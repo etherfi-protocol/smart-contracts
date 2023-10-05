@@ -1,0 +1,1132 @@
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "previousAdmin",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "newAdmin",
+        "type": "address"
+      }
+    ],
+    "name": "AdminChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "beacon",
+        "type": "address"
+      }
+    ],
+    "name": "BeaconUpgraded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "member",
+        "type": "address"
+      }
+    ],
+    "name": "CommitteeMemberAdded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "member",
+        "type": "address"
+      }
+    ],
+    "name": "CommitteeMemberRemoved",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "member",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "enabled",
+        "type": "bool"
+      }
+    ],
+    "name": "CommitteeMemberUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "newConsensusVersion",
+        "type": "uint32"
+      }
+    ],
+    "name": "ConsensusVersionUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "version",
+        "type": "uint8"
+      }
+    ],
+    "name": "Initialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "newOracleReportPeriod",
+        "type": "uint32"
+      }
+    ],
+    "name": "OracleReportPeriodUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "Paused",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "newQuorumSize",
+        "type": "uint32"
+      }
+    ],
+    "name": "QuorumUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "consensusVersion",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "refSlotFrom",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "refSlotTo",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "refBlockFrom",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "refBlockTo",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "hash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "ReportPublished",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "reportStartSlot",
+        "type": "uint32"
+      }
+    ],
+    "name": "ReportStartSlotUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "consensusVersion",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "refSlotFrom",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "refSlotTo",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "refBlockFrom",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "refBlockTo",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "hash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "committeeMember",
+        "type": "address"
+      }
+    ],
+    "name": "ReportSubmitted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "Unpaused",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "implementation",
+        "type": "address"
+      }
+    ],
+    "name": "Upgraded",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_address",
+        "type": "address"
+      }
+    ],
+    "name": "addCommitteeMember",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "blockStampForNextReport",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "slotFrom",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "slotTo",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "blockFrom",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "committeeMemberStates",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "registered",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "enabled",
+        "type": "bool"
+      },
+      {
+        "internalType": "uint32",
+        "name": "lastReportRefSlot",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "numReports",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "computeSlotAtTimestamp",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "consensusStates",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "support",
+        "type": "uint32"
+      },
+      {
+        "internalType": "bool",
+        "name": "consensusReached",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "consensusVersion",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "consensusVersion",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refSlotFrom",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refSlotTo",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refBlockFrom",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refBlockTo",
+            "type": "uint32"
+          },
+          {
+            "internalType": "int128",
+            "name": "accruedRewards",
+            "type": "int128"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "validatorsToApprove",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "liquidityPoolValidatorsToExit",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "exitedValidators",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint32[]",
+            "name": "exitedValidatorsExitTimestamps",
+            "type": "uint32[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "slashedValidators",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "withdrawalRequestsToInvalidate",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint32",
+            "name": "lastFinalizedWithdrawalRequestId",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "eEthTargetAllocationWeight",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "etherFanTargetAllocationWeight",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint128",
+            "name": "pendingWithdrawalAmount",
+            "type": "uint128"
+          },
+          {
+            "internalType": "uint32",
+            "name": "numPendingValidatorsRequestedToExit",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "numValidatorsToSpinUp",
+            "type": "uint32"
+          }
+        ],
+        "internalType": "struct IEtherFiOracle.OracleReport",
+        "name": "_report",
+        "type": "tuple"
+      }
+    ],
+    "name": "generateReportHash",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getImplementation",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "_quorumSize",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "_reportPeriodSlot",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "_reportStartSlot",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "_slotsPerEpoch",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "_secondsPerSlot",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "_genesisTime",
+        "type": "uint32"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "_hash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "isConsensusReached",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "lastPublishedReportRefBlock",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "lastPublishedReportRefSlot",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_address",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "_enabled",
+        "type": "bool"
+      }
+    ],
+    "name": "manageCommitteeMember",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "numActiveCommitteeMembers",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "numCommitteeMembers",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pauseContract",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "paused",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "proxiableUUID",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "quorumSize",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_address",
+        "type": "address"
+      }
+    ],
+    "name": "removeCommitteeMember",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "renounceOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "reportPeriodSlot",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "reportStartSlot",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "_consensusVersion",
+        "type": "uint32"
+      }
+    ],
+    "name": "setConsensusVersion",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "_reportPeriodSlot",
+        "type": "uint32"
+      }
+    ],
+    "name": "setOracleReportPeriod",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "_quorumSize",
+        "type": "uint32"
+      }
+    ],
+    "name": "setQuorumSize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "_reportStartSlot",
+        "type": "uint32"
+      }
+    ],
+    "name": "setReportStartSlot",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_member",
+        "type": "address"
+      }
+    ],
+    "name": "shouldSubmitReport",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "slotForNextReport",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "consensusVersion",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refSlotFrom",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refSlotTo",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refBlockFrom",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refBlockTo",
+            "type": "uint32"
+          },
+          {
+            "internalType": "int128",
+            "name": "accruedRewards",
+            "type": "int128"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "validatorsToApprove",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "liquidityPoolValidatorsToExit",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "exitedValidators",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint32[]",
+            "name": "exitedValidatorsExitTimestamps",
+            "type": "uint32[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "slashedValidators",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "withdrawalRequestsToInvalidate",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint32",
+            "name": "lastFinalizedWithdrawalRequestId",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "eEthTargetAllocationWeight",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "etherFanTargetAllocationWeight",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint128",
+            "name": "pendingWithdrawalAmount",
+            "type": "uint128"
+          },
+          {
+            "internalType": "uint32",
+            "name": "numPendingValidatorsRequestedToExit",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "numValidatorsToSpinUp",
+            "type": "uint32"
+          }
+        ],
+        "internalType": "struct IEtherFiOracle.OracleReport",
+        "name": "_report",
+        "type": "tuple"
+      }
+    ],
+    "name": "submitReport",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "unPauseContract",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newImplementation",
+        "type": "address"
+      }
+    ],
+    "name": "upgradeTo",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newImplementation",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "data",
+        "type": "bytes"
+      }
+    ],
+    "name": "upgradeToAndCall",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "consensusVersion",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refSlotFrom",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refSlotTo",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refBlockFrom",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refBlockTo",
+            "type": "uint32"
+          },
+          {
+            "internalType": "int128",
+            "name": "accruedRewards",
+            "type": "int128"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "validatorsToApprove",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "liquidityPoolValidatorsToExit",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "exitedValidators",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint32[]",
+            "name": "exitedValidatorsExitTimestamps",
+            "type": "uint32[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "slashedValidators",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "withdrawalRequestsToInvalidate",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint32",
+            "name": "lastFinalizedWithdrawalRequestId",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "eEthTargetAllocationWeight",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "etherFanTargetAllocationWeight",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint128",
+            "name": "pendingWithdrawalAmount",
+            "type": "uint128"
+          },
+          {
+            "internalType": "uint32",
+            "name": "numPendingValidatorsRequestedToExit",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "numValidatorsToSpinUp",
+            "type": "uint32"
+          }
+        ],
+        "internalType": "struct IEtherFiOracle.OracleReport",
+        "name": "_report",
+        "type": "tuple"
+      }
+    ],
+    "name": "verifyReport",
+    "outputs": [],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

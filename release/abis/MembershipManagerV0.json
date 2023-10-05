@@ -1,0 +1,1402 @@
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "Deprecated",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "DisallowZeroAddress",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ExceededMaxWithdrawal",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InsufficientBalance",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InsufficientLiquidity",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "IntegerOverflow",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidAllocation",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidAmount",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidDeposit",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidEAPRollover",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidWithdraw",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotEnoughReservedRewards",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyAdmin",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyTokenOwner",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OutOfBound",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RequireTokenUnlocked",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "TierLimitExceeded",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "UnexpectedTier",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "WrongTokenMinted",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "previousAdmin",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "newAdmin",
+        "type": "address"
+      }
+    ],
+    "name": "AdminChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "beacon",
+        "type": "address"
+      }
+    ],
+    "name": "BeaconUpgraded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_tokenId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_eapPoints",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint40",
+        "name": "_loyaltyPoints",
+        "type": "uint40"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint40",
+        "name": "_tierPoints",
+        "type": "uint40"
+      }
+    ],
+    "name": "FundsMigrated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "version",
+        "type": "uint8"
+      }
+    ],
+    "name": "Initialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_tokenId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint128",
+        "name": "_amount",
+        "type": "uint128"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint128",
+        "name": "_amountSacrificedForBoostingPoints",
+        "type": "uint128"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint40",
+        "name": "_loyaltyPoints",
+        "type": "uint40"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint40",
+        "name": "_tierPoints",
+        "type": "uint40"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "_tier",
+        "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "_prevTopUpTimestamp",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint96",
+        "name": "_rewardsLocalIndex",
+        "type": "uint96"
+      }
+    ],
+    "name": "NftUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "Paused",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "Unpaused",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "implementation",
+        "type": "address"
+      }
+    ],
+    "name": "Upgraded",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "DEPRECATED_admin",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint40",
+        "name": "_requiredTierPoints",
+        "type": "uint40"
+      },
+      {
+        "internalType": "uint24",
+        "name": "_weight",
+        "type": "uint24"
+      }
+    ],
+    "name": "addNewTier",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "admins",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "allTimeHighDepositAmount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_tokenId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_totalAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint128",
+        "name": "_amount",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint128",
+        "name": "_amountForPoints",
+        "type": "uint128"
+      }
+    ],
+    "name": "canTopUp",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "claim",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "_tokenIds",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "claimBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "eETH",
+    "outputs": [
+      {
+        "internalType": "contract IeETH",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getFees",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "mintFeeAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "burnFeeAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "upgradeFeeAmount",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getImplementation",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_eEthAddress",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_liquidityPoolAddress",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_membershipNft",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_treasury",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_protocolRevenueManager",
+        "type": "address"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "liquidityPool",
+    "outputs": [
+      {
+        "internalType": "contract ILiquidityPool",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "maxDepositTopUpPercent",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "membershipNFT",
+    "outputs": [
+      {
+        "internalType": "contract IMembershipNFT",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "minDepositGwei",
+    "outputs": [
+      {
+        "internalType": "uint56",
+        "name": "",
+        "type": "uint56"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "minimumAmountForMint",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "numberOfTiers",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pauseContract",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "paused",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pointsBoostFactor",
+    "outputs": [
+      {
+        "internalType": "uint16",
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pointsGrowthRate",
+    "outputs": [
+      {
+        "internalType": "uint16",
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "protocolRevenueFeeSplitPercent",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "protocolRevenueManager",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "proxiableUUID",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "int128",
+        "name": "_accruedRewards",
+        "type": "int128"
+      }
+    ],
+    "name": "rebase",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_tokenId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "_eapDepositBlockNumber",
+        "type": "uint32"
+      }
+    ],
+    "name": "recoverTierPointsForEap",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "_tokenIds",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint32[]",
+        "name": "_eapDepositBlockNumbers",
+        "type": "uint32[]"
+      }
+    ],
+    "name": "recoverTierPointsForEapBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "renounceOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_tokenId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "requestWithdraw",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_tokenId",
+        "type": "uint256"
+      }
+    ],
+    "name": "requestWithdrawAndBurn",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "_tier",
+        "type": "uint8"
+      }
+    ],
+    "name": "rewardsGlobalIndex",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_mintFeeAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_burnFeeAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_upgradeFeeAmount",
+        "type": "uint256"
+      }
+    ],
+    "name": "setFeeAmounts",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "_percent",
+        "type": "uint8"
+      }
+    ],
+    "name": "setMaxDepositTopUpPercent",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint56",
+        "name": "_value",
+        "type": "uint56"
+      }
+    ],
+    "name": "setMinDepositWei",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_tokenId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint40",
+        "name": "_loyaltyPoints",
+        "type": "uint40"
+      },
+      {
+        "internalType": "uint40",
+        "name": "_tierPoints",
+        "type": "uint40"
+      }
+    ],
+    "name": "setPoints",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "_tokenIds",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint40[]",
+        "name": "_loyaltyPoints",
+        "type": "uint40[]"
+      },
+      {
+        "internalType": "uint40[]",
+        "name": "_tierPoints",
+        "type": "uint40[]"
+      }
+    ],
+    "name": "setPointsBatch",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "_newWaitTime",
+        "type": "uint32"
+      }
+    ],
+    "name": "setTopUpCooltimePeriod",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint32",
+        "name": "_blocks",
+        "type": "uint32"
+      }
+    ],
+    "name": "setWithdrawalLockBlocks",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "sharesReservedForRewards",
+    "outputs": [
+      {
+        "internalType": "uint128",
+        "name": "",
+        "type": "uint128"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "tierData",
+    "outputs": [
+      {
+        "internalType": "uint96",
+        "name": "rewardsGlobalIndex",
+        "type": "uint96"
+      },
+      {
+        "internalType": "uint40",
+        "name": "requiredTierPoints",
+        "type": "uint40"
+      },
+      {
+        "internalType": "uint24",
+        "name": "weight",
+        "type": "uint24"
+      },
+      {
+        "internalType": "uint96",
+        "name": "__gap",
+        "type": "uint96"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "tierDeposits",
+    "outputs": [
+      {
+        "internalType": "uint128",
+        "name": "amounts",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint128",
+        "name": "shares",
+        "type": "uint128"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint40",
+        "name": "_tierPoints",
+        "type": "uint40"
+      }
+    ],
+    "name": "tierForPoints",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "tokenData",
+    "outputs": [
+      {
+        "internalType": "uint96",
+        "name": "rewardsLocalIndex",
+        "type": "uint96"
+      },
+      {
+        "internalType": "uint40",
+        "name": "baseLoyaltyPoints",
+        "type": "uint40"
+      },
+      {
+        "internalType": "uint40",
+        "name": "baseTierPoints",
+        "type": "uint40"
+      },
+      {
+        "internalType": "uint32",
+        "name": "prevPointsAccrualTimestamp",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "prevTopUpTimestamp",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint8",
+        "name": "tier",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "__gap",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "tokenDeposits",
+    "outputs": [
+      {
+        "internalType": "uint128",
+        "name": "amounts",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint128",
+        "name": "shares",
+        "type": "uint128"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "topUpCooltimePeriod",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_tokenId",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint128",
+        "name": "_amount",
+        "type": "uint128"
+      },
+      {
+        "internalType": "uint128",
+        "name": "_amountForPoints",
+        "type": "uint128"
+      }
+    ],
+    "name": "topUpDepositWithEth",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "treasury",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "treasuryFeeSplitPercent",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "unPauseContract",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_address",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "_isAdmin",
+        "type": "bool"
+      }
+    ],
+    "name": "updateAdmin",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint16",
+        "name": "_newPointsBoostFactor",
+        "type": "uint16"
+      },
+      {
+        "internalType": "uint16",
+        "name": "_newPointsGrowthRate",
+        "type": "uint16"
+      }
+    ],
+    "name": "updatePointsParams",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint8",
+        "name": "_tier",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint40",
+        "name": "_requiredTierPoints",
+        "type": "uint40"
+      },
+      {
+        "internalType": "uint24",
+        "name": "_weight",
+        "type": "uint24"
+      }
+    ],
+    "name": "updateTier",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newImplementation",
+        "type": "address"
+      }
+    ],
+    "name": "upgradeTo",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newImplementation",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "data",
+        "type": "bytes"
+      }
+    ],
+    "name": "upgradeToAndCall",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "_recipient",
+        "type": "address"
+      }
+    ],
+    "name": "withdrawFees",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "withdrawalLockBlocks",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amountForPoints",
+        "type": "uint256"
+      }
+    ],
+    "name": "wrapEth",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_numNFTs",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amountForPoints",
+        "type": "uint256"
+      }
+    ],
+    "name": "wrapEthBatch",
+    "outputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "",
+        "type": "uint256[]"
+      }
+    ],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_amountForPoints",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "_eapDepositBlockNumber",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_snapshotEthAmount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_points",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "_merkleProof",
+        "type": "bytes32[]"
+      }
+    ],
+    "name": "wrapEthForEap",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "stateMutability": "payable",
+    "type": "receive"
+  }
+]

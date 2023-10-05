@@ -1,0 +1,24 @@
+# Compiler files
+cache/
+out/
+
+# Ignores development broadcast logs
+!/broadcast
+/broadcast/*
+/broadcast/*/31337/
+
+# Dotenv file
+.env
+node_modules
+node_modules
+.env
+coverage
+coverage.json
+typechain
+typechain-types
+
+# Hardhat files
+cache
+artifacts
+
+.DS_Store

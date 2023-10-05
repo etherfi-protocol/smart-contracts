@@ -1,0 +1,620 @@
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "previousAdmin",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "newAdmin",
+        "type": "address"
+      }
+    ],
+    "name": "AdminChanged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "_address",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "_reportHash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "AdminOperationsExecuted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "_address",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "_isAdmin",
+        "type": "bool"
+      }
+    ],
+    "name": "AdminUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "beacon",
+        "type": "address"
+      }
+    ],
+    "name": "BeaconUpgraded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint8",
+        "name": "version",
+        "type": "uint8"
+      }
+    ],
+    "name": "Initialized",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "previousOwner",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "OwnershipTransferred",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "implementation",
+        "type": "address"
+      }
+    ],
+    "name": "Upgraded",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "acceptableRebaseAprInBps",
+    "outputs": [
+      {
+        "internalType": "int32",
+        "name": "",
+        "type": "int32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "admins",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "auctionManager",
+    "outputs": [
+      {
+        "internalType": "contract IAuctionManager",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "blockForNextReportToProcess",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "etherFiNodesManager",
+    "outputs": [
+      {
+        "internalType": "contract IEtherFiNodesManager",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "etherFiOracle",
+    "outputs": [
+      {
+        "internalType": "contract IEtherFiOracle",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint32",
+            "name": "consensusVersion",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refSlotFrom",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refSlotTo",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refBlockFrom",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "refBlockTo",
+            "type": "uint32"
+          },
+          {
+            "internalType": "int128",
+            "name": "accruedRewards",
+            "type": "int128"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "validatorsToApprove",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "liquidityPoolValidatorsToExit",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "exitedValidators",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint32[]",
+            "name": "exitedValidatorsExitTimestamps",
+            "type": "uint32[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "slashedValidators",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint256[]",
+            "name": "withdrawalRequestsToInvalidate",
+            "type": "uint256[]"
+          },
+          {
+            "internalType": "uint32",
+            "name": "lastFinalizedWithdrawalRequestId",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "eEthTargetAllocationWeight",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "etherFanTargetAllocationWeight",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint128",
+            "name": "pendingWithdrawalAmount",
+            "type": "uint128"
+          },
+          {
+            "internalType": "uint32",
+            "name": "numPendingValidatorsRequestedToExit",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "numValidatorsToSpinUp",
+            "type": "uint32"
+          }
+        ],
+        "internalType": "struct IEtherFiOracle.OracleReport",
+        "name": "_report",
+        "type": "tuple"
+      },
+      {
+        "internalType": "bytes[]",
+        "name": "_pubKey",
+        "type": "bytes[]"
+      },
+      {
+        "internalType": "bytes[]",
+        "name": "_signature",
+        "type": "bytes[]"
+      }
+    ],
+    "name": "executeTasks",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getImplementation",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_etherFiOracle",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_stakingManager",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_auctionManager",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_etherFiNodesManager",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_liquidityPool",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_membershipManager",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_withdrawRequestNft",
+        "type": "address"
+      },
+      {
+        "internalType": "int32",
+        "name": "_acceptableRebaseAprInBps",
+        "type": "int32"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "lastHandledReportRefBlock",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "lastHandledReportRefSlot",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "liquidityPool",
+    "outputs": [
+      {
+        "internalType": "contract ILiquidityPool",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "membershipManager",
+    "outputs": [
+      {
+        "internalType": "contract IMembershipManager",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "numPendingValidatorsRequestedToExit",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "numValidatorsToSpinUp",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pendingWithdrawalAmount",
+    "outputs": [
+      {
+        "internalType": "uint128",
+        "name": "",
+        "type": "uint128"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "proxiableUUID",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "renounceOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "slotForNextReportToProcess",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "stakingManager",
+    "outputs": [
+      {
+        "internalType": "contract IStakingManager",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newOwner",
+        "type": "address"
+      }
+    ],
+    "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "int32",
+        "name": "_acceptableRebaseAprInBps",
+        "type": "int32"
+      }
+    ],
+    "name": "updateAcceptableRebaseApr",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_address",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "_isAdmin",
+        "type": "bool"
+      }
+    ],
+    "name": "updateAdmin",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newImplementation",
+        "type": "address"
+      }
+    ],
+    "name": "upgradeTo",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newImplementation",
+        "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "data",
+        "type": "bytes"
+      }
+    ],
+    "name": "upgradeToAndCall",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "withdrawRequestNft",
+    "outputs": [
+      {
+        "internalType": "contract IWithdrawRequestNFT",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

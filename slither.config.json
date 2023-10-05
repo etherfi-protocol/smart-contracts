@@ -1,0 +1,5 @@
+{
+    "filter_paths": "(script/|test/)",
+    "printers_to_run": "human-summary"
+
+}
