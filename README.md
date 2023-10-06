@@ -1,6 +1,6 @@
-# dappContracts
+# smart-contracts
 
-Smart Contracts for Ether Fi dapp
+Smart Contracts for ether.fi staking protocol
 
 # EtherFi smart contracts setup
 
