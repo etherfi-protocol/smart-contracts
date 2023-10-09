@@ -29,14 +29,12 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     uint32 public lastHandledReportRefSlot;
     uint32 public lastHandledReportRefBlock;
-    uint128 public pendingWithdrawalAmount;
-    uint32 public numPendingValidatorsRequestedToExit;
     uint32 public numValidatorsToSpinUp;
 
     int32 public acceptableRebaseAprInBps;
 
     event AdminUpdated(address _address, bool _isAdmin);
-    event AdminOperationsExecuted(address _address, bytes32 _reportHash);
+    event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -71,9 +69,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(etherFiOracle.isConsensusReached(reportHash), "EtherFiAdmin: report didn't reach consensus");
         require(slotForNextReportToProcess() == _report.refSlotFrom, "EtherFiAdmin: report has wrong `refSlotFrom`");
         require(blockForNextReportToProcess() == _report.refBlockFrom, "EtherFiAdmin: report has wrong `refBlockFrom`");
-
-        pendingWithdrawalAmount = _report.pendingWithdrawalAmount;
-        numPendingValidatorsRequestedToExit = _report.numPendingValidatorsRequestedToExit;
 
         //The number of validators for the current scheduling period we can spin up
         //Important variable when calculating how many BNFT players to assign for the scheduling period
@@ -131,6 +126,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             withdrawRequestNft.invalidateRequest(_report.withdrawalRequestsToInvalidate[i]);
         }
         withdrawRequestNft.finalizeRequests(_report.lastFinalizedWithdrawalRequestId);
+
+        liquidityPool.addEthAmountLockedForWithdrawal(_report.finalizedWithdrawalAmount);
     }
 
     function _handleTargetFundsAllocations(IEtherFiOracle.OracleReport calldata _report) internal {

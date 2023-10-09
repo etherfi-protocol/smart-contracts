@@ -45,7 +45,7 @@ deploy-goerli-tvlOracle:; forge clean && forge script script/deploys/DeployTVLOr
 
 deploy-goerli-lpaPoints:; forge clean && forge script script/deploys/DeployLoyaltyPointsMarketSafe.sol:DeployLoyaltyPointsMarketSafeScript --rpc-url ${GOERLI_RPC_URL} --broadcast --verify  -vvvv --slow && bash script/extractABI.sh
 
-deploy-mainnet-lpaPoints:; forge clean && forge script script/deploys/DeployLoyaltyPointsMarketSafe.s.sol:DeployLoyaltyPointsMarketSafeScript --rpc-url ${MAINNET_RPC_URL} --broadcast --verify  -vvvv --slow && bash script/extractABI.sh
+deploy-mainnet-lpaPoints:; forge clean && forge script script/deploys/DeployLoyaltyPointsMarketSafe.sol:DeployLoyaltyPointsMarketSafeScript --rpc-url ${MAINNET_RPC_URL} --broadcast --verify  -vvvv --slow && bash script/extractABI.sh
 
 deploy-optimism-tvlOracle:; forge clean && forge script script/deploys/DeployTVLOracle.s.sol:DeployTVLOracleScript --rpc-url ${OPTIMISM_RPC_URL} --broadcast --verify  -vvvv --slow && bash script/extractABI.sh
 

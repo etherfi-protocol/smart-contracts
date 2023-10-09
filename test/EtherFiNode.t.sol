@@ -101,6 +101,41 @@ contract EtherFiNodeTest is TestSetup {
         testnetFork = vm.createFork(vm.envString("GOERLI_RPC_URL"));
     }
 
+    function createRestakedValidator() public returns (uint256) {
+        vm.deal(alice, 33 ether);
+        vm.startPrank(alice);
+
+        nodeOperatorManagerInstance.registerNodeOperator("fake_ipfs_hash", 10);
+
+        // create a new bid
+        uint256[] memory createdBids = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
+
+        // depsosit against that bid with restaking enabled
+        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether * createdBids.length}(createdBids, true);
+
+        // Register the validator and send deposited eth to depositContract/Beaconchain
+        // signatures are not checked but roots need to match
+        bytes32 root = depGen.generateDepositRoot(
+            hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
+            hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
+            managerInstance.getWithdrawalCredentials(createdBids[0]),
+            32 ether
+        );
+        IStakingManager.DepositData memory depositData = IStakingManager
+            .DepositData({
+                publicKey: hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
+                signature: hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
+                depositDataRoot: root,
+                ipfsHashForEncryptedValidatorKey: "restaking_unit_tests"
+        });
+        IStakingManager.DepositData[] memory depositDatas = new IStakingManager.DepositData[](1);
+        depositDatas[0] = depositData;
+        stakingManagerInstance.batchRegisterValidators(zeroRoot, createdBids, depositDatas);
+
+        vm.stopPrank();
+        return createdBids[0];
+    }
+
     function test_createPod() public {
         // re-run setup now that we have fork selected. Probably a better way we can do this
         vm.selectFork(testnetFork);
@@ -126,9 +161,8 @@ contract EtherFiNodeTest is TestSetup {
         vm.selectFork(testnetFork);
         setUp();
 
-        safeInstance = EtherFiNode(payable(managerInstance.createUnusedWithdrawalSafe(1, true)[0]));
-        vm.prank(address(managerInstance));
-        safeInstance.recordStakingStart(true);
+        uint256 bidId = createRestakedValidator();
+        safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(bidId)));
 
         // simulate 1 eth of already claimed staking rewards and 1 eth of unclaimed restaked rewards
         vm.deal(address(safeInstance.eigenPod()), 1 ether);
@@ -150,11 +184,10 @@ contract EtherFiNodeTest is TestSetup {
         // re-run setup now that we have fork selected. Probably a better way we can do this
         vm.selectFork(testnetFork);
         setUp();
-        vm.prank(address(managerInstance));
-        safeInstance.setIsRestakingEnabled(true);
-        safeInstance.createEigenPod();
 
-        uint256 validatorId = bidId[0];
+        uint256 validatorId = createRestakedValidator();
+        safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
+
         uint256 beaconBalance = 32 ether;
         (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = (0, 0, 0, 0);
 
@@ -228,9 +261,9 @@ contract EtherFiNodeTest is TestSetup {
         // re-run setup now that we have fork selected. Probably a better way we can do this
         vm.selectFork(testnetFork);
         setUp();
-        vm.prank(address(managerInstance));
-        safeInstance.setIsRestakingEnabled(true);
-        safeInstance.createEigenPod();
+
+        uint256 validatorId = createRestakedValidator();
+        safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
 
         // simulate 1 eth of staking rewards sent to the eigen pod
         vm.deal(address(safeInstance.eigenPod()), 1 ether);
@@ -283,11 +316,10 @@ contract EtherFiNodeTest is TestSetup {
         // re-run setup now that we have fork selected. Probably a better way we can do this
         vm.selectFork(testnetFork);
         setUp();
-        safeInstance.createEigenPod();
-        vm.prank(address(managerInstance));
-        safeInstance.setIsRestakingEnabled(true);
 
-        uint256 validatorId = bidId[0];
+        uint256 validatorId = createRestakedValidator();
+        safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
+
         uint256[] memory validatorIds = new uint256[](1);
         uint32[] memory exitRequestTimestamps = new uint32[](1);
         validatorIds[0] = validatorId;
@@ -333,13 +365,8 @@ contract EtherFiNodeTest is TestSetup {
         vm.selectFork(testnetFork);
         setUp();
 
-        uint256 validatorId = bidId[0];
-        IEtherFiNode node = IEtherFiNode(managerInstance.etherfiNodeAddress(validatorId));
-
-        vm.prank(address(managerInstance));
-        node.setIsRestakingEnabled(true);
-        node.createEigenPod();
-
+        uint256 validatorId = createRestakedValidator();
+        IEtherFiNode node = IEtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
 
         // simulate staking rewards
         vm.deal(node.eigenPod(), 1 ether);
@@ -369,11 +396,8 @@ contract EtherFiNodeTest is TestSetup {
         vm.selectFork(testnetFork);
         setUp();
 
-        uint256 validatorId = bidId[0];
-
-        vm.prank(address(managerInstance));
-        safeInstance.setIsRestakingEnabled(true);
-        safeInstance.createEigenPod();
+        uint256 validatorId = createRestakedValidator();
+        safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
 
         uint256[] memory validatorIds = new uint256[](1);
         uint32[] memory exitRequestTimestamps = new uint32[](1);
@@ -419,7 +443,7 @@ contract EtherFiNodeTest is TestSetup {
 
         // shoud not be allowed to partial withdraw since node is exited
         // In this case it fails because of the balance check right before the state check
-        vm.expectRevert("etherfi node contract's balance is above 8 ETH. You should exit the node.");
+        vm.expectRevert("Balance > 8 ETH. Exit the node.");
         managerInstance.partialWithdraw(validatorId);
 
         // This should succeed even though there are still some unclaimed withdrawals
@@ -578,7 +602,7 @@ contract EtherFiNodeTest is TestSetup {
         vm.expectRevert("Only EtherFiNodeManager Contract");
         IEtherFiNode(etherFiNode).markExited(1);
 
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert("Not admin");
         vm.prank(owner);
         managerInstance.processNodeExit(validatorIds, exitTimestamps);
         assertTrue(IEtherFiNode(etherFiNode).phase() == IEtherFiNode.VALIDATOR_PHASE.LIVE);
@@ -677,7 +701,7 @@ contract EtherFiNodeTest is TestSetup {
 
         vm.deal(etherfiNode, 8.0 ether);
         vm.expectRevert(
-            "etherfi node contract's balance is above 8 ETH. You should exit the node."
+            "Balance > 8 ETH. Exit the node."
         );
         managerInstance.partialWithdraw(bidId[0]);
     }
@@ -688,7 +712,7 @@ contract EtherFiNodeTest is TestSetup {
         vm.deal(etherfiNode, 4 ether);
 
         vm.expectRevert(
-            "Caller is not the admin"
+            "Not admin"
         );
         vm.prank(owner);
         managerInstance.markBeingSlashed(bidId);
@@ -696,7 +720,7 @@ contract EtherFiNodeTest is TestSetup {
         hoax(alice);
         managerInstance.markBeingSlashed(bidId);
         vm.expectRevert(
-            "you can skim the rewards only when the node is LIVE or FULLY_WITHDRAWN."
+            "Must be LIVE or FULLY_WITHDRAWN."
         );
         managerInstance.partialWithdraw(bidId[0]);
     }
@@ -960,7 +984,7 @@ contract EtherFiNodeTest is TestSetup {
         uint256 bnftStakerBalance = address(staker).balance;
 
         hoax(owner);
-        vm.expectRevert("you can skim the rewards only when the node is LIVE or FULLY_WITHDRAWN.");
+        vm.expectRevert("Must be LIVE or FULLY_WITHDRAWN.");
         managerInstance.partialWithdraw(validatorIds[0]);
     }
 
@@ -1257,7 +1281,7 @@ contract EtherFiNodeTest is TestSetup {
         exitTimestamps[0] = uint32(block.timestamp);
 
         // T-NFT holder sends the exit request after the node is marked EXITED
-        vm.expectRevert("validator node is not live");
+        vm.expectRevert(EtherFiNodesManager.ValidatorNotLive.selector);
         managerInstance.sendExitRequest(validatorIds[0]);
     }
 

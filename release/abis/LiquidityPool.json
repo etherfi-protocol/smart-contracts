@@ -114,6 +114,12 @@
         "internalType": "enum ILiquidityPool.SourceOfFunds",
         "name": "source",
         "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "referral",
+        "type": "address"
       }
     ],
     "name": "Deposit",
@@ -168,25 +174,6 @@
       }
     ],
     "name": "Rebase",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint128",
-        "name": "eEthWeight",
-        "type": "uint128"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint128",
-        "name": "etherFanWeight",
-        "type": "uint128"
-      }
-    ],
-    "name": "StakingTargetWeightsSet",
     "type": "event"
   },
   {
@@ -372,6 +359,19 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint128",
+        "name": "_amount",
+        "type": "uint128"
+      }
+    ],
+    "name": "addEthAmountLockedForWithdrawal",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -636,7 +636,31 @@
     "inputs": [
       {
         "internalType": "address",
+        "name": "_referral",
+        "type": "address"
+      }
+    ],
+    "name": "deposit",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
         "name": "_user",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_referral",
         "type": "address"
       }
     ],
@@ -683,11 +707,6 @@
         "internalType": "uint128",
         "name": "",
         "type": "uint128"
-      },
-      {
-        "internalType": "uint128",
-        "name": "",
-        "type": "uint128"
       }
     ],
     "stateMutability": "view",
@@ -701,6 +720,19 @@
         "internalType": "contract IeETH",
         "name": "",
         "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ethAmountLockedForWithdrawal",
+    "outputs": [
+      {
+        "internalType": "uint128",
+        "name": "",
+        "type": "uint128"
       }
     ],
     "stateMutability": "view",
@@ -844,7 +876,7 @@
         "type": "uint32"
       }
     ],
-    "name": "initializePhase2",
+    "name": "initializeOnUpgrade",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1179,12 +1211,12 @@
   {
     "inputs": [
       {
-        "internalType": "uint128",
-        "name": "_newSize",
-        "type": "uint128"
+        "internalType": "address",
+        "name": "_address",
+        "type": "address"
       }
     ],
-    "name": "setMaxBnftSlotSize",
+    "name": "setMembershipManager",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1192,12 +1224,12 @@
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "_address",
-        "type": "address"
+        "internalType": "uint128",
+        "name": "_newSize",
+        "type": "uint128"
       }
     ],
-    "name": "setMembershipManager",
+    "name": "setNumValidatorsToSpinUpPerSchedulePerBnftHolder",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"

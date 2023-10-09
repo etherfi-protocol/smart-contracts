@@ -32,16 +32,16 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     uint32 public numCommitteeMembers; // the total number of committee members
     uint32 public numActiveCommitteeMembers; // the number of active (enabled) committee members
 
-    event CommitteeMemberAdded(address member);
-    event CommitteeMemberRemoved(address member);
-    event CommitteeMemberUpdated(address member, bool enabled);
+    event CommitteeMemberAdded(address indexed member);
+    event CommitteeMemberRemoved(address indexed member);
+    event CommitteeMemberUpdated(address indexed member, bool enabled);
     event QuorumUpdated(uint32 newQuorumSize);
     event ConsensusVersionUpdated(uint32 newConsensusVersion);
     event OracleReportPeriodUpdated(uint32 newOracleReportPeriod);
     event ReportStartSlotUpdated(uint32 reportStartSlot);
 
-    event ReportPublished(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 hash);
-    event ReportSubmitted(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 hash, address committeeMember);
+    event ReportPublished(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash);
+    event ReportSubmitted(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash, address indexed committeeMember);
 
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -203,12 +203,11 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
                 _report.lastFinalizedWithdrawalRequestId,
                 _report.eEthTargetAllocationWeight,
                 _report.etherFanTargetAllocationWeight,
-                _report.pendingWithdrawalAmount,
-                _report.numPendingValidatorsRequestedToExit,
+                _report.finalizedWithdrawalAmount,
                 _report.numValidatorsToSpinUp
             )
         );
-        return keccak256(abi.encodePacked(chunk1, chunk2, chunk3));
+        return keccak256(abi.encode(chunk1, chunk2, chunk3));
     }
 
     function addCommitteeMember(address _address) public onlyOwner {
@@ -223,6 +222,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     function removeCommitteeMember(address _address) public onlyOwner {
         require(committeeMemberStates[_address].registered == true, "Not registered");
         numCommitteeMembers--;
+        if (committeeMemberStates[_address].enabled) numActiveCommitteeMembers--;
         delete committeeMemberStates[_address];
 
         emit CommitteeMemberRemoved(_address);

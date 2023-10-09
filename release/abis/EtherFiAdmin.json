@@ -284,13 +284,8 @@
           },
           {
             "internalType": "uint128",
-            "name": "pendingWithdrawalAmount",
+            "name": "finalizedWithdrawalAmount",
             "type": "uint128"
-          },
-          {
-            "internalType": "uint32",
-            "name": "numPendingValidatorsRequestedToExit",
-            "type": "uint32"
           },
           {
             "internalType": "uint32",
@@ -433,19 +428,6 @@
   },
   {
     "inputs": [],
-    "name": "numPendingValidatorsRequestedToExit",
-    "outputs": [
-      {
-        "internalType": "uint32",
-        "name": "",
-        "type": "uint32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "numValidatorsToSpinUp",
     "outputs": [
       {
@@ -465,19 +447,6 @@
         "internalType": "address",
         "name": "",
         "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "pendingWithdrawalAmount",
-    "outputs": [
-      {
-        "internalType": "uint128",
-        "name": "",
-        "type": "uint128"
       }
     ],
     "stateMutability": "view",

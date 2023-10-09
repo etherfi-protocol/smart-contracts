@@ -59,7 +59,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         uint64 _totalKeys
     ) public whenNotPaused {
         require(!registered[msg.sender], "Already registered");
-        
+
         KeyData memory keyData = KeyData({
             totalKeys: _totalKeys,
             keysUsed: 0,

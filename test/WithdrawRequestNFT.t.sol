@@ -88,8 +88,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         bool earlyRequestIsFinalized = withdrawRequestNFTInstance.isFinalized(requestId);
         assertFalse(earlyRequestIsFinalized, "Request should not be Finalized");
 
-        vm.prank(alice);
-        withdrawRequestNFTInstance.finalizeRequests(requestId);
+        _finalizeWithdrawalRequest(requestId);
 
         WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
         assertEq(request.amountOfEEth, 1 ether, "Amount of eEth should match");
@@ -168,8 +167,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(withdrawRequestNFTInstance.balanceOf(bob), 1, "Bobs balance should be 1");
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId), bob, "Bobs should own the NFT");
 
-        vm.prank(alice);
-        withdrawRequestNFTInstance.finalizeRequests(requestId);
+        _finalizeWithdrawalRequest(requestId);
 
         vm.prank(bob);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
@@ -205,8 +203,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(withdrawRequestNFTInstance.balanceOf(bob), 1, "Bobs balance should be 1");
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId), bob, "Bobs should own the NFT");
 
-        vm.prank(alice);
-        withdrawRequestNFTInstance.finalizeRequests(requestId);
+        _finalizeWithdrawalRequest(requestId);
 
         vm.prank(bob);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
@@ -253,8 +250,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(alice);
         liquidityPoolInstance.deposit{value: 100 ether}();
 
-        vm.prank(alice);
-        withdrawRequestNFTInstance.finalizeRequests(requestId);
+        _finalizeWithdrawalRequest(requestId);
 
         uint256 bobsStartingBalance = address(bob).balance;
 

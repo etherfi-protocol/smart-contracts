@@ -1,6 +1,6 @@
-# smart-contracts
+# etherfi-protocol smart-contracts
 
-Smart Contracts for ether.fi staking protocol
+Smart Contracts for ether.fi ethereum staking protocol
 
 # EtherFi smart contracts setup
 
