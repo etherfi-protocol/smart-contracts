@@ -158,8 +158,7 @@ contract UpgradeTest is TestSetup {
             address(auctionInstance),
             address(stakingManagerInstance),
             address(TNFTInstance),
-            address(BNFTInstance),
-            address(protocolRevenueManagerInstance)
+            address(BNFTInstance)
         );
 
         assertEq(etherFiNodesManagerV2Instance.getImplementation(), address(managerV2Implementation));

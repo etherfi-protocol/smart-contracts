@@ -156,14 +156,7 @@ contract RewardsSkimmingTest is TestSetup {
         }
         vm.stopPrank();
     }
-
-    function test_partialWithdrawBatchGroupByOperator() public {
-        _deals();
-        startHoax(operators[0]);
-        managerInstance.partialWithdrawBatchGroupByOperator(operators[0], validatorIdsOfMixedTNftHolders);
-        vm.stopPrank();
-    }
-
+    
     function test_partialWithdrawBatchForTNftInLiquidityPool() public {
         _deals();
         startHoax(operators[0]);

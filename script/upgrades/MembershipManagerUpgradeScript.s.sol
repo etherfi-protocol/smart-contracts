@@ -24,7 +24,7 @@ contract MembershipManagerUpgrade is Script {
 
         membershipManagerInstance.upgradeTo(address(membershipManagerV2Implementation));
 
-        membershipManagerInstance.initializePhase2();
+        membershipManagerInstance.initializeOnUpgrade();
         
         vm.stopBroadcast();
     }

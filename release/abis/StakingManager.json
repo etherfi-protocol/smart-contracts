@@ -547,6 +547,19 @@
   },
   {
     "inputs": [],
+    "name": "getEtherFiNodeBeacon",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "getImplementation",
     "outputs": [
       {

@@ -53,7 +53,11 @@ contract NFTExchangeTest is TestSetup {
         vm.startPrank(alice);
         uint256 withdrawalAmount = 0.1 ether;
         uint256 requestId = membershipManagerInstance.requestWithdraw(membershipNftTokenId, withdrawalAmount);
-        withdrawRequestNFTInstance.finalizeRequests(requestId);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(requestId);
+        
+        vm.startPrank(alice);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
         assertEq(membershipNftInstance.transferLockedUntil(membershipNftTokenId), block.number + membershipManagerInstance.withdrawalLockBlocks());
 

@@ -254,8 +254,7 @@ contract SmallScenariosTest is TestSetup {
         assertEq(address(liquidityPoolInstance).balance, 32 ether + 1 ether);
         vm.stopPrank();
 
-        vm.prank(alice);
-        withdrawRequestNFTInstance.finalizeRequests(withdrawRequestId);
+        _finalizeWithdrawalRequest(withdrawRequestId);
 
         vm.prank(chad);
         withdrawRequestNFTInstance.claimWithdraw(withdrawRequestId);

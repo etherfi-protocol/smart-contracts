@@ -18,8 +18,6 @@ import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IEtherFiAdmin.sol";
 
-import "forge-std/console.sol";
-
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -60,6 +58,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     // TODO(Dave): Before we go to mainnet consider packing this with other variables
     bool public restakeBnftDeposits;
+    uint128 public ethAmountLockedForWithdrawal;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -107,7 +106,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @param _schedulingPeriod the time we want between scheduling periods
     /// @param _eEthNumVal the number of validators to set for eEth
     /// @param _etherFanNumVal the number of validators to set for ether fan
-    function initializePhase2(uint128 _schedulingPeriod, uint32 _eEthNumVal, uint32 _etherFanNumVal) external onlyOwner { 
+    function initializeOnUpgrade(uint128 _schedulingPeriod, uint32 _eEthNumVal, uint32 _etherFanNumVal) external onlyOwner { 
         //Sets what scheduling period we will start with       
         schedulingPeriodInSeconds = _schedulingPeriod;
 
@@ -144,11 +143,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @param _recipient the recipient who will receives the ETH
     /// @param _amount the amount to withdraw from contract
     /// it returns the amount of shares burned
-    function withdraw(address _recipient, uint256 _amount) external onlyWithdrawRequestOrMembershipManager NonZeroAddress(_recipient) returns (uint256) {
+    function withdraw(address _recipient, uint256 _amount) external NonZeroAddress(_recipient) returns (uint256) {
+        require(msg.sender == address(withdrawRequestNFT), "Incorrect Caller");
         if(totalValueInLp < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
 
         uint256 share = sharesForWithdrawalAmount(_amount);
         totalValueInLp -= uint128(_amount);
+        ethAmountLockedForWithdrawal -= uint128(_amount);
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
         
         eETH.burnShares(msg.sender, share);
@@ -553,6 +554,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         fundStatistics[SourceOfFunds.ETHER_FAN].numberOfValidators -= numberOfEtherFanValidators;
     }
 
+    function addEthAmountLockedForWithdrawal(uint128 _amount) external onlyAdmin {
+        ethAmountLockedForWithdrawal += _amount;
+    }
+
     //--------------------------------------------------------------------------------------
     //------------------------------  INTERNAL FUNCTIONS  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -704,12 +709,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     //--------------------------------------------------------------------------------------
 
     modifier onlyAdmin() {
-        require(admins[msg.sender], "Caller is not the admin");
-        _;
-    }
-
-    modifier onlyWithdrawRequestOrMembershipManager() {
-        require(msg.sender == address(withdrawRequestNFT) || msg.sender == address(membershipManager), "Caller is not the WithdrawRequestNFT or MembershipManager");
+        require(admins[msg.sender], "Not admin");
         _;
     }
 

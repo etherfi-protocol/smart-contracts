@@ -162,7 +162,11 @@ contract LiquidityPoolTest is TestSetup {
         // alice priv key = 2
         ILiquidityPool.PermitInput memory permitInputAlice = createPermitInput(2, address(liquidityPoolInstance), 2 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
         uint256 aliceReqId = liquidityPoolInstance.requestWithdrawWithPermit(alice, 2 ether, permitInputAlice);
-        withdrawRequestNFTInstance.finalizeRequests(aliceReqId);
+        vm.stopPrank();
+        
+        _finalizeWithdrawalRequest(aliceReqId);
+        
+        vm.startPrank(alice);
         withdrawRequestNFTInstance.claimWithdraw(aliceReqId);
         assertEq(eETHInstance.balanceOf(alice), 1 ether);
         assertEq(alice.balance, 2 ether);
@@ -175,8 +179,7 @@ contract LiquidityPoolTest is TestSetup {
         uint256 bobReqId = liquidityPoolInstance.requestWithdrawWithPermit(bob, 2 ether, permitInputBob);
         vm.stopPrank();
 
-        vm.prank(alice);
-        withdrawRequestNFTInstance.finalizeRequests(bobReqId);
+        _finalizeWithdrawalRequest(bobReqId);
 
         vm.startPrank(bob);
         withdrawRequestNFTInstance.claimWithdraw(bobReqId);
@@ -575,7 +578,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_sendExitRequestFails() public {
         uint256[] memory newValidators = new uint256[](10);
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert("Not admin");
         vm.prank(owner);
         liquidityPoolInstance.sendExitRequests(newValidators);
     }
@@ -794,8 +797,7 @@ contract LiquidityPoolTest is TestSetup {
         uint256 bobRequestId = liquidityPoolInstance.requestWithdraw(bob, eEthTVL);
         vm.stopPrank();
 
-        vm.prank(alice);
-        withdrawRequestNFTInstance.finalizeRequests(bobRequestId);
+        _finalizeWithdrawalRequest(bobRequestId);
 
         vm.prank(bob);
         withdrawRequestNFTInstance.claimWithdraw(bobRequestId);
@@ -1337,7 +1339,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_UpdateSchedulingPeriodFailsIfNotAdmin() public {
         vm.prank(bob);
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert("Not admin");
         liquidityPoolInstance.setSchedulingPeriodInSeconds(100000);
     }
 
@@ -1349,7 +1351,7 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(etherFanTargetWeight, 50);
 
         vm.prank(bob);
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert("Not admin");
         liquidityPoolInstance.setStakingTargetWeights(50, 50);
 
         vm.startPrank(alice);

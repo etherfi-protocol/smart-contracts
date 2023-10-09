@@ -85,7 +85,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     error WrongVersion();
 
     // To be called for Phase 2 contract upgrade
-    function initializePhase2() external onlyOwner {
+    function initializeOnUpgrade() external onlyOwner {
         fanBoostThreshold = 1_000; // 1 ETH
         burnFeeWaiverPeriodInDays = 30;
         while (tierVaults.length < tierData.length) {
@@ -150,6 +150,19 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         return wrapEth(_amount, _amountForPoints, address(0));
     }
 
+    function unwrapForEEthAndBurn(uint256 _tokenId) external whenNotPaused {
+        _requireTokenOwner(_tokenId);
+
+        // Claim all staking rewards before burn
+        _claimStakingRewards(_tokenId);
+        _migrateFromV0ToV1(_tokenId);
+
+        (uint256 totalBalance, uint256 feeAmount) = _withdrawAndBurn(_tokenId);
+
+        // transfer 'eEthShares' of eETH to the owner
+        eETH.transfer(msg.sender, totalBalance - feeAmount);
+    }
+
     /// @notice Increase your deposit tied to this NFT within the configured percentage limit.
     /// @dev Can only be done once per month
     /// @param _tokenId ID of NFT token
@@ -207,14 +220,11 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         _claimStakingRewards(_tokenId);
         _migrateFromV0ToV1(_tokenId);
 
-        uint64 feeAmount = hasMetBurnFeeWaiverPeriod(_tokenId) ? 0 : burnFee * 0.001 ether;
-        uint256 totalBalance = _withdrawAndBurn(_tokenId);
-        if (totalBalance < feeAmount) revert InsufficientBalance();
+        (uint256 totalBalance, uint256 feeAmount) = _withdrawAndBurn(_tokenId);
 
         eETH.approve(address(liquidityPool), totalBalance);
         uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(msg.sender, totalBalance, feeAmount);
         
-        _emitNftUpdateEvent(_tokenId);
         return withdrawTokenId;
     }
 
@@ -465,17 +475,21 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         return tokenId;
     }
 
-    function _withdrawAndBurn(uint256 _tokenId) internal returns (uint256) {
+    function _withdrawAndBurn(uint256 _tokenId) internal returns (uint256, uint256) {
         if (tokenData[_tokenId].version != 1) revert WrongVersion();
 
         uint8 tier = tokenData[_tokenId].tier;
         uint256 vaultShare = tokenData[_tokenId].vaultShare;
         uint256 ethAmount = ethAmountForVaultShare(tier, vaultShare);
-        
+        uint64 feeAmount = hasMetBurnFeeWaiverPeriod(_tokenId) ? 0 : burnFee * 0.001 ether;
+        if (ethAmount < feeAmount) revert InsufficientBalance();
+
         _withdraw(_tokenId, ethAmount);
         membershipNFT.burn(msg.sender, _tokenId, 1);
 
-        return ethAmount;   
+        _emitNftUpdateEvent(_tokenId);
+
+        return (ethAmount, feeAmount);
     }
 
     function _withdraw(uint256 _tokenId, uint256 _amount) internal {

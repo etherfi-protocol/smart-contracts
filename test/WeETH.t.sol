@@ -258,6 +258,8 @@ contract WeETHTest is TestSetup {
         assertEq(eETHInstance.balanceOf(alice), 2 ether);
         vm.stopPrank();
 
+        assertEq(weEthInstance.getRate(), 1 ether);
+
         // Bob deposits into LP
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 1 ether}();
@@ -277,6 +279,8 @@ contract WeETHTest is TestSetup {
         liquidityPoolInstance.rebase(1 ether);
         _transferTo(address(liquidityPoolInstance), 1 ether);
         assertEq(address(liquidityPoolInstance).balance, 4 ether);
+
+        assertEq(weEthInstance.getRate(), 1.333333333333333333 ether);
 
         // Alice now has 2.666666666666666666 ether
         // Bob should still have 1 ether weETH because it doesn't rebase

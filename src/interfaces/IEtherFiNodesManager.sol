@@ -46,8 +46,7 @@ interface IEtherFiNodesManager {
         address _auctionContract,
         address _stakingManagerContract,
         address _tnftContract,
-        address _bnftContract,
-        address _protocolRevenueManagerContract
+        address _bnftContract
     ) external;
 
     function batchSendExitRequest(uint256[] calldata _validatorIds) external;
@@ -56,7 +55,6 @@ interface IEtherFiNodesManager {
     function getUnusedWithdrawalSafesLength() external view returns (uint256);
     function incrementNumberOfValidators(uint64 _count) external;
     function markBeingSlashed(uint256[] calldata _validatorIds) external;
-    function partialWithdrawBatchGroupByOperator(address _operator, uint256[] memory _validatorIds) external;
     function partialWithdrawBatch(uint256[] calldata _validatorIds) external;
     function partialWithdraw(uint256 _validatorId) external;
     function processNodeExit(uint256[] calldata _validatorIds, uint32[] calldata _exitTimestamp) external;
@@ -66,7 +64,6 @@ interface IEtherFiNodesManager {
     function setEtherFiNodePhase(uint256 _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase) external;
     function setNonExitPenaltyDailyRate(uint64 _nonExitPenaltyDailyRate) external;
     function setNonExitPenaltyPrincipal(uint64 _nonExitPenaltyPrincipal) external;
-    function setProtocolRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnf) external;
     function setStakingRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnf) external;
     function unregisterEtherFiNode(uint256 _validatorId) external;
     function updateAdmin(address _address, bool _isAdmin) external;

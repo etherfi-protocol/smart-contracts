@@ -66,6 +66,8 @@ interface ILiquidityPool {
     function sendExitRequests(uint256[] calldata _validatorIds) external;
 
     function rebase(int128 _accruedRewards) external;
+    function addEthAmountLockedForWithdrawal(uint128 _amount) external;
+    
     function setTokenAddress(address _eETH) external;
     function setStakingManager(address _address) external;
     function setEtherFiNodesManager(address _nodeManager) external;

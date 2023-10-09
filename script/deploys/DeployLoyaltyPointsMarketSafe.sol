@@ -22,7 +22,7 @@ contract DeployLoyaltyPointsMarketSafeScript is Script {
 
         lpaMarketSafe = new LoyaltyPointsMarketSafe(1500000000000);
 
-        addressProvider.addContract(address(lpaMarketSafe), "LoyaltyPointsMarketSafe");
+        addressProvider.addContract(address(lpaMarketSafe), "LoyaltyPointsMarketSafeV2");
 
         vm.stopBroadcast();
     }

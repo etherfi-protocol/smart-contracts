@@ -503,13 +503,8 @@
           },
           {
             "internalType": "uint128",
-            "name": "pendingWithdrawalAmount",
+            "name": "finalizedWithdrawalAmount",
             "type": "uint128"
-          },
-          {
-            "internalType": "uint32",
-            "name": "numPendingValidatorsRequestedToExit",
-            "type": "uint32"
           },
           {
             "internalType": "uint32",
@@ -943,13 +938,8 @@
           },
           {
             "internalType": "uint128",
-            "name": "pendingWithdrawalAmount",
+            "name": "finalizedWithdrawalAmount",
             "type": "uint128"
-          },
-          {
-            "internalType": "uint32",
-            "name": "numPendingValidatorsRequestedToExit",
-            "type": "uint32"
           },
           {
             "internalType": "uint32",
@@ -1105,13 +1095,8 @@
           },
           {
             "internalType": "uint128",
-            "name": "pendingWithdrawalAmount",
+            "name": "finalizedWithdrawalAmount",
             "type": "uint128"
-          },
-          {
-            "internalType": "uint32",
-            "name": "numPendingValidatorsRequestedToExit",
-            "type": "uint32"
           },
           {
             "internalType": "uint32",

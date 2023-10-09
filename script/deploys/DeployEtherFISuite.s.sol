@@ -132,8 +132,7 @@ contract DeployEtherFiSuiteScript is Script {
             address(auctionManager),
             address(stakingManager),
             address(TNFTInstance),
-            address(BNFTInstance),
-            address(protocolRevenueManager)
+            address(BNFTInstance)
         );
 
         regulationsManagerImplementation = new RegulationsManager();

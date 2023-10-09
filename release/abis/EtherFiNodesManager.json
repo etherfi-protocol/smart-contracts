@@ -6,7 +6,42 @@
   },
   {
     "inputs": [],
+    "name": "AlreadyInstalled",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "CannotResetNodeWithBalance",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidPenaltyRate",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "MustClaimRestakedWithdrawals",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NonZeroAddress",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotInstalled",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "NotTnftOwner",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ValidatorNotLive",
     "type": "error"
   },
   {
@@ -190,6 +225,25 @@
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "_validatorId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "withdrawalSafeAddress",
+        "type": "address"
+      }
+    ],
+    "name": "WithdrawalSafeReset",
+    "type": "event"
+  },
+  {
     "inputs": [],
     "name": "DEPRECATED_admin",
     "outputs": [
@@ -223,6 +277,34 @@
         "internalType": "address",
         "name": "",
         "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "DEPRECATED_protocolRewardsSplit",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "treasury",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "nodeOperator",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "tnft",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint64",
+        "name": "bnft",
+        "type": "uint64"
       }
     ],
     "stateMutability": "view",
@@ -339,6 +421,30 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_count",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "_enableRestaking",
+        "type": "bool"
+      }
+    ],
+    "name": "createUnusedWithdrawalSafe",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "delayedWithdrawalRouter",
     "outputs": [
@@ -426,6 +532,25 @@
       }
     ],
     "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_validatorId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getExitTimestamp",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -541,12 +666,63 @@
         "type": "uint256"
       }
     ],
+    "name": "getStakingStartTimestamp",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getUnusedWithdrawalSafesLength",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_validatorId",
+        "type": "uint256"
+      }
+    ],
     "name": "getWithdrawalCredentials",
     "outputs": [
       {
         "internalType": "bytes",
         "name": "",
         "type": "bytes"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "_validatorId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getWithdrawalSafeAddress",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
       }
     ],
     "stateMutability": "view",
@@ -590,11 +766,6 @@
       {
         "internalType": "address",
         "name": "_bnftContract",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "_protocolRevenueManagerContract",
         "type": "address"
       }
     ],
@@ -803,24 +974,6 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_operator",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256[]",
-        "name": "_validatorIds",
-        "type": "uint256[]"
-      }
-    ],
-    "name": "partialWithdrawBatchGroupByOperator",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "inputs": [],
     "name": "pauseContract",
     "outputs": [],
@@ -892,34 +1045,6 @@
   },
   {
     "inputs": [],
-    "name": "protocolRewardsSplit",
-    "outputs": [
-      {
-        "internalType": "uint64",
-        "name": "treasury",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint64",
-        "name": "nodeOperator",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint64",
-        "name": "tnft",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint64",
-        "name": "bnft",
-        "type": "uint64"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "proxiableUUID",
     "outputs": [
       {
@@ -952,19 +1077,38 @@
         "type": "uint256"
       },
       {
-        "internalType": "address",
-        "name": "_address",
-        "type": "address"
+        "internalType": "bool",
+        "name": "_enableRestaking",
+        "type": "bool"
       }
     ],
     "name": "registerEtherFiNode",
-    "outputs": [],
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
     "stateMutability": "nonpayable",
     "type": "function"
   },
   {
     "inputs": [],
     "name": "renounceOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256[]",
+        "name": "_validatorIds",
+        "type": "uint256[]"
+      }
+    ],
+    "name": "resetWithdrawalSafes",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -1106,34 +1250,6 @@
         "type": "uint64"
       }
     ],
-    "name": "setProtocolRewardsSplit",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint64",
-        "name": "_treasury",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint64",
-        "name": "_nodeOperator",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint64",
-        "name": "_tnft",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint64",
-        "name": "_bnft",
-        "type": "uint64"
-      }
-    ],
     "name": "setStakingRewardsSplit",
     "outputs": [],
     "stateMutability": "nonpayable",
@@ -1237,6 +1353,25 @@
     "name": "unregisterEtherFiNode",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "unusedWithdrawalSafes",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {

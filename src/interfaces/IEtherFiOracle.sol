@@ -18,8 +18,7 @@ interface IEtherFiOracle {
         uint32 lastFinalizedWithdrawalRequestId;
         uint32 eEthTargetAllocationWeight;
         uint32 etherFanTargetAllocationWeight;
-        uint128 pendingWithdrawalAmount;
-        uint32 numPendingValidatorsRequestedToExit;
+        uint128 finalizedWithdrawalAmount;
         uint32 numValidatorsToSpinUp;
     }
 
