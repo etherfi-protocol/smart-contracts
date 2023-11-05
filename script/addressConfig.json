@@ -1,0 +1,224 @@
+{
+  "AddressProvider": [],
+  "RegulationsManager": [],
+  "LiquidityPool": [
+    {
+      "methodName": "bNftTreasury",
+      "value": "BNFT",
+      "isReference": true
+    },
+    {
+      "methodName": "eETH",
+      "value": "EETH",
+      "isReference": true
+    },
+    {
+      "methodName": "membershipManager",
+      "value": "MembershipManager",
+      "isReference": true
+    },
+    {
+      "methodName": "nodesManager",
+      "value": "EtherFiNodesManager",
+      "isReference": true
+    },
+    {
+      "methodName": "regulationsManager",
+      "value": "RegulationsManager",
+      "isReference": true
+    },
+    {
+      "methodName": "stakingManager",
+      "value": "StakingManager",
+      "isReference": true
+    },
+    {
+      "methodName": "tNft",
+      "value": "TNFT",
+      "isReference": true
+    }
+  ],
+  "EETH": [
+    {
+      "methodName": "liquidityPool",
+      "value": "LiquidityPool",
+      "isReference": true
+    }
+  ],
+  "WeETH": [
+    {
+      "methodName": "eETH",
+      "value": "EETH",
+      "isReference": true
+    },
+    {
+      "methodName": "liquidityPool",
+      "value": "LiquidityPool",
+      "isReference": true
+    }
+  ],
+  "MembershipManager": [
+    {
+      "methodName": "eETH",
+      "value": "EETH",
+      "isReference": true
+    },
+    {
+      "methodName": "liquidityPool",
+      "value": "LiquidityPool",
+      "isReference": true
+    },
+    {
+      "methodName": "membershipNFT",
+      "value": "MembershipNFT",
+      "isReference": true
+    },
+    {
+      "methodName": "protocolRevenueManager",
+      "value": "ProtocolRevenueManager",
+      "isReference": true
+    },
+    {
+      "methodName": "treasury",
+      "value": "Treasury",
+      "isReference": true
+    }
+  ],
+  "MembershipNFT": [],
+  "NFTExchange": [
+    {
+      "methodName": "membershipNft",
+      "value": "MembershipNFT",
+      "isReference": true
+    },
+    {
+      "methodName": "tNft",
+      "value": "TNFT",
+      "isReference": true
+    }
+  ],
+  "AuctionManager": [
+    {
+      "methodName": "nodeOperatorManager",
+      "value": "NodeOperatorManager",
+      "isReference": true
+    },
+    {
+      "methodName": "protocolRevenueManager",
+      "value": "ProtocolRevenueManager",
+      "isReference": true
+    },
+    {
+      "methodName": "stakingManagerContractAddress",
+      "value": "StakingManager",
+      "isReference": true
+    }
+  ],
+  "StakingManager": [
+    {
+      "methodName": "BNFTInterfaceInstance",
+      "value": "BNFT",
+      "isReference": true
+    },
+    {
+      "methodName": "TNFTInterfaceInstance",
+      "value": "TNFT",
+      "isReference": true
+    },
+    {
+      "methodName": "auctionManager",
+      "value": "AuctionManager",
+      "isReference": true
+    },
+    {
+      "methodName": "liquidityPoolContract",
+      "value": "LiquidityPool",
+      "isReference": true
+    },
+    {
+      "methodName": "nodesManager",
+      "value": "EtherFiNodesManager",
+      "isReference": true
+    }
+  ],
+  "EtherFiNodesManager": [
+    {
+      "methodName": "auctionManager",
+      "value": "AuctionManager",
+      "isReference": true
+    },
+    {
+      "methodName": "bnft",
+      "value": "BNFT",
+      "isReference": true
+    },
+    {
+      "methodName": "protocolRevenueManager",
+      "value": "ProtocolRevenueManager",
+      "isReference": true
+    },
+    {
+      "methodName": "protocolRevenueManagerContract",
+      "value": "ProtocolRevenueManager",
+      "isReference": true
+    },
+    {
+      "methodName": "stakingManagerContract",
+      "value": "StakingManager",
+      "isReference": true
+    },
+    {
+      "methodName": "tnft",
+      "value": "TNFT",
+      "isReference": true
+    },
+    {
+      "methodName": "treasuryContract",
+      "value": "Treasury",
+      "isReference": true
+    }
+  ],
+  "ProtocolRevenueManager": [
+    {
+      "methodName": "auctionManager",
+      "value": "AuctionManager",
+      "isReference": true
+    },
+    {
+      "methodName": "etherFiNodesManager",
+      "value": "EtherFiNodesManager",
+      "isReference": true
+    }
+  ],
+  "TNFT": [
+    {
+      "methodName": "stakingManagerAddress",
+      "value": "StakingManager",
+      "isReference": true
+    }
+  ],
+  "BNFT": [
+    {
+      "methodName": "stakingManagerAddress",
+      "value": "StakingManager",
+      "isReference": true
+    }
+  ],
+  "Treasury": [],
+  "NodeOperatorManager": [
+    {
+      "methodName": "auctionManagerContractAddress",
+      "value": "AuctionManager",
+      "isReference": true
+    }
+  ],
+  "EtherFiNode": [
+    {
+      "methodName": "etherFiNodesManager",
+      "value": "EtherFiNodesManager",
+      "isReference": true
+    }
+  ],
+  "EarlyAdopterPool": [],
+  "LoyaltyPointsMarketSafe": []
+}
