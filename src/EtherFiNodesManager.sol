@@ -65,9 +65,10 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
     event FundsWithdrawn(uint256 indexed _validatorId, uint256 amount);
     event NodeExitRequested(uint256 _validatorId);
+    event NodeExitRequestReverted(uint256 _validatorId);
     event NodeExitProcessed(uint256 _validatorId);
     event NodeEvicted(uint256 _validatorId);
-    event PhaseChanged(uint256 _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
+    event PhaseChanged(uint256 indexed _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
     event WithdrawalSafeReset(uint256 indexed _validatorId, address indexed withdrawalSafeAddress);
 
     //--------------------------------------------------------------------------------------

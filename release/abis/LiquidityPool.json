@@ -225,7 +225,7 @@
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "uint256",
         "name": "validatorId",
         "type": "uint256"
@@ -238,7 +238,7 @@
     "anonymous": false,
     "inputs": [
       {
-        "indexed": false,
+        "indexed": true,
         "internalType": "uint256",
         "name": "validatorId",
         "type": "uint256"
@@ -263,6 +263,19 @@
       }
     ],
     "name": "ValidatorRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "validatorId",
+        "type": "uint256"
+      }
+    ],
+    "name": "ValidatorRegistrationCanceled",
     "type": "event"
   },
   {

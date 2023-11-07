@@ -102,9 +102,13 @@ contract DeployPhaseTwoScript is Script {
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
 
-        etherFiOracleInstance.initialize(1, 96, 0, 32, 12, beacon_genesis_time);
-        // etherFiOracleInstance.initialize(2, 7200, 12, beacon_genesis_time);
-        // 96 slots = 19.2 mins, 7200 slots = 225 epochs = 1day
+        if (block.chainid == 1) {
+            // Mainnet's slot 0 happened at 1606824023; https://beaconcha.in/slot/0
+            etherFiOracleInstance.initialize(1, 7200, 0, 32, 12, 1606824023);
+
+            // TODO
+            // address oracleNodeAddress = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39
+            // etherFiOracleInstance.addCommitteeMember(oracleNodeAddress);
 
         etherFiOracleInstance.addCommitteeMember(address(0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39));
         etherFiOracleInstance.addCommitteeMember(address(0x601B37004f2A6B535a6cfBace0f88D2d534aCcD8));
@@ -122,7 +126,19 @@ contract DeployPhaseTwoScript is Script {
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
 
-        // Retrieve their actuall addresses from AddressProvider using their contract names
+        int32 acceptableRebaseAprInBps;
+        uint16 postReportWaitTimeInSlots;
+
+        if (block.chainid == 1) {
+            acceptableRebaseAprInBps = 500; // 5%
+            postReportWaitTimeInSlots = 7200 / 2; // 7200 slots = 225 epochs = 1 day
+        } else if (block.chainid == 5) {
+            acceptableRebaseAprInBps = 600; // 6%
+            postReportWaitTimeInSlots = 15 minutes / 12 seconds; // 15 minutes
+        } else {
+            require(false, "chain is wrong");
+        }
+
         etherFiAdminInstance.initialize(
             etherFiOracleAddress,
             stakingManagerAddress,
