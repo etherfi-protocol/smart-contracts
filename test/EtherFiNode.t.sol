@@ -784,7 +784,7 @@ contract EtherFiNodeTest is TestSetup {
             treasuryBalance + 0.05 ether + 0.05 ether // 5% rewards + 5% rewards that would have gone to node operator
         );
 
-        // dan should recieve the T-NFT share
+        // dan should receive the T-NFT share
         uint256 danExpectedStakingRewards = 1 ether * TNFTRewardSplit / RewardSplitDivisor;
         assertEq(address(dan).balance, danBalance + danExpectedStakingRewards);
 

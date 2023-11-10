@@ -260,9 +260,9 @@ function setProtocolRevenueManager(address _protocolRevenueManager) external onl
 
 **Parameters**
 
-| Name                      | Type      | Description                        |
-| ------------------------- | --------- | ---------------------------------- |
-| `_protocolRevenueManager` | `address` | the addres of the protocol manager |
+| Name                      | Type      | Description                         |
+| ------------------------- | --------- | ----------------------------------  |
+| `_protocolRevenueManager` | `address` | the address of the protocol manager |
 
 ### setStakingManagerContractAddress
 

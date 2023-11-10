@@ -393,7 +393,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     /// @notice Calculate which BNFT players are currently scheduled and assigned to deposit as a BNFT player.
     ///         We don't hold any data, just have the function return a start and finish index of the selected users in the array.
-    ///         When a user deposits, it calls this function and checks if the user depositing fits inside the first and last index returnd
+    ///         When a user deposits, it calls this function and checks if the user depositing fits inside the first and last index returned
     ///         by this function. The indices can wrap around as well. Lets look at an example of a BNFT array with size 10.
     ///
     ///         Example:

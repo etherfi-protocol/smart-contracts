@@ -48,7 +48,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @dev liquidity pool contract will call this function when a user requests withdraw
     /// @param amountOfEEth amount of eETH requested for withdrawal
     /// @param shareOfEEth share of eETH requested for withdrawal
-    /// @param recipient address to recieve with WithdrawRequestNFT
+    /// @param recipient address to receive with WithdrawRequestNFT
     /// @param fee fee to be subtracted from amount when recipient calls claimWithdraw
     /// @return uint256 id of the withdraw request
     function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external payable onlyLiquidtyPool returns (uint256) {

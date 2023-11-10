@@ -39,7 +39,7 @@ constructor() ERC721("Transferrable NFT", "TNFT");
 
 
 ```solidity
-function mint(address _reciever, uint256 _validatorId) external onlyStakingManagerContract;
+function mint(address _receiver, uint256 _validatorId) external onlyStakingManagerContract;
 ```
 
 ### onlyStakingManagerContract

@@ -15,7 +15,7 @@ contract EtherFiOracleTest is TestSetup {
     function test_addCommitteeMember() public {
         _moveClock(1024 + 2 * slotsPerEpoch);
 
-        // chad is not a commitee member
+        // chad is not a committee member
         vm.prank(chad);
         vm.expectRevert("You are not registered as the Oracle committee member");
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
