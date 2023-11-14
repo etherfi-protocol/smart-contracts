@@ -144,6 +144,19 @@
         "type": "uint256"
       }
     ],
+    "name": "NodeExitRequestReverted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "_validatorId",
+        "type": "uint256"
+      }
+    ],
     "name": "NodeExitRequested",
     "type": "event"
   },
