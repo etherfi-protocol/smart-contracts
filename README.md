@@ -1,6 +1,9 @@
 # etherfi-protocol smart-contracts
 
-Smart Contracts for ether.fi ethereum staking protocol
+Smart Contracts for ether.fi ethereum staking protocol.
+
+From 2024/02/15, we have migrated from our private repo to this public one.
+We start with the shallow copy of the latest commit of the prevate one.
 
 # EtherFi smart contracts setup
 
