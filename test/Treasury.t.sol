@@ -40,7 +40,6 @@ contract TreasuryTest is TestSetup {
         vm.expectRevert("the balance is lower than the requested amount");
         treasuryInstance.withdraw(0.5 ether + 1, owner);
 
-        uint256 ownerPrevBalance = address(owner).balance;
         vm.prank(owner);
         treasuryInstance.withdraw(0.5 ether, owner);
 
@@ -59,7 +58,6 @@ contract TreasuryTest is TestSetup {
 
         assertEq(address(treasuryInstance).balance, 5 ether);
 
-        uint256 ownerPrevBalance = address(owner).balance;
         vm.prank(owner);
         treasuryInstance.withdraw(0.5 ether, owner);
 

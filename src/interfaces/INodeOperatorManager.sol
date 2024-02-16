@@ -27,7 +27,7 @@ interface INodeOperatorManager {
         uint64 totalKeys
     ) external;
 
-    function batchMigrateNodeOperator(
+    function initializeOnUpgrade(
         address[] memory _operator, 
         bytes[] memory _ipfsHash,
         uint64[] memory _totalKeys,

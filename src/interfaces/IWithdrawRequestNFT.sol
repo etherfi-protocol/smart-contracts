@@ -19,8 +19,4 @@ interface IWithdrawRequestNFT {
     function invalidateRequest(uint256 requestId) external;
     function finalizeRequests(uint256 upperBound) external;
     function updateAdmin(address _address, bool _isAdmin) external;
-
-    function updateLiquidityPool(address _newLiquidityPool) external;
-    function updateEEth(address _newEEth) external;
-    function updateMembershipManager(address _newMembershipManager) external;
 }

@@ -93,6 +93,16 @@ contract DeployEtherFiSuiteScript is Script {
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address ethDepositContractAddress;
+        if (block.chainid == 5) {
+            // goerli
+            ethDepositContractAddress = 0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b;
+        } else if (block.chainid == 1) {
+            ethDepositContractAddress = 0x00000000219ab540356cBB839Cbe05303d7705Fa;
+        } else {
+            assert(false);
+        }
+        
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy contracts
@@ -107,7 +117,7 @@ contract DeployEtherFiSuiteScript is Script {
         stakingManagerImplementation = new StakingManager();
         stakingManagerProxy = new UUPSProxy(address(stakingManagerImplementation),"");
         stakingManager = StakingManager(address(stakingManagerProxy));
-        stakingManager.initialize(address(auctionManager));
+        stakingManager.initialize(address(auctionManager), ethDepositContractAddress);
 
         BNFTImplementation = new BNFT();
         BNFTProxy = new UUPSProxy(address(BNFTImplementation),"");
@@ -160,7 +170,6 @@ contract DeployEtherFiSuiteScript is Script {
         liquidityPool = LiquidityPool(
             payable(address(liquidityPoolProxy))
         );
-        liquidityPool.initialize();
 
         eETHImplementation = new EETH();
         eETHProxy = new UUPSProxy(address(eETHImplementation), "");
@@ -181,9 +190,7 @@ contract DeployEtherFiSuiteScript is Script {
         stakingManager.registerTNFTContract(address(TNFTInstance));
         stakingManager.registerBNFTContract(address(BNFTInstance));
 
-        liquidityPool.setTokenAddress(address(eETHInstance));
-        liquidityPool.setStakingManager(address(stakingManager));
-        liquidityPool.setEtherFiNodesManager(address(etherFiNodesManager));
+        liquidityPool.initialize(address(eETHInstance), address(stakingManager), address(etherFiNodesManager), address(0), address(0), address(0), address(0));
 
         weEthImplementation = new WeETH();
         weETHProxy = new UUPSProxy(address(weEthImplementation), "");

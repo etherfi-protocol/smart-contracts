@@ -77,10 +77,6 @@ contract DeployPhaseOnePointFiveScript is Script {
         liquidityPoolImplementation = new LiquidityPool();
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImplementation),"");
         liquidityPool = LiquidityPool(payable(address(liquidityPoolProxy)));
-        liquidityPool.initialize();
-        liquidityPool.setTnft(tnft);
-        liquidityPool.setStakingManager(stakingManagerProxyAddress);
-        liquidityPool.setEtherFiNodesManager(etherFiNodesManagerProxyAddress);
         addressProvider.addContract(address(liquidityPoolProxy), "LiquidityPool");
 
         eETHImplementation = new EETH();
@@ -92,14 +88,16 @@ contract DeployPhaseOnePointFiveScript is Script {
         membershipNFTImplementation = new MembershipNFT();
         membershipNFTProxy = new UUPSProxy(address(membershipNFTImplementation),"");
         membershipNFT = MembershipNFT(payable(address(membershipNFTProxy)));
-        membershipNFT.initialize(baseURI);
         addressProvider.addContract(address(membershipNFTProxy), "MembershipNFT");
 
         membershipManagerImplementation = new MembershipManager();
         membershipManagerProxy = new UUPSProxy(address(membershipManagerImplementation),"");
         membershipManager = MembershipManager(payable(address(membershipManagerProxy)));
-        // membershipManager.initialize(address(eETH), address(liquidityPool), address(membershipNFT), treasury, protocolRevenueManagerProxy);
         addressProvider.addContract(address(membershipManagerProxy), "MembershipManager");
+
+        liquidityPool.initialize(address(eETH), address(stakingManagerProxyAddress), address(etherFiNodesManagerProxyAddress), address(membershipManager), address(tnft), address(0), address(0));
+        // membershipManager.initialize(address(eETH), address(liquidityPool), address(membershipNFT), treasury, protocolRevenueManagerProxy);
+        membershipNFT.initialize(baseURI, address(membershipManager));
 
         weETHImplementation = new WeETH();
         weETHProxy = new UUPSProxy(address(weETHImplementation),"");
@@ -115,11 +113,8 @@ contract DeployPhaseOnePointFiveScript is Script {
 
         setUpAdmins(admin);
 
-        liquidityPool.setTokenAddress(address(eETH));
-        liquidityPool.setMembershipManager(address(membershipManager));
         regulationsManager.initializeNewWhitelist(initialHash);
         regulationsManager.confirmEligibility(initialHash);
-        membershipNFT.setMembershipManager(address(membershipManager));
         membershipManager.setTopUpCooltimePeriod(28 days);
 
         initializeTiers();

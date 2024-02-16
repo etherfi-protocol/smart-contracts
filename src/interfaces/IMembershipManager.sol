@@ -74,16 +74,17 @@ interface IMembershipManager {
     function vaultShareForEthAmount(uint8 _tier, uint256 _ethAmount) external view returns (uint256);
 
     // only Owner
+    function initializeOnUpgrade(address _etherFiAdminAddress, uint256 _fanBoostThresholdAmount, uint16 _burnFeeWaiverPeriodInDays) external;
+
     function setWithdrawalLockBlocks(uint32 _blocks) external;
     function updatePointsParams(uint16 _newPointsBoostFactor, uint16 _newPointsGrowthRate) external;
     function rebase(int128 _accruedRewards) external;
-    function addNewTier(uint40 _requiredTierPoints, uint24 _weight) external returns (uint256);
+    function addNewTier(uint40 _requiredTierPoints, uint24 _weight) external;
     function updateTier(uint8 _tier, uint40 _requiredTierPoints, uint24 _weight) external;
     function setPoints(uint256 _tokenId, uint40 _loyaltyPoints, uint40 _tierPoints) external;
-    function setPointsBatch(uint256[] calldata _tokenIds, uint40[] calldata _loyaltyPoints, uint40[] calldata _tierPoints) external;
-    function setMinDepositWei(uint56 _value) external;
-    function setMaxDepositTopUpPercent(uint8 _percent) external;
+    function setDepositAmountParams(uint56 _minDepositGwei, uint8 _maxDepositTopUpPercent) external;
     function setTopUpCooltimePeriod(uint32 _newWaitTime) external;
-    function withdrawFees(uint256 _amount, address _recipient) external;
     function updateAdmin(address _address, bool _isAdmin) external;
+    function pauseContract() external;
+    function unPauseContract() external;
 }

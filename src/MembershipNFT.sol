@@ -50,12 +50,20 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         _disableInitializers();
     }
 
-    function initialize(string calldata _metadataURI) external initializer {
+    function initialize(string calldata _metadataURI, address _membershipManagerInstance) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ERC1155_init(_metadataURI);
         nextMintTokenId = 1;
         maxTokenId = 1000;
+        membershipManager = IMembershipManager(_membershipManagerInstance);
+    }
+
+    function initializeOnUpgrade(address _liquidityPoolAddress) external onlyOwner {
+        require(_liquidityPoolAddress != address(0), "No zero addresses");
+        liquidityPool = ILiquidityPool(_liquidityPoolAddress);
+        admins[DEPRECATED_admin] = true;
+        DEPRECATED_admin = address(0);
     }
 
     function mint(address _to, uint256 _amount) external onlyMembershipManagerContract returns (uint256) {
@@ -97,14 +105,6 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         maxTokenId = _maxTokenId;
     }
 
-    function setMembershipManager(address _address) external onlyOwner {
-        membershipManager = IMembershipManager(_address);
-    }
-
-    function setLiquidityPool(address _address) external onlyOwner {
-        liquidityPool = ILiquidityPool(_address);
-    }
-
     /// @notice Set up for EAP migration; Updates the merkle root, Set the required loyalty points per tier
     /// @param _newMerkleRoot new merkle root used to verify the EAP user data (deposits, points)
     /// @param _requiredEapPointsPerEapDeposit required EAP points per deposit for each tier
@@ -141,7 +141,7 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         uint256[] memory _ids,
         uint256[] memory _amounts,
         bytes memory _data
-    ) internal override {
+    ) internal view override {
 
         // empty mints and burns from checks
         if (_from == address(0x00) || _to == address(0x00)) {
@@ -158,7 +158,7 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     //--------------------------------------  GETTER  --------------------------------------
     //--------------------------------------------------------------------------------------
 
-    function balanceOfUser(address _user, uint256 _id) public returns (uint256) {
+    function balanceOfUser(address _user, uint256 _id) public view returns (uint256) {
         return balanceOf(_user, _id);
     }
 

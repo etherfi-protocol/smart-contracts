@@ -55,14 +55,24 @@ contract EETHTest is TestSetup {
         assertEq(eETHInstance.totalShares(), 100);
 
         vm.prank(address(liquidityPoolInstance));
-        eETHInstance.burnShares(alice, 50);
+        eETHInstance.burnShares(alice, 25);
+
+        assertEq(eETHInstance.shares(alice), 75);
+        assertEq(eETHInstance.totalShares(), 75);
+
+        vm.prank(alice);
+        eETHInstance.burnShares(alice, 25);
 
         assertEq(eETHInstance.shares(alice), 50);
         assertEq(eETHInstance.totalShares(), 50);
 
-        vm.expectRevert("Only pool contract function");
+        vm.expectRevert("BURN_AMOUNT_EXCEEDS_BALANCE");
         vm.prank(alice);
         eETHInstance.burnShares(alice, 100);
+
+        vm.expectRevert("Incorrect Caller");
+        vm.prank(bob);
+        eETHInstance.burnShares(alice, 50);
     }
 
     function test_EEthRebase() public {

@@ -69,16 +69,16 @@ contract NodeOperatorManagerTest is TestSetup {
         keysUsed[1] = 1;
 
         vm.prank(bob);
-        vm.expectRevert("Caller is not the admin");
-        nodeOperatorManagerInstance.batchMigrateNodeOperator(
+        vm.expectRevert("Ownable: caller is not the owner");
+        nodeOperatorManagerInstance.initializeOnUpgrade(
             operators,
             hashes,
             totalKeys,
             keysUsed
         );
 
-        vm.prank(alice);
-        nodeOperatorManagerInstance.batchMigrateNodeOperator(
+        vm.prank(owner);
+        nodeOperatorManagerInstance.initializeOnUpgrade(
             operators,
             hashes,
             totalKeys,
@@ -97,9 +97,9 @@ contract NodeOperatorManagerTest is TestSetup {
 
         assertEq(nodeOperatorManagerInstance.registered(bob), true);
 
-        vm.prank(alice);
+        vm.prank(owner);
         vm.expectRevert("Already registered");
-        nodeOperatorManagerInstance.batchMigrateNodeOperator(
+        nodeOperatorManagerInstance.initializeOnUpgrade(
             operators,
             hashes,
             totalKeys,

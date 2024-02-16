@@ -22,7 +22,11 @@ contract EETHUpgrade is Script {
         EETH EETHInstance = EETH(EETHProxyAddress);
         EETH EETHV2Implementation = new EETH();
 
+        uint256 totalShares = EETHInstance.totalShares();
+
         EETHInstance.upgradeTo(address(EETHV2Implementation));
+
+        require(totalShares == EETHInstance.totalShares(), "EETHUpgrade: totalShares mismatch");
 
         vm.stopBroadcast();
     }

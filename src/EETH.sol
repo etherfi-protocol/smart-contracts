@@ -34,6 +34,8 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     bytes32 private immutable _HASHED_VERSION;
     bytes32 private immutable _TYPE_HASH;
 
+    event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
+
     // TODO: Figure our what `name` and `version` are for
     constructor() { 
         bytes32 hashedName = keccak256("EETH");
@@ -60,11 +62,19 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     function mintShares(address _user, uint256 _share) external onlyPoolContract {
         shares[_user] += _share;
         totalShares += _share;
+
+        emit Transfer(address(0), _user, liquidityPool.amountForShare(_share));
+        emit TransferShares(address(0), _user, _share);
     }
 
-    function burnShares(address _user, uint256 _share) external onlyPoolContract {
+    function burnShares(address _user, uint256 _share) external {
+        require(msg.sender == address(liquidityPool) || msg.sender == _user, "Incorrect Caller");
+        require(shares[_user] >= _share, "BURN_AMOUNT_EXCEEDS_BALANCE");
         shares[_user] -= _share;
         totalShares -= _share;
+
+        emit Transfer(_user, address(0), liquidityPool.amountForShare(_share));
+        emit TransferShares(_user, address(0), _share);
     }
 
     function transfer(address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
@@ -151,6 +161,8 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
 
         shares[_sender] -= _sharesAmount;
         shares[_recipient] += _sharesAmount;
+
+        emit TransferShares(_sender, _recipient, _sharesAmount);
     }
 
     function _authorizeUpgrade(

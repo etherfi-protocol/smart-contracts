@@ -140,11 +140,31 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertFalse(requestIsFinalized, "Request should not be finalized");
 
         vm.expectRevert("Request is not finalized");
-        vm.prank(address(liquidityPoolInstance));
+        vm.prank(bob);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
     }
 
-    function test_ValidClaimWithdraw() public {
+    function test_ClaimWithdrawOfOthers() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 10 ether);
+
+        uint96 amountOfEEth = 1 ether;
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), amountOfEEth);
+
+        vm.prank(bob);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
+
+        vm.expectRevert("Not the owner of the NFT");
+        vm.prank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+    }
+
+    function test_ValidClaimWithdraw1() public {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         vm.stopPrank();
@@ -152,6 +172,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 bobsStartingBalance = address(bob).balance;
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 10 ether);
+        assertEq(eETHInstance.balanceOf(bob), 10 ether);
+        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 0 ether, "eETH balance should be 0 ether");
 
         // Case 1.
         // Even after the rebase, the withdrawal amount should remain the same; 1 eth
@@ -161,11 +183,19 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
+        assertEq(withdrawRequestNFTInstance.accumulatedDustEEthShares(), 0, "Accumulated dust should be 0");
+        assertEq(eETHInstance.balanceOf(bob), 9 ether);
+        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 1 ether, "eETH balance should be 1 ether");
+
+        // Rebase with accrued_rewards = 10 ether for the deposited 10 ether
+        // -> 1 ether eETH shares = 2 ether ETH
         vm.prank(address(membershipManagerInstance));
         liquidityPoolInstance.rebase(10 ether);
 
         assertEq(withdrawRequestNFTInstance.balanceOf(bob), 1, "Bobs balance should be 1");
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId), bob, "Bobs should own the NFT");
+        assertEq(eETHInstance.balanceOf(bob), 18 ether);
+        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 2 ether, "eETH balance should be 2 ether");
 
         _finalizeWithdrawalRequest(requestId);
 
@@ -175,10 +205,17 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 bobsEndingBalance = address(bob).balance;
 
         assertEq(bobsEndingBalance, bobsStartingBalance + 1 ether, "Bobs balance should be 1 ether higher");
+        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 1 ether, "eETH balance should be 1 ether");
+        assertEq(liquidityPoolInstance.amountForShare(withdrawRequestNFTInstance.accumulatedDustEEthShares()), 1 ether);
+
+        vm.prank(alice);
+        withdrawRequestNFTInstance.burnAccumulatedDustEEthShares();
+        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 0 ether, "eETH balance should be 0 ether");
+        assertEq(eETHInstance.balanceOf(bob), 18 ether + 1 ether); // 1 ether eETH in `withdrawRequestNFT` contract is re-distributed to the eETH holders
     }
 
     function test_ValidClaimWithdrawWithNegativeRebase() public {
-        uint256[] memory validatorIds = launch_validator();
+        launch_validator();
 
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
@@ -213,27 +250,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(bobsEndingBalance, bobsStartingBalance + 0.5 ether, "Bobs balance should be 1 ether higher");
     }
 
-    function testUpdateLiquidityPool() public {
-        address newLiquidityPool = address(0x456);
-        vm.prank(alice);
-        withdrawRequestNFTInstance.updateLiquidityPool(newLiquidityPool);
-        assertEq(address(withdrawRequestNFTInstance.liquidityPool()), newLiquidityPool, "Liquidity pool should be updated");
-    }
-
-    function testUpdateEEth() public {
-        address newEEth = address(0x789);
-        vm.prank(alice);
-        withdrawRequestNFTInstance.updateEEth(newEEth);
-        assertEq(address(withdrawRequestNFTInstance.eETH()), newEEth, "eETH should be updated");
-    }
-
-    function testUpdateAdmin() public {
-        address newAdmin = address(0xabc);
-        vm.prank(owner);
-        withdrawRequestNFTInstance.updateAdmin(newAdmin, true);
-        assertTrue(withdrawRequestNFTInstance.admins(newAdmin));
-    }
-
     function test_withdraw_with_zero_liquidity() public {
         // bob mints 60 eETH and alilce spins up 2 validators with the deposited 60 ETH
         launch_validator();
@@ -261,5 +277,53 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         assertEq(bobsEndingBalance, bobsStartingBalance + 60 ether, "Bobs balance should be 60 ether higher");
         
+    }
+
+    function test_SD_6() public {
+        vm.deal(bob, 98);
+
+        vm.startPrank(bob);
+        liquidityPoolInstance.deposit{value: 98}();
+        eETHInstance.approve(address(liquidityPoolInstance), 98);
+        vm.stopPrank();
+
+        assertEq(eETHInstance.totalShares(), 98);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 98);
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(2);
+        assertEq(eETHInstance.totalShares(), 98);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 100);
+
+        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 0);
+        vm.prank(bob);
+        // Withdraw request for 9 wei eETH amount (= 8.82 wei eETH share)
+        // 8 wei eETH share is transfered to `withdrawRequestNFT` contract
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 9);
+        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 8);
+        // Within `LP.requestWithdraw`
+        // - `share` is calculated by `sharesForAmount` as (9 * 98) / 100 = 8.82 ---> (rounded down to) 8
+
+
+        _finalizeWithdrawalRequest(requestId);
+
+
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        // Within `claimWithdraw`,
+        // - `request.amountOfEEth` is 9
+        // - `amountForShares` is (8 * 100) / 98 = 8.16 ---> (rounded down to) 8
+        // - `amountToTransfer` is min(9, 8) = 8
+        // Therefore, it calls `LP.withdraw(.., 8)`
+
+        // Within `LP.withdraw`, 
+        // - `share` is calculated by 'sharesForWithdrawalAmount' as (8 * 98 + 100 - 1) / 100 = 8.83 ---> (rounded down to) 8
+
+        // As a result, bob received 8 wei ETH which is 1 wei less than 9 wei.
+        assertEq(bob.balance, 8);
+        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 0);
+
+        // We burnt 8 wei eETH share which is worth of 8.16 wei eETH amount.
+        // We processed the withdrawal of 8 wei ETH. 
+        // --> The rest 0.16 wei ETH is effectively distributed to the other eETH holders.
     }
 }

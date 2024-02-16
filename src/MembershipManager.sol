@@ -10,6 +10,7 @@ import "./interfaces/IeETH.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IMembershipNFT.sol";
 import "./interfaces/ILiquidityPool.sol";
+import "./interfaces/IEtherFiAdmin.sol";
 
 import "./libraries/GlobalIndexLibrary.sol";
 
@@ -62,12 +63,15 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     // Phase 2
     TierVault[] public tierVaults;
 
+    IEtherFiAdmin public etherFiAdmin;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
     event FundsMigrated(address indexed user, uint256 _tokenId, uint256 _amount, uint256 _eapPoints, uint40 _loyaltyPoints, uint40 _tierPoints);
     event NftUpdated(uint256 _tokenId, uint128 _amount, uint128 _amountSacrificedForBoostingPoints, uint40 _loyaltyPoints, uint40 _tierPoints, uint8 _tier, uint32 _prevTopUpTimestamp, uint96 _share);
+    event NftUnwrappedForEEth(address indexed _user, uint256 indexed _tokenId, uint256 _amountOfEEth, uint40 _loyaltyPoints, uint256 _feeAmount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -85,12 +89,14 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     error WrongVersion();
 
     // To be called for Phase 2 contract upgrade
-    function initializeOnUpgrade() external onlyOwner {
-        fanBoostThreshold = 1_000; // 1 ETH
-        burnFeeWaiverPeriodInDays = 30;
+    function initializeOnUpgrade(address _etherFiAdminAddress, uint256 _fanBoostThresholdAmount, uint16 _burnFeeWaiverPeriodInDays) external onlyOwner {
+        etherFiAdmin = IEtherFiAdmin(_etherFiAdminAddress);
+        fanBoostThreshold = uint16(_fanBoostThresholdAmount / 0.001 ether);
+        burnFeeWaiverPeriodInDays = _burnFeeWaiverPeriodInDays;
         while (tierVaults.length < tierData.length) {
             tierVaults.push(TierVault(0, 0));
         }
+        admins[_etherFiAdminAddress] = true;
     }
 
     error InvalidEAPRollover();
@@ -117,7 +123,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         uint40 loyaltyPoints = uint40(_min(_points, type(uint40).max));
         uint40 tierPoints = membershipNFT.computeTierPointsForEap(_eapDepositBlockNumber);
 
-        liquidityPool.deposit{value: msg.value}(msg.sender);
+        liquidityPool.deposit{value: msg.value}(msg.sender, address(0));
 
         uint256 tokenId = _mintMembershipNFT(msg.sender, msg.value - _amountForPoints, _amountForPoints, loyaltyPoints, tierPoints);
 
@@ -137,7 +143,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     /// @param _amountForPoints amount of ETH to boost earnings of {loyalty, tier} points
     /// @return tokenId The ID of the minted membership NFT.
     function wrapEth(uint256 _amount, uint256 _amountForPoints, address _referral) public payable whenNotPaused returns (uint256) {
-        uint256 feeAmount = mintFee * 0.001 ether;
+        uint256 feeAmount = uint256(mintFee) * 0.001 ether;
         uint256 depositPerNFT = _amount + _amountForPoints;
         uint256 ethNeededPerNFT = depositPerNFT + feeAmount;
 
@@ -157,10 +163,17 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         _claimStakingRewards(_tokenId);
         _migrateFromV0ToV1(_tokenId);
 
+        uint40 loyaltyPoints = membershipNFT.loyaltyPointsOf(_tokenId);
         (uint256 totalBalance, uint256 feeAmount) = _withdrawAndBurn(_tokenId);
 
         // transfer 'eEthShares' of eETH to the owner
         eETH.transfer(msg.sender, totalBalance - feeAmount);
+
+        if (feeAmount > 0) {
+            liquidityPool.withdraw(address(this), feeAmount);
+        }
+
+        emit NftUnwrappedForEEth(msg.sender, _tokenId, totalBalance - feeAmount, loyaltyPoints, feeAmount);
     }
 
     /// @notice Increase your deposit tied to this NFT within the configured percentage limit.
@@ -174,7 +187,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         claim(_tokenId);
 
         uint256 additionalDeposit = _topUpDeposit(_tokenId, _amount, _amountForPoints);
-        liquidityPool.deposit{value: additionalDeposit}(msg.sender);
+        liquidityPool.deposit{value: additionalDeposit}(msg.sender, address(0));
         _emitNftUpdateEvent(_tokenId);
     }
 
@@ -244,8 +257,9 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         _emitNftUpdateEvent(_tokenId);
     }
 
+    error InvalidCaller();
     function rebase(int128 _accruedRewards) external {
-        _requireAdmin();
+        if (msg.sender != address(etherFiAdmin)) revert InvalidCaller();
         uint256 ethRewardsPerEEthShareBeforeRebase = liquidityPool.amountForShare(1 ether);
         liquidityPool.rebase(_accruedRewards);
         uint256 ethRewardsPerEEthShareAfterRebase = liquidityPool.amountForShare(1 ether);
@@ -255,7 +269,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         uint256 etherFanEEthShares = eETH.shares(address(this));
         uint256 thresholdAmount = fanBoostThresholdEthAmount();
         if (address(this).balance >= thresholdAmount) {
-            uint256 mintedShare = liquidityPool.deposit{value: thresholdAmount}(address(this));
+            uint256 mintedShare = liquidityPool.deposit{value: thresholdAmount}(address(this), address(0));
             ethRewardsPerEEthShareAfterRebase += 1 ether * thresholdAmount / etherFanEEthShares;
         }
 
@@ -287,12 +301,11 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     }
 
     error TierLimitExceeded();
-    function addNewTier(uint40 _requiredTierPoints, uint24 _weight) external returns (uint256) {
+    function addNewTier(uint40 _requiredTierPoints, uint24 _weight) external {
         _requireAdmin();
-        if (tierDeposits.length >= type(uint8).max) revert TierLimitExceeded();
+        if (tierData.length >= type(uint8).max) revert TierLimitExceeded();
         tierData.push(TierData(0, _requiredTierPoints, _weight, 0));
         tierVaults.push(TierVault(0, 0));
-        return tierDeposits.length - 1;
     }
 
     error OutOfBound();
@@ -301,17 +314,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         if (_tier >= tierData.length) revert OutOfBound();
         tierData[_tier].requiredTierPoints = _requiredTierPoints;
         tierData[_tier].weight = _weight;
-    }
-
-    /// @notice Sets the points for the given NFTs.
-    /// @dev This function allows the contract owner to set the points for specific NFTs.
-    /// @param _tokenIds The IDs of the membership NFT.
-    /// @param _loyaltyPoints The number of loyalty points to set for the specified NFT.
-    /// @param _tierPoints The number of tier points to set for the specified NFT.
-    function setPointsBatch(uint256[] calldata _tokenIds, uint40[] calldata _loyaltyPoints, uint40[] calldata _tierPoints) external {
-        for (uint256 i = 0; i < _tokenIds.length; i++) {
-            setPoints(_tokenIds[i], _loyaltyPoints[i], _tierPoints[i]);            
-        }
     }
 
     /// @notice Sets the points for a given Ethereum address.
@@ -327,15 +329,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         _emitNftUpdateEvent(_tokenId);
     }
 
-    error InvalidWithdraw();
-    function withdrawFees(uint256 _amount, address _recipient) external {
-        _requireAdmin();
-        if (_recipient == address(0)) revert InvalidWithdraw();
-        if (address(this).balance < _amount) revert InvalidWithdraw();
-        (bool sent, ) = address(_recipient).call{value: _amount}("");
-        if (!sent) revert InvalidWithdraw();
-    }
-
     function updatePointsParams(uint16 _newPointsBoostFactor, uint16 _newPointsGrowthRate) external {
         _requireAdmin();
         pointsBoostFactor = _newPointsBoostFactor;
@@ -349,17 +342,12 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     }
 
     /// @notice Updates minimum valid deposit
-    /// @param _value minimum deposit in wei
-    function setMinDepositWei(uint56 _value) external {
+    /// @param _minDepositGwei minimum deposit in wei
+    /// @param _maxDepositTopUpPercent integer percentage value
+    function setDepositAmountParams(uint56 _minDepositGwei, uint8 _maxDepositTopUpPercent) external {
         _requireAdmin();
-        minDepositGwei = _value;
-    }
-
-    /// @notice Updates minimum valid deposit
-    /// @param _percent integer percentage value
-    function setMaxDepositTopUpPercent(uint8 _percent) external {
-        _requireAdmin();
-        maxDepositTopUpPercent = _percent;
+        minDepositGwei = _minDepositGwei;
+        maxDepositTopUpPercent = _maxDepositTopUpPercent;
     }
 
     /// @notice Updates the time a user must wait between top ups
@@ -481,10 +469,12 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         uint8 tier = tokenData[_tokenId].tier;
         uint256 vaultShare = tokenData[_tokenId].vaultShare;
         uint256 ethAmount = ethAmountForVaultShare(tier, vaultShare);
-        uint64 feeAmount = hasMetBurnFeeWaiverPeriod(_tokenId) ? 0 : burnFee * 0.001 ether;
+        uint256 feeAmount = hasMetBurnFeeWaiverPeriod(_tokenId) ? 0 : uint256(burnFee) * 0.001 ether;
         if (ethAmount < feeAmount) revert InsufficientBalance();
 
         _withdraw(_tokenId, ethAmount);
+        delete tokenData[_tokenId];
+
         membershipNFT.burn(msg.sender, _tokenId, 1);
 
         _emitNftUpdateEvent(_tokenId);
@@ -685,16 +675,16 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     }
 
     error OnlyTokenOwner();
-    function _requireTokenOwner(uint256 _tokenId) internal {
+    function _requireTokenOwner(uint256 _tokenId) internal view {
         if (membershipNFT.balanceOfUser(msg.sender, _tokenId) != 1) revert OnlyTokenOwner();
     }
 
     error OnlyAdmin();
-    function _requireAdmin() internal {
+    function _requireAdmin() internal view {
         if (!admins[msg.sender]) revert OnlyAdmin();
     }
 
-    function _feeAmountSanityCheck(uint256 _feeAmount) internal {
+    function _feeAmountSanityCheck(uint256 _feeAmount) internal pure {
         if (_feeAmount % 0.001 ether != 0 || _feeAmount / 0.001 ether > type(uint16).max) revert InvalidAmount();
     }
 

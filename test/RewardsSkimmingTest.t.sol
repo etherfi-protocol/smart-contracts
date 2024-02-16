@@ -77,7 +77,6 @@ contract RewardsSkimmingTest is TestSetup {
 
             uint256[] memory candidateBidIds = new uint256[](1);
             candidateBidIds[0] = validatorIds[i];
-            bytes32[] memory stakerProof = merkleStakers.getProof(stakerWhitelistedAddresses, i);
             stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(candidateBidIds, false);
 
             address etherFiNode = managerInstance.etherfiNodeAddress(candidateBidIds[0]);

@@ -22,9 +22,12 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     uint32 public nextRequestId;
     uint32 public lastFinalizedRequestId;
+    uint96 public accumulatedDustEEthShares; // to be burned or used to cover the validator churn cost
 
-    event WithdrawRequestCreated(uint32 requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
-    event WithdrawRequestClaimed(uint32 requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
+    event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
+    event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
+    event WithdrawRequestInvalidated(uint32 indexed requestId);
+    event WithdrawRequestValidated(uint32 indexed requestId);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -62,13 +65,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return requestId;
     }
 
-    /// @notice called by the NFT owner to claim their ETH
-    /// @dev burns the NFT and transfers ETH from the liquidity pool to the owner minus any fee, withdraw request must be valid and finalized
-    /// @param tokenId the id of the withdraw request and associated NFT
-    function claimWithdraw(uint256 tokenId) external {
-        require(tokenId <= nextRequestId, "Request does not exist");
+    function getClaimableAmount(uint256 tokenId) public view returns (uint256) {
+        require(tokenId < nextRequestId, "Request does not exist");
         require(tokenId <= lastFinalizedRequestId, "Request is not finalized");
-        require(ownerOf(tokenId) == msg.sender, "Not the owner of the NFT");
+        require(ownerOf(tokenId) != address(0), "Already Claimed");
 
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
         require(request.isValid, "Request is not valid");
@@ -76,25 +76,54 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         // send the lesser value of the originally requested amount of eEth or the current eEth value of the shares
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
         uint256 amountToTransfer = (request.amountOfEEth < amountForShares) ? request.amountOfEEth : amountForShares;
-        require(amountToTransfer > 0, "Amount to transfer is zero");
+        uint256 fee = uint256(request.feeGwei) * 1 gwei;
+
+        return amountToTransfer - fee;
+    }
+
+    /// @notice called by the NFT owner to claim their ETH
+    /// @dev burns the NFT and transfers ETH from the liquidity pool to the owner minus any fee, withdraw request must be valid and finalized
+    /// @param tokenId the id of the withdraw request and associated NFT
+    function claimWithdraw(uint256 tokenId) public {
+        require(ownerOf(tokenId) == msg.sender, "Not the owner of the NFT");
+
+        IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
+        uint256 fee = uint256(request.feeGwei) * 1 gwei;
+        uint256 amountToWithdraw = getClaimableAmount(tokenId);
 
         // transfer eth to requester
         address recipient = ownerOf(tokenId);
         _burn(tokenId);
         delete _requests[tokenId];
 
-        uint256 fee = request.feeGwei * 1 gwei;
         if (fee > 0) {
             // send fee to membership manager
             liquidityPool.withdraw(address(membershipManager), fee);
         }
 
-        uint256 amountBurnedShare = liquidityPool.withdraw(recipient, amountToTransfer - fee);
+        uint256 amountBurnedShare = liquidityPool.withdraw(recipient, amountToWithdraw);
+        uint256 amountUnBurnedShare = request.shareOfEEth - amountBurnedShare;
+        if (amountUnBurnedShare > 0) {
+            accumulatedDustEEthShares += uint96(amountUnBurnedShare);
+        }
 
-        emit WithdrawRequestClaimed(uint32(tokenId), amountToTransfer, amountBurnedShare, recipient, fee);
+        emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw + fee, amountBurnedShare, recipient, fee);
     }
-    
-    // add function to transfer accumulated shares to admin
+
+    function batchClaimWithdraw(uint256[] calldata tokenIds) external {
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            claimWithdraw(tokenIds[i]);
+        }
+    }
+
+    // a function to transfer accumulated shares to admin
+    function burnAccumulatedDustEEthShares() external onlyAdmin {
+        require(eETH.totalShares() > accumulatedDustEEthShares, "Inappropriate burn");
+        uint256 amount = accumulatedDustEEthShares;
+        accumulatedDustEEthShares = 0;
+
+        eETH.burnShares(address(this), amount);
+    }
 
     function getRequest(uint256 requestId) external view returns (IWithdrawRequestNFT.WithdrawRequest memory) {
         return _requests[requestId];
@@ -109,22 +138,17 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function invalidateRequest(uint256 requestId) external onlyAdmin {
+        require(_requests[requestId].isValid, "Request is not valid");
         _requests[requestId].isValid = false;
+
+        emit WithdrawRequestInvalidated(uint32(requestId));
     }
 
-    function updateLiquidityPool(address _newLiquidityPool) external onlyAdmin {
-        require(_newLiquidityPool != address(0), "Cannot be address zero");
-        liquidityPool = ILiquidityPool(_newLiquidityPool);
-    }
+    function validateRequest(uint256 requestId) external onlyAdmin {
+        require(!_requests[requestId].isValid, "Request is valid");
+        _requests[requestId].isValid = true;
 
-    function updateEEth(address _newEEth) external onlyAdmin {
-        require(_newEEth != address(0), "Cannot be address zero");
-        eETH = IeETH(_newEEth);
-    }
-
-    function updateMembershipManager(address _newMembershipManager) external onlyAdmin {
-        require(_newMembershipManager != address(0), "Cannot be address zero");
-        membershipManager = IMembershipManager(_newMembershipManager);
+        emit WithdrawRequestValidated(uint32(requestId));
     }
 
     function updateAdmin(address _address, bool _isAdmin) external onlyOwner {

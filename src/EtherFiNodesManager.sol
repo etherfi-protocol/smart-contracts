@@ -54,10 +54,12 @@ contract EtherFiNodesManager is
     IEigenPodManager public eigenPodManager;
     IDelayedWithdrawalRouter public delayedWithdrawalRouter;
     // max number of queued eigenlayer withdrawals to attempt to claim in a single tx
-    uint8 public maxEigenlayerWithrawals;
+    uint8 public maxEigenlayerWithdrawals;
 
     // stack of re-usable withdrawal safes to save gas
     address[] public unusedWithdrawalSafes;
+
+    bool public enableNodeRecycling;
 
 
     //--------------------------------------------------------------------------------------
@@ -82,6 +84,7 @@ contract EtherFiNodesManager is
 
     receive() external payable {}
 
+    error InvalidParams();
     error NonZeroAddress();
 
     /// @dev Sets the revenue splits on deployment
@@ -104,8 +107,6 @@ contract EtherFiNodesManager is
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
 
-        nonExitPenaltyPrincipal = 1 ether;
-        nonExitPenaltyDailyRate = 300; // 3% per day
         SCALE = 1_000_000;
 
         treasuryContract = _treasuryContract;
@@ -114,18 +115,18 @@ contract EtherFiNodesManager is
         auctionManager = IAuctionManager(_auctionContract);
         tnft = TNFT(_tnftContract);
         bnft = BNFT(_bnftContract);
+    }
 
-        // in basis points for higher resolution
-        stakingRewardsSplit = RewardsSplit({
-            treasury: 50_000, // 5 %
-            nodeOperator: 50_000, // 5 %
-            tnft: 815_625, // 90 % * 29 / 32
-            bnft: 84_375 // 90 % * 3 / 32
-        });
+    function initializeOnUpgrade(address _etherFiAdmin, address _eigenPodManager, address _delayedWithdrawalRouter, uint8 _maxEigenlayerWithdrawals) public onlyOwner {
+        admins[_etherFiAdmin] = true;
+        eigenPodManager = IEigenPodManager(_eigenPodManager);
+        delayedWithdrawalRouter = IDelayedWithdrawalRouter(_delayedWithdrawalRouter);
+        maxEigenlayerWithdrawals = _maxEigenlayerWithdrawals;
     }
 
     error NotTnftOwner();
     error ValidatorNotLive();
+    error ValidatorNotExited();
 
     /// @notice Send the request to exit the validator node
     /// @param _validatorId ID of the validator associated
@@ -133,7 +134,7 @@ contract EtherFiNodesManager is
         if(msg.sender != tnft.ownerOf(_validatorId)) revert NotTnftOwner();
         if(phase(_validatorId) != IEtherFiNode.VALIDATOR_PHASE.LIVE) revert ValidatorNotLive();
         address etherfiNode = etherfiNodeAddress[_validatorId];
-        IEtherFiNode(etherfiNode).setExitRequestTimestamp();
+        IEtherFiNode(etherfiNode).setExitRequestTimestamp(uint32(block.timestamp));
 
         emit NodeExitRequested(_validatorId);
     }
@@ -146,6 +147,18 @@ contract EtherFiNodesManager is
         }
     }
 
+    function batchRevertExitRequest(uint256[] calldata _validatorIds) external onlyAdmin whenNotPaused {
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            uint256 _validatorId = _validatorIds[i];
+
+            if (phase(_validatorId) != IEtherFiNode.VALIDATOR_PHASE.LIVE) revert ValidatorNotLive();
+            address etherfiNode = etherfiNodeAddress[_validatorId];
+            IEtherFiNode(etherfiNode).setExitRequestTimestamp(0);
+
+            emit NodeExitRequestReverted(_validatorId);
+        }
+    }
+
     /// @notice Once the node's exit is observed, the protocol calls this function to process their exits.
     /// @param _validatorIds The list of validators which exited
     /// @param _exitTimestamps The list of exit timestamps of the validators
@@ -153,28 +166,28 @@ contract EtherFiNodesManager is
         uint256[] calldata _validatorIds,
         uint32[] calldata _exitTimestamps
     ) external onlyAdmin nonReentrant whenNotPaused {
-        require(_validatorIds.length == _exitTimestamps.length, "Check params");
+        if (_validatorIds.length != _exitTimestamps.length) revert InvalidParams();
+        
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             _processNodeExit(_validatorIds[i], _exitTimestamps[i]);
-        }
-    }
-
-    /// @notice Once the node's malicious behavior (such as front-running) is observed, the protocol calls this function to evict them.
-    /// @param _validatorIds The list of validators which should be evicted
-    function processNodeEvict(
-        uint256[] calldata _validatorIds
-    ) external onlyAdmin nonReentrant whenNotPaused {
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _processNodeEvict(_validatorIds[i]);
         }
     }
 
     /// @notice queue a withdrawal of eth from an eigenPod. You must wait for the queuing period
     ///         defined by eigenLayer before you can finish the withdrawal via etherFiNode.claimQueuedWithdrawals()
     /// @param _validatorId The validator Id
-    function queueRestakedWithdrawal(uint256 _validatorId) external whenNotPaused {
+    function queueRestakedWithdrawal(uint256 _validatorId) public whenNotPaused {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         IEtherFiNode(etherfiNode).queueRestakedWithdrawal();
+    }
+
+    /// @notice queue a withdrawal of eth from an eigenPod. You must wait for the queuing period
+    ///         defined by eigenLayer before you can finish the withdrawal via etherFiNode.claimQueuedWithdrawals()
+    /// @param _validatorIds The list of validators to queue withdrawals for
+    function batchQueueRestakedWithdrawal(uint256[] calldata _validatorIds) external whenNotPaused {
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            queueRestakedWithdrawal(_validatorIds[i]);
+        }
     }
 
     /// @notice Process the rewards skimming
@@ -185,7 +198,7 @@ contract EtherFiNodesManager is
         // sweep rewards from eigenPod if any queued withdrawals are ready to be claimed
         if (IEtherFiNode(etherfiNode).isRestakingEnabled()) {
             // claim any queued withdrawals that are ready
-            IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithrawals);
+            IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithdrawals);
             // queue up an balance currently in the contract so they are ready to be swept in the future
             IEtherFiNode(etherfiNode).queueRestakedWithdrawal();
         }
@@ -215,8 +228,6 @@ contract EtherFiNodesManager is
         }
     }
 
-    error MustClaimRestakedWithdrawals();
-
     /// @notice process the full withdrawal
     /// @dev This fullWithdrawal is allowed only after it's marked as EXITED.
     /// @dev EtherFi will be monitoring the status of the validator nodes and mark them EXITED if they do;
@@ -227,23 +238,25 @@ contract EtherFiNodesManager is
 
         if (IEtherFiNode(etherfiNode).isRestakingEnabled()) {
             // sweep rewards from eigenPod
-            IEtherFiNode(etherfiNode).claimQueuedWithdrawals(5);
+            IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithdrawals);
             // require that all pending withdrawals have cleared
-            if (IEtherFiNode(etherfiNode).hasOutstandingEigenLayerWithdrawals()) revert MustClaimRestakedWithdrawals();
+            require (!IEtherFiNode(etherfiNode).hasOutstandingEigenLayerWithdrawals(), "Must Claim Restaked Withdrawals");
         }
 
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) 
             = getFullWithdrawalPayouts(_validatorId);
         _setPhase(etherfiNode, _validatorId, IEtherFiNode.VALIDATOR_PHASE.FULLY_WITHDRAWN);
 
-
         _distributePayouts(_validatorId, toTreasury, toOperator, toTnft, toBnft);
 
         // automatically recycle this node if entire execution layer balance is withdrawn
         if (IEtherFiNode(etherfiNode).totalBalanceInExecutionLayer() == 0) {
-            unusedWithdrawalSafes.push(etherfiNodeAddress[_validatorId]);
-            IEtherFiNode(etherfiNode).resetWithdrawalSafe();
+            _recycleEtherFiNode(_validatorId);
         }
+
+        // burn the tNFT and bNFT
+        tnft.burnFromWithdrawal(_validatorId);
+        bnft.burnFromWithdrawal(_validatorId);
     }
 
     /// @notice Process the full withdrawal for multiple validators
@@ -259,7 +272,9 @@ contract EtherFiNodesManager is
     ) external whenNotPaused onlyAdmin {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address etherfiNode = etherfiNodeAddress[_validatorIds[i]];
-            _setPhase(etherfiNode, _validatorIds[i], IEtherFiNode.VALIDATOR_PHASE.BEING_SLASHED);
+            IEtherFiNode(etherfiNode).markBeingSlashed();
+
+            emit PhaseChanged(_validatorIds[i], IEtherFiNode.VALIDATOR_PHASE.BEING_SLASHED);
         }
     }
 
@@ -279,24 +294,22 @@ contract EtherFiNodesManager is
             }
 
             // reset safe and add to unused stack for later re-use
-            node.resetWithdrawalSafe();
-            unusedWithdrawalSafes.push(address(node));
-            etherfiNodeAddress[_validatorIds[i]] = address(0);
-            emit WithdrawalSafeReset(_validatorIds[i], address(node));
+            _recycleEtherFiNode(_validatorIds[i]);
+
         }
     }
 
     /// @dev create a new proxy instance of the etherFiNode withdrawal safe contract.
     /// @param _createEigenPod whether or not to create an associated eigenPod contract.
     function instantiateEtherFiNode(bool _createEigenPod) internal returns (address) {
-            BeaconProxy proxy = new BeaconProxy(IStakingManager(stakingManagerContract).getEtherFiNodeBeacon(), "");
-            EtherFiNode node = EtherFiNode(payable(proxy));
-            node.initialize(address(this));
-            if (_createEigenPod) {
-                node.createEigenPod();
-            }
+        BeaconProxy proxy = new BeaconProxy(IStakingManager(stakingManagerContract).getEtherFiNodeBeacon(), "");
+        EtherFiNode node = EtherFiNode(payable(proxy));
+        node.initialize(address(this));
+        if (_createEigenPod) {
+            node.createEigenPod();
+        }
 
-            return address(node);
+        return address(node);
     }
 
     /// @dev pre-create withdrawal safe contracts so that future staking operations are cheaper.
@@ -326,7 +339,7 @@ contract EtherFiNodesManager is
         address withdrawalSafeAddress;
 
         // can I re-use an existing safe
-        if (unusedWithdrawalSafes.length > 0) {
+        if (unusedWithdrawalSafes.length > 0 && enableNodeRecycling) {
             // pop
             withdrawalSafeAddress = unusedWithdrawalSafes[unusedWithdrawalSafes.length-1];
             unusedWithdrawalSafes.pop();
@@ -337,20 +350,15 @@ contract EtherFiNodesManager is
 
         IEtherFiNode(withdrawalSafeAddress).recordStakingStart(_enableRestaking);
         etherfiNodeAddress[_validatorId] = withdrawalSafeAddress;
+
+        emit PhaseChanged(_validatorId, IEtherFiNode(withdrawalSafeAddress).phase());
         return withdrawalSafeAddress;
     }
 
     /// @notice Unset the EtherFiNode contract for the validator ID
     /// @param _validatorId ID of the validator associated
     function unregisterEtherFiNode(uint256 _validatorId) external onlyStakingManagerContract {
-        address safeAddress = etherfiNodeAddress[_validatorId];
-        if(safeAddress == address(0)) revert NotInstalled();
-
-        // recycle the node
-        unusedWithdrawalSafes.push(etherfiNodeAddress[_validatorId]);
-        IEtherFiNode(safeAddress).resetWithdrawalSafe();
-
-        etherfiNodeAddress[_validatorId] = address(0);
+        _recycleEtherFiNode(_validatorId);
     }
 
     //--------------------------------------------------------------------------------------
@@ -366,26 +374,23 @@ contract EtherFiNodesManager is
     function setStakingRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnft)
         public onlyAdmin
     {
+        if (_treasury + _nodeOperator + _tnft + _bnft != SCALE) revert InvalidParams();
         stakingRewardsSplit.treasury = _treasury;
         stakingRewardsSplit.nodeOperator = _nodeOperator;
         stakingRewardsSplit.tnft = _tnft;
         stakingRewardsSplit.bnft = _bnft;
     }
 
-    /// @notice Sets the Non Exit Penalty Principal amount
-    /// @param _nonExitPenaltyPrincipal the new principal amount
-    function setNonExitPenaltyPrincipal (uint64 _nonExitPenaltyPrincipal) public onlyAdmin {
-        nonExitPenaltyPrincipal = _nonExitPenaltyPrincipal;
-    }
-
     error InvalidPenaltyRate();
-
-    /// @notice Sets the Non Exit Penalty Daily Rate amount
+    /// @notice Sets the Non Exit Penalty 
+    /// @param _nonExitPenaltyPrincipal the new principal amount
     /// @param _nonExitPenaltyDailyRate the new non exit daily rate
-    function setNonExitPenaltyDailyRate(uint64 _nonExitPenaltyDailyRate) public onlyAdmin {
-        if(_nonExitPenaltyDailyRate > 100) revert InvalidPenaltyRate();
+    function setNonExitPenalty(uint64 _nonExitPenaltyDailyRate, uint64 _nonExitPenaltyPrincipal) public onlyAdmin {
+        if(_nonExitPenaltyDailyRate > 10000) revert InvalidPenaltyRate();
+        nonExitPenaltyPrincipal = _nonExitPenaltyPrincipal;
         nonExitPenaltyDailyRate = _nonExitPenaltyDailyRate;
     }
+
 
     /// @notice Sets the phase of the validator
     /// @param _validatorId id of the validator associated to this etherfi node
@@ -406,8 +411,13 @@ contract EtherFiNodesManager is
 
     /// @notice set maximum number of queued eigenlayer withdrawals that can be processed in 1 tx
     /// @param _max max number of queued withdrawals
-    function setMaxEigenLayerWithdrawals(uint8 _max) external onlyOwner {
-        maxEigenlayerWithrawals = _max;
+    function setMaxEigenLayerWithdrawals(uint8 _max) external onlyAdmin {
+        maxEigenlayerWithdrawals = _max;
+    }
+
+    /// @notice set whether newly spun up validators should use a previously recycled node (if available) to save gas
+    function setEnableNodeRecycling(bool _enabled) external onlyAdmin {
+        enableNodeRecycling = _enabled;
     }
 
     /// @notice Increments the number of validators by a certain amount
@@ -448,6 +458,8 @@ contract EtherFiNodesManager is
 
         numberOfValidators -= 1;
 
+        emit PhaseChanged(_validatorId, IEtherFiNode.VALIDATOR_PHASE.EXITED);
+
         emit NodeExitProcessed(_validatorId);
     }
 
@@ -456,19 +468,18 @@ contract EtherFiNodesManager is
         emit PhaseChanged(_validatorId, _phase);
     }
 
-    function _processNodeEvict(uint256 _validatorId) internal {
-        address etherfiNode = etherfiNodeAddress[_validatorId];
+    function _recycleEtherFiNode(uint256 _validatorId) internal {
+        address safeAddress = etherfiNodeAddress[_validatorId];
+        if(safeAddress == address(0)) revert NotInstalled();
 
-        // Mark EVICTED
-        IEtherFiNode(etherfiNode).markEvicted();
+        // recycle the node
+        IEtherFiNode(safeAddress).resetWithdrawalSafe();
+        unusedWithdrawalSafes.push(etherfiNodeAddress[_validatorId]);
 
-        numberOfValidators -= 1;
+        emit PhaseChanged(_validatorId, IEtherFiNode.VALIDATOR_PHASE.READY_FOR_DEPOSIT);
+        emit WithdrawalSafeReset(_validatorId, safeAddress);
 
-        // Return the all amount in the contract back to the node operator
-        uint256 returnAmount = address(etherfiNode).balance;
-        _distributePayouts(_validatorId, 0, returnAmount, 0, 0);
-
-        emit NodeEvicted(_validatorId);
+        delete etherfiNodeAddress[_validatorId];
     }
 
     function _distributePayouts(uint256 _validatorId, uint256 _toTreasury, uint256 _toOperator, uint256 _toTnft, uint256 _toBnft) internal {
@@ -483,15 +494,6 @@ contract EtherFiNodesManager is
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    // Eigenlayer EigenPodManager
-    function setEigenPodMananger(address _addr) external onlyOwner {
-        eigenPodManager = IEigenPodManager(_addr);
-    }
-
-    // Eigenlayer DelayedWithdrawalRouter
-    function setDelayedWithdrawalRouter(address _addr) external onlyOwner {
-        delayedWithdrawalRouter = IDelayedWithdrawalRouter(_addr);
-    }
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  GETTER   --------------------------------------
@@ -527,7 +529,6 @@ contract EtherFiNodesManager is
 
     function getWithdrawalSafeAddress(uint256 _validatorId) public view returns (address) {
         address etherfiNode = etherfiNodeAddress[_validatorId];
-        require(etherfiNode != address(0), "The validator Id is invalid.");
 
         if (IEtherFiNode(etherfiNode).isRestakingEnabled()) {
             return IEtherFiNode(etherfiNode).eigenPod();
@@ -607,12 +608,12 @@ contract EtherFiNodesManager is
     /// @return toTreasury      the TVL for the Treasury
     function getFullWithdrawalPayouts(uint256 _validatorId) 
         public view returns (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) {
-        require(isExited(_validatorId), "validator node is not exited");
+        if (phase(_validatorId) != IEtherFiNode.VALIDATOR_PHASE.EXITED) revert ValidatorNotExited();
 
-        // The full withdrawal payouts should be equal to the total TVL of the validator
+        // The full withdrawal payouts should be equal to the total withdrawable TVL of the validator
         // 'beaconBalance' should be 0 since the validator must be in 'withdrawal_done' status
         // - it will get provably verified once we have EIP 4788
-        return calculateTVL(_validatorId, 0);
+        return calculateWithdrawableTVL(_validatorId, 0);
     }
 
     /// @notice Compute the TVLs for {node operator, t-nft holder, b-nft holder, treasury}
@@ -628,29 +629,52 @@ contract EtherFiNodesManager is
         uint256 _beaconBalance
     ) public view returns (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) {
         address etherfiNode = etherfiNodeAddress[_validatorId];
+        uint256 executionBalance = IEtherFiNode(etherfiNode).totalBalanceInExecutionLayer();
         return  IEtherFiNode(etherfiNode).calculateTVL(
                     _beaconBalance,
+                    executionBalance,
                     stakingRewardsSplit,
                     SCALE
                 );
     }
 
-    /// @notice Fetches if the specified validator has been exited
-    /// @return The bool value representing if the validator has been exited
-    function isExited(uint256 _validatorId) public view returns (bool) {
-        return phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.EXITED;
+    /// @notice Compute the withdrawable TVLs for {node operator, t-nft holder, b-nft holder, treasury}
+    ///         This differs from calculateTVL() in the presence of restaking, where some funds
+    ///         might not be immediately withdrawable due to eigenLayer's delayed withdrawal mechanism.
+    ///         This method should be used when determining full withdrawal payouts
+    /// @param _validatorId id of the validator associated to etherfi node
+    /// @param _beaconBalance the balance of the validator in Consensus Layer
+    ///
+    /// @return toNodeOperator  the TVL for the Node Operator
+    /// @return toTnft          the TVL for the T-NFT holder
+    /// @return toBnft          the TVL for the B-NFT holder
+    /// @return toTreasury      the TVL for the Treasury
+    function calculateWithdrawableTVL(
+        uint256 _validatorId,
+        uint256 _beaconBalance
+    ) public view returns (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) {
+        address etherfiNode = etherfiNodeAddress[_validatorId];
+        uint256 executionBalance = IEtherFiNode(etherfiNode).withdrawableBalanceInExecutionLayer();
+        return  IEtherFiNode(etherfiNode).calculateTVL(
+                    _beaconBalance,
+                    executionBalance,
+                    stakingRewardsSplit,
+                    SCALE
+                );
     }
 
-    /// @notice Fetches if the specified validator has been withdrawn
-    /// @return The bool value representing if the validator has been withdrawn
-    function isFullyWithdrawn(uint256 _validatorId) public view returns (bool) {
-        return phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.FULLY_WITHDRAWN;
+    /// @notice return the eigenpod associated with the etherFiNode connected to the provided validator
+    /// @dev The existence of a connected eigenpod does not imply the node is currently configured for restaking.
+    ///      use isRestakingEnabled() instead
+    function getEigenPod(uint256 _validatorId) public view returns (address) {
+        IEtherFiNode etherfiNode = IEtherFiNode(etherfiNodeAddress[_validatorId]);
+        return etherfiNode.eigenPod();
     }
 
-    /// @notice Fetches if the specified validator has been evicted
-    /// @return The bool value representing if the validator has been evicted
-    function isEvicted(uint256 _validatorId) public view returns (bool) {
-        return phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.EVICTED;
+    /// @notice return whether the provided validator is configured for restaknig via eigenLayer
+    function isRestakingEnabled(uint256 _validatorId) public view returns (bool) {
+        IEtherFiNode etherfiNode = IEtherFiNode(etherfiNodeAddress[_validatorId]);
+        return etherfiNode.isRestakingEnabled();
     }
 
     /// @notice Fetches the address of the implementation contract currently being used by the proxy
@@ -659,17 +683,26 @@ contract EtherFiNodesManager is
         return _getImplementation();
     }
 
+    function _requireAdmin() internal view virtual {
+        require(admins[msg.sender], "Not admin");
+    }
+
+    function _onlyStakingManagerContract() internal view virtual {
+        require(msg.sender == stakingManagerContract, "Not staking manager");
+    }
+
+
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
 
     modifier onlyStakingManagerContract() {
-        require(msg.sender == stakingManagerContract, "Not staking manager");
+        _onlyStakingManagerContract();
         _;
     }
 
     modifier onlyAdmin() {
-        require(admins[msg.sender], "Not admin");
+        _requireAdmin();
         _;
     }
 }

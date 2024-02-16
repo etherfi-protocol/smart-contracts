@@ -5,8 +5,8 @@ import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
-import "@eigenlayer/contracts/interfaces/IEigenPodManager.sol";
-import "@eigenlayer/contracts/interfaces/IDelayedWithdrawalRouter.sol";
+import "@eigenlayer/IEigenPodManager.sol";
+import "@eigenlayer/IDelayedWithdrawalRouter.sol";
 
 contract EtherFiNode is IEtherFiNode {
     address public etherFiNodesManager;
@@ -69,7 +69,7 @@ contract EtherFiNode is IEtherFiNode {
         exitRequestTimestamp = 0;
         exitTimestamp = 0;
         stakingStartTimestamp = 0;
-        phase = VALIDATOR_PHASE.READY_FOR_DEPOSIT;
+        _setPhase(VALIDATOR_PHASE.READY_FOR_DEPOSIT);
         restakingObservedExitBlock = 0;
         isRestakingEnabled = false;
     }
@@ -99,17 +99,15 @@ contract EtherFiNode is IEtherFiNode {
 
     /// @notice Sets the exit request timestamp
     /// @dev Called when a TNFT holder submits an exit request
-    function setExitRequestTimestamp() external onlyEtherFiNodeManagerContract {
-        require(exitRequestTimestamp == 0, "Exit request was already sent.");
-        exitRequestTimestamp = uint32(block.timestamp);
+    function setExitRequestTimestamp(uint32 _timestamp) external onlyEtherFiNodeManagerContract {
+        exitRequestTimestamp = _timestamp;
     }
 
     /// @notice Set the validators phase to exited
     /// @param _exitTimestamp the time the exit was complete
     function markExited(uint32 _exitTimestamp) external onlyEtherFiNodeManagerContract {
         require(_exitTimestamp <= block.timestamp, "Invalid exit timestamp");
-        _validatePhaseTransition(VALIDATOR_PHASE.EXITED);
-        phase = VALIDATOR_PHASE.EXITED;
+        _setPhase(VALIDATOR_PHASE.EXITED);
         exitTimestamp = _exitTimestamp;
 
         if (isRestakingEnabled) {
@@ -122,11 +120,9 @@ contract EtherFiNode is IEtherFiNode {
         }
     }
 
-    /// @notice Set the validators phase to EVICTED
-    function markEvicted() external onlyEtherFiNodeManagerContract {
-        _validatePhaseTransition(VALIDATOR_PHASE.EVICTED);
-        phase = VALIDATOR_PHASE.EVICTED;
-        exitTimestamp = uint32(block.timestamp);
+    /// @notice Set the validators phase to BEING_SLASHED
+    function markBeingSlashed() external onlyEtherFiNodeManagerContract {
+        _setPhase(VALIDATOR_PHASE.BEING_SLASHED);
     }
 
     /// @dev unused by protocol. Simplifies test setup
@@ -294,10 +290,27 @@ contract EtherFiNode is IEtherFiNode {
         return (_withdrawalSafe, _eigenPod, _delayedWithdrawalRouter);
     }
 
+
     /// @notice total balance (wei) of this safe currently in the execution layer. Includes restaked funds
     function totalBalanceInExecutionLayer() public view returns (uint256) {
         (uint256 _safe, uint256 _pod, uint256 _router) = splitBalanceInExecutionLayer();
         return _safe + _pod + _router;
+    }
+
+    /// @notice balance (wei) of this safe that could be immediately withdrawn.
+    ///         This only differs from the balance in the safe in the case of restaked validators
+    ///         because some funds might not be withdrawable yet do to eigenlayer's queued withdrawal system
+    function withdrawableBalanceInExecutionLayer() public view returns (uint256) {
+        uint256 safeBalance = address(this).balance;
+        uint256 claimableBalance = 0;
+        if (isRestakingEnabled) {
+            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
+            IDelayedWithdrawalRouter.DelayedWithdrawal[] memory claimableWithdrawals = delayedWithdrawalRouter.getClaimableUserDelayedWithdrawals(address(this));
+            for (uint256 x = 0; x < claimableWithdrawals.length; x++) {
+                claimableBalance += claimableWithdrawals[x].amount;
+            }
+        }
+        return safeBalance + claimableBalance;
     }
 
     /// @notice Given
@@ -305,6 +318,7 @@ contract EtherFiNode is IEtherFiNode {
     ///         - the current balance of the ether fi node,
     ///         Compute the TVLs for {node operator, t-nft holder, b-nft holder, treasury}
     /// @param _beaconBalance the balance of the validator in Consensus Layer
+    /// @param _executionBalance the balance of the validator in Execution Layer
     /// @param _SRsplits the splits for the Staking Rewards
     /// @param _scale the scale
     ///
@@ -314,11 +328,12 @@ contract EtherFiNode is IEtherFiNode {
     /// @return toTreasury      the payout to the Treasury
     function calculateTVL(
         uint256 _beaconBalance,
+        uint256 _executionBalance,
         IEtherFiNodesManager.RewardsSplit memory _SRsplits,
         uint256 _scale
     ) public view returns (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) {
 
-        uint256 balance = _beaconBalance + totalBalanceInExecutionLayer();
+        uint256 balance = _beaconBalance + _executionBalance;
 
         // Compute the payouts for the rewards = (staking rewards)
         // the protocol rewards must be paid off already in 'processNodeExit'
@@ -439,6 +454,10 @@ contract EtherFiNode is IEtherFiNode {
             pass = (_newPhase == VALIDATOR_PHASE.EXITED);
         } else if (currentPhase == VALIDATOR_PHASE.EXITED) {
             pass = (_newPhase == VALIDATOR_PHASE.FULLY_WITHDRAWN);
+        } else if (currentPhase == VALIDATOR_PHASE.CANCELLED) {
+            pass = (_newPhase == VALIDATOR_PHASE.READY_FOR_DEPOSIT);
+        } else if (currentPhase == VALIDATOR_PHASE.FULLY_WITHDRAWN) {
+            pass = (_newPhase == VALIDATOR_PHASE.READY_FOR_DEPOSIT);
         } else {
             pass = false;
         }

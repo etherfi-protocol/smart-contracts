@@ -30,12 +30,17 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         require(_liquidityPool != address(0), "No zero addresses");
         require(_eETH != address(0), "No zero addresses");
         
-        __ERC20_init("EtherFi wrapped ETH", "weETH");
-        __ERC20Permit_init("EtherFi wrapped ETH");
+        __ERC20_init("Wrapped eETH", "weETH");
+        __ERC20Permit_init("Wrapped eETH");
         __UUPSUpgradeable_init();
         __Ownable_init();
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
+    }
+
+    /// @dev name changed from the version initially deployed
+    function name() public view virtual override returns (string memory) {
+        return "Wrapped eETH";
     }
 
     /// @notice Wraps eEth

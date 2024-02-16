@@ -165,13 +165,13 @@ contract EtherFiOracleTest is TestSetup {
         
         // check the consensus state
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
-        (uint32 support, bool consensusReached) = etherFiOracleInstance.consensusStates(reportHash);
+        (uint32 support, bool consensusReached,) = etherFiOracleInstance.consensusStates(reportHash);
         assertEq(support, 1);
 
         // bob submits the period 2 report
         vm.prank(bob);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
-        (support, consensusReached) = etherFiOracleInstance.consensusStates(reportHash);
+        (support, consensusReached,) = etherFiOracleInstance.consensusStates(reportHash);
         assertEq(support, 2);
 
         assertEq(etherFiOracleInstance.lastPublishedReportRefSlot(), reportAtPeriod2A.refSlotTo);
@@ -194,30 +194,42 @@ contract EtherFiOracleTest is TestSetup {
         // Now it's period 3
         _moveClock(1024);
 
-        // alice submits the period 3 report
-        vm.prank(alice);
-        consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod3);
-        assertEq(consensusReached, false);
-        // bob submits the same period 3 report
-        vm.prank(bob);
-        consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod3);
-        assertEq(consensusReached, true);
+        _executeAdminTasks(reportAtPeriod3);
+
 
         // Now it's period 4
         _moveClock(1024);
 
-        vm.prank(alice);
-        consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod4);
-        assertEq(consensusReached, false);
-        vm.prank(bob);
-        consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod4);
-        assertEq(consensusReached, true);
+        _executeAdminTasks(reportAtPeriod4);
     }
 
-    function test_change_report_start_slot() public { 
+    function test_report_submission_before_processing_last_published_one_fails() public {
         vm.prank(owner);
         etherFiOracleInstance.setQuorumSize(1);
-        
+
+        // period 2
+        _moveClock(1024 + 2 * slotsPerEpoch);
+
+        vm.prank(alice);
+        bool consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod2A);
+        assertEq(consensusReached, true);
+
+        // Now it's period 3
+        _moveClock(1024);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        _initReportBlockStamp(report);
+
+        vm.prank(alice);
+        vm.expectRevert("Last published report is not handled yet");
+        etherFiOracleInstance.submitReport(report);
+    }
+
+    function test_change_report_start_slot1() public { 
+        vm.prank(owner);
+        bytes[] memory emptyBytes = new bytes[](0);
+        etherFiOracleInstance.setQuorumSize(1);
+
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         _moveClock(1024 + 2 * 32);
 
@@ -231,37 +243,60 @@ contract EtherFiOracleTest is TestSetup {
         report.refBlockFrom = 0;
         report.refBlockTo = 1024-1;
 
-        vm.prank(alice);
+        vm.startPrank(alice);
         etherFiOracleInstance.submitReport(report);
+        etherFiAdminInstance.executeTasks(report, emptyBytes, emptyBytes);
+        vm.stopPrank();
 
         (slotFrom, slotTo, blockFrom) = etherFiOracleInstance.blockStampForNextReport();
         assertEq(slotFrom, 1024);
         assertEq(slotTo, 2 * 1024 - 1);
         assertEq(blockFrom, 1024);
 
-        console.log(etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp));
         vm.prank(owner);
         etherFiOracleInstance.setReportStartSlot(1 * 1024 + 512);
+
+        _moveClock(1 * 1024 + 512);
 
         (slotFrom, slotTo, blockFrom) = etherFiOracleInstance.blockStampForNextReport();
         assertEq(slotFrom, 1024);
         assertEq(slotTo, 2 * 1024 + 512 - 1);
         assertEq(blockFrom, 1024);
 
-        _moveClock(1 * 1024 + 512);
-
         report.refSlotFrom = 1024;
-        report.refSlotTo = 2 * 1024 + 512 -1;
+        report.refSlotTo = 2 * 1024 + 512 - 1;
         report.refBlockFrom = 1024;
-        report.refBlockTo = 2 * 1024 + 512 -1;
+        report.refBlockTo = 2 * 1024 + 512 - 1;
 
-        vm.prank(alice);
+        vm.startPrank(alice);
         etherFiOracleInstance.submitReport(report);
+        etherFiAdminInstance.executeTasks(report, emptyBytes, emptyBytes);
+        vm.stopPrank();
 
         (slotFrom, slotTo, blockFrom) = etherFiOracleInstance.blockStampForNextReport();
         assertEq(slotFrom, 2 * 1024 + 512);
         assertEq(slotTo, 3 * 1024 + 512 - 1);
         assertEq(blockFrom, 2 * 1024 + 512);
+    }
+
+    function test_change_report_start_slot2() public { 
+        vm.prank(owner);
+
+        _moveClock(1024 + 2 * 32);
+
+        (uint32 slotFrom, uint32 slotTo, uint32 blockFrom) = etherFiOracleInstance.blockStampForNextReport();
+        assertEq(slotFrom, 0);
+        assertEq(slotTo, 1024 - 1);
+        assertEq(blockFrom, 0);
+
+        console.log(etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp));
+        vm.prank(owner);
+        etherFiOracleInstance.setReportStartSlot(1 * 1024 + 512);
+
+        (slotFrom, slotTo, blockFrom) = etherFiOracleInstance.blockStampForNextReport();
+        assertEq(slotFrom, 1 * 1024 + 512);
+        assertEq(slotTo, 2 * 1024 + 512 - 1);
+        assertEq(blockFrom, 1 * 1024 + 512);
     }
 
     function test_report_start_slot() public {
@@ -314,17 +349,46 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(reportAtSlot4287);
     }
 
+    function test_unpublishReport() public {
+        vm.prank(owner);
+        etherFiOracleInstance.setQuorumSize(1);
+
+        // period 2
+        _moveClock(1024 + 2 * slotsPerEpoch);
+
+        uint32 lastPublishedReportRefSlot = etherFiOracleInstance.lastPublishedReportRefSlot();
+        uint32 lastPublishedReportRefBlock = etherFiOracleInstance.lastPublishedReportRefBlock();
+
+        // Oracle accidentally generated an wrong report
+        bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
+        vm.prank(alice);
+        bool consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod2A);
+        assertEq(consensusReached, true);
+
+        assertEq(etherFiOracleInstance.lastPublishedReportRefSlot(), reportAtPeriod2A.refSlotTo);
+        assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), reportAtPeriod2A.refBlockTo);
+
+        // Owner performs manual operations to undo the published report
+        vm.startPrank(owner);
+        etherFiOracleInstance.unpublishReport(reportHash);
+        etherFiOracleInstance.updateLastPublishedBlockStamps(lastPublishedReportRefSlot, lastPublishedReportRefBlock);
+        vm.stopPrank();
+
+        assertEq(etherFiOracleInstance.lastPublishedReportRefSlot(), lastPublishedReportRefSlot);
+        assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), lastPublishedReportRefBlock);
+    }
+
     function test_pause() public {
         _moveClock(1024 + 2 * slotsPerEpoch);
         
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiOracleInstance.pauseContract();
 
         vm.prank(alice);
         vm.expectRevert("Pausable: paused");
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
 
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiOracleInstance.unPauseContract();
 
         vm.prank(alice);
@@ -377,7 +441,7 @@ contract EtherFiOracleTest is TestSetup {
     function test_huge_positive_rebaes() public {
         // TVL after `launch_validator` is 60 ETH
         // EtherFIAdmin limits the APR per rebase as 100 % == 10000 bps
-        uint256[] memory validatorIds = launch_validator();
+        launch_validator();
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
 
@@ -397,7 +461,7 @@ contract EtherFiOracleTest is TestSetup {
     function test_huge_negative_rebaes() public {
         // TVL after `launch_validator` is 60 ETH
         // EtherFIAdmin limits the APR per rebase as 100 % == 10000 bps
-        uint256[] memory validatorIds = launch_validator();
+        launch_validator();
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
 
@@ -414,4 +478,96 @@ contract EtherFiOracleTest is TestSetup {
         _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
     }
 
+    function test_SD_5() public {
+        vm.prank(owner);
+        etherFiOracleInstance.addCommitteeMember(chad);
+
+        vm.prank(owner);
+        etherFiOracleInstance.setQuorumSize(5);
+        
+        _moveClock(1024 + 2 * slotsPerEpoch);
+        
+        // alice submits the period 2 report
+        vm.prank(alice);
+        etherFiOracleInstance.submitReport(reportAtPeriod2A);
+           
+        // check the consensus state
+        bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
+        (uint32 support, bool consensusReached, uint32 consensusTimestamp) = etherFiOracleInstance.consensusStates(reportHash);
+        assertEq(support, 1);
+        assertEq(consensusReached, false);
+        assertEq(consensusTimestamp, 0);
+
+        vm.prank(owner);
+        etherFiOracleInstance.setQuorumSize(1);
+
+        // bob submits the period 2 report
+        uint32 curTimestamp = uint32(block.timestamp);
+        vm.prank(bob);
+        etherFiOracleInstance.submitReport(reportAtPeriod2A);
+        (support, consensusReached, consensusTimestamp) = etherFiOracleInstance.consensusStates(reportHash);
+        assertEq(support, 2);
+        assertEq(consensusReached, true);
+        assertEq(consensusTimestamp, curTimestamp);
+
+        _moveClock(1);
+
+        // chad submits the period 2 report
+        vm.prank(chad);
+        vm.expectRevert("Consensus already reached");
+        etherFiOracleInstance.submitReport(reportAtPeriod2A);
+        (support, consensusReached, consensusTimestamp) = etherFiOracleInstance.consensusStates(reportHash);
+        assertEq(support, 2);
+        assertEq(consensusReached, true);
+        assertEq(consensusTimestamp, curTimestamp);
+    }
+
+    function test_postReportWaitTimeInSlots() public {
+        bytes[] memory emptyBytes = new bytes[](0);
+        vm.prank(owner);
+        etherFiOracleInstance.setQuorumSize(1);
+
+        // period 2
+        _moveClock(1024 + 2 * slotsPerEpoch);
+
+        vm.prank(alice);
+        bool consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod2A);
+        assertEq(consensusReached, true);
+
+        vm.prank(alice);
+        assertEq(etherFiAdminInstance.canExecuteTasks(reportAtPeriod2A), true);
+
+        vm.prank(owner);
+        etherFiAdminInstance.updatePostReportWaitTimeInSlots(1);
+        assertEq(etherFiAdminInstance.canExecuteTasks(reportAtPeriod2A), false);
+
+        vm.expectRevert("EtherFiAdmin: report is too fresh");
+        vm.prank(alice);
+        etherFiAdminInstance.executeTasks(reportAtPeriod2A, emptyBytes, emptyBytes);
+
+        _moveClock(1);
+        assertEq(etherFiAdminInstance.canExecuteTasks(reportAtPeriod2A), true);
+
+        vm.prank(alice);
+        etherFiAdminInstance.executeTasks(reportAtPeriod2A, emptyBytes, emptyBytes);
+    }
+
+    function test_all_pause() public {
+        vm.startPrank(alice);
+
+        etherFiAdminInstance.pause(true, true, true, false, false, false);
+        etherFiAdminInstance.pause(true, true, true, false, false, false);
+        etherFiAdminInstance.pause(true, true, true, true, true, true);
+        etherFiAdminInstance.pause(true, true, true, true, true, true);
+
+        vm.expectRevert("Ownable: caller is not the owner");
+        etherFiAdminInstance.unPause(false, false, false, false, false, false);
+        vm.stopPrank();
+
+        vm.startPrank(owner);
+        etherFiAdminInstance.unPause(false, false, false, true, true, true);
+        etherFiAdminInstance.unPause(true, true, true, true, true, true);
+        etherFiAdminInstance.unPause(true, true, true, true, true, true);
+        vm.stopPrank();
+    }
 }

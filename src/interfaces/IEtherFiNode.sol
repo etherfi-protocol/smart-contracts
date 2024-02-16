@@ -48,7 +48,7 @@ interface IEtherFiNode {
     }
 
     // VIEW functions
-    function calculateTVL(uint256 _beaconBalance, IEtherFiNodesManager.RewardsSplit memory _SRsplits, uint256 _scale) external view returns (uint256, uint256, uint256, uint256);
+    function calculateTVL(uint256 _beaconBalance, uint256 _executionBalance, IEtherFiNodesManager.RewardsSplit memory _SRsplits, uint256 _scale) external view returns (uint256, uint256, uint256, uint256);
     function eigenPod() external view returns (address);
     function exitRequestTimestamp() external view returns (uint32);
     function exitTimestamp() external view returns (uint32);
@@ -63,18 +63,19 @@ interface IEtherFiNode {
     function createEigenPod() external;
     function hasOutstandingEigenLayerWithdrawals() external view returns (bool);
     function isRestakingEnabled() external view returns (bool);
-    function markEvicted() external;
     function markExited(uint32 _exitTimestamp) external;
+    function markBeingSlashed() external;
     function moveRewardsToManager(uint256 _amount) external;
     function queueRestakedWithdrawal() external;
     function recordStakingStart(bool _enableRestaking) external;
     function resetWithdrawalSafe() external;
-    function setExitRequestTimestamp() external;
+    function setExitRequestTimestamp(uint32 _timestamp) external;
     function setIpfsHashForEncryptedValidatorKey(string calldata _ipfs) external;
     function setIsRestakingEnabled(bool _enabled) external;
     function setPhase(VALIDATOR_PHASE _phase) external;
     function splitBalanceInExecutionLayer() external view returns (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter);
     function totalBalanceInExecutionLayer() external view returns (uint256);
+    function withdrawableBalanceInExecutionLayer() external view returns (uint256);
 
     function withdrawFunds(
         address _treasury,

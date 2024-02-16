@@ -27,7 +27,7 @@ contract EarlyAdopterPoolTest is Test {
     TestERC20 public rETH;
     TestERC20 public wstETH;
     TestERC20 public sfrxEth;
-    TestERC20 public cbEth;
+    TestERC20 public cbEthTestERC;
 
     uint256 One_Day = 1 days;
     uint256 One_Month = 1 weeks * 4;
@@ -41,11 +41,11 @@ contract EarlyAdopterPoolTest is Test {
         rETH.mint(alice, 10e18);
         rETH.mint(bob, 10e18);
 
-        cbEth = new TestERC20("Staked ETH", "wstETH");
-        cbEth.mint(alice, 10e18);
-        cbEth.mint(bob, 10e18);
+        cbEthTestERC = new TestERC20("Staked ETH", "wstETH");
+        cbEthTestERC.mint(alice, 10e18);
+        cbEthTestERC.mint(bob, 10e18);
 
-        wstETH = new TestERC20("Coinbase ETH", "cbEth");
+        wstETH = new TestERC20("Coinbase ETH", "cbEthTestERC");
         wstETH.mint(alice, 10e18);
         wstETH.mint(bob, 10e18);
 
@@ -58,7 +58,7 @@ contract EarlyAdopterPoolTest is Test {
             address(rETH),
             address(wstETH),
             address(sfrxEth),
-            address(cbEth)
+            address(cbEthTestERC)
         );
         vm.stopPrank();
     }
@@ -200,7 +200,7 @@ contract EarlyAdopterPoolTest is Test {
         earlyAdopterPoolInstance.deposit(address(rETH), 5e17);
 
         vm.prank(bob);
-        cbEth.approve(address(earlyAdopterPoolInstance), 0.5 ether);
+        cbEthTestERC.approve(address(earlyAdopterPoolInstance), 0.5 ether);
 
         vm.expectEmit(false, false, false, true);
         emit ERC20TVLUpdated(
@@ -212,7 +212,7 @@ contract EarlyAdopterPoolTest is Test {
             1.7 ether
         );
         vm.prank(bob);
-        earlyAdopterPoolInstance.deposit(address(cbEth), 5e17);
+        earlyAdopterPoolInstance.deposit(address(cbEthTestERC), 5e17);
     }
 
     function test_EventEthTVLUpdated() public {
@@ -331,8 +331,8 @@ contract EarlyAdopterPoolTest is Test {
         assertEq(totalBal, 1 ether);
 
         vm.startPrank(alice);
-        cbEth.approve(address(earlyAdopterPoolInstance), 10 ether);
-        earlyAdopterPoolInstance.deposit(address(cbEth), 10 ether);
+        cbEthTestERC.approve(address(earlyAdopterPoolInstance), 10 ether);
+        earlyAdopterPoolInstance.deposit(address(cbEthTestERC), 10 ether);
         vm.stopPrank();
 
         (
@@ -387,8 +387,8 @@ contract EarlyAdopterPoolTest is Test {
 
         vm.startPrank(alice);
         rETH.approve(address(earlyAdopterPoolInstance), 0.1 ether);
-        cbEth.approve(address(earlyAdopterPoolInstance), 0.1 ether);
-        earlyAdopterPoolInstance.deposit(address(cbEth), 0.1 ether);
+        cbEthTestERC.approve(address(earlyAdopterPoolInstance), 0.1 ether);
+        earlyAdopterPoolInstance.deposit(address(cbEthTestERC), 0.1 ether);
         earlyAdopterPoolInstance.deposit(address(rETH), 0.1 ether);
         vm.stopPrank();
 
@@ -410,14 +410,14 @@ contract EarlyAdopterPoolTest is Test {
 
         uint256 balanceBeforeBob = wstETH.balanceOf(bob);
         uint256 balanceBeforeAlice = rETH.balanceOf(alice) +
-            cbEth.balanceOf(alice);
+            cbEthTestERC.balanceOf(alice);
 
         vm.prank(bob);
         earlyAdopterPoolInstance.withdraw();
         vm.prank(alice);
         earlyAdopterPoolInstance.withdraw();
         uint256 balanceAfterAlice = rETH.balanceOf(alice) +
-            cbEth.balanceOf(alice);
+            cbEthTestERC.balanceOf(alice);
 
         (, , totalERC20Balance) = earlyAdopterPoolInstance
             .depositInfo(bob);
@@ -747,8 +747,8 @@ contract EarlyAdopterPoolTest is Test {
         vm.stopPrank();
 
         vm.startPrank(alice);
-        cbEth.approve(address(earlyAdopterPoolInstance), 10 ether);
-        earlyAdopterPoolInstance.deposit(address(cbEth), 1e18);
+        cbEthTestERC.approve(address(earlyAdopterPoolInstance), 10 ether);
+        earlyAdopterPoolInstance.deposit(address(cbEthTestERC), 1e18);
         vm.stopPrank();
 
         vm.startPrank(bob);

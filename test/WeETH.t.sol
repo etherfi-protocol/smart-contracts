@@ -16,6 +16,10 @@ contract WeETHTest is TestSetup {
         gregProof = merkle.getProof(whiteListedAddresses, 8);
     }
 
+    function test_UpdatedName() public {
+        assertEq(weEthInstance.name(), "Wrapped eETH");
+    }
+
     function test_WrapEETHFailsIfZeroAmount() public {
         vm.expectRevert("weETH: can't wrap zero eETH");
         weEthInstance.wrap(0);

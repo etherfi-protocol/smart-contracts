@@ -22,7 +22,11 @@ contract WeEthUpgrade is Script {
         WeETH weEthInstance = WeETH(weEthProxyAddress);
         WeETH weEthV2Implementation = new WeETH();
 
+        uint256 totalSupply = weEthInstance.totalSupply();
+
         weEthInstance.upgradeTo(address(weEthV2Implementation));
+
+        require(totalSupply == weEthInstance.totalSupply(), "WeEthUpgrade: totalSupply mismatch");
 
         vm.stopBroadcast();
     }

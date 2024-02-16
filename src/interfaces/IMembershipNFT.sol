@@ -10,8 +10,8 @@ interface IMembershipNFT is IERC1155Upgradeable {
         uint8[28] __gap;
     }
 
-    function initialize(string calldata _metadataURI) external;
-    function setMembershipManager(address _address) external;
+    function initialize(string calldata _metadataURI, address _membershipManagerAddress) external;
+    function initializeOnUpgrade(address _liquidityPoolAddress) external;
     function computeTierPointsForEap(uint32 _eapDepositBlockNumber) external view returns (uint40);
     function setUpForEap(bytes32 _newMerkleRoot, uint64[] calldata _requiredEapPointsPerEapDeposit) external;
     function processDepositFromEapUser(address _user, uint32  _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) external;
@@ -33,7 +33,7 @@ interface IMembershipNFT is IERC1155Upgradeable {
     function isWithdrawable(uint256 _tokenId, uint256 _withdrawalAmount) external view returns (bool);
     function allTimeHighDepositOf(uint256 _tokenId) external view returns (uint256);
     function transferLockedUntil(uint256 _tokenId) external view returns (uint32);
-    function balanceOfUser(address _user, uint256 _id) external returns (uint256);
+    function balanceOfUser(address _user, uint256 _id) external view returns (uint256);
 
     function contractURI() external view returns (string memory);
     function setContractMetadataURI(string calldata _newURI) external;

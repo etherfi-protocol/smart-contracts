@@ -55,19 +55,19 @@ contract StorageOptimizationTest is TestSetup {
         b = new B();
     }
 
-    function test_doSomethingOnceWithA() public {
+    function test_doSomethingOnceWithA() public view {
         a.doSomething(1);
     }
 
-    function test_doSomethingOnceWithB() public {
+    function test_doSomethingOnceWithB() public view {
         b.doSomething(1);
     }
 
-    function test_doSomethingAlotWithA() public {
+    function test_doSomethingAlotWithA() public view {
         a.doSomething(10);
     }
 
-    function test_doSomethingAlotWithB() public {
+    function test_doSomethingAlotWithB() public view {
         b.doSomething(10);
     }
 

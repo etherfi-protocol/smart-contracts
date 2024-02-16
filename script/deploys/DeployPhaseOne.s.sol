@@ -60,6 +60,16 @@ contract DeployPhaseOne is Script {
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address ethDepositContractAddress;
+        if (block.chainid == 5) {
+            // goerli
+            ethDepositContractAddress = 0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b;
+        } else if (block.chainid == 1) {
+            ethDepositContractAddress = 0x00000000219ab540356cBB839Cbe05303d7705Fa;
+        } else {
+            assert(false);
+        }
+
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy contracts
@@ -74,7 +84,7 @@ contract DeployPhaseOne is Script {
         stakingManagerImplementation = new StakingManager();
         stakingManagerProxy = new UUPSProxy(address(stakingManagerImplementation),"");
         stakingManager = StakingManager(address(stakingManagerProxy));
-        stakingManager.initialize(address(auctionManager));
+        stakingManager.initialize(address(auctionManager), ethDepositContractAddress);
 
         BNFTImplementation = new BNFT();
         BNFTProxy = new UUPSProxy(address(BNFTImplementation),"");

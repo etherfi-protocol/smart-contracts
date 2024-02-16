@@ -75,8 +75,6 @@ contract AuctionManager is
         maxBidAmount = 5 ether;
         numberOfBids = 1;
         whitelistEnabled = true;
-        accumulatedRevenue = 0;
-        accumulatedRevenueThreshold = 1 ether;
 
         nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerContract);
 
@@ -84,6 +82,15 @@ contract AuctionManager is
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
+    }
+
+    function initializeOnUpgrade(address _membershipManagerContractAddress, uint128 _accumulatedRevenueThreshold, address _etherFiAdminContractAddress, address _nodeOperatorManagerAddress) external onlyOwner { 
+        require(_membershipManagerContractAddress != address(0) && _etherFiAdminContractAddress != address(0) && _nodeOperatorManagerAddress != address(0), "No Zero Addresses");
+        membershipManagerContractAddress = _membershipManagerContractAddress;
+        nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerAddress);
+        accumulatedRevenue = 0;
+        accumulatedRevenueThreshold = _accumulatedRevenueThreshold;
+        admins[_etherFiAdminContractAddress] = true;
     }
 
     /// @notice Creates bid(s) for the right to run a validator node when ETH is deposited
@@ -300,15 +307,6 @@ contract AuctionManager is
         require(address(stakingManagerContractAddress) == address(0), "Address already set");
         require(_stakingManagerContractAddress != address(0), "No zero addresses");
         stakingManagerContractAddress = _stakingManagerContractAddress;
-    }
-
-    /// @notice Sets the membership manager contract address
-    /// @dev Needed to transfer accumulated revenue to the membership manager contract
-    /// @param _membershipManagerContractAddress new MembershiptManager contract address
-    function setMembershipManagerContractAddress(address _membershipManagerContractAddress) external onlyOwner {
-        require(membershipManagerContractAddress == address(0), "Address already set");
-        require(_membershipManagerContractAddress != address(0), "No zero addresses");
-        membershipManagerContractAddress = _membershipManagerContractAddress;
     }
 
     /// @notice Updates the minimum bid price for a non-whitelisted bidder

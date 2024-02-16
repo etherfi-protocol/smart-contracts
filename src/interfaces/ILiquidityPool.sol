@@ -42,6 +42,8 @@ interface ILiquidityPool {
         uint32 index;
     }
 
+    function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external;
+
     function numPendingDeposits() external view returns (uint32);
     function totalValueOutOfLp() external view returns (uint128);
     function totalValueInLp() external view returns (uint128);
@@ -54,6 +56,7 @@ interface ILiquidityPool {
     function deposit() external payable returns (uint256);
     function deposit(address _referral) external payable returns (uint256);
     function deposit(address _user, address _referral) external payable returns (uint256);
+    function depositToRecipient(address _recipient, uint256 _amount, address _referral) external returns (uint256);
     function withdraw(address _recipient, uint256 _amount) external returns (uint256);
     function requestWithdraw(address recipient, uint256 amount) external returns (uint256);
     function requestWithdrawWithPermit(address _owner, uint256 _amount, PermitInput calldata _permit) external returns (uint256);
@@ -63,20 +66,16 @@ interface ILiquidityPool {
     function batchRegisterAsBnftHolder(bytes32 _depositRoot, uint256[] calldata _validatorIds, IStakingManager.DepositData[] calldata _registerValidatorDepositData, bytes32[] calldata _depositDataRootApproval, bytes[] calldata _signaturesForApprovalDeposit) external;
     function batchApproveRegistration(uint256[] memory _validatorIds, bytes[] calldata _pubKey, bytes[] calldata _signature) external;
     function batchCancelDeposit(uint256[] calldata _validatorIds) external;
+    function batchCancelDepositByAdmin(uint256[] calldata _validatorIds, address _bnftStaker) external;
     function sendExitRequests(uint256[] calldata _validatorIds) external;
 
     function rebase(int128 _accruedRewards) external;
     function addEthAmountLockedForWithdrawal(uint128 _amount) external;
     
-    function setTokenAddress(address _eETH) external;
-    function setStakingManager(address _address) external;
-    function setEtherFiNodesManager(address _nodeManager) external;
-    function setMembershipManager(address _address) external;
-    function setTnft(address _address) external;
-    function setWithdrawRequestNFT(address _address) external; 
     function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external;
-    function setEtherFiAdminContract(address _address) external;
     function updateAdmin(address _newAdmin, bool _isAdmin) external;
-
+    function pauseContract() external;
+    function unPauseContract() external;
+    
     function decreaseSourceOfFundsValidators(uint32 numberOfEethValidators, uint32 numberOfEtherFanValidators) external;
 }

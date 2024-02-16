@@ -24,6 +24,11 @@ contract TNFTUpgrade is Script {
 
         TNFTInstance.upgradeTo(address(TNFTV2Implementation));
 
+        // phase 2 upgrade initialization
+        address etherFiNodesManagerAddress = addressProvider.getContractAddress("EtherFiNodesManager");
+        assert(etherFiNodesManagerAddress != address(0));
+        TNFTInstance.initializeOnUpgrade(etherFiNodesManagerAddress);
+
         vm.stopBroadcast();
     }
 }

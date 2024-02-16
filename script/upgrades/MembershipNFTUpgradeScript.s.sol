@@ -18,15 +18,25 @@ contract MembershipNFTUpgrade is Script {
         address membershipNFTProxy = addressProvider.getContractAddress("MembershipNFT");
         address liquidityPool = addressProvider.getContractAddress("LiquidityPool");
 
+        require(membershipNFTProxy != address(0), "MembershipNFTUpgrade: membershipNFTProxy is zero address");
+        require(liquidityPool != address(0), "MembershipNFTUpgrade: liquidityPool is zero address");
+
         vm.startBroadcast(deployerPrivateKey);
 
         MembershipNFT membershipNFTInstance = MembershipNFT(payable(membershipNFTProxy));
         MembershipNFT membershipNFTV2Implementation = new MembershipNFT();
 
-        membershipNFTInstance.upgradeTo(address(membershipNFTV2Implementation));
+        uint32 nextMintTokenId = membershipNFTInstance.nextMintTokenId();
+        uint32 maxTokenId = membershipNFTInstance.maxTokenId();
+        bytes32 eapMerkleRoot = membershipNFTInstance.eapMerkleRoot();
 
-        membershipNFTInstance.setLiquidityPool(liquidityPool);
-        
+        membershipNFTInstance.upgradeTo(address(membershipNFTV2Implementation));        
+        membershipNFTInstance.initializeOnUpgrade(liquidityPool);
+
+        require(membershipNFTInstance.nextMintTokenId() == nextMintTokenId, "MembershipNFTUpgrade: nextMintTokenId mismatch");
+        require(membershipNFTInstance.maxTokenId() == maxTokenId, "MembershipNFTUpgrade: maxTokenId mismatch");
+        require(membershipNFTInstance.eapMerkleRoot() == eapMerkleRoot, "MembershipNFTUpgrade: eapMerkleRoot mismatch");
+
         vm.stopBroadcast();
     }
 }

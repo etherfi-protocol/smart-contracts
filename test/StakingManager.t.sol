@@ -6,8 +6,9 @@ import "./TestSetup.sol";
 contract StakingManagerTest is TestSetup {
     event StakeDeposit(
         address indexed staker,
-        uint256 bidId,
-        address withdrawSafe
+        uint256 indexed bidId,
+        address indexed withdrawSafe,
+        bool restaked
     );
     event DepositCancelled(uint256 id);
     event ValidatorRegistered(
@@ -23,7 +24,6 @@ contract StakingManagerTest is TestSetup {
     uint256[] public validatorArray;
     uint256[] public bidIds;
     bytes[] public sig;
-    address public etherFiNode;
 
     function setUp() public {
         setUpTests();
@@ -35,10 +35,10 @@ contract StakingManagerTest is TestSetup {
      function test_DisableInitializer() public {
         vm.expectRevert("Initializable: contract is already initialized");
         vm.prank(owner);
-        stakingManagerImplementation.initialize(address(auctionInstance));
+        stakingManagerImplementation.initialize(address(auctionInstance), address(depositContractEth2));
     }
 
-    function test_fake() public {
+    function test_fake() public view {
         console.logBytes32(_getDepositRoot());
     }
 
@@ -64,8 +64,6 @@ contract StakingManagerTest is TestSetup {
         report.numValidatorsToSpinUp = 4;
         _executeAdminTasks(report);
 
-        bytes32[] memory aliceProof = merkle.getProof(whiteListedAddresses, 3);
-
         vm.startPrank(alice);
         liquidityPoolInstance.registerAsBnftHolder(alice);
         liquidityPoolInstance.registerAsBnftHolder(greg);
@@ -74,7 +72,7 @@ contract StakingManagerTest is TestSetup {
         vm.deal(greg, 100000 ether);
 
         //Set the max number of validators per holder to 4
-        liquidityPoolInstance.setNumValidatorsToSpinUpPerSchedulePerBnftHolder(4);
+        liquidityPoolInstance.setNumValidatorsToSpinUpInBatch(4);
 
         //Alice deposits funds into the LP to allow for validators to be spun and the calculations can work in dutyForWeek
         liquidityPoolInstance.deposit{value: 120 ether}();
@@ -82,8 +80,6 @@ contract StakingManagerTest is TestSetup {
 
         //Move forward in time to make sure dutyForWeek runs with an arbitrary timestamp
         vm.warp(12431561615);
-
-        liquidityPoolInstance.dutyForWeek();
 
         startHoax(alice);
         nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 1000);
@@ -106,7 +102,7 @@ contract StakingManagerTest is TestSetup {
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.generateWithdrawalCredentials(etherFiNode),
-            1 ether
+            2 ether
         );
         IStakingManager.DepositData memory depositData = IStakingManager
             .DepositData({
@@ -120,7 +116,7 @@ contract StakingManagerTest is TestSetup {
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.generateWithdrawalCredentials(etherFiNode),
-            31 ether
+            30 ether
         );
 
         depositDataRootsForApproval[0] = rootForApproval;
@@ -276,7 +272,7 @@ contract StakingManagerTest is TestSetup {
 
         uint256[] memory bidIdArray = new uint256[](0);
 
-        vm.expectRevert("No bid Ids provided");
+        vm.expectRevert("Incorrect bids or numVals");
         stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
             bidIdArray,
             false
@@ -635,7 +631,6 @@ contract StakingManagerTest is TestSetup {
     }
 
     function test_BatchRegisterValidatorWorksCorrectly() public {
-        bytes32[] memory proof = merkle.getProof(whiteListedAddresses, 0);
 
         startHoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
         nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 100);
@@ -782,7 +777,6 @@ contract StakingManagerTest is TestSetup {
     }
 
     function test_BatchRegisterValidatorFailsIfIncorrectPhase() public {
-        bytes32[] memory proof = merkle.getProof(whiteListedAddresses, 0);
 
         startHoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
         nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 100);
@@ -1248,7 +1242,6 @@ contract StakingManagerTest is TestSetup {
     }
 
     function test_EventValidatorRegistered() public {
-        bytes32[] memory proof = merkle.getProof(whiteListedAddresses, 0);
 
         vm.prank(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
         nodeOperatorManagerInstance.registerNodeOperator(
@@ -1301,13 +1294,13 @@ contract StakingManagerTest is TestSetup {
         );
 
         hoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        uint256[] memory bidIds = auctionInstance.createBid{value: 0.4 ether}(
+        uint256[] memory newBidIds = auctionInstance.createBid{value: 0.4 ether}(
             4,
             0.1 ether
         );
 
         startHoax(alice);
-        stakingManagerInstance.batchDepositWithBidIds{value: 128 ether}(bidIds, false);
+        stakingManagerInstance.batchDepositWithBidIds{value: 128 ether}(newBidIds, false);
     }
 
     function test_CanOnlySetAddressesOnce() public {

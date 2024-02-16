@@ -24,6 +24,11 @@ contract BNFTUpgrade is Script {
 
         BNFTInstance.upgradeTo(address(BNFTV2Implementation));
 
+        // phase 2 upgrade initialization
+        address etherFiNodesManagerAddress = addressProvider.getContractAddress("EtherFiNodesManager");
+        assert(etherFiNodesManagerAddress != address(0));
+        BNFTInstance.initializeOnUpgrade(etherFiNodesManagerAddress);
+
         vm.stopBroadcast();
     }
 }

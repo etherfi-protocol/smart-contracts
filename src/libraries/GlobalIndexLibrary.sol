@@ -78,7 +78,7 @@ library globalIndexLibrary {
     }
     
     // Compute `rescaledTierRewards` for each tier from `tierRewards` and `weight`
-    function calculateRescaledTierRewards(uint256[] memory tierRewards, uint24[] memory tierWeights) public view returns (uint256[] memory) {
+    function calculateRescaledTierRewards(uint256[] memory tierRewards, uint24[] memory tierWeights) public pure returns (uint256[] memory) {
         uint256[] memory weightedTierRewards = new uint256[](tierRewards.length);
         uint256[] memory rescaledTierRewards = new uint256[](tierRewards.length);
         uint256 sumTierRewards = 0;

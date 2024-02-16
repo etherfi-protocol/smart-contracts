@@ -10,7 +10,6 @@ contract EtherFiNodesManagerTest is TestSetup {
     address etherFiNode;
     uint256[] bidId;
     EtherFiNode safeInstance;
-    uint256 testnetFork;
 
     function setUp() public {
         setUpTests();
@@ -75,8 +74,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         );
 
         safeInstance = EtherFiNode(payable(etherFiNode));
-
-        testnetFork = vm.createFork(vm.envString("GOERLI_RPC_URL"));
     }
 
     function test_SetStakingRewardsSplit() public {
@@ -100,15 +97,29 @@ contract EtherFiNodesManagerTest is TestSetup {
         assertEq(bnft, 400000);
     }
 
+    function test_setEnableNodeRecycling() public {
+        vm.expectRevert("Not admin");
+        vm.prank(owner);
+        managerInstance.setEnableNodeRecycling(true);
+
+        vm.prank(alice);
+        managerInstance.setEnableNodeRecycling(true);
+        assertEq(managerInstance.enableNodeRecycling(), true);
+
+        vm.prank(alice);
+        managerInstance.setEnableNodeRecycling(false);
+        assertEq(managerInstance.enableNodeRecycling(), false);
+    }
+
     function test_SetNonExitPenaltyPrincipal() public {
         vm.expectRevert("Not admin");
         vm.prank(owner);
-        managerInstance.setNonExitPenaltyPrincipal(2 ether);
+        managerInstance.setNonExitPenalty(300, 2 ether);
 
         assertEq(managerInstance.nonExitPenaltyPrincipal(), 1 ether);
 
         vm.prank(alice);
-        managerInstance.setNonExitPenaltyPrincipal(2 ether);
+        managerInstance.setNonExitPenalty(300, 2 ether);
 
         assertEq(managerInstance.nonExitPenaltyPrincipal(), 2 ether);
     }
@@ -116,10 +127,10 @@ contract EtherFiNodesManagerTest is TestSetup {
     function test_SetNonExitPenaltyDailyRate() public {
         vm.expectRevert("Not admin");
         vm.prank(owner);
-        managerInstance.setNonExitPenaltyDailyRate(2 ether);
+        managerInstance.setNonExitPenalty(300, 2 ether);
 
         vm.prank(alice);
-        managerInstance.setNonExitPenaltyDailyRate(5);
+        managerInstance.setNonExitPenalty(5, 2 ether);
         assertEq(managerInstance.nonExitPenaltyDailyRate(), 5);
     }
 
@@ -179,7 +190,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         vm.deal(managerInstance.etherfiNodeAddress(validatorId), 1 ether);
         vm.stopPrank();
 
-
         uint256[] memory validatorsToReset = new uint256[](1);
         validatorsToReset[0] = validatorId;
         vm.prank(alice);
@@ -187,12 +197,22 @@ contract EtherFiNodesManagerTest is TestSetup {
         managerInstance.resetWithdrawalSafes(validatorsToReset);
     }
 
-    function test_CantResetRestakedNodeWithBalance() public {
-        // re-run setup now that we have fork selected. Probably a better way we can do this
-        vm.selectFork(testnetFork);
-        setUp();
+    function test_getEigenPod() public {
+        initializeTestingFork(TESTNET_FORK);
 
-        uint256 validatorId = bidId[0];
+        uint256 nonRestakedValidatorId = depositAndRegisterValidator(false);
+        assertEq(managerInstance.getEigenPod(nonRestakedValidatorId), address(0x0));
+        assertEq(managerInstance.isRestakingEnabled(nonRestakedValidatorId), false);
+
+        uint256 restakedValidatorId = depositAndRegisterValidator(true);
+        assert(managerInstance.getEigenPod(restakedValidatorId) != address(0x0));
+        assertEq(managerInstance.isRestakingEnabled(restakedValidatorId), true);
+    }
+
+    function test_CantResetRestakedNodeWithBalance() public {
+        initializeTestingFork(TESTNET_FORK);
+
+        uint256 validatorId = depositAndRegisterValidator(true);
         address node = managerInstance.etherfiNodeAddress(validatorId);
         vm.prank(address(managerInstance));
         IEtherFiNode(node).setIsRestakingEnabled(true);
@@ -265,10 +285,7 @@ contract EtherFiNodesManagerTest is TestSetup {
 
     function test_RegisterEtherFiNodeReusesAvailableSafes() public {
         vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            _ipfsHash,
-            5
-        );
+        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 5);
 
         assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 0);
 
@@ -304,6 +321,23 @@ contract EtherFiNodesManagerTest is TestSetup {
         // original premade safe should be on top of the stack after being recycled
         assertEq(managerInstance.unusedWithdrawalSafes(1), premadeSafe[0]);
         assertEq(managerInstance.unusedWithdrawalSafes(0), safe2[0]);
+
+
+        // disable use of recycled validators
+        vm.prank(alice);
+        managerInstance.setEnableNodeRecycling(false);
+
+        // create a new bid
+        vm.deal(alice, 33 ether);
+        vm.prank(alice);
+        bidId = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
+        processedBids = stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidId, false);
+
+        // recycled validator should not have been used because of toggle
+        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 2);
+        assert(managerInstance.etherfiNodeAddress(processedBids[0]) != managerInstance.unusedWithdrawalSafes(1));
+        assert(managerInstance.etherfiNodeAddress(processedBids[0]) != address(0));
+
     }
 
     function test_createMultipleUnusedWithdrawalSafes() public {
@@ -352,16 +386,8 @@ contract EtherFiNodesManagerTest is TestSetup {
 
         assertEq(managerInstance.isExitRequested(bidId[0]), true);
 
-        hoax(0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf);
-        vm.expectRevert("Exit request was already sent.");
-        managerInstance.sendExitRequest(bidId[0]);
-
         uint256[] memory ids = new uint256[](1);
         ids[0] = bidId[0];
-        hoax(0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf);
-        vm.expectRevert("Exit request was already sent.");
-        managerInstance.batchSendExitRequest(ids);
-
         address etherFiNode = managerInstance.etherfiNodeAddress(bidId[0]);
         uint32 exitRequestTimestamp = IEtherFiNode(etherFiNode).exitRequestTimestamp();
 
@@ -415,7 +441,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     function test_PausableModifierWorks() public {
         hoax(alice);
         managerInstance.pauseContract();
-        
+
         hoax(0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf);
         vm.expectRevert("Pausable: paused");
         managerInstance.sendExitRequest(bidId[0]);

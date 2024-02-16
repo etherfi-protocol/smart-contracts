@@ -8,6 +8,7 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "./interfaces/IEtherFiOracle.sol";
+import "./interfaces/IEtherFiAdmin.sol";
 
 import "forge-std/console.sol";
 
@@ -31,6 +32,10 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
     uint32 public numCommitteeMembers; // the total number of committee members
     uint32 public numActiveCommitteeMembers; // the number of active (enabled) committee members
+
+    IEtherFiAdmin etherFiAdmin;
+
+    mapping(address => bool) public admins;
 
     event CommitteeMemberAdded(address indexed member);
     event CommitteeMemberRemoved(address indexed member);
@@ -66,10 +71,11 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     }
 
     function submitReport(OracleReport calldata _report) external whenNotPaused returns (bool) {
+        bytes32 reportHash = generateReportHash(_report);
+        require(!consensusStates[reportHash].consensusReached, "Consensus already reached");
         require(shouldSubmitReport(msg.sender), "You don't need to submit a report");
         verifyReport(_report);
 
-        bytes32 reportHash = generateReportHash(_report);
 
         // update the member state
         CommitteeMemberState storage memberState = committeeMemberStates[msg.sender];
@@ -78,7 +84,6 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
         // update the consensus state
         ConsensusState storage consenState = consensusStates[reportHash];
-        consenState.support++;
 
         emit ReportSubmitted(
             _report.consensusVersion,
@@ -91,9 +96,11 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
             );
 
         // if the consensus reaches
-        bool consensusReached = (consenState.support == quorumSize);
+        consenState.support++;
+        bool consensusReached = (consenState.support >= quorumSize);
         if (consensusReached) {
             consenState.consensusReached = true;
+            consenState.consensusTimestamp = uint32(block.timestamp);
             _publishReport(_report, reportHash);
         }
 
@@ -115,6 +122,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         uint32 slot = slotForNextReport();
         require(_isFinalized(slot), "Report Epoch is not finalized yet");
         require(computeSlotAtTimestamp(block.timestamp) >= reportStartSlot, "Report Slot has not started yet");
+        require(lastPublishedReportRefSlot == etherFiAdmin.lastHandledReportRefSlot(), "Last published report is not handled yet");
         return slot > committeeMemberStates[_member].lastReportRefSlot;
     }
 
@@ -128,6 +136,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         require(_report.refBlockTo < block.number, "Report is for wrong blockTo");
 
         // If two epochs in a row are justified, the current_epoch - 2 is considered finalized
+        // Put 1 epoch more as a safe buffer
         uint32 currSlot = computeSlotAtTimestamp(block.timestamp);
         uint32 currEpoch = (currSlot / SLOTS_PER_EPOCH);
         uint32 reportEpoch = (_report.refSlotTo / SLOTS_PER_EPOCH);
@@ -136,6 +145,16 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
     function isConsensusReached(bytes32 _hash) public view returns (bool) {
         return consensusStates[_hash].consensusReached;
+    }
+
+    function getConsensusTimestamp(bytes32 _hash) public view returns (uint32) {
+        require(consensusStates[_hash].consensusReached, "Consensus is not reached yet");
+        return consensusStates[_hash].consensusTimestamp;
+    }
+
+    function getConsensusSlot(bytes32 _hash) public view returns (uint32) {
+        require(consensusStates[_hash].consensusReached, "Consensus is not reached yet");
+        return computeSlotAtTimestamp(consensusStates[_hash].consensusTimestamp);
     }
 
     function _isFinalized(uint32 _slot) internal view returns (bool) {
@@ -210,6 +229,10 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         return keccak256(abi.encode(chunk1, chunk2, chunk3));
     }
 
+    function beaconGenesisTimestamp() external view returns (uint32) {
+        return BEACON_GENESIS_TIME;
+    }
+
     function addCommitteeMember(address _address) public onlyOwner {
         require(committeeMemberStates[_address].registered == false, "Already registered");
         numCommitteeMembers++;
@@ -241,12 +264,13 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit CommitteeMemberUpdated(_address, _enabled);
     }
 
-    function setReportStartSlot(uint32 _reportStartSlot) public onlyOwner {
+    function setReportStartSlot(uint32 _reportStartSlot) public isAdmin {
         // check if the start slot is at the beginning of the epoch
         require(_reportStartSlot > computeSlotAtTimestamp(block.timestamp), "The start slot should be in the future");
         require(_reportStartSlot > lastPublishedReportRefSlot, "The start slot should be after the last published report");
-        require(_reportStartSlot % 32 == 0, "The start slot should be at the beginning of the epoch");
+        require(_reportStartSlot % SLOTS_PER_EPOCH == 0, "The start slot should be at the beginning of the epoch");
         reportStartSlot = _reportStartSlot;
+        
         emit ReportStartSlotUpdated(_reportStartSlot);
     }
 
@@ -256,7 +280,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit QuorumUpdated(_quorumSize);
     }
 
-    function setOracleReportPeriod(uint32 _reportPeriodSlot) public onlyOwner {
+    function setOracleReportPeriod(uint32 _reportPeriodSlot) public isAdmin {
         require(_reportPeriodSlot != 0, "Report period cannot be zero");
         require(_reportPeriodSlot % SLOTS_PER_EPOCH == 0, "Report period must be a multiple of the epoch");
         reportPeriodSlot = _reportPeriodSlot;
@@ -264,18 +288,38 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit OracleReportPeriodUpdated(_reportPeriodSlot);
     }
 
-    function setConsensusVersion(uint32 _consensusVersion) public onlyOwner {
+    function setConsensusVersion(uint32 _consensusVersion) public isAdmin {
         require(_consensusVersion > consensusVersion, "New consensus version must be greater than the current one");
         consensusVersion = _consensusVersion;
 
         emit ConsensusVersionUpdated(_consensusVersion);
     }
 
-    function pauseContract() external onlyOwner {
+    function setEtherFiAdmin(address _etherFiAdminAddress) external onlyOwner {
+        require(etherFiAdmin == IEtherFiAdmin(address(0)), "EtherFiAdmin is already set");
+        etherFiAdmin = IEtherFiAdmin(_etherFiAdminAddress);
+    }
+    
+    function unpublishReport(bytes32 _hash) external isAdmin {
+        require(consensusStates[_hash].consensusReached, "Consensus is not reached yet");
+        consensusStates[_hash].support = 0;
+        consensusStates[_hash].consensusReached = false;
+    }
+
+    function updateLastPublishedBlockStamps(uint32 _lastPublishedReportRefSlot, uint32 _lastPublishedReportRefBlock) external isAdmin {
+        lastPublishedReportRefSlot = _lastPublishedReportRefSlot;
+        lastPublishedReportRefBlock = _lastPublishedReportRefBlock;
+    }
+
+    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
+        admins[_address] = _isAdmin;
+    }
+
+    function pauseContract() external isAdmin {
         _pause();
     }
 
-    function unPauseContract() external onlyOwner {
+    function unPauseContract() external isAdmin {
         _unpause();
     }
 
@@ -284,4 +328,9 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    modifier isAdmin() {
+        require(admins[msg.sender] || msg.sender == owner(), "EtherFiAdmin: not an admin");
+        _;
+    }
 }
