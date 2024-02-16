@@ -7,6 +7,7 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/ILiquifier.sol";
 import "./interfaces/ILiquidityPool.sol";
@@ -14,16 +15,14 @@ import "./interfaces/ILiquidityPool.sol";
 
 /// put (restaked) {stETH, cbETH, wbETH} and get eETH
 contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, ILiquifier {
+    using SafeERC20 for IERC20;
 
-    uint32 public depositCapClockStartTime;
-    uint32 public depositCapPeriod; // seconds
-    uint96 public depositCap;
-    uint96 public totalDepositedThisPeriod;
+    uint32 public eigenLayerWithdrawalClaimGasCost;
+    uint32 public timeBoundCapRefreshInterval; // seconds
+
+    bool public quoteStEthWithCurve;
 
     uint128 public accumulatedFee;
-
-    uint32 internal constant EigenLayerWithdrawalClaimGasCost = 150_000;
-    uint32 internal constant BALANCE_OFFSET = 0;
 
     mapping(address => TokenInfo) public tokenInfos;
     mapping(bytes32 => bool) public isRegisteredQueuedWithdrawals;
@@ -36,12 +35,25 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     ICurvePool public cbEth_Eth_Pool;
     ICurvePool public wbEth_Eth_Pool;
+    ICurvePool public stEth_Eth_Pool;
 
     IcbETH public cbEth;
     IwBETH public wbEth;
     ILido public lido;
 
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
+    event RegisteredQueuedWithdrawal(bytes32 _withdrawalRoot, IStrategyManager.QueuedWithdrawal _queuedWithdrawal);
+    event CompletedQueuedWithdrawal(bytes32 _withdrawalRoot);
+    event QueuedStEthWithdrawals(uint256[] _reqIds);
+    event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
+
+    error StrategyShareNotEnough();
+    error NotSupportedToken();
+    error EthTransferFailed();
+    error NotEnoughBalance();
+    error AlreadyRegistered();
+    error NotRegistered();
+
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -50,8 +62,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     /// @notice initialize to set variables on deployment
     function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
-                        address _stEth, address _cbEth, address _wbEth, address _cbEth_Eth_Pool, address _wbEth_Eth_Pool,
-                        uint96 _depositCap, uint32 _depositCapPeriod) initializer external {
+                        address _stEth, address _cbEth, address _wbEth, address _cbEth_Eth_Pool, address _wbEth_Eth_Pool, address _stEth_Eth_Pool,
+                        uint32 _timeBoundCapRefreshInterval) initializer external {
         __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -67,15 +79,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         wbEth = IwBETH(_wbEth);
         cbEth_Eth_Pool = ICurvePool(_cbEth_Eth_Pool);
         wbEth_Eth_Pool = ICurvePool(_wbEth_Eth_Pool);
+        stEth_Eth_Pool = ICurvePool(_stEth_Eth_Pool);
         
-        depositCap = _depositCap;
-        depositCapPeriod = _depositCapPeriod;
-        depositCapClockStartTime = uint32(block.timestamp);
+        timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
+        quoteStEthWithCurve = true;
+        eigenLayerWithdrawalClaimGasCost = 150_000;
     }
 
-    receive() external payable {
-        require(msg.sender == address(lidoWithdrawalQueue) || msg.sender == address(cbEth_Eth_Pool) || msg.sender == address(wbEth_Eth_Pool), "not allowed");
-    }
+    receive() external payable {}
 
     /// the users mint eETH given the queued withdrawal for their LRT with withdrawer == address(this)
     /// charge a small fixed amount fee to compensate for the gas cost for claim
@@ -87,25 +98,19 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
         /// register it to prevent duplicate deposits with the same queued withdrawal
         isRegisteredQueuedWithdrawals[withdrawalRoot] = true;
+        emit RegisteredQueuedWithdrawal(withdrawalRoot, _queuedWithdrawal);
 
         /// queue the strategy share for withdrawal
         uint256 amount = _enqueueForWithdrawal(_queuedWithdrawal.strategies, _queuedWithdrawal.shares);
 
-        require(!isDepositCapReached(amount), "Deposit cap reached");
-
         /// handle fee
         uint256 feeAmount = _queuedWithdrawal.strategies.length * getFeeAmount();
-        require(amount >= feeAmount + BALANCE_OFFSET, "less than the fee amount");
         amount -= feeAmount;
         accumulatedFee += uint128(feeAmount);
-
-        /// to protect from over-commitment
-        amount -= BALANCE_OFFSET;
         
         /// mint eETH to the user
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, amount, _referral);
 
-        _afterDeposit(amount);
         return eEthShare;
     }
 
@@ -115,29 +120,26 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @param _referral The referral address
     /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
     function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {
-        require(isTokenWhitelisted(_token), "token is not whitelisted");
+        require(isTokenWhitelisted(_token), "NotWhitelisted");
 
-        uint256 balance = tokenAmountToEthAmount(_token, IERC20(_token).balanceOf(address(this)));
-        bool sent = IERC20(_token).transferFrom(msg.sender, address(this), _amount);
-        require(sent, "erc20 transfer failed");
-        uint256 newBalance = tokenAmountToEthAmount(_token, IERC20(_token).balanceOf(address(this)));
-        uint256 dx = newBalance - balance;
+        IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
+        
+        uint256 dx = quoteByMarketValue(_token, _amount);
 
-        require(!isDepositCapReached(dx), "Deposit cap reached");
-
-        require(_amount > BALANCE_OFFSET, "amount is too small");
-        dx -= BALANCE_OFFSET;
+        // discount
+        dx = (10000 - tokenInfos[_token].discountInBasisPoints) * dx / 10000;
+        require(!isDepositCapReached(_token, dx), "CapReached");
 
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, dx, _referral);
 
         emit Liquified(msg.sender, dx, _token, false);
 
-        _afterDeposit(dx);
+        _afterDeposit(_token, dx);
         return eEthShare;
     }
 
     function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused returns (uint256) {
-        IERC20Permit(_token).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s);
+        try IERC20Permit(_token).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return depositWithERC20(_token, _amount, _referral);
     }
 
@@ -150,7 +152,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         uint256 num = _queuedWithdrawals.length;
         bool[] memory receiveAsTokens = new bool[](num);
         for (uint256 i = 0; i < num; i++) {
-            _completeWithdrawals(_queuedWithdrawals[i].strategies, _queuedWithdrawals[i].shares);
+            _completeWithdrawals(_queuedWithdrawals[i]);
 
             /// so that the shares withdrawn from the specified strategies are sent to the caller
             receiveAsTokens[i] = true;
@@ -163,18 +165,25 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// Initiate the process for redemption of stETH 
     function stEthRequestWithdrawal() external onlyAdmin returns (uint256[] memory) {
         uint256 amount = lido.balanceOf(address(this));
-        require(amount >= lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT(), "not enough stETH");
+        return stEthRequestWithdrawal(amount);
+    }
 
-        tokenInfos[address(lido)].ethAmountPendingForWithdrawals += uint128(amount);
+    function stEthRequestWithdrawal(uint256 _amount) public onlyAdmin returns (uint256[] memory) {
+        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT() || _amount < lido.balanceOf(address(this))) revert NotEnoughBalance();
+
+        tokenInfos[address(lido)].ethAmountPendingForWithdrawals += uint128(_amount);
 
         uint256 maxAmount = lidoWithdrawalQueue.MAX_STETH_WITHDRAWAL_AMOUNT();
-        uint256 numReqs = (amount + maxAmount - 1) / maxAmount;
+        uint256 numReqs = (_amount + maxAmount - 1) / maxAmount;
         uint256[] memory reqAmounts = new uint256[](numReqs);
         for (uint256 i = 0; i < numReqs; i++) {
-            reqAmounts[i] = (i == numReqs - 1) ? amount - i * maxAmount : maxAmount;
+            reqAmounts[i] = (i == numReqs - 1) ? _amount - i * maxAmount : maxAmount;
         }
-        lido.approve(address(lidoWithdrawalQueue), amount);
+        lido.approve(address(lidoWithdrawalQueue), _amount);
         uint256[] memory reqIds = lidoWithdrawalQueue.requestWithdrawals(reqAmounts, address(this));
+
+        emit QueuedStEthWithdrawals(reqIds);
+
         return reqIds;
     }
 
@@ -186,79 +195,138 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
         uint256 newBalance = address(this).balance;
 
-        tokenInfos[address(lido)].ethAmountPendingForWithdrawals -= uint128(newBalance - balance);
+        // to prevent the underflow error
+        uint128 dx = uint128(_min(newBalance - balance, tokenInfos[address(lido)].ethAmountPendingForWithdrawals));
+        tokenInfos[address(lido)].ethAmountPendingForWithdrawals -= dx;
+
+        emit CompletedStEthQueuedWithdrawals(_requestIds);
     }
 
     // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
     function withdrawEther() external onlyAdmin {
-        require(address(this).balance >= accumulatedFee, "not enough balance");
         bool sent;
 
-        if (accumulatedFee > 0.2 ether) {
+        if (accumulatedFee > 0.2 ether && address(this).balance >= accumulatedFee) {
             uint256 amountToTreasury = accumulatedFee;
             accumulatedFee = 0;
             (sent, ) = payable(treasury).call{value: amountToTreasury, gas: 5000}("");
-            require(sent, "failed to send ether");
+            if (!sent) revert EthTransferFailed();
         }
 
-        uint256 amountToLiquidityPool = address(this).balance - accumulatedFee;
-        (sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 10000}("");
-        require(sent, "failed to send ether");
+        if (address(this).balance >= accumulatedFee) {
+            uint256 amountToLiquidityPool = address(this).balance - accumulatedFee;
+            (sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
+            if (!sent) revert EthTransferFailed();
+        }
     }
 
-    function updateWhitelistedToken(address _tokenAddress, bool _isWhitelisted) external onlyOwner {
-        tokenInfos[_tokenAddress].isWhitelisted = _isWhitelisted;
+    function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOwner {
+        tokenInfos[_token].isWhitelisted = _isWhitelisted;
+    }
+
+    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _refreshClock) external onlyOwner {
+        tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
+        tokenInfos[_token].totalCapInEther = _totalCapInEther;
+
+        if (_refreshClock) {
+            tokenInfos[_token].timeBoundCapClockStartTime = uint32(block.timestamp);
+            tokenInfos[_token].totalDepositedThisPeriod = 0;
+        }
+    }
+
+    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyOwner {
+        tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
+    }
+
+    function updateEigenLayerWithdrawalClaimGasCost(uint32 _eigenLayerWithdrawalClaimGasCost) external onlyOwner {
+        eigenLayerWithdrawalClaimGasCost = _eigenLayerWithdrawalClaimGasCost;
+    }
+
+    function registerToken(address _token, address _strategy, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) external onlyOwner {
+        if (_token != address(IStrategy(_strategy).underlyingToken())) revert NotSupportedToken();
+        if (address(tokenInfos[_token].strategy) != address(0) || tokenInfos[_token].totalDeposited != 0) revert AlreadyRegistered();
+        tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_strategy), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0);
     }
 
     function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
         admins[_address] = _isAdmin;
     }
 
-    function updateDepositCap(uint96 _depositCap, uint32 _depositCapPeriod) external onlyOwner {
-        depositCap = _depositCap;
-        depositCapPeriod = _depositCapPeriod;
+    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyOwner {
+        quoteStEthWithCurve = _quoteStEthWithCurve;
     }
 
-    function registerToken(address _token, address _strategy, bool _isWhitelisted) external onlyOwner {
-        require(_token == address(IStrategy(_strategy).underlyingToken()), "token mismatch");
-        require(address(tokenInfos[_token].strategy) == address(0) && tokenInfos[_token].strategyShare == 0 && tokenInfos[_token].ethAmountPendingForWithdrawals == 0, "already registered");
-        tokenInfos[_token] = TokenInfo(IStrategy(_strategy), 0, 0, _isWhitelisted);
+    //Pauses the contract
+    function pauseContract() external onlyAdmin {
+        _pause();
+    }
+
+    //Unpauses the contract
+    function unPauseContract() external onlyAdmin {
+        _unpause();
     }
 
     function swapCbEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin returns (uint256) {
+        if (_amount > cbEth.balanceOf(address(this))) revert NotEnoughBalance();
         cbEth.approve(address(cbEth_Eth_Pool), _amount);
         return cbEth_Eth_Pool.exchange_underlying(1, 0, _amount, _minOutputAmount);
     }
 
     function swapWbEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin returns (uint256) {
+        if (_amount > wbEth.balanceOf(address(this))) revert NotEnoughBalance();
         wbEth.approve(address(wbEth_Eth_Pool), _amount);
         return wbEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
     }
 
-    /* VIEW FUNCTIONS */
-    function strategyShareToEthAmount(address _token, IStrategy _strategy, uint256 _share) public view returns (uint256) {
-        uint256 tokenAmount = _strategy.sharesToUnderlyingView(_share);
-        return tokenAmountToEthAmount(_token, tokenAmount);
+    function swapStEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin returns (uint256) {
+        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
+        lido.approve(address(stEth_Eth_Pool), _amount);
+        return stEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
     }
 
-    function tokenAmountToEthAmount(address _token, uint256 _amount) public view returns (uint256) {
+    /* VIEW FUNCTIONS */
+
+    // Given the `_amount` of `_token` token, returns the equivalent amount of ETH 
+    function quoteByFairValue(address _token, uint256 _amount) public view returns (uint256) {
         if (_token == address(lido)) return _amount * 1; /// 1:1 from stETH to eETH
         else if (_token == address(cbEth)) return _amount * cbEth.exchangeRate() / 1e18;
         else if (_token == address(wbEth)) return _amount * wbEth.exchangeRate() / 1e18;
-        
-        require(false, "not supported");
+
+        revert NotSupportedToken();
+    }
+
+    function quoteStrategyShareForDeposit(address _token, IStrategy _strategy, uint256 _share) public view returns (uint256) {
+        uint256 tokenAmount = _strategy.sharesToUnderlyingView(_share);
+        return quoteByMarketValue(_token, tokenAmount);
+    }
+
+    function quoteByMarketValue(address _token, uint256 _amount) public view returns (uint256) {
+        if (_amount == 0) return 0;
+
+        if (_token == address(lido)) {
+            if (quoteStEthWithCurve) {
+                return _min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
+            } else {
+                return _amount; /// 1:1 from stETH to eETH
+            }
+        } else if (_token == address(cbEth)) {
+            return _min(_amount * cbEth.exchangeRate() / 1e18, ICurvePoolQuoter2(address(cbEth_Eth_Pool)).get_dy(1, 0, _amount));
+        } else if (_token == address(wbEth)) {
+            return _min(_amount * wbEth.exchangeRate() / 1e18, ICurvePoolQuoter1(address(wbEth_Eth_Pool)).get_dy(1, 0, _amount));
+        }
+
+        revert NotSupportedToken();
     }
 
     function verifyQueuedWithdrawal(address _user, IStrategyManager.QueuedWithdrawal calldata _queuedWithdrawal) public view returns (bytes32) {
-        require(_queuedWithdrawal.depositor == _user, "not the owner of the queued withdrawal");
-        require(_queuedWithdrawal.withdrawerAndNonce.withdrawer == address(this), "withdrawer != liquifier");
+        require(_queuedWithdrawal.depositor == _user && _queuedWithdrawal.withdrawerAndNonce.withdrawer == address(this), "wrong depositor/withdrawer");
         for (uint256 i = 0; i < _queuedWithdrawal.strategies.length; i++) {
             address token = address(_queuedWithdrawal.strategies[i].underlyingToken());
-            require(isTokenWhitelisted(token), "token is not whitelisted");
+            require(tokenInfos[token].isWhitelisted && tokenInfos[token].strategy == _queuedWithdrawal.strategies[i], "NotWhitelisted");
         }
         bytes32 withdrawalRoot = eigenLayerStrategyManager.calculateWithdrawalRoot(_queuedWithdrawal);
-        require(eigenLayerStrategyManager.withdrawalRootPending(withdrawalRoot), "already claimed OR wrong queued withdrawal");
-        require(!isRegisteredQueuedWithdrawals[withdrawalRoot], "already deposited");
+        require(eigenLayerStrategyManager.withdrawalRootPending(withdrawalRoot), "WrongQ");
+        require(!isRegisteredQueuedWithdrawals[withdrawalRoot], "Deposited");
 
         return withdrawalRoot;
     }
@@ -268,18 +336,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function getFeeAmount() public view returns (uint256) {
-        uint256 gasSpendings = EigenLayerWithdrawalClaimGasCost;
+        uint256 gasSpendings = eigenLayerWithdrawalClaimGasCost;
         uint256 feeAmount = gasSpendings * block.basefee;
-        return gasSpendings;
+        return feeAmount;
     }
 
     function getTotalPooledEther() public view returns (uint256) {
-        uint256 total = address(this).balance;
-        total += getTotalPooledEther(address(lido));
-        total += getTotalPooledEther(address(cbEth));
-        total += getTotalPooledEther(address(wbEth));
-        total -= accumulatedFee;
-        return total;
+        return address(this).balance + getTotalPooledEther(address(lido)) + getTotalPooledEther(address(cbEth)) + getTotalPooledEther(address(wbEth)) - accumulatedFee;
     }
 
     /// deposited (restaked) ETH can have 3 states:
@@ -290,8 +353,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         TokenInfo memory info = tokenInfos[_token];
         if (!isTokenWhitelisted(_token)) return (0, 0, 0);
 
-        uint256 restaked = tokenAmountToEthAmount(_token, info.strategy.sharesToUnderlyingView(info.strategyShare)); /// restaked & pending for withdrawals
-        uint256 holding = tokenAmountToEthAmount(_token, IERC20(_token).balanceOf(address(this))); /// eth value for erc20 holdings
+        uint256 restaked = quoteByFairValue(_token, info.strategy.sharesToUnderlyingView(info.strategyShare)); /// restaked & pending for withdrawals
+        uint256 holding = quoteByFairValue(_token, IERC20(_token).balanceOf(address(this))); /// eth value for erc20 holdings
         uint256 pendingForWithdrawals = info.ethAmountPendingForWithdrawals; /// eth pending for withdrawals
         return (restaked, holding, pendingForWithdrawals);
     }
@@ -305,14 +368,26 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return _getImplementation();
     }
 
-    function isDepositCapReached(uint256 _amount) public view returns (bool) {
-        uint256 totalDepositedThisPeriod_ = totalDepositedThisPeriod;
-        uint32 depositCapClockStartTime_ = depositCapClockStartTime;
-        if (block.timestamp >= depositCapClockStartTime_ + depositCapPeriod) {
+    function timeBoundCap(address _token) public view returns (uint256) {
+        return uint256(1 ether) * tokenInfos[_token].timeBoundCapInEther;
+    }
+
+    function totalCap(address _token) public view returns (uint256) {
+        return uint256(1 ether) * tokenInfos[_token].totalCapInEther;
+    }
+
+    function totalDeposited(address _token) public view returns (uint256) {
+        return tokenInfos[_token].totalDeposited;
+    }
+
+    function isDepositCapReached(address _token, uint256 _amount) public view returns (bool) {
+        TokenInfo memory info = tokenInfos[_token];
+        uint96 totalDepositedThisPeriod_ = info.totalDepositedThisPeriod;
+        uint32 timeBoundCapClockStartTime_ = info.timeBoundCapClockStartTime;
+        if (block.timestamp >= timeBoundCapClockStartTime_ + timeBoundCapRefreshInterval) {
             totalDepositedThisPeriod_ = 0;
-            depositCapClockStartTime_ = uint32(block.timestamp);
         }
-        return (totalDepositedThisPeriod_ + _amount > depositCap);
+        return (totalDepositedThisPeriod_ + _amount > timeBoundCap(_token) || info.totalDeposited + _amount > totalCap(_token));
     }
 
     /* INTERNAL FUNCTIONS */
@@ -323,38 +398,62 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
             IStrategy strategy = _strategies[i];
             uint256 share = _shares[i];
             address token = address(strategy.underlyingToken());
-            uint256 dx = strategyShareToEthAmount(token, strategy, share);
+            uint256 dx = quoteStrategyShareForDeposit(token, strategy, share);
+
+            // discount
+            dx = (10000 - tokenInfos[token].discountInBasisPoints) * dx / 10000;
+
+            require(!isDepositCapReached(token, dx), "CapReached");
 
             amount += dx;
             tokenInfos[token].strategyShare += uint128(share);
+
+            _afterDeposit(token, amount);
 
             emit Liquified(msg.sender, dx, token, true);
         }
         return amount;
     }
+    
+    function _completeWithdrawals(IStrategyManager.QueuedWithdrawal memory _queuedWithdrawal) internal {
+        bytes32 withdrawalRoot = eigenLayerStrategyManager.calculateWithdrawalRoot(_queuedWithdrawal);
+        if (!isRegisteredQueuedWithdrawals[withdrawalRoot]) revert NotRegistered();
 
-    function _completeWithdrawals(IStrategy[] memory _strategies, uint256[] memory _shares) internal {
-        uint256 numStrategies = _strategies.length;
+        uint256 numStrategies = _queuedWithdrawal.strategies.length;
         for (uint256 i = 0; i < numStrategies; i++) {
-            address token = address(_strategies[i].underlyingToken());
-            uint128 share = uint128(_shares[i]);
+            address token = address(_queuedWithdrawal.strategies[i].underlyingToken());
+            uint128 share = uint128(_queuedWithdrawal.shares[i]);
+
+            if (tokenInfos[token].strategyShare < share) revert StrategyShareNotEnough();
             tokenInfos[token].strategyShare -= share;
         }
+
+        emit CompletedQueuedWithdrawal(withdrawalRoot);
     }
 
-    function _afterDeposit(uint256 _amount) internal {
-        if (block.timestamp >= depositCapClockStartTime + depositCapPeriod) {
-            totalDepositedThisPeriod = 0;
-            depositCapClockStartTime = uint32(block.timestamp);
+    function _afterDeposit(address _token, uint256 _amount) internal {
+        TokenInfo storage info = tokenInfos[_token];
+        if (block.timestamp >= info.timeBoundCapClockStartTime + timeBoundCapRefreshInterval) {
+            info.totalDepositedThisPeriod = 0;
+            info.timeBoundCapClockStartTime = uint32(block.timestamp);
         }
-        totalDepositedThisPeriod += uint96(_amount);
+        info.totalDepositedThisPeriod += uint96(_amount);
+        info.totalDeposited += uint96(_amount);
+    }
+
+     function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
+        return (_a > _b) ? _b : _a;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
+    function _requireAdmin() internal view virtual {
+        require(admins[msg.sender] || msg.sender == owner(), "NotAdmin");
+    }
+
     /* MODIFIER */
     modifier onlyAdmin() {
-        require(admins[msg.sender], "Not admin");
+        _requireAdmin();
         _;
     }
 }

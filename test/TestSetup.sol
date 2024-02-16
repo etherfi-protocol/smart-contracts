@@ -52,6 +52,7 @@ contract TestSetup is Test {
 
     ICurvePool public cbEth_Eth_Pool;
     ICurvePool public wbEth_Eth_Pool;
+    ICurvePool public stEth_Eth_Pool;
 
     IcbETH public cbEth;
     IwBETH public wbEth;
@@ -279,6 +280,7 @@ contract TestSetup is Test {
 
             cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
             wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
+            stEth_Eth_Pool = ICurvePool(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
             cbEth = IcbETH(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
             wbEth = IwBETH(0xa2E3356610840701BDf5611a53974510Ae27E2e1);
             stEth = ILido(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
@@ -298,14 +300,14 @@ contract TestSetup is Test {
                 address(wbEth),
                 address(cbEth_Eth_Pool),
                 address(wbEth_Eth_Pool),
-                5000 ether,
+                address(stEth_Eth_Pool),
                 3600
             );
 
             liquifierInstance.updateAdmin(alice, true);
-            liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true);
-            liquifierInstance.registerToken(address(cbEth), address(cbEthStrategy), true);
-            liquifierInstance.registerToken(address(wbEth), address(wbEthStrategy), true);
+            liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true, 0, 50, 1000); // 50 ether timeBoundCap, 1000 ether total cap
+            liquifierInstance.registerToken(address(cbEth), address(cbEthStrategy), true, 0, 50, 1000);
+            liquifierInstance.registerToken(address(wbEth), address(wbEthStrategy), true, 0, 50, 1000);
 
             liquidityPoolInstance.upgradeTo(address(new LiquidityPool()));
             liquidityPoolInstance.initializeOnUpgrade(address(auctionInstance), address(liquifierInstance));
@@ -477,13 +479,16 @@ contract TestSetup is Test {
         membershipManagerProxy = new UUPSProxy(address(membershipManagerImplementation), "");
         membershipManagerInstance = MembershipManagerV0(payable(membershipManagerProxy));
 
-        etherFiOracleImplementation = new EtherFiOracle();
         etherFiAdminImplementation = new EtherFiAdmin();
-
-        etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
-        
-        liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTProxy));
+        etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
+
+        etherFiOracleImplementation = new EtherFiOracle();
+        etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
+        etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
+
+
+        liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
         withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolInstance)), payable(address(eETHInstance)), payable(address(membershipManagerInstance)));
         membershipManagerInstance.initialize(
@@ -503,7 +508,7 @@ contract TestSetup is Test {
             address(0),
             address(0),
             address(0),
-            0,
+            address(0),
             0
         );
 
@@ -512,8 +517,6 @@ contract TestSetup is Test {
         withdrawRequestNFTInstance.updateAdmin(alice, true);
         liquidityPoolInstance.updateAdmin(alice, true);
         liquifierInstance.updateAdmin(alice, true);
-
-        etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
 
         // special case for forked tests utilizing oracle
         // can't use env variable because then it would apply to all tests including non-forked ones
@@ -548,7 +551,6 @@ contract TestSetup is Test {
         nftExchangeInstance.initialize(address(TNFTInstance), address(membershipNftInstance), address(managerInstance));
         nftExchangeInstance.updateAdmin(alice);
 
-        etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
         etherFiAdminInstance.initialize(
             address(etherFiOracleInstance),
             address(stakingManagerInstance),
@@ -1073,14 +1075,14 @@ contract TestSetup is Test {
                 hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
                 hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
                 managerInstance.generateWithdrawalCredentials(etherFiNode),
-                2 ether
+                1 ether
             );
 
             rootForApproval = depGen.generateDepositRoot(
                 hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
                 hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65",
                 managerInstance.generateWithdrawalCredentials(etherFiNode),
-                30 ether
+                31 ether
             );
 
             depositDataRootsForApproval[i] = rootForApproval;
@@ -1116,5 +1118,73 @@ contract TestSetup is Test {
 
         vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(amount);
+    }
+
+    // Given two uint256 params (a, b, c),
+    // Check if |a-b| <= c
+    function _assertWithinRange(uint256 a, uint256 b, uint256 c) internal pure returns (bool) {
+        if (a > b) {
+            return a - b <= c;
+        } else {
+            return b - a <= c;
+        }
+    }
+
+    function _finalizeLidoWithdrawals(uint256[] memory reqIds) internal {
+        bytes32 FINALIZE_ROLE = liquifierInstance.lidoWithdrawalQueue().FINALIZE_ROLE();
+        address finalize_role = liquifierInstance.lidoWithdrawalQueue().getRoleMember(FINALIZE_ROLE, 0);
+
+        // The redemption is approved by the Lido
+        vm.startPrank(finalize_role);
+        uint256 currentRate = stEth.getTotalPooledEther() * 1e27 / stEth.getTotalShares();
+        (uint256 ethToLock, uint256 sharesToBurn) = liquifierInstance.lidoWithdrawalQueue().prefinalize(reqIds, currentRate);
+        liquifierInstance.lidoWithdrawalQueue().finalize(reqIds[reqIds.length-1], currentRate);
+        vm.stopPrank();
+
+        // The ether.fi admin claims the finalized withdrawal, which sends the ETH to the liquifier contract
+        vm.startPrank(alice);
+        uint256 lastCheckPointIndex = liquifierInstance.lidoWithdrawalQueue().getLastCheckpointIndex();
+        uint256[] memory hints = liquifierInstance.lidoWithdrawalQueue().findCheckpointHints(reqIds, 1, lastCheckPointIndex);
+        liquifierInstance.stEthClaimWithdrawals(reqIds, hints);
+
+        // The ether.fi admin withdraws the ETH from the liquifier contract to the liquidity pool contract
+        liquifierInstance.withdrawEther();
+        vm.stopPrank();
+    }
+
+    function _prepareForValidatorRegistration(uint256[] memory _validatorIds) internal returns (IStakingManager.DepositData[] memory, bytes32[] memory, bytes[] memory, bytes[] memory pubKey) {
+        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](_validatorIds.length);
+        bytes32[] memory depositDataRootsForApproval = new bytes32[](_validatorIds.length);
+        bytes[] memory sig = new bytes[](_validatorIds.length);
+        bytes[] memory pubKey = new bytes[](_validatorIds.length);
+
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            address etherFiNode = managerInstance.etherfiNodeAddress(_validatorIds[i]);
+            pubKey[i] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
+            bytes32 root = depGen.generateDepositRoot(
+                pubKey[i],
+                hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
+                managerInstance.generateWithdrawalCredentials(etherFiNode),
+                1 ether
+            );
+            depositDataArray[i] = IStakingManager.DepositData({
+                publicKey: pubKey[i],
+                signature: hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
+                depositDataRoot: root,
+                ipfsHashForEncryptedValidatorKey: "test_ipfs"
+            });
+
+            depositDataRootsForApproval[i] = depGen.generateDepositRoot(
+                pubKey[i],
+                hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65",
+                managerInstance.generateWithdrawalCredentials(etherFiNode),
+                31 ether
+            );
+
+            sig[i] = hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65";
+        
+        }
+
+        return (depositDataArray, depositDataRootsForApproval, sig, pubKey);
     }
 }

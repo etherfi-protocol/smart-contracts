@@ -7,9 +7,19 @@ import "@eigenlayer/IPauserRegistry.sol";
 
 // cbETH-ETH mainnet: 0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A
 // wBETH-ETH mainnet: 0xBfAb6FA95E0091ed66058ad493189D2cB29385E6
+// stETH-ETH mainnet: 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022
 interface ICurvePool {
     function exchange_underlying(uint256 i, uint256 j, uint256 dx, uint256 min_dy) external returns (uint256);
     function exchange(int128 i, int128 j, uint256 dx, uint256 min_dy) external returns (uint256);
+    function get_virtual_price() external view returns (uint256);
+}
+
+interface ICurvePoolQuoter1 {
+    function get_dy(int128 i, int128 j, uint256 dx) external view returns (uint256); // wBETH-ETH, stETH-ETH
+}
+
+interface ICurvePoolQuoter2 {
+    function get_dy(uint256 i, uint256 j, uint256 dx) external view returns (uint256); // cbETH-ETH
 }
 
 // mint forwarder: 0xfae23c30d383DF59D3E031C325a73d454e8721a6
@@ -81,10 +91,15 @@ interface ILiquifier {
     } 
 
     struct TokenInfo {
-        IStrategy strategy;
         uint128 strategyShare;
         uint128 ethAmountPendingForWithdrawals;
+        IStrategy strategy;
         bool isWhitelisted;
+        uint16 discountInBasisPoints;
+        uint32 timeBoundCapClockStartTime;
+        uint32 timeBoundCapInEther;
+        uint32 totalCapInEther;
+        uint96 totalDepositedThisPeriod;
+        uint96 totalDeposited;
     }
-
 }

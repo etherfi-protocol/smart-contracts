@@ -8,7 +8,7 @@ import "../../src/helpers/AddressProvider.sol";
 contract LiquidityPoolUpgrade is Script {
   
     AddressProvider public addressProvider;
-    
+
     address public stakingManager;
     uint256 public getTotalPooledEther;
     uint32 public numPendingDeposits;
@@ -41,23 +41,28 @@ contract LiquidityPoolUpgrade is Script {
 
         LiquidityPool LiquidityPoolV2Implementation = new LiquidityPool();
 
-        LiquidityPoolInstance.upgradeTo(address(LiquidityPoolV2Implementation));
+        // LiquidityPoolInstance.upgradeTo(address(LiquidityPoolV2Implementation));
 
-        if (block.chainid == 1) {
-            LiquidityPoolInstance.initializeOnUpgrade(auctionManager, liquifier);
-        } else if (block.chainid == 5) {
-            LiquidityPoolInstance.initializeOnUpgrade(auctionManager, liquifier);
-        } else {
-            require(false, "chain is wrong");
-        }
+        // // Phase 2
+        // //Ensure these inputs are correct
+        // //First parameter = the scheduling period in seconds we want to set
+        // //Second parameter = the number of validators ETH source of funds currently has spun up
+        // //Third parameter = the number of validators ETHER_FAN source of funds currently has spun up
+        // if (block.chainid == 1) {
+        //     LiquidityPoolInstance.initializeOnUpgrade(auctionManager, liquifier);
+        // } else if (block.chainid == 5) {
+        //     LiquidityPoolInstance.initializeOnUpgrade(auctionManager, liquifier);
+        // } else {
+        //     require(false, "chain is wrong");
+        // }
 
-        // Validate the states
-        require(stakingManager == address(LiquidityPoolInstance.stakingManager()), "stakingManager");
-        require(getTotalPooledEther == LiquidityPoolInstance.getTotalPooledEther(), "getTotalPooledEther");
-        require(numPendingDeposits == LiquidityPoolInstance.numPendingDeposits(), "numPendingDeposits");
-        require(totalValueOutOfLp == LiquidityPoolInstance.totalValueOutOfLp(), "totalValueOutOfLp");
-        require(totalValueInLp == LiquidityPoolInstance.totalValueInLp(), "totalValueInLp");
-        require(LiquidityPoolInstance.admins(etherFiAdminAddress), "EtherFiAdmin should be an admin");
+        // // Validate the states
+        // require(stakingManager == address(LiquidityPoolInstance.stakingManager()), "stakingManager");
+        // require(getTotalPooledEther == LiquidityPoolInstance.getTotalPooledEther(), "getTotalPooledEther");
+        // require(numPendingDeposits == LiquidityPoolInstance.numPendingDeposits(), "numPendingDeposits");
+        // require(totalValueOutOfLp == LiquidityPoolInstance.totalValueOutOfLp(), "totalValueOutOfLp");
+        // require(totalValueInLp == LiquidityPoolInstance.totalValueInLp(), "totalValueInLp");
+        // require(LiquidityPoolInstance.admins(etherFiAdminAddress), "EtherFiAdmin should be an admin");
 
         vm.stopBroadcast();
     }

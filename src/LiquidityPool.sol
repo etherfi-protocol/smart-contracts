@@ -42,7 +42,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     address public DEPRECATED_admin;
 
-    uint32 public numPendingDeposits; // number of deposits that have not been registered yet
+    uint32 public numPendingDeposits; // number of deposits to the staking manager, which needs 'registerValidator'
 
     address public DEPRECATED_bNftTreasury;
     IWithdrawRequestNFT public withdrawRequestNFT;
@@ -64,9 +64,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     bool public restakeBnftDeposits;
     uint128 public ethAmountLockedForWithdrawal;
     bool public paused;
-
     IAuctionManager public auctionManager;
     ILiquifier public liquifier;
+
+    bool private isLpBnftHolder;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -86,7 +87,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     event ValidatorRegistrationCanceled(uint256 indexed validatorId);
     event Rebase(uint256 totalEthLocked, uint256 totalEEthShares);
     event WhitelistStatusUpdated(bool value);
-
 
     error IncorrectCaller();
     error InvalidAmount();
@@ -115,23 +115,21 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         
         __Ownable_init();
         __UUPSUpgradeable_init();
-
         eETH = IeETH(_eEthAddress);
         stakingManager = IStakingManager(_stakingManagerAddress);
         nodesManager = IEtherFiNodesManager(_nodesManagerAddress);
         membershipManager = IMembershipManager(_membershipManagerAddress);
         tNft = ITNFT(_tNftAddress);
-
         paused = true;
         whitelistEnabled = true;
         restakeBnftDeposits = false;
         ethAmountLockedForWithdrawal = 0;
         maxValidatorsPerOwner = 30;
-
         etherFiAdminContract = _etherFiAdminContract;
         withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
-
         admins[_etherFiAdminContract] = true;
+        fundStatistics[SourceOfFunds.EETH].numberOfValidators = 1;
+        fundStatistics[SourceOfFunds.ETHER_FAN].numberOfValidators = 1;
     }
 
     function initializeOnUpgrade(address _auctionManager, address _liquifier) external onlyOwner { 
@@ -190,7 +188,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
         eETH.burnShares(msg.sender, share);
 
-        _sendFund(_recipient, _amount);
+        (bool sent, ) = _recipient.call{value: _amount}("");
+        if (!sent) revert SendFail();
 
         return share;
     }
@@ -250,55 +249,26 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         return requestId;
     }
 
-    // [Staking flow]
-    // Step 1: allocate validators; create withdrawal safe contracts
-    // Step 2: create the keys using the desktop app
-    // Step 3: register the validator keys
-    // Step 4: wait for the oracle to approve
-
-
-    // Step 1 for {B-NFT staker, Operation Solo Staker} flows
+    /// @notice Allows a BNFT player to deposit their 2 ETH and pair with 30 ETH from the LP
+    /// @dev This function has multiple dependencies that need to be followed before this function will succeed. 
     /// @param _candidateBidIds validator IDs that have been matched with the BNFT holder on the FE
     /// @param _numberOfValidators how many validators the user wants to spin up. This can be less than the candidateBidIds length. 
     ///         we may have more Ids sent in than needed to spin up incase some ids fail.
     /// @return Array of bids that were successfully processed.
     function batchDepositAsBnftHolder(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators) external payable whenNotPaused returns (uint256[] memory) {
-        uint32 index = bnftHoldersIndexes[msg.sender].index;
-        require(bnftHoldersIndexes[msg.sender].registered && bnftHolders[index].holder == msg.sender, "Incorrect Caller");        
-        require(msg.value == _numberOfValidators * 2 ether, "Deposit 2 ETH per validator");
-        require(totalValueInLp + msg.value >= 32 ether * _numberOfValidators, "Not enough balance");
-        require(_numberOfValidators <= maxValidatorsPerOwner, "Exceeded max validators per owner");
-    
-        //Funds in the LP can come from our membership strategy or the eEth staking strategy. We select which source of funds will
-        //be used for spinning up these deposited ids. See the function for more detail on how we do this.
-        SourceOfFunds _source = allocateSourceOfFunds();
-        fundStatistics[_source].numberOfValidators += uint32(_numberOfValidators);
-
-        //We then call the Staking Manager contract which handles the rest of the logic
-        uint256[] memory newValidators = stakingManager.batchDepositWithBidIds(_candidateBidIds, _numberOfValidators, msg.sender, _source, restakeBnftDeposits);
-
-        numPendingDeposits += uint32(newValidators.length);
-
-        //Sometimes not all the validators get deposited successfully. We need to check if there were remaining IDs that were not successful
-        //and refund the BNFT player their 2 ETH for each ID
-        if (_numberOfValidators > newValidators.length) {
-            uint256 returnAmount = 2 ether * (_numberOfValidators - newValidators.length);
-            _sendFund(msg.sender, returnAmount);
-        }
-        
-        return newValidators;
+        require(!isLpBnftHolder, "IncorrectBnftMode");
+        return _batchDeposit(_candidateBidIds, _numberOfValidators, 2 ether);
     }
 
-    // Step 3 for {Permission-less Node Staking, B-NFT staker, Operation Solo Staker} flows
-    /// @notice BNFT players register validators they have deposited. This triggers a 2 ETH transaction to the beacon chain.
+    /// @notice BNFT players register validators they have deposited. This triggers a 1 ETH transaction to the beacon chain.
     /// @dev This function can only be called by a BNFT player on IDs that have been deposited.  
     /// @param _depositRoot This is the deposit root of the beacon chain. Can send in 0x00 to bypass this check in future
     /// @param _validatorIds The ids of the validators to register
     /// @param _registerValidatorDepositData As in the solo staking flow, the BNFT player must send in a deposit data object (see ILiquidityPool for struct data)
-    ///         to register the validators. However, the signature and deposit data root must be for a 2 ETH deposit
-    /// @param _depositDataRootApproval The deposit data roots for each validator for the 30 ETH transaction which will happen in the approval
+    ///         to register the validators. However, the signature and deposit data root must be for a 1 ETH deposit
+    /// @param _depositDataRootApproval The deposit data roots for each validator for the 31 ETH transaction which will happen in the approval
     ///         step. See the Staking Manager for details.
-    /// @param _signaturesForApprovalDeposit Much like the deposit data root. This is the signature for each validator for the 30 ETH 
+    /// @param _signaturesForApprovalDeposit Much like the deposit data root. This is the signature for each validator for the 31 ETH 
     ///         transaction which will happen in the approval step.
     function batchRegisterAsBnftHolder(
         bytes32 _depositRoot,
@@ -307,24 +277,88 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         bytes32[] calldata _depositDataRootApproval,
         bytes[] calldata _signaturesForApprovalDeposit
     ) external whenNotPaused {
+        require(!isLpBnftHolder, "IncorrectBnftMode");
+        return _batchRegister(_depositRoot, _validatorIds, _registerValidatorDepositData, _depositDataRootApproval, _signaturesForApprovalDeposit, msg.sender);
+    }
+
+    function batchDepositWithLiquidityPoolAsBnftHolder(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators) external whenNotPaused returns (uint256[] memory) {
+        require(isLpBnftHolder, "IncorrectBnftMode");
+        return _batchDeposit(_candidateBidIds, _numberOfValidators, 0 ether);
+    }
+
+    function batchRegisterWithLiquidityPoolAsBnftHolder(
+        bytes32 _depositRoot,
+        uint256[] calldata _validatorIds,
+        IStakingManager.DepositData[] calldata _registerValidatorDepositData,
+        bytes32[] calldata _depositDataRootApproval,
+        bytes[] calldata _signaturesForApprovalDeposit
+    ) external whenNotPaused {
+        require(isLpBnftHolder, "IncorrectBnftMode");
+        return _batchRegister(_depositRoot, _validatorIds, _registerValidatorDepositData, _depositDataRootApproval, _signaturesForApprovalDeposit, address(this));
+    }
+
+    function _batchDeposit(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, uint256 _stakerDepositAmountPerValidator) internal returns (uint256[] memory) {
+        uint32 index = bnftHoldersIndexes[msg.sender].index;
+        require(bnftHoldersIndexes[msg.sender].registered && bnftHolders[index].holder == msg.sender, "Incorrect Caller");        
+        require(msg.value == _numberOfValidators * _stakerDepositAmountPerValidator, "Not Enough Deposit");
+        require(totalValueInLp + msg.value >= 32 ether * _numberOfValidators, "Not enough balance");
+        require(_numberOfValidators <= maxValidatorsPerOwner, "Exceeded max validators per owner");
+    
+        //Funds in the LP can come from our membership strategy or the eEth staking strategy. We select which source of funds will
+        //be used for spinning up these deposited ids. See the function for more detail on how we do this.
+        SourceOfFunds _source = allocateSourceOfFunds();
+        fundStatistics[_source].numberOfValidators += uint32(_numberOfValidators);
+
+        uint256 amountFromLp = (32 ether - _stakerDepositAmountPerValidator) * _numberOfValidators;
+        if (amountFromLp > type(uint128).max) revert InvalidAmount();
+
+        totalValueOutOfLp += uint128(amountFromLp);
+        totalValueInLp -= uint128(amountFromLp);
+        numPendingDeposits += uint32(_numberOfValidators);
+
+        //We then call the Staking Manager contract which handles the rest of the logic
+        uint256[] memory newValidators = stakingManager.batchDepositWithBidIds{value: 32 ether * _numberOfValidators}(_candidateBidIds, msg.sender, _source, restakeBnftDeposits);
+        
+        //Sometimes not all the validators get deposited successfully. We need to check if there were remaining IDs that were not successful
+        //and refund the BNFT player their 2 ETH for each ID
+        if (_numberOfValidators > newValidators.length) {
+            uint256 returnAmount = _stakerDepositAmountPerValidator * (_numberOfValidators - newValidators.length);
+            totalValueOutOfLp += uint128(returnAmount);
+            totalValueInLp -= uint128(returnAmount);
+            numPendingDeposits -= uint32(_numberOfValidators - newValidators.length);
+
+            (bool sent, ) = msg.sender.call{value: returnAmount}("");
+            if (!sent) revert SendFail();
+        }
+        
+        return newValidators;
+    }
+
+    function _batchRegister(
+        bytes32 _depositRoot,
+        uint256[] calldata _validatorIds,
+        IStakingManager.DepositData[] calldata _registerValidatorDepositData,
+        bytes32[] calldata _depositDataRootApproval,
+        bytes[] calldata _signaturesForApprovalDeposit,
+        address _bnftRecipient
+    ) internal {
         require(_validatorIds.length == _registerValidatorDepositData.length && _validatorIds.length == _depositDataRootApproval.length && _validatorIds.length == _signaturesForApprovalDeposit.length, "lengths differ");
 
-        numPendingDeposits -= uint32(_validatorIds.length);
-        stakingManager.batchRegisterValidators{value: 2 ether * _validatorIds.length}(_depositRoot, _validatorIds, msg.sender, address(this), _registerValidatorDepositData, msg.sender);
+        stakingManager.batchRegisterValidators(_depositRoot, _validatorIds, _bnftRecipient, address(this), _registerValidatorDepositData, msg.sender);
         
-        //For each validator, we need to store the deposit data root of the 30 ETH transaction so it is accessible in the approve function
+        //For each validator, we need to store the deposit data root of the 31 ETH transaction so it is accessible in the approve function
         for(uint256 i; i < _validatorIds.length; i++) {
             depositDataRootForApprovalDeposits[_validatorIds[i]] = _depositDataRootApproval[i];
             emit ValidatorRegistered(_validatorIds[i], _signaturesForApprovalDeposit[i], _registerValidatorDepositData[i].publicKey, _depositDataRootApproval[i]);
         }
     }
 
-    /// @notice Approves validators and triggers the 30 ETH transaction to the beacon chain (rest of the stake).
-    /// @dev This gets called by the Oracle and only when it has confirmed the withdraw credentials of the 2 ETH deposit in the registration
+    /// @notice Approves validators and triggers the 31 ETH transaction to the beacon chain (rest of the stake).
+    /// @dev This gets called by the Oracle and only when it has confirmed the withdraw credentials of the 1 ETH deposit in the registration
     ///         phase match the withdraw credentials stored on the beacon chain. This prevents a front-running attack.
     /// @param _validatorIds The IDs of the validators to be approved
     /// @param _pubKey The pubKey for each validator being spun up.
-    /// @param _signature The signatures for each validator for the 30 ETH transaction that were emitted in the register phase
+    /// @param _signature The signatures for each validator for the 31 ETH transaction that were emitted in the register phase
     function batchApproveRegistration(
         uint256[] memory _validatorIds, 
         bytes[] calldata _pubKey,
@@ -341,10 +375,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
             emit ValidatorApproved(_validatorIds[i]);
         }
 
-        totalValueOutOfLp += uint128(30 ether * _validatorIds.length);
-        totalValueInLp -= uint128(30 ether * _validatorIds.length);
-
-        stakingManager.batchApproveRegistration{value: 30 ether * _validatorIds.length}(_validatorIds, _pubKey, _signature, depositDataRootApproval);
+        numPendingDeposits -= uint32(_validatorIds.length);
+        stakingManager.batchApproveRegistration(_validatorIds, _pubKey, _signature, depositDataRootApproval);
     }
 
     /// @notice Cancels a BNFT players deposits (whether validator is registered or deposited. Just not live on beacon chain)
@@ -359,24 +391,30 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function _batchCancelDeposit(uint256[] calldata _validatorIds, address _bnftStaker) internal {
-        uint256 poolBalance = address(this).balance;
-        
-        uint256 cnts = 0;
-        uint256 returnAmount;
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            if(nodesManager.phase(_validatorIds[i]) == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) {
-                emit ValidatorRegistrationCanceled(_validatorIds[i]);
-            } else {
-                cnts += 1;
+        uint256 returnAmount = 0;
+
+        if (!isLpBnftHolder) {
+            //Due to the way we handle our totalValueOutOfLP calculations, we need to update the data before we call the Staking Manager
+            //For this reason, we first need to check which phase each validator is in. Because if a bNFT cancels a validator that has 
+            //already been registered, they only receive 1 ETH back because the other 1 ETH is in the beacon chain. Those funds will be lost
+            for (uint256 i = 0; i < _validatorIds.length; i++) {
+                if(nodesManager.phase(_validatorIds[i]) == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) {
+                    returnAmount += 1 ether;
+
+                    emit ValidatorRegistrationCanceled(_validatorIds[i]);
+                } else {
+                    returnAmount += 2 ether;
+                }
             }
         }
 
-        returnAmount = cnts * 2 ether;
-        numPendingDeposits -= uint32(cnts);
+        totalValueOutOfLp += uint128(returnAmount);
+        numPendingDeposits -= uint32(_validatorIds.length);
         stakingManager.batchCancelDepositAsBnftHolder(_validatorIds, _bnftStaker);
 
-        _sendFund(_bnftStaker, returnAmount);
-        assert (poolBalance == address(this).balance + returnAmount);
+        totalValueInLp -= uint128(returnAmount);
+        (bool sent, ) = address(_bnftStaker).call{value: returnAmount}("");
+        if (!sent) revert SendFail();
     }
 
     /// @notice The admin can register an address to become a BNFT holder. This adds them to the bnftHolders array
@@ -492,6 +530,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit WhitelistStatusUpdated(_value);
     }
 
+    function updateBnftMode(bool _isLpBnftHolder) external onlyAdmin {
+        // Never toggle it in the process of deposit-regiration
+        isLpBnftHolder = _isLpBnftHolder;
+    }
+
     /// @notice Decreases the number of validators for a certain source of fund
     /// @dev When a user deposits, we increment the number of validators in the allocated source object. However, when a BNFT player cancels 
     ///         their deposits, we need to decrease this again.
@@ -526,13 +569,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         return share;
     }
 
-    function _sendFund(address _recipient, uint256 _amount) internal {
-        if (_amount == 0) return;
-        uint256 balanace = address(this).balance;
-        (bool sent, ) = _recipient.call{value: _amount}("");
-        assert (sent && address(this).balance == balanace - _amount);
-    }
-
     function _isWhitelisted(address _user) internal view returns (bool) {
         return (!whitelistEnabled || whitelisted[_user]);
     }
@@ -558,13 +594,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     ///         We simply check which of the sources is below their target allocation and allocate the deposits to it.
     /// @return The chosen source of funds (EETH or ETHER_FAN)
     function allocateSourceOfFunds() public view returns (SourceOfFunds) {
-        if (fundStatistics[SourceOfFunds.EETH].numberOfValidators == 0) {
-            return SourceOfFunds.EETH;
-        }
-        if (fundStatistics[SourceOfFunds.ETHER_FAN].numberOfValidators == 0) {
-            return SourceOfFunds.ETHER_FAN;
-        }
-
         uint256 validatorRatio = (fundStatistics[SourceOfFunds.EETH].numberOfValidators * 10_000) / fundStatistics[SourceOfFunds.ETHER_FAN].numberOfValidators;
         uint256 weightRatio = (fundStatistics[SourceOfFunds.EETH].targetWeight * 10_000) / fundStatistics[SourceOfFunds.ETHER_FAN].targetWeight;
 

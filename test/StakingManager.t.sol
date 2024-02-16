@@ -102,7 +102,7 @@ contract StakingManagerTest is TestSetup {
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.generateWithdrawalCredentials(etherFiNode),
-            2 ether
+            1 ether
         );
         IStakingManager.DepositData memory depositData = IStakingManager
             .DepositData({
@@ -116,7 +116,7 @@ contract StakingManagerTest is TestSetup {
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.generateWithdrawalCredentials(etherFiNode),
-            30 ether
+            31 ether
         );
 
         depositDataRootsForApproval[0] = rootForApproval;
@@ -272,7 +272,7 @@ contract StakingManagerTest is TestSetup {
 
         uint256[] memory bidIdArray = new uint256[](0);
 
-        vm.expectRevert("Incorrect bids or numVals");
+        vm.expectRevert("No bid Ids provided");
         stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
             bidIdArray,
             false

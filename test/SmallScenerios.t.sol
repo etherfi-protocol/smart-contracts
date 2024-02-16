@@ -145,7 +145,7 @@ contract SmallScenariosTest is TestSetup {
         }
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether);
-        assertEq(address(stakingManagerInstance).balance, 0 ether);
+        assertEq(address(stakingManagerInstance).balance, 32 ether);
 
         // Generate Deposit Data
         IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
@@ -157,14 +157,14 @@ contract SmallScenariosTest is TestSetup {
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.generateWithdrawalCredentials(newEtherFiNode),
-            2 ether
+            1 ether
         );
 
         bytes32 rootForApproval = depGen.generateDepositRoot(
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.generateWithdrawalCredentials(newEtherFiNode),
-            30 ether
+            31 ether
         );
 
         bytes[] memory pubKey = new bytes[](1);
@@ -198,9 +198,9 @@ contract SmallScenariosTest is TestSetup {
 
         vm.stopPrank();
 
-        assertEq(address(stakingManagerInstance).balance, 0 ether);
+        assertEq(address(stakingManagerInstance).balance, 31 ether);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether);
-        assertEq(address(liquidityPoolInstance).balance, 30 ether);
+        assertEq(address(liquidityPoolInstance).balance, 0 ether);
 
         // Check NFT's are minted correctly
         assertEq(TNFTInstance.ownerOf(processedBidIds[0]), address(liquidityPoolInstance));
@@ -251,7 +251,7 @@ contract SmallScenariosTest is TestSetup {
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 31 ether);
         liquidityPoolInstance.deposit{value: 32 ether}();
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 31 ether + 32 ether);
-        assertEq(address(liquidityPoolInstance).balance, 30 ether + 32 ether + 1 ether);
+        assertEq(address(liquidityPoolInstance).balance, 32 ether + 1 ether);
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(withdrawRequestId);
