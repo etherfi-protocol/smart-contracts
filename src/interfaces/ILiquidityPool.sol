@@ -42,8 +42,6 @@ interface ILiquidityPool {
         uint32 index;
     }
 
-    function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external;
-
     function numPendingDeposits() external view returns (uint32);
     function totalValueOutOfLp() external view returns (uint128);
     function totalValueInLp() external view returns (uint128);
@@ -66,7 +64,6 @@ interface ILiquidityPool {
     function batchRegisterAsBnftHolder(bytes32 _depositRoot, uint256[] calldata _validatorIds, IStakingManager.DepositData[] calldata _registerValidatorDepositData, bytes32[] calldata _depositDataRootApproval, bytes[] calldata _signaturesForApprovalDeposit) external;
     function batchApproveRegistration(uint256[] memory _validatorIds, bytes[] calldata _pubKey, bytes[] calldata _signature) external;
     function batchCancelDeposit(uint256[] calldata _validatorIds) external;
-    function batchCancelDepositByAdmin(uint256[] calldata _validatorIds, address _bnftStaker) external;
     function sendExitRequests(uint256[] calldata _validatorIds) external;
 
     function rebase(int128 _accruedRewards) external;

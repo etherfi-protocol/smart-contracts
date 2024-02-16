@@ -101,46 +101,27 @@ contract StakingManager is
         admins[_etherFiAdmin] = true;
     }
 
-    // As a 32 ETH Full staker
     /// @notice Allows depositing multiple stakes at once
     /// @param _candidateBidIds IDs of the bids to be matched with each stake
     /// @return Array of the bid IDs that were processed and assigned
     function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, bool _enableRestaking)
         external payable whenNotPaused correctStakeAmount nonReentrant returns (uint256[] memory)
     {
-        uint256 numberOfDeposits = msg.value / stakeAmount;
-        require(_candidateBidIds.length >= numberOfDeposits && numberOfDeposits <= maxBatchDepositSize, "Incorrect bids or numVals");
-        require(auctionManager.numberOfActiveBids() >= numberOfDeposits, "No bids available at the moment");
-
-        uint256[] memory processedBidIds = _processDeposits(_candidateBidIds, numberOfDeposits, msg.sender, ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, _enableRestaking);
-
-        //Need to refund the BNFT holder, currently we just sending the 30 ETH from LP back
-        uint256 unMatchedBidCount = numberOfDeposits - processedBidIds.length;
-        if (unMatchedBidCount > 0) {
-            _refundDeposit(msg.sender, stakeAmount * unMatchedBidCount);
-        }
-
-        return processedBidIds;
+        return _depositWithBidIds(_candidateBidIds, msg.sender, ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, _enableRestaking);
     }
-    
+
     /// @notice Allows depositing multiple stakes at once
     /// @dev Function gets called from the liquidity pool as part of the BNFT staker flow
     /// @param _candidateBidIds IDs of the bids to be matched with each stake
-    /// @param _numberOfValidators number of validators to spin up
     /// @param _staker the address of the BNFT player who originated the call to the LP
     /// @param _source the staking type that the funds are sourced from (EETH / ETHER_FAN), see natspec for allocateSourceOfFunds()
     /// @param _enableRestaking Eigen layer integration check to identify if restaking is possible
     /// @return Array of the bid IDs that were processed and assigned
-    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, address _staker, ILiquidityPool.SourceOfFunds _source, bool _enableRestaking)
-        external whenNotPaused nonReentrant returns (uint256[] memory)
+    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, address _staker, ILiquidityPool.SourceOfFunds _source, bool _enableRestaking)
+        public payable whenNotPaused nonReentrant correctStakeAmount returns (uint256[] memory)
     {
         require(msg.sender == liquidityPoolContract, "Incorrect Caller");
-        require(_candidateBidIds.length >= _numberOfValidators && _candidateBidIds.length <= maxBatchDepositSize, "Incorrect bids or numVals");
-        require(auctionManager.numberOfActiveBids() >= _numberOfValidators, "No bids available at the moment");
-
-        uint256[] memory processedBidIds = _processDeposits(_candidateBidIds, _numberOfValidators, _staker, _source, _enableRestaking);
-
-        return processedBidIds;
+        return _depositWithBidIds(_candidateBidIds, _staker, _source, _enableRestaking);
     }
 
     /// @notice Batch creates validator object, mints NFTs, sets NB variables and deposits into beacon chain
@@ -175,41 +156,39 @@ contract StakingManager is
         address _tNftRecipient,
         DepositData[] calldata _depositData,
         address _staker
-    ) payable public whenNotPaused nonReentrant verifyDepositState(_depositRoot) {
+    ) public whenNotPaused nonReentrant verifyDepositState(_depositRoot) {
         require(msg.sender == liquidityPoolContract, "Only LiquidityPool can call this function");
         require(_validatorId.length <= maxBatchDepositSize, "Too many validators");
         require(_validatorId.length == _depositData.length, "Array lengths must match");
-        require(msg.value == _validatorId.length * 2 ether, "Incorrect amount");
 
         for (uint256 x; x < _validatorId.length; ++x) {
-            _registerValidator(_validatorId[x], _bNftRecipient, _tNftRecipient, _depositData[x], _staker, 2 ether);
+            _registerValidator(_validatorId[x], _bNftRecipient, _tNftRecipient, _depositData[x], _staker, 1 ether);
         }
     }
 
-    /// @notice Approves validators and deposits the remaining 30 ETH into the beacon chain
+    /// @notice Approves validators and deposits the remaining 31 ETH into the beacon chain
     /// @dev This gets called by the LP and only will only happen when the oracle has confirmed that the withdraw credentials for the 
     ///         validators are correct. This prevents a front-running attack.
     /// @param _validatorId validator IDs to approve
     /// @param _pubKey the pubkeys for each validator
-    /// @param _signature the signature for the 30 ETH transaction which was submitted in the register phase
-    /// @param _depositDataRootApproval the deposit data root for the 30 ETH transaction which was submitted in the register phase
+    /// @param _signature the signature for the 31 ETH transaction which was submitted in the register phase
+    /// @param _depositDataRootApproval the deposit data root for the 31 ETH transaction which was submitted in the register phase
     function batchApproveRegistration(
         uint256[] memory _validatorId, 
         bytes[] calldata _pubKey,
         bytes[] calldata _signature,
         bytes32[] calldata _depositDataRootApproval
-    ) external payable {
+    ) external {
         require(msg.sender == liquidityPoolContract, "Only LiquidityPool can call this function");
-        require(msg.value == _validatorId.length * 30 ether, "Incorrect amount");
 
         for (uint256 x; x < _validatorId.length; ++x) {
             nodesManager.setEtherFiNodePhase(_validatorId[x], IEtherFiNode.VALIDATOR_PHASE.LIVE);
             // Deposit to the Beacon Chain
             bytes memory withdrawalCredentials = nodesManager.getWithdrawalCredentials(_validatorId[x]);
-            bytes32 beaconChainDepositRoot = depositRootGenerator.generateDepositRoot(_pubKey[x], _signature[x], withdrawalCredentials, 30 ether);
+            bytes32 beaconChainDepositRoot = depositRootGenerator.generateDepositRoot(_pubKey[x], _signature[x], withdrawalCredentials, 31 ether);
             bytes32 registeredDataRoot = _depositDataRootApproval[x];
             require(beaconChainDepositRoot == registeredDataRoot, "Incorrect deposit data root");
-            depositContractEth2.deposit{value: 30 ether}(_pubKey[x], withdrawalCredentials, _signature[x], beaconChainDepositRoot);
+            depositContractEth2.deposit{value: 31 ether}(_pubKey[x], withdrawalCredentials, _signature[x], beaconChainDepositRoot);
         }
     }
 
@@ -217,9 +196,8 @@ contract StakingManager is
     /// @param _validatorIds the IDs of the validators deposits to cancel
     function batchCancelDeposit(uint256[] calldata _validatorIds) public whenNotPaused nonReentrant {
         for (uint256 x; x < _validatorIds.length; ++x) {
-            ILiquidityPool.SourceOfFunds source = bidIdToStakerInfo[_validatorIds[x]].sourceOfFund;
-            require(source == ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, "Wrong flow");
-            _cancelDeposit(_validatorIds[x], msg.sender, source);
+            require(bidIdToStakerInfo[_validatorIds[x]].sourceOfFund == ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, "Wrong flow");
+            _cancelDeposit(_validatorIds[x], msg.sender);
         }
     }
 
@@ -250,7 +228,7 @@ contract StakingManager is
                 BNFTInterfaceInstance.burnFromCancelBNftFlow(nftTokenId);
             }
 
-            _cancelDeposit(_validatorIds[x], _caller, source);
+            _cancelDeposit(_validatorIds[x], _caller);
         }
 
         ILiquidityPool(liquidityPoolContract).decreaseSourceOfFundsValidators(numberOfEethValidators, numberOfEtherFanValidators);
@@ -334,12 +312,23 @@ contract StakingManager is
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
 
-    function _processDeposits(uint256[] calldata _candidateBidIds, uint256 _numberOfDeposits, address _staker, ILiquidityPool.SourceOfFunds _source, bool _enableRestaking) internal returns (uint256[] memory) {
-        uint256[] memory processedBidIds = new uint256[](_numberOfDeposits);
+    function _depositWithBidIds(
+        uint256[] calldata _candidateBidIds, 
+        address _staker, 
+        ILiquidityPool.SourceOfFunds _source,
+        bool _enableRestaking
+    ) internal returns (uint256[] memory){
+
+        require(_candidateBidIds.length > 0, "No bid Ids provided");
+        uint256 numberOfDeposits = msg.value / stakeAmount;
+        require(numberOfDeposits <= maxBatchDepositSize, "Batch too large");
+        require(auctionManager.numberOfActiveBids() >= numberOfDeposits, "No bids available at the moment");
+
+        uint256[] memory processedBidIds = new uint256[](numberOfDeposits);
         uint256 processedBidIdsCount = 0;
 
         for (uint256 i = 0;
-            i < _candidateBidIds.length && processedBidIdsCount < _numberOfDeposits;
+            i < _candidateBidIds.length && processedBidIdsCount < numberOfDeposits;
             ++i) {
             uint256 bidId = _candidateBidIds[i];
             address bidStaker = bidIdToStakerInfo[bidId].staker;
@@ -359,6 +348,12 @@ contract StakingManager is
         // resize the processedBidIds array to the actual number of processed bid IDs
         assembly {
             mstore(processedBidIds, processedBidIdsCount)
+        }
+
+        //Need to refund the BNFT holder, currently we just sending the 30 ETH from LP back
+        uint256 unMatchedBidCount = numberOfDeposits - processedBidIdsCount;
+        if (unMatchedBidCount > 0) {
+            _refundDeposit(msg.sender, stakeAmount * unMatchedBidCount);
         }
 
         return processedBidIds;
@@ -428,7 +423,7 @@ contract StakingManager is
 
     /// @notice Cancels a users stake
     /// @param _validatorId the ID of the validator deposit to cancel
-    function _cancelDeposit(uint256 _validatorId, address _caller, ILiquidityPool.SourceOfFunds _source) internal {
+    function _cancelDeposit(uint256 _validatorId, address _caller) internal {
         require(bidIdToStakerInfo[_validatorId].staker == _caller, "Not deposit owner");
 
         IEtherFiNode.VALIDATOR_PHASE validatorPhase = nodesManager.phase(_validatorId);
@@ -437,14 +432,17 @@ contract StakingManager is
         nodesManager.setEtherFiNodePhase(_validatorId, IEtherFiNode.VALIDATOR_PHASE.CANCELLED);
         nodesManager.unregisterEtherFiNode(_validatorId);
 
-        if (_source == ILiquidityPool.SourceOfFunds.DELEGATED_STAKING) {
-            auctionManager.reEnterAuction(_validatorId);
+        // Call function in auction contract to re-initiate the bid that won
+        auctionManager.reEnterAuction(_validatorId);
+        if(validatorPhase == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) {
+            _refundDeposit(msg.sender, 31 ether);
+        } else {
             _refundDeposit(msg.sender, stakeAmount);
-        } else if (_source == ILiquidityPool.SourceOfFunds.EETH || _source == ILiquidityPool.SourceOfFunds.ETHER_FAN) {
-            auctionManager.reEnterAuction(_validatorId);
         }
 
         emit DepositCancelled(_validatorId);
+
+        require(bidIdToStakerInfo[_validatorId].staker == address(0), "Bid already cancelled");
     }
 
     /// @notice Refunds the depositor their staked ether for a specific stake
@@ -452,10 +450,8 @@ contract StakingManager is
     /// @param _depositOwner address of the user being refunded
     /// @param _amount the amount to refund the depositor
     function _refundDeposit(address _depositOwner, uint256 _amount) internal {
-        uint256 balanace = address(this).balance;
         (bool sent, ) = _depositOwner.call{value: _amount}("");
         require(sent, "Failed to send Ether"); 
-        assert (address(this).balance == balanace - _amount);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

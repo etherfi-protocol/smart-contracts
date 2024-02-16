@@ -16,7 +16,7 @@ interface IAuctionManager {
     function numberOfActiveBids() external view returns (uint256);
 
     function isBidActive(uint256 _bidId) external view returns (bool);
-    
+
     function createBid(
         uint256 _bidSize,
         uint256 _bidAmount

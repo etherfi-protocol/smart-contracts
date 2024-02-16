@@ -15,10 +15,6 @@ import "./interfaces/IWithdrawRequestNFT.sol";
 
 import "forge-std/console.sol";
 
-interface IEtherFiPausable {
-    function paused() external view returns (bool);
-}
-
 contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     IEtherFiOracle public etherFiOracle;
@@ -38,8 +34,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     int32 public acceptableRebaseAprInBps;
 
     uint16 public postReportWaitTimeInSlots;
-
-    mapping(address => bool) public pausers;
 
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
@@ -78,54 +72,35 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // based on the boolean flags
     // if true, pause,
     // else, unpuase
-    function pause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external isPauser() {
-        if (_etherFiOracle && !IEtherFiPausable(address(etherFiOracle)).paused()) {
+    function pause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external isAdmin() {
+        if (_etherFiOracle) {
             etherFiOracle.pauseContract();
-        }
-
-        if (_stakingManager && !IEtherFiPausable(address(stakingManager)).paused()) {
-            stakingManager.pauseContract();
-        }
-
-        if (_auctionManager && !IEtherFiPausable(address(auctionManager)).paused()) {
-            auctionManager.pauseContract();
-        }
-
-        if (_etherFiNodesManager && !IEtherFiPausable(address(etherFiNodesManager)).paused()) {
-            etherFiNodesManager.pauseContract();
-        }
-
-        if (_liquidityPool && !IEtherFiPausable(address(liquidityPool)).paused()) {
-            liquidityPool.pauseContract();
-        }
-
-        if (_membershipManager && !IEtherFiPausable(address(membershipManager)).paused()) {
-            membershipManager.pauseContract();
-        }
-    }
-
-    function unPause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external onlyOwner {
-        if (_etherFiOracle && IEtherFiPausable(address(etherFiOracle)).paused()) {
+        } else {
             etherFiOracle.unPauseContract();
         }
-
-        if (_stakingManager && IEtherFiPausable(address(stakingManager)).paused()) {
+        if (_stakingManager) {
+            stakingManager.pauseContract();
+        } else {
             stakingManager.unPauseContract();
         }
-
-        if (_auctionManager && IEtherFiPausable(address(auctionManager)).paused()) {
+        if (_auctionManager) {
+            auctionManager.pauseContract();
+        } else {
             auctionManager.unPauseContract();
         }
-
-        if (_etherFiNodesManager && IEtherFiPausable(address(etherFiNodesManager)).paused()) {
+        if (_etherFiNodesManager) {
+            etherFiNodesManager.pauseContract();
+        } else {
             etherFiNodesManager.unPauseContract();
         }
-
-        if (_liquidityPool && IEtherFiPausable(address(liquidityPool)).paused()) {
+        if (_liquidityPool) {
+            liquidityPool.pauseContract();
+        } else {
             liquidityPool.unPauseContract();
         }
-
-        if (_membershipManager && IEtherFiPausable(address(membershipManager)).paused()) {
+        if (_membershipManager) {
+            membershipManager.pauseContract();
+        } else {
             membershipManager.unPauseContract();
         }
     }
@@ -138,6 +113,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (slotForNextReportToProcess() != _report.refSlotFrom) return false;
         if (blockForNextReportToProcess() != _report.refBlockFrom) return false;
         if (current_slot < postReportWaitTimeInSlots + etherFiOracle.getConsensusSlot(reportHash)) return false;
+        if (current_slot >= _report.refSlotTo + 1 + etherFiOracle.reportPeriodSlot()) return false;
         return true;
     }
 
@@ -148,6 +124,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(slotForNextReportToProcess() == _report.refSlotFrom, "EtherFiAdmin: report has wrong `refSlotFrom`");
         require(blockForNextReportToProcess() == _report.refBlockFrom, "EtherFiAdmin: report has wrong `refBlockFrom`");
         require(current_slot >= postReportWaitTimeInSlots + etherFiOracle.getConsensusSlot(reportHash), "EtherFiAdmin: report is too fresh");
+        require(current_slot < _report.refSlotTo + 1 + etherFiOracle.reportPeriodSlot(), "EtherFiAdmin: report is too old");
 
         numValidatorsToSpinUp = _report.numValidatorsToSpinUp;
 
@@ -240,15 +217,11 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit AdminUpdated(_address, _isAdmin);
     }
 
-    function updatePauser(address _address, bool _isPauser) external onlyOwner {
-        pausers[_address] = _isPauser;
-    }
-
     function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external onlyOwner {
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
     }
 
-    function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external isAdmin {
+    function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external onlyOwner {
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
 
@@ -260,12 +233,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
 
     modifier isAdmin() {
-        require(admins[msg.sender] || msg.sender == owner(), "EtherFiAdmin: not an admio");
-        _;
-    }
-
-    modifier isPauser() {
-        require(pausers[msg.sender] || msg.sender == owner(), "EtherFiAdmin: not a pauser");
+        require(admins[msg.sender], "EtherFiAdmin: not an admin");
         _;
     }
 }
