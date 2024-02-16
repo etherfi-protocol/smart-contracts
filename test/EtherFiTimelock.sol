@@ -165,6 +165,25 @@ contract TimelockTest is TestSetup {
             2 days                    // time before operation can be run
         );
 
+
+        console2.log("roleadmin:");
+        console2.logBytes32( tl.getRoleAdmin(keccak256("PROPOSER_ROLE")));
+
+        // should be able to give proposer role to new address. Now previous tx should work
+        // I use different salt because we already previously scheduled a tx with this data and salt 0
+        vm.prank(address(tl));
+        tl.grantRole(keccak256("PROPOSER_ROLE"), rando);
+
+        vm.prank(rando);
+        tl.schedule(
+            address(managerInstance), // target
+            0,                        // value
+            undoData,                 // encoded call data
+            0,                        // optional predecessor
+            bytes32(uint256(1)),       // optional salt
+            2 days                    // time before operation can be run
+        );
+
         // Timelock should be able to give control back to a normal account
         bytes memory transferOwershipData = hex"f2fde38b000000000000000000000000f155a2632ef263a6a382028b3b33feb29175b8a5";
         vm.prank(admin);
