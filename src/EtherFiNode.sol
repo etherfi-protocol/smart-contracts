@@ -5,8 +5,8 @@ import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
-import "@eigenlayer/IEigenPodManager.sol";
-import "@eigenlayer/IDelayedWithdrawalRouter.sol";
+import "./interfaces/eigenlayer-interfaces/IEigenPodManager.sol";
+import "./interfaces/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 
 contract EtherFiNode is IEtherFiNode {
     address public etherFiNodesManager;

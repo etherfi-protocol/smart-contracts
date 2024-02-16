@@ -5,8 +5,8 @@ import "./TestSetup.sol";
 import "../src/EtherFiNode.sol";
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
-import "@eigenlayer/IEigenPodManager.sol";
-import "@eigenlayer/IDelayedWithdrawalRouter.sol";
+import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
+import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 
 import "forge-std/console2.sol";
 

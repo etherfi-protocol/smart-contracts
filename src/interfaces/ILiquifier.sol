@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
-import "@eigenlayer/IStrategyManager.sol";
-import "@eigenlayer/IStrategy.sol";
-import "@eigenlayer/IPauserRegistry.sol";
+import "./eigenlayer-interfaces/IStrategyManager.sol";
+import "./eigenlayer-interfaces/IStrategy.sol";
+import "./eigenlayer-interfaces/IPauserRegistry.sol";
 
 // cbETH-ETH mainnet: 0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A
 // wBETH-ETH mainnet: 0xBfAb6FA95E0091ed66058ad493189D2cB29385E6
