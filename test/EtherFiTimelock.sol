@@ -24,7 +24,7 @@ contract TimelockTest is TestSetup {
         address[] memory executors = new address[](1);
         executors[0] = owner;
 
-        Timelock tl = new Timelock(2 days, proposers, executors, address(0x0));
+        Timelock tl = new EtherFiTimelock(2 days, proposers, executors, address(0x0));
 
         // transfer ownership to new timelock
         vm.prank(owner);

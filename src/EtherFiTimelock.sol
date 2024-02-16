@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/governance/TimelockController.sol";
 
-contract Timelock is TimelockController {
+contract EtherFiTimelock is TimelockController {
 
     constructor(
         uint256 minDelay,
