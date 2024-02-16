@@ -2,8 +2,8 @@
 pragma solidity 0.8.13;
 
 import "./IEtherFiNode.sol";
-import "./eigenlayer-interfaces/IEigenPodManager.sol";
-import "./eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
+import "../eigenlayer-interfaces/IEigenPodManager.sol";
+import "../eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 
 interface IEtherFiNodesManager {
 

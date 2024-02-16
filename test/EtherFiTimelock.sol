@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "./TestSetup.sol";
-import "../src/Timelock.sol";
+import "../src/EtherFiTimelock.sol";
 import "forge-std/console2.sol";
 
 contract TimelockTest is TestSetup {
@@ -24,7 +24,7 @@ contract TimelockTest is TestSetup {
         address[] memory executors = new address[](1);
         executors[0] = owner;
 
-        Timelock tl = new EtherFiTimelock(2 days, proposers, executors, address(0x0));
+        EtherFiTimelock tl = new EtherFiTimelock(2 days, proposers, executors, address(0x0));
 
         // transfer ownership to new timelock
         vm.prank(owner);

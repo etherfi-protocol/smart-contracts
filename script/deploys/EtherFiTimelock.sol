@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 import "../../src/helpers/AddressProvider.sol";
-import "../../src/Timelock.sol";
+import "../../src/EtherFiTimelock.sol";
 
 contract DeployLoyaltyPointsMarketSafeScript is Script {
 
@@ -33,7 +33,7 @@ contract DeployLoyaltyPointsMarketSafeScript is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // Last param is left blank as recommended by OZ documentation
-        Timelock tl = new Timelock(minWaitTime, proposers, executors, address(0x0));
+        Timelock tl = new EtherFiTimelock(minWaitTime, proposers, executors, address(0x0));
 
         addressProvider.addContract(address(tl), "Timelock");
         */
