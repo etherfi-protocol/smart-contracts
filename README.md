@@ -2,6 +2,9 @@
 
 Smart Contracts for ether.fi ethereum staking protocol
 
+From 2024/02/16, we are migrating from our private repo to this public one.
+We start with the shallow copy of the latest commit of the prevate repo.
+
 # EtherFi smart contracts setup
 
 ## Get Started
