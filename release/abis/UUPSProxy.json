@@ -1,71 +1,71 @@
 [
   {
+    "type": "constructor",
     "inputs": [
       {
-        "internalType": "address",
         "name": "_implementation",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       },
       {
-        "internalType": "bytes",
         "name": "_data",
-        "type": "bytes"
+        "type": "bytes",
+        "internalType": "bytes"
       }
     ],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
+    "stateMutability": "nonpayable"
   },
   {
-    "anonymous": false,
+    "type": "fallback",
+    "stateMutability": "payable"
+  },
+  {
+    "type": "receive",
+    "stateMutability": "payable"
+  },
+  {
+    "type": "event",
+    "name": "AdminChanged",
     "inputs": [
       {
-        "indexed": false,
-        "internalType": "address",
         "name": "previousAdmin",
-        "type": "address"
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
       },
       {
-        "indexed": false,
-        "internalType": "address",
         "name": "newAdmin",
-        "type": "address"
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
       }
     ],
-    "name": "AdminChanged",
-    "type": "event"
+    "anonymous": false
   },
   {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "beacon",
-        "type": "address"
-      }
-    ],
+    "type": "event",
     "name": "BeaconUpgraded",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
     "inputs": [
       {
+        "name": "beacon",
+        "type": "address",
         "indexed": true,
-        "internalType": "address",
-        "name": "implementation",
-        "type": "address"
+        "internalType": "address"
       }
     ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Upgraded",
-    "type": "event"
-  },
-  {
-    "stateMutability": "payable",
-    "type": "fallback"
-  },
-  {
-    "stateMutability": "payable",
-    "type": "receive"
+    "inputs": [
+      {
+        "name": "implementation",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
   }
 ]
