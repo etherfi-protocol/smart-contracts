@@ -1,76 +1,76 @@
 [
   {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "previousOwner",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
-      }
-    ],
-    "name": "OwnershipTransferred",
-    "type": "event"
+    "type": "receive",
+    "stateMutability": "payable"
   },
   {
-    "inputs": [],
+    "type": "function",
     "name": "owner",
+    "inputs": [],
     "outputs": [
       {
-        "internalType": "address",
         "name": "",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       }
     ],
-    "stateMutability": "view",
-    "type": "function"
+    "stateMutability": "view"
   },
   {
-    "inputs": [],
+    "type": "function",
     "name": "renounceOwnership",
+    "inputs": [],
     "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "stateMutability": "nonpayable"
   },
   {
+    "type": "function",
+    "name": "transferOwnership",
     "inputs": [
       {
-        "internalType": "address",
         "name": "newOwner",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       }
     ],
-    "name": "transferOwnership",
     "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "stateMutability": "nonpayable"
   },
   {
+    "type": "function",
+    "name": "withdraw",
     "inputs": [
       {
-        "internalType": "uint256",
         "name": "_amount",
-        "type": "uint256"
+        "type": "uint256",
+        "internalType": "uint256"
       },
       {
-        "internalType": "address",
         "name": "_to",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       }
     ],
-    "name": "withdraw",
     "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "stateMutability": "nonpayable"
   },
   {
-    "stateMutability": "payable",
-    "type": "receive"
+    "type": "event",
+    "name": "OwnershipTransferred",
+    "inputs": [
+      {
+        "name": "previousOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
   }
 ]

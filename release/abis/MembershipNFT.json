@@ -1,1342 +1,1334 @@
 [
   {
+    "type": "constructor",
     "inputs": [],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
+    "stateMutability": "nonpayable"
   },
   {
-    "inputs": [],
-    "name": "DisallowZeroAddress",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "InvalidEAPRollover",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "InvalidVersion",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "MintingIsPaused",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OnlyMembershipManagerContract",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "RequireTokenUnlocked",
-    "type": "error"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "address",
-        "name": "previousAdmin",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "address",
-        "name": "newAdmin",
-        "type": "address"
-      }
-    ],
-    "name": "AdminChanged",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "account",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "operator",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "bool",
-        "name": "approved",
-        "type": "bool"
-      }
-    ],
-    "name": "ApprovalForAll",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "_fromTokenId",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "_toTokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "BatchMetadataUpdate",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "beacon",
-        "type": "address"
-      }
-    ],
-    "name": "BeaconUpgraded",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint8",
-        "name": "version",
-        "type": "uint8"
-      }
-    ],
-    "name": "Initialized",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      },
-      {
-        "indexed": false,
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "name": "MerkleUpdated",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "MetadataUpdate",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "bool",
-        "name": "isPaused",
-        "type": "bool"
-      }
-    ],
-    "name": "MintingPaused",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "previousOwner",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
-      }
-    ],
-    "name": "OwnershipTransferred",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "until",
-        "type": "uint256"
-      }
-    ],
-    "name": "TokenLocked",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "operator",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "from",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "to",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256[]",
-        "name": "ids",
-        "type": "uint256[]"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256[]",
-        "name": "values",
-        "type": "uint256[]"
-      }
-    ],
-    "name": "TransferBatch",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "operator",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "from",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "to",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "value",
-        "type": "uint256"
-      }
-    ],
-    "name": "TransferSingle",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": false,
-        "internalType": "string",
-        "name": "value",
-        "type": "string"
-      },
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
-      }
-    ],
-    "name": "URI",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "implementation",
-        "type": "address"
-      }
-    ],
-    "name": "Upgraded",
-    "type": "event"
-  },
-  {
-    "inputs": [],
+    "type": "function",
     "name": "DEPRECATED_admin",
+    "inputs": [],
     "outputs": [
       {
-        "internalType": "address",
         "name": "",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       }
     ],
-    "stateMutability": "view",
-    "type": "function"
+    "stateMutability": "view"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
-      }
-    ],
+    "type": "function",
     "name": "accruedLoyaltyPointsOf",
-    "outputs": [
-      {
-        "internalType": "uint40",
-        "name": "",
-        "type": "uint40"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
-        "internalType": "uint256",
         "name": "_tokenId",
-        "type": "uint256"
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint40",
+        "internalType": "uint40"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "accruedStakingRewardsOf",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
-        "internalType": "uint256",
         "name": "_tokenId",
-        "type": "uint256"
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "accruedTierPointsOf",
-    "outputs": [
-      {
-        "internalType": "uint40",
-        "name": "",
-        "type": "uint40"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
+        "name": "_tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint40",
+        "internalType": "uint40"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "admins",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "startID",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "endID",
-        "type": "uint256"
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "alertBatchMetadataUpdate",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
+        "name": "startID",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "endID",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "alertMetadataUpdate",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "allTimeHighDepositOf",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "account",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "id",
-        "type": "uint256"
+        "name": "_tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "balanceOf",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
-        "internalType": "address[]",
-        "name": "accounts",
-        "type": "address[]"
-      },
-      {
-        "internalType": "uint256[]",
-        "name": "ids",
-        "type": "uint256[]"
-      }
-    ],
-    "name": "balanceOfBatch",
-    "outputs": [
-      {
-        "internalType": "uint256[]",
-        "name": "",
-        "type": "uint256[]"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_user",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_id",
-        "type": "uint256"
-      }
-    ],
-    "name": "balanceOfUser",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_from",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "burn",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_totalAmount",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint128",
-        "name": "_amount",
-        "type": "uint128"
-      },
-      {
-        "internalType": "uint128",
-        "name": "_amountForPoints",
-        "type": "uint128"
-      }
-    ],
-    "name": "canTopUp",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "claimableTier",
-    "outputs": [
-      {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint32",
-        "name": "_eapDepositBlockNumber",
-        "type": "uint32"
-      }
-    ],
-    "name": "computeTierPointsForEap",
-    "outputs": [
-      {
-        "internalType": "uint40",
-        "name": "",
-        "type": "uint40"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "contractURI",
-    "outputs": [
-      {
-        "internalType": "string",
-        "name": "",
-        "type": "string"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "eapDepositProcessed",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "eapMerkleRoot",
-    "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "getImplementation",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint32",
-        "name": "_blocks",
-        "type": "uint32"
-      }
-    ],
-    "name": "incrementLock",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "string",
-        "name": "_metadataURI",
-        "type": "string"
-      }
-    ],
-    "name": "initialize",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
         "name": "account",
-        "type": "address"
+        "type": "address",
+        "internalType": "address"
       },
       {
-        "internalType": "address",
-        "name": "operator",
-        "type": "address"
-      }
-    ],
-    "name": "isApprovedForAll",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_withdrawalAmount",
-        "type": "uint256"
-      }
-    ],
-    "name": "isWithdrawable",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "liquidityPool",
-    "outputs": [
-      {
-        "internalType": "contract ILiquidityPool",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "loyaltyPointsOf",
-    "outputs": [
-      {
-        "internalType": "uint40",
-        "name": "",
-        "type": "uint40"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "maxTokenId",
-    "outputs": [
-      {
-        "internalType": "uint32",
-        "name": "",
-        "type": "uint32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_since",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_until",
-        "type": "uint256"
-      }
-    ],
-    "name": "membershipPointsEarning",
-    "outputs": [
-      {
-        "internalType": "uint40",
-        "name": "",
-        "type": "uint40"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_to",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "mint",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "mintingPaused",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "nextMintTokenId",
-    "outputs": [
-      {
-        "internalType": "uint32",
-        "name": "",
-        "type": "uint32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "name": "nftData",
-    "outputs": [
-      {
-        "internalType": "uint32",
-        "name": "transferLockedUntil",
-        "type": "uint32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "owner",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_user",
-        "type": "address"
-      },
-      {
-        "internalType": "uint32",
-        "name": "_eapDepositBlockNumber",
-        "type": "uint32"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_snapshotEthAmount",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_points",
-        "type": "uint256"
-      },
-      {
-        "internalType": "bytes32[]",
-        "name": "_merkleProof",
-        "type": "bytes32[]"
-      }
-    ],
-    "name": "processDepositFromEapUser",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "proxiableUUID",
-    "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "renounceOwnership",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "name": "requiredEapPointsPerEapDeposit",
-    "outputs": [
-      {
-        "internalType": "uint64",
-        "name": "",
-        "type": "uint64"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "from",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "to",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256[]",
-        "name": "ids",
-        "type": "uint256[]"
-      },
-      {
-        "internalType": "uint256[]",
-        "name": "amounts",
-        "type": "uint256[]"
-      },
-      {
-        "internalType": "bytes",
-        "name": "data",
-        "type": "bytes"
-      }
-    ],
-    "name": "safeBatchTransferFrom",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "from",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "to",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
         "name": "id",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      },
-      {
-        "internalType": "bytes",
-        "name": "data",
-        "type": "bytes"
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
-    "name": "safeTransferFrom",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "balanceOfBatch",
     "inputs": [
       {
-        "internalType": "address",
+        "name": "accounts",
+        "type": "address[]",
+        "internalType": "address[]"
+      },
+      {
+        "name": "ids",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "balanceOfUser",
+    "inputs": [
+      {
+        "name": "_user",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_id",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "burn",
+    "inputs": [
+      {
+        "name": "_from",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "canTopUp",
+    "inputs": [
+      {
+        "name": "_tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_totalAmount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_amount",
+        "type": "uint128",
+        "internalType": "uint128"
+      },
+      {
+        "name": "_amountForPoints",
+        "type": "uint128",
+        "internalType": "uint128"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "claimableTier",
+    "inputs": [
+      {
+        "name": "_tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "computeTierPointsForEap",
+    "inputs": [
+      {
+        "name": "_eapDepositBlockNumber",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint40",
+        "internalType": "uint40"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "contractURI",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "eapDepositProcessed",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "eapMerkleRoot",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getImplementation",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "incrementLock",
+    "inputs": [
+      {
+        "name": "_tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_blocks",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "initialize",
+    "inputs": [
+      {
+        "name": "_metadataURI",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "_membershipManagerInstance",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "initializeOnUpgrade",
+    "inputs": [
+      {
+        "name": "_liquidityPoolAddress",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "isApprovedForAll",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
         "name": "operator",
-        "type": "address"
-      },
-      {
-        "internalType": "bool",
-        "name": "approved",
-        "type": "bool"
+        "type": "address",
+        "internalType": "address"
       }
     ],
-    "name": "setApprovalForAll",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "string",
-        "name": "_newURI",
-        "type": "string"
-      }
-    ],
-    "name": "setContractMetadataURI",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_address",
-        "type": "address"
-      }
-    ],
-    "name": "setLiquidityPool",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint32",
-        "name": "_maxTokenId",
-        "type": "uint32"
-      }
-    ],
-    "name": "setMaxTokenId",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_address",
-        "type": "address"
-      }
-    ],
-    "name": "setMembershipManager",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "string",
-        "name": "_newURI",
-        "type": "string"
-      }
-    ],
-    "name": "setMetadataURI",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bool",
-        "name": "_paused",
-        "type": "bool"
-      }
-    ],
-    "name": "setMintingPaused",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "_newMerkleRoot",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "uint64[]",
-        "name": "_requiredEapPointsPerEapDeposit",
-        "type": "uint64[]"
-      }
-    ],
-    "name": "setUpForEap",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes4",
-        "name": "interfaceId",
-        "type": "bytes4"
-      }
-    ],
-    "name": "supportsInterface",
     "outputs": [
       {
-        "internalType": "bool",
         "name": "",
-        "type": "bool"
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
-    "stateMutability": "view",
-    "type": "function"
+    "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "isWithdrawable",
     "inputs": [
       {
-        "internalType": "uint256",
         "name": "_tokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "tierOf",
-    "outputs": [
-      {
-        "internalType": "uint8",
-        "name": "",
-        "type": "uint8"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "tierPointsOf",
-    "outputs": [
-      {
-        "internalType": "uint40",
-        "name": "",
-        "type": "uint40"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "_tokenId",
-        "type": "uint256"
-      }
-    ],
-    "name": "transferLockedUntil",
-    "outputs": [
-      {
-        "internalType": "uint32",
-        "name": "",
-        "type": "uint32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
-      }
-    ],
-    "name": "transferOwnership",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "_address",
-        "type": "address"
+        "type": "uint256",
+        "internalType": "uint256"
       },
       {
-        "internalType": "bool",
-        "name": "_isAdmin",
-        "type": "bool"
+        "name": "_withdrawalAmount",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
-    "name": "updateAdmin",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
+    "outputs": [
       {
-        "internalType": "address",
-        "name": "newImplementation",
-        "type": "address"
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
-    "name": "upgradeTo",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "liquidityPool",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract ILiquidityPool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "loyaltyPointsOf",
     "inputs": [
       {
-        "internalType": "address",
-        "name": "newImplementation",
-        "type": "address"
+        "name": "_tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint40",
+        "internalType": "uint40"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "maxTokenId",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "membershipPointsEarning",
+    "inputs": [
+      {
+        "name": "_tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
       },
       {
-        "internalType": "bytes",
+        "name": "_since",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_until",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint40",
+        "internalType": "uint40"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "mint",
+    "inputs": [
+      {
+        "name": "_to",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "mintingPaused",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "nextMintTokenId",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "nftData",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "transferLockedUntil",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "owner",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "processDepositFromEapUser",
+    "inputs": [
+      {
+        "name": "_user",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_eapDepositBlockNumber",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "_snapshotEthAmount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_points",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_merkleProof",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "proxiableUUID",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "renounceOwnership",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "requiredEapPointsPerEapDeposit",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "safeBatchTransferFrom",
+    "inputs": [
+      {
+        "name": "from",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "to",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "ids",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "amounts",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
         "name": "data",
-        "type": "bytes"
+        "type": "bytes",
+        "internalType": "bytes"
       }
     ],
-    "name": "upgradeToAndCall",
     "outputs": [],
-    "stateMutability": "payable",
-    "type": "function"
+    "stateMutability": "nonpayable"
   },
   {
+    "type": "function",
+    "name": "safeTransferFrom",
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
+        "name": "from",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "to",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "id",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "data",
+        "type": "bytes",
+        "internalType": "bytes"
       }
     ],
-    "name": "uri",
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setApprovalForAll",
+    "inputs": [
+      {
+        "name": "operator",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "approved",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setContractMetadataURI",
+    "inputs": [
+      {
+        "name": "_newURI",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setMaxTokenId",
+    "inputs": [
+      {
+        "name": "_maxTokenId",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setMetadataURI",
+    "inputs": [
+      {
+        "name": "_newURI",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setMintingPaused",
+    "inputs": [
+      {
+        "name": "_paused",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setUpForEap",
+    "inputs": [
+      {
+        "name": "_newMerkleRoot",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "_requiredEapPointsPerEapDeposit",
+        "type": "uint64[]",
+        "internalType": "uint64[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "supportsInterface",
+    "inputs": [
+      {
+        "name": "interfaceId",
+        "type": "bytes4",
+        "internalType": "bytes4"
+      }
+    ],
     "outputs": [
       {
-        "internalType": "string",
         "name": "",
-        "type": "string"
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
-    "stateMutability": "view",
-    "type": "function"
+    "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "tierOf",
     "inputs": [
       {
-        "internalType": "uint256",
         "name": "_tokenId",
-        "type": "uint256"
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
-    "name": "valueOf",
     "outputs": [
       {
-        "internalType": "uint256",
         "name": "",
-        "type": "uint256"
+        "type": "uint8",
+        "internalType": "uint8"
       }
     ],
-    "stateMutability": "view",
-    "type": "function"
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "tierPointsOf",
+    "inputs": [
+      {
+        "name": "_tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint40",
+        "internalType": "uint40"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "transferLockedUntil",
+    "inputs": [
+      {
+        "name": "_tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "transferOwnership",
+    "inputs": [
+      {
+        "name": "newOwner",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "updateAdmin",
+    "inputs": [
+      {
+        "name": "_address",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_isAdmin",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "upgradeTo",
+    "inputs": [
+      {
+        "name": "newImplementation",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "upgradeToAndCall",
+    "inputs": [
+      {
+        "name": "newImplementation",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "data",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "uri",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "valueOf",
+    "inputs": [
+      {
+        "name": "_tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "AdminChanged",
+    "inputs": [
+      {
+        "name": "previousAdmin",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "newAdmin",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ApprovalForAll",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "operator",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "approved",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BatchMetadataUpdate",
+    "inputs": [
+      {
+        "name": "_fromTokenId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "_toTokenId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BeaconUpgraded",
+    "inputs": [
+      {
+        "name": "beacon",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Initialized",
+    "inputs": [
+      {
+        "name": "version",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MerkleUpdated",
+    "inputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MetadataUpdate",
+    "inputs": [
+      {
+        "name": "_tokenId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MintingPaused",
+    "inputs": [
+      {
+        "name": "isPaused",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OwnershipTransferred",
+    "inputs": [
+      {
+        "name": "previousOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TokenLocked",
+    "inputs": [
+      {
+        "name": "_tokenId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "until",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TransferBatch",
+    "inputs": [
+      {
+        "name": "operator",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "from",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "ids",
+        "type": "uint256[]",
+        "indexed": false,
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "values",
+        "type": "uint256[]",
+        "indexed": false,
+        "internalType": "uint256[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TransferSingle",
+    "inputs": [
+      {
+        "name": "operator",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "from",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "id",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "value",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "URI",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "id",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Upgraded",
+    "inputs": [
+      {
+        "name": "implementation",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "DisallowZeroAddress",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidEAPRollover",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidVersion",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "MintingIsPaused",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OnlyMembershipManagerContract",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RequireTokenUnlocked",
+    "inputs": []
   }
 ]
