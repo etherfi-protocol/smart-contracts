@@ -42,8 +42,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     mapping(address => bool) public pausers;
 
-    mapping(address => bool) public pausers;
-
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
 
