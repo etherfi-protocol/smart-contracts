@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
-interface IBNFT {
+import "@openzeppelin-upgradeable/contracts/token/ERC721/IERC721Upgradeable.sol";
+
+interface IBNFT is IERC721Upgradeable {
 
     function burnFromWithdrawal(uint256 _validatorId) external;
     function initialize() external;

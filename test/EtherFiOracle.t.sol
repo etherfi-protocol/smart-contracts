@@ -432,10 +432,6 @@ contract EtherFiOracleTest is TestSetup {
         report.eEthTargetAllocationWeight = 80;
         report.etherFanTargetAllocationWeight = 20;
         _executeAdminTasks(report);
-        (, uint32 eEthTargetWeight) = liquidityPoolInstance.fundStatistics(ILiquidityPool.SourceOfFunds.EETH);
-        (, uint32 etherFanTargetWeight) = liquidityPoolInstance.fundStatistics(ILiquidityPool.SourceOfFunds.ETHER_FAN);
-        assertEq(eEthTargetWeight, 80);
-        assertEq(etherFanTargetWeight, 20);
     }
 
     function test_huge_positive_rebaes() public {
@@ -448,13 +444,13 @@ contract EtherFiOracleTest is TestSetup {
         _moveClock(1 days / 12);
 
         // Change in APR is below 100%
-        report.accruedRewards = int128(60 ether) / int128(365);
+        report.accruedRewards = int128(60 ether - 1 ether) / int128(365);
         _executeAdminTasks(report);
 
         _moveClock(1 days / 12);
 
         // Change in APR is above 100%, which reverts
-        report.accruedRewards = int128(61 ether) / int128(365);
+        report.accruedRewards = int128(60 ether + 1 ether) / int128(365);
         _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
     }
 

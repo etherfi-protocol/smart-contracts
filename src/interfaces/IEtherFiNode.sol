@@ -6,76 +6,74 @@ import "./IEtherFiNodesManager.sol";
 interface IEtherFiNode {
     // State Transition Diagram for StateMachine contract:
     //
-    //      NOT_INITIALIZED
-    //              |
-    //      READY_FOR_DEPOSIT
-    //              ↓
-    //      STAKE_DEPOSITED
-    //           /      \
-    //          /        \
-    //         ↓          ↓
-    //         LIVE    CANCELLED
-    //         |  \ \ 
-    //         |   \ \
-    //         |   ↓  --> EVICTED
+    //      NOT_INITIALIZED <-
+    //              |        |
+    //              ↓        |
+    //      STAKE_DEPOSITED --
+    //           /    \      |
+    //          ↓      ↓     |
+    //         LIVE <- WAITING_FOR_APPROVAL
+    //         |  \ 
+    //         |   ↓  
     //         |  BEING_SLASHED
-    //         |    /
     //         |   /
     //         ↓  ↓
     //         EXITED
-    //           |
-    //           ↓
-    //      FULLY_WITHDRAWN
+    //         |
+    //         ↓
+    //     FULLY_WITHDRAWN
+    // 
     // Transitions are only allowed as directed above.
     // For instance, a transition from STAKE_DEPOSITED to either LIVE or CANCELLED is allowed,
-    // but a transition from STAKE_DEPOSITED to NOT_INITIALIZED, BEING_SLASHED, or EXITED is not.
+    // but a transition from LIVE to NOT_INITIALIZED is not.
     //
     // All phase transitions should be made through the setPhase function,
     // which validates transitions based on these rules.
     //
-    // Fully_WITHDRAWN or CANCELLED nodes can be recycled via resetWithdrawalSafe()
     enum VALIDATOR_PHASE {
         NOT_INITIALIZED,
         STAKE_DEPOSITED,
         LIVE,
         EXITED,
         FULLY_WITHDRAWN,
-        CANCELLED,
+        DEPRECATED_CANCELLED,
         BEING_SLASHED,
-        EVICTED,
+        DEPRECATED_EVICTED,
         WAITING_FOR_APPROVAL,
-        READY_FOR_DEPOSIT
+        DEPRECATED_READY_FOR_DEPOSIT
     }
 
     // VIEW functions
-    function calculateTVL(uint256 _beaconBalance, uint256 _executionBalance, IEtherFiNodesManager.RewardsSplit memory _SRsplits, uint256 _scale) external view returns (uint256, uint256, uint256, uint256);
+    function numAssociatedValidators() external view returns (uint256);
+    function calculateTVL(uint256 _beaconBalance, IEtherFiNodesManager.ValidatorInfo memory _info, IEtherFiNodesManager.RewardsSplit memory _SRsplits, bool _onlyWithdrawable) external view returns (uint256, uint256, uint256, uint256);
     function eigenPod() external view returns (address);
-    function exitRequestTimestamp() external view returns (uint32);
-    function exitTimestamp() external view returns (uint32);
     function getNonExitPenalty(uint32 _tNftExitRequestTimestamp, uint32 _bNftExitRequestTimestamp) external view returns (uint256);
-    function getStakingRewardsPayouts(uint256 _beaconBalance, IEtherFiNodesManager.RewardsSplit memory _splits, uint256 _scale) external view returns (uint256, uint256, uint256, uint256);
-    function ipfsHashForEncryptedValidatorKey() external view returns (string memory);
-    function phase() external view returns (VALIDATOR_PHASE);
-    function stakingStartTimestamp() external view returns (uint32);
+    function getRewardsPayouts(uint32 _exitRequestTimestamp, IEtherFiNodesManager.RewardsSplit memory _splits) external view returns (uint256, uint256, uint256, uint256);
+    function getFullWithdrawalPayouts(IEtherFiNodesManager.ValidatorInfo memory _info, IEtherFiNodesManager.RewardsSplit memory _SRsplits) external view returns (uint256, uint256, uint256, uint256);
+    function version() external view returns (uint16);
+    function numExitRequestsByTnft() external view returns (uint16);
+    function associatedValidatorIds(uint256 _index) external view returns (uint256);
+    function validatePhaseTransition(VALIDATOR_PHASE _currentPhase, VALIDATOR_PHASE _newPhase) external pure returns (bool);
+
+    function DEPRECATED_exitRequestTimestamp() external view returns (uint32);
+    function DEPRECATED_exitTimestamp() external view returns (uint32);
+    function DEPRECATED_phase() external view returns (VALIDATOR_PHASE);
 
     // Non-VIEW functions
-    function claimQueuedWithdrawals(uint256 maxNumWithdrawals) external;
+    function initialize(address _etherFiNodesManager) external;
+    function claimQueuedWithdrawals(uint256 maxNumWithdrawals, bool _checkIfHasOutstandingEigenLayerWithdrawals) external returns (bool);
     function createEigenPod() external;
     function hasOutstandingEigenLayerWithdrawals() external view returns (bool);
     function isRestakingEnabled() external view returns (bool);
-    function markExited(uint32 _exitTimestamp) external;
-    function markBeingSlashed() external;
-    function moveRewardsToManager(uint256 _amount) external;
+    function processNodeExit() external;
     function queueRestakedWithdrawal() external;
-    function recordStakingStart(bool _enableRestaking) external;
-    function resetWithdrawalSafe() external;
-    function setExitRequestTimestamp(uint32 _timestamp) external;
-    function setIpfsHashForEncryptedValidatorKey(string calldata _ipfs) external;
-    function setIsRestakingEnabled(bool _enabled) external;
-    function setPhase(VALIDATOR_PHASE _phase) external;
+    function registerValidator(uint256 _validatorId, bool _enableRestaking) external;
+    function unRegisterValidator(uint256 _validatorId) external returns (bool);
     function splitBalanceInExecutionLayer() external view returns (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter);
     function totalBalanceInExecutionLayer() external view returns (uint256);
     function withdrawableBalanceInExecutionLayer() external view returns (uint256);
+    function updateNumExitRequests(uint16 _up, uint16 _down) external;
+    function migrateVersion(uint256 _validatorId) external;
 
     function withdrawFunds(
         address _treasury,

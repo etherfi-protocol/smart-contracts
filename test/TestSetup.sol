@@ -190,6 +190,8 @@ contract TestSetup is Test {
     address shonee = vm.addr(1200);
     address jess = vm.addr(1201);
 
+    address admin;
+
     address[] public actors;
     address[] public bnftHoldersArray;
     uint256[] public whitelistIndices;
@@ -243,9 +245,12 @@ contract TestSetup is Test {
             vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
             addressProviderInstance = AddressProvider(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
             owner = 0xF155a2632Ef263a6A382028B3B33feb29175b8A5;
+            admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
         } else if (forkEnum == TESTNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("GOERLI_RPC_URL")));
             addressProviderInstance = AddressProvider(address(0x6E429db4E1a77bCe9B6F9EDCC4e84ea689c1C97e));
+            owner = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
+            admin = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
         } else {
             revert("Unimplemented fork");
         }
@@ -273,6 +278,7 @@ contract TestSetup is Test {
         vm.startPrank(owner);
             
         if (forkEnum == MAINNET_FORK) {
+            depGen = new DepositDataGeneration();
 
             liquifierImplementation = new Liquifier();
             liquifierProxy = new UUPSProxy(address(liquifierImplementation), "");
@@ -536,8 +542,6 @@ contract TestSetup is Test {
         vm.startPrank(alice);
         managerInstance.setStakingRewardsSplit(50_000, 50_000, 815_625, 84_375);
         managerInstance.setNonExitPenalty(300, 1 ether);
-        liquidityPoolInstance.setStakingTargetWeights(50, 50);
-        liquidityPoolInstance.setNumValidatorsToSpinUpInBatch(4);
         membershipManagerInstance.setTopUpCooltimePeriod(28 days);
         vm.stopPrank();
         
@@ -633,6 +637,7 @@ contract TestSetup is Test {
         _initializePeople();
         _initializeEtherFiAdmin();
 
+        admin = alice;
     }
 
     function _initOracleReportsforTesting() internal {
@@ -950,16 +955,21 @@ contract TestSetup is Test {
         return permitInput;
     }
 
+    function registerAsBnftHolder(address _user) internal {
+        (bool registered, uint32 index) = liquidityPoolInstance.bnftHoldersIndexes(_user);
+        if (!registered) liquidityPoolInstance.registerAsBnftHolder(_user);
+    }
+
     function setUpBnftHolders() internal {
         vm.startPrank(alice);
-        liquidityPoolInstance.registerAsBnftHolder(alice);
-        liquidityPoolInstance.registerAsBnftHolder(greg);
-        liquidityPoolInstance.registerAsBnftHolder(bob);
-        liquidityPoolInstance.registerAsBnftHolder(owner);
-        liquidityPoolInstance.registerAsBnftHolder(shonee);
-        liquidityPoolInstance.registerAsBnftHolder(dan);
-        liquidityPoolInstance.registerAsBnftHolder(elvis);
-        liquidityPoolInstance.registerAsBnftHolder(henry);
+        registerAsBnftHolder(alice);
+        registerAsBnftHolder(greg);
+        registerAsBnftHolder(bob);
+        registerAsBnftHolder(owner);
+        registerAsBnftHolder(shonee);
+        registerAsBnftHolder(dan);
+        registerAsBnftHolder(elvis);
+        registerAsBnftHolder(henry);
         vm.stopPrank();
 
         vm.deal(alice, 100000 ether);
@@ -1019,69 +1029,104 @@ contract TestSetup is Test {
     }
 
     function launch_validator() internal returns (uint256[] memory) {
-        bytes[] memory sig;
+        return launch_validator(2, 0, false, alice);
+    }
+
+    function launch_validator(uint256 _numValidators, uint256 _validatorIdToCoUseWithdrawalSafe, bool _isLpBnftHolder) internal returns (uint256[] memory) {
+        return launch_validator(_numValidators, _validatorIdToCoUseWithdrawalSafe, _isLpBnftHolder, alice, alice);
+    }
+
+    function launch_validator(uint256 _numValidators, uint256 _validatorIdToCoUseWithdrawalSafe, bool _isLpBnftHolder, address _bnftStaker) internal returns (uint256[] memory) {
+        return launch_validator(_numValidators, _validatorIdToCoUseWithdrawalSafe, _isLpBnftHolder, _bnftStaker, alice);
+    }
+
+    function launch_validator(uint256 _numValidators, uint256 _validatorIdToCoUseWithdrawalSafe, bool _isLpBnftHolder, address _bnftStaker, address _nodeOperator) internal returns (uint256[] memory) {
         bytes32 rootForApproval;
 
-        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.numValidatorsToSpinUp = 2;
-        _executeAdminTasks(report);
+        // IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        // report.numValidatorsToSpinUp = uint32(_numValidators);
+        // _executeAdminTasks(report);
 
-        sig = new bytes[](2);
-        sig[0] = hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65";
-        sig[1] = hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65";
+        vm.deal(owner, 10000 ether);
+        vm.deal(alice, 10000 ether);
+        vm.deal(bob, 10000 ether);
+        vm.deal(_bnftStaker, 10000 ether);
 
+        address admin;
+        if (block.chainid == 1) {
+            admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
+        } else {
+            admin = alice;
+        }
+        vm.startPrank(admin);
+        registerAsBnftHolder(_nodeOperator);
+        liquidityPoolInstance.updateBnftMode(_isLpBnftHolder);
+        vm.stopPrank();
 
-        vm.deal(owner, 100 ether);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 0);
+        vm.prank(admin);
+        auctionInstance.disableWhitelist();
 
-        setUpBnftHolders();
-
-        // vm.warp(1000000);
-        _moveClock(int256(1000000) / int256(12));
-
-        vm.prank(alice);
-        //Set the max number of validators per holder to 2
-        liquidityPoolInstance.setNumValidatorsToSpinUpInBatch(2);
-
-        vm.startPrank(alice);
-        if (!nodeOperatorManagerInstance.registered(alice)) {
+        vm.startPrank(_nodeOperator);
+        if (!nodeOperatorManagerInstance.registered(_nodeOperator)) {
             nodeOperatorManagerInstance.registerNodeOperator(
                 _ipfsHash,
                 10000
             );
         }
-        uint256[] memory bidIds = auctionInstance.createBid{value: 0.2 ether}(2, 0.1 ether);
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        {
+            address[] memory users = new address[](2);
+            ILiquidityPool.SourceOfFunds[] memory approvedTags = new ILiquidityPool.SourceOfFunds[](2);
+            bool[] memory approvals = new bool[](2);
+            users[0] = _nodeOperator;
+            users[1] = _nodeOperator;
+            approvedTags[0] = ILiquidityPool.SourceOfFunds.EETH;
+            approvedTags[1] = ILiquidityPool.SourceOfFunds.ETHER_FAN;
+            approvals[0] = true;
+            approvals[1] = true;
+            nodeOperatorManagerInstance.batchUpdateOperatorsApprovedTags(users, approvedTags, approvals);
+        }
+        vm.stopPrank();
+
+        vm.startPrank(_nodeOperator);
+        uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether * _numValidators}(_numValidators, 0.1 ether);
         vm.stopPrank();
 
         startHoax(bob);
-        liquidityPoolInstance.deposit{value: 60 ether}();
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 60 ether);
+        liquidityPoolInstance.deposit{value: 30 ether * _numValidators}();
         vm.stopPrank();
 
-        vm.prank(elvis);
-        uint256[] memory newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 4 ether}(bidIds, 2);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 60 ether);
+        vm.prank(_bnftStaker);
+        uint256[] memory newValidators;
+        if (_isLpBnftHolder) {
+            newValidators = liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(bidIds, _numValidators, _validatorIdToCoUseWithdrawalSafe);
+        } else {
+            newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether * _numValidators}(bidIds, _numValidators, _validatorIdToCoUseWithdrawalSafe);
+        }
 
-        IStakingManager.DepositData[]
-            memory depositDataArray = new IStakingManager.DepositData[](2);
+        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](_numValidators);
 
-        bytes32[] memory depositDataRootsForApproval = new bytes32[](2);
+        bytes32[] memory depositDataRootsForApproval = new bytes32[](_numValidators);
+        bytes[] memory pubKey = new bytes[](_numValidators);
+        bytes[] memory sig = new bytes[](_numValidators);
 
         for (uint256 i = 0; i < newValidators.length; i++) {
-            address etherFiNode = managerInstance.etherfiNodeAddress(
+            address safe = managerInstance.getWithdrawalSafeAddress(
                 newValidators[i]
             );
             root = depGen.generateDepositRoot(
                 hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
                 hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-                managerInstance.generateWithdrawalCredentials(etherFiNode),
+                managerInstance.generateWithdrawalCredentials(safe),
                 1 ether
             );
 
             rootForApproval = depGen.generateDepositRoot(
                 hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
                 hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65",
-                managerInstance.generateWithdrawalCredentials(etherFiNode),
+                managerInstance.generateWithdrawalCredentials(safe),
                 31 ether
             );
 
@@ -1093,19 +1138,23 @@ contract TestSetup is Test {
                 depositDataRoot: root,
                 ipfsHashForEncryptedValidatorKey: "test_ipfs"
             });
+
+            sig[i] = hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65";
+            pubKey[i] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
         }
 
-        // bytes32 depositRoot = _getDepositRoot();
+        vm.startPrank(_bnftStaker);
         bytes32 depositRoot = zeroRoot;
-        vm.prank(elvis);
-        liquidityPoolInstance.batchRegisterAsBnftHolder(depositRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
+        if (_isLpBnftHolder) {
+            liquidityPoolInstance.batchRegisterWithLiquidityPoolAsBnftHolder(depositRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
+        } else {
+            liquidityPoolInstance.batchRegisterAsBnftHolder(depositRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
+        }
+        vm.stopPrank();
 
-        bytes[] memory pubKey = new bytes[](2);
-        pubKey[0] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-        pubKey[1] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-
-        vm.prank(alice);
+        vm.startPrank(admin);
         liquidityPoolInstance.batchApproveRegistration(newValidators, pubKey, sig);
+        vm.stopPrank();
     
         return newValidators;
     }
@@ -1118,6 +1167,30 @@ contract TestSetup is Test {
 
         vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(amount);
+    }
+
+    function _upgrade_etherfi_node_contract() internal {
+        EtherFiNode etherFiNode = new EtherFiNode();
+        vm.prank(stakingManagerInstance.owner());
+        stakingManagerInstance.upgradeEtherFiNode(address(etherFiNode));
+    }
+
+    function _upgrade_etherfi_nodes_manager_contract() internal {
+        address newImpl = address(new EtherFiNodesManager());
+        vm.prank(managerInstance.owner());
+        managerInstance.upgradeTo(newImpl);
+    }
+
+    function _upgrade_staking_manager_contract() internal {
+        address newImpl = address(new StakingManager());
+        vm.prank(stakingManagerInstance.owner());
+        stakingManagerInstance.upgradeTo(newImpl);
+    }
+
+    function _to_uint256_array(uint256 _value) internal pure returns (uint256[] memory) {
+        uint256[] memory array = new uint256[](1);
+        array[0] = _value;
+        return array;
     }
 
     // Given two uint256 params (a, b, c),

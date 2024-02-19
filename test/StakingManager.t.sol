@@ -71,9 +71,6 @@ contract StakingManagerTest is TestSetup {
         vm.deal(alice, 100000 ether);
         vm.deal(greg, 100000 ether);
 
-        //Set the max number of validators per holder to 4
-        liquidityPoolInstance.setNumValidatorsToSpinUpInBatch(4);
-
         //Alice deposits funds into the LP to allow for validators to be spun and the calculations can work in dutyForWeek
         liquidityPoolInstance.deposit{value: 120 ether}();
         vm.stopPrank();
@@ -205,15 +202,6 @@ contract StakingManagerTest is TestSetup {
         assertEq(validatorId, bidId[0]);
 
         vm.stopPrank();
-
-        assertEq(
-            IEtherFiNode(etherfiNode).ipfsHashForEncryptedValidatorKey(),
-            depositData.ipfsHashForEncryptedValidatorKey
-        );
-        assertEq(
-            managerInstance.ipfsHashForEncryptedValidatorKey(validatorId),
-            depositData.ipfsHashForEncryptedValidatorKey
-        );
     }
 
     function test_BatchDepositWithBidIdsFailsIFInvalidDepositAmount() public {
@@ -250,7 +238,7 @@ contract StakingManagerTest is TestSetup {
         bidIdArray[7] = 12;
         bidIdArray[8] = 19;
         bidIdArray[9] = 20;
-
+ 
         vm.expectRevert("No bids available at the moment");
         stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
             bidIdArray,
@@ -272,7 +260,7 @@ contract StakingManagerTest is TestSetup {
 
         uint256[] memory bidIdArray = new uint256[](0);
 
-        vm.expectRevert("No bid Ids provided");
+        vm.expectRevert("Incorrect bids or numVals");
         stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
             bidIdArray,
             false
@@ -524,7 +512,7 @@ contract StakingManagerTest is TestSetup {
 
         stakingManagerInstance.batchRegisterValidators(zeroRoot, bidIdArray, depositDataArray);
 
-        vm.expectRevert("Invalid phase transition");
+        vm.expectRevert("INVALID_PHASE_TRANSITION");
         stakingManagerInstance.batchRegisterValidators(zeroRoot, bidIdArray, depositDataArray);
 
         vm.stopPrank();
@@ -825,7 +813,7 @@ contract StakingManagerTest is TestSetup {
         );
 
         root = _getDepositRoot();
-        vm.expectRevert("Invalid phase transition");
+        vm.expectRevert("INVALID_PHASE_TRANSITION");
         stakingManagerInstance.batchRegisterValidators(root, 
             bidIdArray,
             depositDataArray
@@ -1003,7 +991,7 @@ contract StakingManagerTest is TestSetup {
 
         stakingManagerInstance.batchRegisterValidators(zeroRoot, bidId, depositDataArray);
 
-        vm.expectRevert("Invalid phase transition");
+        vm.expectRevert("INVALID_PHASE_TRANSITION");
         stakingManagerInstance.batchCancelDeposit(bidId);
     }
 
@@ -1064,7 +1052,7 @@ contract StakingManagerTest is TestSetup {
         assertEq(staker, 0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
         assertEq(selectedBidId, bidId2[0]);
         assertTrue(
-            IEtherFiNode(etherFiNode).phase() ==
+            managerInstance.phase(bidId2[0]) ==
                 IEtherFiNode.VALIDATOR_PHASE.STAKE_DEPOSITED
         );
 
@@ -1076,14 +1064,16 @@ contract StakingManagerTest is TestSetup {
         assertEq(isActive, false);
         assertEq(auctionInstance.numberOfActiveBids(), 2);
         assertEq(address(auctionInstance).balance, 0.6 ether);
+        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 0);
 
         stakingManagerInstance.batchCancelDeposit(bidId2);
         assertEq(managerInstance.etherfiNodeAddress(bidId2[0]), address(0));
         assertEq(stakingManagerInstance.bidIdToStaker(bidId2[0]), address(0));
         assertTrue(
-            IEtherFiNode(etherFiNode).phase() ==
-                IEtherFiNode.VALIDATOR_PHASE.READY_FOR_DEPOSIT // node has been recycled in pool
+            managerInstance.phase(bidId2[0]) ==
+                IEtherFiNode.VALIDATOR_PHASE.NOT_INITIALIZED // validator is gone & bid is re-usable
         );
+        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 1);
 
         (bidAmount, , bidder, isActive) = auctionInstance.bids(bidId2[0]);
         assertEq(bidAmount, 0.3 ether);
