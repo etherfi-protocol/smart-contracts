@@ -123,6 +123,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         require(_isFinalized(slot), "Report Epoch is not finalized yet");
         require(computeSlotAtTimestamp(block.timestamp) >= reportStartSlot, "Report Slot has not started yet");
         require(lastPublishedReportRefSlot == etherFiAdmin.lastHandledReportRefSlot(), "Last published report is not handled yet");
+
         return slot > committeeMemberStates[_member].lastReportRefSlot;
     }
 
@@ -134,6 +135,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         require(_report.refSlotTo == slotTo, "Report is for wrong slotTo");
         require(_report.refBlockFrom == blockFrom, "Report is for wrong blockFrom");
         require(_report.refBlockTo < block.number, "Report is for wrong blockTo");
+        require(_report.refBlockTo > etherFiAdmin.lastAdminExecutionBlock(), "Report must be based on the block after when the last admin execution is performed");
 
         // If two epochs in a row are justified, the current_epoch - 2 is considered finalized
         // Put 1 epoch more as a safe buffer
