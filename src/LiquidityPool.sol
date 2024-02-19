@@ -172,7 +172,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     /// @notice withdraw from pool
-    /// @dev Burns user whq43 from msg.senders account & Sends equivalent amount of ETH back to the recipient
+    /// @dev Burns user share from msg.senders account & Sends equivalent amount of ETH back to the recipient
     /// @param _recipient the recipient who will receives the ETH
     /// @param _amount the amount to withdraw from contract
     /// it returns the amount of shares burned
@@ -250,10 +250,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     // [Staking flow]
-    // Step 1: [Deposit] allocate validators; create withdrawal safe contracts
+    // Step 1: [Deposit] initiate spinning up the validators & allocate withdrawal safe contracts
     // Step 2: create the keys using the desktop app
-    // Step 3: [Register] register the validator keys
-    // Step 4: wait for the oracle to approve
+    // Step 3: [Register] register the validator keys sending 1 ETH to the eth deposit contract
+    // Step 4: wait for the oracle to approve and send the rest 31 ETH to the eth deposit contract
     function batchDepositAsBnftHolder(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators) external payable whenNotPaused returns (uint256[] memory) {
         return batchDepositAsBnftHolder(_candidateBidIds, _numberOfValidators, 0);
     }
