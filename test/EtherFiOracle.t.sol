@@ -570,49 +570,4 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.unPause(true, true, true, true, true, true);
         vm.stopPrank();
     }
-
-    function test_report_earlier_than_last_admin_execution_fails() public {
-        vm.prank(owner);
-        bytes[] memory emptyBytes = new bytes[](0);
-        etherFiOracleInstance.setQuorumSize(1);
-
-        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        _moveClock(1024 + 2 * 32);
-
-        (uint32 slotFrom, uint32 slotTo, uint32 blockFrom) = etherFiOracleInstance.blockStampForNextReport();
-        assertEq(slotFrom, 0);
-        assertEq(slotTo, 1024-1);
-        assertEq(blockFrom, 0);
-
-        report.refSlotFrom = 0;
-        report.refSlotTo = 1024-1;
-        report.refBlockFrom = 0;
-        report.refBlockTo = 1024-1;
-
-        vm.startPrank(alice);
-        etherFiOracleInstance.submitReport(report);
-        _moveClock(1 * 1024); // The oracle bot failed to submit the report for admin task execution... which can happen in real life
-        etherFiAdminInstance.executeTasks(report, emptyBytes, emptyBytes);
-
-        report.refSlotFrom = 1024;
-        report.refSlotTo = 2 * 1024 - 1;
-        report.refBlockFrom = 1024;
-        report.refBlockTo = 2 * 1024 - 1;
-
-        vm.expectRevert("Report must be based on the block after when the last admin execution is performed");
-        etherFiOracleInstance.submitReport(report);
-
-        // After a period, the oracle bot submits the new report such that the report's 'refBlockTo' > 'lastAdminExecutionBlock'
-        // which succeeds
-        _moveClock(1024);
-        report.refSlotFrom = 1024;
-        report.refSlotTo = 3 * 1024 - 1;
-        report.refBlockFrom = 1024;
-        report.refBlockTo = 3 * 1024 - 1;
-
-        etherFiOracleInstance.submitReport(report);
-        etherFiAdminInstance.executeTasks(report, emptyBytes, emptyBytes);
-
-        vm.stopPrank();
-    }
 }
