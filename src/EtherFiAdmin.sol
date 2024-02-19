@@ -38,6 +38,9 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     int32 public acceptableRebaseAprInBps;
 
     uint16 public postReportWaitTimeInSlots;
+    uint32 public lastAdminExecutionBlock;
+
+    mapping(address => bool) public pausers;
 
     mapping(address => bool) public pausers;
 
@@ -158,6 +161,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         lastHandledReportRefSlot = _report.refSlotTo;
         lastHandledReportRefBlock = _report.refBlockTo;
+        lastAdminExecutionBlock = uint32(block.number);
 
         emit AdminOperationsExecuted(msg.sender, reportHash);
     }
