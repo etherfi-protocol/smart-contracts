@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.13;
+pragma solidity ^0.8.13;
 
 import "../eigenlayer-interfaces/IStrategyManager.sol";
 import "../eigenlayer-interfaces/IStrategy.sol";
