@@ -246,17 +246,17 @@ contract SmallScenariosTest is TestSetup {
         vm.startPrank(owner);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 31 ether);
         liquidityPoolInstance.deposit{value: 32 ether}();
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 31 ether + 32 ether);
-        assertEq(address(liquidityPoolInstance).balance, 32 ether + 1 ether + 31 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 31 ether + 32 ether); // 31 + 32 = 63
+        assertEq(address(liquidityPoolInstance).balance, 32 ether + 1 ether + 31 ether); // 32 + 1 + 31 = 64
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(withdrawRequestId);
 
         vm.prank(chad);
-        withdrawRequestNFTInstance.claimWithdraw(withdrawRequestId);
+        withdrawRequestNFTInstance.claimWithdraw(withdrawRequestId); // Chad claims his 15.5 ETH
 
-        assert(liquidityPoolInstance.getTotalPooledEther() >= 47.5 ether); // 63 - 15.5 = 47.5
-        assert(address(liquidityPoolInstance).balance >= 17.5 ether); // 33 - 15.5 = 17.5
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 47.5 ether); // 63 - 15.5 = 47.5
+        assertEq(address(liquidityPoolInstance).balance, 48.5 ether); // 64 - 15.5 = 48.5
 
         vm.prank(alice);
         liquidityPoolInstance.batchApproveRegistration(processedBidIds, pubKey, signature);
@@ -269,6 +269,9 @@ contract SmallScenariosTest is TestSetup {
             assertEq(uint8(managerInstance.phase(processedBidIds[i])), uint8(IEtherFiNode.VALIDATOR_PHASE.LIVE));
         }
 
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 47.5 ether); // 47.5
+        assertEq(address(liquidityPoolInstance).balance, 17.5 ether); // 48.5 - 31 = 17.5
+
         // EtherFi sends an exit request for a node to be exited to reclaim the 32 ether sent to the pool for withdrawals
         {
             vm.startPrank(alice);
@@ -279,8 +282,8 @@ contract SmallScenariosTest is TestSetup {
 
             // The node contract receives the ETH (principal + rewards) from the beacon chian
             address node = managerInstance.etherfiNodeAddress(processedBidIds[0]);
-            uint256 totalStakingRewardsForOneEtherRewardsForTnft = 1 ether * uint256(100 * 32) / uint256(90 * 29);
-            vm.deal(address(node), address(node).balance + 32 ether + totalStakingRewardsForOneEtherRewardsForTnft);
+            uint256 totalStakingRewardsForOneEtherRewardsForTnft = 0;
+            vm.deal(address(node), 32 ether + totalStakingRewardsForOneEtherRewardsForTnft);
 
             // ether.fi processes the node exit.
             uint32[] memory exitTimestamps = new uint32[](1);
@@ -288,17 +291,17 @@ contract SmallScenariosTest is TestSetup {
             managerInstance.processNodeExit(processedBidIds, exitTimestamps);
 
             (, uint256 toTNFT,,) = managerInstance.getFullWithdrawalPayouts(processedBidIds[0]);
-            assertEq(toTNFT, 30 ether + 1 ether - 1);
+            assertEq(toTNFT, 30 ether);
 
             vm.stopPrank();
         }
 
-        vm.prank(alice);
         // ether.fi process the node exit from the LP
         uint256[] memory slashingPenalties = new uint256[](1);
         slashingPenalties[0] = 0;
 
-        // (30 ETH + @ ETH) enters the pool from the ether.fi node contract
+        vm.prank(alice);
+        // (30 ETH) enters the pool from the ether.fi node contract
         managerInstance.batchFullWithdraw(processedBidIds);
 
         assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 10.333333333333333333 ether);
