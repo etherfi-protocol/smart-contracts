@@ -372,19 +372,6 @@
   },
   {
     "type": "function",
-    "name": "lastAdminExecutionBlock",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint32",
-        "internalType": "uint32"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "lastHandledReportRefBlock",
     "inputs": [],
     "outputs": [

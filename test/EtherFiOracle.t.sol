@@ -611,4 +611,50 @@ contract EtherFiOracleTest is TestSetup {
 
         vm.stopPrank();
     }
+
+    function test_consensus_scenario_example1() public {
+        vm.startPrank(owner);
+        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.setQuorumSize(2);
+        vm.stopPrank();
+
+        _moveClock(1024 + 2 * slotsPerEpoch);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        _initReportBlockStamp(report);
+
+        // Assume that the accruedRewards must be 1 ether, all the time
+
+        // Alice submited the correct report 
+        vm.prank(alice);
+        report.accruedRewards = 1 ether;
+        bool consensusReached = etherFiOracleInstance.submitReport(report);
+        assertFalse(consensusReached);
+
+        // However, Bob submitted a wrong report
+        vm.prank(chad);
+        report.accruedRewards = 2 ether;
+        consensusReached = etherFiOracleInstance.submitReport(report);
+        assertFalse(consensusReached);
+
+        // Bob realized that he generated a wrong report and try to submit the correct report
+        // which fails because no more than 1 report can be submitted within the same period by the same committee member
+        vm.prank(chad);
+        vm.expectRevert("You don't need to submit a report");
+        etherFiOracleInstance.submitReport(report);
+
+        // However, in the next period, the committee can re-try to publish the correct report
+        _moveClock(1024);
+        _initReportBlockStamp(report);
+
+        vm.prank(alice);
+        report.accruedRewards = 1 ether;
+        consensusReached = etherFiOracleInstance.submitReport(report);
+        assertFalse(consensusReached);
+
+        vm.prank(chad);
+        report.accruedRewards = 1 ether;
+        consensusReached = etherFiOracleInstance.submitReport(report);
+        assertTrue(consensusReached); // succeeded
+    }
 }
