@@ -215,7 +215,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
         if (address(this).balance >= accumulatedFee) {
             uint256 amountToLiquidityPool = address(this).balance - accumulatedFee;
-            (sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 10000}("");
+            (sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
             if (!sent) revert EthTransferFailed();
         }
     }
