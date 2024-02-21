@@ -342,7 +342,7 @@ contract LiquidityPoolTest is TestSetup {
 
         // SD-1 "Anyone can call StakingManager.batchCancelDepositAsBnftHolder to cancel a deposit"
         vm.prank(bob);
-        vm.expectRevert("Incorrect Caller");
+        vm.expectRevert("INCORRECT_CALLER");
         stakingManagerInstance.batchCancelDepositAsBnftHolder(newValidators, alice);
 
         vm.prank(alice);
@@ -570,6 +570,22 @@ contract LiquidityPoolTest is TestSetup {
 
         // The liquidity pool receives the rewards as B-NFT holder and T-NFT holder
         assertEq((address(liquidityPoolInstance).balance), 1 * 0.9 ether);
+    }
+
+    function test_batchPartialWithdrawOptimized() public {
+        uint256[] memory validatorIds = launch_validator(20, 0, false);
+
+        uint256 totalTnftRewards = 0;
+        for (uint256 i = 0; i < validatorIds.length; i++) {
+            address etherfiNode = managerInstance.etherfiNodeAddress(
+                validatorIds[i]
+            );
+            _transferTo(etherfiNode, 1 ether);
+            totalTnftRewards += (1 ether * 90 * 29) / (100 * 32);
+        }
+        uint256 lastBalance = address(liquidityPoolInstance).balance;
+        managerInstance.batchPartialWithdrawOptimized(validatorIds);
+        assertEq(address(liquidityPoolInstance).balance, lastBalance + totalTnftRewards);
     }
 
     function test_ProcessNodeExit() public {

@@ -86,5 +86,5 @@ interface IEtherFiNode {
         uint256 _bnftAmount
     ) external;
 
-
+    function moveFundsToManager(uint256 _amount) external;
 }

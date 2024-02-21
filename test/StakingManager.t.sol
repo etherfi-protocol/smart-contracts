@@ -216,7 +216,7 @@ contract StakingManagerTest is TestSetup {
         uint256[] memory bidIdArray = new uint256[](1);
         bidIdArray[0] = 1;
 
-        vm.expectRevert("Insufficient staking amount");
+        vm.expectRevert("WRONG_STAKING_AMOUNT");
         stakingManagerInstance.batchDepositWithBidIds{value: 0.033 ether}(
             bidIdArray,
             false
@@ -239,7 +239,7 @@ contract StakingManagerTest is TestSetup {
         bidIdArray[8] = 19;
         bidIdArray[9] = 20;
  
-        vm.expectRevert("No bids available at the moment");
+        vm.expectRevert("NOT_ENOUGH_BIDS");
         stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
             bidIdArray,
             false
@@ -467,7 +467,7 @@ contract StakingManagerTest is TestSetup {
             memory depositDataArray = new IStakingManager.DepositData[](1);
 
         vm.prank(owner);
-        vm.expectRevert("Not deposit owner");
+        vm.expectRevert("INCORRECT_CALLER");
         stakingManagerInstance.batchRegisterValidators(zeroRoot, bidId, depositDataArray);
     }
 
@@ -918,10 +918,10 @@ contract StakingManagerTest is TestSetup {
         vm.stopPrank();
 
         vm.prank(owner);
-        vm.expectRevert("Not deposit owner");
+        vm.expectRevert("INCORRECT_CALLER");
         stakingManagerInstance.batchCancelDeposit(bidId);
 
-        vm.expectRevert("Not deposit owner");
+        vm.expectRevert("INCORRECT_CALLER");
         stakingManagerInstance.batchCancelDeposit(bidId);
     }
 
@@ -944,7 +944,7 @@ contract StakingManagerTest is TestSetup {
         );
         stakingManagerInstance.batchCancelDeposit(bidId);
 
-        vm.expectRevert("Not deposit owner");
+        vm.expectRevert("INCORRECT_CALLER");
         stakingManagerInstance.batchCancelDeposit(bidId);
     }
 
@@ -1208,7 +1208,7 @@ contract StakingManagerTest is TestSetup {
         assertEq(stakingManagerInstance.maxBatchDepositSize(), 12);
 
         vm.prank(owner);
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert("NOT_ADMIN");
         stakingManagerInstance.setMaxBatchDepositSize(12);
     }
 

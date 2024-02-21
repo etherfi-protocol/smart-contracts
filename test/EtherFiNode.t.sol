@@ -487,7 +487,7 @@ contract EtherFiNodeTest is TestSetup {
 
         // shoud not be allowed to partial withdraw since node is exited
         // In this case it fails because of the balance check right before the state check
-        vm.expectRevert("Must be LIVE");
+        vm.expectRevert("NOT_LIVE");
         managerInstance.partialWithdraw(validatorId);
 
         // attacker sends more eth to pod that will not be able to be able to be withdrawn immediately
@@ -744,7 +744,7 @@ contract EtherFiNodeTest is TestSetup {
 
         vm.deal(etherfiNode, 16.0 ether);
         vm.expectRevert(
-            "balance >= 16 ETH"
+            "MUST_EXIT"
         );
         managerInstance.partialWithdraw(bidId[0]);
     }
@@ -763,7 +763,7 @@ contract EtherFiNodeTest is TestSetup {
         hoax(alice);
         managerInstance.markBeingSlashed(bidId);
         vm.expectRevert(
-            "Must be LIVE"
+            "NOT_LIVE"
         );
         managerInstance.partialWithdraw(bidId[0]);
     }
@@ -961,7 +961,7 @@ contract EtherFiNodeTest is TestSetup {
         TNFTInstance.transferFrom(staker, dan, validatorIds[0]);
 
         hoax(owner);
-        vm.expectRevert("Must be LIVE");
+        vm.expectRevert("NOT_LIVE");
         managerInstance.partialWithdraw(validatorIds[0]);
     }
 
@@ -1507,9 +1507,9 @@ contract EtherFiNodeTest is TestSetup {
         // It exited & its principle is withdrawn
         _transferTo(etherfiNode, 16 ether);
 
-        vm.expectRevert("balance >= 16 ETH");
+        vm.expectRevert("MUST_EXIT");
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(validatorIds[0]);
-        vm.expectRevert("balance >= 16 ETH");
+        vm.expectRevert("MUST_EXIT");
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(newValidatorIds[0]);
 
         // Mark validatorIds[0] as EXITED
@@ -1535,9 +1535,9 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(toBnft, 2 ether);
         assertEq(toTreasury, 0 ether);
 
-        vm.expectRevert("Must be LIVE");
+        vm.expectRevert("NOT_LIVE");
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(validatorIds[0]);
-        vm.expectRevert("balance >= 16 ETH");
+        vm.expectRevert("MUST_EXIT");
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(newValidatorIds[0]);
 
         vm.expectRevert("NOT_EXITED");

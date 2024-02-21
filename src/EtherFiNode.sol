@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.24;
 
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
@@ -182,12 +182,12 @@ contract EtherFiNode is IEtherFiNode {
             _treasuryAmount += (!sent) ? _operatorAmount : 0;
         }
         if (_bnftAmount > 0) {
-            (sent, ) = payable(_bnftHolder).call{value: _bnftAmount, gas: 10000}("");
+            (sent, ) = payable(_bnftHolder).call{value: _bnftAmount, gas: 12000}("");
             _treasuryAmount += (!sent) ? _bnftAmount : 0;
         }
         if (_tnftAmount > 0) {
-            (sent, ) = payable(_tnftHolder).call{value: _tnftAmount, gas: 120000}("");
-            require(sent, "ETH_SEND_FAILED"); // to support 'receive' of LP
+            (sent, ) = payable(_tnftHolder).call{value: _tnftAmount, gas: 12000}("");
+            _treasuryAmount += (!sent) ? _tnftAmount : 0;
         }
         if (_treasuryAmount > 0) {
             (sent, ) = _treasury.call{value: _treasuryAmount, gas: 2300}("");
@@ -280,6 +280,11 @@ contract EtherFiNode is IEtherFiNode {
             }
         }
         return safeBalance + claimableBalance;
+    }
+
+    function moveFundsToManager(uint256 _amount) external onlyEtherFiNodeManagerContract {
+        (bool sent, ) = etherFiNodesManager.call{value: _amount, gas: 6000}("");
+        require(sent, "ETH_SEND_FAILED");
     }
 
     function getFullWithdrawalPayouts(
