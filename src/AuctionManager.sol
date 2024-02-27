@@ -174,7 +174,7 @@ contract AuctionManager is
             });
 
             // The Bid with its bid Id `x` can be accessed
-            // - if x < bidIdsBeforeGasOptimization, then bids[x] is the bid
+            // - if x <= bidIdsBeforeGasOptimization, then bids[x] is the bid
             // - otherwise, then batchedBids[x / 10] is all needed to construct the bid info
             //   - isAcitve = (batchedBids[x / 10].isActiveBits >> (x % 10)) & 1
             //   - bidderPubKeyIndex = batchedBids[x / 10].bidderPubKeyStartIndex + (x % 10)
