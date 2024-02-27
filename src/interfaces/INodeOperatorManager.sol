@@ -41,6 +41,7 @@ interface INodeOperatorManager {
     ) external;
 
     function fetchNextKeyIndex(address _user) external returns (uint64);
+    function batchFetchNextKeyIndex(address _user, uint256 _size) external returns (uint64);
 
     function isEligibleToRunValidatorsForSourceOfFund(address _operator, LiquidityPool.SourceOfFunds _source) external view returns (bool approved);
 

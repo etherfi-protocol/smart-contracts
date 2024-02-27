@@ -9,6 +9,7 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract AuctionManager is
     Initializable,
@@ -25,7 +26,7 @@ contract AuctionManager is
     uint128 public whitelistBidAmount;
     uint64 public minBidAmount;
     uint64 public maxBidAmount;
-    uint256 public numberOfBids;
+    uint256 public numberOfBids; // need to rename this variable to something like 'maxBidId'
     uint256 public numberOfActiveBids;
 
     INodeOperatorManager public nodeOperatorManager;
@@ -44,6 +45,9 @@ contract AuctionManager is
     uint128 public accumulatedRevenueThreshold;
 
     mapping(address => bool) public admins;
+
+    uint64 public bidIdsBeforeGasOptimization;
+    mapping(uint256 => BatchedBid) public batchedBids;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -93,6 +97,11 @@ contract AuctionManager is
         admins[_etherFiAdminContractAddress] = true;
     }
 
+    function initializeOnUpgradeVersion2() {
+        bidIdsBeforeGasOptimization = numberOfBids;
+        numberOfBids = 10 * ((numberOfBids + 10 - 1) / 10); // offset
+    }
+
     /// @notice Creates bid(s) for the right to run a validator node when ETH is deposited
     /// @param _bidSize the number of bids that the node operator would like to create
     /// @param _bidAmountPerBid the ether value of each bid that is created
@@ -138,21 +147,39 @@ contract AuctionManager is
         uint256[] memory bidIdArray = new uint256[](_bidSize);
         uint64[] memory ipfsIndexArray = new uint64[](_bidSize);
 
-        for (uint256 i = 0; i < _bidSize; i++) {
-            uint64 ipfsIndex = nodeOperatorManager.fetchNextKeyIndex(msg.sender);
-            uint256 bidId = numberOfBids + i;
-            bidIdArray[i] = bidId;
-            ipfsIndexArray[i] = ipfsIndex;
+        uint256 numBatchedBids = (_bidSize + 10 - 1) / 10;
+        uint256 batchedBidId = numberOfBids / 10;
+        uint64 ipfsStartIndex = nodeOperatorManager.batchFetchNextKeyIndex(msg.sender, _bidSize);
 
-            //Creates a bid object for storage and lookup in future
-            bids[bidId] = Bid({
-                amount: _bidAmountPerBid,
-                bidderPubKeyIndex: ipfsIndex,
-                bidderAddress: msg.sender,
-                isActive: true
-            });
+        for (uint256 i = 0; i < _bidSize; i++) {
+            bidIdArray[i] = batchedBidId * 10 + i;
+            ipfsIndexArray[i] = ipfsStartIndex + i;
         }
-        numberOfBids += _bidSize;
+
+        for (uint256 i = 0; i < numBatchedBids; i++) {
+            uint256 numBids = Math.min(10, _bidSize - i * 10);
+            uint256 bidBatchId = batchedBidId + i;
+            uint16 isActiveBits;
+
+            for (uint256 j = 0; j < numBids; j++) {
+                isActiveBits = isActiveBits | (1 << j);
+            }
+
+            batchedBids[bidBatchId] = BatchedBid({
+                numBids: numBids,
+                isActiveBits: isActiveBits,
+                amountPerBidInGwei: uint32(_bidAmountPerBid / 1 gwei),
+                bidderPubKeyStartIndex: uint32(ipfsStartIndex + i),
+                bidderAddress: msg.sender
+            });
+
+            // The Bid with its bid Id `x` can be accessed
+            // - if x < bidIdsBeforeGasOptimization, then bids[x] is the bid
+            // - otherwise, then batchedBids[x / 10] is all needed to construct the bid info
+            //   - isAcitve = (batchedBids[x / 10].isActiveBits >> (x % 10)) & 1
+            //   - bidderPubKeyIndex = batchedBids[x / 10].bidderPubKeyStartIndex + (x % 10)
+        }
+        numberOfBids += numBatchedBids * 10;
         numberOfActiveBids += _bidSize;
 
         emit BidCreated(msg.sender, _bidAmountPerBid, bidIdArray, ipfsIndexArray);
