@@ -99,12 +99,15 @@ contract EtherFiNode is IEtherFiNode {
     function registerValidator(uint256 _validatorId, bool _enableRestaking) public onlyEtherFiNodeManagerContract ensureLatestVersion {
         require(numAssociatedValidators() == 0 || isRestakingEnabled == _enableRestaking, "restaking status mismatch");
 
+        // One more validator to it
         _numAssociatedValidators += 1;
 
         // TODO: see if we really need to maintain the validator Ids on-chain
-        uint256 index = associatedValidatorIds.length;
-        associatedValidatorIds.push(_validatorId);
-        associatedValidatorIndices[_validatorId] = index;
+        {
+            uint256 index = associatedValidatorIds.length;
+            associatedValidatorIds.push(_validatorId);
+            associatedValidatorIndices[_validatorId] = index;
+        }
 
         if (_enableRestaking) {
             isRestakingEnabled = true;
@@ -118,31 +121,29 @@ contract EtherFiNode is IEtherFiNode {
         uint256 _validatorId,
         IEtherFiNodesManager.ValidatorInfo memory _info
     ) external onlyEtherFiNodeManagerContract ensureLatestVersion returns (bool) {        
-        // VALIDATOR_PHASE phase = IEtherFiNodesManager(etherFiNodesManager).phase(_validatorId);
         require(_info.phase == VALIDATOR_PHASE.FULLY_WITHDRAWN || _info.phase == VALIDATOR_PHASE.NOT_INITIALIZED, "invalid phase");
 
+        // Unregister it
         _numAssociatedValidators -= 1;
 
         // If the phase changed from EXITED to FULLY_WITHDRAWN, decrement the counter
-        if (_info.phase == VALIDATOR_PHASE.FULLY_WITHDRAWN) {
-            numExitedValidators -= 1;
-        }
+        if (_info.phase == VALIDATOR_PHASE.FULLY_WITHDRAWN) numExitedValidators -= 1;
 
         // If there was an exit request, decrement the number of exit requests
-        if (_info.exitRequestTimestamp != 0) {
-            numExitRequestsByTnft -= 1;
-        }
+        if (_info.exitRequestTimestamp != 0) numExitRequestsByTnft -= 1;
 
         // TODO: see if we really need to maintain the validator Ids on-chain
-        uint256 index = associatedValidatorIndices[_validatorId];        
-        uint256 endIndex = associatedValidatorIds.length - 1;
-        uint256 end = associatedValidatorIds[endIndex];
+        {
+            uint256 index = associatedValidatorIndices[_validatorId];        
+            uint256 endIndex = associatedValidatorIds.length - 1;
+            uint256 end = associatedValidatorIds[endIndex];
 
-        associatedValidatorIds[index] = associatedValidatorIds[endIndex];
-        associatedValidatorIndices[end] = index;
-        
-        associatedValidatorIds.pop();
-        delete associatedValidatorIndices[_validatorId];
+            associatedValidatorIds[index] = associatedValidatorIds[endIndex];
+            associatedValidatorIndices[end] = index;
+            
+            associatedValidatorIds.pop();
+            delete associatedValidatorIndices[_validatorId];
+        }
         
         if (numAssociatedValidators() == 0) {
             restakingObservedExitBlock = 0;
