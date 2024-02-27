@@ -68,7 +68,7 @@ interface IEtherFiNode {
     function processNodeExit() external;
     function queueRestakedWithdrawal() external;
     function registerValidator(uint256 _validatorId, bool _enableRestaking) external;
-    function unRegisterValidator(uint256 _validatorId) external returns (bool);
+    function unRegisterValidator(uint256 _validatorId, IEtherFiNodesManager.ValidatorInfo memory _info) external returns (bool);
     function splitBalanceInExecutionLayer() external view returns (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter);
     function totalBalanceInExecutionLayer() external view returns (uint256);
     function withdrawableBalanceInExecutionLayer() external view returns (uint256);

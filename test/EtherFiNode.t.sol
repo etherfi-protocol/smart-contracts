@@ -665,7 +665,7 @@ contract EtherFiNodeTest is TestSetup {
         vm.expectRevert("INCORRECT_CALLER");
         IEtherFiNode(etherFiNode).processNodeExit();
 
-        vm.expectRevert("Not admin");
+        vm.expectRevert("NOT_ADMIN");
         vm.prank(bob);
         managerInstance.processNodeExit(validatorIds, exitTimestamps);
         IEtherFiNodesManager.ValidatorInfo memory info = managerInstance.getValidatorInfo(validatorIds[0]);
@@ -755,7 +755,7 @@ contract EtherFiNodeTest is TestSetup {
         vm.deal(etherfiNode, 4 ether);
 
         vm.expectRevert(
-            "Not admin"
+            "NOT_ADMIN"
         );
         vm.prank(bob);
         managerInstance.markBeingSlashed(bidId);
@@ -1252,7 +1252,7 @@ contract EtherFiNodeTest is TestSetup {
         exitTimestamps[0] = uint32(block.timestamp);
 
         // T-NFT holder sends the exit request after the node is marked EXITED
-        vm.expectRevert(EtherFiNodesManager.ValidatorNotLive.selector);
+        vm.expectRevert("NOT_LIVE");
         managerInstance.batchSendExitRequest(_to_uint256_array(validatorIds[0]));
     }
 
@@ -1702,6 +1702,67 @@ contract EtherFiNodeTest is TestSetup {
         }
     }
 
+    function test_ForcedPartialWithdrawal_succeeds() public {
+        uint256[] memory validatorIds = launch_validator(1, 0, false);
+        uint256 validatorId = validatorIds[0];
+        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
+
+        assertTrue(managerInstance.phase(validatorIds[0]) == IEtherFiNode.VALIDATOR_PHASE.LIVE);
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
+
+        // launch 3 more validators
+        uint256[] memory newValidatorIds = launch_validator(3, validatorId, false);
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 4);
+
+        // 1 ether as staking rewards
+        _transferTo(etherfiNode, 1 ether);
+
+        uint256[] memory validatorIdsToExit = new uint256[](1);
+        uint32[] memory exitTimestamps = new uint32[](1);
+        exitTimestamps[0] = uint32(block.timestamp);
+
+        // Exit 1 among 4
+        validatorIdsToExit[0] = newValidatorIds[0];
+        _transferTo(etherfiNode, 16 ether);
+
+        vm.expectRevert("NOT_ADMIN");
+        managerInstance.forcePartialWithdraw(validatorId);
+
+        vm.prank(alice);
+        managerInstance.forcePartialWithdraw(validatorId);
+    }
+
+    function test_PartialWithdrawalOfPrincipalFails() public {
+        uint256[] memory validatorIds = launch_validator(1, 0, false);
+        uint256 validatorId = validatorIds[0];
+        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
+
+        assertTrue(managerInstance.phase(validatorIds[0]) == IEtherFiNode.VALIDATOR_PHASE.LIVE);
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
+
+        // launch 3 more validators
+        uint256[] memory newValidatorIds = launch_validator(3, validatorId, false);
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 4);
+
+        uint256[] memory validatorIdsToExit = new uint256[](1);
+        uint32[] memory exitTimestamps = new uint32[](1);
+        exitTimestamps[0] = uint32(block.timestamp);
+
+        // Exit 1 among 4
+        validatorIdsToExit[0] = newValidatorIds[0];
+        _transferTo(etherfiNode, 16 ether);
+
+        // Someone triggers paritalWithrdaw
+        // Before the Oracle marks it as EXITED
+        vm.expectRevert("MUST_EXIT");
+        managerInstance.partialWithdraw(validatorId);
+
+        hoax(managerInstance.owner());
+        managerInstance.processNodeExit(validatorIdsToExit, exitTimestamps);
+
+        managerInstance.fullWithdraw(validatorIdsToExit[0]);
+    }
+
     function test_TnftTransferFailsWithMultipleValidators_Fails() public {
         uint256[] memory validatorIds = launch_validator(1, 0, false);
         uint256 validatorId = validatorIds[0];
@@ -1717,6 +1778,60 @@ contract EtherFiNodeTest is TestSetup {
         address tnftOwner = TNFTInstance.ownerOf(validatorId);
         vm.prank(tnftOwner);
         vm.expectRevert("numAssociatedValidators != 1");
+        TNFTInstance.transferFrom(tnftOwner, bob, validatorId);
+
+        uint256[] memory validatorIdsToExit = new uint256[](1);
+        uint32[] memory exitTimestamps = new uint32[](1);
+        exitTimestamps[0] = uint32(block.timestamp);
+
+        // Exit 1 among 4
+        validatorIdsToExit[0] = newValidatorIds[0];
+        _transferTo(etherfiNode, 16 ether);
+        hoax(managerInstance.owner());
+        managerInstance.processNodeExit(validatorIdsToExit, exitTimestamps);
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 4);
+
+        managerInstance.fullWithdraw(validatorIdsToExit[0]);
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 3);
+
+        // Still fails
+        vm.prank(tnftOwner);
+        vm.expectRevert("numAssociatedValidators != 1");
+        TNFTInstance.transferFrom(tnftOwner, bob, validatorId);
+
+        // Exit 1 among 3
+        validatorIdsToExit[0] = newValidatorIds[1];
+        _transferTo(etherfiNode, 16 ether);
+        hoax(managerInstance.owner());
+        managerInstance.processNodeExit(validatorIdsToExit, exitTimestamps);
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 3);
+
+        managerInstance.fullWithdraw(validatorIdsToExit[0]);
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 2);
+
+        // Still fails
+        vm.prank(tnftOwner);
+        vm.expectRevert("numAssociatedValidators != 1");
+        TNFTInstance.transferFrom(tnftOwner, bob, validatorId);
+
+        // Exit 1 among 2
+        validatorIdsToExit[0] = newValidatorIds[2];
+        _transferTo(etherfiNode, 16 ether);
+        hoax(managerInstance.owner());
+        managerInstance.processNodeExit(validatorIdsToExit, exitTimestamps);
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 2);
+
+        // Still fails
+        vm.prank(tnftOwner);
+        vm.expectRevert("numAssociatedValidators != 1");
+        TNFTInstance.transferFrom(tnftOwner, bob, validatorId);
+
+
+        managerInstance.fullWithdraw(validatorIdsToExit[0]);
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
+
+        // Now succeeds
+        vm.prank(tnftOwner);
         TNFTInstance.transferFrom(tnftOwner, bob, validatorId);
     }
 }

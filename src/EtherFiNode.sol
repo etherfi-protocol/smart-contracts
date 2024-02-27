@@ -27,7 +27,7 @@ contract EtherFiNode is IEtherFiNode {
     uint16 public version;
     uint16 private _numAssociatedValidators;
     uint16 public numExitRequestsByTnft;
-    uint16 public numExitedValidators;
+    uint16 public numExitedValidators; // EXITED & but not FULLY_WITHDRAWN
 
     // TODO: see if we really need to maintain the validator Ids on-chain
     mapping(uint256 => uint256) public associatedValidatorIndices;
@@ -114,14 +114,23 @@ contract EtherFiNode is IEtherFiNode {
 
     /// @dev deRegister the validator from the safe
     ///      if there is no more validator associated with this safe, it is recycled to be used again in the withdrawal safe pool
-    function unRegisterValidator(uint256 _validatorId) external onlyEtherFiNodeManagerContract ensureLatestVersion returns (bool) {
-        VALIDATOR_PHASE phase = IEtherFiNodesManager(etherFiNodesManager).phase(_validatorId);
-        require(phase == VALIDATOR_PHASE.FULLY_WITHDRAWN || phase == VALIDATOR_PHASE.NOT_INITIALIZED, "invalid phase");
+    function unRegisterValidator(
+        uint256 _validatorId,
+        IEtherFiNodesManager.ValidatorInfo memory _info
+    ) external onlyEtherFiNodeManagerContract ensureLatestVersion returns (bool) {        
+        // VALIDATOR_PHASE phase = IEtherFiNodesManager(etherFiNodesManager).phase(_validatorId);
+        require(_info.phase == VALIDATOR_PHASE.FULLY_WITHDRAWN || _info.phase == VALIDATOR_PHASE.NOT_INITIALIZED, "invalid phase");
 
         _numAssociatedValidators -= 1;
 
-        if (phase == VALIDATOR_PHASE.FULLY_WITHDRAWN) {
+        // If the phase changed from EXITED to FULLY_WITHDRAWN, decrement the counter
+        if (_info.phase == VALIDATOR_PHASE.FULLY_WITHDRAWN) {
             numExitedValidators -= 1;
+        }
+
+        // If there was an exit request, decrement the number of exit requests
+        if (_info.exitRequestTimestamp != 0) {
+            numExitRequestsByTnft -= 1;
         }
 
         // TODO: see if we really need to maintain the validator Ids on-chain
@@ -468,7 +477,14 @@ contract EtherFiNode is IEtherFiNode {
     function _calculatePrincipals(
         uint256 _balance
     ) internal pure returns (uint256 , uint256) {
-        require(_balance <= 32 ether, "the total principal must be lower than 32 ether");
+        // Check if the ETH principal withdrawn (16 ETH ~ 32 ETH) from beacon is within this contract
+        // If not:
+        //  - case 1: ETH is still in the EigenPod contract. Need to get that out
+        //  - case 2: ETH is withdrawn from the EigenPod contract, but ETH got slashed and the amount is under 16 ETH
+        // Note that the case 2 won't happen until EigenLayer's AVS goes live on mainnet and the slashing mechanism is added
+        // We will need upgrades again once EigenLayer's AVS goes live
+        require(_balance >= 16 ether && _balance <= 32 ether, "INCORRECT_PRINCIPAL_AMOUNT");
+        
         uint256 toBnftPrincipal = (_balance >= 31 ether) ? _balance - 30 ether : 1 ether;
         uint256 toTnftPrincipal = _balance - toBnftPrincipal;
         return (toBnftPrincipal, toTnftPrincipal);
