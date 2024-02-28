@@ -12,9 +12,9 @@ import "../src/interfaces/ILiquifier.sol";
 import "../src/EtherFiNodesManager.sol";
 import "../src/StakingManager.sol";
 import "../src/NodeOperatorManager.sol";
-import "../src/RegulationsManager.sol";
+import "../src/archive/RegulationsManager.sol";
 import "../src/AuctionManager.sol";
-import "../src/ProtocolRevenueManager.sol";
+import "../src/archive/ProtocolRevenueManager.sol";
 import "../src/BNFT.sol";
 import "../src/TNFT.sol";
 import "../src/Treasury.sol";
@@ -37,7 +37,7 @@ import "./Attacker.sol";
 import "../lib/murky/src/Merkle.sol";
 import "./TestERC20.sol";
 
-import "../src/MembershipManagerV0.sol";
+import "../src/archive/MembershipManagerV0.sol";
 import "../src/EtherFiOracle.sol";
 import "../src/EtherFiAdmin.sol";
 

@@ -8,7 +8,7 @@ import "../../src/EtherFiNodesManager.sol";
 import "../../src/EtherFiNode.sol";
 import "../../src/BNFT.sol";
 import "../../src/TNFT.sol";
-import "../../src/ProtocolRevenueManager.sol";
+import "../../src/archive/ProtocolRevenueManager.sol";
 import "../../src/StakingManager.sol";
 import "../../src/AuctionManager.sol";
 import "../../src/UUPSProxy.sol";

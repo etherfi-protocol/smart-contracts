@@ -9,7 +9,7 @@ import "../../src/EETH.sol";
 import "../../src/NFTExchange.sol";
 import "../../src/LiquidityPool.sol";
 import "../../src/helpers/AddressProvider.sol";
-import "../../src/RegulationsManager.sol";
+import "../../src/archive/RegulationsManager.sol";
 import "../../src/UUPSProxy.sol";
 
 contract DeployPhaseOnePointFiveScript is Script {
