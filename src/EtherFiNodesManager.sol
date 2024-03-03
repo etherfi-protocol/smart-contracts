@@ -373,6 +373,27 @@ contract EtherFiNodesManager is
         _unRegisterValidator(_validatorId);
     }
 
+    /// @notice Call the eigenPod contract
+    /// @param data to call eigenPod contract
+    function callEigenPod(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
+        address etherfiNode = etherfiNodeAddress[_validatorId];
+        IEtherFiNode(etherfiNode).callEigenPod{value: msg.value}(data);
+    }
+
+    /// @notice Call the Eigenlayer delegation Manager contract
+    /// @param data to call eigenPod contract
+    function callDelegationManager(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
+        address etherfiNode = etherfiNodeAddress[_validatorId];
+        IEtherFiNode(etherfiNode).callDelegationManager{value: msg.value}(data);
+    }
+
+    /// @notice Call the Eigenlayer EigenPod Manager contract
+    /// @param data to call contract
+    function callEigenPodManager(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
+        address etherfiNode = etherfiNodeAddress[_validatorId];
+        IEtherFiNode(etherfiNode).callEigenPodManager{value: msg.value}(data);
+    }
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  SETTER   --------------------------------------
     //--------------------------------------------------------------------------------------

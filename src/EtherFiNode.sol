@@ -401,7 +401,7 @@ contract EtherFiNode is IEtherFiNode {
 
     /// @notice Call the eigenPod contract
     /// @param data to call eigenPod contract
-    function callEigenPod( bytes calldata data) external payable onlyEtherFiNodeManagerContract {
+    function callEigenPod(bytes calldata data) external payable onlyEtherFiNodeManagerContract {
         _executeCall(address(eigenPod), msg.value, data);
     }
 
@@ -426,7 +426,7 @@ contract EtherFiNode is IEtherFiNode {
     /// @param value amount of ETH to send with call
     /// @param data bytes array to execute
     function _executeCall(address to, uint256 value, bytes memory data) internal {
-        (bool success,) = address(to).call{value: value}(data);
+        (bool success,) = address(to).call{value: value, gas: gasleft()}(data);
         if (!success) revert CallFailed(data);
     }
 

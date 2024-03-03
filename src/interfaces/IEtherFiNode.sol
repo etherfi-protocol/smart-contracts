@@ -75,6 +75,10 @@ interface IEtherFiNode {
     function updateNumExitRequests(uint16 _up, uint16 _down) external;
     function migrateVersion(uint256 _validatorId) external;
 
+    function callEigenPod(bytes calldata data) external payable;
+    function callDelegationManager(bytes calldata data) external payable;
+    function callEigenPodManager(bytes calldata data) external payable;
+
     function withdrawFunds(
         address _treasury,
         uint256 _treasuryAmount,

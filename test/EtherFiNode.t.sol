@@ -132,7 +132,7 @@ contract EtherFiNodeTest is TestSetup {
         initializeTestingFork(MAINNET_FORK);
 
         uint256 bidId = depositAndRegisterValidator(true);
-       safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(bidId)));
+        safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(bidId)));
 
         // simulate 1 eth of already claimed staking rewards and 1 eth of unclaimed restaked rewards
         vm.deal(address(safeInstance.eigenPod()), 1 ether);
@@ -142,7 +142,9 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(address(safeInstance.eigenPod()).balance, 1 ether);
 
         // claim the restaked rewards
-        safeInstance.queueRestakedWithdrawal();
+        // safeInstance.queueRestakedWithdrawal();
+        vm.prank(admin);
+        managerInstance.callEigenPod(bidId, abi.encodeWithSignature("withdrawBeforeRestaking()"));
         vm.roll(block.number + (50400) + 1);
         safeInstance.claimQueuedWithdrawals(1, false);
 
