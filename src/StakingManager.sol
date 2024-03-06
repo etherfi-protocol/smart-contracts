@@ -394,8 +394,10 @@ contract StakingManager is
         require(depositDataRoot == _depositData.depositDataRoot, "WRONG_ROOT");
 
         if(_tNftRecipient == liquidityPoolContract) {
+            // Deposits are split into two (1 ETH, 31 ETH). The latter is by the ether.fi Oracle
             nodesManager.setValidatorPhase(_validatorId, IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL);
         } else {
+            // Deposit 32 ETH at once
             nodesManager.setValidatorPhase(_validatorId, IEtherFiNode.VALIDATOR_PHASE.LIVE);
         }
 
@@ -447,8 +449,6 @@ contract StakingManager is
     /// @param _validatorId the ID of the validator deposit to cancel
     function _cancelDeposit(uint256 _validatorId, address _caller) internal {
         require(bidIdToStakerInfo[_validatorId].staker == _caller, "INCORRECT_CALLER");
-
-        IEtherFiNode.VALIDATOR_PHASE validatorPhase = nodesManager.phase(_validatorId);
 
         bidIdToStakerInfo[_validatorId].staker = address(0);
         nodesManager.unregisterValidator(_validatorId);

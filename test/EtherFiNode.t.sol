@@ -1836,4 +1836,28 @@ contract EtherFiNodeTest is TestSetup {
         vm.prank(tnftOwner);
         TNFTInstance.transferFrom(tnftOwner, bob, validatorId);
     }
+
+    // Zellic-Audit-Issue 1
+    function test_CacnelAfterBeingMarkedExited_fails() public {
+        vm.deal(alice, 10000 ether);
+
+        uint256[] memory validatorIds = launch_validator(1, 0, false);
+        uint32[] memory exitTimestamps = new uint32[](1);
+        exitTimestamps[0] = 1;
+        address etherFiNode = managerInstance.etherfiNodeAddress(validatorIds[0]);
+
+        assertTrue(managerInstance.phase(validatorIds[0]) == IEtherFiNode.VALIDATOR_PHASE.LIVE);
+
+        vm.startPrank(alice);
+        managerInstance.processNodeExit(validatorIds, exitTimestamps);
+        IEtherFiNodesManager.ValidatorInfo memory info = managerInstance.getValidatorInfo(validatorIds[0]);
+        assertTrue(info.phase == IEtherFiNode.VALIDATOR_PHASE.EXITED);
+
+        uint256[] memory bidIds = auctionInstance.createBid{value: 0.2 ether}(2, 0.1 ether);
+        liquidityPoolInstance.deposit{value: 60 ether}();
+        uint256[] memory newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 4 ether}(bidIds, 2);
+
+        vm.expectRevert("INVALID_PHASE_TRANSITION");
+        liquidityPoolInstance.batchCancelDeposit(validatorIds);
+    }
 }

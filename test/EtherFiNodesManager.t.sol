@@ -165,23 +165,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         managerInstance.unregisterValidator(bidId[0]);
     }
 
-    function test_UnregisterValidatorRevertsIfAlreadyUnregistered() public {
-        uint256[] memory validatorsToReset = new uint256[](1);
-        uint32[] memory timeStamps = new uint32[](1);
-        validatorsToReset[0] = bidId[0];
-        timeStamps[0] = uint32(block.timestamp);
-        
-        // need to put the node in a terminal state before it can be unregistered
-        vm.prank(alice);
-        managerInstance.processNodeExit(validatorsToReset, timeStamps);
-
-        vm.startPrank(address(stakingManagerInstance));
-        managerInstance.unregisterValidator(bidId[0]);
-
-        vm.expectRevert(EtherFiNodesManager.NotInstalled.selector);
-        managerInstance.unregisterValidator(bidId[0]);
-    }
-
     function test_getEigenPod() public {
         initializeTestingFork(MAINNET_FORK);
 
@@ -305,7 +288,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     // 2. restaking with previously restaked node
     // 3. normal mode in previously restaked
 
-    function test_UnregisterValidator() public {
+    function test_UnregisterValidatorAfterFullWithdraw_fails() public {
         address node = managerInstance.etherfiNodeAddress(bidId[0]);
         assert(node != address(0));
 
@@ -315,14 +298,16 @@ contract EtherFiNodesManagerTest is TestSetup {
         timeStamps[0] = uint32(block.timestamp);
         
         // need to put the node in a terminal state before it can be unregistered
+        _transferTo(managerInstance.etherfiNodeAddress(validatorsToReset[0]), 32 ether);
         vm.prank(alice);
         managerInstance.processNodeExit(validatorsToReset, timeStamps);
 
-        vm.startPrank(address(stakingManagerInstance));
-        managerInstance.unregisterValidator(bidId[0]);
+        _moveClock(100000);
+        managerInstance.batchFullWithdraw(validatorsToReset);
 
-        node = managerInstance.etherfiNodeAddress(bidId[0]);
-        assertEq(node, address(0));
+        vm.startPrank(address(stakingManagerInstance));
+        vm.expectRevert();
+        managerInstance.unregisterValidator(bidId[0]);
     }
 
     function test_SendExitRequestWorksCorrectly() public {

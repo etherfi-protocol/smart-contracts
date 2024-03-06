@@ -261,8 +261,10 @@ contract EtherFiNodesManager is
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
         require (!IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithdrawals, true), "PENDING_WITHDRAWALS");
+        require(phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.EXITED, "NOT_EXITED");
         
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = getFullWithdrawalPayouts(_validatorId);
+        _setValidatorPhase(etherfiNode, _validatorId, IEtherFiNode.VALIDATOR_PHASE.FULLY_WITHDRAWN); // EXITED -> FULLY_WITHDRAWN
         _unRegisterValidator(_validatorId);
         _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
 
@@ -370,6 +372,9 @@ contract EtherFiNodesManager is
     /// @notice Unset the EtherFiNode contract for the validator ID
     /// @param _validatorId ID of the validator associated
     function unregisterValidator(uint256 _validatorId) external onlyStakingManagerContract {
+        // Called by StakingManager.CancelDeposit
+        // {STAKE_DEPOSITED, WAITING_FOR_APPROVAL} -> {NOT_INITIALIZED}
+        _setValidatorPhase(etherfiNodeAddress[_validatorId], _validatorId, IEtherFiNode.VALIDATOR_PHASE.NOT_INITIALIZED);
         _unRegisterValidator(_validatorId);
     }
 
@@ -480,14 +485,6 @@ contract EtherFiNodesManager is
     function _unRegisterValidator(uint256 _validatorId) internal {
         address safeAddress = etherfiNodeAddress[_validatorId];
         if (safeAddress == address(0)) revert NotInstalled();
-
-        if (phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.EXITED) {
-            // Called by EtherFiNodesManager.fullWithdraw
-            _setValidatorPhase(safeAddress, _validatorId, IEtherFiNode.VALIDATOR_PHASE.FULLY_WITHDRAWN);
-        } else {
-            // Called by StakingManager.CancelDeposit --> EtherFiNodesManager.unregisterValidator
-            _setValidatorPhase(safeAddress, _validatorId, IEtherFiNode.VALIDATOR_PHASE.NOT_INITIALIZED);
-        }
 
         IEtherFiNode(safeAddress).unRegisterValidator(_validatorId, validatorInfos[_validatorId]);
 
