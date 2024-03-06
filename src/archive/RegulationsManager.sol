@@ -5,7 +5,7 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "./interfaces/IRegulationsManager.sol";
+import "../interfaces/IRegulationsManager.sol";
 
 contract RegulationsManager is
     IRegulationsManager,
