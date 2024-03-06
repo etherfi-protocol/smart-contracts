@@ -133,6 +133,7 @@ contract EtherFiNodesManager is
 
             require (msg.sender == tnft.ownerOf(_validatorId), "NOT_TNFT_OWNER");
             require (phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
+            require (!isExitRequested(_validatorId), "ALREADY_ASKED");
 
             _updateEtherFiNode(_validatorId);
 
@@ -151,6 +152,7 @@ contract EtherFiNodesManager is
             address etherfiNode = etherfiNodeAddress[_validatorId];
 
             require (msg.sender == tnft.ownerOf(_validatorId), "NOT_TNFT_OWNER");
+            require (isExitRequested(_validatorId), "NOT_ASKED");
 
             _updateEtherFiNode(_validatorId);
 
@@ -603,7 +605,7 @@ contract EtherFiNodesManager is
     /// @notice Fetches if the node has an exit request
     /// @param _validatorId id of the validator associated to etherfi node
     /// @return bool value based on if an exit request has been sent
-    function isExitRequested(uint256 _validatorId) external view returns (bool) {
+    function isExitRequested(uint256 _validatorId) public view returns (bool) {
         ValidatorInfo memory info = getValidatorInfo(_validatorId);
         return info.exitRequestTimestamp > 0;
     }

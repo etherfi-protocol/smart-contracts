@@ -1860,4 +1860,27 @@ contract EtherFiNodeTest is TestSetup {
         vm.expectRevert("INVALID_PHASE_TRANSITION");
         liquidityPoolInstance.batchCancelDeposit(validatorIds);
     }
+
+    // Zellic-Audit-Issue 2
+    function test_SendingMultipleExitRequests_fails() public {
+        vm.startPrank(TNFTInstance.ownerOf(bidId[0]));
+
+        managerInstance.batchSendExitRequest(_to_uint256_array(bidId[0]));
+
+        vm.expectRevert("ALREADY_ASKED");
+        managerInstance.batchSendExitRequest(_to_uint256_array(bidId[0]));
+    }
+
+    // Zellic-Audit-Issue 2
+    function test_RevertingExitRequest_WhenThereIsNoExitRequest_fails() public {
+        vm.startPrank(TNFTInstance.ownerOf(bidId[0]));
+
+        vm.expectRevert("NOT_ASKED");
+        managerInstance.batchRevertExitRequest(_to_uint256_array(bidId[0]));
+
+        managerInstance.batchSendExitRequest(_to_uint256_array(bidId[0]));
+
+        managerInstance.batchRevertExitRequest(_to_uint256_array(bidId[0]));
+    }
+
 }
