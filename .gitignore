@@ -2,6 +2,7 @@
 cache/
 out/
 
+
 # Ignores development broadcast logs
 !/broadcast
 /broadcast/*
@@ -16,6 +17,7 @@ coverage
 coverage.json
 typechain
 typechain-types
+.vscode
 
 # Hardhat files
 cache
