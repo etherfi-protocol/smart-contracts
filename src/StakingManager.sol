@@ -110,7 +110,7 @@ contract StakingManager is
         require(_candidateBidIds.length >= numberOfDeposits && numberOfDeposits <= maxBatchDepositSize, "Incorrect bids or numVals");
         require(auctionManager.numberOfActiveBids() >= numberOfDeposits, "NOT_ENOUGH_BIDS");
 
-        uint256[] memory processedBidIds = _processDeposits(_candidateBidIds, numberOfDeposits, msg.sender, ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, _enableRestaking, 0);
+        uint256[] memory processedBidIds = _processDeposits(_candidateBidIds, numberOfDeposits, msg.sender, msg.sender, msg.sender, ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, _enableRestaking, 0);
 
         uint256 unMatchedBidCount = numberOfDeposits - processedBidIds.length;
         if (unMatchedBidCount > 0) {
@@ -128,14 +128,14 @@ contract StakingManager is
     /// @param _enableRestaking Eigen layer integration check to identify if restaking is possible
     /// @param _validatorIdToShareWithdrawalSafe the validator ID to use for the withdrawal safe
     /// @return Array of the bid IDs that were processed and assigned
-    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, address _staker, ILiquidityPool.SourceOfFunds _source, bool _enableRestaking, uint256 _validatorIdToShareWithdrawalSafe)
+    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, address _staker, address _tnftHolder, address _bnftHolder, ILiquidityPool.SourceOfFunds _source, bool _enableRestaking, uint256 _validatorIdToShareWithdrawalSafe)
         public whenNotPaused nonReentrant returns (uint256[] memory)
     {
         require(msg.sender == liquidityPoolContract, "Incorrect Caller");
         require(_candidateBidIds.length >= _numberOfValidators && _candidateBidIds.length <= maxBatchDepositSize, "Incorrect bids or numVals");
         require(auctionManager.numberOfActiveBids() >= _numberOfValidators, "NOT_ENOUGH_BIDS");
 
-        return _processDeposits(_candidateBidIds, _numberOfValidators, _staker, _source, _enableRestaking, _validatorIdToShareWithdrawalSafe);
+        return _processDeposits(_candidateBidIds, _numberOfValidators, _staker, _tnftHolder, _bnftHolder, _source, _enableRestaking, _validatorIdToShareWithdrawalSafe);
     }
 
     /// @notice Batch creates validator object, mints NFTs, sets NB variables and deposits into beacon chain
@@ -338,7 +338,9 @@ contract StakingManager is
     function _processDeposits(
         uint256[] calldata _candidateBidIds, 
         uint256 _numberOfDeposits,
-        address _staker, 
+        address _staker,
+        address _tnftHolder,
+        address _bnftHolder,
         ILiquidityPool.SourceOfFunds _source,
         bool _enableRestaking,
         uint256 _validatorIdToShareWithdrawalSafe
@@ -352,15 +354,14 @@ contract StakingManager is
             uint256 bidId = _candidateBidIds[i];
             address bidStaker = bidIdToStakerInfo[bidId].staker;
             address operator = auctionManager.getBidOwner(bidId);
-            bool isActive = auctionManager.isBidActive(bidId);
-            if (bidStaker == address(0) && isActive) {
+            if (bidStaker == address(0) && auctionManager.isBidActive(bidId)) {
                 // Verify the node operator who has been selected is approved to run validators using the specific source of funds.
                 // See more info in Node Operator manager around approving operators for different source types
                 require(_verifyNodeOperator(operator, _source), "INVALID_OPERATOR");
                 auctionManager.updateSelectedBidInformation(bidId);
                 processedBidIds[processedBidIdsCount] = bidId;
                 processedBidIdsCount++;
-                _processDeposit(bidId, _staker, _enableRestaking, _source, _validatorIdToShareWithdrawalSafe);
+                _processDeposit(bidId, _staker, _tnftHolder, _bnftHolder, _enableRestaking, _source, _validatorIdToShareWithdrawalSafe);
             }
         }
 
@@ -424,7 +425,7 @@ contract StakingManager is
 
     /// @notice Update the state of the contract now that a deposit has been made
     /// @param _bidId The bid that won the right to the deposit
-    function _processDeposit(uint256 _bidId, address _staker, bool _enableRestaking, ILiquidityPool.SourceOfFunds _source, uint256 _validatorIdToShareWithdrawalSafe) internal {
+    function _processDeposit(uint256 _bidId, address _staker, address _tnftHolder, address _bnftHolder, bool _enableRestaking, ILiquidityPool.SourceOfFunds _source, uint256 _validatorIdToShareWithdrawalSafe) internal {
         bidIdToStakerInfo[_bidId] = StakerInfo(_staker, _source);
         uint256 validatorId = _bidId;
 
@@ -434,7 +435,7 @@ contract StakingManager is
             etherfiNode = nodesManager.allocateEtherFiNode(_enableRestaking);
         } else {
             require(TNFTInterfaceInstance.ownerOf(_validatorIdToShareWithdrawalSafe) == msg.sender, "WRONG_TNFT_OWNER"); // T-NFT owner must be the same
-            require(BNFTInterfaceInstance.ownerOf(_validatorIdToShareWithdrawalSafe) == _staker, "WRONG_BNFT_OWNER");
+            require(BNFTInterfaceInstance.ownerOf(_validatorIdToShareWithdrawalSafe) == _bnftHolder, "WRONG_BNFT_OWNER");
             require(auctionManager.getBidOwner(_validatorIdToShareWithdrawalSafe) == auctionManager.getBidOwner(_bidId), "WRONG_BID_OWNER");
             etherfiNode = nodesManager.etherfiNodeAddress(_validatorIdToShareWithdrawalSafe);
             nodesManager.updateEtherFiNode(_validatorIdToShareWithdrawalSafe);

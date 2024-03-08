@@ -578,8 +578,10 @@ contract TestSetup is Test {
         // on the contracts already deployed by eigenlayer on those chains
         if (block.chainid == 1) {
             managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), 0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338, 0x7Fe7E9CC0F274d2435AD5d56D5fa73E47F6A23D8, 5);
+            managerInstance.initializeOnUpgrade2(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
         } else {
             managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), 0xa286b84C96aF280a49Fe1F40B9627C2A2827df41, 0x89581561f1F98584F88b0d57c2180fb89225388f, 5);
+            managerInstance.initializeOnUpgrade2(0x1b7b8F6b258f95Cf9596EabB9aa18B62940Eb0a8);
         }
 
         _initOracleReportsforTesting();
@@ -1095,7 +1097,11 @@ contract TestSetup is Test {
         vm.stopPrank();
 
         startHoax(bob);
-        liquidityPoolInstance.deposit{value: 30 ether * _numValidators}();
+        if (_isLpBnftHolder) {
+            liquidityPoolInstance.deposit{value: 32 ether * _numValidators}();
+        } else {
+            liquidityPoolInstance.deposit{value: 30 ether * _numValidators}();
+        }
         vm.stopPrank();
 
         vm.prank(_bnftStaker);

@@ -24,7 +24,7 @@ interface IStakingManager {
     function setEtherFiNodesManagerAddress(address _managerAddress) external;
     function setLiquidityPoolAddress(address _liquidityPoolAddress) external;
     
-    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, address _staker, ILiquidityPool.SourceOfFunds source, bool _enableRestaking, uint256 _validatorIdToCoUseWithdrawalSafe) external returns (uint256[] memory);
+    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, address _staker, address _tnftHolder, address _bnftHolder, ILiquidityPool.SourceOfFunds source, bool _enableRestaking, uint256 _validatorIdToCoUseWithdrawalSafe) external returns (uint256[] memory);
     function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, bool _enableRestaking) external payable returns (uint256[] memory);
 
     function batchRegisterValidators(bytes32 _depositRoot, uint256[] calldata _validatorId, DepositData[] calldata _depositData) external;

@@ -123,6 +123,10 @@ contract EtherFiNodesManager is
         maxEigenlayerWithdrawals = _maxEigenlayerWithdrawals;
     }
 
+    function initializeOnUpgrade2(address _delegationManager) external {
+        delegationManager = IDelegationManager(delegationManager);
+    }
+
     /// @notice Send the request to exit the validators as their T-NFT holder
     ///         The B-NFT holder must serve the request otherwise their bond will get penalized gradually
     /// @param _validatorIds IDs of the validators

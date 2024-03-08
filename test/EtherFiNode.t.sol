@@ -1734,6 +1734,42 @@ contract EtherFiNodeTest is TestSetup {
         managerInstance.forcePartialWithdraw(validatorId);
     }
 
+    function test_lp_as_bnft_holders_cant_mix_up_1() public {
+        uint256[] memory validatorIds = launch_validator(1, 0, false);
+        uint256 validatorId = validatorIds[0];
+        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
+
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
+
+        vm.deal(alice, 10000 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.updateBnftMode(true);
+        uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether * 1}(1, 0.1 ether);
+        liquidityPoolInstance.deposit{value: 32 ether * 1}();
+
+        // launch 1 more validators
+        vm.expectRevert("WRONG_BNFT_OWNER");
+        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(bidIds, 1, validatorId);
+    }
+
+    function test_lp_as_bnft_holders_cant_mix_up_2() public {
+        uint256[] memory validatorIds = launch_validator(1, 0, true);
+        uint256 validatorId = validatorIds[0];
+        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
+
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
+
+        vm.deal(alice, 10000 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.updateBnftMode(false);
+        uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether * 1}(1, 0.1 ether);
+        liquidityPoolInstance.deposit{value: 30 ether * 1}();
+
+        // launch 1 more validators
+        vm.expectRevert("WRONG_BNFT_OWNER");
+        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(bidIds, 1, validatorId);
+    }
+
     function test_PartialWithdrawalOfPrincipalFails() public {
         uint256[] memory validatorIds = launch_validator(1, 0, false);
         uint256 validatorId = validatorIds[0];
