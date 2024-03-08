@@ -24,6 +24,9 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "./libraries/DepositRootGenerator.sol";
 
+import "forge-std/console2.sol";
+
+
 contract StakingManager is
     Initializable,
     IStakingManager,
@@ -151,6 +154,7 @@ contract StakingManager is
         require(_validatorId.length == _depositData.length, "Array lengths must match");
 
         for (uint256 x; x < _validatorId.length; ++x) {
+            require(bidIdToStakerInfo[_validatorId[x]].sourceOfFund == ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, "Wrong flow");
             _registerValidator(_validatorId[x], msg.sender, msg.sender, _depositData[x], msg.sender, 32 ether);
         }
     }
@@ -177,6 +181,7 @@ contract StakingManager is
         require(msg.value == _validatorId.length * 1 ether, "Incorrect amount");
 
         for (uint256 x; x < _validatorId.length; ++x) {
+            require(bidIdToStakerInfo[_validatorId[x]].sourceOfFund == ILiquidityPool.SourceOfFunds.EETH, "Wrong flow");
             _registerValidator(_validatorId[x], _bNftRecipient, _tNftRecipient, _depositData[x], _staker, 1 ether);
         }
     }
@@ -389,6 +394,7 @@ contract StakingManager is
         address _staker,
         uint256 _depositAmount
     ) internal {
+        console.log(bidIdToStakerInfo[_validatorId].staker, _staker);
         require(bidIdToStakerInfo[_validatorId].staker == _staker, "INCORRECT_CALLER");
         bytes memory withdrawalCredentials = nodesManager.getWithdrawalCredentials(_validatorId);
         bytes32 depositDataRoot = depositRootGenerator.generateDepositRoot(_depositData.publicKey, _depositData.signature, withdrawalCredentials, _depositAmount);

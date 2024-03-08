@@ -1919,4 +1919,51 @@ contract EtherFiNodeTest is TestSetup {
         managerInstance.batchRevertExitRequest(_to_uint256_array(bidId[0]));
     }
 
+    function test_wrong_staker_on_fails_1() public {
+        vm.deal(alice, 100000 ether);
+
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 32 ether * 1}();
+
+        registerAsBnftHolder(alice);
+        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFSHash, 5);
+
+        {
+            uint256[] memory bidId1 = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
+            uint256[] memory newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(bidId1, 1);
+        }
+
+        uint256[] memory bidId1 = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
+        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidId1, false);
+
+        (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(bidId1);
+
+        vm.expectRevert("Wrong flow");
+        liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, bidId1, depositDataArray, depositDataRootsForApproval, sig);
+        vm.stopPrank();
+    }
+
+    function test_wrong_staker_on_fails_2() public {
+        vm.deal(alice, 100000 ether);
+
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 32 ether * 1}();
+
+        registerAsBnftHolder(alice);
+        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFSHash, 5);
+
+        uint256[] memory bidId1 = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
+        liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(bidId1, 1);
+
+        uint256[] memory bidId2 = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
+        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidId2, false);
+
+        (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(bidId2);
+
+        vm.expectRevert("Wrong flow");
+        liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, bidId2, depositDataArray, depositDataRootsForApproval, sig);
+        vm.stopPrank();
+    }
+
+
 }
