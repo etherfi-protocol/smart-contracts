@@ -140,9 +140,7 @@ contract EtherFiNodesManager is
             require (!isExitRequested(_validatorId), "ALREADY_ASKED");
 
             _updateEtherFiNode(_validatorId);
-
-            IEtherFiNode(etherfiNode).updateNumExitRequests(1, 0);
-            validatorInfos[_validatorId].exitRequestTimestamp = uint32(block.timestamp);
+            _updateExitRequestTimestamp(_validatorId, etherfiNode, uint32(block.timestamp));
 
             emit NodeExitRequested(_validatorId);
         }
@@ -159,9 +157,7 @@ contract EtherFiNodesManager is
             require (isExitRequested(_validatorId), "NOT_ASKED");
 
             _updateEtherFiNode(_validatorId);
-
-            IEtherFiNode(etherfiNode).updateNumExitRequests(0, 1);
-            validatorInfos[_validatorId].exitRequestTimestamp = 0;
+            _updateExitRequestTimestamp(_validatorId, etherfiNode, 0);
 
             emit NodeExitRequestReverted(_validatorId);
         }
@@ -481,9 +477,21 @@ contract EtherFiNodesManager is
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
 
+    function _updateExitRequestTimestamp(uint256 _validatorId, address _etherfiNode, uint32 _exitRequestTimestamp) internal {
+        IEtherFiNode(_etherfiNode).updateNumExitRequests(_exitRequestTimestamp > 0 ? 1 : 0, _exitRequestTimestamp == 0 ? 1 : 0);
+        validatorInfos[_validatorId].exitRequestTimestamp = _exitRequestTimestamp;
+    }
+
     function _setValidatorPhase(address _node, uint256 _validatorId, IEtherFiNode.VALIDATOR_PHASE _newPhase) internal {
         IEtherFiNode(_node).validatePhaseTransition(phase(_validatorId), _newPhase);
         validatorInfos[_validatorId].phase = _newPhase;
+
+        if (_newPhase == IEtherFiNode.VALIDATOR_PHASE.LIVE) {
+            IEtherFiNode(_node).updateNumberOfAssociatedValidators(1, 0);
+        }
+        if (_newPhase == IEtherFiNode.VALIDATOR_PHASE.FULLY_WITHDRAWN) {
+            IEtherFiNode(_node).updateNumberOfAssociatedValidators(0, 1);
+        }
 
         emit PhaseChanged(_validatorId, _newPhase);
     }

@@ -99,9 +99,6 @@ contract EtherFiNode is IEtherFiNode {
     function registerValidator(uint256 _validatorId, bool _enableRestaking) public onlyEtherFiNodeManagerContract ensureLatestVersion {
         require(numAssociatedValidators() == 0 || isRestakingEnabled == _enableRestaking, "restaking status mismatch");
 
-        // One more validator to it
-        _numAssociatedValidators += 1;
-
         // TODO: see if we really need to maintain the validator Ids on-chain
         {
             uint256 index = associatedValidatorIds.length;
@@ -123,14 +120,15 @@ contract EtherFiNode is IEtherFiNode {
     ) external onlyEtherFiNodeManagerContract ensureLatestVersion returns (bool) {        
         require(_info.phase == VALIDATOR_PHASE.FULLY_WITHDRAWN || _info.phase == VALIDATOR_PHASE.NOT_INITIALIZED, "invalid phase");
 
-        // Unregister it
-        _numAssociatedValidators -= 1;
-
         // If the phase changed from EXITED to FULLY_WITHDRAWN, decrement the counter
-        if (_info.phase == VALIDATOR_PHASE.FULLY_WITHDRAWN) numExitedValidators -= 1;
+        if (_info.phase == VALIDATOR_PHASE.FULLY_WITHDRAWN) {
+            numExitedValidators -= 1;
+        }
 
         // If there was an exit request, decrement the number of exit requests
-        if (_info.exitRequestTimestamp != 0) numExitRequestsByTnft -= 1;
+        if (_info.exitRequestTimestamp != 0) {
+            numExitRequestsByTnft -= 1;
+        }
 
         // TODO: see if we really need to maintain the validator Ids on-chain
         {
@@ -156,6 +154,11 @@ contract EtherFiNode is IEtherFiNode {
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
+
+    function updateNumberOfAssociatedValidators(uint16 _up, uint16 _down) external onlyEtherFiNodeManagerContract ensureLatestVersion {
+        if (_up > 0) _numAssociatedValidators += _up;
+        if (_down > 0) _numAssociatedValidators -= _down;
+    }
 
     function updateNumExitRequests(uint16 _up, uint16 _down) external onlyEtherFiNodeManagerContract ensureLatestVersion {
         if (_up > 0) numExitRequestsByTnft += _up;

@@ -52,6 +52,7 @@ interface IEtherFiNode {
     function getFullWithdrawalPayouts(IEtherFiNodesManager.ValidatorInfo memory _info, IEtherFiNodesManager.RewardsSplit memory _SRsplits) external view returns (uint256, uint256, uint256, uint256);
     function version() external view returns (uint16);
     function numExitRequestsByTnft() external view returns (uint16);
+    function numExitedValidators() external view returns (uint16);
     function associatedValidatorIds(uint256 _index) external view returns (uint256);
     function validatePhaseTransition(VALIDATOR_PHASE _currentPhase, VALIDATOR_PHASE _newPhase) external pure returns (bool);
 
@@ -67,6 +68,7 @@ interface IEtherFiNode {
     function isRestakingEnabled() external view returns (bool);
     function processNodeExit() external;
     function queueRestakedWithdrawal() external;
+    function updateNumberOfAssociatedValidators(uint16 _increment, uint16 _decrement) external;
     function registerValidator(uint256 _validatorId, bool _enableRestaking) external;
     function unRegisterValidator(uint256 _validatorId, IEtherFiNodesManager.ValidatorInfo memory _info) external returns (bool);
     function splitBalanceInExecutionLayer() external view returns (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter);
