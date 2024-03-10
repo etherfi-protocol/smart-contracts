@@ -290,6 +290,9 @@ contract EtherFiNodesManager is
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
 
+        // sweep rewards from eigenPod if any queued withdrawals are ready to be claimed
+        IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithdrawals, false);
+
         // distribute the rewards payouts. It does not revert even if the safe's balance >= 16 ether
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, false);
         _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
@@ -522,6 +525,7 @@ contract EtherFiNodesManager is
         // When there is any pending exit request from T-NFT holder,
         // the corresponding valiator must exit
         require(IEtherFiNode(etherfiNode).numExitRequestsByTnft() == 0, "PENDING_EXIT_REQUEST");
+        require(IEtherFiNode(etherfiNode).numExitedValidators() == 0, "NEED_FULL_WITHDRAWAL");
 
         // Once the balance of the safe goes over 16 ETH, 
         // it is impossible to tell if that ETH is from staking rewards or from principal (16 ETH ~ 32 ETH)

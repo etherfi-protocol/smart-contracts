@@ -1606,6 +1606,7 @@ contract EtherFiNodeTest is TestSetup {
         assertTrue(managerInstance.phase(validatorIds[0]) == IEtherFiNode.VALIDATOR_PHASE.LIVE);
         assertTrue(managerInstance.phase(newValidatorIds[0]) == IEtherFiNode.VALIDATOR_PHASE.LIVE);
         assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 2);
+        assertEq(IEtherFiNode(etherfiNode).numExitedValidators(), 0);
 
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(validatorId);
         assertEq(toOperator, 1 ether * 5 / (2 * 100));
@@ -1647,6 +1648,7 @@ contract EtherFiNodeTest is TestSetup {
         managerInstance.processNodeExit(validatorIds, exitTimestamps);
 
         assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 2);
+        assertEq(IEtherFiNode(etherfiNode).numExitedValidators(), 1);
 
         // 16 ether was withdrawn from Beacon after the full slashing
         // 1 ether which were accrued rewards for both validators are used to cover the loss in `validatorId`
@@ -1665,7 +1667,7 @@ contract EtherFiNodeTest is TestSetup {
 
         vm.expectRevert("NOT_LIVE");
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(validatorIds[0]);
-        vm.expectRevert("MUST_EXIT");
+        vm.expectRevert("NEED_FULL_WITHDRAWAL");
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(newValidatorIds[0]);
 
         vm.expectRevert("NOT_EXITED");
@@ -1845,7 +1847,33 @@ contract EtherFiNodeTest is TestSetup {
         }
     }
 
-    function test_ForcedPartialWithdrawal_succeeds() public {
+    function test_ForcePartialWithdraw_claimQueuedWithdrawals_suceeds() public {
+        initializeTestingFork(MAINNET_FORK);
+        uint256 validatorId = depositAndRegisterValidator(true);
+        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
+        address eigenPod = IEtherFiNode(etherfiNode).eigenPod();
+
+        // simulate 1 eth of already claimed staking rewards and 1 eth of unclaimed restaked rewards
+        vm.deal(eigenPod, 1 ether);
+        vm.deal(etherfiNode, 1 ether);
+
+        assertEq(address(etherfiNode).balance, 1 ether);
+        assertEq(address(eigenPod).balance, 1 ether);
+
+        // queueRestakedWithdrawal
+        IEtherFiNode(etherfiNode).queueRestakedWithdrawal();
+
+        // 7 days passed
+        vm.roll(block.number + (50400) + 1);
+
+        vm.prank(admin);
+        managerInstance.forcePartialWithdraw(validatorId);
+
+        assertEq(address(eigenPod).balance, 0 ether);
+        assertEq(address(etherfiNode).balance, 0 ether);
+    }
+
+    function test_ForcedPartialWithdrawalWithExitedValidator_fails() public {
         uint256[] memory validatorIds = launch_validator(1, 0, false);
         uint256 validatorId = validatorIds[0];
         address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
@@ -1862,10 +1890,32 @@ contract EtherFiNodeTest is TestSetup {
 
         uint256[] memory validatorIdsToExit = new uint256[](1);
         uint32[] memory exitTimestamps = new uint32[](1);
-        exitTimestamps[0] = uint32(block.timestamp);
-
-        // Exit 1 among 4
         validatorIdsToExit[0] = newValidatorIds[0];
+        exitTimestamps[0] = uint32(block.timestamp);
+    
+        _transferTo(etherfiNode, 16 ether);
+
+        hoax(managerInstance.owner());
+        managerInstance.processNodeExit(validatorIdsToExit, exitTimestamps);
+
+        vm.expectRevert("NEED_FULL_WITHDRAWAL");
+        vm.prank(alice);
+        managerInstance.forcePartialWithdraw(validatorId);
+    }
+
+    function test_ForcedPartialWithdrawal_succeeds() public {
+        uint256[] memory validatorIds = launch_validator(1, 0, false);
+        uint256 validatorId = validatorIds[0];
+        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
+
+        assertTrue(managerInstance.phase(validatorIds[0]) == IEtherFiNode.VALIDATOR_PHASE.LIVE);
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
+
+        // launch 3 more validators
+        uint256[] memory newValidatorIds = launch_validator(3, validatorId, false);
+        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 4);
+
+        // Earned >= 16 ether
         _transferTo(etherfiNode, 16 ether);
 
         vm.expectRevert("NOT_ADMIN");
