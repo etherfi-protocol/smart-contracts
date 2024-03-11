@@ -757,7 +757,7 @@ contract StakingManagerTest is TestSetup {
         assertEq(address(auctionInstance).balance, 3 ether);
         
         bytes32 root = _getDepositRoot();
-        vm.expectRevert("Array lengths must match");
+        vm.expectRevert("WRONG_PARAMS");
         stakingManagerInstance.batchRegisterValidators(root, 
             bidIdArray,
             depositDataArray
@@ -891,7 +891,7 @@ contract StakingManagerTest is TestSetup {
         assertEq(address(auctionInstance).balance, 3 ether);
 
         root = _getDepositRoot();
-        vm.expectRevert("Too many validators");
+        vm.expectRevert("WRONG_PARAMS");
         stakingManagerInstance.batchRegisterValidators(root, 
             bidIdArray,
             depositDataArray
@@ -1295,21 +1295,21 @@ contract StakingManagerTest is TestSetup {
 
     function test_CanOnlySetAddressesOnce() public {
         vm.startPrank(owner);
-        vm.expectRevert("Address already set");
+        vm.expectRevert("ALREADY_SET");
         stakingManagerInstance.registerEtherFiNodeImplementationContract(
             address(0)
         );
 
-        vm.expectRevert("Address already set");
+        vm.expectRevert("ALREADY_SET");
         stakingManagerInstance.registerTNFTContract(address(0));
 
-        vm.expectRevert("Address already set");
+        vm.expectRevert("ALREADY_SET");
         stakingManagerInstance.registerBNFTContract(address(0));
 
-        vm.expectRevert("Address already set");
+        vm.expectRevert("ALREADY_SET");
         stakingManagerInstance.setLiquidityPoolAddress(address(0));
 
-        vm.expectRevert("Address already set");
+        vm.expectRevert("ALREADY_SET");
         stakingManagerInstance.setEtherFiNodesManagerAddress(address(0));
     }
 

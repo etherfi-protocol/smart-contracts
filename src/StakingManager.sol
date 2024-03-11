@@ -135,7 +135,7 @@ contract StakingManager is
         public whenNotPaused nonReentrant returns (uint256[] memory)
     {
         require(msg.sender == liquidityPoolContract, "Incorrect Caller");
-        require(_candidateBidIds.length >= _numberOfValidators && _candidateBidIds.length <= maxBatchDepositSize, "Incorrect bids or numVals");
+        require(_candidateBidIds.length >= _numberOfValidators && _candidateBidIds.length <= maxBatchDepositSize, "WRONG_PARAMS");
         require(auctionManager.numberOfActiveBids() >= _numberOfValidators, "NOT_ENOUGH_BIDS");
 
         return _processDeposits(_candidateBidIds, _numberOfValidators, _staker, _tnftHolder, _bnftHolder, _source, _enableRestaking, _validatorIdToShareWithdrawalSafe);
@@ -150,8 +150,7 @@ contract StakingManager is
         uint256[] calldata _validatorId,
         DepositData[] calldata _depositData
     ) public whenNotPaused nonReentrant verifyDepositState(_depositRoot) {
-        require(_validatorId.length <= maxBatchDepositSize, "Too many validators");
-        require(_validatorId.length == _depositData.length, "Array lengths must match");
+        require(_validatorId.length == _depositData.length && _validatorId.length <= maxBatchDepositSize, "WRONG_PARAMS");
 
         for (uint256 x; x < _validatorId.length; ++x) {
             require(bidIdToStakerInfo[_validatorId[x]].sourceOfFund == ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, "Wrong flow");
@@ -176,9 +175,7 @@ contract StakingManager is
         address _staker
     ) public payable whenNotPaused nonReentrant verifyDepositState(_depositRoot) {
         require(msg.sender == liquidityPoolContract, "INCORRECT_CALLER");
-        require(_validatorId.length <= maxBatchDepositSize, "Too many validators");
-        require(_validatorId.length == _depositData.length, "Array lengths must match");
-        require(msg.value == _validatorId.length * 1 ether, "Incorrect amount");
+        require(_validatorId.length <= maxBatchDepositSize && _validatorId.length == _depositData.length && msg.value == _validatorId.length * 1 ether, "WRONG_PARAMS");
 
         for (uint256 x; x < _validatorId.length; ++x) {
             require(bidIdToStakerInfo[_validatorId[x]].sourceOfFund == ILiquidityPool.SourceOfFunds.EETH, "Wrong flow");
@@ -207,7 +204,7 @@ contract StakingManager is
             bytes memory withdrawalCredentials = nodesManager.getWithdrawalCredentials(_validatorId[x]);
             bytes32 beaconChainDepositRoot = depositRootGenerator.generateDepositRoot(_pubKey[x], _signature[x], withdrawalCredentials, 31 ether);
             bytes32 registeredDataRoot = _depositDataRootApproval[x];
-            require(beaconChainDepositRoot == registeredDataRoot, "Incorrect deposit data root");
+            require(beaconChainDepositRoot == registeredDataRoot, "WRONG_DEPOSIT_DATA_ROOT");
             depositContractEth2.deposit{value: 31 ether}(_pubKey[x], withdrawalCredentials, _signature[x], beaconChainDepositRoot);
         }
     }
@@ -269,15 +266,15 @@ contract StakingManager is
     /// @notice Sets the EtherFi node manager contract
     /// @param _nodesManagerAddress address of the manager contract being set
     function setEtherFiNodesManagerAddress(address _nodesManagerAddress) public onlyOwner {
-        require(address(nodesManager) == address(0), "Address already set");
-        
+        require(address(nodesManager) == address(0), "ALREADY_SET");
+
         nodesManager = IEtherFiNodesManager(_nodesManagerAddress);
     }
 
     /// @notice Sets the Liquidity pool contract address
     /// @param _liquidityPoolAddress address of the liquidity pool contract being set
     function setLiquidityPoolAddress(address _liquidityPoolAddress) public onlyOwner {
-        require(liquidityPoolContract == address(0), "Address already set");
+        require(liquidityPoolContract == address(0), "ALREADY_SET");
 
         liquidityPoolContract = _liquidityPoolAddress;
     }
@@ -289,7 +286,7 @@ contract StakingManager is
     }
 
     function registerEtherFiNodeImplementationContract(address _etherFiNodeImplementationContract) public onlyOwner {
-        require(implementationContract == address(0), "Address already set");
+        require(implementationContract == address(0), "ALREADY_SET");
         require(_etherFiNodeImplementationContract != address(0), "ZERO_ADDRESS");
 
         implementationContract = _etherFiNodeImplementationContract;
@@ -299,7 +296,7 @@ contract StakingManager is
     /// @notice Instantiates the TNFT interface
     /// @param _tnftAddress Address of the TNFT contract
     function registerTNFTContract(address _tnftAddress) public onlyOwner {
-        require(address(TNFTInterfaceInstance) == address(0), "Address already set");
+        require(address(TNFTInterfaceInstance) == address(0), "ALREADY_SET");
 
         TNFTInterfaceInstance = ITNFT(_tnftAddress);
     }
@@ -307,7 +304,7 @@ contract StakingManager is
     /// @notice Instantiates the BNFT interface
     /// @param _bnftAddress Address of the BNFT contract
     function registerBNFTContract(address _bnftAddress) public onlyOwner {
-        require(address(BNFTInterfaceInstance) == address(0), "Address already set");
+        require(address(BNFTInterfaceInstance) == address(0), "ALREADY_SET");
 
         BNFTInterfaceInstance = IBNFT(_bnftAddress);
     }

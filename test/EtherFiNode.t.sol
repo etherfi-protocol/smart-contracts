@@ -1459,6 +1459,7 @@ contract EtherFiNodeTest is TestSetup {
 
         assertTrue(managerInstance.phase(validatorIds[0]) == IEtherFiNode.VALIDATOR_PHASE.LIVE);
         assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether);
 
         // One validator of id `validatorId` with accrued rewards amount in the safe = 1 ether
         vm.deal(etherfiNode, 1 ether);
@@ -1478,7 +1479,8 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(toBnft, 2 ether + 1 ether * (90 * 3) / (100 * 32));
         assertEq(toTreasury, 1 ether * 5 / 100);
 
-        liquidityPoolInstance.deposit{value: 32 ether * 1}();
+        liquidityPoolInstance.deposit{value: 30 ether * 1}();
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether + 30 ether);
 
         vm.startPrank(alice);
         registerAsBnftHolder(alice);
@@ -1488,6 +1490,7 @@ contract EtherFiNodeTest is TestSetup {
         // 
         uint256[] memory newValidatorIds = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
         liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(newValidatorIds, 1, validatorId);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether + 30 ether);
 
         // Confirm that the num of associated validators still 1
         assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
@@ -1519,6 +1522,7 @@ contract EtherFiNodeTest is TestSetup {
 
         // Confirm that the num of associated validators still 1
         assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether + 30 ether);
 
         // Confirm that the {getRewardsPayouts, calculateTVL} remain the smae
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(validatorId);
@@ -1545,6 +1549,7 @@ contract EtherFiNodeTest is TestSetup {
         liquidityPoolInstance.batchApproveRegistration(newValidatorIds, pubKey, sig);
 
         assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 2);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether + 30 ether);
 
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(validatorId);
         assertEq(toOperator, 1 ether * 5 / (2 * 100));
