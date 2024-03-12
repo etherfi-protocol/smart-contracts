@@ -51,6 +51,7 @@ interface IEtherFiNodesManager {
 
     function batchQueueRestakedWithdrawal(uint256[] calldata _validatorIds) external;
     function batchSendExitRequest(uint256[] calldata _validatorIds) external;
+    function batchRevertExitRequest(uint256[] calldata _validatorIds) external;
     function batchFullWithdraw(uint256[] calldata _validatorIds) external;
     function batchPartialWithdraw(uint256[] calldata _validatorIds) external;
     function fullWithdraw(uint256 _validatorId) external;

@@ -227,17 +227,9 @@ contract StakingManager is
     function batchCancelDepositAsBnftHolder(uint256[] calldata _validatorIds, address _caller) public whenNotPaused nonReentrant {
         require(msg.sender == liquidityPoolContract, "INCORRECT_CALLER");
 
-        uint32 numberOfEethValidators;
-        uint32 numberOfEtherFanValidators;
         for (uint256 x; x < _validatorIds.length; ++x) { 
             ILiquidityPool.SourceOfFunds source = bidIdToStakerInfo[_validatorIds[x]].sourceOfFund;
             require(source != ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, "Wrong flow");
-
-            if (source == ILiquidityPool.SourceOfFunds.EETH){
-                numberOfEethValidators++;
-            } else if (source == ILiquidityPool.SourceOfFunds.ETHER_FAN) {
-                numberOfEtherFanValidators++;
-            }
 
             if(nodesManager.phase(_validatorIds[x]) == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) {
                 uint256 nftTokenId = _validatorIds[x];

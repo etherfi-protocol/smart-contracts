@@ -244,7 +244,7 @@ contract TestSetup is Test {
         if (forkEnum == MAINNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
             addressProviderInstance = AddressProvider(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
-            owner = 0xF155a2632Ef263a6A382028B3B33feb29175b8A5;
+            owner = addressProviderInstance.owner();
             admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
         } else if (forkEnum == TESTNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("GOERLI_RPC_URL")));
@@ -254,6 +254,8 @@ contract TestSetup is Test {
         } else {
             revert("Unimplemented fork");
         }
+
+        depGen = new DepositDataGeneration();
 
         //  grab all addresses from address manager and override global testing variables
         regulationsManagerInstance = RegulationsManager(addressProviderInstance.getContractAddress("RegulationsManager"));
@@ -275,11 +277,31 @@ contract TestSetup is Test {
         withdrawRequestNFTInstance = WithdrawRequestNFT(addressProviderInstance.getContractAddress("WithdrawRequestNFT"));
 
 
+        assert(address(regulationsManagerInstance) != address(0x0));
+        assert(address(managerInstance) != address(0x0));
+        assert(address(liquidityPoolInstance) != address(0x0));
+        assert(address(eETHInstance) != address(0x0));
+        assert(address(weEthInstance) != address(0x0));
+        assert(address(membershipManagerV1Instance) != address(0x0));
+        assert(address(membershipNftInstance) != address(0x0));
+        assert(address(nftExchangeInstance) != address(0x0));
+        assert(address(auctionInstance) != address(0x0));
+        assert(address(stakingManagerInstance) != address(0x0));
+        assert(address(TNFTInstance) != address(0x0));
+        assert(address(BNFTInstance) != address(0x0));
+        assert(address(treasuryInstance) != address(0x0));
+        assert(address(nodeOperatorManagerInstance) != address(0x0));
+        assert(address(node) != address(0x0));
+        assert(address(earlyAdopterPoolInstance) != address(0x0));
+     // TODO: doesn't currently exist on mainnet. But re-add this check after deploy
+     //   assert(address(withdrawRequestNFTInstance) != address(0x0));
+    }
+
+    function setUpLiquifier(uint8 forkEnum) internal {
+        
         vm.startPrank(owner);
             
         if (forkEnum == MAINNET_FORK) {
-            depGen = new DepositDataGeneration();
-
             liquifierImplementation = new Liquifier();
             liquifierProxy = new UUPSProxy(address(liquifierImplementation), "");
             liquifierInstance = Liquifier(payable(liquifierProxy));
@@ -322,26 +344,6 @@ contract TestSetup is Test {
         }
 
         vm.stopPrank();
-        
-
-        assert(address(regulationsManagerInstance) != address(0x0));
-        assert(address(managerInstance) != address(0x0));
-        assert(address(liquidityPoolInstance) != address(0x0));
-        assert(address(eETHInstance) != address(0x0));
-        assert(address(weEthInstance) != address(0x0));
-        assert(address(membershipManagerV1Instance) != address(0x0));
-        assert(address(membershipNftInstance) != address(0x0));
-        assert(address(nftExchangeInstance) != address(0x0));
-        assert(address(auctionInstance) != address(0x0));
-        assert(address(stakingManagerInstance) != address(0x0));
-        assert(address(TNFTInstance) != address(0x0));
-        assert(address(BNFTInstance) != address(0x0));
-        assert(address(treasuryInstance) != address(0x0));
-        assert(address(nodeOperatorManagerInstance) != address(0x0));
-        assert(address(node) != address(0x0));
-        assert(address(earlyAdopterPoolInstance) != address(0x0));
-     // TODO: doesn't currently exist on mainnet. But re-add this check after deploy
-     //   assert(address(withdrawRequestNFTInstance) != address(0x0));
     }
 
     function setUpTests() internal {
@@ -1119,6 +1121,7 @@ contract TestSetup is Test {
         bytes[] memory sig = new bytes[](_numValidators);
 
         for (uint256 i = 0; i < newValidators.length; i++) {
+            console.log("1");
             address safe = managerInstance.getWithdrawalSafeAddress(
                 newValidators[i]
             );
@@ -1128,6 +1131,7 @@ contract TestSetup is Test {
                 managerInstance.generateWithdrawalCredentials(safe),
                 1 ether
             );
+            console.log("2");
 
             rootForApproval = depGen.generateDepositRoot(
                 hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
@@ -1135,6 +1139,7 @@ contract TestSetup is Test {
                 managerInstance.generateWithdrawalCredentials(safe),
                 31 ether
             );
+            console.log("3");
 
             depositDataRootsForApproval[i] = rootForApproval;
 
@@ -1144,10 +1149,13 @@ contract TestSetup is Test {
                 depositDataRoot: root,
                 ipfsHashForEncryptedValidatorKey: "test_ipfs"
             });
+            console.log("4");
 
             sig[i] = hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65";
             pubKey[i] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
         }
+
+        console.log("XX");
 
         vm.startPrank(_bnftStaker);
         bytes32 depositRoot = zeroRoot;
@@ -1191,6 +1199,12 @@ contract TestSetup is Test {
         address newImpl = address(new StakingManager());
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeTo(newImpl);
+    }
+
+    function _upgrade_liquidity_pool_contract() internal {
+        address newImpl = address(new LiquidityPool());
+        vm.prank(liquidityPoolInstance.owner());
+        liquidityPoolInstance.upgradeTo(newImpl);
     }
 
     function _to_uint256_array(uint256 _value) internal pure returns (uint256[] memory) {

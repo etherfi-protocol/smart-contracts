@@ -222,7 +222,7 @@ contract EtherFiNode is IEtherFiNode {
     function getRewardsPayouts(
         uint32 _exitRequestTimestamp,
         IEtherFiNodesManager.RewardsSplit memory _splits
-    ) public view ensureLatestVersion returns (uint256, uint256, uint256, uint256) {
+    ) public view returns (uint256, uint256, uint256, uint256) {
         uint256 _balance = withdrawableBalanceInExecutionLayer();
         return _calculateSplits(_balance, _splits);
     }

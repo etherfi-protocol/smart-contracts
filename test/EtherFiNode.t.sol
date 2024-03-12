@@ -10,6 +10,7 @@ import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 
 import "forge-std/console2.sol";
 
+
 contract EtherFiNodeTest is TestSetup {
 
     // from EtherFiNodesManager.sol
@@ -1704,11 +1705,38 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(toTreasury, 0);
     }
 
+    function test_mainnet_fullWithdraw_after_upgrade() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        _upgrade_etherfi_nodes_manager_contract();
+        _upgrade_etherfi_node_contract();
+        _upgrade_staking_manager_contract();
+
+        uint256 validatorId = 2285;
+
+        vm.deal(managerInstance.getEigenPod(validatorId), 16 ether);
+
+        uint256[] memory validatorIds = new uint256[](1);
+        uint32[] memory exitTimestamps = new uint32[](1);
+        validatorIds[0] = validatorId;
+        exitTimestamps[0] = uint32(block.timestamp);
+        hoax(managerInstance.owner());
+        managerInstance.processNodeExit(validatorIds, exitTimestamps);
+
+        vm.expectRevert("PENDING_WITHDRAWALS");
+        managerInstance.fullWithdraw(validatorId);
+
+        _moveClock(7 * 7200);
+
+        managerInstance.fullWithdraw(validatorId);
+    }
+
     function test_mainnet_partialWithdraw_after_upgrade() public {
         initializeRealisticFork(MAINNET_FORK);
 
         _upgrade_etherfi_nodes_manager_contract();
         _upgrade_etherfi_node_contract();
+        _upgrade_staking_manager_contract();
 
         uint256 validatorId = 2285;
         managerInstance.batchQueueRestakedWithdrawal(_to_uint256_array(validatorId));
@@ -1743,6 +1771,7 @@ contract EtherFiNodeTest is TestSetup {
         _upgrade_etherfi_nodes_manager_contract();
         _upgrade_etherfi_node_contract();
         _upgrade_staking_manager_contract();
+        _upgrade_liquidity_pool_contract();
 
         address etherFiNode = managerInstance.unusedWithdrawalSafes(managerInstance.getUnusedWithdrawalSafesLength() - 1);
 
@@ -1757,12 +1786,49 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(IEtherFiNode(newEtherFiNode).numAssociatedValidators(), 1);        
     }
 
+
+
+    function test_mainnet_view_functions_with_version0_safe() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        _upgrade_etherfi_nodes_manager_contract();
+        _upgrade_etherfi_node_contract();
+        _upgrade_staking_manager_contract();
+        _upgrade_liquidity_pool_contract();
+
+        uint256 validatorId = 2285;
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
+        IEtherFiNode node = IEtherFiNode(nodeAddress);
+
+        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = managerInstance.getRewardsPayouts(validatorId);
+        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 32 ether);
+        assertTrue(managerInstance.phase(validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE);
+        assertEq(node.version(), 0);
+        assertEq(node.numAssociatedValidators(), 1);
+        assertEq(node.numExitRequestsByTnft(), 0);
+        assertEq(node.numExitedValidators(), 0);
+        assertEq(node.isRestakingEnabled(), true);
+
+        uint256[] memory validatorIdsToExit = new uint256[](1);
+        uint32[] memory exitTimestamps = new uint32[](1);
+        validatorIdsToExit[0] = validatorId;
+        exitTimestamps[0] = uint32(block.timestamp);
+
+        _transferTo(nodeAddress, 32 ether);
+
+        hoax(managerInstance.owner());
+        managerInstance.processNodeExit(validatorIdsToExit, exitTimestamps);
+        managerInstance.getFullWithdrawalPayouts(validatorId);
+        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 0 ether);
+    }
+
     function test_mainnet_launch_validator_with_reserved_version1_safe() public {
         initializeRealisticFork(MAINNET_FORK);
 
         _upgrade_etherfi_nodes_manager_contract();
         _upgrade_etherfi_node_contract();
         _upgrade_staking_manager_contract();
+        _upgrade_liquidity_pool_contract();
 
         managerInstance.createUnusedWithdrawalSafe(1, true);
         address etherFiNode = managerInstance.unusedWithdrawalSafes(managerInstance.getUnusedWithdrawalSafesLength() - 1);
@@ -1786,6 +1852,7 @@ contract EtherFiNodeTest is TestSetup {
         _upgrade_etherfi_nodes_manager_contract();
         _upgrade_etherfi_node_contract();
         _upgrade_staking_manager_contract();
+        _upgrade_liquidity_pool_contract();
 
         uint256 validatorId = 2285;
         address etherFiNode = managerInstance.etherfiNodeAddress(validatorId);
@@ -1799,6 +1866,31 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(etherFiNode, newEtherFiNode);
         assertEq(IEtherFiNode(etherFiNode).version(), 1);
         assertEq(IEtherFiNode(etherFiNode).numAssociatedValidators(), 2);
+    }
+
+    // Zellic audit - Cancel validator deposit with version 0 safe fails
+    function test_mainnet_cancel_intermediate_validator() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        address operator = 0x1876ECcb4eDd3ed95051c64824430fc7f1C8763c;
+        vm.deal(operator, 100 ether);
+        vm.startPrank(operator);
+        uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether * 1}(1, 0.1 ether);
+        vm.stopPrank();
+        
+        address bnftStaker = 0x5836152812568244760ba356B5f3838Aa5B672e0;
+        vm.startPrank(bnftStaker);
+        uint256[] memory validatorIds = liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(bidIds, 1);
+        vm.stopPrank();
+
+        _upgrade_etherfi_nodes_manager_contract();
+        _upgrade_etherfi_node_contract();
+        _upgrade_staking_manager_contract();
+        _upgrade_liquidity_pool_contract();
+
+        vm.startPrank(bnftStaker);
+        liquidityPoolInstance.batchCancelDeposit(validatorIds);
+        vm.stopPrank();
     }
 
     function test_ExitOneAmongMultipleValidators() public {
@@ -1850,6 +1942,10 @@ contract EtherFiNodeTest is TestSetup {
 
             assertEq(safe, etherfiNode);
         }
+
+        // Cannot call `batchRevertExitRequest` with the exited validator
+        vm.expectRevert();
+        managerInstance.batchRevertExitRequest(validatorIdsToExit);
     }
 
     function test_ForcePartialWithdraw_claimQueuedWithdrawals_suceeds() public {

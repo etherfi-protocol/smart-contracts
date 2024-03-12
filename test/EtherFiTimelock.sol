@@ -185,6 +185,7 @@ contract TimelockTest is TestSetup {
         );
 
         // Timelock should be able to give control back to a normal account
+        address newOwner = 0xF155a2632Ef263a6A382028B3B33feb29175b8A5;
         bytes memory transferOwershipData = hex"f2fde38b000000000000000000000000f155a2632ef263a6a382028b3b33feb29175b8a5";
         vm.prank(admin);
         tl.schedule(
@@ -204,6 +205,6 @@ contract TimelockTest is TestSetup {
             0,                        // optional predecessor
             0                         // optional salt
         );
-        assertEq(managerInstance.owner(), owner);
+        assertEq(managerInstance.owner(), newOwner);
     }
 }

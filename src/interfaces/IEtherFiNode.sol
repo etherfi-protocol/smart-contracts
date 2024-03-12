@@ -45,14 +45,14 @@ interface IEtherFiNode {
 
     // VIEW functions
     function numAssociatedValidators() external view returns (uint256);
-    function calculateTVL(uint256 _beaconBalance, IEtherFiNodesManager.ValidatorInfo memory _info, IEtherFiNodesManager.RewardsSplit memory _SRsplits, bool _onlyWithdrawable) external view returns (uint256, uint256, uint256, uint256);
+    function numExitRequestsByTnft() external view returns (uint16);
+    function numExitedValidators() external view returns (uint16);
+    function version() external view returns (uint16);
     function eigenPod() external view returns (address);
+    function calculateTVL(uint256 _beaconBalance, IEtherFiNodesManager.ValidatorInfo memory _info, IEtherFiNodesManager.RewardsSplit memory _SRsplits, bool _onlyWithdrawable) external view returns (uint256, uint256, uint256, uint256);
     function getNonExitPenalty(uint32 _tNftExitRequestTimestamp, uint32 _bNftExitRequestTimestamp) external view returns (uint256);
     function getRewardsPayouts(uint32 _exitRequestTimestamp, IEtherFiNodesManager.RewardsSplit memory _splits) external view returns (uint256, uint256, uint256, uint256);
     function getFullWithdrawalPayouts(IEtherFiNodesManager.ValidatorInfo memory _info, IEtherFiNodesManager.RewardsSplit memory _SRsplits) external view returns (uint256, uint256, uint256, uint256);
-    function version() external view returns (uint16);
-    function numExitRequestsByTnft() external view returns (uint16);
-    function numExitedValidators() external view returns (uint16);
     function associatedValidatorIds(uint256 _index) external view returns (uint256);
     function validatePhaseTransition(VALIDATOR_PHASE _currentPhase, VALIDATOR_PHASE _newPhase) external pure returns (bool);
 

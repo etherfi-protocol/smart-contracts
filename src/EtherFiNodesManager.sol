@@ -155,6 +155,7 @@ contract EtherFiNodesManager is
 
             require (msg.sender == tnft.ownerOf(_validatorId), "NOT_TNFT_OWNER");
             require (isExitRequested(_validatorId), "NOT_ASKED");
+            require (phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
 
             _updateEtherFiNode(_validatorId);
             _updateExitRequestTimestamp(_validatorId, etherfiNode, 0);
@@ -358,6 +359,10 @@ contract EtherFiNodesManager is
             phase: IEtherFiNode(etherfiNode).DEPRECATED_phase()
         });
         IEtherFiNode(etherfiNode).migrateVersion(_validatorId);
+
+        if (_validatorId != 0) {
+            IEtherFiNode(etherfiNode).updateNumberOfAssociatedValidators(1, 0);
+        }
     }
 
     /// @notice Registers the validator with the EtherFiNode contract
@@ -379,6 +384,7 @@ contract EtherFiNodesManager is
     function unregisterValidator(uint256 _validatorId) external onlyStakingManagerContract {
         // Called by StakingManager.CancelDeposit
         // {STAKE_DEPOSITED, WAITING_FOR_APPROVAL} -> {NOT_INITIALIZED}
+        _updateEtherFiNode(_validatorId);
         _setValidatorPhase(etherfiNodeAddress[_validatorId], _validatorId, IEtherFiNode.VALIDATOR_PHASE.NOT_INITIALIZED);
         _unRegisterValidator(_validatorId);
     }
