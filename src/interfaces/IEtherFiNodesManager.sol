@@ -23,28 +23,28 @@ interface IEtherFiNodesManager {
     }
 
     // VIEW functions
-    function etherfiNodeAddress(uint256 _validatorId) external view returns (address);
-
-    function calculateTVL(uint256 _validatorId, uint256 _beaconBalance) external view returns (uint256, uint256, uint256, uint256);
     function delayedWithdrawalRouter() external view returns (IDelayedWithdrawalRouter);
     function eigenPodManager() external view returns (IEigenPodManager);
     function delegationManager() external view returns (IDelegationManager);
-    function generateWithdrawalCredentials(address _address) external view returns (bytes memory);
+    function treasuryContract() external view returns (address);
+
+    function etherfiNodeAddress(uint256 _validatorId) external view returns (address);
+    function calculateTVL(uint256 _validatorId, uint256 _beaconBalance) external view returns (uint256, uint256, uint256, uint256);
     function getFullWithdrawalPayouts(uint256 _validatorId) external view returns (uint256, uint256, uint256, uint256);
     function getNonExitPenalty(uint256 _validatorId) external view returns (uint256);
     function getRewardsPayouts(uint256 _validatorId) external view returns (uint256, uint256, uint256, uint256);
     function getWithdrawalCredentials(uint256 _validatorId) external view returns (bytes memory);
     function getValidatorInfo(uint256 _validatorId) external view returns (ValidatorInfo memory);
+    function numAssociatedValidators(uint256 _validatorId) external view returns (uint256);
+    function phase(uint256 _validatorId) external view returns (IEtherFiNode.VALIDATOR_PHASE phase);
+
+    function generateWithdrawalCredentials(address _address) external view returns (bytes memory);
     function nonExitPenaltyDailyRate() external view returns (uint64);
     function nonExitPenaltyPrincipal() external view returns (uint64);
     function numberOfValidators() external view returns (uint64);
-    function numAssociatedValidators(uint256 _validatorId) external view returns (uint256);
-    function phase(uint256 _validatorId) external view returns (IEtherFiNode.VALIDATOR_PHASE phase);
     function maxEigenlayerWithdrawals() external view returns (uint8);
 
     function admins(address _address) external view returns (bool);
-    function treasuryContract() external view returns (address);
-
 
     // Non-VIEW functions    
     function updateEtherFiNode(uint256 _validatorId) external;

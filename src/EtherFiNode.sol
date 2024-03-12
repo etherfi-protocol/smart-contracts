@@ -539,7 +539,7 @@ contract EtherFiNode is IEtherFiNode {
     // We don't need to worry about unbounded array length because anyone can call claimQueuedWithdrawals()
     // with a variable number of withdrawals to process if the queue ever became to large.
     // This function can go away once we have a proof based withdrawal system.
-    function hasOutstandingEigenLayerWithdrawals() public view returns (bool) {
+    function hasOutstaingEigenPodWithdrawalsQueuedBeforeExit() public view returns (bool) {
         IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
         IDelayedWithdrawalRouter.DelayedWithdrawal[] memory unclaimedWithdrawals = delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this));
         for (uint256 i = 0; i < unclaimedWithdrawals.length; i++) {
@@ -589,7 +589,7 @@ contract EtherFiNode is IEtherFiNode {
         }
 
         if (_checkIfHasOutstandingEigenLayerWithdrawals) {
-            return hasOutstandingEigenLayerWithdrawals();
+            return hasOutstaingEigenPodWithdrawalsQueuedBeforeExit();
         } else {
             return false;
         }

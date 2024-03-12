@@ -74,6 +74,9 @@ contract EtherFiNodesManager is
     event NodeEvicted(uint256 _validatorId);
     event PhaseChanged(uint256 indexed _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
 
+    event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
+    event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
+
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
@@ -155,8 +158,8 @@ contract EtherFiNodesManager is
             address etherfiNode = etherfiNodeAddress[_validatorId];
 
             require (msg.sender == tnft.ownerOf(_validatorId), "NOT_TNFT_OWNER");
-            require (isExitRequested(_validatorId), "NOT_ASKED");
             require (phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
+            require (isExitRequested(_validatorId), "NOT_ASKED");
 
             _updateEtherFiNode(_validatorId);
             _updateExitRequestTimestamp(_validatorId, etherfiNode, 0);
@@ -213,6 +216,8 @@ contract EtherFiNodesManager is
         // distribute the rewards payouts. It reverts if the safe's balance >= 16 ether
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
         _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
+
+        emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
     }
 
     function batchPartialWithdraw(uint256[] calldata _validatorIds) external whenNotPaused{
@@ -248,6 +253,8 @@ contract EtherFiNodesManager is
             payouts[1] += toTnft;
             payouts[2] += toBnft;
             payouts[3] += toTreasury;
+
+            emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
         }
 
         _sendFund(operator, payouts[0]);
@@ -274,6 +281,8 @@ contract EtherFiNodesManager is
 
         tnft.burnFromWithdrawal(_validatorId);
         bnft.burnFromWithdrawal(_validatorId);
+
+        emit FullWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
     }
 
     /// @notice Process the full withdrawal for multiple validators
@@ -298,6 +307,8 @@ contract EtherFiNodesManager is
         // distribute the rewards payouts. It does not revert even if the safe's balance >= 16 ether
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, false);
         _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
+
+        emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
     }
 
     /// @notice Once the Oracle observes that the validator is being slashed, it marks the validator as being slashed
@@ -524,14 +535,15 @@ contract EtherFiNodesManager is
     // it performs some sanity-checks on the validator status, safe balance
     function _getTotalRewardsPayoutsFromSafe(
         uint256 _validatorId,
-        bool _checkMaxBalance
+        bool _checkExit
     ) internal view returns (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) {
         require(phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
         address etherfiNode = etherfiNodeAddress[_validatorId];
 
         // When there is any pending exit request from T-NFT holder,
         // the corresponding valiator must exit
-        require(IEtherFiNode(etherfiNode).numExitRequestsByTnft() == 0, "PENDING_EXIT_REQUEST");
+        // Only the admin can bypass it to provide the liquidity to the liquidity pool
+        require(!_checkExit || IEtherFiNode(etherfiNode).numExitRequestsByTnft() == 0, "PENDING_EXIT_REQUEST");
         require(IEtherFiNode(etherfiNode).numExitedValidators() == 0, "NEED_FULL_WITHDRAWAL");
 
         // Once the balance of the safe goes over 16 ETH, 
@@ -544,7 +556,7 @@ contract EtherFiNodesManager is
         // 
         // The boolean flag '_checkMaxBalance' is FALSE only when this is called for 'forcePartialWithdraw'
         // where the Admin handles the case when the balance goes over 16 ETH
-        require(!_checkMaxBalance || address(etherfiNode).balance < 16 ether, "MUST_EXIT");
+        require(!_checkExit || address(etherfiNode).balance < 16 ether, "MUST_EXIT");
 
         return IEtherFiNode(etherfiNode).getRewardsPayouts(
             validatorInfos[_validatorId].exitRequestTimestamp,
