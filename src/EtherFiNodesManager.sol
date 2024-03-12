@@ -123,7 +123,8 @@ contract EtherFiNodesManager is
         maxEigenlayerWithdrawals = _maxEigenlayerWithdrawals;
     }
 
-    function initializeOnUpgrade2(address _delegationManager) external {
+    function initializeOnUpgrade2(address _delegationManager) external onlyOwner {
+        require(address(delegationManager) == address(0), "ALREADY_SET");
         delegationManager = IDelegationManager(delegationManager);
     }
 

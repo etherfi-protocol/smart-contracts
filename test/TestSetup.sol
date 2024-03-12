@@ -1121,7 +1121,6 @@ contract TestSetup is Test {
         bytes[] memory sig = new bytes[](_numValidators);
 
         for (uint256 i = 0; i < newValidators.length; i++) {
-            console.log("1");
             address safe = managerInstance.getWithdrawalSafeAddress(
                 newValidators[i]
             );
@@ -1131,7 +1130,6 @@ contract TestSetup is Test {
                 managerInstance.generateWithdrawalCredentials(safe),
                 1 ether
             );
-            console.log("2");
 
             rootForApproval = depGen.generateDepositRoot(
                 hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
@@ -1139,7 +1137,6 @@ contract TestSetup is Test {
                 managerInstance.generateWithdrawalCredentials(safe),
                 31 ether
             );
-            console.log("3");
 
             depositDataRootsForApproval[i] = rootForApproval;
 
@@ -1149,13 +1146,10 @@ contract TestSetup is Test {
                 depositDataRoot: root,
                 ipfsHashForEncryptedValidatorKey: "test_ipfs"
             });
-            console.log("4");
 
             sig[i] = hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65";
             pubKey[i] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
         }
-
-        console.log("XX");
 
         vm.startPrank(_bnftStaker);
         bytes32 depositRoot = zeroRoot;
@@ -1243,6 +1237,31 @@ contract TestSetup is Test {
         // The ether.fi admin withdraws the ETH from the liquifier contract to the liquidity pool contract
         liquifierInstance.withdrawEther();
         vm.stopPrank();
+    }
+
+    function _prepareForDepositData(uint256[] memory _validatorIds, uint256 _depositAmount) internal returns (IStakingManager.DepositData[] memory) {
+        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](_validatorIds.length);
+        bytes[] memory pubKey = new bytes[](_validatorIds.length);
+
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            address etherFiNode = managerInstance.etherfiNodeAddress(_validatorIds[i]);
+            pubKey[i] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
+            bytes32 root = depGen.generateDepositRoot(
+                pubKey[i],
+                hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
+                managerInstance.generateWithdrawalCredentials(etherFiNode),
+                _depositAmount
+            );
+
+            depositDataArray[i] = IStakingManager.DepositData({
+                publicKey: pubKey[i],
+                signature: hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
+                depositDataRoot: root,
+                ipfsHashForEncryptedValidatorKey: "test_ipfs"
+            });
+        }
+
+        return depositDataArray;
     }
 
     function _prepareForValidatorRegistration(uint256[] memory _validatorIds) internal returns (IStakingManager.DepositData[] memory, bytes32[] memory, bytes[] memory, bytes[] memory pubKey) {

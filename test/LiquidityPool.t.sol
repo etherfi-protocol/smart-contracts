@@ -1226,4 +1226,31 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
     }
 
+    function test_Zellic_PoC() public {
+        setUpBnftHolders();
+
+        vm.deal(alice, 1000 ether);
+        vm.deal(henry, 1000 ether);
+
+        vm.startPrank(alice);
+        uint256[] memory bidIds = auctionInstance.createBid{value: 0.2 ether}(2, 0.1 ether);
+        liquidityPoolInstance.deposit{value: 60 ether}();
+        vm.stopPrank();
+
+        vm.startPrank(henry);
+        uint256[] memory x = new uint256[](1);
+        x[0] = bidIds[0];
+        uint256[] memory newValidators1 = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(x, 1);
+
+        IStakingManager.DepositData[] memory depositDataArray1 = _prepareForDepositData(newValidators1, 32 ether);
+
+        uint256[] memory x1 = new uint256[](1);
+        x1[0] = bidIds[1];
+        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(x1,false);
+
+        vm.expectRevert("Wrong flow");
+        stakingManagerInstance.batchRegisterValidators(zeroRoot, newValidators1, depositDataArray1);
+
+        vm.stopPrank();
+    }
 }

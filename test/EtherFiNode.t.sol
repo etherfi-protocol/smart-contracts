@@ -2215,6 +2215,7 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(IEtherFiNode(etherfiNode).numExitRequestsByTnft(), 0);
     }
 
+    // Zellic-Audit-Issue 4
     function test_wrong_staker_on_fails_1() public {
         vm.deal(alice, 100000 ether);
 
@@ -2239,6 +2240,7 @@ contract EtherFiNodeTest is TestSetup {
         vm.stopPrank();
     }
 
+    // Zellic-Audit-Issue 4
     function test_wrong_staker_on_fails_2() public {
         vm.deal(alice, 100000 ether);
 
@@ -2254,10 +2256,20 @@ contract EtherFiNodeTest is TestSetup {
         uint256[] memory bidId2 = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
         stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidId2, false);
 
-        (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(bidId2);
+        // Confirm that the LP flow can't affect the 32 ETH staker flow
+        {
+            (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(bidId2);
+            vm.expectRevert("Wrong flow");
+            liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, bidId2, depositDataArray, depositDataRootsForApproval, sig);
+        }
 
-        vm.expectRevert("Wrong flow");
-        liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, bidId2, depositDataArray, depositDataRootsForApproval, sig);
+        // Confirm that the 32ETH flow can't affect the LP flow
+        {
+            IStakingManager.DepositData[] memory depositDataArray = _prepareForDepositData(bidId1, 32 ether);
+            vm.expectRevert("Wrong flow");
+            stakingManagerInstance.batchRegisterValidators(zeroRoot, bidId1, depositDataArray);
+        }
+
         vm.stopPrank();
     }
 
