@@ -68,14 +68,15 @@ interface IEtherFiNode {
     function isRestakingEnabled() external view returns (bool);
     function processNodeExit() external;
     function queueRestakedWithdrawal() external;
-    function updateNumberOfAssociatedValidators(uint16 _increment, uint16 _decrement) external;
+    function updateNumberOfAssociatedValidators(uint16 _up, uint16 _down) external;
+    function updateNumExitedValidators(uint16 _up, uint16 _down) external;
     function registerValidator(uint256 _validatorId, bool _enableRestaking) external;
     function unRegisterValidator(uint256 _validatorId, IEtherFiNodesManager.ValidatorInfo memory _info) external returns (bool);
     function splitBalanceInExecutionLayer() external view returns (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter);
     function totalBalanceInExecutionLayer() external view returns (uint256);
     function withdrawableBalanceInExecutionLayer() external view returns (uint256);
     function updateNumExitRequests(uint16 _up, uint16 _down) external;
-    function migrateVersion(uint256 _validatorId) external;
+    function migrateVersion(uint256 _validatorId, IEtherFiNodesManager.ValidatorInfo memory _info) external;
 
     function callEigenPod(bytes calldata data) external payable;
     function callDelegationManager(bytes calldata data) external payable;

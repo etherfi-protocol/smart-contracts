@@ -64,7 +64,7 @@ contract EtherFiNode is IEtherFiNode {
     // if `_validatorId` != 0, the v0 safe contract currently is tied to the validator with its id = `_validatorId`
     // this function updates it to v1 so that it can be used by multiple validators 
     // else `_validatorId` == 0, this safe is not tied to any validator yet
-    function migrateVersion(uint256 _validatorId) external onlyEtherFiNodeManagerContract {
+    function migrateVersion(uint256 _validatorId, IEtherFiNodesManager.ValidatorInfo memory _info) external onlyEtherFiNodeManagerContract {
         if (version != 0) return;
         
         DEPRECATED_exitRequestTimestamp = 0;
@@ -78,6 +78,20 @@ contract EtherFiNode is IEtherFiNode {
         if (_validatorId != 0) {
             require(_numAssociatedValidators == 0, "ALREADY_INITIALIZED");
             registerValidator(_validatorId, false);
+
+            updateNumberOfAssociatedValidators(1, 0);
+
+            // Meaning that the validator got `sendExitRequest` before the safe version 1 release
+            // EFM._updateExitRequestTimestamp (which updates 'numExitRequestsByTnft') was not called. So, process that here
+            if (_info.exitRequestTimestamp > 0) {
+                updateNumExitRequests(1, 0);
+            }
+
+            // Meaning that the validator got `processNodeExit` before the safe version 1 release
+            // EFM._setValidatorPhase (which updates 'numExitedValidators') was not called. So, process that here
+            if (_info.exitTimestamp > 0) {
+                updateNumExitedValidators(1, 0);
+            }
         }
     }
 
@@ -155,20 +169,23 @@ contract EtherFiNode is IEtherFiNode {
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
 
-    function updateNumberOfAssociatedValidators(uint16 _up, uint16 _down) external onlyEtherFiNodeManagerContract ensureLatestVersion {
+    function updateNumberOfAssociatedValidators(uint16 _up, uint16 _down) public onlyEtherFiNodeManagerContract ensureLatestVersion {
         if (_up > 0) _numAssociatedValidators += _up;
         if (_down > 0) _numAssociatedValidators -= _down;
     }
 
-    function updateNumExitRequests(uint16 _up, uint16 _down) external onlyEtherFiNodeManagerContract ensureLatestVersion {
+    function updateNumExitRequests(uint16 _up, uint16 _down) public onlyEtherFiNodeManagerContract ensureLatestVersion {
         if (_up > 0) numExitRequestsByTnft += _up;
         if (_down > 0) numExitRequestsByTnft -= _down;
     }
 
+    function updateNumExitedValidators(uint16 _up, uint16 _down) public onlyEtherFiNodeManagerContract ensureLatestVersion {
+        if (_up > 0) numExitedValidators += _up;
+        if (_down > 0) numExitedValidators -= _down;
+    }
+
     /// @notice process the exit
     function processNodeExit() external onlyEtherFiNodeManagerContract ensureLatestVersion {
-        numExitedValidators += 1;
-
         if (isRestakingEnabled) {
             // eigenLayer bookeeping
             // we need to mark a block from which we know all beaconchain eth has been moved to the eigenPod
@@ -303,7 +320,7 @@ contract EtherFiNode is IEtherFiNode {
     function getFullWithdrawalPayouts(
         IEtherFiNodesManager.ValidatorInfo memory _info,
         IEtherFiNodesManager.RewardsSplit memory _SRsplits
-    ) public view onlyEtherFiNodeManagerContract ensureLatestVersion returns (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) {
+    ) public view onlyEtherFiNodeManagerContract returns (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) {
         if (version == 0 || numAssociatedValidators() == 1) {
             return calculateTVL(0, _info, _SRsplits, true);
         } else if (version == 1) {

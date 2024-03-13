@@ -296,11 +296,21 @@ contract EtherFiNodesManagerTest is TestSetup {
         uint32[] memory timeStamps = new uint32[](1);
         validatorsToReset[0] = bidId[0];
         timeStamps[0] = uint32(block.timestamp);
-        
+        uint256 validatorId = validatorsToReset[0];
+
         // need to put the node in a terminal state before it can be unregistered
         _transferTo(managerInstance.etherfiNodeAddress(validatorsToReset[0]), 32 ether);
         vm.prank(alice);
         managerInstance.processNodeExit(validatorsToReset, timeStamps);
+
+        assertTrue(managerInstance.phase(validatorId) == IEtherFiNode.VALIDATOR_PHASE.EXITED);
+        assertEq(IEtherFiNode(node).version(), 1);
+        assertEq(IEtherFiNode(node).numAssociatedValidators(), 1);
+        assertEq(managerInstance.numAssociatedValidators(validatorId), 1);
+        assertEq(managerInstance.getNonExitPenalty(validatorId), 0);
+        assertEq(IEtherFiNode(node).numExitRequestsByTnft(), 0);
+        assertEq(IEtherFiNode(node).numExitedValidators(), 1);
+        assertEq(IEtherFiNode(node).isRestakingEnabled(), false);
 
         _moveClock(100000);
         managerInstance.batchFullWithdraw(validatorsToReset);

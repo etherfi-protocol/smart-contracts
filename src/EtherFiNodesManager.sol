@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -127,7 +128,7 @@ contract EtherFiNodesManager is
     }
 
     function initializeOnUpgrade2(address _delegationManager) external onlyOwner {
-        require(address(delegationManager) == address(0), "ALREADY_SET");
+        if (address(delegationManager) != address(0)) return;
         delegationManager = IDelegationManager(delegationManager);
     }
 
@@ -141,7 +142,7 @@ contract EtherFiNodesManager is
 
             require (msg.sender == tnft.ownerOf(_validatorId), "NOT_TNFT_OWNER");
             require (phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
-            require (!isExitRequested(_validatorId), "ALREADY_ASKED");
+            require (!isExitRequested(_validatorId), "ASKED");
 
             _updateEtherFiNode(_validatorId);
             _updateExitRequestTimestamp(_validatorId, etherfiNode, uint32(block.timestamp));
@@ -157,9 +158,10 @@ contract EtherFiNodesManager is
             uint256 _validatorId = _validatorIds[i];
             address etherfiNode = etherfiNodeAddress[_validatorId];
 
-            require (msg.sender == tnft.ownerOf(_validatorId), "NOT_TNFT_OWNER");
-            require (phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
-            require (isExitRequested(_validatorId), "NOT_ASKED");
+            // require (msg.sender == tnft.ownerOf(_validatorId), "NOT_TNFT_OWNER");
+            // require (phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
+            // require (isExitRequested(_validatorId), "NOT_ASKED");
+            require(msg.sender == tnft.ownerOf(_validatorId) && phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE && isExitRequested(_validatorId), "INVALID");
 
             _updateEtherFiNode(_validatorId);
             _updateExitRequestTimestamp(_validatorId, etherfiNode, 0);
@@ -235,7 +237,7 @@ contract EtherFiNodesManager is
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             uint256 _validatorId = _validatorIds[i];
-            require (auctionManager.getBidOwner(_validatorId) == operator && tnft.ownerOf(_validatorId) == tnftOwner && bnft.ownerOf(_validatorId) == bnftOwner, "INVALID_OWNERS");
+            require (auctionManager.getBidOwner(_validatorId) == operator && tnft.ownerOf(_validatorId) == tnftOwner && bnft.ownerOf(_validatorId) == bnftOwner, "INVALID");
 
             address etherfiNode = etherfiNodeAddress[_validatorId];
             _updateEtherFiNode(_validatorId);
@@ -353,10 +355,11 @@ contract EtherFiNodesManager is
         }
 
         // make sure the safe is migrated to v1
-        IEtherFiNode(withdrawalSafeAddress).migrateVersion(0);
+        ValidatorInfo memory info = ValidatorInfo(0, 0, 0, IEtherFiNode.VALIDATOR_PHASE.NOT_INITIALIZED);
+        IEtherFiNode(withdrawalSafeAddress).migrateVersion(0, info);
     }
 
-    function updateEtherFiNode(uint256 _validatorId) external onlyStakingManagerContract {
+    function updateEtherFiNode(uint256 _validatorId) external {
         _updateEtherFiNode(_validatorId);
     }
 
@@ -370,11 +373,8 @@ contract EtherFiNodesManager is
             exitTimestamp: IEtherFiNode(etherfiNode).DEPRECATED_exitTimestamp(),
             phase: IEtherFiNode(etherfiNode).DEPRECATED_phase()
         });
-        IEtherFiNode(etherfiNode).migrateVersion(_validatorId);
 
-        if (_validatorId != 0) {
-            IEtherFiNode(etherfiNode).updateNumberOfAssociatedValidators(1, 0);
-        }
+        IEtherFiNode(etherfiNode).migrateVersion(_validatorId, validatorInfos[_validatorId]);
     }
 
     /// @notice Registers the validator with the EtherFiNode contract
@@ -512,6 +512,9 @@ contract EtherFiNodesManager is
         }
         if (_newPhase == IEtherFiNode.VALIDATOR_PHASE.FULLY_WITHDRAWN) {
             IEtherFiNode(_node).updateNumberOfAssociatedValidators(0, 1);
+        }
+        if (_newPhase == IEtherFiNode.VALIDATOR_PHASE.EXITED) {
+            IEtherFiNode(_node).updateNumExitedValidators(1, 0);
         }
 
         emit PhaseChanged(_validatorId, _newPhase);
