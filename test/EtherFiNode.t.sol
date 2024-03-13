@@ -1877,8 +1877,17 @@ contract EtherFiNodeTest is TestSetup {
         _upgrade_staking_manager_contract();
         _upgrade_liquidity_pool_contract();
 
+        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = (0, 0, 0, 0);
+
+        // The below two function calls PANIC!!!
+        // - getFullWithdrawalPayouts
+        // - calculateTVL
         // The protocol must make sure that the safe of the valdiators that got exited before the contracts upgrades
         // has to be updated to the version 1 before being interacted
+
+        // managerInstance.getFullWithdrawalPayouts(validatorId);
+        // (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 0 ether);
+
         managerInstance.updateEtherFiNode(validatorId);
 
         assertTrue(managerInstance.phase(validatorId) == IEtherFiNode.VALIDATOR_PHASE.EXITED);
@@ -1889,8 +1898,6 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(node.numExitRequestsByTnft(), 0);
         assertEq(node.numExitedValidators(), 1);
         assertEq(node.isRestakingEnabled(), true);
-
-        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = (0, 0, 0, 0);
 
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 0 ether);
         assertEq(toOperator, 1 ether * 0 / 100);
@@ -1927,7 +1934,7 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(node.version(), 1);
     }
 
-    function test_mainnet_view_functions_with_version0_safe() public {
+    function test_mainnet_view_functions_with_version0_safe_exited_after_upgrade() public {
         initializeRealisticFork(MAINNET_FORK);
 
         _upgrade_etherfi_nodes_manager_contract();
@@ -1977,6 +1984,15 @@ contract EtherFiNodeTest is TestSetup {
 
         hoax(managerInstance.owner());
         managerInstance.processNodeExit(validatorIdsToExit, exitTimestamps);
+
+        assertTrue(managerInstance.phase(validatorId) == IEtherFiNode.VALIDATOR_PHASE.EXITED);
+        assertEq(node.version(), 1);
+        assertEq(node.numAssociatedValidators(), 1);
+        assertEq(managerInstance.numAssociatedValidators(validatorId), 1);
+        assertEq(managerInstance.getNonExitPenalty(validatorId), 0);
+        assertEq(node.numExitRequestsByTnft(), 0);
+        assertEq(node.numExitedValidators(), 1);
+        assertEq(node.isRestakingEnabled(), true);
 
         vm.expectRevert("INSUFFICIENT_BALANCE");
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getFullWithdrawalPayouts(validatorId);
