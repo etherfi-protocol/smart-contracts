@@ -260,7 +260,7 @@ contract StakingManagerTest is TestSetup {
 
         uint256[] memory bidIdArray = new uint256[](0);
 
-        vm.expectRevert("Incorrect bids or numVals");
+        vm.expectRevert("WRONG_PARAMS");
         stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
             bidIdArray,
             false
@@ -1295,21 +1295,21 @@ contract StakingManagerTest is TestSetup {
 
     function test_CanOnlySetAddressesOnce() public {
         vm.startPrank(owner);
-        vm.expectRevert("ALREADY_SET");
+        vm.expectRevert(StakingManager.ALREADY_SET.selector);
         stakingManagerInstance.registerEtherFiNodeImplementationContract(
             address(0)
         );
 
-        vm.expectRevert("ALREADY_SET");
+        vm.expectRevert(StakingManager.ALREADY_SET.selector);
         stakingManagerInstance.registerTNFTContract(address(0));
 
-        vm.expectRevert("ALREADY_SET");
+        vm.expectRevert(StakingManager.ALREADY_SET.selector);
         stakingManagerInstance.registerBNFTContract(address(0));
 
-        vm.expectRevert("ALREADY_SET");
+        vm.expectRevert(StakingManager.ALREADY_SET.selector);
         stakingManagerInstance.setLiquidityPoolAddress(address(0));
 
-        vm.expectRevert("ALREADY_SET");
+        vm.expectRevert(StakingManager.ALREADY_SET.selector);
         stakingManagerInstance.setEtherFiNodesManagerAddress(address(0));
     }
 
