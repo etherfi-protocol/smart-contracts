@@ -43,7 +43,7 @@ contract StakingManager is
     address public implementationContract;
     address public liquidityPoolContract;
 
-    bool public DEPRECATED_whitelistEnabled;
+    bool public isFullStakeEnabled;
     bytes32 public merkleRoot;
 
     ITNFT public TNFTInterfaceInstance;
@@ -85,6 +85,7 @@ contract StakingManager is
     function initialize(address _auctionAddress, address _depositContractAddress) external initializer {
         stakeAmount = 32 ether;
         maxBatchDepositSize = 25;
+        isFullStakeEnabled = true;
 
         __Pausable_init();
         __Ownable_init();
@@ -107,6 +108,7 @@ contract StakingManager is
     function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, bool _enableRestaking)
         external payable whenNotPaused nonReentrant returns (uint256[] memory)
     {
+        require(isFullStakeEnabled, "DEPRECATED");
         require(msg.value > 0 && msg.value % stakeAmount == 0 && msg.value / stakeAmount > 0, "WRONG_STAKING_AMOUNT");
 
         uint256 numberOfDeposits = msg.value / stakeAmount;
@@ -150,6 +152,7 @@ contract StakingManager is
         uint256[] calldata _validatorId,
         DepositData[] calldata _depositData
     ) public whenNotPaused nonReentrant verifyDepositState(_depositRoot) {
+        require(isFullStakeEnabled, "DEPRECATED");
         require(_validatorId.length == _depositData.length && _validatorId.length <= maxBatchDepositSize, "WRONG_PARAMS");
 
         for (uint256 x; x < _validatorId.length; ++x) {
@@ -212,6 +215,7 @@ contract StakingManager is
     /// @notice Cancels a user's deposits
     /// @param _validatorIds the IDs of the validators deposits to cancel
     function batchCancelDeposit(uint256[] calldata _validatorIds) public whenNotPaused nonReentrant {
+        require(isFullStakeEnabled, "DEPRECATED");
         for (uint256 x; x < _validatorIds.length; ++x) {
             require(bidIdToStakerInfo[_validatorIds[x]].sourceOfFund == ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, "Wrong flow");
             _cancelDeposit(_validatorIds[x], msg.sender);
@@ -308,6 +312,10 @@ contract StakingManager is
         
         upgradableBeacon.upgradeTo(_newImplementation);
         implementationContract = _newImplementation;
+    }
+
+    function updateFullStakingStatus(bool _status) external onlyOwner {
+        isFullStakeEnabled = _status;
     }
 
     function pauseContract() external onlyAdmin { _pause(); }

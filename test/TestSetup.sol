@@ -293,6 +293,7 @@ contract TestSetup is Test {
         assert(address(nodeOperatorManagerInstance) != address(0x0));
         assert(address(node) != address(0x0));
         assert(address(earlyAdopterPoolInstance) != address(0x0));
+
      // TODO: doesn't currently exist on mainnet. But re-add this check after deploy
      //   assert(address(withdrawRequestNFTInstance) != address(0x0));
     }
@@ -1193,6 +1194,8 @@ contract TestSetup is Test {
         address newImpl = address(new StakingManager());
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeTo(newImpl);
+
+        assert(stakingManagerInstance.isFullStakeEnabled() == false);
     }
 
     function _upgrade_liquidity_pool_contract() internal {
