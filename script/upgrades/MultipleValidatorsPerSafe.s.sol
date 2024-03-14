@@ -10,6 +10,7 @@ import "../../src/StakingManager.sol";
 import "../../src/TNFT.sol";
 import "../../src/EtherFiNodesManager.sol";
 import "../../src/EtherFiNode.sol";
+import "../../src/EtherFiTimelock.sol";
 
 import "../../src/AuctionManager.sol";
 import "../../src/helpers/AddressProvider.sol";
@@ -26,6 +27,19 @@ contract MultipleValidatorsPerSafe is Script {
     LiquidityPool liquidityPool;
     StakingManager stakingManager;
     TNFT tnft;
+
+    EtherFiTimelock timelock;
+
+    event TimelockTransaction(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
+
+    function getSelector(bytes memory _f) public pure returns (bytes4) {
+        return bytes4(keccak256(_f));
+    }
+
+    function genUpgradeTo(address _target, address _newImplementation) public pure returns (bytes memory) {
+        bytes4 functionSelector = getSelector("upgradeTo(address)");
+        return abi.encodeWithSelector(functionSelector, _newImplementation);
+    }
 
     function run() external {
         address deployer = vm.envAddress("DEPLOYER");
@@ -47,6 +61,15 @@ contract MultipleValidatorsPerSafe is Script {
         address el_delegationManager;
         if (block.chainid == 1) {
             el_delegationManager = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
+
+            uint256 minDelay = timelock.getMinDelay();
+
+            emit TimelockTransaction(address(liquidityPool), 0, genUpgradeTo(address(liquidityPool), address(LiquidityPoolNewImpl)), bytes32(0), bytes32(0), minDelay);
+            emit TimelockTransaction(address(stakingManager), 0, genUpgradeTo(address(stakingManager), address(StakingManagerNewImpl)), bytes32(0), bytes32(0), minDelay);
+            emit TimelockTransaction(address(tnft), 0, genUpgradeTo(address(tnft), address(TNFTNewImpl)), bytes32(0), bytes32(0), minDelay);
+            emit TimelockTransaction(address(nodesManager), 0, genUpgradeTo(address(nodesManager), address(EtherFiNodesManagerNewImpl)), bytes32(0), bytes32(0), minDelay);
+            emit TimelockTransaction(address(stakingManager), 0, abi.encodeWithSelector(getSelector("upgradeEtherFiNode(address)"), address(EtherFiNodeNewImpl)), bytes32(0), bytes32(0), minDelay);
+            emit TimelockTransaction(address(nodesManager), 0, abi.encodeWithSelector(getSelector("initializeOnUpgrade2(address)"), el_delegationManager), bytes32(0), bytes32(0), minDelay);
 
             // Perform the upgrades manually by the timelock
         } else if (block.chainid == 5) {
@@ -74,6 +97,7 @@ contract MultipleValidatorsPerSafe is Script {
         nodesManager = EtherFiNodesManager(payable(addressProvider.getContractAddress("EtherFiNodesManager")));
         tnft = TNFT(addressProvider.getContractAddress("TNFT"));
         liquidityPool = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));
+        timelock = EtherFiTimelock(payable(addressProvider.getContractAddress("EtherFiTimelock")));
     }
 
 }

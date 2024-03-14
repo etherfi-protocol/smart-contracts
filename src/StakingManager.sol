@@ -24,8 +24,6 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "./libraries/DepositRootGenerator.sol";
 
-import "forge-std/console2.sol";
-
 
 contract StakingManager is
     Initializable,
@@ -112,7 +110,7 @@ contract StakingManager is
         require(msg.value > 0 && msg.value % stakeAmount == 0 && msg.value / stakeAmount > 0, "WRONG_STAKING_AMOUNT");
 
         uint256 numberOfDeposits = msg.value / stakeAmount;
-        require(_candidateBidIds.length >= numberOfDeposits && numberOfDeposits <= maxBatchDepositSize, "Incorrect bids or numVals");
+        require(_candidateBidIds.length >= numberOfDeposits && numberOfDeposits <= maxBatchDepositSize, "WRONG_PARAMS");
         require(auctionManager.numberOfActiveBids() >= numberOfDeposits, "NOT_ENOUGH_BIDS");
 
         uint256[] memory processedBidIds = _processDeposits(_candidateBidIds, numberOfDeposits, msg.sender, msg.sender, msg.sender, ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, _enableRestaking, 0);
@@ -259,18 +257,19 @@ contract StakingManager is
         return node;
     }
 
+    error ALREADY_SET();
+
     /// @notice Sets the EtherFi node manager contract
     /// @param _nodesManagerAddress address of the manager contract being set
     function setEtherFiNodesManagerAddress(address _nodesManagerAddress) public onlyOwner {
-        require(address(nodesManager) == address(0), "ALREADY_SET");
-
+        if (address(nodesManager) != address(0)) revert ALREADY_SET();
         nodesManager = IEtherFiNodesManager(_nodesManagerAddress);
     }
 
     /// @notice Sets the Liquidity pool contract address
     /// @param _liquidityPoolAddress address of the liquidity pool contract being set
     function setLiquidityPoolAddress(address _liquidityPoolAddress) public onlyOwner {
-        require(liquidityPoolContract == address(0), "ALREADY_SET");
+        if (address(liquidityPoolContract) != address(0)) revert ALREADY_SET();
 
         liquidityPoolContract = _liquidityPoolAddress;
     }
@@ -282,7 +281,7 @@ contract StakingManager is
     }
 
     function registerEtherFiNodeImplementationContract(address _etherFiNodeImplementationContract) public onlyOwner {
-        require(implementationContract == address(0), "ALREADY_SET");
+        if (address(upgradableBeacon) != address(0) || address(implementationContract) != address(0)) revert ALREADY_SET();
         require(_etherFiNodeImplementationContract != address(0), "ZERO_ADDRESS");
 
         implementationContract = _etherFiNodeImplementationContract;
@@ -292,7 +291,7 @@ contract StakingManager is
     /// @notice Instantiates the TNFT interface
     /// @param _tnftAddress Address of the TNFT contract
     function registerTNFTContract(address _tnftAddress) public onlyOwner {
-        require(address(TNFTInterfaceInstance) == address(0), "ALREADY_SET");
+        if (address(TNFTInterfaceInstance) != address(0)) revert ALREADY_SET();
 
         TNFTInterfaceInstance = ITNFT(_tnftAddress);
     }
@@ -300,7 +299,7 @@ contract StakingManager is
     /// @notice Instantiates the BNFT interface
     /// @param _bnftAddress Address of the BNFT contract
     function registerBNFTContract(address _bnftAddress) public onlyOwner {
-        require(address(BNFTInterfaceInstance) == address(0), "ALREADY_SET");
+        if (address(BNFTInterfaceInstance) != address(0)) revert ALREADY_SET();
 
         BNFTInterfaceInstance = IBNFT(_bnftAddress);
     }
@@ -391,7 +390,6 @@ contract StakingManager is
         address _staker,
         uint256 _depositAmount
     ) internal {
-        console.log(bidIdToStakerInfo[_validatorId].staker, _staker);
         require(bidIdToStakerInfo[_validatorId].staker == _staker, "INCORRECT_CALLER");
         bytes memory withdrawalCredentials = nodesManager.getWithdrawalCredentials(_validatorId);
         bytes32 depositDataRoot = depositRootGenerator.generateDepositRoot(_depositData.publicKey, _depositData.signature, withdrawalCredentials, _depositAmount);
