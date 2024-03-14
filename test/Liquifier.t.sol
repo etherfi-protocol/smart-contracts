@@ -12,6 +12,7 @@ contract LiquifierTest is TestSetup {
         setUpTests();
 
         initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
 
         vm.startPrank(owner);
         liquifierInstance.updateWhitelistedToken(address(stEth), true);

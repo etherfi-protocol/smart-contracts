@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import "forge-std/console.sol";
+
 contract DepositDataGeneration {
-    uint constant GWEI = 1e9;
+    uint64 constant GWEI = 1e9;
 
     function generateDepositRoot(
         bytes calldata pubkey,
         bytes calldata signature,
         bytes calldata withdrawal_credentials,
         uint256 _amountIn
-    ) public pure returns (bytes32) {
-
-        uint deposit_amount = _amountIn / GWEI;
-        bytes memory amount = to_little_endian_64(uint64(deposit_amount));
+    ) public view returns (bytes32) {
+        uint64 deposit_amount = uint64(_amountIn / GWEI);
+        bytes memory amount = to_little_endian_64(deposit_amount);
 
         bytes32 pubkey_root = sha256(abi.encodePacked(pubkey, bytes16(0)));
         bytes32 signature_root = sha256(
