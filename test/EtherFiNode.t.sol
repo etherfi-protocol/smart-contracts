@@ -1552,7 +1552,7 @@ contract EtherFiNodeTest is TestSetup {
         numTnftsHeldByLP = 2;
         numValidators_STAKE_DEPOSITED = 0;
         numValidators_WATING_FOR_APPROVAL = 0;
-        tvl = numBnftsHeldByLP * 2 ether + numTnftsHeldByLP * 30 ether + address(liquidityPoolInstance).balance - numValidators_STAKE_DEPOSITED * 2 ether - numValidators_WATING_FOR_APPROVAL * 1 ether;
+        tvl = numBnftsHeldByLP * 2 ether + numTnftsHeldByLP * 30 ether + address(liquidityPoolInstance).balance + numValidators_WATING_FOR_APPROVAL * 1 ether;
         assertEq(liquidityPoolInstance.getTotalPooledEther(), tvl);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether + 30 ether + 32 ether);
         assertEq(address(liquidityPoolInstance).balance, 32 ether);
@@ -1568,7 +1568,7 @@ contract EtherFiNodeTest is TestSetup {
         numTnftsHeldByLP = 2;
         numValidators_STAKE_DEPOSITED = 1;
         numValidators_WATING_FOR_APPROVAL = 0;
-        tvl = numBnftsHeldByLP * 2 ether + numTnftsHeldByLP * 30 ether + address(liquidityPoolInstance).balance;
+        tvl = numBnftsHeldByLP * 2 ether + numTnftsHeldByLP * 30 ether + address(liquidityPoolInstance).balance + numValidators_WATING_FOR_APPROVAL * 1 ether;
         assertEq(liquidityPoolInstance.getTotalPooledEther(), tvl);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether + 30 ether + 32 ether);
         assertEq(address(liquidityPoolInstance).balance, 32 ether);
