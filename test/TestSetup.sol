@@ -40,6 +40,7 @@ import "./TestERC20.sol";
 import "../src/MembershipManagerV0.sol";
 import "../src/EtherFiOracle.sol";
 import "../src/EtherFiAdmin.sol";
+import "../src/EtherFiTimelock.sol";
 
 contract TestSetup is Test {
     uint256 public constant kwei = 10 ** 3;
@@ -158,6 +159,8 @@ contract TestSetup is Test {
 
     TVLOracle tvlOracle;
 
+    EtherFiTimelock public etherFiTimelockInstance;
+
     Merkle merkle;
     bytes32 root;
 
@@ -220,6 +223,15 @@ contract TestSetup is Test {
     uint8 TESTNET_FORK = 1;
     uint8 MAINNET_FORK = 2;
 
+    struct TimelockTransactionInput {
+        address target;
+        uint256 value;
+        bytes data;
+        bytes32 predecessor;
+        bytes32 salt;
+        uint256 delay;
+    }
+
 
     // initialize a fork in which fresh contracts are deployed
     // and initialized to the same state as the unit tests.
@@ -275,7 +287,7 @@ contract TestSetup is Test {
         node = EtherFiNode(payable(addressProviderInstance.getContractAddress("EtherFiNode")));
         earlyAdopterPoolInstance = EarlyAdopterPool(payable(addressProviderInstance.getContractAddress("EarlyAdopterPool")));
         withdrawRequestNFTInstance = WithdrawRequestNFT(addressProviderInstance.getContractAddress("WithdrawRequestNFT"));
-
+        etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
 
         assert(address(regulationsManagerInstance) != address(0x0));
         assert(address(managerInstance) != address(0x0));
@@ -293,6 +305,7 @@ contract TestSetup is Test {
         assert(address(nodeOperatorManagerInstance) != address(0x0));
         assert(address(node) != address(0x0));
         assert(address(earlyAdopterPoolInstance) != address(0x0));
+        assert(address(etherFiTimelockInstance) != address(0x0));
 
      // TODO: doesn't currently exist on mainnet. But re-add this check after deploy
      //   assert(address(withdrawRequestNFTInstance) != address(0x0));
@@ -529,7 +542,9 @@ contract TestSetup is Test {
 
         // special case for forked tests utilizing oracle
         // can't use env variable because then it would apply to all tests including non-forked ones
-        if (block.chainid == 5) {
+        if (block.chainid == 1) {
+            genesisSlotTimestamp = 1606824023;
+        } else if (block.chainid == 5) {
             // goerli
             genesisSlotTimestamp = uint32(1616508000);
         } else {
@@ -1178,20 +1193,95 @@ contract TestSetup is Test {
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(amount);
     }
 
+    function _upgrade_multiple_validators_per_safe() internal {
+        vm.warp(block.timestamp + 3 days);
+
+        vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+        // ├─ emit TimelockTransaction(target: 0x308861A430be4cce5502d0A12724771Fc6DaF216, value: 0, data: 0x3659cfe6000000000000000000000000d27a57bb8f9b7ec7862df87f5143146c161f5a8b, predecessor: 0x0000000000000000000000000000000000000000000000000000000000000000, salt: 0x0000000000000000000000000000000000000000000000000000000000000000, delay: 259200 [2.592e5])
+        {
+            etherFiTimelockInstance.execute(
+                address(0x308861A430be4cce5502d0A12724771Fc6DaF216),
+                0,
+                hex"3659cfe6000000000000000000000000d27a57bb8f9b7ec7862df87f5143146c161f5a8b",
+                0x0,
+                0x0
+            );
+        }
+
+        // ├─ emit TimelockTransaction(target: 0x25e821b7197B146F7713C3b89B6A4D83516B912d, value: 0, data: 0x3659cfe6000000000000000000000000b27d4e7b8ff1ef21751b50f3821d99719ad5868f, predecessor: 0x0000000000000000000000000000000000000000000000000000000000000000, salt: 0x0000000000000000000000000000000000000000000000000000000000000000, delay: 259200 [2.592e5])
+        {
+            etherFiTimelockInstance.execute(
+                address(0x25e821b7197B146F7713C3b89B6A4D83516B912d),
+                0,
+                hex"3659cfe6000000000000000000000000b27d4e7b8ff1ef21751b50f3821d99719ad5868f",
+                0x0,
+                0x0
+            );
+        }
+        
+        // ├─ emit TimelockTransaction(target: 0x7B5ae07E2AF1C861BcC4736D23f5f66A61E0cA5e, value: 0, data: 0x3659cfe6000000000000000000000000afb82ce44fd8a3431a64742bcd3547eeda1afea7, predecessor: 0x0000000000000000000000000000000000000000000000000000000000000000, salt: 0x0000000000000000000000000000000000000000000000000000000000000000, delay: 259200 [2.592e5])
+        {
+            etherFiTimelockInstance.execute(
+                address(0x7B5ae07E2AF1C861BcC4736D23f5f66A61E0cA5e),
+                0,
+                hex"3659cfe6000000000000000000000000afb82ce44fd8a3431a64742bcd3547eeda1afea7",
+                0x0,
+                0x0
+            );
+        }
+        
+        // ├─ emit TimelockTransaction(target: 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F, value: 0, data: 0x3659cfe6000000000000000000000000d90c5624a52a3bd4ad006d578b00c3ecf8725fda, predecessor: 0x0000000000000000000000000000000000000000000000000000000000000000, salt: 0x0000000000000000000000000000000000000000000000000000000000000000, delay: 259200 [2.592e5])
+        {
+            etherFiTimelockInstance.execute(
+                address(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F),
+                0,
+                hex"3659cfe6000000000000000000000000d90c5624a52a3bd4ad006d578b00c3ecf8725fda",
+                0x0,
+                0x0
+            );
+        }
+
+        // ├─ emit TimelockTransaction(target: 0x25e821b7197B146F7713C3b89B6A4D83516B912d, value: 0, data: 0x4937097400000000000000000000000052bbf281fbcfa7cf3e9101a52af5dcb32754e3c0, predecessor: 0x0000000000000000000000000000000000000000000000000000000000000000, salt: 0x0000000000000000000000000000000000000000000000000000000000000000, delay: 259200 [2.592e5])
+        {
+            etherFiTimelockInstance.execute(
+                address(0x25e821b7197B146F7713C3b89B6A4D83516B912d),
+                0,
+                hex"4937097400000000000000000000000052bbf281fbcfa7cf3e9101a52af5dcb32754e3c0",
+                0x0,
+                0x0
+            );
+        }
+        
+        // ├─ emit TimelockTransaction(target: 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F, value: 0, data: 0xde5faecc00000000000000000000000039053d51b77dc0d36036fc1fcc8cb819df8ef37a, predecessor: 0x0000000000000000000000000000000000000000000000000000000000000000, salt: 0x0000000000000000000000000000000000000000000000000000000000000000, delay: 259200 [2.592e5])
+        {
+            etherFiTimelockInstance.execute(
+                address(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F),
+                0,
+                hex"de5faecc00000000000000000000000039053d51b77dc0d36036fc1fcc8cb819df8ef37a",
+                0x0,
+                0x0
+            );
+        }
+        vm.stopPrank();
+    }
+
     function _upgrade_etherfi_node_contract() internal {
-        EtherFiNode etherFiNode = new EtherFiNode();
+        // EtherFiNode etherFiNode = new EtherFiNode();
+        address newImpl = 0x52bbF281fbcFa7cF3e9101A52aF5dCb32754E3c0;
         vm.prank(stakingManagerInstance.owner());
-        stakingManagerInstance.upgradeEtherFiNode(address(etherFiNode));
+        stakingManagerInstance.upgradeEtherFiNode(newImpl);
     }
 
     function _upgrade_etherfi_nodes_manager_contract() internal {
-        address newImpl = address(new EtherFiNodesManager());
+        // address newImpl = address(new EtherFiNodesManager());
+        address newImpl = address(0xD90C5624A52a3BD4aD006d578b00c3Ecf8725fDa);
         vm.prank(managerInstance.owner());
         managerInstance.upgradeTo(newImpl);
     }
 
     function _upgrade_staking_manager_contract() internal {
-        address newImpl = address(new StakingManager());
+        // address newImpl = address(new StakingManager());
+        address newImpl = address(0xB27d4e7b8fF1EF21751b50F3821D99719Ad5868f);
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeTo(newImpl);
 
@@ -1199,7 +1289,8 @@ contract TestSetup is Test {
     }
 
     function _upgrade_liquidity_pool_contract() internal {
-        address newImpl = address(new LiquidityPool());
+        // address newImpl = address(new LiquidityPool());
+        address newImpl = address(0xd27a57BB8f9B7ec7862dF87f5143146C161f5a8B);
         vm.prank(liquidityPoolInstance.owner());
         liquidityPoolInstance.upgradeTo(newImpl);
     }

@@ -965,10 +965,6 @@ contract LiquidityPoolTest is TestSetup {
         vm.prank(alice);
         liquidityPoolInstance.setRestakeBnftDeposits(true);
 
-        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.numValidatorsToSpinUp = 4;
-        _executeAdminTasks(report);
-
         vm.startPrank(alice);
         registerAsBnftHolder(alice);
         registerAsBnftHolder(greg);

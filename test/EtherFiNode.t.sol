@@ -1454,6 +1454,10 @@ contract EtherFiNodeTest is TestSetup {
 
     function test_trackingTVL3() public {
         uint256 tvl = 0;
+        uint256 numBnftsHeldByLP = 0; // of validators in [LIVE, EXITED, BEING_SLASHED]
+        uint256 numTnftsHeldByLP = 0; // of validators in [LIVE, EXITED, BEING_SLASHED]
+        uint256 numValidators_STAKE_DEPOSITED = 0;
+        uint256 numValidators_WATING_FOR_APPROVAL = 0;
         assertEq(address(liquidityPoolInstance).balance, 0);
         assertEq(address(stakingManagerInstance).balance, 0);
 
@@ -1461,25 +1465,34 @@ contract EtherFiNodeTest is TestSetup {
         uint256 validatorId = validatorIds[0];
         address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
 
-        vm.prank(alice);
-        liquidityPoolInstance.updateBnftMode(false);
-
         // tvl = (BNFT) + (TNFT) + (LP Balance) - ....
-        tvl = 1 * 2 ether + 1 * 30 ether + address(liquidityPoolInstance).balance - 0 * 2 ether - 0 * 1 ether;
+        numBnftsHeldByLP = 1;
+        numTnftsHeldByLP = 1;
+        numValidators_STAKE_DEPOSITED = 0;
+        numValidators_WATING_FOR_APPROVAL = 0;
+        tvl = numBnftsHeldByLP * 2 ether + numTnftsHeldByLP * 30 ether + address(liquidityPoolInstance).balance - numValidators_STAKE_DEPOSITED * 2 ether - numValidators_WATING_FOR_APPROVAL * 1 ether;
         assertEq(liquidityPoolInstance.getTotalPooledEther(), tvl);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
         assertEq(address(liquidityPoolInstance).balance, 0);
         assertEq(address(stakingManagerInstance).balance, 0);
-        
+
+        vm.startPrank(alice);
+
+        // ---------------------------------------------------------- //
+        // -------------- BNFT to BNFT-Staker, TNFT to LP ----------- //
+        // ---------------------------------------------------------- //
+        liquidityPoolInstance.updateBnftMode(false);
+
         liquidityPoolInstance.deposit{value: 30 ether}();
-        tvl = 1 * 2 ether + 1 * 30 ether + address(liquidityPoolInstance).balance - 0 * 2 ether - 0 * 1 ether;
+        numBnftsHeldByLP = 1;
+        numTnftsHeldByLP = 1;
+        numValidators_STAKE_DEPOSITED = 0;
+        numValidators_WATING_FOR_APPROVAL = 0;
+        tvl = numBnftsHeldByLP * 2 ether + numTnftsHeldByLP * 30 ether + address(liquidityPoolInstance).balance - numValidators_STAKE_DEPOSITED * 2 ether - numValidators_WATING_FOR_APPROVAL * 1 ether;
         assertEq(liquidityPoolInstance.getTotalPooledEther(), tvl);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether + 30 ether);
         assertEq(address(liquidityPoolInstance).balance, 30 ether);
         assertEq(address(stakingManagerInstance).balance, 0);
-
-        vm.startPrank(alice);
-        registerAsBnftHolder(alice);
 
         // 
         // New Validator Deposit
@@ -1487,7 +1500,11 @@ contract EtherFiNodeTest is TestSetup {
         uint256[] memory newValidatorIds = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
         liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(newValidatorIds, 1, 0);
 
-        tvl = 1 * 2 ether + 1 * 30 ether + address(liquidityPoolInstance).balance - 1 * 2 ether - 0 * 1 ether;
+        numBnftsHeldByLP = 1;
+        numTnftsHeldByLP = 1;
+        numValidators_STAKE_DEPOSITED = 1;
+        numValidators_WATING_FOR_APPROVAL = 0;
+        tvl = numBnftsHeldByLP * 2 ether + numTnftsHeldByLP * 30 ether + address(liquidityPoolInstance).balance - numValidators_STAKE_DEPOSITED * 2 ether - numValidators_WATING_FOR_APPROVAL * 1 ether;
         assertEq(liquidityPoolInstance.getTotalPooledEther(), tvl);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether + 30 ether);
         assertEq(address(liquidityPoolInstance).balance, 32 ether);
@@ -1499,8 +1516,11 @@ contract EtherFiNodeTest is TestSetup {
         (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(newValidatorIds);
         liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, newValidatorIds, depositDataArray, depositDataRootsForApproval, sig);
 
-        // Confirm that the num of associated validators still 1
-        tvl = 1 * 2 ether + 1 * 30 ether + address(liquidityPoolInstance).balance - 0 * 2 ether - 1 * 1 ether;
+        numBnftsHeldByLP = 1;
+        numTnftsHeldByLP = 1;
+        numValidators_STAKE_DEPOSITED = 0;
+        numValidators_WATING_FOR_APPROVAL = 1;
+        tvl = numBnftsHeldByLP * 2 ether + numTnftsHeldByLP * 30 ether + address(liquidityPoolInstance).balance - numValidators_STAKE_DEPOSITED * 2 ether - numValidators_WATING_FOR_APPROVAL * 1 ether;
         assertEq(liquidityPoolInstance.getTotalPooledEther(), tvl);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether + 30 ether);
         assertEq(address(liquidityPoolInstance).balance, 31 ether);
@@ -1511,9 +1531,79 @@ contract EtherFiNodeTest is TestSetup {
         // 
         liquidityPoolInstance.batchApproveRegistration(newValidatorIds, pubKey, sig);
 
-        tvl = 1 * 2 ether + 2 * 30 ether + address(liquidityPoolInstance).balance - 0 * 2 ether - 0 * 1 ether;
+        numBnftsHeldByLP = 1;
+        numTnftsHeldByLP = 2;
+        numValidators_STAKE_DEPOSITED = 0;
+        numValidators_WATING_FOR_APPROVAL = 0;
+        tvl = numBnftsHeldByLP * 2 ether + numTnftsHeldByLP * 30 ether + address(liquidityPoolInstance).balance - numValidators_STAKE_DEPOSITED * 2 ether - numValidators_WATING_FOR_APPROVAL * 1 ether;
         assertEq(liquidityPoolInstance.getTotalPooledEther(), tvl);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether + 30 ether);
+        assertEq(address(liquidityPoolInstance).balance, 0);
+        assertEq(address(stakingManagerInstance).balance, 0);
+
+
+        // ---------------------------------------------------------- //
+        // ---------------- BNFT to LP, TNFT to LP ------------------ //
+        // ---------------------------------------------------------- //
+        liquidityPoolInstance.updateBnftMode(true);
+
+        liquidityPoolInstance.deposit{value: 32 ether}();
+        numBnftsHeldByLP = 1;
+        numTnftsHeldByLP = 2;
+        numValidators_STAKE_DEPOSITED = 0;
+        numValidators_WATING_FOR_APPROVAL = 0;
+        tvl = numBnftsHeldByLP * 2 ether + numTnftsHeldByLP * 30 ether + address(liquidityPoolInstance).balance - numValidators_STAKE_DEPOSITED * 2 ether - numValidators_WATING_FOR_APPROVAL * 1 ether;
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), tvl);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether + 30 ether + 32 ether);
+        assertEq(address(liquidityPoolInstance).balance, 32 ether);
+        assertEq(address(stakingManagerInstance).balance, 0);
+
+        // 
+        // New Validator Deposit
+        // 
+        newValidatorIds = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
+        liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(newValidatorIds, 1, 0);
+
+        numBnftsHeldByLP = 1;
+        numTnftsHeldByLP = 2;
+        numValidators_STAKE_DEPOSITED = 1;
+        numValidators_WATING_FOR_APPROVAL = 0;
+        tvl = numBnftsHeldByLP * 2 ether + numTnftsHeldByLP * 30 ether + address(liquidityPoolInstance).balance;
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), tvl);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether + 30 ether + 32 ether);
+        assertEq(address(liquidityPoolInstance).balance, 32 ether);
+        assertEq(address(stakingManagerInstance).balance, 0);
+
+        // 
+        // New Validator Register
+        // 
+        (depositDataArray, depositDataRootsForApproval, sig, pubKey) = _prepareForValidatorRegistration(newValidatorIds);
+        liquidityPoolInstance.batchRegisterWithLiquidityPoolAsBnftHolder(zeroRoot, newValidatorIds, depositDataArray, depositDataRootsForApproval, sig);
+
+        numBnftsHeldByLP = 1;
+        numTnftsHeldByLP = 2;
+        numValidators_STAKE_DEPOSITED = 0;
+        numValidators_WATING_FOR_APPROVAL = 1;
+        tvl = numBnftsHeldByLP * 2 ether + numTnftsHeldByLP * 30 ether + address(liquidityPoolInstance).balance + numValidators_WATING_FOR_APPROVAL * 1 ether;
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), tvl);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether + 30 ether + 32 ether);
+        assertEq(address(liquidityPoolInstance).balance, 31 ether);
+        assertEq(address(stakingManagerInstance).balance, 0);
+
+        // 
+        // APPROVE
+        // 
+        liquidityPoolInstance.batchApproveRegistration(newValidatorIds, pubKey, sig);
+
+        numBnftsHeldByLP = 2;
+        numTnftsHeldByLP = 3;
+        numValidators_STAKE_DEPOSITED = 0;
+        numValidators_WATING_FOR_APPROVAL = 0;
+        tvl = numBnftsHeldByLP * 2 ether + numTnftsHeldByLP * 30 ether + address(liquidityPoolInstance).balance + numValidators_WATING_FOR_APPROVAL * 1 ether;
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), tvl);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether + 30 ether + 32 ether);
+        assertEq(address(liquidityPoolInstance).balance, 0);
+        assertEq(address(stakingManagerInstance).balance, 0);
 
         vm.stopPrank();
     }
@@ -1774,10 +1864,7 @@ contract EtherFiNodeTest is TestSetup {
     function test_mainnet_fullWithdraw_after_upgrade() public {
         initializeRealisticFork(MAINNET_FORK);
 
-        _upgrade_etherfi_nodes_manager_contract();
-        _upgrade_etherfi_node_contract();
-        _upgrade_staking_manager_contract();
-        _upgrade_liquidity_pool_contract();
+        _upgrade_multiple_validators_per_safe();
 
         uint256 validatorId = 2285;
 
@@ -1801,10 +1888,7 @@ contract EtherFiNodeTest is TestSetup {
     function test_mainnet_partialWithdraw_after_upgrade() public {
         initializeRealisticFork(MAINNET_FORK);
 
-        _upgrade_etherfi_nodes_manager_contract();
-        _upgrade_etherfi_node_contract();
-        _upgrade_staking_manager_contract();
-        _upgrade_liquidity_pool_contract();
+        _upgrade_multiple_validators_per_safe();
 
         uint256 validatorId = 2285;
         managerInstance.batchQueueRestakedWithdrawal(_to_uint256_array(validatorId));
@@ -1836,10 +1920,7 @@ contract EtherFiNodeTest is TestSetup {
 
         managerInstance.createUnusedWithdrawalSafe(1, true);
 
-        _upgrade_etherfi_nodes_manager_contract();
-        _upgrade_etherfi_node_contract();
-        _upgrade_staking_manager_contract();
-        _upgrade_liquidity_pool_contract();
+        _upgrade_multiple_validators_per_safe();
 
         address etherFiNode = managerInstance.unusedWithdrawalSafes(managerInstance.getUnusedWithdrawalSafesLength() - 1);
 
@@ -1872,10 +1953,7 @@ contract EtherFiNodeTest is TestSetup {
         hoax(managerInstance.owner());
         managerInstance.processNodeExit(validatorIdsToExit, exitTimestamps);
 
-        _upgrade_etherfi_nodes_manager_contract();
-        _upgrade_etherfi_node_contract();
-        _upgrade_staking_manager_contract();
-        _upgrade_liquidity_pool_contract();
+        _upgrade_multiple_validators_per_safe();
 
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = (0, 0, 0, 0);
 
@@ -1937,10 +2015,7 @@ contract EtherFiNodeTest is TestSetup {
     function test_mainnet_view_functions_with_version0_safe_exited_after_upgrade() public {
         initializeRealisticFork(MAINNET_FORK);
 
-        _upgrade_etherfi_nodes_manager_contract();
-        _upgrade_etherfi_node_contract();
-        _upgrade_staking_manager_contract();
-        _upgrade_liquidity_pool_contract();
+        _upgrade_multiple_validators_per_safe();
 
         uint256 validatorId = 2285;
         address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
@@ -2032,10 +2107,7 @@ contract EtherFiNodeTest is TestSetup {
     function test_mainnet_launch_validator_with_reserved_version1_safe() public {
         initializeRealisticFork(MAINNET_FORK);
 
-        _upgrade_etherfi_nodes_manager_contract();
-        _upgrade_etherfi_node_contract();
-        _upgrade_staking_manager_contract();
-        _upgrade_liquidity_pool_contract();
+        _upgrade_multiple_validators_per_safe();
 
         managerInstance.createUnusedWithdrawalSafe(1, true);
         address etherFiNode = managerInstance.unusedWithdrawalSafes(managerInstance.getUnusedWithdrawalSafesLength() - 1);
@@ -2056,10 +2128,7 @@ contract EtherFiNodeTest is TestSetup {
 
         managerInstance.createUnusedWithdrawalSafe(1, true);
 
-        _upgrade_etherfi_nodes_manager_contract();
-        _upgrade_etherfi_node_contract();
-        _upgrade_staking_manager_contract();
-        _upgrade_liquidity_pool_contract();
+        _upgrade_multiple_validators_per_safe();
         
         address etherFiNode = managerInstance.unusedWithdrawalSafes(managerInstance.getUnusedWithdrawalSafesLength() - 1);
 
@@ -2079,10 +2148,11 @@ contract EtherFiNodeTest is TestSetup {
 
         managerInstance.createUnusedWithdrawalSafe(1, true);
 
-        _upgrade_etherfi_nodes_manager_contract();
-        _upgrade_etherfi_node_contract();
-        _upgrade_staking_manager_contract();
-        _upgrade_liquidity_pool_contract();
+        // _upgrade_etherfi_nodes_manager_contract();
+        // _upgrade_etherfi_node_contract();
+        // _upgrade_staking_manager_contract();
+        // _upgrade_liquidity_pool_contract();
+        _upgrade_multiple_validators_per_safe();
 
         uint256 validatorId = 2285;
         address etherFiNode = managerInstance.etherfiNodeAddress(validatorId);
