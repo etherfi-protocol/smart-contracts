@@ -1266,22 +1266,20 @@ contract TestSetup is Test {
     }
 
     function _upgrade_etherfi_node_contract() internal {
-        // EtherFiNode etherFiNode = new EtherFiNode();
-        address newImpl = 0x52bbF281fbcFa7cF3e9101A52aF5dCb32754E3c0;
+        EtherFiNode etherFiNode = new EtherFiNode();
+        address newImpl = address(etherFiNode);
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(newImpl);
     }
 
     function _upgrade_etherfi_nodes_manager_contract() internal {
-        // address newImpl = address(new EtherFiNodesManager());
-        address newImpl = address(0xD90C5624A52a3BD4aD006d578b00c3Ecf8725fDa);
+        address newImpl = address(new EtherFiNodesManager());
         vm.prank(managerInstance.owner());
         managerInstance.upgradeTo(newImpl);
     }
 
     function _upgrade_staking_manager_contract() internal {
-        // address newImpl = address(new StakingManager());
-        address newImpl = address(0xB27d4e7b8fF1EF21751b50F3821D99719Ad5868f);
+        address newImpl = address(new StakingManager());
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeTo(newImpl);
 
@@ -1289,8 +1287,7 @@ contract TestSetup is Test {
     }
 
     function _upgrade_liquidity_pool_contract() internal {
-        // address newImpl = address(new LiquidityPool());
-        address newImpl = address(0xd27a57BB8f9B7ec7862dF87f5143146C161f5a8B);
+        address newImpl = address(new LiquidityPool());
         vm.prank(liquidityPoolInstance.owner());
         liquidityPoolInstance.upgradeTo(newImpl);
     }

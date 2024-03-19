@@ -390,12 +390,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     function _batchCancelDeposit(uint256[] calldata _validatorIds, address _bnftStaker) internal {
         uint256 returnAmount = 0;
+
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             if(nodesManager.phase(_validatorIds[i]) == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) {
-                returnAmount += 1 ether;
+                if (!isLpBnftHolder) returnAmount += 1 ether;
+                else totalValueInLp -= 1 ether;
                 emit ValidatorRegistrationCanceled(_validatorIds[i]);
             } else {
-                returnAmount += 2 ether;
+                if (!isLpBnftHolder) returnAmount += 2 ether;
                 numPendingDeposits -= 1;
             }
         }

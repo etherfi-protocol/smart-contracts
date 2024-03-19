@@ -2168,6 +2168,44 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(IEtherFiNode(etherFiNode).numAssociatedValidators(), 2);
     }
 
+    function test_mainnet_launch_validator_cancel_afeter_deposit_while_sharing_version0_safe() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        _upgrade_multiple_validators_per_safe();
+        
+        _upgrade_liquidity_pool_contract();
+        
+        uint256 validatorId = 23835;
+        address etherFiNode = managerInstance.etherfiNodeAddress(validatorId);
+
+        assertEq(IEtherFiNode(etherFiNode).version(), 0);
+        assertEq(IEtherFiNode(etherFiNode).numAssociatedValidators(), 1);
+
+        address operator = auctionInstance.getBidOwner(validatorId);
+        vm.deal(operator, 100 ether);
+        vm.startPrank(operator);
+        uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether * 1}(1, 0.1 ether);
+        vm.stopPrank();
+        
+        address bnftStaker = 0x5836152812568244760ba356B5f3838Aa5B672e0;
+        uint256 lp_balance = address(liquidityPoolInstance).balance;
+        vm.startPrank(bnftStaker);
+        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(bidIds, 1, validatorId);
+        vm.stopPrank();
+        address newEtherFiNode = managerInstance.etherfiNodeAddress(newValidatorIds[0]);
+
+        assertEq(etherFiNode, newEtherFiNode);
+        assertEq(IEtherFiNode(etherFiNode).version(), 1);
+        assertEq(IEtherFiNode(etherFiNode).numAssociatedValidators(), 1);
+
+        vm.startPrank(bnftStaker);
+        liquidityPoolInstance.batchCancelDeposit(newValidatorIds);
+        vm.stopPrank();
+
+        assertEq(lp_balance, address(liquidityPoolInstance).balance);
+        assertEq(managerInstance.etherfiNodeAddress(newValidatorIds[0]), address(0));
+    }
+
     // Zellic audit - Cancel validator deposit with version 0 safe fails
     function test_mainnet_cancel_intermediate_validator() public {
         initializeRealisticFork(MAINNET_FORK);
