@@ -516,4 +516,22 @@ contract LiquifierTest is TestSetup {
         assertGe(liquifierInstance.getTotalPooledEther(), 10 ether - 0.01 ether);
     }
 
+    function test_timelock_update_deposit_cap() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        vm.warp(block.timestamp + 3 days);
+
+        vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+        etherFiTimelockInstance.execute(
+                address(0x9FFDF407cDe9a93c47611799DA23924Af3EF764F),
+                0,
+                hex"387557AA000000000000000000000000AE7AB96520DE3A18E5E111B5EAAB095312D7FE840000000000000000000000000000000000000000000000000000000000001388000000000000000000000000000000000000000000000000000000000000EA600000000000000000000000000000000000000000000000000000000000000000",
+                0x0,
+                0x0
+            );
+        vm.stopPrank();
+       
+       assertEq(liquifierInstance.totalCap(address(stEth)), 60_000 ether);
+    }
+
 }

@@ -288,6 +288,7 @@ contract TestSetup is Test {
         earlyAdopterPoolInstance = EarlyAdopterPool(payable(addressProviderInstance.getContractAddress("EarlyAdopterPool")));
         withdrawRequestNFTInstance = WithdrawRequestNFT(addressProviderInstance.getContractAddress("WithdrawRequestNFT"));
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
+        liquifierInstance = Liquifier(payable(addressProviderInstance.getContractAddress("Liquifier")));
 
         assert(address(regulationsManagerInstance) != address(0x0));
         assert(address(managerInstance) != address(0x0));
@@ -1202,7 +1203,7 @@ contract TestSetup is Test {
             etherFiTimelockInstance.execute(
                 address(0x308861A430be4cce5502d0A12724771Fc6DaF216),
                 0,
-                hex"3659cfe6000000000000000000000000d27a57bb8f9b7ec7862df87f5143146c161f5a8b",
+                hex"3659cfe6000000000000000000000000605f17e88027e25e18c95be0d8011ac969426399",
                 0x0,
                 0x0
             );
