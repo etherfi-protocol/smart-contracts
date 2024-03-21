@@ -594,6 +594,9 @@ contract LiquifierTest is TestSetup {
 
         liquifierInstance.CASE1();
 
+        vm.expectRevert();
+        liquifierInstance.CASE1();
+
         vm.stopPrank();
     }
 

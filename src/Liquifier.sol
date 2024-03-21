@@ -361,7 +361,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     // This user deposited 625 wBETH and minted only 7.65 eETH due to the low liquidity in the curve pool that it used
     // Rescue him!
     function CASE1() external onlyAdmin {
-        if (flags["CASE1"]) return;
+        if (flags["CASE1"]) revert();
         flags["CASE1"] = true;
 
         address recipient = 0xc0948cE48e87a55704EfEf8E4b8f92CA34D2087E;
