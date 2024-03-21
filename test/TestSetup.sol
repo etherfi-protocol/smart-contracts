@@ -242,7 +242,7 @@ contract TestSetup is Test {
         if (forkEnum == MAINNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
             addressProviderInstance = AddressProvider(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
-            owner = 0xF155a2632Ef263a6A382028B3B33feb29175b8A5;
+            owner = addressProviderInstance.getContractAddress("EtherFiTimelock");
         } else if (forkEnum == TESTNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("GOERLI_RPC_URL")));
             addressProviderInstance = AddressProvider(address(0x6E429db4E1a77bCe9B6F9EDCC4e84ea689c1C97e));
@@ -268,16 +268,11 @@ contract TestSetup is Test {
         node = EtherFiNode(payable(addressProviderInstance.getContractAddress("EtherFiNode")));
         earlyAdopterPoolInstance = EarlyAdopterPool(payable(addressProviderInstance.getContractAddress("EarlyAdopterPool")));
         withdrawRequestNFTInstance = WithdrawRequestNFT(addressProviderInstance.getContractAddress("WithdrawRequestNFT"));
-
+        liquifierInstance = Liquifier(payable(addressProviderInstance.getContractAddress("Liquifier")));
 
         vm.startPrank(owner);
             
         if (forkEnum == MAINNET_FORK) {
-
-            liquifierImplementation = new Liquifier();
-            liquifierProxy = new UUPSProxy(address(liquifierImplementation), "");
-            liquifierInstance = Liquifier(payable(liquifierProxy));
-
             cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
             wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
             stEth_Eth_Pool = ICurvePool(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
@@ -290,27 +285,9 @@ contract TestSetup is Test {
             eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
             lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
             
-            liquifierInstance.initialize(
-                address(treasuryInstance),
-                address(liquidityPoolInstance),
-                address(eigenLayerStrategyManager),
-                address(lidoWithdrawalQueue),
-                address(stEth),
-                address(cbEth),
-                address(wbEth),
-                address(cbEth_Eth_Pool),
-                address(wbEth_Eth_Pool),
-                address(stEth_Eth_Pool),
-                3600
-            );
-
+            liquifierInstance.upgradeTo(address(new Liquifier()));
+            liquifierInstance.initializeOnUpgrade(0x1b81D678ffb9C0263b24A97847620C99d213eB14);
             liquifierInstance.updateAdmin(alice, true);
-            liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true, 0, 50, 1000); // 50 ether timeBoundCap, 1000 ether total cap
-            liquifierInstance.registerToken(address(cbEth), address(cbEthStrategy), true, 0, 50, 1000);
-            liquifierInstance.registerToken(address(wbEth), address(wbEthStrategy), true, 0, 50, 1000);
-
-            liquidityPoolInstance.upgradeTo(address(new LiquidityPool()));
-            liquidityPoolInstance.initializeOnUpgrade(address(auctionInstance), address(liquifierInstance));
         } else if (forkEnum == TESTNET_FORK) {
 
         }
@@ -498,25 +475,25 @@ contract TestSetup is Test {
             address(treasuryInstance),
             address(protocolRevenueManagerInstance)
         );
-        liquifierInstance.initialize(
-            address(treasuryInstance),
-            address(liquidityPoolInstance),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            0
-        );
+        // liquifierInstance.initialize(
+        //     address(treasuryInstance),
+        //     address(liquidityPoolInstance),
+        //     address(0),
+        //     address(0),
+        //     address(0),
+        //     address(0),
+        //     address(0),
+        //     address(0),
+        //     address(0),
+        //     address(0),
+        //     0
+        // );
 
         membershipManagerInstance.updateAdmin(alice, true);
         membershipNftInstance.updateAdmin(alice, true);
         withdrawRequestNFTInstance.updateAdmin(alice, true);
         liquidityPoolInstance.updateAdmin(alice, true);
-        liquifierInstance.updateAdmin(alice, true);
+        // liquifierInstance.updateAdmin(alice, true);
 
         // special case for forked tests utilizing oracle
         // can't use env variable because then it would apply to all tests including non-forked ones

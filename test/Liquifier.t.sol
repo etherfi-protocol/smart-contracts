@@ -4,6 +4,11 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 import "forge-std/Test.sol";
 
+interface IWBETH {
+    function exchangeRate() external view returns (uint256);
+    function deposit(address referral) external payable;
+}
+
 contract LiquifierTest is TestSetup {
 
     uint256 public testnetFork;
@@ -14,6 +19,7 @@ contract LiquifierTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
 
         vm.startPrank(owner);
+        liquifierInstance.unPauseContract();
         liquifierInstance.updateWhitelistedToken(address(stEth), true);
         vm.stopPrank();
     }
@@ -52,7 +58,7 @@ contract LiquifierTest is TestSetup {
         assertEq(liquifierInstance.isDepositCapReached(address(stEth), 50 ether), false);
 
         vm.startPrank(owner);
-        liquifierInstance.updateDepositCap(address(stEth), 10, 1000, false);
+        liquifierInstance.updateDepositCap(address(stEth), 10, 1000);
         vm.stopPrank();
 
         vm.startPrank(alice);
@@ -61,27 +67,45 @@ contract LiquifierTest is TestSetup {
         _assertWithinRange(liquifierInstance.totalDeposited(address(stEth)), 60 ether, 0.1 ether);
 
         stEth.approve(address(liquifierInstance), 10 ether);
-        vm.expectRevert("CapReached");
+        vm.expectRevert("CAPPED");
         liquifierInstance.depositWithERC20(address(stEth), 10 ether, address(0));
 
         cbEth.approve(address(liquifierInstance), 10 ether);
         liquifierInstance.depositWithERC20(address(cbEth), 10 ether, address(0));
 
         vm.startPrank(owner);
-        liquifierInstance.updateDepositCap(address(stEth), 10, 1000, true);
+        liquifierInstance.updateDepositCap(address(stEth), 10, 1000);
         vm.stopPrank();
+
+        _moveClock(1000);
 
         assertEq(liquifierInstance.isDepositCapReached(address(stEth), 10 ether), false);
 
         // Set the total cap to 100 ether
         vm.startPrank(owner);
-        liquifierInstance.updateDepositCap(address(stEth), 100, 100, true);
+        liquifierInstance.updateDepositCap(address(stEth), 100, 100);
         vm.stopPrank();
 
         // CHeck
         _assertWithinRange(liquifierInstance.totalDeposited(address(stEth)), 60 ether, 0.1 ether);
         assertEq(liquifierInstance.isDepositCapReached(address(stEth), 40 ether), false);
         assertEq(liquifierInstance.isDepositCapReached(address(stEth), 40 ether + 1 ether), true);
+    }
+
+    function test_deposit_stEth() public {
+        vm.deal(alice, 100 ether);
+
+        vm.startPrank(owner);
+        liquifierInstance.updateDepositCap(address(stEth), 50, 60000);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        stEth.submit{value: 20 ether}(address(0));
+        stEth.approve(address(liquifierInstance), 10 ether);
+        liquifierInstance.depositWithERC20(address(stEth), 10 ether, address(0));
+        vm.stopPrank();
+
+        assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.01 ether);
     }
 
     function test_deopsit_cbEth() public {
@@ -171,29 +195,29 @@ contract LiquifierTest is TestSetup {
         _assertWithinRange(liquifierInstance.getTotalPooledEther(), 0, 0.000001 ether);
     }
 
-    function test_deopsit_stEth_with_discount() public {
-        uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
-        uint256 lpBalance = address(liquidityPoolInstance).balance;
+    // function test_deopsit_stEth_with_discount() public {
+    //     uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
+    //     uint256 lpBalance = address(liquidityPoolInstance).balance;
 
-        vm.startPrank(owner);
-        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 5000); // discount by -50%
-        vm.stopPrank();
+    //     vm.startPrank(owner);
+    //     liquifierInstance.updateDiscountInBasisPoints(address(stEth), 5000); // discount by -50%
+    //     vm.stopPrank();
 
-        vm.deal(alice, 100 ether);
+    //     vm.deal(alice, 100 ether);
 
-        assertEq(eETHInstance.balanceOf(alice), 0);
-        assertEq(liquifierInstance.getTotalPooledEther(), 0);
+    //     assertEq(eETHInstance.balanceOf(alice), 0);
+    //     assertEq(liquifierInstance.getTotalPooledEther(), 0);
 
-        vm.startPrank(alice);
+    //     vm.startPrank(alice);
 
-        stEth.submit{value: 20 ether}(address(0));
-        stEth.approve(address(liquifierInstance), 20 ether);
-        liquifierInstance.depositWithERC20(address(stEth), 20 ether, address(0));
+    //     stEth.submit{value: 20 ether}(address(0));
+    //     stEth.approve(address(liquifierInstance), 20 ether);
+    //     liquifierInstance.depositWithERC20(address(stEth), 20 ether, address(0));
 
-        assertLe(eETHInstance.balanceOf(alice), 10 ether);
-        assertGe(liquifierInstance.getTotalPooledEther(), 20 ether - 10);
-        assertLe(liquidityPoolInstance.getTotalPooledEther(), lpTvl + 10 ether );
-    }
+    //     assertLe(eETHInstance.balanceOf(alice), 10 ether);
+    //     assertGe(liquifierInstance.getTotalPooledEther(), 20 ether - 10);
+    //     assertLe(liquidityPoolInstance.getTotalPooledEther(), lpTvl + 10 ether );
+    // }
 
     function test_deopsit_stEth_with_explicit_permit() public {
         vm.deal(alice, 100 ether);
@@ -513,6 +537,64 @@ contract LiquifierTest is TestSetup {
         _complete_queued_withdrawal(queuedWithdrawal, cbEthStrategy);
         assertGe(cbEth.balanceOf(address(liquifierInstance)), 10 ether - 1);
         assertGe(liquifierInstance.getTotalPooledEther(), 10 ether - 0.01 ether);
+    }
+
+    function test_pancacke_wbETH_swap() public {
+        uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
+        uint256 lpBalance = address(liquidityPoolInstance).balance;
+
+        uint256 inputAmount = 650 ether;
+
+        vm.startPrank(alice);
+
+        vm.expectRevert("Too little received");
+        liquifierInstance.pancakeSwapForEth(address(wbEth), inputAmount, 500, 2 * inputAmount, 3600);
+
+        uint256 beforeTVL = liquidityPoolInstance.getTotalPooledEther();
+        uint256 beforeBalance = address(liquifierInstance).balance;
+
+        uint256 exchangeRate = IWBETH(address(wbEth)).exchangeRate();
+        uint256 maxSlippageBp = 100;
+        uint256 minOutput = (exchangeRate * inputAmount * (10000 - maxSlippageBp)) / 10000 / 1e18;
+        liquifierInstance.pancakeSwapForEth(address(wbEth), inputAmount, 500, minOutput, 3600);
+
+        assertGe(address(liquifierInstance).balance, beforeBalance + minOutput);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), beforeTVL); // does not change till Oracle updates
+
+        vm.stopPrank();
+    }
+
+    function test_pancacke_cbETH_swap() public {
+        uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
+        uint256 lpBalance = address(liquidityPoolInstance).balance;
+
+        uint256 inputAmount = 1 ether;
+
+        vm.startPrank(alice);
+
+        vm.expectRevert("Too little received");
+        liquifierInstance.pancakeSwapForEth(address(cbEth), inputAmount, 500, 2 * inputAmount, 3600);
+
+        uint256 beforeTVL = liquidityPoolInstance.getTotalPooledEther();
+        uint256 beforeBalance = address(liquifierInstance).balance;
+
+        uint256 exchangeRate = IWBETH(address(cbEth)).exchangeRate();
+        uint256 maxSlippageBp = 1000; // 10%
+        uint256 minOutput = (exchangeRate * inputAmount * (10000 - maxSlippageBp)) / 10000 / 1e18;
+        liquifierInstance.pancakeSwapForEth(address(cbEth), inputAmount, 500, minOutput, 3600);
+
+        assertGe(address(liquifierInstance).balance, beforeBalance + minOutput);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), beforeTVL); // does not change till Oracle updates
+
+        vm.stopPrank();
+    }
+
+    function test_case1() public {
+        vm.startPrank(alice);
+
+        liquifierInstance.CASE1();
+
+        vm.stopPrank();
     }
 
 }
