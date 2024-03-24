@@ -9,6 +9,8 @@ import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRateProvider.sol";
 
+import "./helpers/AddressProvider.sol";
+
 contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider {
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -26,16 +28,14 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         _disableInitializers();
     }
 
-    function initialize(address _liquidityPool, address _eETH) external initializer {
-        require(_liquidityPool != address(0), "No zero addresses");
-        require(_eETH != address(0), "No zero addresses");
-        
+    function initialize(address _addressProvider) external initializer {
         __ERC20_init("Wrapped eETH", "weETH");
         __ERC20Permit_init("Wrapped eETH");
         __UUPSUpgradeable_init();
         __Ownable_init();
-        eETH = IeETH(_eETH);
-        liquidityPool = ILiquidityPool(_liquidityPool);
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
+        eETH = IeETH(addressProvider.getContractAddress("EETH"));
+        liquidityPool = ILiquidityPool(addressProvider.getContractAddress("LiquidityPool"));
     }
 
     /// @dev name changed from the version initially deployed

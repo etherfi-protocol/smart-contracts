@@ -9,6 +9,7 @@ import "@openzeppelin-upgradeable/contracts/utils/CountersUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.sol";
 
+import "./helpers/AddressProvider.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 
@@ -51,12 +52,12 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         _disableInitializers(); 
     }
 
-    function initialize(address _liquidityPool) external initializer {
-        require(_liquidityPool != address(0), "No zero addresses");
-        
+    function initialize(address _addressProvider) external initializer {        
         __UUPSUpgradeable_init();
         __Ownable_init();
-        liquidityPool = ILiquidityPool(_liquidityPool);
+
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
+        liquidityPool = ILiquidityPool(addressProvider.getContractAddress("LiquidityPool"));
     }
 
     function mintShares(address _user, uint256 _share) external onlyPoolContract {

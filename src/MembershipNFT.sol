@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
+import "./helpers/AddressProvider.sol";
+
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
@@ -50,13 +52,17 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         _disableInitializers();
     }
 
-    function initialize(string calldata _metadataURI, address _membershipManagerInstance) external initializer {
+    function initialize(string calldata _metadataURI, address _addressProvider) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ERC1155_init(_metadataURI);
+        
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
+
         nextMintTokenId = 1;
         maxTokenId = 1000;
-        membershipManager = IMembershipManager(_membershipManagerInstance);
+        membershipManager = IMembershipManager(addressProvider.getContractAddress("MembershipManager"));
+        admins[msg.sender] = true;
     }
 
     function initializeOnUpgrade(address _liquidityPoolAddress) external onlyOwner {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
+import "./helpers/AddressProvider.sol";
+
 import "./interfaces/ITNFT.sol";
 import "./interfaces/IBNFT.sol";
 import "./interfaces/IAuctionManager.sol";
@@ -76,11 +78,16 @@ contract StakingManager is
     }
 
     /// @notice Initialize to set variables on deployment
-    /// @dev Deploys NFT contracts internally to ensure ownership is set to this contract
-    /// @dev AuctionManager Contract must be deployed first
-    /// @param _auctionAddress The address of the auction contract for interaction
-    function initialize(address _auctionAddress, address _depositContractAddress) external initializer {
-        require(_auctionAddress != address(0), "No zero addresses");
+    function initialize(address _addressProvider) external initializer {
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
+        liquidityPoolContract = addressProvider.getContractAddress("LiquidityPool");
+        TNFTInterfaceInstance = ITNFT(addressProvider.getContractAddress("TNFT"));
+        BNFTInterfaceInstance = IBNFT(addressProvider.getContractAddress("BNFT"));
+        nodesManager = IEtherFiNodesManager(addressProvider.getContractAddress("EtherFiNodesManager"));
+        auctionManager = IAuctionManager(addressProvider.getContractAddress("AuctionManager"));
+        depositContractEth2 = IDepositContract(addressProvider.getContractAddress("DepositContract"));
+        nodeOperatorManager = addressProvider.getContractAddress("NodeOperatorManager");
+        admins[msg.sender] = true;
 
         stakeAmount = 32 ether;
         maxBatchDepositSize = 25;
@@ -89,9 +96,6 @@ contract StakingManager is
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
-
-        auctionManager = IAuctionManager(_auctionAddress);
-        depositContractEth2 = IDepositContract(_depositContractAddress);
     }
 
     function initializeOnUpgrade(address _nodeOperatorManager, address _etherFiAdmin) external onlyOwner {

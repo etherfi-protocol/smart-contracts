@@ -13,6 +13,8 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 
+import "./helpers/AddressProvider.sol";
+
 import "forge-std/console.sol";
 
 interface IEtherFiPausable {
@@ -51,28 +53,22 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function initialize(
-        address _etherFiOracle,
-        address _stakingManager,
-        address _auctionManager,
-        address _etherFiNodesManager,
-        address _liquidityPool,
-        address _membershipManager,
-        address _withdrawRequestNft,
-        int32 _acceptableRebaseAprInBps,
-        uint16 _postReportWaitTimeInSlots
+        address _addressProvider
     ) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
 
-        etherFiOracle = IEtherFiOracle(_etherFiOracle);
-        stakingManager = IStakingManager(_stakingManager);
-        auctionManager = IAuctionManager(_auctionManager);
-        etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
-        liquidityPool = ILiquidityPool(_liquidityPool);
-        membershipManager = IMembershipManager(_membershipManager);
-        withdrawRequestNft = IWithdrawRequestNFT(_withdrawRequestNft);
-        acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
-        postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
+        etherFiOracle = IEtherFiOracle(addressProvider.getContractAddress("EtherFiOracle"));
+        stakingManager = IStakingManager(addressProvider.getContractAddress("StakingManager"));
+        auctionManager = IAuctionManager(addressProvider.getContractAddress("AuctionManager"));
+        etherFiNodesManager = IEtherFiNodesManager(addressProvider.getContractAddress("EtherFiNodesManager"));
+        liquidityPool = ILiquidityPool(addressProvider.getContractAddress("LiquidityPool"));
+        membershipManager = IMembershipManager(addressProvider.getContractAddress("MembershipManager"));
+        withdrawRequestNft = IWithdrawRequestNFT(addressProvider.getContractAddress("WithdrawRequestNFT"));
+        acceptableRebaseAprInBps = 1_000;
+        postReportWaitTimeInSlots = 0;
+        admins[msg.sender] = true;
     }
 
     // pause {etherfi oracle, staking manager, auction manager, etherfi nodes manager, liquidity pool, membership manager}

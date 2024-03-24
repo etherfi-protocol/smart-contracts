@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
+import "./helpers/AddressProvider.sol";
+
 import "../src/interfaces/INodeOperatorManager.sol";
 import "../src/interfaces/IAuctionManager.sol";
 import "../src/LiquidityPool.sol";
@@ -45,10 +47,14 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     }
 
     /// @notice initializes contract
-    function initialize() external initializer {
+    function initialize(address _addressProvider) external initializer {
         __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
+
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
+        auctionManagerContractAddress = addressProvider.getContractAddress("AuctionManager");
+        admins[msg.sender] = true;
     }
 
     /// @notice Migrates operator details from previous contract

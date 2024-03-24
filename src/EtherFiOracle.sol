@@ -10,6 +10,7 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "./interfaces/IEtherFiOracle.sol";
 import "./interfaces/IEtherFiAdmin.sol";
 
+import "./helpers/AddressProvider.sol";
 
 contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle {
 
@@ -53,12 +54,17 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         _disableInitializers();
     }
 
-    function initialize(uint32 _quorumSize, uint32 _reportPeriodSlot, uint32 _reportStartSlot, uint32 _slotsPerEpoch, uint32 _secondsPerSlot, uint32 _genesisTime)
+    function initialize(address _addressProvider, uint32 _quorumSize, uint32 _reportPeriodSlot, uint32 _reportStartSlot, uint32 _slotsPerEpoch, uint32 _secondsPerSlot, uint32 _genesisTime)
         external
         initializer
     {
         __Ownable_init();
         __UUPSUpgradeable_init();
+
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
+
+        etherFiAdmin = IEtherFiAdmin(addressProvider.getContractAddress("EtherFiAdmin"));
+        admins[msg.sender] = true;
 
         consensusVersion = 1;
         reportPeriodSlot = _reportPeriodSlot;

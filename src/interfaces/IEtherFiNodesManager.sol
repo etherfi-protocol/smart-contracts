@@ -38,14 +38,6 @@ interface IEtherFiNodesManager {
     function phase(uint256 _validatorId) external view returns (IEtherFiNode.VALIDATOR_PHASE phase);
 
     // Non-VIEW functions
-    function initialize(
-        address _treasuryContract,
-        address _auctionContract,
-        address _stakingManagerContract,
-        address _tnftContract,
-        address _bnftContract
-    ) external;
-
     function batchQueueRestakedWithdrawal(uint256[] calldata _validatorIds) external;
     function batchSendExitRequest(uint256[] calldata _validatorIds) external;
     function fullWithdrawBatch(uint256[] calldata _validatorIds) external;

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
+import "./helpers/AddressProvider.sol";
+
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -87,34 +89,30 @@ contract EtherFiNodesManager is
     error InvalidParams();
     error NonZeroAddress();
 
-    /// @dev Sets the revenue splits on deployment
-    /// @dev AuctionManager, treasury and deposit contracts must be deployed first
-    /// @param _treasuryContract The address of the treasury contract for interaction
-    /// @param _auctionContract The address of the auction contract for interaction
-    /// @param _stakingManagerContract The address of the staking contract for interaction
-    /// @param _tnftContract The address of the TNFT contract for interaction
-    /// @param _bnftContract The address of the BNFT contract for interaction
     function initialize(
-        address _treasuryContract,
-        address _auctionContract,
-        address _stakingManagerContract,
-        address _tnftContract,
-        address _bnftContract
+        address _addressProvider
     ) external initializer {
-        if(_treasuryContract == address(0) || _auctionContract == address(0) || _stakingManagerContract == address(0) || _tnftContract == address(0) || _bnftContract == address(0)) revert NonZeroAddress();
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
 
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
 
+        treasuryContract = addressProvider.getContractAddress("Treasury");
+        stakingManagerContract = addressProvider.getContractAddress("StakingManager");
+        auctionManager = IAuctionManager(addressProvider.getContractAddress("AuctionManager"));
+        tnft = TNFT(addressProvider.getContractAddress("TNFT"));
+        bnft = BNFT(addressProvider.getContractAddress("BNFT"));
+        eigenPodManager = IEigenPodManager(addressProvider.getContractAddress("EigenPodManager"));
+        delayedWithdrawalRouter = IDelayedWithdrawalRouter(addressProvider.getContractAddress("DelayedWithdrawalRouter"));
+        admins[msg.sender] = true;
+
         SCALE = 1_000_000;
-
-        treasuryContract = _treasuryContract;
-        stakingManagerContract = _stakingManagerContract;
-
-        auctionManager = IAuctionManager(_auctionContract);
-        tnft = TNFT(_tnftContract);
-        bnft = BNFT(_bnftContract);
+        setStakingRewardsSplit(100_000, 0, 815_625, 84_375);
+        nonExitPenaltyPrincipal = 1 ether;
+        nonExitPenaltyDailyRate = 50;
+        enableNodeRecycling = true;
+        maxEigenlayerWithdrawals = 5;
     }
 
     function initializeOnUpgrade(address _etherFiAdmin, address _eigenPodManager, address _delayedWithdrawalRouter, uint8 _maxEigenlayerWithdrawals) public onlyOwner {

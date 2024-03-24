@@ -10,6 +10,7 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IMembershipManager.sol";
 
+import "./helpers/AddressProvider.sol";
 
 contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IWithdrawRequestNFT {
 
@@ -34,17 +35,18 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         _disableInitializers();
     }
 
-    function initialize(address _liquidityPoolAddress, address _eEthAddress, address _membershipManagerAddress) initializer external {
-        require(_liquidityPoolAddress != address(0), "No zero addresses");
-        require(_eEthAddress != address(0), "No zero addresses");
+    function initialize(address _addressProvider) initializer external {
         __ERC721_init("Withdraw Request NFT", "WithdrawRequestNFT");
         __Ownable_init();
         __UUPSUpgradeable_init();
 
-        liquidityPool = ILiquidityPool(_liquidityPoolAddress);
-        eETH = IeETH(_eEthAddress);
-        membershipManager = IMembershipManager(_membershipManagerAddress);
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
+        liquidityPool = ILiquidityPool(addressProvider.getContractAddress("LiquidityPool"));
+        eETH = IeETH(addressProvider.getContractAddress("EETH"));
+        membershipManager = IMembershipManager(addressProvider.getContractAddress("MembershipManager"));
+
         nextRequestId = 1;
+        admins[msg.sender] = true;
     }
 
     /// @notice creates a withdraw request and issues an associated NFT to the recipient

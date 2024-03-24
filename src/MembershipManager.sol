@@ -6,6 +6,8 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
+import "./helpers/AddressProvider.sol";
+
 import "./interfaces/IeETH.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IMembershipNFT.sol";
@@ -87,6 +89,33 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     error Deprecated();
     error DisallowZeroAddress();
     error WrongVersion();
+
+    function initialize(address _addressProvider) external initializer {
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
+
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+
+        eETH = IeETH(addressProvider.getContractAddress("EETH"));
+        liquidityPool = ILiquidityPool(addressProvider.getContractAddress("LiquidityPool"));
+        membershipNFT = IMembershipNFT(addressProvider.getContractAddress("MembershipNFT"));
+        treasury = addressProvider.getContractAddress("Treasury");
+        admins[msg.sender] = true;
+
+        pointsBoostFactor = 10000;
+        pointsGrowthRate = 10000;
+        minDepositGwei = (0.1 ether / 1 gwei);
+        maxDepositTopUpPercent = 20;
+        withdrawalLockBlocks = 3600;
+
+        topUpCooltimePeriod = 300;
+        fanBoostThreshold = uint16(0.1 ether / 0.001 ether);
+
+        mintFee = uint16(0 / 0.001 ether);
+        burnFee = uint16(0.05 ether / 0.001 ether);
+        upgradeFee = uint16(0 / 0.001 ether);
+        burnFeeWaiverPeriodInDays = 30;
+    }
 
     // To be called for Phase 2 contract upgrade
     function initializeOnUpgrade(address _etherFiAdminAddress, uint256 _fanBoostThresholdAmount, uint16 _burnFeeWaiverPeriodInDays) external onlyOwner {

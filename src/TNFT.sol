@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
+import "./helpers/AddressProvider.sol";
+
 import "@openzeppelin-upgradeable/contracts/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -22,14 +24,15 @@ contract TNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     /// @notice initialize to set variables on deployment
-    function initialize(address _stakingManagerAddress) initializer external {
-        require(_stakingManagerAddress != address(0), "No zero addresses");
-        
+    function initialize(address _addressProvider) initializer external {        
         __ERC721_init("Transferrable NFT", "TNFT");
         __Ownable_init();
         __UUPSUpgradeable_init();
 
-        stakingManagerAddress = _stakingManagerAddress;
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
+
+        stakingManagerAddress = addressProvider.getContractAddress("StakingManager");
+        etherFiNodesManagerAddress = addressProvider.getContractAddress("EtherFiNodesManager");
     }
 
     /// @notice initialization function that should be called after phase 2.0 contract upgrade

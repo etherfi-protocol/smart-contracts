@@ -9,7 +9,6 @@ interface IWithdrawRequestNFT {
         uint32  feeGwei;
     }
 
-    function initialize(address _liquidityPoolAddress, address _eEthAddress, address _membershipManager) external;
     function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address requester, uint256 fee) external payable returns (uint256);
     function claimWithdraw(uint256 requestId) external;
 

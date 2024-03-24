@@ -23,6 +23,8 @@ import "./interfaces/IEtherFiAdmin.sol";
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/ILiquifier.sol";
 
+import "./helpers/AddressProvider.sol";
+
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -110,24 +112,29 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         totalValueInLp += uint128(msg.value);
     }
 
-    function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external initializer {
-        if (_eEthAddress == address(0) || _stakingManagerAddress == address(0) || _nodesManagerAddress == address(0) || _membershipManagerAddress == address(0) || _tNftAddress == address(0)) revert DataNotSet();
-        
+    function initialize(address _addressProvider) external initializer {        
         __Ownable_init();
         __UUPSUpgradeable_init();
-        eETH = IeETH(_eEthAddress);
-        stakingManager = IStakingManager(_stakingManagerAddress);
-        nodesManager = IEtherFiNodesManager(_nodesManagerAddress);
-        membershipManager = IMembershipManager(_membershipManagerAddress);
-        tNft = ITNFT(_tNftAddress);
-        paused = true;
-        whitelistEnabled = true;
-        restakeBnftDeposits = false;
+
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
+        eETH = IeETH(addressProvider.getContractAddress("EETH"));
+        stakingManager = IStakingManager(addressProvider.getContractAddress("StakingManager"));
+        nodesManager = IEtherFiNodesManager(addressProvider.getContractAddress("EtherFiNodesManager"));
+        membershipManager = IMembershipManager(addressProvider.getContractAddress("MembershipManager"));
+        tNft = ITNFT(addressProvider.getContractAddress("TNFT"));
+        etherFiAdminContract = addressProvider.getContractAddress("EtherFiAdmin");
+        withdrawRequestNFT = IWithdrawRequestNFT(addressProvider.getContractAddress("WithdrawRequestNFT"));
+        auctionManager = IAuctionManager(addressProvider.getContractAddress("AuctionManager"));
+
+        admins[etherFiAdminContract] = true;
+        admins[msg.sender] = true;
+
+        whitelistEnabled = false;
+        restakeBnftDeposits = true;
         ethAmountLockedForWithdrawal = 0;
-        maxValidatorsPerOwner = 30;
-        etherFiAdminContract = _etherFiAdminContract;
-        withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
-        admins[_etherFiAdminContract] = true;
+        maxValidatorsPerOwner = 40;
+        isLpBnftHolder = true;
+        
         fundStatistics[SourceOfFunds.EETH].numberOfValidators = 1;
         fundStatistics[SourceOfFunds.ETHER_FAN].numberOfValidators = 1;
     }

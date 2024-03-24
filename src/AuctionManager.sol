@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.13;
 
+import "./helpers/AddressProvider.sol";
+
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/INodeOperatorManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
@@ -66,9 +68,9 @@ contract AuctionManager is
 
     /// @notice Initialize to set variables on deployment
     function initialize(
-        address _nodeOperatorManagerContract
+        address _addressProvider
     ) external initializer {
-        require(_nodeOperatorManagerContract != address(0), "No Zero Addresses");
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
         
         whitelistBidAmount = 0.001 ether;
         minBidAmount = 0.01 ether;
@@ -76,7 +78,10 @@ contract AuctionManager is
         numberOfBids = 1;
         whitelistEnabled = true;
 
-        nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerContract);
+        nodeOperatorManager = INodeOperatorManager(addressProvider.getContractAddress("NodeOperatorManager"));
+        stakingManagerContractAddress = addressProvider.getContractAddress("StakingManager");
+        membershipManagerContractAddress = addressProvider.getContractAddress("MembershipManager");
+        admins[msg.sender] = true;
 
         __Pausable_init();
         __Ownable_init();
