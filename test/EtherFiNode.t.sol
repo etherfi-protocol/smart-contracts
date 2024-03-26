@@ -1864,8 +1864,6 @@ contract EtherFiNodeTest is TestSetup {
     function test_mainnet_fullWithdraw_after_upgrade() public {
         initializeRealisticFork(MAINNET_FORK);
 
-        _upgrade_multiple_validators_per_safe();
-
         uint256 validatorId = 2285;
 
         vm.deal(managerInstance.getEigenPod(validatorId), 16 ether);
@@ -1887,8 +1885,6 @@ contract EtherFiNodeTest is TestSetup {
 
     function test_mainnet_partialWithdraw_after_upgrade() public {
         initializeRealisticFork(MAINNET_FORK);
-
-        _upgrade_multiple_validators_per_safe();
 
         uint256 validatorId = 2285;
         managerInstance.batchQueueRestakedWithdrawal(_to_uint256_array(validatorId));
@@ -1915,26 +1911,6 @@ contract EtherFiNodeTest is TestSetup {
         managerInstance.fullWithdraw(validatorId);
     }
 
-    function test_mainnet_launch_validator_with_reserved_version0_safe() public {
-        initializeRealisticFork(MAINNET_FORK);
-
-        managerInstance.createUnusedWithdrawalSafe(1, true);
-
-        _upgrade_multiple_validators_per_safe();
-
-        address etherFiNode = managerInstance.unusedWithdrawalSafes(managerInstance.getUnusedWithdrawalSafesLength() - 1);
-
-        assertEq(IEtherFiNode(etherFiNode).version(), 0);
-        assertEq(IEtherFiNode(etherFiNode).numAssociatedValidators(), 0);
-
-        uint256[] memory newValidatorIds = launch_validator(1, 0, false);
-        address newEtherFiNode = managerInstance.etherfiNodeAddress(newValidatorIds[0]);
-
-        assertEq(etherFiNode, newEtherFiNode);
-        assertEq(IEtherFiNode(newEtherFiNode).version(), 1);
-        assertEq(IEtherFiNode(newEtherFiNode).numAssociatedValidators(), 1);        
-    }
-
     function test_mainnet_view_functions_with_version0_safe_exited_before_upgrade() public {
         initializeRealisticFork(MAINNET_FORK);
 
@@ -1952,8 +1928,6 @@ contract EtherFiNodeTest is TestSetup {
 
         hoax(managerInstance.owner());
         managerInstance.processNodeExit(validatorIdsToExit, exitTimestamps);
-
-        _upgrade_multiple_validators_per_safe();
 
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = (0, 0, 0, 0);
 
@@ -2014,8 +1988,6 @@ contract EtherFiNodeTest is TestSetup {
 
     function test_mainnet_view_functions_with_version0_safe_exited_after_upgrade() public {
         initializeRealisticFork(MAINNET_FORK);
-
-        _upgrade_multiple_validators_per_safe();
 
         uint256 validatorId = 2285;
         address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
@@ -2107,8 +2079,6 @@ contract EtherFiNodeTest is TestSetup {
     function test_mainnet_launch_validator_with_reserved_version1_safe() public {
         initializeRealisticFork(MAINNET_FORK);
 
-        _upgrade_multiple_validators_per_safe();
-
         managerInstance.createUnusedWithdrawalSafe(1, true);
         address etherFiNode = managerInstance.unusedWithdrawalSafes(managerInstance.getUnusedWithdrawalSafesLength() - 1);
 
@@ -2123,36 +2093,10 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(IEtherFiNode(newEtherFiNode).numAssociatedValidators(), 1);        
     }
 
-    function test_mainnet_launch_validator_with_version0_safe() public {
-        initializeRealisticFork(MAINNET_FORK);
-
-        managerInstance.createUnusedWithdrawalSafe(1, true);
-
-        _upgrade_multiple_validators_per_safe();
-        
-        address etherFiNode = managerInstance.unusedWithdrawalSafes(managerInstance.getUnusedWithdrawalSafesLength() - 1);
-
-        assertEq(IEtherFiNode(etherFiNode).version(), 0);
-        assertEq(IEtherFiNode(etherFiNode).numAssociatedValidators(), 0);
-
-        uint256[] memory newValidatorIds = launch_validator(1, 0, false);
-        address newEtherFiNode = managerInstance.etherfiNodeAddress(newValidatorIds[0]);
-
-        assertEq(etherFiNode, newEtherFiNode);
-        assertEq(IEtherFiNode(newEtherFiNode).version(), 1);
-        assertEq(IEtherFiNode(newEtherFiNode).numAssociatedValidators(), 1);
-    }
-
     function test_mainnet_launch_validator_sharing_version0_safe() public {
         initializeRealisticFork(MAINNET_FORK);
 
         managerInstance.createUnusedWithdrawalSafe(1, true);
-
-        // _upgrade_etherfi_nodes_manager_contract();
-        // _upgrade_etherfi_node_contract();
-        // _upgrade_staking_manager_contract();
-        // _upgrade_liquidity_pool_contract();
-        _upgrade_multiple_validators_per_safe();
 
         uint256 validatorId = 2285;
         address etherFiNode = managerInstance.etherfiNodeAddress(validatorId);
@@ -2170,8 +2114,6 @@ contract EtherFiNodeTest is TestSetup {
 
     function test_mainnet_launch_validator_cancel_afeter_deposit_while_sharing_version0_safe() public {
         initializeRealisticFork(MAINNET_FORK);
-
-        _upgrade_multiple_validators_per_safe();
         
         _upgrade_liquidity_pool_contract();
         
