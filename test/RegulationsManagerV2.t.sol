@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "../src/RegulationsManagerV2.sol";
+import "../src/archive/RegulationsManagerV2.sol";
 
 contract RegulationsManagerV2Test is Test {
 

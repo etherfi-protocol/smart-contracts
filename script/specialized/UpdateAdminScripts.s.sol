@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 import "../../src/EtherFiNodesManager.sol";
-import "../../src/ProtocolRevenueManager.sol";
+import "../../src/archive/ProtocolRevenueManager.sol";
 import "../../src/AuctionManager.sol";
 import "../../src/TNFT.sol";
 import "../../src/LiquidityPool.sol";
@@ -11,7 +11,7 @@ import "../../src/MembershipManager.sol";
 import "../../src/MembershipNFT.sol";
 import "../../src/StakingManager.sol";
 import "../../src/NFTExchange.sol";
-import "../../src/RegulationsManager.sol";
+import "../../src/archive/RegulationsManager.sol";
 import "../../src/helpers/AddressProvider.sol";
 import "../../src/WithdrawRequestNFT.sol";
 
