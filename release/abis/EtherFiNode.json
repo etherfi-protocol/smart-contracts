@@ -533,7 +533,7 @@
   },
   {
     "type": "function",
-    "name": "hasOutstandingEigenLayerWithdrawals",
+    "name": "hasOutstaingEigenPodWithdrawalsQueuedBeforeExit",
     "inputs": [],
     "outputs": [
       {
@@ -589,6 +589,46 @@
     "inputs": [
       {
         "name": "_validatorId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_info",
+        "type": "tuple",
+        "internalType": "struct IEtherFiNodesManager.ValidatorInfo",
+        "components": [
+          {
+            "name": "validatorIndex",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "exitRequestTimestamp",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "exitTimestamp",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "phase",
+            "type": "uint8",
+            "internalType": "enum IEtherFiNode.VALIDATOR_PHASE"
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "moveFundsToManager",
+    "inputs": [
+      {
+        "name": "_amount",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -724,6 +764,33 @@
         "name": "_validatorId",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "_info",
+        "type": "tuple",
+        "internalType": "struct IEtherFiNodesManager.ValidatorInfo",
+        "components": [
+          {
+            "name": "validatorIndex",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "exitRequestTimestamp",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "exitTimestamp",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "phase",
+            "type": "uint8",
+            "internalType": "enum IEtherFiNode.VALIDATOR_PHASE"
+          }
+        ]
       }
     ],
     "outputs": [
@@ -738,6 +805,42 @@
   {
     "type": "function",
     "name": "updateNumExitRequests",
+    "inputs": [
+      {
+        "name": "_up",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "_down",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "updateNumExitedValidators",
+    "inputs": [
+      {
+        "name": "_up",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "_down",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "updateNumberOfAssociatedValidators",
     "inputs": [
       {
         "name": "_up",

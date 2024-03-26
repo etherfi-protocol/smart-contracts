@@ -41,7 +41,9 @@ contract LiquidityPoolUpgrade is Script {
 
         LiquidityPool LiquidityPoolV2Implementation = new LiquidityPool();
 
-        // LiquidityPoolInstance.upgradeTo(address(LiquidityPoolV2Implementation));
+        require(LiquidityPoolInstance.numPendingDeposits() == 0, "numPendingDeposits should be 0");
+
+        LiquidityPoolInstance.upgradeTo(address(LiquidityPoolV2Implementation));
 
         // // Phase 2
         // //Ensure these inputs are correct

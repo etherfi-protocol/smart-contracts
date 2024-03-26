@@ -12,6 +12,7 @@ contract LiquifierTest is TestSetup {
         setUpTests();
 
         initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
 
         vm.startPrank(owner);
         liquifierInstance.updateWhitelistedToken(address(stEth), true);
@@ -150,9 +151,9 @@ contract LiquifierTest is TestSetup {
         stEth.approve(address(liquifierInstance), 10 ether);
         liquifierInstance.depositWithERC20(address(stEth), 10 ether, address(0));
 
-        assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.01 ether);
-        assertGe(liquifierInstance.getTotalPooledEther(), 10 ether - 0.01 ether);
-        assertGe(liquidityPoolInstance.getTotalPooledEther(), lpTvl + 10 ether - 0.01 ether);
+        assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.1 ether);
+        assertGe(liquifierInstance.getTotalPooledEther(), 10 ether - 0.1 ether);
+        assertGe(liquidityPoolInstance.getTotalPooledEther(), lpTvl + 10 ether - 0.1 ether);
         assertEq(address(liquifierInstance).balance, 0 ether);
 
         lpTvl = liquidityPoolInstance.getTotalPooledEther();

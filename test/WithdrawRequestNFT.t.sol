@@ -263,6 +263,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Somehow, LP gets some ETH
         // For example, alice deposits 100 ETH :D
+        vm.deal(alice, 1000 ether);
         vm.prank(alice);
         liquidityPoolInstance.deposit{value: 100 ether}();
 
