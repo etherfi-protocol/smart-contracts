@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.13;
+pragma solidity ^0.8.13;
 
 import "./helpers/AddressProvider.sol";
 
@@ -72,6 +72,7 @@ contract AuctionManager is
     ) external initializer {
         AddressProvider addressProvider = AddressProvider(_addressProvider);
         
+        accumulatedRevenueThreshold = 1 ether;
         whitelistBidAmount = 0.001 ether;
         minBidAmount = 0.01 ether;
         maxBidAmount = 5 ether;

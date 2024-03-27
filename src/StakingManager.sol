@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.13;
+pragma solidity ^0.8.13;
 
 import "./helpers/AddressProvider.sol";
 
@@ -26,6 +26,7 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "./libraries/DepositRootGenerator.sol";
 
+
 contract StakingManager is
     Initializable,
     IStakingManager,
@@ -42,7 +43,7 @@ contract StakingManager is
     address public implementationContract;
     address public liquidityPoolContract;
 
-    bool public DEPRECATED_whitelistEnabled;
+    bool public isFullStakeEnabled;
     bytes32 public merkleRoot;
 
     ITNFT public TNFTInterfaceInstance;
@@ -91,6 +92,7 @@ contract StakingManager is
 
         stakeAmount = 32 ether;
         maxBatchDepositSize = 25;
+        isFullStakeEnabled = true;
 
         __Pausable_init();
         __Ownable_init();
@@ -99,7 +101,6 @@ contract StakingManager is
     }
 
     function initializeOnUpgrade(address _nodeOperatorManager, address _etherFiAdmin) external onlyOwner {
-        require(_nodeOperatorManager != address(0) && _etherFiAdmin != address(0), "No zero addresses");
         DEPRECATED_admin = address(0);
         nodeOperatorManager = _nodeOperatorManager;
         admins[_etherFiAdmin] = true;
@@ -109,9 +110,23 @@ contract StakingManager is
     /// @param _candidateBidIds IDs of the bids to be matched with each stake
     /// @return Array of the bid IDs that were processed and assigned
     function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, bool _enableRestaking)
-        external payable whenNotPaused correctStakeAmount nonReentrant returns (uint256[] memory)
+        external payable whenNotPaused nonReentrant returns (uint256[] memory)
     {
-        return _depositWithBidIds(_candidateBidIds, msg.sender, ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, _enableRestaking);
+        require(isFullStakeEnabled, "DEPRECATED");
+        require(msg.value > 0 && msg.value % stakeAmount == 0 && msg.value / stakeAmount > 0, "WRONG_STAKING_AMOUNT");
+
+        uint256 numberOfDeposits = msg.value / stakeAmount;
+        require(_candidateBidIds.length >= numberOfDeposits && numberOfDeposits <= maxBatchDepositSize, "WRONG_PARAMS");
+        require(auctionManager.numberOfActiveBids() >= numberOfDeposits, "NOT_ENOUGH_BIDS");
+
+        uint256[] memory processedBidIds = _processDeposits(_candidateBidIds, numberOfDeposits, msg.sender, msg.sender, msg.sender, ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, _enableRestaking, 0);
+
+        uint256 unMatchedBidCount = numberOfDeposits - processedBidIds.length;
+        if (unMatchedBidCount > 0) {
+            _refundDeposit(msg.sender, stakeAmount * unMatchedBidCount);
+        }
+        
+        return processedBidIds;
     }
 
     /// @notice Allows depositing multiple stakes at once
@@ -120,12 +135,16 @@ contract StakingManager is
     /// @param _staker the address of the BNFT player who originated the call to the LP
     /// @param _source the staking type that the funds are sourced from (EETH / ETHER_FAN), see natspec for allocateSourceOfFunds()
     /// @param _enableRestaking Eigen layer integration check to identify if restaking is possible
+    /// @param _validatorIdToShareWithdrawalSafe the validator ID to use for the withdrawal safe
     /// @return Array of the bid IDs that were processed and assigned
-    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, address _staker, ILiquidityPool.SourceOfFunds _source, bool _enableRestaking)
-        public payable whenNotPaused nonReentrant correctStakeAmount returns (uint256[] memory)
+    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, address _staker, address _tnftHolder, address _bnftHolder, ILiquidityPool.SourceOfFunds _source, bool _enableRestaking, uint256 _validatorIdToShareWithdrawalSafe)
+        public whenNotPaused nonReentrant returns (uint256[] memory)
     {
         require(msg.sender == liquidityPoolContract, "Incorrect Caller");
-        return _depositWithBidIds(_candidateBidIds, _staker, _source, _enableRestaking);
+        require(_candidateBidIds.length >= _numberOfValidators && _candidateBidIds.length <= maxBatchDepositSize, "WRONG_PARAMS");
+        require(auctionManager.numberOfActiveBids() >= _numberOfValidators, "NOT_ENOUGH_BIDS");
+
+        return _processDeposits(_candidateBidIds, _numberOfValidators, _staker, _tnftHolder, _bnftHolder, _source, _enableRestaking, _validatorIdToShareWithdrawalSafe);
     }
 
     /// @notice Batch creates validator object, mints NFTs, sets NB variables and deposits into beacon chain
@@ -137,10 +156,11 @@ contract StakingManager is
         uint256[] calldata _validatorId,
         DepositData[] calldata _depositData
     ) public whenNotPaused nonReentrant verifyDepositState(_depositRoot) {
-        require(_validatorId.length <= maxBatchDepositSize, "Too many validators");
-        require(_validatorId.length == _depositData.length, "Array lengths must match");
+        require(isFullStakeEnabled, "DEPRECATED");
+        require(_validatorId.length == _depositData.length && _validatorId.length <= maxBatchDepositSize, "WRONG_PARAMS");
 
         for (uint256 x; x < _validatorId.length; ++x) {
+            require(bidIdToStakerInfo[_validatorId[x]].sourceOfFund == ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, "Wrong flow");
             _registerValidator(_validatorId[x], msg.sender, msg.sender, _depositData[x], msg.sender, 32 ether);
         }
     }
@@ -160,12 +180,12 @@ contract StakingManager is
         address _tNftRecipient,
         DepositData[] calldata _depositData,
         address _staker
-    ) public whenNotPaused nonReentrant verifyDepositState(_depositRoot) {
-        require(msg.sender == liquidityPoolContract, "Only LiquidityPool can call this function");
-        require(_validatorId.length <= maxBatchDepositSize, "Too many validators");
-        require(_validatorId.length == _depositData.length, "Array lengths must match");
+    ) public payable whenNotPaused nonReentrant verifyDepositState(_depositRoot) {
+        require(msg.sender == liquidityPoolContract, "INCORRECT_CALLER");
+        require(_validatorId.length <= maxBatchDepositSize && _validatorId.length == _depositData.length && msg.value == _validatorId.length * 1 ether, "WRONG_PARAMS");
 
         for (uint256 x; x < _validatorId.length; ++x) {
+            require(bidIdToStakerInfo[_validatorId[x]].sourceOfFund == ILiquidityPool.SourceOfFunds.EETH, "Wrong flow");
             _registerValidator(_validatorId[x], _bNftRecipient, _tNftRecipient, _depositData[x], _staker, 1 ether);
         }
     }
@@ -182,16 +202,16 @@ contract StakingManager is
         bytes[] calldata _pubKey,
         bytes[] calldata _signature,
         bytes32[] calldata _depositDataRootApproval
-    ) external {
-        require(msg.sender == liquidityPoolContract, "Only LiquidityPool can call this function");
+    ) external payable {
+        require(msg.sender == liquidityPoolContract, "INCORRECT_CALLER");
 
         for (uint256 x; x < _validatorId.length; ++x) {
-            nodesManager.setEtherFiNodePhase(_validatorId[x], IEtherFiNode.VALIDATOR_PHASE.LIVE);
+            nodesManager.setValidatorPhase(_validatorId[x], IEtherFiNode.VALIDATOR_PHASE.LIVE);
             // Deposit to the Beacon Chain
             bytes memory withdrawalCredentials = nodesManager.getWithdrawalCredentials(_validatorId[x]);
             bytes32 beaconChainDepositRoot = depositRootGenerator.generateDepositRoot(_pubKey[x], _signature[x], withdrawalCredentials, 31 ether);
             bytes32 registeredDataRoot = _depositDataRootApproval[x];
-            require(beaconChainDepositRoot == registeredDataRoot, "Incorrect deposit data root");
+            require(beaconChainDepositRoot == registeredDataRoot, "WRONG_DEPOSIT_DATA_ROOT");
             depositContractEth2.deposit{value: 31 ether}(_pubKey[x], withdrawalCredentials, _signature[x], beaconChainDepositRoot);
         }
     }
@@ -199,6 +219,7 @@ contract StakingManager is
     /// @notice Cancels a user's deposits
     /// @param _validatorIds the IDs of the validators deposits to cancel
     function batchCancelDeposit(uint256[] calldata _validatorIds) public whenNotPaused nonReentrant {
+        require(isFullStakeEnabled, "DEPRECATED");
         for (uint256 x; x < _validatorIds.length; ++x) {
             require(bidIdToStakerInfo[_validatorIds[x]].sourceOfFund == ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, "Wrong flow");
             _cancelDeposit(_validatorIds[x], msg.sender);
@@ -212,19 +233,11 @@ contract StakingManager is
     /// @param _validatorIds validators to cancel
     /// @param _caller address of the bNFT holder who initiated the transaction. Used for verification
     function batchCancelDepositAsBnftHolder(uint256[] calldata _validatorIds, address _caller) public whenNotPaused nonReentrant {
-        require(msg.sender == liquidityPoolContract, "Incorrect Caller");
+        require(msg.sender == liquidityPoolContract, "INCORRECT_CALLER");
 
-        uint32 numberOfEethValidators;
-        uint32 numberOfEtherFanValidators;
         for (uint256 x; x < _validatorIds.length; ++x) { 
             ILiquidityPool.SourceOfFunds source = bidIdToStakerInfo[_validatorIds[x]].sourceOfFund;
             require(source != ILiquidityPool.SourceOfFunds.DELEGATED_STAKING, "Wrong flow");
-
-            if (source == ILiquidityPool.SourceOfFunds.EETH){
-                numberOfEethValidators++;
-            } else if (source == ILiquidityPool.SourceOfFunds.ETHER_FAN) {
-                numberOfEtherFanValidators++;
-            }
 
             if(nodesManager.phase(_validatorIds[x]) == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) {
                 uint256 nftTokenId = _validatorIds[x];
@@ -234,24 +247,35 @@ contract StakingManager is
 
             _cancelDeposit(_validatorIds[x], _caller);
         }
-
-        ILiquidityPool(liquidityPoolContract).decreaseSourceOfFundsValidators(numberOfEethValidators, numberOfEtherFanValidators);
     }
+
+    /// @dev create a new proxy instance of the etherFiNode withdrawal safe contract.
+    /// @param _createEigenPod whether or not to create an associated eigenPod contract.
+    function instantiateEtherFiNode(bool _createEigenPod) external returns (address) {
+        require(msg.sender == address(nodesManager), "INCORRECT_CALLER");
+
+        BeaconProxy proxy = new BeaconProxy(address(upgradableBeacon), "");
+        address node = address(proxy);
+        IEtherFiNode(node).initialize(address(nodesManager));
+        if (_createEigenPod) {
+            IEtherFiNode(node).createEigenPod();
+        }
+        return node;
+    }
+
+    error ALREADY_SET();
 
     /// @notice Sets the EtherFi node manager contract
     /// @param _nodesManagerAddress address of the manager contract being set
     function setEtherFiNodesManagerAddress(address _nodesManagerAddress) public onlyOwner {
-        require(address(nodesManager) == address(0), "Address already set");
-        require(_nodesManagerAddress != address(0), "No zero addresses");
-
+        if (address(nodesManager) != address(0)) revert ALREADY_SET();
         nodesManager = IEtherFiNodesManager(_nodesManagerAddress);
     }
 
     /// @notice Sets the Liquidity pool contract address
     /// @param _liquidityPoolAddress address of the liquidity pool contract being set
     function setLiquidityPoolAddress(address _liquidityPoolAddress) public onlyOwner {
-        require(liquidityPoolContract == address(0), "Address already set");
-        require(_liquidityPoolAddress != address(0), "No zero addresses");
+        if (address(liquidityPoolContract) != address(0)) revert ALREADY_SET();
 
         liquidityPoolContract = _liquidityPoolAddress;
     }
@@ -263,8 +287,8 @@ contract StakingManager is
     }
 
     function registerEtherFiNodeImplementationContract(address _etherFiNodeImplementationContract) public onlyOwner {
-        require(implementationContract == address(0), "Address already set");
-        require(_etherFiNodeImplementationContract != address(0), "No zero addresses");
+        if (address(upgradableBeacon) != address(0) || address(implementationContract) != address(0)) revert ALREADY_SET();
+        require(_etherFiNodeImplementationContract != address(0), "ZERO_ADDRESS");
 
         implementationContract = _etherFiNodeImplementationContract;
         upgradableBeacon = new UpgradeableBeacon(implementationContract);      
@@ -273,8 +297,7 @@ contract StakingManager is
     /// @notice Instantiates the TNFT interface
     /// @param _tnftAddress Address of the TNFT contract
     function registerTNFTContract(address _tnftAddress) public onlyOwner {
-        require(address(TNFTInterfaceInstance) == address(0), "Address already set");
-        require(_tnftAddress != address(0), "No zero addresses");
+        if (address(TNFTInterfaceInstance) != address(0)) revert ALREADY_SET();
 
         TNFTInterfaceInstance = ITNFT(_tnftAddress);
     }
@@ -282,8 +305,7 @@ contract StakingManager is
     /// @notice Instantiates the BNFT interface
     /// @param _bnftAddress Address of the BNFT contract
     function registerBNFTContract(address _bnftAddress) public onlyOwner {
-        require(address(BNFTInterfaceInstance) == address(0), "Address already set");
-        require(_bnftAddress != address(0), "No zero addresses");
+        if (address(BNFTInterfaceInstance) != address(0)) revert ALREADY_SET();
 
         BNFTInterfaceInstance = IBNFT(_bnftAddress);
     }
@@ -291,10 +313,14 @@ contract StakingManager is
     /// @notice Upgrades the etherfi node
     /// @param _newImplementation The new address of the etherfi node
     function upgradeEtherFiNode(address _newImplementation) public onlyOwner {
-        require(_newImplementation != address(0), "No zero addresses");
+        require(_newImplementation != address(0), "ZERO_ADDRESS");
         
         upgradableBeacon.upgradeTo(_newImplementation);
         implementationContract = _newImplementation;
+    }
+
+    function updateFullStakingStatus(bool _status) external onlyOwner {
+        isFullStakeEnabled = _status;
     }
 
     function pauseContract() external onlyAdmin { _pause(); }
@@ -303,12 +329,12 @@ contract StakingManager is
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
     function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        require(_address != address(0), "Cannot be address zero");
+        require(_address != address(0), "ZERO_ADDRESS");
         admins[_address] = _isAdmin;
     }
     
     function setNodeOperatorManager(address _nodeOperateManager) external onlyAdmin {
-        require(_nodeOperateManager != address(0), "Cannot be address zero");
+        require(_nodeOperateManager != address(0), "ZERO_ADDRESS");
         nodeOperatorManager = _nodeOperateManager;
     }
 
@@ -316,48 +342,39 @@ contract StakingManager is
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
 
-    function _depositWithBidIds(
+    function _processDeposits(
         uint256[] calldata _candidateBidIds, 
-        address _staker, 
+        uint256 _numberOfDeposits,
+        address _staker,
+        address _tnftHolder,
+        address _bnftHolder,
         ILiquidityPool.SourceOfFunds _source,
-        bool _enableRestaking
+        bool _enableRestaking,
+        uint256 _validatorIdToShareWithdrawalSafe
     ) internal returns (uint256[] memory){
-
-        require(_candidateBidIds.length > 0, "No bid Ids provided");
-        uint256 numberOfDeposits = msg.value / stakeAmount;
-        require(numberOfDeposits <= maxBatchDepositSize, "Batch too large");
-        require(auctionManager.numberOfActiveBids() >= numberOfDeposits, "No bids available at the moment");
-
-        uint256[] memory processedBidIds = new uint256[](numberOfDeposits);
+        uint256[] memory processedBidIds = new uint256[](_numberOfDeposits);
         uint256 processedBidIdsCount = 0;
 
         for (uint256 i = 0;
-            i < _candidateBidIds.length && processedBidIdsCount < numberOfDeposits;
+            i < _candidateBidIds.length && processedBidIdsCount < _numberOfDeposits;
             ++i) {
             uint256 bidId = _candidateBidIds[i];
             address bidStaker = bidIdToStakerInfo[bidId].staker;
             address operator = auctionManager.getBidOwner(bidId);
-            bool isActive = auctionManager.isBidActive(bidId);
-            if (bidStaker == address(0) && isActive) {
-                //Verify the node operator who has been selected is approved to run validators using the specific source of funds.
-                //See more info in Node Operator manager around approving operators for different source types
-                require(_verifyNodeOperator(operator, _source), "Operator not verified");
+            if (bidStaker == address(0) && auctionManager.isBidActive(bidId)) {
+                // Verify the node operator who has been selected is approved to run validators using the specific source of funds.
+                // See more info in Node Operator manager around approving operators for different source types
+                require(_verifyNodeOperator(operator, _source), "INVALID_OPERATOR");
                 auctionManager.updateSelectedBidInformation(bidId);
                 processedBidIds[processedBidIdsCount] = bidId;
                 processedBidIdsCount++;
-                _processDeposit(bidId, _staker, _enableRestaking, _source);
+                _processDeposit(bidId, _staker, _tnftHolder, _bnftHolder, _enableRestaking, _source, _validatorIdToShareWithdrawalSafe);
             }
         }
 
         // resize the processedBidIds array to the actual number of processed bid IDs
         assembly {
             mstore(processedBidIds, processedBidIdsCount)
-        }
-
-        //Need to refund the BNFT holder, currently we just sending the 30 ETH from LP back
-        uint256 unMatchedBidCount = numberOfDeposits - processedBidIdsCount;
-        if (unMatchedBidCount > 0) {
-            _refundDeposit(msg.sender, stakeAmount * unMatchedBidCount);
         }
 
         return processedBidIds;
@@ -379,20 +396,21 @@ contract StakingManager is
         address _staker,
         uint256 _depositAmount
     ) internal {
-        require(bidIdToStakerInfo[_validatorId].staker == _staker, "Not deposit owner");
+        require(bidIdToStakerInfo[_validatorId].staker == _staker, "INCORRECT_CALLER");
         bytes memory withdrawalCredentials = nodesManager.getWithdrawalCredentials(_validatorId);
         bytes32 depositDataRoot = depositRootGenerator.generateDepositRoot(_depositData.publicKey, _depositData.signature, withdrawalCredentials, _depositAmount);
-        require(depositDataRoot == _depositData.depositDataRoot, "Deposit data root mismatch");
+        require(depositDataRoot == _depositData.depositDataRoot, "WRONG_ROOT");
 
         if(_tNftRecipient == liquidityPoolContract) {
-            nodesManager.setEtherFiNodePhase(_validatorId, IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL);
+            // Deposits are split into two (1 ETH, 31 ETH). The latter is by the ether.fi Oracle
+            nodesManager.setValidatorPhase(_validatorId, IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL);
         } else {
-            nodesManager.setEtherFiNodePhase(_validatorId, IEtherFiNode.VALIDATOR_PHASE.LIVE);
+            // Deposit 32 ETH at once
+            nodesManager.setValidatorPhase(_validatorId, IEtherFiNode.VALIDATOR_PHASE.LIVE);
         }
 
         // Deposit to the Beacon Chain
         depositContractEth2.deposit{value: _depositAmount}(_depositData.publicKey, withdrawalCredentials, _depositData.signature, depositDataRoot);
-        nodesManager.setEtherFiNodeIpfsHashForEncryptedValidatorKey(_validatorId, _depositData.ipfsHashForEncryptedValidatorKey);
 
         nodesManager.incrementNumberOfValidators(1);
         auctionManager.processAuctionFeeTransfer(_validatorId);
@@ -414,12 +432,22 @@ contract StakingManager is
 
     /// @notice Update the state of the contract now that a deposit has been made
     /// @param _bidId The bid that won the right to the deposit
-    function _processDeposit(uint256 _bidId, address _staker, bool _enableRestaking, ILiquidityPool.SourceOfFunds _source) internal {
+    function _processDeposit(uint256 _bidId, address _staker, address _tnftHolder, address _bnftHolder, bool _enableRestaking, ILiquidityPool.SourceOfFunds _source, uint256 _validatorIdToShareWithdrawalSafe) internal {
         bidIdToStakerInfo[_bidId] = StakerInfo(_staker, _source);
         uint256 validatorId = _bidId;
 
         // register a withdrawalSafe for this bid/validator, creating a new one if necessary
-        address etherfiNode = nodesManager.registerEtherFiNode(validatorId, _enableRestaking);
+        address etherfiNode;
+        if (_validatorIdToShareWithdrawalSafe == 0) {
+            etherfiNode = nodesManager.allocateEtherFiNode(_enableRestaking);
+        } else {
+            require(TNFTInterfaceInstance.ownerOf(_validatorIdToShareWithdrawalSafe) == msg.sender, "WRONG_TNFT_OWNER"); // T-NFT owner must be the same
+            require(BNFTInterfaceInstance.ownerOf(_validatorIdToShareWithdrawalSafe) == _bnftHolder, "WRONG_BNFT_OWNER");
+            require(auctionManager.getBidOwner(_validatorIdToShareWithdrawalSafe) == auctionManager.getBidOwner(_bidId), "WRONG_BID_OWNER");
+            etherfiNode = nodesManager.etherfiNodeAddress(_validatorIdToShareWithdrawalSafe);
+            nodesManager.updateEtherFiNode(_validatorIdToShareWithdrawalSafe);
+        }
+        nodesManager.registerValidator(validatorId, _enableRestaking, etherfiNode);
 
         emit StakeDeposit(_staker, _bidId, etherfiNode, _enableRestaking);
         emit StakeSource(_bidId, _source);
@@ -428,25 +456,20 @@ contract StakingManager is
     /// @notice Cancels a users stake
     /// @param _validatorId the ID of the validator deposit to cancel
     function _cancelDeposit(uint256 _validatorId, address _caller) internal {
-        require(bidIdToStakerInfo[_validatorId].staker == _caller, "Not deposit owner");
-
-        IEtherFiNode.VALIDATOR_PHASE validatorPhase = nodesManager.phase(_validatorId);
+        require(bidIdToStakerInfo[_validatorId].staker == _caller, "INCORRECT_CALLER");
 
         bidIdToStakerInfo[_validatorId].staker = address(0);
-        nodesManager.setEtherFiNodePhase(_validatorId, IEtherFiNode.VALIDATOR_PHASE.CANCELLED);
-        nodesManager.unregisterEtherFiNode(_validatorId);
+        nodesManager.unregisterValidator(_validatorId);
 
         // Call function in auction contract to re-initiate the bid that won
         auctionManager.reEnterAuction(_validatorId);
-        if(validatorPhase == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) {
-            _refundDeposit(msg.sender, 31 ether);
-        } else {
+
+        bool isFullStake = (msg.sender != liquidityPoolContract);
+        if (isFullStake) {
             _refundDeposit(msg.sender, stakeAmount);
         }
 
         emit DepositCancelled(_validatorId);
-
-        require(bidIdToStakerInfo[_validatorId].staker == address(0), "Bid already cancelled");
     }
 
     /// @notice Refunds the depositor their staked ether for a specific stake
@@ -454,8 +477,9 @@ contract StakingManager is
     /// @param _depositOwner address of the user being refunded
     /// @param _amount the amount to refund the depositor
     function _refundDeposit(address _depositOwner, uint256 _amount) internal {
+        uint256 balanace = address(this).balance;
         (bool sent, ) = _depositOwner.call{value: _amount}("");
-        require(sent, "Failed to send Ether"); 
+        require(sent && address(this).balance == balanace - _amount, "SendFail");
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -470,6 +494,18 @@ contract StakingManager is
             approved = true;
         } else {
             approved = INodeOperatorManager(nodeOperatorManager).isEligibleToRunValidatorsForSourceOfFund(_operator, _source);
+        }
+    }
+
+    function _requireAdmin() internal view virtual {
+        require(admins[msg.sender], "NOT_ADMIN");
+    }
+
+    function _verifyDepositState(bytes32 _depositRoot) internal view virtual {
+        // disable deposit root check if none provided
+        if (_depositRoot != 0x0000000000000000000000000000000000000000000000000000000000000000) {
+            bytes32 onchainDepositRoot = depositContractEth2.get_deposit_root();
+            require(_depositRoot == onchainDepositRoot, "DEPOSIT_ROOT_CHANGED");
         }
     }
 
@@ -502,22 +538,13 @@ contract StakingManager is
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
 
-    modifier correctStakeAmount() {
-        require(msg.value > 0 && msg.value % stakeAmount == 0, "Insufficient staking amount");
-        _;
-    }
-
     modifier verifyDepositState(bytes32 _depositRoot) {
-        // disable deposit root check if none provided
-        if (_depositRoot != 0x0000000000000000000000000000000000000000000000000000000000000000) {
-            bytes32 onchainDepositRoot = depositContractEth2.get_deposit_root();
-            require(_depositRoot == onchainDepositRoot, "deposit root changed");
-        }
+        _verifyDepositState(_depositRoot);
         _;
     }
 
     modifier onlyAdmin() {
-        require(admins[msg.sender], "Caller is not the admin");
+        _requireAdmin();
         _;
     }
 }

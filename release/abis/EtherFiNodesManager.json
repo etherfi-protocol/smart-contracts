@@ -167,6 +167,19 @@
   },
   {
     "type": "function",
+    "name": "batchPartialWithdrawOptimized",
+    "inputs": [
+      {
+        "name": "_validatorIds",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "batchQueueRestakedWithdrawal",
     "inputs": [
       {
@@ -255,6 +268,60 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "callDelegationManager",
+    "inputs": [
+      {
+        "name": "_validatorId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "data",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "callEigenPod",
+    "inputs": [
+      {
+        "name": "_validatorId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "data",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "callEigenPodManager",
+    "inputs": [
+      {
+        "name": "_validatorId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "data",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "payable"
   },
   {
     "type": "function",
@@ -350,6 +417,19 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "forcePartialWithdraw",
+    "inputs": [
+      {
+        "name": "_validatorId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -663,6 +743,19 @@
         "name": "_maxEigenlayerWithdrawals",
         "type": "uint8",
         "internalType": "uint8"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "initializeOnUpgrade2",
+    "inputs": [
+      {
+        "name": "_delegationManager",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [],
@@ -1221,6 +1314,49 @@
   },
   {
     "type": "event",
+    "name": "FullWithdrawal",
+    "inputs": [
+      {
+        "name": "_validatorId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "etherFiNode",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "toOperator",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "toTnft",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "toBnft",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "toTreasury",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "FundsWithdrawn",
     "inputs": [
       {
@@ -1324,6 +1460,49 @@
   },
   {
     "type": "event",
+    "name": "PartialWithdrawal",
+    "inputs": [
+      {
+        "name": "_validatorId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "etherFiNode",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "toOperator",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "toTnft",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "toBnft",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "toTreasury",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Paused",
     "inputs": [
       {
@@ -1407,6 +1586,11 @@
   },
   {
     "type": "error",
+    "name": "NotAdmin",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NotInstalled",
     "inputs": []
   },
@@ -1417,17 +1601,7 @@
   },
   {
     "type": "error",
-    "name": "NotTnftOwner",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "ValidatorNotExited",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "ValidatorNotLive",
+    "name": "SendFail",
     "inputs": []
   }
 ]
