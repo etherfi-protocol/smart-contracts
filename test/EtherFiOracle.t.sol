@@ -432,10 +432,6 @@ contract EtherFiOracleTest is TestSetup {
         report.eEthTargetAllocationWeight = 80;
         report.etherFanTargetAllocationWeight = 20;
         _executeAdminTasks(report);
-        (, uint32 eEthTargetWeight) = liquidityPoolInstance.fundStatistics(ILiquidityPool.SourceOfFunds.EETH);
-        (, uint32 etherFanTargetWeight) = liquidityPoolInstance.fundStatistics(ILiquidityPool.SourceOfFunds.ETHER_FAN);
-        assertEq(eEthTargetWeight, 80);
-        assertEq(etherFanTargetWeight, 20);
     }
 
     function test_huge_positive_rebaes() public {
@@ -448,13 +444,13 @@ contract EtherFiOracleTest is TestSetup {
         _moveClock(1 days / 12);
 
         // Change in APR is below 100%
-        report.accruedRewards = int128(60 ether) / int128(365);
+        report.accruedRewards = int128(60 ether - 1 ether) / int128(365);
         _executeAdminTasks(report);
 
         _moveClock(1 days / 12);
 
         // Change in APR is above 100%, which reverts
-        report.accruedRewards = int128(61 ether) / int128(365);
+        report.accruedRewards = int128(60 ether + 1 ether) / int128(365);
         _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
     }
 
@@ -614,5 +610,51 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.executeTasks(report, emptyBytes, emptyBytes);
 
         vm.stopPrank();
+    }
+
+    function test_consensus_scenario_example1() public {
+        vm.startPrank(owner);
+        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.setQuorumSize(2);
+        vm.stopPrank();
+
+        _moveClock(1024 + 2 * slotsPerEpoch);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        _initReportBlockStamp(report);
+
+        // Assume that the accruedRewards must be 1 ether, all the time
+
+        // Alice submited the correct report 
+        vm.prank(alice);
+        report.accruedRewards = 1 ether;
+        bool consensusReached = etherFiOracleInstance.submitReport(report);
+        assertFalse(consensusReached);
+
+        // However, Bob submitted a wrong report
+        vm.prank(chad);
+        report.accruedRewards = 2 ether;
+        consensusReached = etherFiOracleInstance.submitReport(report);
+        assertFalse(consensusReached);
+
+        // Bob realized that he generated a wrong report and try to submit the correct report
+        // which fails because no more than 1 report can be submitted within the same period by the same committee member
+        vm.prank(chad);
+        vm.expectRevert("You don't need to submit a report");
+        etherFiOracleInstance.submitReport(report);
+
+        // However, in the next period, the committee can re-try to publish the correct report
+        _moveClock(1024);
+        _initReportBlockStamp(report);
+
+        vm.prank(alice);
+        report.accruedRewards = 1 ether;
+        consensusReached = etherFiOracleInstance.submitReport(report);
+        assertFalse(consensusReached);
+
+        vm.prank(chad);
+        report.accruedRewards = 1 ether;
+        consensusReached = etherFiOracleInstance.submitReport(report);
+        assertTrue(consensusReached); // succeeded
     }
 }

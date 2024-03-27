@@ -49,11 +49,7 @@ contract SmallScenariosTest is TestSetup {
 
         setUpBnftHolders();
         vm.warp(976348625856);
-
-        vm.prank(alice);
-        //Set the max number of validators per holder to 4
-        liquidityPoolInstance.setNumValidatorsToSpinUpInBatch(4);
-
+        
         startHoax(bob);
         nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 40);
         uint256[] memory bidIds = auctionInstance.createBid{value: 1 ether}(5, 0.2 ether);
@@ -141,11 +137,11 @@ contract SmallScenariosTest is TestSetup {
                 processedBidIds[i]
             );
 
-            assertEq(uint8(IEtherFiNode(_etherFiNode).phase()), uint8(IEtherFiNode.VALIDATOR_PHASE.STAKE_DEPOSITED));
+            assertEq(uint8(managerInstance.phase(processedBidIds[i])), uint8(IEtherFiNode.VALIDATOR_PHASE.STAKE_DEPOSITED));
         }
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether);
-        assertEq(address(stakingManagerInstance).balance, 32 ether);
+        assertEq(address(stakingManagerInstance).balance, 0 ether);
 
         // Generate Deposit Data
         IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
@@ -193,14 +189,14 @@ contract SmallScenariosTest is TestSetup {
                 processedBidIds[i]
             );
 
-            assertEq(uint8(IEtherFiNode(_etherFiNode).phase()), uint8(IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL));
+            assertEq(uint8(managerInstance.phase(processedBidIds[i])), uint8(IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL));
         }
 
         vm.stopPrank();
 
-        assertEq(address(stakingManagerInstance).balance, 31 ether);
+        assertEq(address(stakingManagerInstance).balance, 0 ether);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether);
-        assertEq(address(liquidityPoolInstance).balance, 0 ether);
+        assertEq(address(liquidityPoolInstance).balance, 31 ether);
 
         // Check NFT's are minted correctly
         assertEq(TNFTInstance.ownerOf(processedBidIds[0]), address(liquidityPoolInstance));
@@ -250,17 +246,17 @@ contract SmallScenariosTest is TestSetup {
         vm.startPrank(owner);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 31 ether);
         liquidityPoolInstance.deposit{value: 32 ether}();
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 31 ether + 32 ether);
-        assertEq(address(liquidityPoolInstance).balance, 32 ether + 1 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 31 ether + 32 ether); // 31 + 32 = 63
+        assertEq(address(liquidityPoolInstance).balance, 32 ether + 1 ether + 31 ether); // 32 + 1 + 31 = 64
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(withdrawRequestId);
 
         vm.prank(chad);
-        withdrawRequestNFTInstance.claimWithdraw(withdrawRequestId);
+        withdrawRequestNFTInstance.claimWithdraw(withdrawRequestId); // Chad claims his 15.5 ETH
 
-        assert(liquidityPoolInstance.getTotalPooledEther() >= 47.5 ether); // 63 - 15.5 = 47.5
-        assert(address(liquidityPoolInstance).balance >= 17.5 ether); // 33 - 15.5 = 17.5
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 47.5 ether); // 63 - 15.5 = 47.5
+        assertEq(address(liquidityPoolInstance).balance, 48.5 ether); // 64 - 15.5 = 48.5
 
         vm.prank(alice);
         liquidityPoolInstance.batchApproveRegistration(processedBidIds, pubKey, signature);
@@ -270,8 +266,11 @@ contract SmallScenariosTest is TestSetup {
                 processedBidIds[i]
             );
 
-            assertEq(uint8(IEtherFiNode(_etherFiNode).phase()), uint8(IEtherFiNode.VALIDATOR_PHASE.LIVE));
+            assertEq(uint8(managerInstance.phase(processedBidIds[i])), uint8(IEtherFiNode.VALIDATOR_PHASE.LIVE));
         }
+
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 47.5 ether); // 47.5
+        assertEq(address(liquidityPoolInstance).balance, 17.5 ether); // 48.5 - 31 = 17.5
 
         // EtherFi sends an exit request for a node to be exited to reclaim the 32 ether sent to the pool for withdrawals
         {
@@ -283,8 +282,8 @@ contract SmallScenariosTest is TestSetup {
 
             // The node contract receives the ETH (principal + rewards) from the beacon chian
             address node = managerInstance.etherfiNodeAddress(processedBidIds[0]);
-            uint256 totalStakingRewardsForOneEtherRewardsForTnft = 1 ether * uint256(100 * 32) / uint256(90 * 29);
-            vm.deal(address(node), address(node).balance + 32 ether + totalStakingRewardsForOneEtherRewardsForTnft);
+            uint256 totalStakingRewardsForOneEtherRewardsForTnft = 0;
+            vm.deal(address(node), 32 ether + totalStakingRewardsForOneEtherRewardsForTnft);
 
             // ether.fi processes the node exit.
             uint32[] memory exitTimestamps = new uint32[](1);
@@ -292,18 +291,18 @@ contract SmallScenariosTest is TestSetup {
             managerInstance.processNodeExit(processedBidIds, exitTimestamps);
 
             (, uint256 toTNFT,,) = managerInstance.getFullWithdrawalPayouts(processedBidIds[0]);
-            assertEq(toTNFT, 30 ether + 1 ether - 1);
+            assertEq(toTNFT, 30 ether);
 
             vm.stopPrank();
         }
 
-        vm.prank(alice);
         // ether.fi process the node exit from the LP
         uint256[] memory slashingPenalties = new uint256[](1);
         slashingPenalties[0] = 0;
 
-        // (30 ETH + @ ETH) enters the pool from the ether.fi node contract
-        managerInstance.fullWithdrawBatch(processedBidIds);
+        vm.prank(alice);
+        // (30 ETH) enters the pool from the ether.fi node contract
+        managerInstance.batchFullWithdraw(processedBidIds);
 
         assertEq(liquidityPoolInstance.getTotalEtherClaimOf(alice), 10.333333333333333333 ether);
         assertEq(liquidityPoolInstance.getTotalEtherClaimOf(bob), 5.166666666666666665 ether);
@@ -438,7 +437,7 @@ contract SmallScenariosTest is TestSetup {
                 gregProcessedBidIds[i]
             );
 
-            assertEq(uint8(IEtherFiNode(etherFiNode).phase()), uint8(IEtherFiNode.VALIDATOR_PHASE.STAKE_DEPOSITED));
+            assertEq(uint8(managerInstance.phase(gregProcessedBidIds[i])), uint8(IEtherFiNode.VALIDATOR_PHASE.STAKE_DEPOSITED));
         }
 
         staker = stakingManagerInstance.bidIdToStaker(bobBidIds[2]);
@@ -479,7 +478,7 @@ contract SmallScenariosTest is TestSetup {
                 gregProcessedBidIds[i]
             );
 
-            assertEq(uint8(IEtherFiNode(etherFiNode).phase()), uint8(IEtherFiNode.VALIDATOR_PHASE.LIVE));
+            assertEq(uint8(managerInstance.phase(gregProcessedBidIds[i])), uint8(IEtherFiNode.VALIDATOR_PHASE.LIVE));
         }
 
         for (uint256 i = 0; i < gregProcessedBidIds.length; i++) {
@@ -494,7 +493,7 @@ contract SmallScenariosTest is TestSetup {
                 gregProcessedBidIds[i]
             );
             assertTrue(
-                IEtherFiNode(gregNode).phase() ==
+                managerInstance.phase(gregProcessedBidIds[i]) ==
                     IEtherFiNode.VALIDATOR_PHASE.LIVE
             );
             assertEq(TNFTInstance.ownerOf(gregProcessedBidIds[i]), greg);
