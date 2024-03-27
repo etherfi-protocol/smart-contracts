@@ -545,7 +545,7 @@ contract EtherFiNode is IEtherFiNode {
         if (eigenPod != address(0x0)) return; // already have pod
         IEigenPodManager eigenPodManager = IEigenPodManager(IEtherFiNodesManager(etherFiNodesManager).eigenPodManager());
         eigenPodManager.createPod();
-        eigenPod = address(eigenPodManager.ownerToPod(address(this)));
+        eigenPod = address(eigenPodManager.getPod(address(this)));
         emit EigenPodCreated(address(this), eigenPod);
     }
 
