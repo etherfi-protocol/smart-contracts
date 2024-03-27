@@ -125,6 +125,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         etherFiAdminContract = addressProvider.getContractAddress("EtherFiAdmin");
         withdrawRequestNFT = IWithdrawRequestNFT(addressProvider.getContractAddress("WithdrawRequestNFT"));
         auctionManager = IAuctionManager(addressProvider.getContractAddress("AuctionManager"));
+        liquifier = ILiquifier(addressProvider.getContractAddress("Liquifier"));
 
         admins[etherFiAdminContract] = true;
         admins[msg.sender] = true;
@@ -134,6 +135,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         ethAmountLockedForWithdrawal = 0;
         DEPRECATED_maxValidatorsPerOwner = 40;
         isLpBnftHolder = true;
+        paused = false;
         
         DEPRECATED_fundStatistics[SourceOfFunds.EETH].numberOfValidators = 1;
         DEPRECATED_fundStatistics[SourceOfFunds.ETHER_FAN].numberOfValidators = 1;

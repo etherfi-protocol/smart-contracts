@@ -110,6 +110,7 @@ contract EtherFiNodesManager is
         bnft = BNFT(addressProvider.getContractAddress("BNFT"));
         eigenPodManager = IEigenPodManager(addressProvider.getContractAddress("EigenPodManager"));
         delayedWithdrawalRouter = IDelayedWithdrawalRouter(addressProvider.getContractAddress("DelayedWithdrawalRouter"));
+        delegationManager = IDelegationManager(addressProvider.getContractAddress("DelegationManager"));
         admins[msg.sender] = true;
 
         SCALE = 1_000_000;

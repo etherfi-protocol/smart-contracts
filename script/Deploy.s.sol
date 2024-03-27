@@ -33,8 +33,12 @@ contract Deploy is Script {
     AddressProvider public addressProvider;
     string[] public contracts;
 
+    address owner;
+
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        owner = generateAddress(deployerPrivateKey);
+
         vm.startBroadcast(deployerPrivateKey);
         
         addressProvider = new AddressProvider(msg.sender);
@@ -46,6 +50,10 @@ contract Deploy is Script {
         initialize_all_contracts();
 
         vm.stopBroadcast();
+    }
+
+    function generateAddress(uint256 privateKey) public pure returns (address) {
+        return address(uint160(uint256(keccak256(abi.encodePacked(privateKey)))));
     }
 
     function list_all_contracts() internal {
@@ -119,6 +127,35 @@ contract Deploy is Script {
         EtherFiOracle(addressProvider.getContractAddress("EtherFiOracle")).initialize(address(addressProvider), 1, 96, 0, 32, 12, 1695902400);
     
         StakingManager(addressProvider.getContractAddress("StakingManager")).registerEtherFiNodeImplementationContract(implementations["EtherFiNode"]);
+
+        {
+            NodeOperatorManager nodeOperatorManager = NodeOperatorManager(addressProvider.getContractAddress("NodeOperatorManager"));
+
+            nodeOperatorManager.addToWhitelist(owner);
+            address[] memory _users = new address[](2);
+            _users[0] = owner;
+            _users[1] = owner;
+            ILiquidityPool.SourceOfFunds[] memory _approvedTags = new ILiquidityPool.SourceOfFunds[](2);
+            _approvedTags[0] = ILiquidityPool.SourceOfFunds.EETH;
+            _approvedTags[1] = ILiquidityPool.SourceOfFunds.ETHER_FAN;
+
+            bool[] memory _approvals = new bool[](2);
+            _approvals[0] = true;
+            _approvals[1] = true;
+            nodeOperatorManager.batchUpdateOperatorsApprovedTags(_users, _approvedTags, _approvals);
+        }
+
+        {
+            LiquidityPool liquidityPool = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));
+            
+            liquidityPool.deposit{value: 1 ether}();
+            assertEq(liquidityPool.getTotalPooledEther(), 1 ether);
+        }
+
+        {
+            EtherFiOracle etherFiOracle = EtherFiOracle(addressProvider.getContractAddress("EtherFiOracle"));
+            
+        }
     }
 
     function upgrade_all_contracts() internal {
