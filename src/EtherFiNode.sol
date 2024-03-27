@@ -545,7 +545,7 @@ contract EtherFiNode is IEtherFiNode {
         if (eigenPod != address(0x0)) return; // already have pod
         IEigenPodManager eigenPodManager = IEigenPodManager(IEtherFiNodesManager(etherFiNodesManager).eigenPodManager());
         eigenPodManager.createPod();
-        eigenPod = address(eigenPodManager.getPod(address(this)));
+        eigenPod = address(eigenPodManager.ownerToPod(address(this)));
         emit EigenPodCreated(address(this), eigenPod);
     }
 
@@ -589,6 +589,7 @@ contract EtherFiNode is IEtherFiNode {
         if (!isRestakingEnabled) return;
 
         // EigenLayer has not enabled "true" restaking yet so we use this temporary mechanism
+        // TODO: remove this once EigenLayer has a proper proof based withdrawal system
         IEigenPod(eigenPod).withdrawBeforeRestaking();
     }
 

@@ -5,6 +5,8 @@ import "forge-std/console.sol";
 
 // import "@openzeppelin-upgradeable/contracts/interfaces/IERC20.sol";
 
+import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
+
 import "../src/interfaces/IStakingManager.sol";
 import "../src/interfaces/IEtherFiNode.sol";
 import "../src/interfaces/ILiquidityPool.sol";
@@ -62,6 +64,7 @@ contract TestSetup is Test {
     IStrategy public wbEthStrategy;
     IStrategy public stEthStrategy;
     IEigenLayerStrategyManager public eigenLayerStrategyManager;
+    IDelayedWithdrawalRouter public eigenLayerDelayedWithdrawalRouter;
 
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
 
@@ -240,7 +243,7 @@ contract TestSetup is Test {
         if (forkEnum == MAINNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
         } else if (forkEnum == TESTNET_FORK) {
-            vm.selectFork(vm.createFork(vm.envString("GOERLI_RPC_URL")));
+            vm.selectFork(vm.createFork(vm.envString("TESTNET_RPC_URL")));
         } else {
             revert("Unimplemented fork");
         }
@@ -259,7 +262,7 @@ contract TestSetup is Test {
             owner = addressProviderInstance.owner();
             admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
         } else if (forkEnum == TESTNET_FORK) {
-            vm.selectFork(vm.createFork(vm.envString("GOERLI_RPC_URL")));
+            vm.selectFork(vm.createFork(vm.envString("TESTNET_RPC_URL")));
             addressProviderInstance = AddressProvider(address(0x6E429db4E1a77bCe9B6F9EDCC4e84ea689c1C97e));
             owner = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
             admin = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
@@ -331,6 +334,7 @@ contract TestSetup is Test {
             wbEthStrategy = IStrategy(0x7CA911E83dabf90C90dD3De5411a10F1A6112184);
             stEthStrategy = IStrategy(0x93c4b944D05dfe6df7645A86cd2206016c51564D);
             eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
+            eigenLayerDelayedWithdrawalRouter = IDelayedWithdrawalRouter(0x7Fe7E9CC0F274d2435AD5d56D5fa73E47F6A23D8);
             lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
             
             liquifierInstance.initialize(
@@ -548,6 +552,9 @@ contract TestSetup is Test {
         } else if (block.chainid == 5) {
             // goerli
             genesisSlotTimestamp = uint32(1616508000);
+        } else if (block.chainid == 17000) {
+            // holesky
+            genesisSlotTimestamp = 1695902400;
         } else {
             genesisSlotTimestamp = 0;
         }
@@ -593,14 +600,21 @@ contract TestSetup is Test {
         membershipNftInstance.initializeOnUpgrade(address(liquidityPoolInstance));
 
 
-        // configure eigenlayer dependency differently for mainnet vs goerli because we rely
+        // configure eigenlayer dependency differently for mainnet vs testnet because we rely
         // on the contracts already deployed by eigenlayer on those chains
+        bool restakingBnftDeposits;
         if (block.chainid == 1) {
+            restakingBnftDeposits = true;
             managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), 0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338, 0x7Fe7E9CC0F274d2435AD5d56D5fa73E47F6A23D8, 5);
             managerInstance.initializeOnUpgrade2(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+        } else if (block.chainid == 17000) {
+            restakingBnftDeposits = false;
+            managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), 0x30770d7E3e71112d7A6b7259542D1f680a70e315, 0x642c646053eaf2254f088e9019ACD73d9AE0FA32, 5);
+            managerInstance.initializeOnUpgrade2(0xA44151489861Fe9e3055d95adC98FbD462B948e7);
         } else {
-            managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), 0xa286b84C96aF280a49Fe1F40B9627C2A2827df41, 0x89581561f1F98584F88b0d57c2180fb89225388f, 5);
-            managerInstance.initializeOnUpgrade2(0x1b7b8F6b258f95Cf9596EabB9aa18B62940Eb0a8);
+            restakingBnftDeposits = false;
+            managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), address(0), address(0), 5);
+            managerInstance.initializeOnUpgrade2(address(0));
         }
 
         _initOracleReportsforTesting();
@@ -609,6 +623,7 @@ contract TestSetup is Test {
         vm.startPrank(alice);
         liquidityPoolInstance.unPauseContract();
         liquidityPoolInstance.updateWhitelistStatus(false);
+        liquidityPoolInstance.setRestakeBnftDeposits(restakingBnftDeposits);
         vm.stopPrank();
 
         // Setup dependencies

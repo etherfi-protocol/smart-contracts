@@ -129,7 +129,7 @@ contract EtherFiNodesManager is
 
     function initializeOnUpgrade2(address _delegationManager) external onlyOwner {
         if (address(delegationManager) != address(0)) return;
-        delegationManager = IDelegationManager(delegationManager);
+        delegationManager = IDelegationManager(_delegationManager);
     }
 
     /// @notice Send the request to exit the validators as their T-NFT holder

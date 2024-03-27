@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "../eigenlayer-libraries/BeaconChainProofs.sol";
+import "src/eigenlayer-libraries/BeaconChainProofs.sol";
 import "./IEigenPodManager.sol";
 import "./IBeaconChainOracle.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";

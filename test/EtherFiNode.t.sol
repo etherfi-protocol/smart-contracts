@@ -93,7 +93,7 @@ contract EtherFiNodeTest is TestSetup {
 
 
     function test_batchClaimRestakedWithdrawal() public {
-        initializeTestingFork(MAINNET_FORK);
+        initializeTestingFork(TESTNET_FORK);
         uint256 validator1 = depositAndRegisterValidator(true);
         uint256 validator2 = depositAndRegisterValidator(true);
         EtherFiNode safe1 = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validator1)));
@@ -130,7 +130,7 @@ contract EtherFiNodeTest is TestSetup {
 
     function test_claimMixedSafeAndPodFunds() public {
 
-        initializeTestingFork(MAINNET_FORK);
+        initializeTestingFork(TESTNET_FORK);
 
         uint256 bidId = depositAndRegisterValidator(true);
         safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(bidId)));
@@ -155,7 +155,7 @@ contract EtherFiNodeTest is TestSetup {
 
     function test_splitBalanceInExecutionLayer() public {
 
-        initializeTestingFork(MAINNET_FORK);
+        initializeTestingFork(TESTNET_FORK);
 
         uint256 validatorId = depositAndRegisterValidator(true);
         safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
@@ -230,7 +230,7 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_claimRestakedRewards() public {
-        initializeTestingFork(MAINNET_FORK);
+        initializeTestingFork(TESTNET_FORK);
 
         uint256 validatorId = depositAndRegisterValidator(true);
         safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
@@ -285,7 +285,7 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_FullWithdrawWhenBalanceBelow16EthFails() public {
-        initializeTestingFork(MAINNET_FORK);
+        initializeTestingFork(TESTNET_FORK);
 
         // create a restaked validator
         uint256 validatorId = depositAndRegisterValidator(true);
@@ -311,7 +311,7 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_canClaimRestakedFullWithdrawal() public {
-        initializeTestingFork(MAINNET_FORK);
+        initializeTestingFork(TESTNET_FORK);
 
         // create a restaked validator
         uint256 validatorId = depositAndRegisterValidator(true);
@@ -349,7 +349,7 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_restakedFullWithdrawal() public {
-        initializeTestingFork(MAINNET_FORK);
+        initializeTestingFork(TESTNET_FORK);
 
         uint256 validatorId = depositAndRegisterValidator(true);
         safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
@@ -394,7 +394,7 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_withdrawableBalanceInExecutionLayer() public {
-        initializeTestingFork(MAINNET_FORK);
+        initializeTestingFork(TESTNET_FORK);
 
         uint256 validatorId = depositAndRegisterValidator(true);
         safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
@@ -440,7 +440,7 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_restakedAttackerCantBlockWithdraw() public {
-        initializeTestingFork(MAINNET_FORK);
+        initializeTestingFork(TESTNET_FORK);
 
         uint256 validatorId = depositAndRegisterValidator(true);
         safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
@@ -504,7 +504,7 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function testFullWithdrawBurnsTNFT() public {
-        initializeTestingFork(MAINNET_FORK);
+        initializeTestingFork(TESTNET_FORK);
 
         uint256 validatorId = depositAndRegisterValidator(true);
         safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
@@ -1924,6 +1924,7 @@ contract EtherFiNodeTest is TestSetup {
         validatorIdsToExit[0] = validatorId;
         exitTimestamps[0] = uint32(block.timestamp);
 
+        // TODO: fix needed
         vm.deal(eigenPodAddress, 32 ether + 1 ether);
 
         hoax(managerInstance.owner());
@@ -2229,7 +2230,7 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_ForcePartialWithdraw_claimQueuedWithdrawals_succeeds() public {
-        initializeTestingFork(MAINNET_FORK);
+        initializeTestingFork(TESTNET_FORK);
         uint256 validatorId = depositAndRegisterValidator(true);
         address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
         address eigenPod = IEtherFiNode(etherfiNode).eigenPod();
