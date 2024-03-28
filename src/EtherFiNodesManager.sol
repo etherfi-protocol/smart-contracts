@@ -401,23 +401,39 @@ contract EtherFiNodesManager is
         _unRegisterValidator(_validatorId);
     }
 
+    // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/pods/EigenPod.sol
     /// @notice Call the eigenPod contract
     /// @param data to call eigenPod contract
+    // - withdrawBeforeRestaking
+    // - activateRestaking
+    // - verifyWithdrawalCredentials
+    // - recoverTokens
+    // - withdrawNonBeaconChainETHBalanceWei
+    // - 
+    // - verifyBalanceUpdates
+    // - verifyAndProcessWithdrawals
     function callEigenPod(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         IEtherFiNode(etherfiNode).callEigenPod{value: msg.value}(data);
     }
 
+    // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/core/DelegationManager.sol
     /// @notice Call the Eigenlayer delegation Manager contract
     /// @param data to call eigenPod contract
+    // - delegateTo(address operator, SignatureWithExpiry memory approverSignatureAndExpiry, bytes32 approverSalt)
+    // - undelegate(address staker)
+    // - completeQueuedWithdrawal
+    // - queueWithdrawals
     function callDelegationManager(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         // IEtherFiNode(etherfiNode).callDelegationManager{value: msg.value}(data);
         IEtherFiNode(etherfiNode).call(address(delegationManager), data);
     }
 
+    // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/pods/EigenPodManager.sol
     /// @notice Call the Eigenlayer EigenPod Manager contract
     /// @param data to call contract
+    // - recordBeaconChainETHBalanceUpdate
     function callEigenPodManager(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         // IEtherFiNode(etherfiNode).callEigenPodManager{value: msg.value}(data);
