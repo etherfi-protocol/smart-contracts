@@ -81,6 +81,7 @@ interface IEtherFiNode {
     function callEigenPod(bytes calldata data) external payable;
     function callDelegationManager(bytes calldata data) external payable;
     function callEigenPodManager(bytes calldata data) external payable;
+    function call(address to, bytes calldata data) external payable;
 
     function withdrawFunds(
         address _treasury,

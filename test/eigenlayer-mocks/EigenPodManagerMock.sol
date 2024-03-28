@@ -9,7 +9,13 @@ contract EigenPodManagerMock is IEigenPodManager, Test {
     IBeacon public eigenPodBeacon;
     IETHPOSDeposit public ethPOS;
 
+    address public owner;
+
     mapping(address => int256) public podShares;
+
+    constructor() {
+        owner = msg.sender;
+    }
 
     function slasher() external view returns(ISlasher) {}
 

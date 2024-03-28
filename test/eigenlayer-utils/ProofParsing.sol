@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity =0.8.12;
+pragma solidity ^0.8.12;
 
 import "forge-std/Test.sol";
 import "forge-std/StdJson.sol";
@@ -115,13 +115,14 @@ contract ProofParsing is Test {
         return slotProof;
     }
 
-    function getStateRootProof() public returns(bytes32[] memory) {
+    function getStateRootProof() public returns(bytes memory) {
         bytes32[] memory stateRootProof = new bytes32[](3);
         for (uint i = 0; i < 3; i++) {
             prefix = string.concat(".StateRootAgainstLatestBlockHeaderProof[", string.concat(vm.toString(i), "]"));
             stateRootProof[i] = (stdJson.readBytes32(proofConfigJson, prefix)); 
         }
-        return stateRootProof;
+        // return stateRootProof;
+        return abi.encodePacked(stateRootProof);
     }
 
     function getWithdrawalProofDeneb() public returns(bytes32[10] memory) {

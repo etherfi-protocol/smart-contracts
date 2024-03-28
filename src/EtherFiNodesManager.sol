@@ -412,14 +412,16 @@ contract EtherFiNodesManager is
     /// @param data to call eigenPod contract
     function callDelegationManager(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
         address etherfiNode = etherfiNodeAddress[_validatorId];
-        IEtherFiNode(etherfiNode).callDelegationManager{value: msg.value}(data);
+        // IEtherFiNode(etherfiNode).callDelegationManager{value: msg.value}(data);
+        IEtherFiNode(etherfiNode).call(address(delegationManager), data);
     }
 
     /// @notice Call the Eigenlayer EigenPod Manager contract
     /// @param data to call contract
     function callEigenPodManager(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
         address etherfiNode = etherfiNodeAddress[_validatorId];
-        IEtherFiNode(etherfiNode).callEigenPodManager{value: msg.value}(data);
+        // IEtherFiNode(etherfiNode).callEigenPodManager{value: msg.value}(data);
+        IEtherFiNode(etherfiNode).call(address(eigenPodManager), data);
     }
 
     //--------------------------------------------------------------------------------------

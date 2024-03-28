@@ -436,6 +436,12 @@ contract EtherFiNode is IEtherFiNode {
     function callEigenPodManager(bytes calldata data) external payable onlyEtherFiNodeManagerContract {
         _executeCall(address(IEtherFiNodesManager(etherFiNodesManager).eigenPodManager()), msg.value, data);
     }
+
+    // As an optimization, it skips the call to 'etherFiNodesManager' back again to retrieve the target address
+    function call(address to, bytes memory data) external payable onlyEtherFiNodeManagerContract {
+        (bool success,) = address(to).call{gas: gasleft()}(data);
+        if (!success) revert CallFailed(data);
+    }
     
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------

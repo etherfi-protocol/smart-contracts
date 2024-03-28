@@ -6,6 +6,9 @@ import "forge-std/console.sol";
 // import "@openzeppelin-upgradeable/contracts/interfaces/IERC20.sol";
 
 import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
+import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
+import "../src/eigenlayer-interfaces/IBeaconChainOracle.sol";
+import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
 
 import "../src/interfaces/IStakingManager.sol";
 import "../src/interfaces/IEtherFiNode.sol";
@@ -65,6 +68,9 @@ contract TestSetup is Test {
     IStrategy public stEthStrategy;
     IEigenLayerStrategyManager public eigenLayerStrategyManager;
     IDelayedWithdrawalRouter public eigenLayerDelayedWithdrawalRouter;
+    IBeaconChainOracle public beaconChainOracle;
+    BeaconChainOracleMock public beaconChainOracleMock;
+    IEigenPodManager public eigenLayerEigenPodManager;
 
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
 
@@ -555,6 +561,7 @@ contract TestSetup is Test {
         } else if (block.chainid == 17000) {
             // holesky
             genesisSlotTimestamp = 1695902400;
+            beaconChainOracle = IBeaconChainOracle(0x4C116BB629bff7A8373c2378bBd919f8349B8f25);
         } else {
             genesisSlotTimestamp = 0;
         }
@@ -609,6 +616,7 @@ contract TestSetup is Test {
             managerInstance.initializeOnUpgrade2(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
         } else if (block.chainid == 17000) {
             restakingBnftDeposits = false;
+            eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
             managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), 0x30770d7E3e71112d7A6b7259542D1f680a70e315, 0x642c646053eaf2254f088e9019ACD73d9AE0FA32, 5);
             managerInstance.initializeOnUpgrade2(0xA44151489861Fe9e3055d95adC98FbD462B948e7);
         } else {

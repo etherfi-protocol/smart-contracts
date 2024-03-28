@@ -156,4 +156,6 @@ interface IEigenPodManager is IPausable {
      */
     function setDenebForkTimestamp(uint64 newDenebForkTimestamp) external;
 
+    function owner() external returns (address);
+
 }
