@@ -89,6 +89,7 @@ contract StakingManager is
         // depositContractEth2 = IDepositContract(addressProvider.getContractAddress("DepositContract"));
         // nodeOperatorManager = addressProvider.getContractAddress("NodeOperatorManager");
         // admins[msg.sender] = true;
+        // admins[addressProvider.getContractAddress("EtherFiAdmin")] = true;
 
         // stakeAmount = 32 ether;
         // maxBatchDepositSize = 25;

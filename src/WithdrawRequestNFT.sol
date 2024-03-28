@@ -47,6 +47,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         nextRequestId = 1;
         admins[msg.sender] = true;
+        admins[addressProvider.getContractAddress("EtherFiAdmin")] = true;
     }
 
     /// @notice creates a withdraw request and issues an associated NFT to the recipient

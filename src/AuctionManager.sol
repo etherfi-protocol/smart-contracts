@@ -83,6 +83,7 @@ contract AuctionManager is
         stakingManagerContractAddress = addressProvider.getContractAddress("StakingManager");
         membershipManagerContractAddress = addressProvider.getContractAddress("MembershipManager");
         admins[msg.sender] = true;
+        admins[addressProvider.getContractAddress("EtherFiAdmin")] = true;
 
         __Pausable_init();
         __Ownable_init();
