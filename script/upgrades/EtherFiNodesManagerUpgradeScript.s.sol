@@ -31,6 +31,7 @@ contract EtherFiNodesManagerUpgrade is Script {
             eigenPodManager = 0xa286b84C96aF280a49Fe1F40B9627C2A2827df41;
             delayedWithdrawalRouter = 0x89581561f1F98584F88b0d57c2180fb89225388f;
             delegationManager = 0x1b7b8F6b258f95Cf9596EabB9aa18B62940Eb0a8;
+        } else if (block.chainid == 17000) {
         } else {
             require(false);
         }
@@ -41,11 +42,10 @@ contract EtherFiNodesManagerUpgrade is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         EtherFiNodesManager EtherFiNodesManagerInstance = EtherFiNodesManager(payable(EtherFiNodesManagerProxyAddress));
-        EtherFiNodesManager EtherFiNodesManagerV2Implementation = new EtherFiNodesManager();
+        EtherFiNodesManagerInstance.upgradeTo(address(new EtherFiNodesManager()));
 
-        EtherFiNodesManagerInstance.upgradeTo(address(EtherFiNodesManagerV2Implementation));
         // EtherFiNodesManagerInstance.initializeOnUpgrade(etherFiAdminAddress, eigenPodManager, delayedWithdrawalRouter, maxEigenlayerWithdrawals);
-        EtherFiNodesManagerInstance.initializeOnUpgrade2(delegationManager);
+        // EtherFiNodesManagerInstance.initializeOnUpgrade2(delegationManager);
 
         require(IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).numberOfValidators() == numberOfValidators);
         require(IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).treasuryContract() == treasury);
