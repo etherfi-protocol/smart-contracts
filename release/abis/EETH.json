@@ -205,7 +205,7 @@
     "name": "initialize",
     "inputs": [
       {
-        "name": "_liquidityPool",
+        "name": "_addressProvider",
         "type": "address",
         "internalType": "address"
       }

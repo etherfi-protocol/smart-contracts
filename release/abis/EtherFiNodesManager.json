@@ -692,27 +692,7 @@
     "name": "initialize",
     "inputs": [
       {
-        "name": "_treasuryContract",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_auctionContract",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_stakingManagerContract",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_tnftContract",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_bnftContract",
+        "name": "_addressProvider",
         "type": "address",
         "internalType": "address"
       }

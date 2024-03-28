@@ -210,7 +210,7 @@
     "name": "initialize",
     "inputs": [
       {
-        "name": "_nodeOperatorManagerContract",
+        "name": "_addressProvider",
         "type": "address",
         "internalType": "address"
       }

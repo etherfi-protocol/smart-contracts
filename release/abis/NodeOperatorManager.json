@@ -174,7 +174,13 @@
   {
     "type": "function",
     "name": "initialize",
-    "inputs": [],
+    "inputs": [
+      {
+        "name": "_addressProvider",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
     "outputs": [],
     "stateMutability": "nonpayable"
   },

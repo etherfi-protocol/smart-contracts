@@ -329,6 +329,11 @@
     "name": "initialize",
     "inputs": [
       {
+        "name": "_addressProvider",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
         "name": "_quorumSize",
         "type": "uint32",
         "internalType": "uint32"

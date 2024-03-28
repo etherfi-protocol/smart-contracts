@@ -430,12 +430,7 @@
     "name": "initialize",
     "inputs": [
       {
-        "name": "_auctionAddress",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_depositContractAddress",
+        "name": "_addressProvider",
         "type": "address",
         "internalType": "address"
       }

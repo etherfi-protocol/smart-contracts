@@ -227,12 +227,7 @@
     "name": "initialize",
     "inputs": [
       {
-        "name": "_liquidityPool",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_eETH",
+        "name": "_addressProvider",
         "type": "address",
         "internalType": "address"
       }

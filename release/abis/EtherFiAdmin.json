@@ -322,49 +322,9 @@
     "name": "initialize",
     "inputs": [
       {
-        "name": "_etherFiOracle",
+        "name": "_addressProvider",
         "type": "address",
         "internalType": "address"
-      },
-      {
-        "name": "_stakingManager",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_auctionManager",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_etherFiNodesManager",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_liquidityPool",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_membershipManager",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_withdrawRequestNft",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_acceptableRebaseAprInBps",
-        "type": "int32",
-        "internalType": "int32"
-      },
-      {
-        "name": "_postReportWaitTimeInSlots",
-        "type": "uint16",
-        "internalType": "uint16"
       }
     ],
     "outputs": [],

@@ -716,37 +716,7 @@
     "name": "initialize",
     "inputs": [
       {
-        "name": "_eEthAddress",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_stakingManagerAddress",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_nodesManagerAddress",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_membershipManagerAddress",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_tNftAddress",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_etherFiAdminContract",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_withdrawRequestNFT",
+        "name": "_addressProvider",
         "type": "address",
         "internalType": "address"
       }

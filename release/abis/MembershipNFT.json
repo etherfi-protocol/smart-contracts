@@ -396,7 +396,7 @@
         "internalType": "string"
       },
       {
-        "name": "_membershipManagerInstance",
+        "name": "_addressProvider",
         "type": "address",
         "internalType": "address"
       }

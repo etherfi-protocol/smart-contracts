@@ -117,7 +117,7 @@
     "name": "initialize",
     "inputs": [
       {
-        "name": "_stakingManagerAddress",
+        "name": "_addressProvider",
         "type": "address",
         "internalType": "address"
       }

@@ -229,17 +229,7 @@
     "name": "initialize",
     "inputs": [
       {
-        "name": "_liquidityPoolAddress",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_eEthAddress",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_membershipManagerAddress",
+        "name": "_addressProvider",
         "type": "address",
         "internalType": "address"
       }
