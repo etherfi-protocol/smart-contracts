@@ -97,40 +97,40 @@ contract EtherFiNodesManager is
     function initialize(
         address _addressProvider
     ) external initializer {
-        AddressProvider addressProvider = AddressProvider(_addressProvider);
+        // AddressProvider addressProvider = AddressProvider(_addressProvider);
 
-        __Ownable_init();
-        __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
+        // __Ownable_init();
+        // __UUPSUpgradeable_init();
+        // __ReentrancyGuard_init();
 
-        treasuryContract = addressProvider.getContractAddress("Treasury");
-        stakingManagerContract = addressProvider.getContractAddress("StakingManager");
-        auctionManager = IAuctionManager(addressProvider.getContractAddress("AuctionManager"));
-        tnft = TNFT(addressProvider.getContractAddress("TNFT"));
-        bnft = BNFT(addressProvider.getContractAddress("BNFT"));
-        eigenPodManager = IEigenPodManager(addressProvider.getContractAddress("EigenPodManager"));
-        delayedWithdrawalRouter = IDelayedWithdrawalRouter(addressProvider.getContractAddress("DelayedWithdrawalRouter"));
-        delegationManager = IDelegationManager(addressProvider.getContractAddress("DelegationManager"));
-        admins[msg.sender] = true;
+        // treasuryContract = addressProvider.getContractAddress("Treasury");
+        // stakingManagerContract = addressProvider.getContractAddress("StakingManager");
+        // auctionManager = IAuctionManager(addressProvider.getContractAddress("AuctionManager"));
+        // tnft = TNFT(addressProvider.getContractAddress("TNFT"));
+        // bnft = BNFT(addressProvider.getContractAddress("BNFT"));
+        // eigenPodManager = IEigenPodManager(addressProvider.getContractAddress("EigenPodManager"));
+        // delayedWithdrawalRouter = IDelayedWithdrawalRouter(addressProvider.getContractAddress("DelayedWithdrawalRouter"));
+        // delegationManager = IDelegationManager(addressProvider.getContractAddress("DelegationManager"));
+        // admins[msg.sender] = true;
 
-        SCALE = 1_000_000;
-        setStakingRewardsSplit(100_000, 0, 815_625, 84_375);
-        nonExitPenaltyPrincipal = 1 ether;
-        nonExitPenaltyDailyRate = 50;
-        enableNodeRecycling = true;
-        maxEigenlayerWithdrawals = 5;
+        // SCALE = 1_000_000;
+        // setStakingRewardsSplit(100_000, 0, 815_625, 84_375);
+        // nonExitPenaltyPrincipal = 1 ether;
+        // nonExitPenaltyDailyRate = 50;
+        // enableNodeRecycling = true;
+        // maxEigenlayerWithdrawals = 5;
     }
 
     function initializeOnUpgrade(address _etherFiAdmin, address _eigenPodManager, address _delayedWithdrawalRouter, uint8 _maxEigenlayerWithdrawals) public onlyOwner {
-        admins[_etherFiAdmin] = true;
-        eigenPodManager = IEigenPodManager(_eigenPodManager);
-        delayedWithdrawalRouter = IDelayedWithdrawalRouter(_delayedWithdrawalRouter);
-        maxEigenlayerWithdrawals = _maxEigenlayerWithdrawals;
+        // admins[_etherFiAdmin] = true;
+        // eigenPodManager = IEigenPodManager(_eigenPodManager);
+        // delayedWithdrawalRouter = IDelayedWithdrawalRouter(_delayedWithdrawalRouter);
+        // maxEigenlayerWithdrawals = _maxEigenlayerWithdrawals;
     }
 
     function initializeOnUpgrade2(address _delegationManager) external onlyOwner {
-        if (address(delegationManager) != address(0)) return;
-        delegationManager = IDelegationManager(delegationManager);
+        // if (address(delegationManager) != address(0)) return;
+        // delegationManager = IDelegationManager(delegationManager);
     }
 
     /// @notice Send the request to exit the validators as their T-NFT holder

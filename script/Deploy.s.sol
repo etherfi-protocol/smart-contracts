@@ -37,19 +37,25 @@ contract Deploy is Script {
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        owner = generateAddress(deployerPrivateKey);
+        owner = vm.envAddress("DEPLOYER");
 
+        uint256 step = 2;
         vm.startBroadcast(deployerPrivateKey);
         
-        addressProvider = new AddressProvider(msg.sender);
+        if (step == 1) {
+            addressProvider = new AddressProvider(msg.sender);
 
-        list_all_contracts();
+            list_all_contracts();
+            deploy_all_contracts();
+            initialize_all_contracts();
+        } else if (step == 2) {
+            addressProvider = AddressProvider(vm.envAddress("CONTRACT_REGISTRY"));
 
-        deploy_all_contracts();
-
-        initialize_all_contracts();
-
+            upgrade_contracts();
+        }
         vm.stopBroadcast();
+
+        sanity_checks();
     }
 
     function generateAddress(uint256 privateKey) public pure returns (address) {
@@ -125,6 +131,23 @@ contract Deploy is Script {
         WithdrawRequestNFT(addressProvider.getContractAddress("WithdrawRequestNFT")).initialize(address(addressProvider));
         EtherFiAdmin(addressProvider.getContractAddress("EtherFiAdmin")).initialize(address(addressProvider));
         EtherFiOracle(addressProvider.getContractAddress("EtherFiOracle")).initialize(address(addressProvider), 1, 96, 0, 32, 12, 1695902400);
+
+
+        StakingManager(addressProvider.getContractAddress("StakingManager")).initializeOnUpgrade(
+            addressProvider.getContractAddress("NodeOperatorManager"),
+            addressProvider.getContractAddress("EtherFiAdmin")
+        );
+        EtherFiNodesManager(payable(addressProvider.getContractAddress("EtherFiNodesManager"))).initializeOnUpgrade(
+            addressProvider.getContractAddress("EtherFiAdmin"),
+            addressProvider.getContractAddress("EigenPodManager"),
+            addressProvider.getContractAddress("DelayedWithdrawalRouter"),
+            5
+        );
+        MembershipManager(payable(addressProvider.getContractAddress("MembershipManager"))).initializeOnUpgrade(
+            addressProvider.getContractAddress("EtherFiAdmin"),
+            0.1 ether,
+            30
+        );
     
         StakingManager(addressProvider.getContractAddress("StakingManager")).registerEtherFiNodeImplementationContract(implementations["EtherFiNode"]);
 
@@ -149,17 +172,23 @@ contract Deploy is Script {
             LiquidityPool liquidityPool = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));
             
             liquidityPool.deposit{value: 1 ether}();
-            assertEq(liquidityPool.getTotalPooledEther(), 1 ether);
+            assert(liquidityPool.getTotalPooledEther() == 1 ether);
         }
 
         {
             EtherFiOracle etherFiOracle = EtherFiOracle(addressProvider.getContractAddress("EtherFiOracle"));
-            
+            etherFiOracle.addCommitteeMember(owner);
         }
     }
 
-    function upgrade_all_contracts() internal {
+    function sanity_checks() internal {
 
+    }
+
+    function upgrade_contracts() internal {
+        StakingManager(addressProvider.getContractAddress("StakingManager")).upgradeTo(address(new StakingManager()));
+        EtherFiNodesManager(payable(addressProvider.getContractAddress("EtherFiNodesManager"))).upgradeTo(address(new EtherFiNodesManager()));
+        MembershipManager(payable(addressProvider.getContractAddress("MembershipManager"))).upgradeTo(address(new MembershipManager()));
     }
 
 }

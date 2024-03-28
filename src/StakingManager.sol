@@ -80,30 +80,30 @@ contract StakingManager is
 
     /// @notice Initialize to set variables on deployment
     function initialize(address _addressProvider) external initializer {
-        AddressProvider addressProvider = AddressProvider(_addressProvider);
-        liquidityPoolContract = addressProvider.getContractAddress("LiquidityPool");
-        TNFTInterfaceInstance = ITNFT(addressProvider.getContractAddress("TNFT"));
-        BNFTInterfaceInstance = IBNFT(addressProvider.getContractAddress("BNFT"));
-        nodesManager = IEtherFiNodesManager(addressProvider.getContractAddress("EtherFiNodesManager"));
-        auctionManager = IAuctionManager(addressProvider.getContractAddress("AuctionManager"));
-        depositContractEth2 = IDepositContract(addressProvider.getContractAddress("DepositContract"));
-        nodeOperatorManager = addressProvider.getContractAddress("NodeOperatorManager");
-        admins[msg.sender] = true;
+        // AddressProvider addressProvider = AddressProvider(_addressProvider);
+        // liquidityPoolContract = addressProvider.getContractAddress("LiquidityPool");
+        // TNFTInterfaceInstance = ITNFT(addressProvider.getContractAddress("TNFT"));
+        // BNFTInterfaceInstance = IBNFT(addressProvider.getContractAddress("BNFT"));
+        // nodesManager = IEtherFiNodesManager(addressProvider.getContractAddress("EtherFiNodesManager"));
+        // auctionManager = IAuctionManager(addressProvider.getContractAddress("AuctionManager"));
+        // depositContractEth2 = IDepositContract(addressProvider.getContractAddress("DepositContract"));
+        // nodeOperatorManager = addressProvider.getContractAddress("NodeOperatorManager");
+        // admins[msg.sender] = true;
 
-        stakeAmount = 32 ether;
-        maxBatchDepositSize = 25;
-        isFullStakeEnabled = true;
+        // stakeAmount = 32 ether;
+        // maxBatchDepositSize = 25;
+        // isFullStakeEnabled = true;
 
-        __Pausable_init();
-        __Ownable_init();
-        __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
+        // __Pausable_init();
+        // __Ownable_init();
+        // __UUPSUpgradeable_init();
+        // __ReentrancyGuard_init();
     }
 
     function initializeOnUpgrade(address _nodeOperatorManager, address _etherFiAdmin) external onlyOwner {
-        DEPRECATED_admin = address(0);
-        nodeOperatorManager = _nodeOperatorManager;
-        admins[_etherFiAdmin] = true;
+        // DEPRECATED_admin = address(0);
+        // nodeOperatorManager = _nodeOperatorManager;
+        // admins[_etherFiAdmin] = true;
     }
 
     /// @notice Allows depositing multiple stakes at once
