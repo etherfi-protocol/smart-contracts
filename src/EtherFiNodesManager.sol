@@ -106,25 +106,25 @@ contract EtherFiNodesManager is
         address _tnftContract,
         address _bnftContract
     ) external initializer {
-        // __Ownable_init();
-        // __UUPSUpgradeable_init();
-        // __ReentrancyGuard_init();
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
 
-        // SCALE = 1_000_000;
+        SCALE = 1_000_000;
 
-        // treasuryContract = _treasuryContract;
-        // stakingManagerContract = _stakingManagerContract;
+        treasuryContract = _treasuryContract;
+        stakingManagerContract = _stakingManagerContract;
 
-        // auctionManager = IAuctionManager(_auctionContract);
-        // tnft = TNFT(_tnftContract);
-        // bnft = BNFT(_bnftContract);
+        auctionManager = IAuctionManager(_auctionContract);
+        tnft = TNFT(_tnftContract);
+        bnft = BNFT(_bnftContract);
     }
 
     function initializeOnUpgrade(address _etherFiAdmin, address _eigenPodManager, address _delayedWithdrawalRouter, uint8 _maxEigenlayerWithdrawals) public onlyOwner {
-        // admins[_etherFiAdmin] = true;
-        // eigenPodManager = IEigenPodManager(_eigenPodManager);
-        // delayedWithdrawalRouter = IDelayedWithdrawalRouter(_delayedWithdrawalRouter);
-        // maxEigenlayerWithdrawals = _maxEigenlayerWithdrawals;
+        admins[_etherFiAdmin] = true;
+        eigenPodManager = IEigenPodManager(_eigenPodManager);
+        delayedWithdrawalRouter = IDelayedWithdrawalRouter(_delayedWithdrawalRouter);
+        maxEigenlayerWithdrawals = _maxEigenlayerWithdrawals;
     }
 
     function initializeOnUpgrade2(address _delegationManager) external onlyOwner {

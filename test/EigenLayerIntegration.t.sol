@@ -31,7 +31,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     bytes32[][] validatorFields;
 
     function setUp() public {
-        initializeTestingFork(TESTNET_FORK);
+        initializeRealisticFork(TESTNET_FORK);
 
         p2p = 0x37d5077434723d0ec21D894a52567cbE6Fb2C3D8;
         dsrv = 0x33503F021B5f1C00bA842cEd26B44ca2FAB157Bd;
@@ -42,6 +42,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // eigenPod = 0x54c702BABacccd92F7bd624C9c17581B5aDa81Ec;
         // eigenPodOwner = 0x16eAd66b7CBcAb3F3Cd49e04E6C74b02b05d98E8;
 
+        // {EigenPod, EigenPodOwner} used in EigenLayer's unit test
         eigenPodOwner = address(42000094993494);
         eigenPod = address(0x49c486E3f4303bc11C02F952Fe5b08D0AB22D443);
 
@@ -52,7 +53,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         eigenLayerEigenPodManager.updateBeaconChainOracle(beaconChainOracle);
         vm.stopPrank();
 
-        vm.startPrank(alice);
+        vm.startPrank(owner);
         liquidityPoolInstance.setRestakeBnftDeposits(true);
         vm.stopPrank();
     }
@@ -106,7 +107,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         assertTrue(node.eigenPod() != address(0));
         
-        vm.startPrank(admin);
+        vm.startPrank(owner);
         // EigenPod contract created after EL contract upgrade is restaked by default in its 'initialize'
         // Therefore, the call to 'activateRestaking()' should fail.
         // We will need to write another test in mainnet for this
@@ -145,22 +146,23 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         address(eigenPod).call(data);
         vm.stopPrank();
     }
+    
     function test_verifyWithdrawalCredentials() public {
         // Spin up a validator
         (uint256 validatorId, address nodeAddress, EtherFiNode node) = create_validator();
 
         // Generate the proofs using the library
-        // setJSON("./test/eigenlayer-utils/test-data/withdrawal_credential_proof_302913.json");
+        setJSON("./test/eigenlayer-utils/test-data/withdrawal_credential_proof_302913.json"); // TODO: Use Ether.Fi's one
         _setWithdrawalCredentialParams();
         _setOracleBlockRoot();
 
-        vm.startPrank(admin);
+        vm.startPrank(owner);
         bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
         managerInstance.callEigenPod(validatorId, abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, validatorFieldsProofs, validatorFields));
         vm.stopPrank();
     }
 
-    // Call DelegationMaanger.delegateTo(address operator)
+    // Call DelegationManager.delegateTo(address operator)
     // function delegateTo(
     //     address operator,
     //     SignatureWithExpiry memory approverSignatureAndExpiry,
@@ -177,7 +179,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     function test_delegateTo() public {
         (uint256 validatorId, address nodeAddress, EtherFiNode node) = create_validator();
 
-        vm.startPrank(admin);
+        vm.startPrank(owner);
         bytes4 selector = bytes4(keccak256("delegateTo(address,(bytes,uint256),bytes32)"));
         IDelegationManager.SignatureWithExpiry memory signatureWithExpiry;
         managerInstance.callDelegationManager(validatorId, abi.encodeWithSelector(selector, p2p, signatureWithExpiry, bytes32(0)));

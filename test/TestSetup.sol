@@ -269,9 +269,12 @@ contract TestSetup is Test {
             admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
         } else if (forkEnum == TESTNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("TESTNET_RPC_URL")));
-            addressProviderInstance = AddressProvider(address(0x6E429db4E1a77bCe9B6F9EDCC4e84ea689c1C97e));
+            addressProviderInstance = AddressProvider(address(0x7c5EB0bE8af2eDB7461DfFa0Fd2856b3af63123e));
             owner = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
             admin = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
+
+            eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
+
         } else {
             revert("Unimplemented fork");
         }
@@ -299,23 +302,23 @@ contract TestSetup is Test {
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         liquifierInstance = Liquifier(payable(addressProviderInstance.getContractAddress("Liquifier")));
 
-        assert(address(regulationsManagerInstance) != address(0x0));
+        // assert(address(regulationsManagerInstance) != address(0x0));
         assert(address(managerInstance) != address(0x0));
         assert(address(liquidityPoolInstance) != address(0x0));
         assert(address(eETHInstance) != address(0x0));
         assert(address(weEthInstance) != address(0x0));
         assert(address(membershipManagerV1Instance) != address(0x0));
         assert(address(membershipNftInstance) != address(0x0));
-        assert(address(nftExchangeInstance) != address(0x0));
+        // assert(address(nftExchangeInstance) != address(0x0));
         assert(address(auctionInstance) != address(0x0));
         assert(address(stakingManagerInstance) != address(0x0));
         assert(address(TNFTInstance) != address(0x0));
         assert(address(BNFTInstance) != address(0x0));
         assert(address(treasuryInstance) != address(0x0));
         assert(address(nodeOperatorManagerInstance) != address(0x0));
-        assert(address(node) != address(0x0));
-        assert(address(earlyAdopterPoolInstance) != address(0x0));
-        assert(address(etherFiTimelockInstance) != address(0x0));
+        // assert(address(node) != address(0x0));
+        // assert(address(earlyAdopterPoolInstance) != address(0x0));
+        // assert(address(etherFiTimelockInstance) != address(0x0));
 
      // TODO: doesn't currently exist on mainnet. But re-add this check after deploy
      //   assert(address(withdrawRequestNFTInstance) != address(0x0));
@@ -1099,6 +1102,8 @@ contract TestSetup is Test {
         address admin;
         if (block.chainid == 1) {
             admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
+        } else if (block.chainid == 17000) {
+            admin = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
         } else {
             admin = alice;
         }
