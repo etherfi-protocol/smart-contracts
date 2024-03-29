@@ -234,38 +234,38 @@ contract EtherFiNodesManager is
     // Optimized version of batchPartialWithdraw for a set of validators
     // such that they share the same {T,B}-NFT holders and Node Operator
     function batchPartialWithdrawOptimized(uint256[] calldata _validatorIds) external whenNotPaused {
-        // uint256[] memory payouts = new uint256[](4); // (toNodeOperator, toTnft, toBnft, toTreasury)
-        // (address operator, address tnftOwner, address bnftOwner, address treasury) = 
-        //     (auctionManager.getBidOwner(_validatorIds[0]), tnft.ownerOf(_validatorIds[0]), bnft.ownerOf(_validatorIds[0]), treasuryContract);
+        uint256[] memory payouts = new uint256[](4); // (toNodeOperator, toTnft, toBnft, toTreasury)
+        (address operator, address tnftOwner, address bnftOwner, address treasury) = 
+            (auctionManager.getBidOwner(_validatorIds[0]), tnft.ownerOf(_validatorIds[0]), bnft.ownerOf(_validatorIds[0]), treasuryContract);
 
-        // for (uint256 i = 0; i < _validatorIds.length; i++) {
-        //     uint256 _validatorId = _validatorIds[i];
-        //     require (auctionManager.getBidOwner(_validatorId) == operator && tnft.ownerOf(_validatorId) == tnftOwner && bnft.ownerOf(_validatorId) == bnftOwner, "INVALID");
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            uint256 _validatorId = _validatorIds[i];
+            require (auctionManager.getBidOwner(_validatorId) == operator && tnft.ownerOf(_validatorId) == tnftOwner && bnft.ownerOf(_validatorId) == bnftOwner, "INVALID");
 
-        //     address etherfiNode = etherfiNodeAddress[_validatorId];
-        //     _updateEtherFiNode(_validatorId);
+            address etherfiNode = etherfiNodeAddress[_validatorId];
+            _updateEtherFiNode(_validatorId);
 
-        //     // sweep rewards from eigenPod if any queued withdrawals are ready to be claimed
-        //     IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithdrawals, false);
+            // sweep rewards from eigenPod if any queued withdrawals are ready to be claimed
+            IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithdrawals, false);
 
-        //     // distribute the rewards payouts. It reverts if the safe's balance >= 16 ether
-        //     (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
+            // distribute the rewards payouts. It reverts if the safe's balance >= 16 ether
+            (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
 
-        //     uint256 total = toOperator + toTnft + toBnft + toTreasury;
-        //     IEtherFiNode(etherfiNode).moveFundsToManager(total);
+            uint256 total = toOperator + toTnft + toBnft + toTreasury;
+            IEtherFiNode(etherfiNode).moveFundsToManager(total);
 
-        //     payouts[0] += toOperator;
-        //     payouts[1] += toTnft;
-        //     payouts[2] += toBnft;
-        //     payouts[3] += toTreasury;
+            payouts[0] += toOperator;
+            payouts[1] += toTnft;
+            payouts[2] += toBnft;
+            payouts[3] += toTreasury;
 
-        //     emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
-        // }
+            emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
+        }
 
-        // _sendFund(operator, payouts[0]);
-        // _sendFund(tnftOwner, payouts[1]);
-        // _sendFund(bnftOwner, payouts[2]);
-        // _sendFund(treasury, payouts[3]);
+        _sendFund(operator, payouts[0]);
+        _sendFund(tnftOwner, payouts[1]);
+        _sendFund(bnftOwner, payouts[2]);
+        _sendFund(treasury, payouts[3]);
     }
 
     /// @notice process the full withdrawal

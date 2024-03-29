@@ -284,7 +284,13 @@
         "internalType": "bytes[]"
       }
     ],
-    "outputs": [],
+    "outputs": [
+      {
+        "name": "returnData",
+        "type": "bytes[]",
+        "internalType": "bytes[]"
+      }
+    ],
     "stateMutability": "nonpayable"
   },
   {
@@ -302,7 +308,13 @@
         "internalType": "bytes[]"
       }
     ],
-    "outputs": [],
+    "outputs": [
+      {
+        "name": "returnData",
+        "type": "bytes[]",
+        "internalType": "bytes[]"
+      }
+    ],
     "stateMutability": "nonpayable"
   },
   {
@@ -320,7 +332,13 @@
         "internalType": "bytes[]"
       }
     ],
-    "outputs": [],
+    "outputs": [
+      {
+        "name": "returnData",
+        "type": "bytes[]",
+        "internalType": "bytes[]"
+      }
+    ],
     "stateMutability": "nonpayable"
   },
   {
@@ -338,7 +356,13 @@
         "internalType": "bytes[]"
       }
     ],
-    "outputs": [],
+    "outputs": [
+      {
+        "name": "returnData",
+        "type": "bytes[]",
+        "internalType": "bytes[]"
+      }
+    ],
     "stateMutability": "nonpayable"
   },
   {
