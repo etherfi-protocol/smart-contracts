@@ -415,9 +415,10 @@ contract EtherFiNodesManager is
     // - 
     // - verifyBalanceUpdates
     // - verifyAndProcessWithdrawals
-    function callEigenPod(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin {
+    function callEigenPod(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
+        returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(data[i]);
+            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(data[i]);
         }
     }
 
@@ -428,10 +429,11 @@ contract EtherFiNodesManager is
     // - undelegate(address staker)
     // - completeQueuedWithdrawal
     // - queueWithdrawals
-    function callDelegationManager(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin {
+    function callDelegationManager(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
         address to = address(delegationManager);
+        returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
+            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
         }
     }
 
@@ -439,17 +441,19 @@ contract EtherFiNodesManager is
     /// @notice Call the Eigenlayer EigenPod Manager contract
     /// @param data to call contract
     // - recordBeaconChainETHBalanceUpdate
-    function callEigenPodManager(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin {
+    function callEigenPodManager(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
         address to = address(eigenPodManager);
+        returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
+            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
         }
     }
 
-    function callDelayedWithdrawalRouter(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin {
+    function callDelayedWithdrawalRouter(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
         address to = address(delayedWithdrawalRouter);
+        returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
+            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
         }
     }
 

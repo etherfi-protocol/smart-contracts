@@ -39,8 +39,8 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         initializeRealisticFork(TESTNET_FORK);
 
         // Upgrade before running tests if you changed the contracts
-        // _upgrade_etherfi_nodes_manager_contract();
-        // _upgrade_etherfi_node_contract();
+        _upgrade_etherfi_nodes_manager_contract();
+        _upgrade_etherfi_node_contract();
 
         p2p = 0x37d5077434723d0ec21D894a52567cbE6Fb2C3D8;
         dsrv = 0x33503F021B5f1C00bA842cEd26B44ca2FAB157Bd;
@@ -235,7 +235,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         data[0] = abi.encodeWithSelector(selector, podOwner);
         
         vm.prank(owner);
-        vm.epxectRevert("DelegationManager.undelegate: staker must be delegated to undelegate");
+        vm.expectRevert("DelegationManager.undelegate: staker must be delegated to undelegate");
         managerInstance.callDelegationManager(validatorIds, data);
     }
 
