@@ -11,8 +11,6 @@ import "./eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "forge-std/console.sol";
 
 contract EtherFiNode is IEtherFiNode {
-    // using Address for address;
-
     address public etherFiNodesManager;
 
     uint256 public DEPRECATED_localRevenueIndex;
