@@ -65,6 +65,8 @@ contract EtherFiNodesManager is
 
     IDelegationManager public delegationManager;
 
+    mapping(address => bool) public eigenLayerOperatingAdmin;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -413,7 +415,7 @@ contract EtherFiNodesManager is
     // - 
     // - verifyBalanceUpdates
     // - verifyAndProcessWithdrawals
-    function callEigenPod(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyAdmin {
+    function callEigenPod(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(data[i]);
         }
@@ -426,7 +428,7 @@ contract EtherFiNodesManager is
     // - undelegate(address staker)
     // - completeQueuedWithdrawal
     // - queueWithdrawals
-    function callDelegationManager(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyAdmin {
+    function callDelegationManager(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin {
         address to = address(delegationManager);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
@@ -437,14 +439,14 @@ contract EtherFiNodesManager is
     /// @notice Call the Eigenlayer EigenPod Manager contract
     /// @param data to call contract
     // - recordBeaconChainETHBalanceUpdate
-    function callEigenPodManager(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyAdmin {
+    function callEigenPodManager(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin {
         address to = address(eigenPodManager);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
         }
     }
 
-    function callDelayedWithdrawalRouter(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyAdmin {
+    function callDelayedWithdrawalRouter(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin {
         address to = address(delayedWithdrawalRouter);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
@@ -511,6 +513,10 @@ contract EtherFiNodesManager is
     /// @param _address the new address to set as admin
     function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
         admins[_address] = _isAdmin;
+    }
+
+    function updateEigenLayerOperatingAdmin(address _address, bool _isAdmin) external onlyOwner {
+        eigenLayerOperatingAdmin[_address] = _isAdmin;
     }
 
     //Pauses the contract
@@ -771,6 +777,9 @@ contract EtherFiNodesManager is
         if (msg.sender != stakingManagerContract) revert NotStakingManager();
     }
 
+    function _eigenLayerOperatingAdmin() internal view virtual {
+        if (!admins[msg.sender] && eigenLayerOperatingAdmin[msg.sender]) revert NotAdmin();
+    }
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
@@ -783,6 +792,11 @@ contract EtherFiNodesManager is
 
     modifier onlyAdmin() {
         _requireAdmin();
+        _;
+    }
+
+    modifier onlyEigenLayerOperatingAdmin() {
+        _eigenLayerOperatingAdmin();
         _;
     }
 }
