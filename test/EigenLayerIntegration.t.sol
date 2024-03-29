@@ -26,6 +26,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     uint256 validatorId;
     IEigenPod eigenPod;
     address podOwner;
+    bytes pubkey;
 
     // Params to _verifyWithdrawalCredentials
     uint64 oracleTimestamp;
@@ -55,6 +56,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         podOwner = managerInstance.etherfiNodeAddress(validatorId);
         validatorIds = new uint256[](1);
         validatorIds[0] = validatorId;
+        pubkey = hex"ad85894db60881bcee956116beae6bc6934d7eca8317dc3084adf665be426a21a1855b5196a7515fd791bf0b6e3727c5";
 
         // Override with Mock
         vm.startPrank(eigenLayerEigenPodManager.owner());
@@ -102,7 +104,11 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     }
 
     function _beacon_process_32ETH_deposit() internal {
-        // TODO
+        // - The validator 1644305 has 32 ETH deposit at slot = 1320800
+        setJSON("./test/eigenlayer-utils/test-data/ValidatorFieldsProof_1644305_1320800.json");
+        
+        _setWithdrawalCredentialParams();
+        _setOracleBlockRoot();
     }
 
     function _beacon_process_partial_withdrawals() internal {
@@ -143,11 +149,16 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.stopPrank();
     }
 
-    // https://holesky.beaconcha.in/validator/1644305#deposits
     function test_verifyWithdrawalCredentials_1ETH() public {
         _beacon_process_1ETH_deposit();
 
         int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
+        IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
+        assertEq(initialShares, 0, "Shares should be 0 ETH in wei before verifying withdrawal credentials");
+        assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
+        assertEq(validatorInfo.validatorIndex, 0);
+        assertEq(validatorInfo.restakedBalanceGwei, 0);
+        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, 0);
 
         // 2. Trigger a function
         vm.startPrank(owner);
@@ -159,14 +170,49 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         // 3. Check the result
         int256 updatedShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
-        assertTrue(updatedShares != initialShares, "Shares should be updated after verifying withdrawal credentials");
+        validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
         assertEq(updatedShares, 1e18, "Shares should be 1 ETH in wei after verifying withdrawal credentials");
+        assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.ACTIVE, "Validator status should be ACTIVE");
+        assertEq(validatorInfo.validatorIndex, validatorIndices[0], "Validator index should be set");
+        assertEq(validatorInfo.restakedBalanceGwei, 1 ether / 1e9, "Restaked balance should be 1 eth0");
+        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
+
+
+        _beacon_process_32ETH_deposit();
+        vm.startPrank(owner);
+        selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
+        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
+
+        // Can perform 'verifyWithdrawalCredentials' only once
+        vm.expectRevert("EigenPod.verifyCorrectWithdrawalCredentials: Validator must be inactive to prove withdrawal credentials");
+        managerInstance.callEigenPod(validatorIds, data);
+        vm.stopPrank();
     }
 
+    // https://holesky.beaconcha.in/validator/1644305#deposits
     function test_verifyWithdrawalCredentials_32ETH() public {
-        _beacon_process_partial_withdrawals();
-        
-        // TODO
+        _beacon_process_32ETH_deposit();
+
+        int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
+        IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
+        assertEq(initialShares, 0, "Shares should be 0 ETH in wei before verifying withdrawal credentials");
+        assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
+        assertEq(validatorInfo.validatorIndex, 0);
+        assertEq(validatorInfo.restakedBalanceGwei, 0);
+        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, 0);
+
+        bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
+        managerInstance.callEigenPod(validatorIds, data);
+
+        int256 updatedShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
+        validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
+        assertEq(updatedShares, 32e18, "Shares should be 32 ETH in wei after verifying withdrawal credentials");
+        assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.ACTIVE, "Validator status should be ACTIVE");
+        assertEq(validatorInfo.validatorIndex, validatorIndices[0], "Validator index should be set");
+        assertEq(validatorInfo.restakedBalanceGwei, 32 ether / 1e9, "Restaked balance should be 32 eth");
+        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
     }
 
     function test_verifyBalanceUpdates_1ETH() public {
