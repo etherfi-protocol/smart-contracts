@@ -306,7 +306,9 @@ contract LiquifierTest is TestSetup {
         uint256 liquifierTVL = liquifierInstance.getTotalPooledEther();
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
 
-        address actor = alice;
+        // While this unit test works, after EL m2 upgrade,
+        // this flow will be deprecated because setting 'wtihdrawer' != msg.sender won't be allowed within `queueWithdrawals`
+        address actor = address(liquifierInstance);
 
         vm.deal(actor, 100 ether);
         vm.startPrank(actor);        
@@ -330,6 +332,7 @@ contract LiquifierTest is TestSetup {
             shares: shares,
             withdrawer: actor
         });
+        
         IDelegationManager.Withdrawal[] memory queuedWithdrawals = new IDelegationManager.Withdrawal[](1);
         queuedWithdrawals[0] = IDelegationManager.Withdrawal({
             staker: actor,
@@ -346,6 +349,9 @@ contract LiquifierTest is TestSetup {
 
         assertTrue(eigenLayerDelegationManager.pendingWithdrawals(withdrawalRoot));
 
+        liquifierInstance.depositWithQueuedWithdrawal(queuedWithdrawals[0], address(0));
+        vm.stopPrank();
+
         vm.roll(block.number + 7 days);
 
         IERC20[][] memory tokens = new IERC20[][](1);
@@ -356,9 +362,10 @@ contract LiquifierTest is TestSetup {
         bool[] memory receiveAsTokens = new bool[](1);
         receiveAsTokens[0] = true;
 
-        eigenLayerDelegationManager.completeQueuedWithdrawals(queuedWithdrawals, tokens, middlewareTimesIndexes, receiveAsTokens);
-
+        vm.startPrank(owner);
+        liquifierInstance.completeQueuedWithdrawals(queuedWithdrawals, tokens, middlewareTimesIndexes);
         vm.stopPrank();
+
     }
 
     function _get_queued_withdrawal_of_restaked_LST_before_m2() internal returns (IDelegationManager.Withdrawal memory) {
