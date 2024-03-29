@@ -115,14 +115,19 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         (uint256 validatorId, address nodeAddress, EtherFiNode node) = create_validator();
 
         assertTrue(node.eigenPod() != address(0));
-        
+
+        uint256[] memory validatorIds = new uint256[](1);
+        bytes[] memory data = new bytes[](1);
+
         vm.startPrank(owner);
         // EigenPod contract created after EL contract upgrade is restaked by default in its 'initialize'
         // Therefore, the call to 'activateRestaking()' should fail.
         // We will need to write another test in mainnet for this
         vm.expectRevert(); 
         bytes4 selector = bytes4(keccak256("activateRestaking()"));
-        managerInstance.callEigenPod(validatorId, abi.encodeWithSelector(selector));
+        validatorIds[0] = validatorId;
+        data[0] = abi.encodeWithSelector(selector);
+        managerInstance.callEigenPod(validatorIds, data);
         vm.stopPrank();
     }
 
@@ -181,9 +186,14 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         _setOracleBlockRoot();
 
         // 3. Trigger a function
+        uint256[] memory validatorIds = new uint256[](1);
+        bytes[] memory data = new bytes[](1);
+
         vm.startPrank(owner);
         bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
-        managerInstance.callEigenPod(validatorId, abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, validatorFieldsProofs, validatorFields));
+        validatorIds[0] = validatorId;
+        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, validatorFieldsProofs, validatorFields);
+        managerInstance.callEigenPod(validatorIds, data);
         vm.stopPrank();
 
         // 4. Check the result
@@ -207,10 +217,16 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     function test_delegateTo() public {
         (uint256 validatorId, address nodeAddress, EtherFiNode node) = create_validator();
 
+        uint256[] memory validatorIds = new uint256[](1);
+        bytes[] memory data = new bytes[](1);
+
         vm.startPrank(owner);
         bytes4 selector = bytes4(keccak256("delegateTo(address,(bytes,uint256),bytes32)"));
         IDelegationManager.SignatureWithExpiry memory signatureWithExpiry;
-        managerInstance.callDelegationManager(validatorId, abi.encodeWithSelector(selector, p2p, signatureWithExpiry, bytes32(0)));
+        validatorIds[0] = validatorId;
+        data[0] = abi.encodeWithSelector(selector, p2p, signatureWithExpiry, bytes32(0));
+
+        managerInstance.callDelegationManager(validatorIds, data);
         // == delegationManager.delegateTo(p2p, signatureWithExpiry, bytes32(0));
         vm.stopPrank();
     }

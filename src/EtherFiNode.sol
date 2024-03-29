@@ -419,14 +419,14 @@ contract EtherFiNode is IEtherFiNode {
         return (payouts[0], payouts[1], payouts[2], payouts[3]);
     }
 
-    /// @notice Call the eigenPod contract
-    /// @param data to call eigenPod contract
-    function callEigenPod(bytes calldata data) external payable onlyEtherFiNodeManagerContract {
-        _executeCall(address(eigenPod), msg.value, data);
+
+    function callEigenPod(bytes calldata data) external onlyEtherFiNodeManagerContract {
+        (bool success,) = address(eigenPod).call{gas: gasleft()}(data);
+        if (!success) revert CallFailed(data);
     }
 
     // As an optimization, it skips the call to 'etherFiNodesManager' back again to retrieve the target address
-    function forwardCall(address to, bytes memory data) external payable onlyEtherFiNodeManagerContract {
+    function forwardCall(address to, bytes memory data) external onlyEtherFiNodeManagerContract {
         (bool success,) = address(to).call{gas: gasleft()}(data);
         if (!success) revert CallFailed(data);
     }
@@ -435,14 +435,6 @@ contract EtherFiNode is IEtherFiNode {
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @notice Execute a low level call
-    /// @param to address to execute call
-    /// @param value amount of ETH to send with call
-    /// @param data bytes array to execute
-    function _executeCall(address to, uint256 value, bytes memory data) internal {
-        (bool success,) = address(to).call{value: value, gas: gasleft()}(data);
-        if (!success) revert CallFailed(data);
-    }
 
     function _applyNonExitPenalty(
         IEtherFiNodesManager.ValidatorInfo memory _info, 

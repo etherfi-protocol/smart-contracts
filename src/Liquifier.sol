@@ -465,7 +465,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
             // discount
             dx = (10000 - tokenInfos[token].discountInBasisPoints) * dx / 10000;
 
-            require(!isDepositCapReached(token, dx), "CAPPED");
+            // Disable it because the deposit through EL queued withdrawal will be deprecated by EigenLayer anyway
+            // But, we need to still support '_enqueueForWithdrawal' as the backward compatibility for the already queued ones
+            // require(!isDepositCapReached(token, dx), "CAPPED");
 
             amount += dx;
             tokenInfos[token].strategyShare += uint128(share);

@@ -143,6 +143,7 @@ contract EtherFiNodesManager is
             require (msg.sender == tnft.ownerOf(_validatorId), "NOT_TNFT_OWNER");
             require (phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
             require (!isExitRequested(_validatorId), "ASKED");
+            // require (msg.sender == tnft.ownerOf(_validatorId) && phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE && !isExitRequested(_validatorId), "INVALID");
 
             _updateEtherFiNode(_validatorId);
             _updateExitRequestTimestamp(_validatorId, etherfiNode, uint32(block.timestamp));
@@ -412,9 +413,10 @@ contract EtherFiNodesManager is
     // - 
     // - verifyBalanceUpdates
     // - verifyAndProcessWithdrawals
-    function callEigenPod(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
-        address etherfiNode = etherfiNodeAddress[_validatorId];
-        IEtherFiNode(etherfiNode).callEigenPod{value: msg.value}(data);
+    function callEigenPod(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyAdmin {
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(data[i]);
+        }
     }
 
     // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/core/DelegationManager.sol
@@ -424,18 +426,22 @@ contract EtherFiNodesManager is
     // - undelegate(address staker)
     // - completeQueuedWithdrawal
     // - queueWithdrawals
-    function callDelegationManager(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
-        address etherfiNode = etherfiNodeAddress[_validatorId];
-        IEtherFiNode(etherfiNode).forwardCall(address(delegationManager), data);
+    function callDelegationManager(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyAdmin {
+        address to = address(delegationManager);
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
+        }
     }
 
     // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/pods/EigenPodManager.sol
     /// @notice Call the Eigenlayer EigenPod Manager contract
     /// @param data to call contract
     // - recordBeaconChainETHBalanceUpdate
-    function callEigenPodManager(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
-        address etherfiNode = etherfiNodeAddress[_validatorId];
-        IEtherFiNode(etherfiNode).forwardCall(address(eigenPodManager), data);
+    function callEigenPodManager(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyAdmin {
+        address to = address(eigenPodManager);
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
+        }
     }
 
     //--------------------------------------------------------------------------------------

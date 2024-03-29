@@ -144,8 +144,14 @@ contract EtherFiNodeTest is TestSetup {
 
         // claim the restaked rewards
         // safeInstance.queueRestakedWithdrawal();
+        uint256[] memory validatorIds = new uint256[](1);
+        bytes[] memory data = new bytes[](1);
+
+        validatorIds[0] = bidId;
+        data[0] = abi.encodeWithSignature("withdrawBeforeRestaking()");
+
         vm.prank(admin);
-        managerInstance.callEigenPod(bidId, abi.encodeWithSignature("withdrawBeforeRestaking()"));
+        managerInstance.callEigenPod(validatorIds, data);
         vm.roll(block.number + (50400) + 1);
         safeInstance.claimQueuedWithdrawals(1, false);
 
