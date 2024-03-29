@@ -425,20 +425,8 @@ contract EtherFiNode is IEtherFiNode {
         _executeCall(address(eigenPod), msg.value, data);
     }
 
-    /// @notice Call the Eigenlayer delegation Manager contract
-    /// @param data to call eigenPod contract
-    function callDelegationManager(bytes calldata data) external payable onlyEtherFiNodeManagerContract {
-        _executeCall(address(IEtherFiNodesManager(etherFiNodesManager).delegationManager()), msg.value, data);
-    }
-
-    /// @notice Call the Eigenlayer EigenPod Manager contract
-    /// @param data to call contract
-    function callEigenPodManager(bytes calldata data) external payable onlyEtherFiNodeManagerContract {
-        _executeCall(address(IEtherFiNodesManager(etherFiNodesManager).eigenPodManager()), msg.value, data);
-    }
-
     // As an optimization, it skips the call to 'etherFiNodesManager' back again to retrieve the target address
-    function call(address to, bytes memory data) external payable onlyEtherFiNodeManagerContract {
+    function forwardCall(address to, bytes memory data) external payable onlyEtherFiNodeManagerContract {
         (bool success,) = address(to).call{gas: gasleft()}(data);
         if (!success) revert CallFailed(data);
     }

@@ -426,8 +426,7 @@ contract EtherFiNodesManager is
     // - queueWithdrawals
     function callDelegationManager(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
         address etherfiNode = etherfiNodeAddress[_validatorId];
-        // IEtherFiNode(etherfiNode).callDelegationManager{value: msg.value}(data);
-        IEtherFiNode(etherfiNode).call(address(delegationManager), data);
+        IEtherFiNode(etherfiNode).forwardCall(address(delegationManager), data);
     }
 
     // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/pods/EigenPodManager.sol
@@ -436,8 +435,7 @@ contract EtherFiNodesManager is
     // - recordBeaconChainETHBalanceUpdate
     function callEigenPodManager(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
         address etherfiNode = etherfiNodeAddress[_validatorId];
-        // IEtherFiNode(etherfiNode).callEigenPodManager{value: msg.value}(data);
-        IEtherFiNode(etherfiNode).call(address(eigenPodManager), data);
+        IEtherFiNode(etherfiNode).forwardCall(address(eigenPodManager), data);
     }
 
     //--------------------------------------------------------------------------------------

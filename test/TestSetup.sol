@@ -8,6 +8,7 @@ import "forge-std/console.sol";
 import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
 import "../src/eigenlayer-interfaces/IBeaconChainOracle.sol";
+import "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
 
 import "../src/interfaces/IStakingManager.sol";
@@ -71,6 +72,7 @@ contract TestSetup is Test {
     IBeaconChainOracle public beaconChainOracle;
     BeaconChainOracleMock public beaconChainOracleMock;
     IEigenPodManager public eigenLayerEigenPodManager;
+    IDelegationManager public eigenLayerDelegationManager;
 
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
 
@@ -248,8 +250,38 @@ contract TestSetup is Test {
 
         if (forkEnum == MAINNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+
+            cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
+            wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
+            stEth_Eth_Pool = ICurvePool(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
+            cbEth = IcbETH(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
+            wbEth = IwBETH(0xa2E3356610840701BDf5611a53974510Ae27E2e1);
+            stEth = ILido(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+            cbEthStrategy = IStrategy(0x54945180dB7943c0ed0FEE7EdaB2Bd24620256bc);
+            wbEthStrategy = IStrategy(0x7CA911E83dabf90C90dD3De5411a10F1A6112184);
+            stEthStrategy = IStrategy(0x93c4b944D05dfe6df7645A86cd2206016c51564D);
+            lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
+
+            eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
+            eigenLayerDelegationManager = IDelegationManager(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+
         } else if (forkEnum == TESTNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("TESTNET_RPC_URL")));
+
+            // cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
+            // wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
+            stEth_Eth_Pool = ICurvePool(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
+            // cbEth = IcbETH(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
+            // wbEth = IwBETH(0xa2E3356610840701BDf5611a53974510Ae27E2e1);
+            stEth = ILido(0x3F1c547b21f65e10480dE3ad8E19fAAC46C95034 );
+            // cbEthStrategy = IStrategy(0x54945180dB7943c0ed0FEE7EdaB2Bd24620256bc);
+            // wbEthStrategy = IStrategy(0x7CA911E83dabf90C90dD3De5411a10F1A6112184);
+            stEthStrategy = IStrategy(0x7D704507b76571a51d9caE8AdDAbBFd0ba0e63d3);
+            lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
+
+            eigenLayerStrategyManager = IEigenLayerStrategyManager(0xdfB5f6CE42aAA7830E94ECFCcAd411beF4d4D5b6);
+            eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
+            eigenLayerDelegationManager = IDelegationManager(0xA44151489861Fe9e3055d95adC98FbD462B948e7);
         } else {
             revert("Unimplemented fork");
         }
@@ -265,15 +297,42 @@ contract TestSetup is Test {
         if (forkEnum == MAINNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
             addressProviderInstance = AddressProvider(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
-            owner = addressProviderInstance.owner();
+            owner = addressProviderInstance.getContractAddress("EtherFiTimelock");
             admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
+
+            cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
+            wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
+            stEth_Eth_Pool = ICurvePool(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
+            cbEth = IcbETH(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
+            wbEth = IwBETH(0xa2E3356610840701BDf5611a53974510Ae27E2e1);
+            stEth = ILido(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+            cbEthStrategy = IStrategy(0x54945180dB7943c0ed0FEE7EdaB2Bd24620256bc);
+            wbEthStrategy = IStrategy(0x7CA911E83dabf90C90dD3De5411a10F1A6112184);
+            stEthStrategy = IStrategy(0x93c4b944D05dfe6df7645A86cd2206016c51564D);
+            lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
+
+            eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
+            eigenLayerDelegationManager = IDelegationManager(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+
         } else if (forkEnum == TESTNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("TESTNET_RPC_URL")));
             addressProviderInstance = AddressProvider(address(0x7c5EB0bE8af2eDB7461DfFa0Fd2856b3af63123e));
             owner = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
             admin = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
 
+            // cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
+            // wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
+            stEth_Eth_Pool = ICurvePool(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
+            // cbEth = IcbETH(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
+            // wbEth = IwBETH(0xa2E3356610840701BDf5611a53974510Ae27E2e1);
+            stEth = ILido(0x3F1c547b21f65e10480dE3ad8E19fAAC46C95034 );
+            // cbEthStrategy = IStrategy(0x54945180dB7943c0ed0FEE7EdaB2Bd24620256bc);
+            // wbEthStrategy = IStrategy(0x7CA911E83dabf90C90dD3De5411a10F1A6112184);
+            stEthStrategy = IStrategy(0x7D704507b76571a51d9caE8AdDAbBFd0ba0e63d3);
+            lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
+
             eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
+            eigenLayerDelegationManager = IDelegationManager(0xA44151489861Fe9e3055d95adC98FbD462B948e7);
 
         } else {
             revert("Unimplemented fork");
@@ -299,76 +358,21 @@ contract TestSetup is Test {
         node = EtherFiNode(payable(addressProviderInstance.getContractAddress("EtherFiNode")));
         earlyAdopterPoolInstance = EarlyAdopterPool(payable(addressProviderInstance.getContractAddress("EarlyAdopterPool")));
         withdrawRequestNFTInstance = WithdrawRequestNFT(addressProviderInstance.getContractAddress("WithdrawRequestNFT"));
-        etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         liquifierInstance = Liquifier(payable(addressProviderInstance.getContractAddress("Liquifier")));
-
-        // assert(address(regulationsManagerInstance) != address(0x0));
-        assert(address(managerInstance) != address(0x0));
-        assert(address(liquidityPoolInstance) != address(0x0));
-        assert(address(eETHInstance) != address(0x0));
-        assert(address(weEthInstance) != address(0x0));
-        assert(address(membershipManagerV1Instance) != address(0x0));
-        assert(address(membershipNftInstance) != address(0x0));
-        // assert(address(nftExchangeInstance) != address(0x0));
-        assert(address(auctionInstance) != address(0x0));
-        assert(address(stakingManagerInstance) != address(0x0));
-        assert(address(TNFTInstance) != address(0x0));
-        assert(address(BNFTInstance) != address(0x0));
-        assert(address(treasuryInstance) != address(0x0));
-        assert(address(nodeOperatorManagerInstance) != address(0x0));
-        // assert(address(node) != address(0x0));
-        // assert(address(earlyAdopterPoolInstance) != address(0x0));
-        // assert(address(etherFiTimelockInstance) != address(0x0));
-
-     // TODO: doesn't currently exist on mainnet. But re-add this check after deploy
-     //   assert(address(withdrawRequestNFTInstance) != address(0x0));
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
         
         vm.startPrank(owner);
             
-        if (forkEnum == MAINNET_FORK) {
-            liquifierImplementation = new Liquifier();
-            liquifierProxy = new UUPSProxy(address(liquifierImplementation), "");
-            liquifierInstance = Liquifier(payable(liquifierProxy));
-
-            cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
-            wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
-            stEth_Eth_Pool = ICurvePool(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
-            cbEth = IcbETH(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
-            wbEth = IwBETH(0xa2E3356610840701BDf5611a53974510Ae27E2e1);
-            stEth = ILido(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
-            cbEthStrategy = IStrategy(0x54945180dB7943c0ed0FEE7EdaB2Bd24620256bc);
-            wbEthStrategy = IStrategy(0x7CA911E83dabf90C90dD3De5411a10F1A6112184);
-            stEthStrategy = IStrategy(0x93c4b944D05dfe6df7645A86cd2206016c51564D);
-            eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
-            eigenLayerDelayedWithdrawalRouter = IDelayedWithdrawalRouter(0x7Fe7E9CC0F274d2435AD5d56D5fa73E47F6A23D8);
-            lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
-            
-            liquifierInstance.initialize(
-                address(treasuryInstance),
-                address(liquidityPoolInstance),
-                address(eigenLayerStrategyManager),
-                address(lidoWithdrawalQueue),
-                address(stEth),
-                address(cbEth),
-                address(wbEth),
-                address(cbEth_Eth_Pool),
-                address(wbEth_Eth_Pool),
-                address(stEth_Eth_Pool),
-                3600
-            );
-
+        if (forkEnum == MAINNET_FORK) {            
+            liquifierInstance.upgradeTo(address(new Liquifier()));
+            liquifierInstance.initializeOnUpgrade(address(eigenLayerDelegationManager), address(0x1b81D678ffb9C0263b24A97847620C99d213eB14));
             liquifierInstance.updateAdmin(alice, true);
-            liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true, 0, 50, 1000); // 50 ether timeBoundCap, 1000 ether total cap
-            liquifierInstance.registerToken(address(cbEth), address(cbEthStrategy), true, 0, 50, 1000);
-            liquifierInstance.registerToken(address(wbEth), address(wbEthStrategy), true, 0, 50, 1000);
-
-            liquidityPoolInstance.upgradeTo(address(new LiquidityPool()));
-            liquidityPoolInstance.initializeOnUpgrade(address(auctionInstance), address(liquifierInstance));
         } else if (forkEnum == TESTNET_FORK) {
-
+            liquifierInstance.upgradeTo(address(new Liquifier()));
+            liquifierInstance.initializeOnUpgrade(address(eigenLayerDelegationManager), address(0));
+            liquifierInstance.updateAdmin(alice, true);
         }
 
         vm.stopPrank();
@@ -537,22 +541,22 @@ contract TestSetup is Test {
         liquifierInstance.initialize(
             address(treasuryInstance),
             address(liquidityPoolInstance),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            0
+            address(eigenLayerStrategyManager),
+            address(lidoWithdrawalQueue),
+            address(stEth),
+            address(cbEth),
+            address(wbEth),
+            address(cbEth_Eth_Pool),
+            address(wbEth_Eth_Pool),
+            address(stEth_Eth_Pool),
+            3600
         );
 
         membershipManagerInstance.updateAdmin(alice, true);
         membershipNftInstance.updateAdmin(alice, true);
         withdrawRequestNFTInstance.updateAdmin(alice, true);
         liquidityPoolInstance.updateAdmin(alice, true);
-        liquifierInstance.updateAdmin(alice, true);
+        // liquifierInstance.updateAdmin(alice, true);
 
         // special case for forked tests utilizing oracle
         // can't use env variable because then it would apply to all tests including non-forked ones

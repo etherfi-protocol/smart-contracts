@@ -463,4 +463,6 @@ interface IDelegationManager is ISignatureUtils {
     function calculateWithdrawalRoot(Withdrawal memory withdrawal) external pure returns (bytes32);
 
     function migrateQueuedWithdrawals(IStrategyManager.DeprecatedStruct_QueuedWithdrawal[] memory withdrawalsToQueue) external;
+
+    function pendingWithdrawals(bytes32 withdrawalRoot) external view returns (bool);
 }

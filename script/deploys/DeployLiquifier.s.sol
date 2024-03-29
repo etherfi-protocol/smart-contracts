@@ -63,23 +63,23 @@ contract DeployLiquifierScript is Script {
             // liquifierInstance.initialize();
         }
 
-
+    
         // function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
         // address _stEth, address _cbEth, address _wbEth, address _cbEth_Eth_Pool, address _wbEth_Eth_Pool, address _stEth_Eth_Pool,
         // uint32 _depositCapRefreshInterval)
-        liquifierInstance.initialize(
-            addressProvider.getContractAddress("Treasury"),
-            addressProvider.getContractAddress("LiquidityPool"),
-            eigenLayerStrategyManager,
-            lidoWithdrawalQueue,
-            stEth,
-            cbEth,
-            wbEth,
-            cbEth_Eth_Pool,
-            wbEth_Eth_Pool,
-            stEth_Eth_Pool,
-            depositCapRefreshInterval // deposit cap refresh interval in seconds
-        );
+        // liquifierInstance.initialize(
+        //     addressProvider.getContractAddress("Treasury"),
+        //     addressProvider.getContractAddress("LiquidityPool"),
+        //     eigenLayerStrategyManager,
+        //     lidoWithdrawalQueue,
+        //     stEth,
+        //     cbEth,
+        //     wbEth,
+        //     cbEth_Eth_Pool,
+        //     wbEth_Eth_Pool,
+        //     stEth_Eth_Pool,
+        //     depositCapRefreshInterval // deposit cap refresh interval in seconds
+        // );
 
         liquifierInstance.updateAdmin(admin, true);
 

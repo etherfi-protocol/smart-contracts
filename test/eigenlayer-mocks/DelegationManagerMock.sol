@@ -9,7 +9,8 @@ import "../../src/eigenlayer-interfaces/IStrategyManager.sol";
 contract DelegationManagerMock is IDelegationManager, Test {
     mapping(address => bool) public isOperator;
     mapping(address => mapping(IStrategy => uint256)) public operatorShares;
-
+    mapping(bytes32 => bool) public pendingWithdrawals;
+    
     function setIsOperator(address operator, bool _isOperatorReturnValue) external {
         isOperator[operator] = _isOperatorReturnValue;
     }
@@ -198,4 +199,5 @@ contract DelegationManagerMock is IDelegationManager, Test {
     ) external {
         strategyManager.withdrawSharesAsTokens(recipient, strategy, shares, token);
     }
+
 }
