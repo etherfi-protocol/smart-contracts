@@ -25,6 +25,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     uint256[] validatorIds;
     uint256 validatorId;
     IEigenPod eigenPod;
+    address podOwner;
 
     // Params to _verifyWithdrawalCredentials
     uint64 oracleTimestamp;
@@ -37,6 +38,10 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     function setUp() public {
         initializeRealisticFork(TESTNET_FORK);
 
+        // Upgrade before running tests if you changed the contracts
+        // _upgrade_etherfi_nodes_manager_contract();
+        // _upgrade_etherfi_node_contract();
+
         p2p = 0x37d5077434723d0ec21D894a52567cbE6Fb2C3D8;
         dsrv = 0x33503F021B5f1C00bA842cEd26B44ca2FAB157Bd;
 
@@ -47,6 +52,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // {EigenPod, EigenPodOwner} used in EigenLayer's unit test
         validatorId = 1;
         eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
+        podOwner = managerInstance.etherfiNodeAddress(validatorId);
         validatorIds = new uint256[](1);
         validatorIds[0] = validatorId;
 
@@ -101,6 +107,36 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         return (validatorIds[0], nodeAddress, node);
     }
 
+    // Example from the EigenLayer repo
+    // function test_verifyWithdrawalCredentials_EL() public {
+    //     // Generate the proofs using the library
+    //     setJSON("./test/eigenlayer-utils/test-data/withdrawal_credential_proof_302913.json");
+    //     _setWithdrawalCredentialParams();
+    //     _setOracleBlockRoot();
+
+    //     address podOwner = managerInstance.etherfiNodeAddress(validatorId);
+    //     int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
+
+    //     vm.startPrank(podOwner);
+    //     // bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
+    //     // bytes memory data = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, validatorFieldsProofs, validatorFields);
+    //     // address(eigenPod).call(data);
+    //     eigenPod.verifyWithdrawalCredentials(
+    //         oracleTimestamp,
+    //         stateRootProof,
+    //         validatorIndices,
+    //         withdrawalCredentialProofs,
+    //         validatorFields
+    //     );
+    //     vm.stopPrank();
+
+    //     // Assert: Check that the shares are updated correctly
+    //     int256 updatedShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
+    //     assertTrue(updatedShares != initialShares, "Shares should be updated after verifying withdrawal credentials");
+    //     assertEq(updatedShares, 32e18, "Shares should be 32ETH in wei after verifying withdrawal credentials");
+    // }
+
+
     // What need to happen after EL mainnet launch
     // per EigenPod
     // - call `activateRestaking()` to empty the EigenPod contract and disable `withdrawBeforeRestaking()`
@@ -140,47 +176,17 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     //     bytes32 beaconStateRoot;
     //     bytes proof;
     // }
-
-    // Example from the EigenLayer repo
-    function test_verifyWithdrawalCredentials_EL() public {
-        // Generate the proofs using the library
-        setJSON("./test/eigenlayer-utils/test-data/withdrawal_credential_proof_302913.json");
+    function test_verifyWithdrawalCredentials() public {
+        // 1. Generate the proofs using the library
+        setJSON("./test/eigenlayer-utils/test-data/withdrawal_credential_proof_302913.json"); // TODO: Use Ether.Fi's one
+        
         _setWithdrawalCredentialParams();
         _setOracleBlockRoot();
 
         address podOwner = managerInstance.etherfiNodeAddress(validatorId);
         int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
 
-        vm.startPrank(podOwner);
-        // bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
-        // bytes memory data = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, validatorFieldsProofs, validatorFields);
-        // address(eigenPod).call(data);
-        eigenPod.verifyWithdrawalCredentials(
-            oracleTimestamp,
-            stateRootProof,
-            validatorIndices,
-            withdrawalCredentialProofs,
-            validatorFields
-        );
-        vm.stopPrank();
-
-        // Assert: Check that the shares are updated correctly
-        int256 updatedShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
-        assertTrue(updatedShares != initialShares, "Shares should be updated after verifying withdrawal credentials");
-        assertEq(updatedShares, 32e18, "Shares should be 32ETH in wei after verifying withdrawal credentials");
-    }
-
-    function test_verifyWithdrawalCredentials() public {
-        // 1. Spin up a validator
-        (uint256 validatorId, address nodeAddress, EtherFiNode node) = create_validator();
-
-        // 2. Generate the proofs using the library
-        setJSON("./test/eigenlayer-utils/test-data/withdrawal_credential_proof_302913.json"); // TODO: Use Ether.Fi's one
-        
-        _setWithdrawalCredentialParams();
-        _setOracleBlockRoot();
-
-        // 3. Trigger a function
+        // 2. Trigger a function
         vm.startPrank(owner);
         bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
         bytes[] memory data = new bytes[](1);
@@ -188,8 +194,11 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         managerInstance.callEigenPod(validatorIds, data);
         vm.stopPrank();
 
-        // 4. Check the result
-        // assertEq(...)
+        // 3. Check the result
+        // Assert: Check that the shares are updated correctly
+        // int256 updatedShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
+        // assertTrue(updatedShares != initialShares, "Shares should be updated after verifying withdrawal credentials");
+        // assertEq(updatedShares, 32e18, "Shares should be 32ETH in wei after verifying withdrawal credentials");
     }
 
     // Call DelegationManager.delegateTo(address operator)
@@ -207,8 +216,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     //     uint256 expiry;
     // }
     function test_delegateTo() public {
-        (uint256 validatorId, address nodeAddress, EtherFiNode node) = create_validator();
-
         vm.startPrank(owner);
         bytes4 selector = bytes4(keccak256("delegateTo(address,(bytes,uint256),bytes32)"));
         IDelegationManager.SignatureWithExpiry memory signatureWithExpiry;
@@ -218,6 +225,18 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         managerInstance.callDelegationManager(validatorIds, data);
         // == delegationManager.delegateTo(p2p, signatureWithExpiry, bytes32(0));
         vm.stopPrank();
+    }
+
+
+    function test_undelegate() public {
+        bytes4 selector = bytes4(keccak256("undelegate(address)"));
+
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(selector, podOwner);
+        
+        vm.prank(owner);
+        vm.epxectRevert("DelegationManager.undelegate: staker must be delegated to undelegate");
+        managerInstance.callDelegationManager(validatorIds, data);
     }
 
 }
