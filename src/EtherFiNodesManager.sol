@@ -444,6 +444,13 @@ contract EtherFiNodesManager is
         }
     }
 
+    function callDelayedWithdrawalRouter(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyAdmin {
+        address to = address(delayedWithdrawalRouter);
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
+        }
+    }
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  SETTER   --------------------------------------
     //--------------------------------------------------------------------------------------
