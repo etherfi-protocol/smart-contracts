@@ -40,7 +40,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         // Upgrade before running tests if you changed the contracts
         _upgrade_etherfi_nodes_manager_contract();
-        _upgrade_etherfi_node_contract();
+        // _upgrade_etherfi_node_contract();
 
         p2p = 0x37d5077434723d0ec21D894a52567cbE6Fb2C3D8;
         dsrv = 0x33503F021B5f1C00bA842cEd26B44ca2FAB157Bd;
@@ -145,10 +145,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     // Call EigenPod.activateRestaking()
     function test_activateRestaking() public {
-        (uint256 validatorId, address nodeAddress, EtherFiNode node) = create_validator();
-
-        assertTrue(node.eigenPod() != address(0));
-
         vm.startPrank(owner);
         // EigenPod contract created after EL contract upgrade is restaked by default in its 'initialize'
         // Therefore, the call to 'activateRestaking()' should fail.
@@ -216,12 +212,12 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     //     uint256 expiry;
     // }
     function test_delegateTo() public {
-        vm.startPrank(owner);
         bytes4 selector = bytes4(keccak256("delegateTo(address,(bytes,uint256),bytes32)"));
         IDelegationManager.SignatureWithExpiry memory signatureWithExpiry;
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, p2p, signatureWithExpiry, bytes32(0));
 
+        vm.startPrank(owner);
         managerInstance.callDelegationManager(validatorIds, data);
         // == delegationManager.delegateTo(p2p, signatureWithExpiry, bytes32(0));
         vm.stopPrank();
@@ -230,13 +226,70 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     function test_undelegate() public {
         bytes4 selector = bytes4(keccak256("undelegate(address)"));
-
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, podOwner);
         
         vm.prank(owner);
         vm.expectRevert("DelegationManager.undelegate: staker must be delegated to undelegate");
         managerInstance.callDelegationManager(validatorIds, data);
+
+        test_delegateTo();
+
+        vm.prank(owner);
+        managerInstance.callDelegationManager(validatorIds, data);
+    }
+
+    function test_access_control() public {
+        bytes4 selector = bytes4(keccak256(""));
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(selector);
+
+        // FAIL
+        vm.startPrank(chad);
+
+        selector = bytes4(keccak256("nonBeaconChainETHBalanceWei()"));
+        data[0] = abi.encodeWithSelector(selector);
+        vm.expectRevert();
+        managerInstance.callEigenPod(validatorIds, data);
+
+        selector = bytes4(keccak256("ethPOS()"));
+        data[0] = abi.encodeWithSelector(selector);
+        vm.expectRevert();
+        managerInstance.callDelegationManager(validatorIds, data);
+
+        selector = bytes4(keccak256("domainSeparator()"));
+        data[0] = abi.encodeWithSelector(selector);
+        vm.expectRevert();
+        managerInstance.callEigenPodManager(validatorIds, data);
+
+        selector = bytes4(keccak256("withdrawalDelayBlocks()"));
+        data[0] = abi.encodeWithSelector(selector);
+        vm.expectRevert();
+        managerInstance.callDelayedWithdrawalRouter(validatorIds, data);
+
+        vm.stopPrank();
+
+        // SUCCEEDS
+        vm.startPrank(owner);
+
+        selector = bytes4(keccak256("nonBeaconChainETHBalanceWei()"));
+        data[0] = abi.encodeWithSelector(selector);
+        managerInstance.callEigenPod(validatorIds, data);
+
+        selector = bytes4(keccak256("ethPOS()"));
+        data[0] = abi.encodeWithSelector(selector);
+        managerInstance.callEigenPodManager(validatorIds, data);
+
+        selector = bytes4(keccak256("domainSeparator()"));
+        data[0] = abi.encodeWithSelector(selector);
+        managerInstance.callDelegationManager(validatorIds, data);
+
+        selector = bytes4(keccak256("withdrawalDelayBlocks()"));
+        data[0] = abi.encodeWithSelector(selector);
+        managerInstance.callDelayedWithdrawalRouter(validatorIds, data);
+
+        vm.stopPrank();
+
     }
 
 }

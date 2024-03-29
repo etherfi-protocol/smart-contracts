@@ -782,7 +782,7 @@ contract EtherFiNodesManager is
     }
 
     function _eigenLayerOperatingAdmin() internal view virtual {
-        if (!admins[msg.sender] && eigenLayerOperatingAdmin[msg.sender]) revert NotAdmin();
+        if (!admins[msg.sender] && !eigenLayerOperatingAdmin[msg.sender]) revert NotAdmin();
     }
 
     //--------------------------------------------------------------------------------------
