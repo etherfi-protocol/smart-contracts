@@ -41,7 +41,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         // Upgrade before running tests if you changed the contracts
         _upgrade_etherfi_nodes_manager_contract();
-        // _upgrade_etherfi_node_contract();
+        _upgrade_etherfi_node_contract();
 
         p2p = 0x37d5077434723d0ec21D894a52567cbE6Fb2C3D8;
         dsrv = 0x33503F021B5f1C00bA842cEd26B44ca2FAB157Bd;
@@ -281,6 +281,36 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         vm.prank(owner);
         managerInstance.callDelegationManager(validatorIds, data);
+    }
+
+    function test_createDelayedWithdrawal() public {
+        test_verifyWithdrawalCredentials_32ETH();
+
+        bytes4 selector = bytes4(keccak256("createDelayedWithdrawal(address,address)"));
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(selector, podOwner, alice);
+
+        vm.prank(owner);
+        vm.expectRevert("DelayedWithdrawalRouter.onlyEigenPod: not podOwner's EigenPod");
+        managerInstance.callDelayedWithdrawalRouter(validatorIds, data);
+    }
+
+    function test_withdrawNonBeaconChainETHBalanceWei() public {
+        test_verifyWithdrawalCredentials_32ETH();
+
+        bytes4 selector = bytes4(keccak256("withdrawNonBeaconChainETHBalanceWei(address,uint256)"));
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(selector, alice, 1 ether);
+
+        _transferTo(address(eigenPod), 1 ether);
+
+        vm.prank(owner);
+        vm.expectRevert("INCORRECT_RECIPIENT");
+        managerInstance.callEigenPod(validatorIds, data);        
+
+        data[0] = abi.encodeWithSelector(selector, podOwner, 1 ether);
+        vm.prank(owner);
+        managerInstance.callEigenPod(validatorIds, data);        
     }
 
     function test_access_control() public {

@@ -421,7 +421,8 @@ contract EtherFiNode is IEtherFiNode {
     }
 
 
-    function callEigenPod(bytes calldata data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
+    function callEigenPod(bytes memory data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
+        _verifyEigenPodCall(data);
         return Address.functionCall(eigenPod, data);
     }
 
@@ -433,6 +434,24 @@ contract EtherFiNode is IEtherFiNode {
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
+
+    function _verifyEigenPodCall(bytes memory data) internal view {
+        bytes4 selector;
+        assembly {
+            selector := mload(add(data, 0x20))
+        }
+
+        // withdrawNonBeaconChainETHBalanceWei
+        if (selector == hex"e2c83445") {
+            require(data.length >= 36, "INVALID_DATA_LENGTH");
+            address recipient;
+            assembly {
+                recipient := mload(add(data, 0x24))
+            }
+            // No withdrawal to any other address than the safe
+            require (recipient == address(this), "INCORRECT_RECIPIENT");
+        }
+    }
 
     function _applyNonExitPenalty(
         IEtherFiNodesManager.ValidatorInfo memory _info, 
