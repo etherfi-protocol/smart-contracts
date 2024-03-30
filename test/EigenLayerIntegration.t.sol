@@ -21,6 +21,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     address p2p;
     address dsrv;
+    address avs_operator;
 
     uint256[] validatorIds;
     uint256 validatorId;
@@ -37,26 +38,29 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     bytes32[][] validatorFields;
 
     function setUp() public {
-        initializeRealisticFork(TESTNET_FORK);
+        initializeRealisticFork(MAINNET_FORK);
+
+        _perform_eigenlayer_upgrade();
 
         // Upgrade before running tests if you changed the contracts
         _upgrade_etherfi_nodes_manager_contract();
         _upgrade_etherfi_node_contract();
+        _upgrade_liquifier();
 
-        p2p = 0x37d5077434723d0ec21D894a52567cbE6Fb2C3D8;
-        dsrv = 0x33503F021B5f1C00bA842cEd26B44ca2FAB157Bd;
+        // yes bob!
+        avs_operator = bob;
 
-        // A validator is launched
-        // - https://holesky.beaconcha.in/validator/1644305#deposits
-        // bid Id = validator Id = 1
+        // - Mainnet
+        // https://beaconcha.in/validator/1293592#withdrawals
+        // bid Id = validator Id = 21397
+        validatorId = 21397;
+        pubkey = hex"a9c09c47ad6c0c5c397521249be41c8b81b139c3208923ec3c95d7f99c57686ab66fe75ea20103a1291578592d11c2c2";
 
         // {EigenPod, EigenPodOwner} used in EigenLayer's unit test
-        validatorId = 1;
         eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
         podOwner = managerInstance.etherfiNodeAddress(validatorId);
         validatorIds = new uint256[](1);
         validatorIds[0] = validatorId;
-        pubkey = hex"ad85894db60881bcee956116beae6bc6934d7eca8317dc3084adf665be426a21a1855b5196a7515fd791bf0b6e3727c5";
 
         // Override with Mock
         vm.startPrank(eigenLayerEigenPodManager.owner());
@@ -66,8 +70,34 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.stopPrank();
 
         vm.startPrank(owner);
+        managerInstance.initializeOnUpgrade2(address(eigenLayerDelegationManager));
         liquidityPoolInstance.setRestakeBnftDeposits(true);
         vm.stopPrank();
+    }
+
+    function _perform_eigenlayer_upgrade() public {
+        // https://etherscan.io/tx/0x6cc1186ebeec36fe7e2762175367b4fdedf0ae2b6a6d880f996d8d450d1d58ec
+        // 
+        // {
+        // "txHash": "0x4420ca4d06e807fa03e84a11c1f80fe7e6f05de1996b983d388db13188a82177",
+        // "target": "0x369e6f597e22eab55ffb173c6d9cd234bd699111",
+        // "value": "0",
+        // "signature": "",
+        // "data": "0x6a76120200000000000000000000000040a2accbd92bca938b02010e17a5b8929b49130d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007a000000000000000000000000000000000000000000000000000000000000006248d80ff0a000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000005d3008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec400000000000000000000000039053d51b77dc0d36036fc1fcc8cb819df8ef37a0000000000000000000000001784be6401339fc0fedf7e9379409f5c1bfe9dda008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec4000000000000000000000000d92145c07f8ed1d392c1b88017934e301cc1c3cd000000000000000000000000f3234220163a757edf1e11a8a085638d9b236614008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec4000000000000000000000000858646372cc42e1a627fce94aa7a7033e7cf075a00000000000000000000000070f44c13944d49a236e3cd7a94f48f5dab6c619b008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec40000000000000000000000007fe7e9cc0f274d2435ad5d56d5fa73e47f6a23d80000000000000000000000004bb6731b02314d40abbffbc4540f508874014226008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec400000000000000000000000091e677b07f7af907ec9a428aafa9fc14a0d3a338000000000000000000000000e4297e3dadbc7d99e26a2954820f514cb50c5762005a2a4f2f3c18f09179b6703e63d9edd165909073000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000243659cfe60000000000000000000000008ba40da60f0827d027f029acee62609f0527a2550039053d51b77dc0d36036fc1fcc8cb819df8ef37a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024635bbd10000000000000000000000000000000000000000000000000000000000000c4e00091e677b07f7af907ec9a428aafa9fc14a0d3a33800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024c1de3aef000000000000000000000000343907185b71adf0eba9567538314396aa9854420091e677b07f7af907ec9a428aafa9fc14a0d3a33800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024463db0380000000000000000000000000000000000000000000000000000000065f1b0570039053d51b77dc0d36036fc1fcc8cb819df8ef37a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024fabc1cbc00000000000000000000000000000000000000000000000000000000000000000091e677b07f7af907ec9a428aafa9fc14a0d3a33800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024fabc1cbc000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000a6db1a8c5a981d1536266d2a393c5f8ddb210eaf00000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000",
+        // "eta": "1712559600"
+        // }
+
+        vm.warp(block.timestamp + 12 days);
+
+        // executeTransaction(address target, uint value, string memory signature, bytes memory data, uint eta)
+        vm.prank(eigenLayerTimelock.admin());
+        eigenLayerTimelock.executeTransaction(
+            0x369e6F597e22EaB55fFb173C6d9cD234BD699111,
+            0,
+            "",
+            hex"6a76120200000000000000000000000040a2accbd92bca938b02010e17a5b8929b49130d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007a000000000000000000000000000000000000000000000000000000000000006248d80ff0a000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000005d3008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec400000000000000000000000039053d51b77dc0d36036fc1fcc8cb819df8ef37a0000000000000000000000001784be6401339fc0fedf7e9379409f5c1bfe9dda008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec4000000000000000000000000d92145c07f8ed1d392c1b88017934e301cc1c3cd000000000000000000000000f3234220163a757edf1e11a8a085638d9b236614008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec4000000000000000000000000858646372cc42e1a627fce94aa7a7033e7cf075a00000000000000000000000070f44c13944d49a236e3cd7a94f48f5dab6c619b008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec40000000000000000000000007fe7e9cc0f274d2435ad5d56d5fa73e47f6a23d80000000000000000000000004bb6731b02314d40abbffbc4540f508874014226008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec400000000000000000000000091e677b07f7af907ec9a428aafa9fc14a0d3a338000000000000000000000000e4297e3dadbc7d99e26a2954820f514cb50c5762005a2a4f2f3c18f09179b6703e63d9edd165909073000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000243659cfe60000000000000000000000008ba40da60f0827d027f029acee62609f0527a2550039053d51b77dc0d36036fc1fcc8cb819df8ef37a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024635bbd10000000000000000000000000000000000000000000000000000000000000c4e00091e677b07f7af907ec9a428aafa9fc14a0d3a33800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024c1de3aef000000000000000000000000343907185b71adf0eba9567538314396aa9854420091e677b07f7af907ec9a428aafa9fc14a0d3a33800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024463db0380000000000000000000000000000000000000000000000000000000065f1b0570039053d51b77dc0d36036fc1fcc8cb819df8ef37a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024fabc1cbc00000000000000000000000000000000000000000000000000000000000000000091e677b07f7af907ec9a428aafa9fc14a0d3a33800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024fabc1cbc000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000a6db1a8c5a981d1536266d2a393c5f8ddb210eaf00000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000",
+            1712559600
+        );
     }
 
     function _setWithdrawalCredentialParams() public {
@@ -96,7 +126,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     }
 
     function _beacon_process_1ETH_deposit() internal {
-        // - The validator 1644305 has only 1 ETH deposit at slot = 1317759
         setJSON("./test/eigenlayer-utils/test-data/withdrawal_credential_proof_1644305_1317759.json");
         
         _setWithdrawalCredentialParams();
@@ -104,8 +133,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     }
 
     function _beacon_process_32ETH_deposit() internal {
-        // - The validator 1644305 has 32 ETH deposit at slot = 1320800
-        setJSON("./test/eigenlayer-utils/test-data/ValidatorFieldsProof_1644305_1320800.json");
+        setJSON("./test/eigenlayer-utils/test-data/ValidatorFieldsProof_1293592_8746783.json");
         
         _setWithdrawalCredentialParams();
         _setOracleBlockRoot();
@@ -137,10 +165,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     // Call EigenPod.activateRestaking()
     function test_activateRestaking() public {
-        // EigenPod contract created after EL contract upgrade is restaked by default in its 'initialize'
-        // Therefore, the call to 'activateRestaking()' should fail.
-        // We will need to write another test in mainnet for this
-        vm.expectRevert(); 
         bytes4 selector = bytes4(keccak256("activateRestaking()"));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector);
@@ -149,52 +173,54 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         managerInstance.callEigenPod(validatorIds, data);
     }
 
-    function test_verifyWithdrawalCredentials_1ETH() public {
-        _beacon_process_1ETH_deposit();
+    // function test_verifyWithdrawalCredentials_1ETH() public {
+    //     _beacon_process_1ETH_deposit();
 
-        int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
-        IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-        assertEq(initialShares, 0, "Shares should be 0 ETH in wei before verifying withdrawal credentials");
-        assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
-        assertEq(validatorInfo.validatorIndex, 0);
-        assertEq(validatorInfo.restakedBalanceGwei, 0);
-        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, 0);
+    //     int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
+    //     IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
+    //     assertEq(initialShares, 0, "Shares should be 0 ETH in wei before verifying withdrawal credentials");
+    //     assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
+    //     assertEq(validatorInfo.validatorIndex, 0);
+    //     assertEq(validatorInfo.restakedBalanceGwei, 0);
+    //     assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, 0);
 
-        // 2. Trigger a function
-        vm.startPrank(owner);
-        bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
-        managerInstance.callEigenPod(validatorIds, data);
-        vm.stopPrank();
+    //     // 2. Trigger a function
+    //     vm.startPrank(owner);
+    //     bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
+    //     bytes[] memory data = new bytes[](1);
+    //     data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
+    //     managerInstance.callEigenPod(validatorIds, data);
+    //     vm.stopPrank();
 
-        // 3. Check the result
-        int256 updatedShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
-        validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-        assertEq(updatedShares, 1e18, "Shares should be 1 ETH in wei after verifying withdrawal credentials");
-        assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.ACTIVE, "Validator status should be ACTIVE");
-        assertEq(validatorInfo.validatorIndex, validatorIndices[0], "Validator index should be set");
-        assertEq(validatorInfo.restakedBalanceGwei, 1 ether / 1e9, "Restaked balance should be 1 eth0");
-        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
-    }
+    //     // 3. Check the result
+    //     int256 updatedShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
+    //     validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
+    //     assertEq(updatedShares, 1e18, "Shares should be 1 ETH in wei after verifying withdrawal credentials");
+    //     assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.ACTIVE, "Validator status should be ACTIVE");
+    //     assertEq(validatorInfo.validatorIndex, validatorIndices[0], "Validator index should be set");
+    //     assertEq(validatorInfo.restakedBalanceGwei, 1 ether / 1e9, "Restaked balance should be 1 eth0");
+    //     assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
+    // }
 
-    function test_verifyAndProcessWithdrawals_OnlyOnce() public {
-        test_verifyWithdrawalCredentials_1ETH();
+    // function test_verifyAndProcessWithdrawals_OnlyOnce() public {
+    //     test_verifyWithdrawalCredentials_1ETH();
         
-        bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
+    //     bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
+    //     bytes[] memory data = new bytes[](1);
+    //     data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
 
-        // Can perform 'verifyWithdrawalCredentials' only once
-        vm.prank(owner);
-        vm.expectRevert("EigenPod.verifyCorrectWithdrawalCredentials: Validator must be inactive to prove withdrawal credentials");
-        managerInstance.callEigenPod(validatorIds, data);
-        vm.stopPrank();
-    }
+    //     // Can perform 'verifyWithdrawalCredentials' only once
+    //     vm.prank(owner);
+    //     vm.expectRevert("EigenPod.verifyCorrectWithdrawalCredentials: Validator must be inactive to prove withdrawal credentials");
+    //     managerInstance.callEigenPod(validatorIds, data);
+    //     vm.stopPrank();
+    // }
 
     // https://holesky.beaconcha.in/validator/1644305#deposits
     function test_verifyWithdrawalCredentials_32ETH() public {
         _beacon_process_32ETH_deposit();
+
+        test_activateRestaking();
 
         int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
         IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
@@ -234,34 +260,38 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.stopPrank();
     }
 
-    function test_verifyBalanceUpdates_32ETH() public {
-        test_verifyWithdrawalCredentials_1ETH();
+    // function test_verifyBalanceUpdates_32ETH() public {
+    //     test_verifyWithdrawalCredentials_1ETH();
 
-        _beacon_process_32ETH_deposit();
+    //     _beacon_process_32ETH_deposit();
 
-        vm.startPrank(owner);
-        bytes4 selector = bytes4(keccak256("verifyBalanceUpdates(uint64,uint40[],(bytes32,bytes),bytes[],bytes32[][])"));
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, validatorIndices, stateRootProof, withdrawalCredentialProofs, validatorFields);
+    //     vm.startPrank(owner);
+    //     bytes4 selector = bytes4(keccak256("verifyBalanceUpdates(uint64,uint40[],(bytes32,bytes),bytes[],bytes32[][])"));
+    //     bytes[] memory data = new bytes[](1);
+    //     data[0] = abi.encodeWithSelector(selector, oracleTimestamp, validatorIndices, stateRootProof, withdrawalCredentialProofs, validatorFields);
 
-        managerInstance.callEigenPod(validatorIds, data);
-        vm.stopPrank();
+    //     managerInstance.callEigenPod(validatorIds, data);
+    //     vm.stopPrank();
 
-        IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-        assertEq(eigenLayerEigenPodManager.podOwnerShares(podOwner), 32e18, "Shares should be 32 ETH in wei after verifying withdrawal credentials");
-        assertEq(validatorInfo.restakedBalanceGwei, 32 ether / 1e9, "Restaked balance should be 32 eth");
-        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
-    }
+    //     IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
+    //     assertEq(eigenLayerEigenPodManager.podOwnerShares(podOwner), 32e18, "Shares should be 32 ETH in wei after verifying withdrawal credentials");
+    //     assertEq(validatorInfo.restakedBalanceGwei, 32 ether / 1e9, "Restaked balance should be 32 eth");
+    //     assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
+    // }
 
     function test_verifyAndProcessWithdrawals_32ETH() public {
         // TODO
     }
 
     function test_delegateTo() public {
+        test_verifyWithdrawalCredentials_32ETH();
+
+        test_registerAsOperator();
+
         bytes4 selector = bytes4(keccak256("delegateTo(address,(bytes,uint256),bytes32)"));
         IDelegationManager.SignatureWithExpiry memory signatureWithExpiry;
         bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, p2p, signatureWithExpiry, bytes32(0));
+        data[0] = abi.encodeWithSelector(selector, avs_operator, signatureWithExpiry, bytes32(0));
 
         vm.startPrank(owner);
         managerInstance.callDelegationManager(validatorIds, data);
@@ -313,6 +343,17 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         data[0] = abi.encodeWithSelector(selector, podOwner, 1 ether);
         vm.prank(owner);
         managerInstance.callEigenPod(validatorIds, data);        
+    }
+
+    function test_registerAsOperator() public {
+        vm.startPrank(avs_operator);
+        IDelegationManager.OperatorDetails memory detail = IDelegationManager.OperatorDetails({
+            earningsReceiver: address(treasuryInstance),
+            delegationApprover: address(0),
+            stakerOptOutWindowBlocks: 0
+        });
+        eigenLayerDelegationManager.registerAsOperator(detail, "");
+        vm.stopPrank();
     }
 
     function test_access_control() public {
