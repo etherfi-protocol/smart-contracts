@@ -85,7 +85,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         validatorFields[0] = getValidatorFields();
 
         // Get an oracle timestamp
-        vm.warp(genesisSlotTimestamp + 1 days);
+        vm.warp(block.timestamp + 1 days);
         oracleTimestamp = uint64(block.timestamp);
     }
 
@@ -176,11 +176,14 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         assertEq(validatorInfo.validatorIndex, validatorIndices[0], "Validator index should be set");
         assertEq(validatorInfo.restakedBalanceGwei, 1 ether / 1e9, "Restaked balance should be 1 eth0");
         assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
+    }
 
-
-        _beacon_process_32ETH_deposit();
+    function test_verifyAndProcessWithdrawals_OnlyOnce() public {
+        test_verifyWithdrawalCredentials_1ETH();
+        
         vm.startPrank(owner);
-        selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
+        bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
+        bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
 
         // Can perform 'verifyWithdrawalCredentials' only once
@@ -215,19 +218,37 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
     }
 
-    function test_verifyBalanceUpdates_1ETH() public {
-        _beacon_process_1ETH_deposit();
-
-        int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
-
-        // 2. Trigger a function
+    function test_verifyBalanceUpdates_FAIL_1() public {
         vm.startPrank(owner);
         bytes4 selector = bytes4(keccak256("verifyBalanceUpdates(uint64,uint40[],(bytes32,bytes),bytes[],bytes32[][])"));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, oracleTimestamp, validatorIndices, stateRootProof, withdrawalCredentialProofs, validatorFields);
+
+        IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
+
+        // Calling 'verifyBalanceUpdates' before 'verifyWithdrawalCredentials' should fail
         vm.expectRevert("EigenPod.verifyBalanceUpdate: Validator not active");
         managerInstance.callEigenPod(validatorIds, data);
         vm.stopPrank();
+    }
+
+    function test_verifyBalanceUpdates_32ETH() public {
+        test_verifyWithdrawalCredentials_1ETH();
+
+        _beacon_process_32ETH_deposit();
+
+        vm.startPrank(owner);
+        bytes4 selector = bytes4(keccak256("verifyBalanceUpdates(uint64,uint40[],(bytes32,bytes),bytes[],bytes32[][])"));
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, validatorIndices, stateRootProof, withdrawalCredentialProofs, validatorFields);
+
+        managerInstance.callEigenPod(validatorIds, data);
+        vm.stopPrank();
+
+        IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
+        assertEq(eigenLayerEigenPodManager.podOwnerShares(podOwner), 32e18, "Shares should be 32 ETH in wei after verifying withdrawal credentials");
+        assertEq(validatorInfo.restakedBalanceGwei, 32 ether / 1e9, "Restaked balance should be 32 eth");
+        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
     }
 
     function test_verifyAndProcessWithdrawals_32ETH() public {
