@@ -28,6 +28,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     IEigenPod eigenPod;
     address podOwner;
     bytes pubkey;
+    EtherFiNode ws;
 
     // Params to _verifyWithdrawalCredentials
     uint64 oracleTimestamp;
@@ -61,6 +62,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         podOwner = managerInstance.etherfiNodeAddress(validatorId);
         validatorIds = new uint256[](1);
         validatorIds[0] = validatorId;
+        ws = EtherFiNode(payable(podOwner));
 
         // Override with Mock
         vm.startPrank(eigenLayerEigenPodManager.owner());
@@ -115,13 +117,12 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         validatorFields[0] = getValidatorFields();
 
         // Get an oracle timestamp
-        vm.warp(block.timestamp + 1 days);
+        // vm.warp(block.timestamp + 1 hours);
         oracleTimestamp = uint64(block.timestamp);
     }
 
     function _setOracleBlockRoot() internal {
         bytes32 latestBlockRoot = getLatestBlockRoot();
-        //set beaconStateRoot
         beaconChainOracleMock.setOracleBlockRootAtTimestamp(latestBlockRoot);
     }
 
@@ -246,6 +247,10 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     }
 
     function test_verifyBalanceUpdates_FAIL_1() public {
+        _beacon_process_32ETH_deposit();
+        
+        test_activateRestaking();
+
         bytes4 selector = bytes4(keccak256("verifyBalanceUpdates(uint64,uint40[],(bytes32,bytes),bytes[],bytes32[][])"));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, oracleTimestamp, validatorIndices, stateRootProof, withdrawalCredentialProofs, validatorFields);
@@ -253,9 +258,16 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
 
         // Calling 'verifyBalanceUpdates' before 'verifyWithdrawalCredentials' should fail
-        // vm.expectRevert("EigenPod.verifyBalanceUpdate: Validator not active");
         vm.prank(owner);
-        vm.expectRevert();
+        vm.expectRevert("EigenPod.verifyBalanceUpdate: Validator not active");
+        managerInstance.callEigenPod(validatorIds, data);
+        vm.stopPrank();
+
+        vm.warp(oracleTimestamp + 5 hours);
+
+        // If the proof is too old, it should fail
+        vm.prank(owner);
+        vm.expectRevert("EigenPod.verifyBalanceUpdates: specified timestamp is too far in past");
         managerInstance.callEigenPod(validatorIds, data);
         vm.stopPrank();
     }
@@ -327,14 +339,43 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         managerInstance.callDelayedWithdrawalRouter(validatorIds, data);
     }
 
+    function test_activateRestaking_and_sweep() public {
+        (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
+
+        test_activateRestaking();
+
+        (uint256 new_withdrawalSafe, uint256 new_eigenPod, uint256 new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
+        assertEq(new_withdrawalSafe, _withdrawalSafe, "withdrawalSafe should not change");
+        assertEq(new_eigenPod, 0, "eigenPod should be emptied");
+        assertEq(new_delayedWithdrawalRouter, _eigenPod + _delayedWithdrawalRouter, "funds in eigenPod should be moved to delayedWithdrawalRouter");
+
+        vm.roll(block.number + (50400) + 1);
+
+        ws.claimQueuedWithdrawals(1, false);
+        
+        (uint256 new_new_withdrawalSafe, uint256 new_new_eigenPod, uint256 new_new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
+        assertEq(new_new_withdrawalSafe, _withdrawalSafe + _eigenPod);
+        assertEq(new_new_eigenPod, 0);
+        assertEq(new_new_delayedWithdrawalRouter, 0);
+    }
+
     function test_withdrawNonBeaconChainETHBalanceWei() public {
-        test_verifyWithdrawalCredentials_32ETH();
+        test_activateRestaking_and_sweep();
+
+        // 1.
+        (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
+
+        _transferTo(address(eigenPod), 1 ether);
+
+        // 2.
+        (uint256 new_withdrawalSafe, uint256 new_eigenPod, uint256 new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
+        assertEq(_withdrawalSafe, new_withdrawalSafe);
+        assertEq(_eigenPod + 1 ether, new_eigenPod);
+        assertEq(_delayedWithdrawalRouter, new_delayedWithdrawalRouter);
 
         bytes4 selector = bytes4(keccak256("withdrawNonBeaconChainETHBalanceWei(address,uint256)"));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, alice, 1 ether);
-
-        _transferTo(address(eigenPod), 1 ether);
 
         vm.prank(owner);
         vm.expectRevert("INCORRECT_RECIPIENT");
@@ -342,7 +383,23 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         data[0] = abi.encodeWithSelector(selector, podOwner, 1 ether);
         vm.prank(owner);
-        managerInstance.callEigenPod(validatorIds, data);        
+        managerInstance.callEigenPod(validatorIds, data);
+
+        // 3.
+        (new_withdrawalSafe, new_eigenPod, new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
+        assertEq(_withdrawalSafe, new_withdrawalSafe);
+        assertEq(_eigenPod, new_eigenPod);
+        assertEq(_delayedWithdrawalRouter + 1 ether, new_delayedWithdrawalRouter);
+
+        vm.roll(block.number + (50400) + 1);
+
+        ws.claimQueuedWithdrawals(5, false);
+        
+        // 4.
+        (uint256 new_new_withdrawalSafe, uint256 new_new_eigenPod, uint256 new_new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
+        assertEq(_withdrawalSafe + 1 ether, new_new_withdrawalSafe);
+        assertEq(_eigenPod, new_new_eigenPod);
+        assertEq(_delayedWithdrawalRouter, new_new_delayedWithdrawalRouter);
     }
 
     function test_registerAsOperator() public {
