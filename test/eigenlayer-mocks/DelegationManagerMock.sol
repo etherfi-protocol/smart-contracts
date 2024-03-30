@@ -4,12 +4,15 @@ pragma solidity =0.8.12;
 import "forge-std/Test.sol";
 import "../../src/eigenlayer-interfaces/IDelegationManager.sol";
 import "../../src/eigenlayer-interfaces/IStrategyManager.sol";
+import "../../src/eigenlayer-interfaces/IStrategy.sol";
 
 
 contract DelegationManagerMock is IDelegationManager, Test {
     mapping(address => bool) public isOperator;
     mapping(address => mapping(IStrategy => uint256)) public operatorShares;
     mapping(bytes32 => bool) public pendingWithdrawals;
+
+    IStrategy public beaconChainETHStrategy;
     
     function setIsOperator(address operator, bool _isOperatorReturnValue) external {
         isOperator[operator] = _isOperatorReturnValue;

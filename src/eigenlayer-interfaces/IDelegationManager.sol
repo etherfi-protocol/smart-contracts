@@ -465,4 +465,6 @@ interface IDelegationManager is ISignatureUtils {
     function migrateQueuedWithdrawals(IStrategyManager.DeprecatedStruct_QueuedWithdrawal[] memory withdrawalsToQueue) external;
 
     function pendingWithdrawals(bytes32 withdrawalRoot) external view returns (bool);
+
+    function beaconChainETHStrategy() external view returns (IStrategy);
 }

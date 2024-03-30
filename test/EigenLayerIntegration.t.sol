@@ -21,7 +21,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     address p2p;
     address dsrv;
-    address avs_operator;
 
     uint256[] validatorIds;
     uint256 validatorId;
@@ -49,7 +48,8 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         _upgrade_liquifier();
 
         // yes bob!
-        avs_operator = bob;
+        p2p = address(1000);
+        dsrv = address(1001);
 
         // - Mainnet
         // https://beaconcha.in/validator/1293592#withdrawals
@@ -117,7 +117,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         validatorFields[0] = getValidatorFields();
 
         // Get an oracle timestamp
-        // vm.warp(block.timestamp + 1 hours);
         oracleTimestamp = uint64(block.timestamp);
     }
 
@@ -144,12 +143,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // TODO
     }
 
-    // References
-    // - https://github.com/Layr-Labs/eigenlayer-contracts/tree/dev?tab=readme-ov-file#current-testnet-deployment
-    // - https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/test/unit/EigenPodUnit.t.sol
-    // - https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/test/unit/
-    // - https://github.com/Layr-Labs/eigenlayer-contracts/tree/dev/src/test/utils
-
     function create_validator() public returns (uint256, address, EtherFiNode) {        
         uint256[] memory validatorIds = launch_validator(1, 0, true);
         address nodeAddress = managerInstance.etherfiNodeAddress(validatorIds[0]);
@@ -174,6 +167,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         managerInstance.callEigenPod(validatorIds, data);
     }
 
+    // TODO
     // function test_verifyWithdrawalCredentials_1ETH() public {
     //     _beacon_process_1ETH_deposit();
 
@@ -203,6 +197,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     //     assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
     // }
 
+    // TODO
     // function test_verifyAndProcessWithdrawals_OnlyOnce() public {
     //     test_verifyWithdrawalCredentials_1ETH();
         
@@ -272,6 +267,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.stopPrank();
     }
 
+    // TODO
     // function test_verifyBalanceUpdates_32ETH() public {
     //     test_verifyWithdrawalCredentials_1ETH();
 
@@ -293,38 +289,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     function test_verifyAndProcessWithdrawals_32ETH() public {
         // TODO
-    }
-
-    function test_delegateTo() public {
-        test_verifyWithdrawalCredentials_32ETH();
-
-        test_registerAsOperator();
-
-        bytes4 selector = bytes4(keccak256("delegateTo(address,(bytes,uint256),bytes32)"));
-        IDelegationManager.SignatureWithExpiry memory signatureWithExpiry;
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, avs_operator, signatureWithExpiry, bytes32(0));
-
-        vm.startPrank(owner);
-        managerInstance.callDelegationManager(validatorIds, data);
-        // == delegationManager.delegateTo(p2p, signatureWithExpiry, bytes32(0));
-        vm.stopPrank();
-    }
-
-
-    function test_undelegate() public {
-        bytes4 selector = bytes4(keccak256("undelegate(address)"));
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, podOwner);
-        
-        vm.prank(owner);
-        vm.expectRevert("DelegationManager.undelegate: staker must be delegated to undelegate");
-        managerInstance.callDelegationManager(validatorIds, data);
-
-        test_delegateTo();
-
-        vm.prank(owner);
-        managerInstance.callDelegationManager(validatorIds, data);
     }
 
     function test_createDelayedWithdrawal() public {
@@ -402,7 +366,9 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         assertEq(_delayedWithdrawalRouter, new_new_delayedWithdrawalRouter);
     }
 
-    function test_registerAsOperator() public {
+    function _registerAsOperator(address avs_operator) internal {
+        assertEq(eigenLayerDelegationManager.isOperator(avs_operator), false);
+
         vm.startPrank(avs_operator);
         IDelegationManager.OperatorDetails memory detail = IDelegationManager.OperatorDetails({
             earningsReceiver: address(treasuryInstance),
@@ -411,8 +377,70 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         });
         eigenLayerDelegationManager.registerAsOperator(detail, "");
         vm.stopPrank();
+
+        assertEq(eigenLayerDelegationManager.isOperator(avs_operator), true);
     }
 
+    function test_registerAsOperator() public {
+        _registerAsOperator(p2p);
+        _registerAsOperator(dsrv);
+    }
+
+    // activateStaking & verifyWithdrawalCredentials & delegate to p2p
+    function test_delegateTo() public {
+        test_verifyWithdrawalCredentials_32ETH();
+
+        test_registerAsOperator();
+
+        bytes4 selector = bytes4(keccak256("delegateTo(address,(bytes,uint256),bytes32)"));
+        IDelegationManager.SignatureWithExpiry memory signatureWithExpiry;
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(selector, p2p, signatureWithExpiry, bytes32(0));
+
+        // Confirm, the earningsReceiver is set to treasuryInstance
+        assertEq(eigenLayerDelegationManager.earningsReceiver(p2p), address(treasuryInstance));
+        assertEq(eigenLayerDelegationManager.operatorShares(p2p, eigenLayerDelegationManager.beaconChainETHStrategy()), 0);
+        assertEq(eigenLayerDelegationManager.isDelegated(podOwner), false);
+
+        vm.startPrank(owner);
+        managerInstance.callDelegationManager(validatorIds, data);
+        vm.stopPrank();
+
+        assertEq(eigenLayerDelegationManager.operatorShares(p2p, eigenLayerDelegationManager.beaconChainETHStrategy()), 32 ether);
+        assertEq(eigenLayerDelegationManager.isDelegated(podOwner), true);
+    }
+
+    function test_undelegate() public {
+        // 1. activateStaking & verifyWithdrawalCredentials & delegate to p2p & undelegate from p2p
+        {
+            bytes4 selector = bytes4(keccak256("undelegate(address)"));
+            bytes[] memory data = new bytes[](1);
+            data[0] = abi.encodeWithSelector(selector, podOwner);
+            
+            vm.prank(owner);
+            vm.expectRevert("DelegationManager.undelegate: staker must be delegated to undelegate");
+            managerInstance.callDelegationManager(validatorIds, data);
+
+            test_delegateTo();
+
+            vm.prank(owner);
+            managerInstance.callDelegationManager(validatorIds, data);
+        }
+
+        // 2. delegate to dsrv
+        {
+            bytes4 selector = bytes4(keccak256("delegateTo(address,(bytes,uint256),bytes32)"));
+            IDelegationManager.SignatureWithExpiry memory signatureWithExpiry;
+            bytes[] memory data = new bytes[](1);
+            data[0] = abi.encodeWithSelector(selector, dsrv, signatureWithExpiry, bytes32(0));
+
+            vm.startPrank(owner);
+            managerInstance.callDelegationManager(validatorIds, data);
+            vm.stopPrank();
+        }
+    }
+
+    // Only {eigenLayerOperatingAdmin / Admin / Owner} can perform EigenLayer-related actions
     function test_access_control() public {
         bytes4 selector = bytes4(keccak256(""));
         bytes[] memory data = new bytes[](1);
