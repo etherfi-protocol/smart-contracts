@@ -41,6 +41,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     IwBETH public wbEth;
     ILido public lido;
 
+    mapping(address => bool) public isDummyToken;
+
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     event RegisteredQueuedWithdrawal(bytes32 _withdrawalRoot, IStrategyManager.QueuedWithdrawal _queuedWithdrawal);
     event CompletedQueuedWithdrawal(bytes32 _withdrawalRoot);
@@ -224,6 +226,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token].isWhitelisted = _isWhitelisted;
     }
 
+    function updateWhitelistedDummyToken(address _token, bool _isDummyToken) external onlyOwner {
+        isDummyToken[_token] = _isDummyToken;
+    }
+
     function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _refreshClock) external onlyOwner {
         tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
@@ -284,6 +290,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return stEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
     }
 
+    
+
+    function swapDummyToEth(address _dummyToken) external payable onlyAdmin returns (uint256) {
+        require(isDummyToken[_dummyToken], "!Dummy token");
+        IERC20(_dummyToken).safeTransfer(msg.sender, msg.value);
+        return msg.value;
+    }
+
     /* VIEW FUNCTIONS */
 
     // Given the `_amount` of `_token` token, returns the equivalent amount of ETH 
@@ -291,6 +305,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (_token == address(lido)) return _amount * 1; /// 1:1 from stETH to eETH
         else if (_token == address(cbEth)) return _amount * cbEth.exchangeRate() / 1e18;
         else if (_token == address(wbEth)) return _amount * wbEth.exchangeRate() / 1e18;
+        else if (isDummyToken[_token]) return _amount * 1; /// 1:1 from dummy token to eETH
 
         revert NotSupportedToken();
     }
@@ -313,8 +328,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
             return _min(_amount * cbEth.exchangeRate() / 1e18, ICurvePoolQuoter2(address(cbEth_Eth_Pool)).get_dy(1, 0, _amount));
         } else if (_token == address(wbEth)) {
             return _min(_amount * wbEth.exchangeRate() / 1e18, ICurvePoolQuoter1(address(wbEth_Eth_Pool)).get_dy(1, 0, _amount));
+        } else if (isDummyToken[_token]) {
+            return _amount; /// 1:1 from dummy token to eETH
         }
-
         revert NotSupportedToken();
     }
 
