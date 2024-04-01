@@ -294,8 +294,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function registerToken(address _token, address _strategy, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) external onlyOwner {
-        if (_token != address(IStrategy(_strategy).underlyingToken())) revert NotSupportedToken();
-        if (address(tokenInfos[_token].strategy) != address(0) || tokenInfos[_token].totalDeposited != 0) revert AlreadyRegistered();
+        if (_strategy == address(0)) {
+            if (_token != address(l2Eth)) revert NotSupportedToken();
+        } else {
+            if (_token != address(IStrategy(_strategy).underlyingToken())) revert NotSupportedToken();
+            if (address(tokenInfos[_token].strategy) != address(0) || tokenInfos[_token].totalDeposited != 0) revert AlreadyRegistered();
+        }
         tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_strategy), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0);
     }
 
