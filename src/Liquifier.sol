@@ -46,17 +46,13 @@ interface IPancackeV3SwapRouter {
 /// Go wild, spread eETH/weETH to the world
 contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, ILiquifier {
     using SafeERC20 for IERC20;
-    
-    enum L2ETH {
 
-    }
-
-    uint32 public eigenLayerWithdrawalClaimGasCost;
+    uint32 public DEPRECATED_eigenLayerWithdrawalClaimGasCost;
     uint32 public timeBoundCapRefreshInterval; // seconds
 
     bool public DEPRECATED_quoteStEthWithCurve;
 
-    uint128 public accumulatedFee;
+    uint128 public DEPRECATED_accumulatedFee;
 
     mapping(address => TokenInfo) public tokenInfos;
     mapping(bytes32 => bool) public isRegisteredQueuedWithdrawals;
@@ -112,25 +108,25 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
                         address _stEth, address _cbEth, address _wbEth, address _cbEth_Eth_Pool, address _wbEth_Eth_Pool, address _stEth_Eth_Pool,
                         uint32 _timeBoundCapRefreshInterval) initializer external {
-        __Pausable_init();
-        __Ownable_init();
-        __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
+        // __Pausable_init();
+        // __Ownable_init();
+        // __UUPSUpgradeable_init();
+        // __ReentrancyGuard_init();
 
-        treasury = _treasury;
-        liquidityPool = ILiquidityPool(_liquidityPool);
-        lidoWithdrawalQueue = ILidoWithdrawalQueue(_lidoWithdrawalQueue);
-        eigenLayerStrategyManager = IEigenLayerStrategyManager(_eigenLayerStrategyManager);
+        // treasury = _treasury;
+        // liquidityPool = ILiquidityPool(_liquidityPool);
+        // lidoWithdrawalQueue = ILidoWithdrawalQueue(_lidoWithdrawalQueue);
+        // eigenLayerStrategyManager = IEigenLayerStrategyManager(_eigenLayerStrategyManager);
 
-        lido = ILido(_stEth);
-        cbEth = IcbETH(_cbEth);
-        wbEth = IwBETH(_wbEth);
-        cbEth_Eth_Pool = ICurvePool(_cbEth_Eth_Pool);
-        wbEth_Eth_Pool = ICurvePool(_wbEth_Eth_Pool);
-        stEth_Eth_Pool = ICurvePool(_stEth_Eth_Pool);
+        // lido = ILido(_stEth);
+        // cbEth = IcbETH(_cbEth);
+        // wbEth = IwBETH(_wbEth);
+        // cbEth_Eth_Pool = ICurvePool(_cbEth_Eth_Pool);
+        // wbEth_Eth_Pool = ICurvePool(_wbEth_Eth_Pool);
+        // stEth_Eth_Pool = ICurvePool(_stEth_Eth_Pool);
         
-        timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
-        eigenLayerWithdrawalClaimGasCost = 150_000;
+        // timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
+        // DEPRECATED_eigenLayerWithdrawalClaimGasCost = 150_000;
     }
 
     function initializeOnUpgrade(address _eigenLayerDelegationManager, address _pancakeRouter) external onlyOwner {
@@ -145,7 +141,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     receive() external payable {}
 
     /// the users mint eETH given the queued withdrawal for their LRT with withdrawer == address(this)
-    /// charge a small fixed amount fee to compensate for the gas cost for claim
     /// @param _queuedWithdrawal The QueuedWithdrawal to be used for the deposit. This is the proof that the user has the re-staked ETH and requested the withdrawals setting the Liquifier contract as the withdrawer.
     /// @param _referral The referral address
     /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
@@ -158,11 +153,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
         /// queue the strategy share for withdrawal
         uint256 amount = _enqueueForWithdrawal(_queuedWithdrawal.strategies, _queuedWithdrawal.shares);
-
-        /// handle fee
-        uint256 feeAmount = _queuedWithdrawal.strategies.length * getFeeAmount();
-        amount -= feeAmount;
-        accumulatedFee += uint128(feeAmount);
         
         /// mint eETH to the user
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, amount, _referral);
@@ -177,7 +167,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
     /// If the token is l2Eth, only the l2SyncPool can call this function
     function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {        
-        require(isTokenWhitelisted(_token) && (tokenInfos[_token].strategy != address(0) || msg.sender == dummyToL1SyncPool[_token]), "NOT_ALLOWED");
+        require(isTokenWhitelisted(_token) && (address(tokenInfos[_token].strategy) != address(0) || msg.sender == dummyToL1SyncPool[_token]), "NOT_ALLOWED");
 
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
         
@@ -261,20 +251,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
     function withdrawEther() external onlyAdmin {
-        bool sent;
-
-        if (accumulatedFee > 0.2 ether && address(this).balance >= accumulatedFee) {
-            uint256 amountToTreasury = accumulatedFee;
-            accumulatedFee = 0;
-            (sent, ) = payable(treasury).call{value: amountToTreasury, gas: 5000}("");
-            if (!sent) revert EthTransferFailed();
-        }
-
-        if (address(this).balance >= accumulatedFee) {
-            uint256 amountToLiquidityPool = address(this).balance - accumulatedFee;
-            (sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
-            if (!sent) revert EthTransferFailed();
-        }
+        uint256 amountToLiquidityPool = address(this).balance;
+        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
+        if (!sent) revert EthTransferFailed();
     }
 
     function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOwner {
@@ -284,6 +263,15 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyOwner {
         tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
+    }
+
+    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyOwner {
+        timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
+    }
+
+    function pauseDeposits(address _token) external onlyAdmin {
+        tokenInfos[_token].timeBoundCapInEther = 0;
+        tokenInfos[_token].totalCapInEther = 0;
     }
     
     function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyOwner {
@@ -428,14 +416,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return tokenInfos[_token].isWhitelisted;
     }
 
-    function getFeeAmount() public view returns (uint256) {
-        uint256 gasSpendings = eigenLayerWithdrawalClaimGasCost;
-        uint256 feeAmount = gasSpendings * block.basefee;
-        return feeAmount;
-    }
-
     function getTotalPooledEther() public view returns (uint256 total) {
-        total = address(this).balance + getTotalPooledEther(address(lido)) + getTotalPooledEther(address(cbEth)) + getTotalPooledEther(address(wbEth)) - accumulatedFee;
+        total = address(this).balance + getTotalPooledEther(address(lido)) + getTotalPooledEther(address(cbEth)) + getTotalPooledEther(address(wbEth));
         for (uint256 i = 0; i < dummies.length; i++) {
             total += getTotalPooledEther(address(dummies[i]));
         }

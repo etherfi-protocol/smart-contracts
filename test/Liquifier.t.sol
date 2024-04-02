@@ -23,10 +23,10 @@ contract LiquifierTest is TestSetup {
         setUpLiquifier(forkEnum);
 
         vm.startPrank(owner);
-        liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true, 0, 50, 1000); // 50 ether timeBoundCap, 1000 ether total cap
+        liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true, 0, 50, 1000, false); // 50 ether timeBoundCap, 1000 ether total cap
         if (forkEnum == MAINNET_FORK) {
-            liquifierInstance.registerToken(address(cbEth), address(cbEthStrategy), true, 0, 50, 1000);
-            liquifierInstance.registerToken(address(wbEth), address(wbEthStrategy), true, 0, 50, 1000);
+            liquifierInstance.registerToken(address(cbEth), address(cbEthStrategy), true, 0, 50, 1000, false);
+            liquifierInstance.registerToken(address(wbEth), address(wbEthStrategy), true, 0, 50, 1000, false);
         }
         vm.stopPrank();
     }
@@ -274,8 +274,8 @@ contract LiquifierTest is TestSetup {
         eigenLayerStrategyManager.depositIntoStrategy(stEthStrategy, stEthStrategy.underlyingToken(), 10 ether);
 
         IDelegationManager.Withdrawal memory queuedWithdrawal = _get_queued_withdrawal_of_restaked_LST_before_m2();
-        uint256 fee_charge = 1 * liquifierInstance.getFeeAmount();
-
+        uint256 fee_charge = 0;
+        
         assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.1 ether);
         assertGe(liquifierInstance.getTotalPooledEther(), 10 ether - 0.1 ether);
         assertEq(stEth.balanceOf(address(liquifierInstance)), 0);
