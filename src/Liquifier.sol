@@ -108,25 +108,25 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
                         address _stEth, address _cbEth, address _wbEth, address _cbEth_Eth_Pool, address _wbEth_Eth_Pool, address _stEth_Eth_Pool,
                         uint32 _timeBoundCapRefreshInterval) initializer external {
-        // __Pausable_init();
-        // __Ownable_init();
-        // __UUPSUpgradeable_init();
-        // __ReentrancyGuard_init();
+        __Pausable_init();
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
 
-        // treasury = _treasury;
-        // liquidityPool = ILiquidityPool(_liquidityPool);
-        // lidoWithdrawalQueue = ILidoWithdrawalQueue(_lidoWithdrawalQueue);
-        // eigenLayerStrategyManager = IEigenLayerStrategyManager(_eigenLayerStrategyManager);
+        treasury = _treasury;
+        liquidityPool = ILiquidityPool(_liquidityPool);
+        lidoWithdrawalQueue = ILidoWithdrawalQueue(_lidoWithdrawalQueue);
+        eigenLayerStrategyManager = IEigenLayerStrategyManager(_eigenLayerStrategyManager);
 
-        // lido = ILido(_stEth);
-        // cbEth = IcbETH(_cbEth);
-        // wbEth = IwBETH(_wbEth);
-        // cbEth_Eth_Pool = ICurvePool(_cbEth_Eth_Pool);
-        // wbEth_Eth_Pool = ICurvePool(_wbEth_Eth_Pool);
-        // stEth_Eth_Pool = ICurvePool(_stEth_Eth_Pool);
+        lido = ILido(_stEth);
+        cbEth = IcbETH(_cbEth);
+        wbEth = IwBETH(_wbEth);
+        cbEth_Eth_Pool = ICurvePool(_cbEth_Eth_Pool);
+        wbEth_Eth_Pool = ICurvePool(_wbEth_Eth_Pool);
+        stEth_Eth_Pool = ICurvePool(_stEth_Eth_Pool);
         
-        // timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
-        // DEPRECATED_eigenLayerWithdrawalClaimGasCost = 150_000;
+        timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
+        DEPRECATED_eigenLayerWithdrawalClaimGasCost = 150_000;
     }
 
     function initializeOnUpgrade(address _eigenLayerDelegationManager, address _pancakeRouter) external onlyOwner {
@@ -264,15 +264,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
     }
-
-    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyOwner {
-        timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
-    }
-
-    function pauseDeposits(address _token) external onlyAdmin {
-        tokenInfos[_token].timeBoundCapInEther = 0;
-        tokenInfos[_token].totalCapInEther = 0;
-    }
     
     function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyOwner {
         if (_isL2Eth) {
@@ -287,6 +278,15 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
             if (address(tokenInfos[_token].strategy) != address(0) || tokenInfos[_token].totalDeposited != 0) revert AlreadyRegistered();
             tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0);
         }
+    }
+
+    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyOwner {
+        timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
+    }
+
+    function pauseDeposits(address _token) external onlyAdmin {
+        tokenInfos[_token].timeBoundCapInEther = 0;
+        tokenInfos[_token].totalCapInEther = 0;
     }
 
     function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
