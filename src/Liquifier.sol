@@ -79,7 +79,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     
     // To support L2 native minting of weETH
     IERC20[] public dummies;
-    mapping(address => address) public dummyToL1SyncPool;
+    address public l1SyncPool;
 
 
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
@@ -167,7 +167,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
     /// If the token is l2Eth, only the l2SyncPool can call this function
     function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {        
-        require(isTokenWhitelisted(_token) && (address(tokenInfos[_token].strategy) != address(0) || msg.sender == dummyToL1SyncPool[_token]), "NOT_ALLOWED");
+        require(isTokenWhitelisted(_token) && (address(tokenInfos[_token].strategy) != address(0) || msg.sender == l1SyncPool), "NOT_ALLOWED");
 
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
         
@@ -266,16 +266,15 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
     
     function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyOwner {
+        if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
             if (_token == address(0)) revert();
             // _target = L1SyncPool contract
             tokenInfos[_token] = TokenInfo(0, 0, IStrategy(address(0)), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0);
-            dummyToL1SyncPool[_token] = _target;
             dummies.push(IERC20(_token));
         } else {
             // _target = EigenLayer's Strategy contract
             if (_token != address(IStrategy(_target).underlyingToken())) revert NotSupportedToken();
-            if (address(tokenInfos[_token].strategy) != address(0) || tokenInfos[_token].totalDeposited != 0) revert AlreadyRegistered();
             tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0);
         }
     }
@@ -304,8 +303,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     // ETH comes in, L2ETH goes out
-    function unwrapL2Eth(address _l2Eth) external payable returns (uint256) {
-        if (dummyToL1SyncPool[_l2Eth] == msg.sender) revert IncorrectCaller();
+    function unwrapL2Eth(address _l2Eth) external payable nonReentrant returns (uint256) {
+        if (l1SyncPool == msg.sender) revert IncorrectCaller();
         IERC20(_l2Eth).safeTransfer(msg.sender, msg.value);
         return msg.value;
     }
@@ -373,12 +372,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     // Given the `_amount` of `_token` token, returns the equivalent amount of ETH 
     function quoteByFairValue(address _token, uint256 _amount) public view returns (uint256) {
+        if (_token == address(0)) revert();
+
         if (_token == address(lido)) return _amount * 1; /// 1:1 from stETH to eETH
         else if (_token == address(cbEth)) return _amount * cbEth.exchangeRate() / 1e18;
         else if (_token == address(wbEth)) return _amount * wbEth.exchangeRate() / 1e18;
-        else if (dummyToL1SyncPool[_token] != address(0)) return _amount * 1; /// 1:1 from l2Eth to eETH
+        else if (address(tokenInfos[_token].strategy) == address(0)) return _amount * 1; /// 1:1 from l2Eth to eETH
         // TODO do the better checking?
-        // - can we check like like IL2BaseSyncPool(dummyToL1SyncPool[_token]).targetToken()
+        // - can we check like like IL2BaseSyncPool(l1SyncPool[_token]).targetToken()
 
         revert NotSupportedToken();
     }
@@ -389,9 +390,11 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function quoteByMarketValue(address _token, uint256 _amount) public view returns (uint256) {
+        if (_token == address(0)) revert();
+
         if (_token == address(lido)) {
             return _amount; /// 1:1 from stETH to eETH
-        } else if (dummyToL1SyncPool[_token] != address(0)) {
+        } else if (address(tokenInfos[_token].strategy) == address(0)) {
             // 1:1 for all dummy tokens
             return _amount;
         }
