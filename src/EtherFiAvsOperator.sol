@@ -12,6 +12,10 @@ import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.
 
 contract EtherFiAvsOperator is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1271Upgradeable {
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
 
     function initialize() external initializer {
         __Ownable_init();
