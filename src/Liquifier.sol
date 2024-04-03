@@ -304,7 +304,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     // ETH comes in, L2ETH goes out
     function unwrapL2Eth(address _l2Eth) external payable nonReentrant returns (uint256) {
-        if (l1SyncPool == msg.sender) revert IncorrectCaller();
+        if (msg.sender != l1SyncPool) revert IncorrectCaller();
+        if (!isTokenWhitelisted(_l2Eth) || (address(tokenInfos[_l2Eth].strategy) != address(0))) revert NotSupportedToken();
         IERC20(_l2Eth).safeTransfer(msg.sender, msg.value);
         return msg.value;
     }
@@ -372,14 +373,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     // Given the `_amount` of `_token` token, returns the equivalent amount of ETH 
     function quoteByFairValue(address _token, uint256 _amount) public view returns (uint256) {
-        if (_token == address(0)) revert();
+        if (!isTokenWhitelisted(_token)) revert NotSupportedToken();
 
         if (_token == address(lido)) return _amount * 1; /// 1:1 from stETH to eETH
         else if (_token == address(cbEth)) return _amount * cbEth.exchangeRate() / 1e18;
         else if (_token == address(wbEth)) return _amount * wbEth.exchangeRate() / 1e18;
         else if (address(tokenInfos[_token].strategy) == address(0)) return _amount * 1; /// 1:1 from l2Eth to eETH
-        // TODO do the better checking?
-        // - can we check like like IL2BaseSyncPool(l1SyncPool[_token]).targetToken()
 
         revert NotSupportedToken();
     }
@@ -390,7 +389,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function quoteByMarketValue(address _token, uint256 _amount) public view returns (uint256) {
-        if (_token == address(0)) revert();
+        if (!isTokenWhitelisted(_token)) revert NotSupportedToken();
 
         if (_token == address(lido)) {
             return _amount; /// 1:1 from stETH to eETH
