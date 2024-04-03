@@ -10,14 +10,41 @@ import "../src/eigenlayer-interfaces/IEigenPod.sol";
 import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "../src/eigenlayer-libraries/BeaconChainProofs.sol";
 
+import "../src/UUPSProxy.sol";
+import "../src/EtherFiAvsOperator.sol";
+
 import "./eigenlayer-utils/ProofParsing.sol";
 import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
+import {BitmapUtils} from "../src/eigenlayer-libraries/BitmapUtils.sol";
+import {BN254} from "../src/eigenlayer-libraries/BN254.sol";
+import {IBLSApkRegistry} from "../../src/eigenlayer-interfaces/IBLSApkRegistry.sol";
+// import {MockAVSDeployer} from "./eigenlayer-middleware/test/utils/MockAVSDeployer.sol";
 
 import "forge-std/console2.sol";
 import "forge-std/console.sol";
 
 
 contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
+
+    uint256 MAX_QUORUM_BITMAP = type(uint192).max;
+    uint8 numQuorums = 192;
+    uint256 maxOperatorsToRegister = 1;
+    uint256 pseudoRandomNumber = 1;
+    uint8 maxQuorumsToRegisterFor = 4;
+    uint32 registrationBlockNumber = 100;
+    uint32 blocksBetweenRegistrations = 10;
+    address defaultOperator = address(1000);
+
+
+    struct OperatorMetadata {
+        uint256 quorumBitmap;
+        address operator;
+        bytes32 operatorId;
+        BN254.G1Point pubkey;
+        uint96[] stakes; // in every quorum for simplicity
+    }
+
+    EtherFiAvsOperator avsOperator;
 
     address p2p;
     address dsrv;
@@ -38,16 +65,19 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     bytes32[][] validatorFields;
 
     function setUp() public {
-        initializeRealisticFork(MAINNET_FORK);
+        // initializeRealisticFork(MAINNET_FORK);
+        // _perform_eigenlayer_upgrade();
 
-        _perform_eigenlayer_upgrade();
+        // _upgrade_etherfi_nodes_manager_contract();
+        // _upgrade_etherfi_node_contract();
+        // _upgrade_liquifier();
 
-        // Upgrade before running tests if you changed the contracts
-        _upgrade_etherfi_nodes_manager_contract();
-        _upgrade_etherfi_node_contract();
-        _upgrade_liquifier();
+        initializeRealisticFork(TESTNET_FORK);
 
-        // yes bob!
+        // blsApkRegistry = IBLSApkRegistry(managerInstance.getBlsApkRegistry());
+
+        avsOperator = EtherFiAvsOperator(address(new UUPSProxy(address(new EtherFiAvsOperator()), "")));
+
         p2p = address(1000);
         dsrv = address(1001);
 
@@ -494,6 +524,93 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         vm.stopPrank();
 
+    }
+
+    function _incrementAddress(address start, uint256 inc) internal pure returns(address) {
+        return address(uint160(uint256(uint160(start) + inc)));
+    }
+
+    function _registerOperatorWithCoordinator(address operator, uint256 quorumBitmap, BN254.G1Point memory pubKey, uint96 stake) internal {
+        // // quorumBitmap can only have 192 least significant bits
+        // quorumBitmap &= MAX_QUORUM_BITMAP;
+
+        // blsApkRegistry.setBLSPublicKey(operator, pubKey);
+
+        // bytes memory quorumNumbers = BitmapUtils.bitmapToBytesArray(quorumBitmap);
+        // for (uint i = 0; i < quorumNumbers.length; i++) {
+        //     _setOperatorWeight(operator, uint8(quorumNumbers[i]), stake);
+        // }
+
+        // ISignatureUtils.SignatureWithSaltAndExpiry memory emptySignatureAndExpiry;
+        // cheats.prank(operator);
+        // registryCoordinator.registerOperator(quorumNumbers, defaultSocket, pubkeyRegistrationParams, emptySignatureAndExpiry);
+    }
+
+    function test_avs_operator() public {
+        {
+            OperatorMetadata[] memory operatorMetadatas = new OperatorMetadata[](maxOperatorsToRegister);
+            for (uint i = 0; i < operatorMetadatas.length; i++) {
+                // limit to 16 quorums so we don't run out of gas, make them all register for quorum 0 as well
+                operatorMetadatas[i].quorumBitmap = uint256(keccak256(abi.encodePacked("quorumBitmap", pseudoRandomNumber, i))) & (1 << maxQuorumsToRegisterFor - 1) | 1;
+                operatorMetadatas[i].operator = _incrementAddress(defaultOperator, i);
+                operatorMetadatas[i].pubkey = BN254.hashToG1(keccak256(abi.encodePacked("pubkey", pseudoRandomNumber, i)));
+                // operatorMetadatas[i].operatorId = operatorMetadatas[i].pubkey.hashG1Point();
+                operatorMetadatas[i].operatorId = BN254.hashG1Point(operatorMetadatas[i].pubkey);
+                operatorMetadatas[i].stakes = new uint96[](maxQuorumsToRegisterFor);
+                for (uint j = 0; j < maxQuorumsToRegisterFor; j++) {
+                    operatorMetadatas[i].stakes[j] = uint96(uint64(uint256(keccak256(abi.encodePacked("stakes", pseudoRandomNumber, i, j)))));
+                }
+            }
+
+            // get the index in quorumBitmaps of each operator in each quorum in the order they will register
+            uint256[][] memory expectedOperatorOverallIndices = new uint256[][](numQuorums);
+            for (uint i = 0; i < numQuorums; i++) {
+                uint32 numOperatorsInQuorum;
+                // for each quorumBitmap, check if the i'th bit is set
+                for (uint j = 0; j < operatorMetadatas.length; j++) {
+                    if (operatorMetadatas[j].quorumBitmap >> i & 1 == 1) {
+                        numOperatorsInQuorum++;
+                    }
+                }
+                expectedOperatorOverallIndices[i] = new uint256[](numOperatorsInQuorum);
+                uint256 numOperatorCounter;
+                for (uint j = 0; j < operatorMetadatas.length; j++) {
+                    if (operatorMetadatas[j].quorumBitmap >> i & 1 == 1) {
+                        expectedOperatorOverallIndices[i][numOperatorCounter] = j;
+                        numOperatorCounter++;
+                    }
+                }
+            }
+
+            // register operators
+            // for (uint i = 0; i < operatorMetadatas.length; i++) {
+            //     cheats.roll(registrationBlockNumber + blocksBetweenRegistrations * i);
+
+            //     _registerOperatorWithCoordinator(operatorMetadatas[i].operator, operatorMetadatas[i].quorumBitmap, operatorMetadatas[i].pubkey, operatorMetadatas[i].stakes);
+            // }
+        }
+
+
+        // uint256 MAX_QUORUM_BITMAP = type(uint192).max;
+
+        // address defaultOperator = address(uint160(uint256(keccak256("defaultOperator"))));
+        // bytes32 defaultOperatorId;
+        // BN254.G1Point internal defaultPubKey =  BN254.G1Point(18260007818883133054078754218619977578772505796600400998181738095793040006897,3432351341799135763167709827653955074218841517684851694584291831827675065899);
+        // string defaultSocket = "69.69.69.69:420";
+
+        // // quorumBitmap can only have 192 least significant bits
+        // quorumBitmap &= MAX_QUORUM_BITMAP;
+
+        // blsApkRegistry.setBLSPublicKey(operator, pubKey);
+
+        // bytes memory quorumNumbers = BitmapUtils.bitmapToBytesArray(quorumBitmap);
+        // for (uint i = 0; i < quorumNumbers.length; i++) {
+        //     _setOperatorWeight(operator, uint8(quorumNumbers[i]), stake);
+        // }
+
+        // ISignatureUtils.SignatureWithSaltAndExpiry memory emptySignatureAndExpiry;
+        // cheats.prank(operator);
+        // registryCoordinator.registerOperator(quorumNumbers, defaultSocket, pubkeyRegistrationParams, emptySignatureAndExpiry);
     }
 
 }
