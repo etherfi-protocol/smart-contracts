@@ -88,7 +88,7 @@ contract EtherFiAvsOperator is Initializable, OwnableUpgradeable, UUPSUpgradeabl
     }
 
     function isValidOperatorCall(address _avsContract, bytes4 _signature, bytes calldata _remainingCalldata) public view returns (bool) {
-        if (!(isAvsWhitelisted(_avsContract))) return false;
+        if (!isAvsWhitelisted(_avsContract)) return false;
         
         // TODO: Add some rules or refer to Mapping
         return false;

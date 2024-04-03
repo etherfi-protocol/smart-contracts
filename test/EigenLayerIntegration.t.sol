@@ -65,18 +65,16 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     bytes32[][] validatorFields;
 
     function setUp() public {
-        // initializeRealisticFork(MAINNET_FORK);
-        // _perform_eigenlayer_upgrade();
+        initializeRealisticFork(MAINNET_FORK);
+        _perform_eigenlayer_upgrade();
 
-        // _upgrade_etherfi_nodes_manager_contract();
-        // _upgrade_etherfi_node_contract();
-        // _upgrade_liquifier();
+        _upgrade_etherfi_nodes_manager_contract();
+        _upgrade_etherfi_node_contract();
+        _upgrade_liquifier();
 
-        initializeRealisticFork(TESTNET_FORK);
-
+        // initializeRealisticFork(TESTNET_FORK);
         // blsApkRegistry = IBLSApkRegistry(managerInstance.getBlsApkRegistry());
-
-        avsOperator = EtherFiAvsOperator(address(new UUPSProxy(address(new EtherFiAvsOperator()), "")));
+        // avsOperator = EtherFiAvsOperator(address(new UUPSProxy(address(new EtherFiAvsOperator()), "")));
 
         p2p = address(1000);
         dsrv = address(1001);
@@ -547,6 +545,10 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     }
 
     function test_avs_operator() public {
+        // initializeRealisticFork(TESTNET_FORK);
+        // blsApkRegistry = IBLSApkRegistry(managerInstance.getBlsApkRegistry());
+        // avsOperator = EtherFiAvsOperator(address(new UUPSProxy(address(new EtherFiAvsOperator()), "")));
+
         {
             OperatorMetadata[] memory operatorMetadatas = new OperatorMetadata[](maxOperatorsToRegister);
             for (uint i = 0; i < operatorMetadatas.length; i++) {
