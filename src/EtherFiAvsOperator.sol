@@ -12,6 +12,8 @@ import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.
 
 contract EtherFiAvsOperator is Initializable, OwnableUpgradeable, UUPSUpgradeable, IERC1271Upgradeable {
 
+    address public avs_operator;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -26,13 +28,17 @@ contract EtherFiAvsOperator is Initializable, OwnableUpgradeable, UUPSUpgradeabl
         return Address.functionCall(to, data);
     }
 
+    function changeAvsOperator(address _avs_operator) external onlyOwner {
+        avs_operator = _avs_operator;
+    }
+
     /**
      * @dev Should return whether the signature provided is valid for the provided data
      * @param _digestHash   Hash of the data to be signed
      * @param _signature Signature byte array associated with _data
      */
     function isValidSignature(bytes32 _digestHash, bytes memory _signature) public view override returns (bytes4 magicValue) {
-        return ECDSAUpgradeable.recover(_digestHash, _signature) == owner() ? this.isValidSignature.selector : bytes4(0);
+        return ECDSAUpgradeable.recover(_digestHash, _signature) == avs_operator ? this.isValidSignature.selector : bytes4(0);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
