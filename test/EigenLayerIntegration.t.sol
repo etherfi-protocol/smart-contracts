@@ -325,6 +325,21 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         assertEq(new_new_delayedWithdrawalRouter, 0);
     }
 
+    function test_recoverTokens() public {
+        test_activateRestaking_and_sweep();
+
+        bytes4 selector = bytes4(keccak256("recoverTokens(address[],uint256[],address)"));
+        address[] memory tokens = new address[](1);
+        uint256[] memory amounts = new uint256[](1);
+        address[] memory recipients = new address[](1);
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(selector, tokens, amounts, recipients);
+
+        vm.prank(owner);
+        vm.expectRevert("NOT_ALLOWED");
+        managerInstance.callEigenPod(validatorIds, data);
+    }
+
     function test_withdrawNonBeaconChainETHBalanceWei() public {
         test_activateRestaking_and_sweep();
 
