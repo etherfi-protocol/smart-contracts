@@ -4,7 +4,20 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 import "forge-std/Test.sol";
 
+import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
+
 import "../src/eigenlayer-interfaces/IDelegationManager.sol";
+
+contract DummyERC20 is ERC20Upgradeable {
+    
+    function mint(address to, uint256 amount) public {
+        _mint(to, amount);
+    }
+
+    function burn(address from, uint256 amount) public {
+        _burn(from, amount);
+    }
+}
 
 interface IWBETH {
     function exchangeRate() external view returns (uint256);
@@ -14,6 +27,9 @@ interface IWBETH {
 contract LiquifierTest is TestSetup {
 
     uint256 public testnetFork;
+
+    DummyERC20 public dummyToken;
+    address public l1SyncPool = address(100000);
 
     function setUp() public {
     }
@@ -29,6 +45,8 @@ contract LiquifierTest is TestSetup {
             liquifierInstance.registerToken(address(wbEth), address(wbEthStrategy), true, 0, 50, 1000, false);
         }
         vm.stopPrank();
+
+        dummyToken = new DummyERC20();
     }
 
     function test_rando_deposit_fails() public {
@@ -521,6 +539,111 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.CASE1();
 
         vm.stopPrank();
+    }
+
+    function _setup_L1SyncPool() internal {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+
+        vm.startPrank(owner);
+        dummyToken = new DummyERC20();
+        liquifierInstance.initializeL1SyncPool(l1SyncPool);
+        liquifierInstance.registerToken(address(dummyToken), address(0), true, 0, 50, 1000, true);
+        vm.stopPrank();
+    }
+
+    function _fast_sync_from_L2_to_L1(uint256 _x) internal {
+        vm.prank(owner);
+        dummyToken.mint(l1SyncPool, _x);
+
+        vm.startPrank(l1SyncPool);
+        dummyToken.approve(address(liquifierInstance), _x);
+        liquifierInstance.depositWithERC20(address(dummyToken), _x, address(0));
+        vm.stopPrank();
+    }
+
+    function _slow_sync_form_L2_to_L1(uint256 _x) internal {
+        vm.startPrank(l1SyncPool);
+        liquifierInstance.unwrapL2Eth{value: _x}(address(dummyToken));
+        vm.stopPrank();
+    }
+
+    function test_fast_sync_with_random_token_fail() public {
+        _setup_L1SyncPool();
+
+        vm.startPrank(owner);
+        uint256 _x = 1 ether;
+        DummyERC20 randomToken = new DummyERC20();
+        randomToken.mint(alice, _x);
+        vm.stopPrank();
+
+        vm.startPrank(l1SyncPool);
+        dummyToken.approve(address(liquifierInstance), _x);
+        vm.expectRevert("NOT_ALLOWED");
+        liquifierInstance.depositWithERC20(address(randomToken), _x, address(0));
+        vm.stopPrank();
+    }
+
+    function test_fast_sync_by_rando_fail() public {
+        _setup_L1SyncPool();
+
+        // Alice somehow got the dummy token and tried to deposit it
+        uint256 _x = 1 ether;
+        vm.prank(owner);
+        dummyToken.mint(alice, _x);
+
+        vm.startPrank(alice);
+        dummyToken.approve(address(liquifierInstance), _x);
+        vm.expectRevert("NOT_ALLOWED");
+        liquifierInstance.depositWithERC20(address(dummyToken), _x, address(0));
+        vm.stopPrank();
+    }
+
+    function test_slow_sync_by_rando_fail() public {
+        test_fast_sync();
+
+        uint256 x = 5 ether;
+        // for some reasons only 5 ether arrived this time :)
+        _transferTo(l1SyncPool, x);
+
+        vm.startPrank(alice);
+        vm.expectRevert(Liquifier.IncorrectCaller.selector);
+        liquifierInstance.unwrapL2Eth(address(dummyToken));
+        vm.stopPrank();
+    }
+
+    function test_slow_sync_with_random_token_fail() public {
+        test_fast_sync();
+
+        vm.prank(owner);
+        DummyERC20 randomToken = new DummyERC20();
+
+        uint256 x = 5 ether;
+        // for some reasons only 5 ether arrived this time :)
+        _transferTo(l1SyncPool, x);
+
+        vm.startPrank(l1SyncPool);
+        vm.expectRevert(Liquifier.NotSupportedToken.selector);
+        liquifierInstance.unwrapL2Eth(address(randomToken));
+        vm.stopPrank();
+    }
+
+    function test_fast_sync() public {
+        _setup_L1SyncPool();
+
+        // L2 layer notifies that eETH (equivalent to X ETH amount) is minted
+        uint256 x = 10 ether;
+        _fast_sync_from_L2_to_L1(x);
+    }
+
+    function test_slow_sync() public {
+        test_fast_sync();
+
+        uint256 x = 5 ether;
+        // for some reasons only 5 ether arrived this time :)
+        _transferTo(l1SyncPool, x);
+
+        _slow_sync_form_L2_to_L1(x);
     }
 
 }

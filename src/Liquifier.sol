@@ -138,6 +138,11 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         eigenLayerDelegationManager = IDelegationManager(_eigenLayerDelegationManager);
     }
 
+    function initializeL1SyncPool(address _l1SyncPool) external onlyOwner {
+        if (l1SyncPool != address(0)) revert();
+        l1SyncPool = _l1SyncPool;
+    }
+
     receive() external payable {}
 
     /// the users mint eETH given the queued withdrawal for their LRT with withdrawer == address(this)
