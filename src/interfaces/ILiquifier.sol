@@ -53,6 +53,9 @@ interface IEigenLayerStrategyManager is IStrategyManager {
     function pauserRegistry() external returns (IPauserRegistry);
     function paused(uint8 index) external view returns (bool);
     function unpause(uint256 newPausedStatus) external;
+
+    // For testing
+    function queueWithdrawal( uint256[] calldata strategyIndexes, IStrategy[] calldata strategies, uint256[] calldata shares, address withdrawer, bool undelegateIfPossible ) external returns(bytes32);
 }
 
 interface IEigenLayerStrategyTVLLimits is IStrategy {
