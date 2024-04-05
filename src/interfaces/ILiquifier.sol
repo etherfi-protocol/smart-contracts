@@ -101,5 +101,6 @@ interface ILiquifier {
         uint32 totalCapInEther;
         uint96 totalDepositedThisPeriod;
         uint96 totalDeposited;
+        bool isL2Eth;
     }
 }

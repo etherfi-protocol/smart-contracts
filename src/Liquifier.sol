@@ -42,6 +42,9 @@ interface IPancackeV3SwapRouter {
     function unwrapWETH9(uint256 amountMinimum, address recipient) external payable;
 }
 
+interface IERC20Burnable is IERC20 {
+    function burn(uint256 amount) external;
+}
 
 /// Go wild, spread eETH/weETH to the world
 contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, ILiquifier {
@@ -104,7 +107,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         _disableInitializers();
     }
 
-    // /// @notice initialize to set variables on deployment
+    /// @notice initialize to set variables on deployment
     function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
                         address _stEth, address _cbEth, address _wbEth, address _cbEth_Eth_Pool, address _wbEth_Eth_Pool, address _stEth_Eth_Pool,
                         uint32 _timeBoundCapRefreshInterval) initializer external {
@@ -172,10 +175,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
     /// If the token is l2Eth, only the l2SyncPool can call this function
     function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {        
-        require(isTokenWhitelisted(_token) && (address(tokenInfos[_token].strategy) != address(0) || msg.sender == l1SyncPool), "NOT_ALLOWED");
+        require(isTokenWhitelisted(_token) && (!tokenInfos[_token].isL2Eth || msg.sender == l1SyncPool), "NOT_ALLOWED");
 
         IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
-        
+
+        // The L1SyncPool's `_anticipatedDeposit` should be the only place to mint the `token` and always send its entirety to the Liquifier contract
+        if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
+
         uint256 dx = quoteByMarketValue(_token, _amount);
 
         // discount
@@ -273,15 +279,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyOwner {
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
-            if (_token == address(0)) revert();
-            // _target = L1SyncPool contract
-            tokenInfos[_token] = TokenInfo(0, 0, IStrategy(address(0)), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0);
+            if (_token == address(0) || _target != address(0)) revert();
             dummies.push(IERC20(_token));
         } else {
             // _target = EigenLayer's Strategy contract
             if (_token != address(IStrategy(_target).underlyingToken())) revert NotSupportedToken();
-            tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0);
         }
+        tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0, _isL2Eth);
     }
 
     function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyOwner {
@@ -307,11 +311,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         _unpause();
     }
 
-    // ETH comes in, L2ETH goes out
+    // ETH comes in, L2ETH is burnt
     function unwrapL2Eth(address _l2Eth) external payable nonReentrant returns (uint256) {
         if (msg.sender != l1SyncPool) revert IncorrectCaller();
-        if (!isTokenWhitelisted(_l2Eth) || (address(tokenInfos[_l2Eth].strategy) != address(0))) revert NotSupportedToken();
-        IERC20(_l2Eth).safeTransfer(msg.sender, msg.value);
+        if (!isTokenWhitelisted(_l2Eth) || !tokenInfos[_l2Eth].isL2Eth) revert NotSupportedToken();
+        _L2SanityChecks(_l2Eth);
+
+        IERC20Burnable(_l2Eth).burn(msg.value);
         return msg.value;
     }
 
@@ -383,7 +389,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (_token == address(lido)) return _amount * 1; /// 1:1 from stETH to eETH
         else if (_token == address(cbEth)) return _amount * cbEth.exchangeRate() / 1e18;
         else if (_token == address(wbEth)) return _amount * wbEth.exchangeRate() / 1e18;
-        else if (address(tokenInfos[_token].strategy) == address(0)) return _amount * 1; /// 1:1 from l2Eth to eETH
+        else if (tokenInfos[_token].isL2Eth) return _amount * 1; /// 1:1 from l2Eth to eETH
 
         revert NotSupportedToken();
     }
@@ -398,7 +404,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
         if (_token == address(lido)) {
             return _amount; /// 1:1 from stETH to eETH
-        } else if (address(tokenInfos[_token].strategy) == address(0)) {
+        } else if (tokenInfos[_token].isL2Eth) {
             // 1:1 for all dummy tokens
             return _amount;
         }
@@ -421,6 +427,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     function isTokenWhitelisted(address _token) public view returns (bool) {
         return tokenInfos[_token].isWhitelisted;
+    }
+
+    function isL2Eth(address _token) public view returns (bool) {
+        return tokenInfos[_token].isL2Eth;
     }
 
     function getTotalPooledEther() public view returns (uint256 total) {
@@ -527,6 +537,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         }
         info.totalDepositedThisPeriod += uint96(_amount);
         info.totalDeposited += uint96(_amount);
+    }
+
+    function _L2SanityChecks(address _token) internal view {
+        require(IERC20(_token).totalSupply() == IERC20(_token).balanceOf(address(this)), "INVALID_L2");
     }
 
      function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {

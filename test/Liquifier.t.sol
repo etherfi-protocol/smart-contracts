@@ -4,11 +4,11 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 import "forge-std/Test.sol";
 
-import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
 
 import "../src/eigenlayer-interfaces/IDelegationManager.sol";
 
-contract DummyERC20 is ERC20Upgradeable {
+contract DummyERC20 is ERC20BurnableUpgradeable {
     
     function mint(address to, uint256 amount) public {
         _mint(to, amount);
@@ -552,13 +552,13 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
     }
 
-    function _fast_sync_from_L2_to_L1(uint256 _x) internal {
+    function _fast_sync_from_L2_to_L1(address _token, uint256 _x) internal {
         vm.prank(owner);
-        dummyToken.mint(l1SyncPool, _x);
+        DummyERC20(_token).mint(l1SyncPool, _x);
 
         vm.startPrank(l1SyncPool);
-        dummyToken.approve(address(liquifierInstance), _x);
-        liquifierInstance.depositWithERC20(address(dummyToken), _x, address(0));
+        DummyERC20(_token).approve(address(liquifierInstance), _x);
+        liquifierInstance.depositWithERC20(_token, _x, address(0));
         vm.stopPrank();
     }
 
@@ -631,19 +631,76 @@ contract LiquifierTest is TestSetup {
     function test_fast_sync() public {
         _setup_L1SyncPool();
 
+        uint256 prevTotalDummy = dummyToken.totalSupply();
+        uint256 prevLiquifierBalance = address(liquifierInstance).balance;
+        uint256 prevTotalPooledEther = liquifierInstance.getTotalPooledEther();
+
         // L2 layer notifies that eETH (equivalent to X ETH amount) is minted
         uint256 x = 10 ether;
-        _fast_sync_from_L2_to_L1(x);
+        _fast_sync_from_L2_to_L1(address(dummyToken), x);
+
+        assertEq(dummyToken.totalSupply(), dummyToken.balanceOf(address(liquifierInstance)));
+        assertEq(dummyToken.totalSupply(), prevTotalDummy + x);
+        assertEq(address(liquifierInstance).balance, prevLiquifierBalance);
+        assertEq(liquifierInstance.getTotalPooledEther(), prevTotalPooledEther + x);
+        assertEq(liquifierInstance.getTotalPooledEther(address(dummyToken)), x);
     }
 
-    function test_slow_sync() public {
+    function test_slow_sync_success() public {
         test_fast_sync();
+
+        uint256 prevTotalDummy = dummyToken.totalSupply();
+        uint256 prevLiquifierBalance = address(liquifierInstance).balance;
+        uint256 prevTotalPooledEther = liquifierInstance.getTotalPooledEther();
 
         uint256 x = 5 ether;
         // for some reasons only 5 ether arrived this time :)
         _transferTo(l1SyncPool, x);
 
         _slow_sync_form_L2_to_L1(x);
+
+        assertEq(dummyToken.totalSupply(), dummyToken.balanceOf(address(liquifierInstance)));
+        assertEq(dummyToken.totalSupply(), prevTotalDummy - x);
+        assertEq(address(liquifierInstance).balance, prevLiquifierBalance + x);
+        assertEq(liquifierInstance.getTotalPooledEther(), prevTotalPooledEther);
+
+        uint256 y = 10 ether;
+        _fast_sync_from_L2_to_L1(address(dummyToken), y);
     }
 
+    function test_multiple_l2Eths() public {
+        test_fast_sync();
+
+        uint256 prevTotalPooledEther = liquifierInstance.getTotalPooledEther();
+
+        vm.startPrank(owner);
+        DummyERC20 dummyToken2 = new DummyERC20();
+        liquifierInstance.registerToken(address(dummyToken2), address(0), true, 0, 50, 1000, true);
+        vm.stopPrank();
+
+        uint256 x = 5 ether;
+        _fast_sync_from_L2_to_L1(address(dummyToken2), x);
+
+        assertEq(liquifierInstance.getTotalPooledEther(), prevTotalPooledEther + liquifierInstance.getTotalPooledEther(address(dummyToken2)));
+    }
+
+    function test_add_dummy_token_flag() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        bool isTokenWhitelisted = liquifierInstance.isTokenWhitelisted(address(stEth));
+        uint256 timeBoundCap = liquifierInstance.timeBoundCap(address(stEth));
+        uint256 totalCap = liquifierInstance.totalCap(address(stEth));
+        uint256 totalDeposited = liquifierInstance.totalDeposited(address(stEth));
+        uint256 getTotalPooledEther = liquifierInstance.getTotalPooledEther(address(stEth));
+
+        // Do the upgrade
+        setUpLiquifier(MAINNET_FORK);
+
+        assertEq(liquifierInstance.isTokenWhitelisted(address(stEth)), isTokenWhitelisted);
+        assertEq(liquifierInstance.isL2Eth(address(stEth)), false);
+        assertEq(liquifierInstance.timeBoundCap(address(stEth)), timeBoundCap);
+        assertEq(liquifierInstance.totalCap(address(stEth)), totalCap);
+        assertEq(liquifierInstance.totalDeposited(address(stEth)), totalDeposited);
+        assertEq(liquifierInstance.getTotalPooledEther(address(stEth)), getTotalPooledEther);
+    }
 }
