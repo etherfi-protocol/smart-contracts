@@ -451,6 +451,11 @@ contract EtherFiNode is IEtherFiNode {
             // No withdrawal to any other address than the safe
             require (recipient == address(this), "INCORRECT_RECIPIENT");
         }
+
+        // recoverTokens(IERC20[], uint256[], address)
+        if (selector == hex"dda3346c") {
+            revert("NOT_ALLOWED");
+        }
     }
 
     function _applyNonExitPenalty(

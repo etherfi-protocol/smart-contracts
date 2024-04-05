@@ -404,6 +404,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
         if (_token == address(lido)) {
             return _amount; /// 1:1 from stETH to eETH
+        } else if (_token == address(cbEth)) {
+            return _min(_amount * cbEth.exchangeRate() / 1e18, ICurvePoolQuoter2(address(cbEth_Eth_Pool)).get_dy(1, 0, _amount));
+        } else if (_token == address(wbEth)) {
+            return _min(_amount * wbEth.exchangeRate() / 1e18, ICurvePoolQuoter1(address(wbEth_Eth_Pool)).get_dy(1, 0, _amount));
         } else if (tokenInfos[_token].isL2Eth) {
             // 1:1 for all dummy tokens
             return _amount;
