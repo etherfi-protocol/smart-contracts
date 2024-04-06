@@ -41,11 +41,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         initializeRealisticFork(MAINNET_FORK);
 
         _perform_eigenlayer_upgrade();
-
-        // Upgrade before running tests if you changed the contracts
-        _upgrade_etherfi_nodes_manager_contract();
-        _upgrade_etherfi_node_contract();
-        _upgrade_liquifier();
+        _perform_etherfi_upgrade();
 
         // yes bob!
         p2p = address(1000);
@@ -464,7 +460,8 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.stopPrank();
 
         // SUCCEEDS
-        vm.startPrank(owner);
+        address el_operating_admin = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
+        vm.startPrank(el_operating_admin);
 
         selector = bytes4(keccak256("nonBeaconChainETHBalanceWei()"));
         data[0] = abi.encodeWithSelector(selector);
