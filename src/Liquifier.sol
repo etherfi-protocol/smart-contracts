@@ -317,7 +317,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (!isTokenWhitelisted(_l2Eth) || !tokenInfos[_l2Eth].isL2Eth) revert NotSupportedToken();
         _L2SanityChecks(_l2Eth);
 
-        IERC20Burnable(_l2Eth).burn(msg.value);
+        IERC20(_l2Eth).safeTransfer(msg.sender, msg.value);
         return msg.value;
     }
 

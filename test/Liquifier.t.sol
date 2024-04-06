@@ -622,6 +622,7 @@ contract LiquifierTest is TestSetup {
     function _slow_sync_form_L2_to_L1(uint256 _x) internal {
         vm.startPrank(l1SyncPool);
         liquifierInstance.unwrapL2Eth{value: _x}(address(dummyToken));
+        DummyERC20(dummyToken).burn(_x);
         vm.stopPrank();
     }
 
