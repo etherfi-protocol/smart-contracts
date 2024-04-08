@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/interfaces/IERC1271Upgradeable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
-
 import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/interfaces/IERC1271Upgradeable.sol";
 
 import "./eigenlayer-interfaces/IRegistryCoordinator.sol";
 import "./eigenlayer-interfaces/ISignatureUtils.sol";
+import "./eigenlayer-interfaces/IDelegationManager.sol";
 
 
 contract EtherFiAvsOperator is IERC1271Upgradeable {
@@ -29,6 +27,18 @@ contract EtherFiAvsOperator is IERC1271Upgradeable {
     function initialize(address _avsOperatorsManager) external managerOnly {
         require(avsOperatorsManager == address(0), "ALREADY_INITIALIZED");
         avsOperatorsManager = _avsOperatorsManager;
+    }
+
+    function registerAsOperator(IDelegationManager _delegationManager, IDelegationManager.OperatorDetails calldata _detail, string calldata _metaDataURI) external managerOnly {
+        _delegationManager.registerAsOperator(_detail, _metaDataURI);
+    }
+
+    function modifyOperatorDetails(IDelegationManager _delegationManager, IDelegationManager.OperatorDetails calldata _newOperatorDetails) external managerOnly {
+        _delegationManager.modifyOperatorDetails(_newOperatorDetails);
+    }
+
+    function updateOperatorMetadataURI(IDelegationManager _delegationManager, string calldata _metadataURI) external managerOnly {
+        _delegationManager.updateOperatorMetadataURI(_metadataURI);
     }
 
     function registerOperator(
