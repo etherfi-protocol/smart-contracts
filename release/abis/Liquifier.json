@@ -425,69 +425,6 @@
   },
   {
     "type": "function",
-    "name": "initialize",
-    "inputs": [
-      {
-        "name": "_treasury",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_liquidityPool",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_eigenLayerStrategyManager",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_lidoWithdrawalQueue",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_stEth",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_cbEth",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_wbEth",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_cbEth_Eth_Pool",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_wbEth_Eth_Pool",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_stEth_Eth_Pool",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "_timeBoundCapRefreshInterval",
-        "type": "uint32",
-        "internalType": "uint32"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "initializeOnUpgrade",
     "inputs": [
       {

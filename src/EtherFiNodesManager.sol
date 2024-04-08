@@ -415,7 +415,7 @@ contract EtherFiNodesManager is
     // - 
     // - verifyBalanceUpdates
     // - verifyAndProcessWithdrawals
-    function callEigenPod(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
+    function callEigenPod(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(data[i]);
@@ -429,7 +429,7 @@ contract EtherFiNodesManager is
     // - undelegate(address staker)
     // - completeQueuedWithdrawal
     // - queueWithdrawals
-    function callDelegationManager(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
+    function callDelegationManager(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
         address to = address(delegationManager);
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
@@ -441,7 +441,7 @@ contract EtherFiNodesManager is
     /// @notice Call the Eigenlayer EigenPod Manager contract
     /// @param data to call contract
     // - recordBeaconChainETHBalanceUpdate
-    function callEigenPodManager(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
+    function callEigenPodManager(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
         address to = address(eigenPodManager);
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
@@ -449,7 +449,7 @@ contract EtherFiNodesManager is
         }
     }
 
-    function callDelayedWithdrawalRouter(uint256[] calldata _validatorIds, bytes[] calldata data) external onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
+    function callDelayedWithdrawalRouter(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
         address to = address(delayedWithdrawalRouter);
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
@@ -523,12 +523,16 @@ contract EtherFiNodesManager is
         eigenLayerOperatingAdmin[_address] = _isAdmin;
     }
 
-    //Pauses the contract
+    function disableEigenLayerOperatingAdmin(address _addres) external onlyAdmin {
+        eigenLayerOperatingAdmin[_addres] = false;
+    }
+
+    // Pauses the contract
     function pauseContract() external onlyAdmin {
         _pause();
     }
 
-    //Unpauses the contract
+    // Unpauses the contract
     function unPauseContract() external onlyAdmin {
         _unpause();
     }

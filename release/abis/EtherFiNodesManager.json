@@ -167,19 +167,6 @@
   },
   {
     "type": "function",
-    "name": "batchPartialWithdrawOptimized",
-    "inputs": [
-      {
-        "name": "_validatorIds",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "batchQueueRestakedWithdrawal",
     "inputs": [
       {
@@ -414,6 +401,19 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "disableEigenLayerOperatingAdmin",
+    "inputs": [
+      {
+        "name": "_addres",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
