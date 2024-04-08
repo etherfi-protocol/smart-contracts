@@ -38,7 +38,7 @@ contract EtherFiAvsOperator is IERC1271Upgradeable {
         string calldata _socket,
         IBLSApkRegistry.PubkeyRegistrationParams calldata _params,
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
-    ) external managerOnly whenNotPaused {
+    ) external managerOnly {
         require(isAvsWhitelisted(_avsContract), "AVS_NOT_WHITELISTED");
 
         IRegistryCoordinator(_avsContract).registerOperator(_quorumNumbers, _socket, _params, _operatorSignature);
@@ -52,7 +52,7 @@ contract EtherFiAvsOperator is IERC1271Upgradeable {
         IRegistryCoordinator.OperatorKickParam[] calldata _operatorKickParams,
         ISignatureUtils.SignatureWithSaltAndExpiry memory _churnApproverSignature,
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
-    ) external managerOnly whenNotPaused {
+    ) external managerOnly {
         require(isAvsWhitelisted(_avsContract), "AVS_NOT_WHITELISTED");
 
         IRegistryCoordinator(_avsContract).registerOperatorWithChurn(_quorumNumbers, _socket, _params, _operatorKickParams, _churnApproverSignature, _operatorSignature);
