@@ -11,7 +11,7 @@ import "./eigenlayer-interfaces/ISignatureUtils.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
 
 
-contract EtherFiAvsOperator is IERC1271Upgradeable {
+contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
 
     struct AvsInfo {
         bool isWhitelisted;
@@ -24,7 +24,7 @@ contract EtherFiAvsOperator is IERC1271Upgradeable {
     mapping(address => AvsInfo) public avsInfos;
 
 
-    function initialize(address _avsOperatorsManager) external managerOnly {
+    function initialize(address _avsOperatorsManager) external {
         require(avsOperatorsManager == address(0), "ALREADY_INITIALIZED");
         avsOperatorsManager = _avsOperatorsManager;
     }

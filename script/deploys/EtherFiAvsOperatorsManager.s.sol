@@ -28,8 +28,13 @@ contract DeployEtherFiAvsOperatorsManager is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        EtherFiAvsOperatorsManager mgr = EtherFiAvsOperatorsManager(address(new UUPSProxy(address(new EtherFiAvsOperatorsManager()), "")));
-        mgr.initialize(delegationManager);
+        EtherFiAvsOperatorsManager mgr = EtherFiAvsOperatorsManager(address(0x2093Bbb221f1d8C7c932c32ee28Be6dEe4a37A6a));
+        mgr.upgradeEtherFiAvsOperator(address(new EtherFiAvsOperator()));
+
+        mgr.instantiateEtherFiAvsOperator(1);
+
+        // EtherFiAvsOperatorsManager mgr = EtherFiAvsOperatorsManager(address(new UUPSProxy(address(new EtherFiAvsOperatorsManager()), "")));
+        // mgr.initialize(delegationManager);
 
         vm.stopBroadcast();
     }
