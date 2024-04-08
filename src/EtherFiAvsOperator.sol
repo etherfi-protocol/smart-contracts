@@ -25,7 +25,6 @@ contract EtherFiAvsOperator is IERC1271Upgradeable {
 
     mapping(address => AvsInfo) public avsInfos;
 
-    constructor() {}
 
     function initialize(address _avsOperatorsManager) external managerOnly {
         require(avsOperatorsManager == address(0), "ALREADY_INITIALIZED");
@@ -99,7 +98,7 @@ contract EtherFiAvsOperator is IERC1271Upgradeable {
      * @param _signature Signature byte array associated with _data
     */
     function isValidSignature(bytes32 _digestHash, bytes memory _signature) public view override returns (bytes4 magicValue) {
-        return ECDSAUpgradeable.recover(_digestHash, _signature) == ecdsaSigner ? this.isValidSignature.selector : bytes4(0);
+        return ECDSAUpgradeable.recover(_digestHash, _signature) == ecdsaSigner ? this.isValidSignature.selector : bytes4(0xffffffff);
     }
 
     function isAvsWhitelisted(address _avsContract) public view returns (bool) {

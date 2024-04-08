@@ -17,7 +17,7 @@ import "./eigenlayer-utils/ProofParsing.sol";
 import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
 import {BitmapUtils} from "../src/eigenlayer-libraries/BitmapUtils.sol";
 import {BN254} from "../src/eigenlayer-libraries/BN254.sol";
-import {IBLSApkRegistry} from "../../src/eigenlayer-interfaces/IBLSApkRegistry.sol";
+import {IBLSApkRegistry} from "../src/eigenlayer-interfaces/IBLSApkRegistry.sol";
 // import {MockAVSDeployer} from "./eigenlayer-middleware/test/utils/MockAVSDeployer.sol";
 
 import "forge-std/console2.sol";
@@ -333,7 +333,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         managerInstance.callDelayedWithdrawalRouter(validatorIds, data);
     }
 
-    function test_activateRestaking_and_sweep() public {
+    function test_sweep() public {
         (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
 
         test_activateRestaking();
@@ -354,7 +354,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     }
 
     function test_withdrawNonBeaconChainETHBalanceWei() public {
-        test_activateRestaking_and_sweep();
+        test_sweep();
 
         // 1.
         (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
