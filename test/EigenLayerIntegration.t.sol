@@ -40,7 +40,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
 
-        _perform_eigenlayer_upgrade();
         _perform_etherfi_upgrade();
 
         // yes bob!
