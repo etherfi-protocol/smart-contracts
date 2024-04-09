@@ -50,7 +50,7 @@ contract UpgradeForEigenLayerM2 is Script {
         
         vm.startBroadcast(deployerPrivateKey);
 
-        Liquifier LiquifierNewImpl = new Liquifier();
+        // Liquifier LiquifierNewImpl = new Liquifier();
         EtherFiNodesManager EtherFiNodesManagerNewImpl = new EtherFiNodesManager();
         EtherFiNode EtherFiNodeNewImpl = new EtherFiNode();
 
@@ -64,11 +64,11 @@ contract UpgradeForEigenLayerM2 is Script {
 
             uint256 minDelay = timelock.getMinDelay();
 
-            emit TimelockTransaction(address(liquifier), 0, genUpgradeTo(address(liquifier), address(LiquifierNewImpl)), bytes32(0), bytes32(0), minDelay);
+            // emit TimelockTransaction(address(liquifier), 0, genUpgradeTo(address(liquifier), address(LiquifierNewImpl)), bytes32(0), bytes32(0), minDelay);
             emit TimelockTransaction(address(stakingManager), 0, abi.encodeWithSelector(getSelector("upgradeEtherFiNode(address)"), address(EtherFiNodeNewImpl)), bytes32(0), bytes32(0), minDelay);
             emit TimelockTransaction(address(nodesManager), 0, genUpgradeTo(address(nodesManager), address(EtherFiNodesManagerNewImpl)), bytes32(0), bytes32(0), minDelay);
 
-            emit TimelockTransaction(address(liquifier), 0, abi.encodeWithSelector(getSelector("initializeOnUpgrade(address,address)"), el_delegationManager, pancakeRouter), bytes32(0), bytes32(0), minDelay);
+            // emit TimelockTransaction(address(liquifier), 0, abi.encodeWithSelector(getSelector("initializeOnUpgrade(address,address)"), el_delegationManager, pancakeRouter), bytes32(0), bytes32(0), minDelay);
             emit TimelockTransaction(address(nodesManager), 0, abi.encodeWithSelector(getSelector("initializeOnUpgrade2(address)"), el_delegationManager), bytes32(0), bytes32(0), minDelay);
             emit TimelockTransaction(address(nodesManager), 0, abi.encodeWithSelector(getSelector("updateEigenLayerOperatingAdmin(address,bool)"), el_admin, true), bytes32(0), bytes32(0), minDelay);
 
@@ -78,15 +78,15 @@ contract UpgradeForEigenLayerM2 is Script {
             pancakeRouter = address(0); // not live in Holesky
             el_admin = deployer;
 
-            require(deployer == liquifier.owner(), "Only the owner can upgrade the contract");
+            // require(deployer == liquifier.owner(), "Only the owner can upgrade the contract");
             require(deployer == stakingManager.owner(), "Only the owner can upgrade the contract");
             require(deployer == nodesManager.owner(), "Only the owner can upgrade the contract");
 
-            liquifier.upgradeTo(address(LiquifierNewImpl));
+            // liquifier.upgradeTo(address(LiquifierNewImpl));
             nodesManager.upgradeTo(address(EtherFiNodesManagerNewImpl));
             stakingManager.upgradeEtherFiNode(address(EtherFiNodeNewImpl));
 
-            liquifier.initializeOnUpgrade(el_delegationManager, pancakeRouter);
+            // liquifier.initializeOnUpgrade(el_delegationManager, pancakeRouter);
             nodesManager.initializeOnUpgrade2(el_delegationManager);
             nodesManager.updateEigenLayerOperatingAdmin(el_admin, true);
         }
