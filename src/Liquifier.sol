@@ -1,5 +1,5 @@
 /// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.23;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
@@ -84,6 +84,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     IERC20[] public dummies;
     address public l1SyncPool;
 
+    mapping(address => bool) public pausers;
 
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     event RegisteredQueuedWithdrawal(bytes32 _withdrawalRoot, IStrategyManager.DeprecatedStruct_QueuedWithdrawal _queuedWithdrawal);
@@ -100,7 +101,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error NotRegistered();
     error WrongOutput();
     error IncorrectCaller();
-
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -292,7 +292,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
     }
 
-    function pauseDeposits(address _token) external onlyAdmin {
+    function pauseDeposits(address _token) external onlyPauser {
         tokenInfos[_token].timeBoundCapInEther = 0;
         tokenInfos[_token].totalCapInEther = 0;
     }
@@ -301,13 +301,17 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         admins[_address] = _isAdmin;
     }
 
+    function updatePauser(address _address, bool _isPauser) external onlyAdmin {
+        pausers[_address] = _isPauser;
+    }
+
     //Pauses the contract
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external onlyPauser {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external onlyOwner {
         _unpause();
     }
 
@@ -367,18 +371,18 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     // https://etherscan.io/tx/0x4dde6b6d232f706466b18422b004e2584fd6c0d3c0afe40adfdc79c79031fe01
     // This user deposited 625 wBETH and minted only 7.65 eETH due to the low liquidity in the curve pool that it used
     // Rescue him!
-    function CASE1() external onlyAdmin {
-        if (flags["CASE1"]) revert();
-        flags["CASE1"] = true;
+    // function CASE1() external onlyAdmin {
+    //     if (flags["CASE1"]) revert();
+    //     flags["CASE1"] = true;
 
-        address recipient = 0xc0948cE48e87a55704EfEf8E4b8f92CA34D2087E;
-        // uint256 wbethAmount = 625601006520000000000;
-        // uint256 eEthAmount = 7650414487237129340;
-        // uint256 exchagneRate = 1032800000000000000; // "the price of wBETH to ETH should be 1.0328"
-        // uint256 diff = (wbethAmount * exchagneRate / 1e18) - eEthAmount;
-        uint256 diff = 617.302086995462789012 ether;
-        liquidityPool.depositToRecipient(recipient, diff, address(0));
-    }
+    //     // address recipient = 0xc0948cE48e87a55704EfEf8E4b8f92CA34D2087E;
+    //     // uint256 wbethAmount = 625601006520000000000;
+    //     // uint256 eEthAmount = 7650414487237129340;
+    //     // uint256 exchagneRate = 1032800000000000000; // "the price of wBETH to ETH should be 1.0328"
+    //     // uint256 diff = (wbethAmount * exchagneRate / 1e18) - eEthAmount;
+    //     // uint256 diff = 617.302086995462789012 ether;
+    //     liquidityPool.depositToRecipient(0xc0948cE48e87a55704EfEf8E4b8f92CA34D2087E, 617.302086995462789012 ether, address(0));
+    // }
 
     /* VIEW FUNCTIONS */
 
@@ -544,7 +548,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function _L2SanityChecks(address _token) internal view {
-        require(IERC20(_token).totalSupply() == IERC20(_token).balanceOf(address(this)), "INVALID_L2");
+        if (IERC20(_token).totalSupply() != IERC20(_token).balanceOf(address(this))) revert();
     }
 
      function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
@@ -557,9 +561,18 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (!(admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
     }
 
+    function _requirePauser() internal view virtual {
+        if (!(pausers[msg.sender] || admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
+    }
+
     /* MODIFIER */
     modifier onlyAdmin() {
         _requireAdmin();
+        _;
+    }
+
+    modifier onlyPauser() {
+        _requirePauser();
         _;
     }
 }
