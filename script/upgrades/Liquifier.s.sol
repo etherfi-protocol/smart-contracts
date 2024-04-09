@@ -52,7 +52,7 @@ contract Upgrade is Script {
 
         address l1syncpool;
         if (block.chainid == 1) {
-            l1syncpool = 0x0;
+            l1syncpool = 0x33757A5E3aFB438733679275C03eE2DB43F43Ee7;
 
             uint256 minDelay = timelock.getMinDelay();
 
@@ -60,12 +60,12 @@ contract Upgrade is Script {
             emit TimelockTransaction(address(liquifier), 0, abi.encodeWithSelector(getSelector("initializeL1SyncPool(address)"), l1syncpool), bytes32(0), bytes32(0), minDelay);
     
         } else if (block.chainid == 17000) {
-            l1syncpool = 0x0;
+            // l1syncpool = 0x0;
 
             require(deployer == liquifier.owner(), "Only the owner can upgrade the contract");
 
             liquifier.upgradeTo(address(LiquifierNewImpl));
-            liquifier.initializeL1SyncPool(l1SyncPool);
+            liquifier.initializeL1SyncPool(l1syncpool);
         }
 
         vm.stopBroadcast();

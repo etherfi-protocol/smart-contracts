@@ -25,9 +25,6 @@
 [submodule "lib/eigenlayer-contracts"]
 	path = lib/eigenlayer-contracts
 	url = https://github.com/Layr-Labs/eigenlayer-contracts
-[submodule "lib/LayerZero-v2"]
-	path = lib/LayerZero-v2
-	url = https://github.com/LayerZero-Labs/LayerZero-v2
 [submodule "lib/Etherfi-SyncPools"]
 	path = lib/Etherfi-SyncPools
 	url = https://github.com/JorgeAtPaladin/Etherfi-SyncPools
