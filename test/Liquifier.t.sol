@@ -584,20 +584,6 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
     }
 
-    function test_case1() public {
-        initializeRealisticFork(MAINNET_FORK);
-        setUpLiquifier(MAINNET_FORK);
-
-        vm.startPrank(owner);
-
-        liquifierInstance.CASE1();
-
-        vm.expectRevert();
-        liquifierInstance.CASE1();
-
-        vm.stopPrank();
-    }
-
     function _setup_L1SyncPool() internal {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
@@ -760,5 +746,33 @@ contract LiquifierTest is TestSetup {
         assertEq(liquifierInstance.totalCap(address(stEth)), totalCap);
         assertEq(liquifierInstance.totalDeposited(address(stEth)), totalDeposited);
         assertEq(liquifierInstance.getTotalPooledEther(address(stEth)), getTotalPooledEther);
+    }
+
+    function test_pauser() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+
+        owner = liquifierInstance.owner();
+
+        vm.startPrank(bob);
+        vm.expectRevert();
+        liquifierInstance.pauseContract();
+        vm.stopPrank();
+
+        vm.prank(owner);
+        liquifierInstance.updatePauser(bob, true);
+
+        vm.startPrank(bob);
+        liquifierInstance.pauseContract();
+        vm.stopPrank();
+
+        vm.startPrank(bob);
+        vm.expectRevert();
+        liquifierInstance.unPauseContract();
+        vm.stopPrank();
+
+        vm.prank(owner);
+        liquifierInstance.unPauseContract();
+
     }
 }
