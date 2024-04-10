@@ -10,6 +10,7 @@ import "../../src/EtherFiAvsOperatorsManager.sol";
 contract DeployEtherFiAvsOperatorsManager is Script {
 
     AddressProvider public addressProvider;
+    EtherFiAvsOperatorsManager mgr;
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -20,20 +21,23 @@ contract DeployEtherFiAvsOperatorsManager is Script {
         address delegationManager;
         if (block.chainid == 1) {
             delegationManager = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
+            mgr = EtherFiAvsOperatorsManager(address(0x2093Bbb221f1d8C7c932c32ee28Be6dEe4a37A6a));
         } else if (block.chainid == 17000) {
             delegationManager = 0xA44151489861Fe9e3055d95adC98FbD462B948e7;
+            mgr = EtherFiAvsOperatorsManager(address(0xDF9679E8BFce22AE503fD2726CB1218a18CD8Bf4));
         } else {
             revert("Chain ID not supported");
         }
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // EtherFiAvsOperatorsManager mgr = EtherFiAvsOperatorsManager(address(0x2093Bbb221f1d8C7c932c32ee28Be6dEe4a37A6a));
-        // mgr.upgradeEtherFiAvsOperator(address(new EtherFiAvsOperator()));
+        mgr.upgradeEtherFiAvsOperator(address(new EtherFiAvsOperator()));
+        mgr.upgradeTo(address(new EtherFiAvsOperatorsManager()));
+
         // mgr.instantiateEtherFiAvsOperator(1);
 
-        EtherFiAvsOperatorsManager mgr = EtherFiAvsOperatorsManager(address(new UUPSProxy(address(new EtherFiAvsOperatorsManager()), "")));
-        mgr.initialize(delegationManager, address(new EtherFiAvsOperator()));
+        // EtherFiAvsOperatorsManager mgr = EtherFiAvsOperatorsManager(address(new UUPSProxy(address(new EtherFiAvsOperatorsManager()), "")));
+        // mgr.initialize(delegationManager, address(new EtherFiAvsOperator()));
 
         vm.stopBroadcast();
     }

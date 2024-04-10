@@ -66,7 +66,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
-        _perform_etherfi_upgrade();
 
         p2p = address(1000);
         dsrv = address(1001);
@@ -596,6 +595,25 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // ISignatureUtils.SignatureWithSaltAndExpiry memory emptySignatureAndExpiry;
         // cheats.prank(operator);
         // registryCoordinator.registerOperator(quorumNumbers, defaultSocket, pubkeyRegistrationParams, emptySignatureAndExpiry);
+    }
+
+    function test_29027_verifyWithdrawalCredentials() public {
+        setJSON("./test/eigenlayer-utils/test-data/mainnet_withdrawal_credential_proof_1285801.json");
+        
+        _setWithdrawalCredentialParams();
+        _setOracleBlockRoot();
+
+        uint256[] memory validatorIds = new uint256[](1);
+        validatorIds[0] = 29027;
+
+        oracleTimestamp = 1712703383;
+        validatorIndices[0] = 1285801;
+
+        bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
+        vm.prank(owner);
+        managerInstance.callEigenPod(validatorIds, data);
     }
 
 }
