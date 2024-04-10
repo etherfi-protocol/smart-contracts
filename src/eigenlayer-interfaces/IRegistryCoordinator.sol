@@ -172,4 +172,6 @@ interface IRegistryCoordinator {
     function deregisterOperator(
         bytes calldata quorumNumbers
     ) external;
+
+    function updateSocket(string memory socket) external;
 }

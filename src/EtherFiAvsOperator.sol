@@ -15,6 +15,9 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
 
     struct AvsInfo {
         bool isWhitelisted;
+        bytes quorumNumbers;
+        string socket;
+        IBLSApkRegistry.PubkeyRegistrationParams params;
     }
 
     address public avsOperatorsManager;
@@ -22,7 +25,6 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
     address public avsNodeOperator;
 
     mapping(address => AvsInfo) public avsInfos;
-
 
     function initialize(address _avsOperatorsManager) external {
         require(avsOperatorsManager == address(0), "ALREADY_INITIALIZED");
@@ -41,20 +43,55 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         _delegationManager.updateOperatorMetadataURI(_metadataURI);
     }
 
+    function updateSocket(address _avsRegistryCoordinator, string memory _socket) external {
+        require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
+
+        IRegistryCoordinator(_avsRegistryCoordinator).updateSocket(_socket);
+        avsInfos[_avsRegistryCoordinator].socket = _socket;
+    }
+
+    function registerBlsKeyAsDelegatedNodeOperator(
+        address _avsRegistryCoordinator, 
+        bytes calldata _quorumNumbers,
+        string calldata _socket,
+        IBLSApkRegistry.PubkeyRegistrationParams calldata _params
+    ) external managerOnly {
+        require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
+
+        avsInfos[_avsRegistryCoordinator].quorumNumbers = _quorumNumbers;
+        avsInfos[_avsRegistryCoordinator].socket = _socket;
+        avsInfos[_avsRegistryCoordinator].params = _params;
+    }
+
+    function isRegisteredBlsKey(
+        address _avsRegistryCoordinator,
+        bytes calldata _quorumNumbers,
+        string calldata _socket,
+        IBLSApkRegistry.PubkeyRegistrationParams calldata _params
+    ) external view returns (bool) {
+        require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
+
+        AvsInfo memory avsInfo = avsInfos[_avsRegistryCoordinator];
+        bytes32 digestHash1 = keccak256(abi.encode(_avsRegistryCoordinator, _quorumNumbers, _socket, _params));
+        bytes32 digestHash2 = keccak256(abi.encode(_avsRegistryCoordinator, avsInfo.quorumNumbers, avsInfo.socket, avsInfo.params));
+
+        return digestHash1 == digestHash2;
+    }
+
     function registerOperator(
-        address _avsContract,
+        address _avsRegistryCoordinator,
         bytes calldata _quorumNumbers,
         string calldata _socket,
         IBLSApkRegistry.PubkeyRegistrationParams calldata _params,
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
     ) external managerOnly {
-        require(isAvsWhitelisted(_avsContract), "AVS_NOT_WHITELISTED");
+        require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
 
-        IRegistryCoordinator(_avsContract).registerOperator(_quorumNumbers, _socket, _params, _operatorSignature);
+        IRegistryCoordinator(_avsRegistryCoordinator).registerOperator(_quorumNumbers, _socket, _params, _operatorSignature);
     }
 
     function registerOperatorWithChurn(
-        address _avsContract,
+        address _avsRegistryCoordinator,
         bytes calldata _quorumNumbers, 
         string calldata _socket,
         IBLSApkRegistry.PubkeyRegistrationParams calldata _params,
@@ -62,25 +99,25 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         ISignatureUtils.SignatureWithSaltAndExpiry memory _churnApproverSignature,
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
     ) external managerOnly {
-        require(isAvsWhitelisted(_avsContract), "AVS_NOT_WHITELISTED");
+        require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
 
-        IRegistryCoordinator(_avsContract).registerOperatorWithChurn(_quorumNumbers, _socket, _params, _operatorKickParams, _churnApproverSignature, _operatorSignature);
+        IRegistryCoordinator(_avsRegistryCoordinator).registerOperatorWithChurn(_quorumNumbers, _socket, _params, _operatorKickParams, _churnApproverSignature, _operatorSignature);
     }
 
     function deregisterOperator(
-        address _avsContract,
+        address _avsRegistryCoordinator,
         bytes calldata quorumNumbers
     ) external managerOnly {
-        IRegistryCoordinator(_avsContract).deregisterOperator(quorumNumbers);
+        IRegistryCoordinator(_avsRegistryCoordinator).deregisterOperator(quorumNumbers);
     }
 
     function operatorForwardCall(
-        address _avsContract, 
+        address _avsRegistryCoordinator, 
         bytes4 _signature, 
         bytes calldata _remainingCalldata) 
     external managerOnly returns (bytes memory) {
-        require(isValidOperatorCall(_avsContract, _signature, _remainingCalldata), "INVALID_OPERATOR_CALL");
-        return Address.functionCall(_avsContract, abi.encodePacked(_signature, _remainingCalldata));
+        require(isValidOperatorCall(_avsRegistryCoordinator, _signature, _remainingCalldata), "INVALID_OPERATOR_CALL");
+        return Address.functionCall(_avsRegistryCoordinator, abi.encodePacked(_signature, _remainingCalldata));
     }
 
     function forwardCall(address to, bytes calldata data) external managerOnly returns (bytes memory) {
@@ -91,8 +128,8 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         avsNodeOperator = _avsNodeOperator;
     }
 
-    function updateAvsWhitelist(address _avsContract, bool _isWhitelisted) external managerOnly {
-        avsInfos[_avsContract].isWhitelisted = _isWhitelisted;
+    function updateAvsWhitelist(address _avsRegistryCoordinator, bool _isWhitelisted) external managerOnly {
+        avsInfos[_avsRegistryCoordinator].isWhitelisted = _isWhitelisted;
     }
 
     function updateEcdsaSigner(address _ecdsaSigner) external managerOnly {
@@ -111,13 +148,13 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         return ECDSAUpgradeable.recover(_digestHash, _signature) == ecdsaSigner ? this.isValidSignature.selector : bytes4(0xffffffff);
     }
 
-    function isAvsWhitelisted(address _avsContract) public view returns (bool) {
-        return avsInfos[_avsContract].isWhitelisted;
+    function isAvsWhitelisted(address _avsRegistryCoordinator) public view returns (bool) {
+        return avsInfos[_avsRegistryCoordinator].isWhitelisted;
     }
 
     // Disabled all forward calls for now.
-    function isValidOperatorCall(address _avsContract, bytes4 _signature, bytes calldata _remainingCalldata) public view returns (bool) {
-        if (!isAvsWhitelisted(_avsContract)) return false;
+    function isValidOperatorCall(address _avsRegistryCoordinator, bytes4 _signature, bytes calldata _remainingCalldata) public view returns (bool) {
+        if (!isAvsWhitelisted(_avsRegistryCoordinator)) return false;
         return false;
     }
 
