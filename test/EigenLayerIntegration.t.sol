@@ -111,13 +111,13 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         validatorFields[0] = getValidatorFields();
 
         // Get an oracle timestamp        
-        vm.warp(block.timestamp + 1 days);
-        oracleTimestamp = uint64(block.timestamp);
+        // vm.warp(block.timestamp + 1 days);
+        // oracleTimestamp = uint64(block.timestamp);
     }
 
     function _setOracleBlockRoot() internal {
-        bytes32 latestBlockRoot = getLatestBlockRoot();
-        beaconChainOracleMock.setOracleBlockRootAtTimestamp(latestBlockRoot);
+        // bytes32 latestBlockRoot = getLatestBlockRoot();
+        // beaconChainOracleMock.setOracleBlockRootAtTimestamp(latestBlockRoot);
     }
 
     function _beacon_process_1ETH_deposit() internal {

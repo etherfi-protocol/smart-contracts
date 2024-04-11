@@ -21,8 +21,8 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
     }
 
     address public avsOperatorsManager;
-    address public ecdsaSigner;
-    address public avsNodeOperator;
+    address public ecdsaSigner;   // ECDSA signer that ether.fi owns
+    address public avsNodeRunner; // Staking Company such as DSRV, Pier Two, Nethermind, ...
 
     mapping(address => AvsInfo) public avsInfos;
 
@@ -63,21 +63,6 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         avsInfos[_avsRegistryCoordinator].params = _params;
     }
 
-    function isRegisteredBlsKey(
-        address _avsRegistryCoordinator,
-        bytes calldata _quorumNumbers,
-        string calldata _socket,
-        IBLSApkRegistry.PubkeyRegistrationParams calldata _params
-    ) external view returns (bool) {
-        require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
-
-        AvsInfo memory avsInfo = avsInfos[_avsRegistryCoordinator];
-        bytes32 digestHash1 = keccak256(abi.encode(_avsRegistryCoordinator, _quorumNumbers, _socket, _params));
-        bytes32 digestHash2 = keccak256(abi.encode(_avsRegistryCoordinator, avsInfo.quorumNumbers, avsInfo.socket, avsInfo.params));
-
-        return digestHash1 == digestHash2;
-    }
-
     function registerOperator(
         address _avsRegistryCoordinator,
         bytes calldata _quorumNumbers,
@@ -86,6 +71,7 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
     ) external managerOnly {
         require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
+        require(isRegisteredBlsKey(_avsRegistryCoordinator, _quorumNumbers, _socket, _params), "NOT_REGISTERED_BLS_KEY");
 
         IRegistryCoordinator(_avsRegistryCoordinator).registerOperator(_quorumNumbers, _socket, _params, _operatorSignature);
     }
@@ -100,6 +86,7 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
     ) external managerOnly {
         require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
+        require(isRegisteredBlsKey(_avsRegistryCoordinator, _quorumNumbers, _socket, _params), "NOT_REGISTERED_BLS_KEY");
 
         IRegistryCoordinator(_avsRegistryCoordinator).registerOperatorWithChurn(_quorumNumbers, _socket, _params, _operatorKickParams, _churnApproverSignature, _operatorSignature);
     }
@@ -111,7 +98,7 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         IRegistryCoordinator(_avsRegistryCoordinator).deregisterOperator(quorumNumbers);
     }
 
-    function operatorForwardCall(
+    function runnerForwardCall(
         address _avsRegistryCoordinator, 
         bytes4 _signature, 
         bytes calldata _remainingCalldata) 
@@ -124,8 +111,8 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         return Address.functionCall(to, data);
     }
 
-    function updateAvsNodeOperator(address _avsNodeOperator) external managerOnly {
-        avsNodeOperator = _avsNodeOperator;
+    function updateAvsNodeRunner(address _avsNodeRunner) external managerOnly {
+        avsNodeRunner = _avsNodeRunner;
     }
 
     function updateAvsWhitelist(address _avsRegistryCoordinator, bool _isWhitelisted) external managerOnly {
@@ -156,6 +143,19 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
     function isValidOperatorCall(address _avsRegistryCoordinator, bytes4 _signature, bytes calldata _remainingCalldata) public view returns (bool) {
         if (!isAvsWhitelisted(_avsRegistryCoordinator)) return false;
         return false;
+    }
+
+    function isRegisteredBlsKey(
+        address _avsRegistryCoordinator,
+        bytes calldata _quorumNumbers,
+        string calldata _socket,
+        IBLSApkRegistry.PubkeyRegistrationParams calldata _params
+    ) public view returns (bool) {
+        AvsInfo memory avsInfo = avsInfos[_avsRegistryCoordinator];
+        bytes32 digestHash1 = keccak256(abi.encode(_avsRegistryCoordinator, _quorumNumbers, _socket, _params));
+        bytes32 digestHash2 = keccak256(abi.encode(_avsRegistryCoordinator, avsInfo.quorumNumbers, avsInfo.socket, avsInfo.params));
+
+        return digestHash1 == digestHash2;
     }
 
     /// @dev implementation address for beacon proxy.

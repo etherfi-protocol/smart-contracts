@@ -35,7 +35,7 @@ contract EtherFiAvsOperatorsManager is
     event UpdatedSocket(uint256 indexed id, address avsRegistryCoordinator, string socket);
     event ModifiedOperatorDetails(uint256 indexed id, IDelegationManager.OperatorDetails newOperatorDetails);
     event UpdatedOperatorMetadataURI(uint256 indexed id, string metadataURI);
-    event UpdatedAvsNodeOperator(uint256 indexed id, address avsNodeOperator);
+    event UpdatedAvsNodeRunner(uint256 indexed id, address avsNodeRunner);
     event UpdatedAvsWhitelist(uint256 indexed id, address avsRegistryCoordinator, bool isWhitelisted);
     event UpdatedEcdsaSigner(uint256 indexed id, address ecdsaSigner);
 
@@ -75,7 +75,6 @@ contract EtherFiAvsOperatorsManager is
         IBLSApkRegistry.PubkeyRegistrationParams calldata _params,
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
     ) external onlyOperator(_id) {
-        require(avsOperators[_id].isRegisteredBlsKey(_avsRegistryCoordinator, _quorumNumbers, _socket, _params), "INVALID_BLS_KEY");
         avsOperators[_id].registerOperator(_avsRegistryCoordinator, _quorumNumbers, _socket, _params, _operatorSignature);
 
         emit RegisteredOperator(_id, _avsRegistryCoordinator, _quorumNumbers, _socket, _params, _operatorSignature);
@@ -134,10 +133,10 @@ contract EtherFiAvsOperatorsManager is
         emit UpdatedOperatorMetadataURI(_id, _metadataURI);
     }
 
-    function updateAvsNodeOperator(uint256 _id, address _avsNodeOperator) external onlyOwner {
-        avsOperators[_id].updateAvsNodeOperator(_avsNodeOperator);
+    function updateAvsNodeRunner(uint256 _id, address _avsNodeRunner) external onlyOwner {
+        avsOperators[_id].updateAvsNodeRunner(_avsNodeRunner);
 
-        emit UpdatedAvsNodeOperator(_id, _avsNodeOperator);
+        emit UpdatedAvsNodeRunner(_id, _avsNodeRunner);
     }
 
     function updateAvsWhitelist(uint256 _id, address _avsRegistryCoordinator, bool _isWhitelisted) external onlyOwner {
@@ -183,7 +182,7 @@ contract EtherFiAvsOperatorsManager is
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     function _onlyOperator(uint256 _id) internal view {
-        require(msg.sender == avsOperators[_id].avsNodeOperator() || msg.sender == owner(), "INCORRECT_CALLER");
+        require(msg.sender == avsOperators[_id].avsNodeRunner() || admins[msg.sender] || msg.sender == owner(), "INCORRECT_CALLER");
     }
 
     modifier onlyOperator(uint256 _id) {
