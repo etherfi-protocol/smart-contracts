@@ -95,6 +95,8 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         address _avsRegistryCoordinator,
         bytes calldata quorumNumbers
     ) external managerOnly {
+        delete avsInfos[_avsRegistryCoordinator];
+
         IRegistryCoordinator(_avsRegistryCoordinator).deregisterOperator(quorumNumbers);
     }
 
@@ -125,6 +127,10 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
 
 
     // VIEW functions
+
+    function getAvsInfo(address _avsRegistryCoordinator) external view returns (AvsInfo memory) {
+        return avsInfos[_avsRegistryCoordinator];
+    }
 
     /**
      * @dev Should return whether the signature provided is valid for the provided data

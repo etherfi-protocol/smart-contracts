@@ -44,6 +44,9 @@ import "./Attacker.sol";
 import "../lib/murky/src/Merkle.sol";
 import "./TestERC20.sol";
 
+import "../src/EtherFiAvsOperator.sol";
+import "../src/EtherFiAvsOperatorsManager.sol";
+
 import "../src/archive/MembershipManagerV0.sol";
 import "../src/EtherFiOracle.sol";
 import "../src/EtherFiAdmin.sol";
@@ -173,6 +176,8 @@ contract TestSetup is Test {
     TVLOracle tvlOracle;
 
     EtherFiTimelock public etherFiTimelockInstance;
+
+    EtherFiAvsOperatorsManager public avsOperatorsManager;
 
     Merkle merkle;
     bytes32 root;
@@ -321,6 +326,8 @@ contract TestSetup is Test {
             eigenLayerDelegationManager = IDelegationManager(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
             eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
 
+            avsOperatorsManager = EtherFiAvsOperatorsManager(0x2093Bbb221f1d8C7c932c32ee28Be6dEe4a37A6a);
+
         } else if (forkEnum == TESTNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("TESTNET_RPC_URL")));
             addressProviderInstance = AddressProvider(address(0x7c5EB0bE8af2eDB7461DfFa0Fd2856b3af63123e));
@@ -343,6 +350,7 @@ contract TestSetup is Test {
             eigenLayerDelegationManager = IDelegationManager(0xA44151489861Fe9e3055d95adC98FbD462B948e7);
             eigenLayerTimelock = ITimelock(0xcF19CE0561052a7A7Ff21156730285997B350A7D);
 
+            avsOperatorsManager = EtherFiAvsOperatorsManager(0xDF9679E8BFce22AE503fD2726CB1218a18CD8Bf4);
         } else {
             revert("Unimplemented fork");
         }
@@ -922,6 +930,14 @@ contract TestSetup is Test {
             0x0,
             0x0
         );
+        vm.stopPrank();
+    }
+
+    function _upgrade_etherfi_avs_operators_manager() internal {
+        vm.startPrank(avsOperatorsManager.owner());
+        avsOperatorsManager.upgradeTo(address(new EtherFiAvsOperatorsManager()));
+        avsOperatorsManager.upgradeEtherFiAvsOperator(address(new EtherFiAvsOperator()));
+        avsOperatorsManager.initializeAvsDirectory(0x135DDa560e946695d6f155dACaFC6f1F25C1F5AF);
         vm.stopPrank();
     }
 

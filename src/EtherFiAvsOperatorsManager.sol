@@ -10,6 +10,9 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "./EtherFiAvsOperator.sol";
 
+import "./eigenlayer-interfaces/IAVSDirectory.sol";
+import "./eigenlayer-interfaces/IServiceManager.sol";
+
 
 contract EtherFiAvsOperatorsManager is
     Initializable,
@@ -26,17 +29,19 @@ contract EtherFiAvsOperatorsManager is
 
     mapping(address => bool) public admins;
     mapping(address => bool) public pausers;
+
+    IAVSDirectory public avsDirectory;
  
     event CreatedEtherFiAvsOperator(uint256 indexed id, address etherFiAvsOperator);
-    event RegisteredBlsKeyAsDelegatedNodeOperator(uint256 indexed id, address avsRegistryCoordinator, bytes quorumNumbers, string socket, IBLSApkRegistry.PubkeyRegistrationParams params);
-    event RegisteredOperator(uint256 indexed id, address avsRegistryCoordinator, bytes quorumNumbers, string socket, IBLSApkRegistry.PubkeyRegistrationParams params, ISignatureUtils.SignatureWithSaltAndExpiry operatorSignature);
-    event DeregisteredOperator(uint256 indexed id, address avsRegistryCoordinator, bytes quorumNumbers);
+    event RegisteredBlsKeyAsDelegatedNodeOperator(uint256 indexed id, address avsServiceManager, bytes quorumNumbers, string socket, IBLSApkRegistry.PubkeyRegistrationParams params);
+    event RegisteredOperator(uint256 indexed id, address avsServiceManager, bytes quorumNumbers, string socket, IBLSApkRegistry.PubkeyRegistrationParams params, ISignatureUtils.SignatureWithSaltAndExpiry operatorSignature);
+    event DeregisteredOperator(uint256 indexed id, address avsServiceManager, bytes quorumNumbers);
     event RegisteredAsOperator(uint256 indexed id, IDelegationManager.OperatorDetails detail);
-    event UpdatedSocket(uint256 indexed id, address avsRegistryCoordinator, string socket);
+    event UpdatedSocket(uint256 indexed id, address avsServiceManager, string socket);
     event ModifiedOperatorDetails(uint256 indexed id, IDelegationManager.OperatorDetails newOperatorDetails);
     event UpdatedOperatorMetadataURI(uint256 indexed id, string metadataURI);
     event UpdatedAvsNodeRunner(uint256 indexed id, address avsNodeRunner);
-    event UpdatedAvsWhitelist(uint256 indexed id, address avsRegistryCoordinator, bool isWhitelisted);
+    event UpdatedAvsWhitelist(uint256 indexed id, address avsServiceManager, bool isWhitelisted);
     event UpdatedEcdsaSigner(uint256 indexed id, address ecdsaSigner);
 
      /// @custom:oz-upgrades-unsafe-allow constructor
@@ -45,7 +50,7 @@ contract EtherFiAvsOperatorsManager is
     }
 
     /// @notice Initialize to set variables on deployment
-    function initialize(address _delegationManager, address _etherFiAvsOperatorImpl) external initializer {
+    function initialize(address _delegationManager, address _avsDirectory, address _etherFiAvsOperatorImpl) external initializer {
         __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -53,6 +58,11 @@ contract EtherFiAvsOperatorsManager is
         nextAvsOperatorId = 1;
         upgradableBeacon = new UpgradeableBeacon(_etherFiAvsOperatorImpl);      
         delegationManager = IDelegationManager(_delegationManager);
+        avsDirectory = IAVSDirectory(_avsDirectory);
+    }
+
+    function initializeAvsDirectory(address _avsDirectory) external onlyOwner {
+        avsDirectory = IAVSDirectory(_avsDirectory);
     }
 
     function registerBlsKeyAsDelegatedNodeOperator(
@@ -115,19 +125,20 @@ contract EtherFiAvsOperatorsManager is
         emit UpdatedSocket(_id, _avsRegistryCoordinator, _socket);
     }
 
+    // Once an operator is registered, they cannot 'deregister' as an operator, and they will forever be considered "delegated to themself"
     function registerAsOperator(uint256 _id, IDelegationManager.OperatorDetails calldata _detail, string calldata _metaDataURI) external onlyOwner {
         avsOperators[_id].registerAsOperator(delegationManager, _detail, _metaDataURI);
 
         emit RegisteredAsOperator(_id, _detail);
     }
 
-    function modifyOperatorDetails(uint256 _id, IDelegationManager.OperatorDetails calldata _newOperatorDetails) external onlyOperator(_id) {
+    function modifyOperatorDetails(uint256 _id, IDelegationManager.OperatorDetails calldata _newOperatorDetails) external onlyOwner {
         avsOperators[_id].modifyOperatorDetails(delegationManager, _newOperatorDetails);
 
         emit ModifiedOperatorDetails(_id, _newOperatorDetails);
     }
 
-    function updateOperatorMetadataURI(uint256 _id, string calldata _metadataURI) external onlyOperator(_id) {
+    function updateOperatorMetadataURI(uint256 _id, string calldata _metadataURI) external onlyOwner {
         avsOperators[_id].updateOperatorMetadataURI(delegationManager, _metadataURI);
 
         emit UpdatedOperatorMetadataURI(_id, _metadataURI);
@@ -165,6 +176,50 @@ contract EtherFiAvsOperatorsManager is
     function upgradeEtherFiAvsOperator(address _newImplementation) public onlyOwner {
         upgradableBeacon.upgradeTo(_newImplementation);
     }
+
+    // VIEW functions
+
+    function getAvsInfo(uint256 _id, address _avsRegistryCoordinator) external view returns (EtherFiAvsOperator.AvsInfo memory) {
+        return avsOperators[_id].getAvsInfo(_avsRegistryCoordinator);
+    }
+
+    function isAvsWhitelisted(uint256 _id, address _avsRegistryCoordinator) external view returns (bool) {
+        return avsOperators[_id].isAvsWhitelisted(_avsRegistryCoordinator);
+    }
+
+    function isRegisteredBlsKey(uint256 _id, address _avsRegistryCoordinator, bytes calldata _quorumNumbers, string calldata _socket, IBLSApkRegistry.PubkeyRegistrationParams calldata _params) external view returns (bool) {
+        return avsOperators[_id].isRegisteredBlsKey(_avsRegistryCoordinator, _quorumNumbers, _socket, _params);
+    }
+
+    function avsNodeRunner(uint256 _id) external view returns (address) {
+        return avsOperators[_id].avsNodeRunner();
+    }
+
+    function ecdsaSigner(uint256 _id) external view returns (address) {
+        return avsOperators[_id].ecdsaSigner();
+    }
+
+    function operatorDetails(uint256 _id) external view returns (IDelegationManager.OperatorDetails memory) {
+        return delegationManager.operatorDetails(address(avsOperators[_id]));
+    }
+
+    /**
+     * @notice Calculates the digest hash to be signed by an operator to register with an AVS
+     * @param _id The id of etherfi avs operator
+     * @param _avs The AVS's service manager contract address
+     * @param _salt A unique and single use value associated with the approver signature.
+     * @param _expiry Time after which the approver's signature becomes invalid
+     */
+    function calculateOperatorAVSRegistrationDigestHash(uint256 _id, address _avs, bytes32 _salt, uint256 _expiry) external view returns (bytes32) {
+        address _operator = address(avsOperators[_id]);
+        return avsDirectory.calculateOperatorAVSRegistrationDigestHash(_operator, _avs, _salt, _expiry);
+    }
+
+    function avsOperatorStatus(uint256 _id, address _avs) external view returns (IAVSDirectory.OperatorAVSRegistrationStatus) {
+        return avsDirectory.avsOperatorStatus(_avs, address(avsOperators[_id]));
+    }
+
+    // INTERNAL functions
 
     function _instantiateEtherFiAvsOperator() internal returns (uint256 _id) {
         _id = nextAvsOperatorId++;
