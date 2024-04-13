@@ -25,7 +25,7 @@ import "forge-std/console2.sol";
 import "forge-std/console.sol";
 
 
-contract EtherFiAvsOperatorsManager is TestSetup {
+contract EtherFiAvsOperatorsManagerTest is TestSetup {
 
     uint256 id;
     address avsNodeRunner;
