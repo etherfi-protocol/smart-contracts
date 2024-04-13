@@ -187,6 +187,10 @@ contract EtherFiAvsOperatorsManager is
         return avsOperators[_id].isAvsWhitelisted(_avsRegistryCoordinator);
     }
 
+    function isAvsRegistered(uint256 _id, address _avsRegistryCoordinator) external view returns (bool) {
+        return avsOperators[_id].isAvsRegistered(_avsRegistryCoordinator);
+    }
+
     function isRegisteredBlsKey(uint256 _id, address _avsRegistryCoordinator, bytes calldata _quorumNumbers, string calldata _socket, IBLSApkRegistry.PubkeyRegistrationParams calldata _params) external view returns (bool) {
         return avsOperators[_id].isRegisteredBlsKey(_avsRegistryCoordinator, _quorumNumbers, _socket, _params);
     }
@@ -206,17 +210,19 @@ contract EtherFiAvsOperatorsManager is
     /**
      * @notice Calculates the digest hash to be signed by an operator to register with an AVS
      * @param _id The id of etherfi avs operator
-     * @param _avs The AVS's service manager contract address
+     * @param _avsServiceManager The AVS's service manager contract address
      * @param _salt A unique and single use value associated with the approver signature.
      * @param _expiry Time after which the approver's signature becomes invalid
      */
-    function calculateOperatorAVSRegistrationDigestHash(uint256 _id, address _avs, bytes32 _salt, uint256 _expiry) external view returns (bytes32) {
+    function calculateOperatorAVSRegistrationDigestHash(uint256 _id, address _avsServiceManager, bytes32 _salt, uint256 _expiry) external view returns (bytes32) {
         address _operator = address(avsOperators[_id]);
-        return avsDirectory.calculateOperatorAVSRegistrationDigestHash(_operator, _avs, _salt, _expiry);
+        return avsDirectory.calculateOperatorAVSRegistrationDigestHash(_operator, _avsServiceManager, _salt, _expiry);
     }
 
-    function avsOperatorStatus(uint256 _id, address _avs) external view returns (IAVSDirectory.OperatorAVSRegistrationStatus) {
-        return avsDirectory.avsOperatorStatus(_avs, address(avsOperators[_id]));
+    /// @param _id The id of etherfi avs operator
+    /// @param _avsServiceManager The AVS's service manager contract address
+    function avsOperatorStatus(uint256 _id, address _avsServiceManager) external view returns (IAVSDirectory.OperatorAVSRegistrationStatus) {
+        return avsDirectory.avsOperatorStatus(_avsServiceManager, address(avsOperators[_id]));
     }
 
     // INTERNAL functions

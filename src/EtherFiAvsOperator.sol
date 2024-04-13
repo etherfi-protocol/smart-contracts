@@ -18,6 +18,7 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         bytes quorumNumbers;
         string socket;
         IBLSApkRegistry.PubkeyRegistrationParams params;
+        bool isRegistered;
     }
 
     address public avsOperatorsManager;
@@ -45,6 +46,7 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
 
     function updateSocket(address _avsRegistryCoordinator, string memory _socket) external {
         require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
+        require(isAvsRegistered(_avsRegistryCoordinator), "AVS_NOT_REGISTERED");
 
         IRegistryCoordinator(_avsRegistryCoordinator).updateSocket(_socket);
         avsInfos[_avsRegistryCoordinator].socket = _socket;
@@ -57,6 +59,7 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         IBLSApkRegistry.PubkeyRegistrationParams calldata _params
     ) external managerOnly {
         require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
+        require(!isAvsRegistered(_avsRegistryCoordinator), "AVS_ALREADY_REGISTERED");
 
         avsInfos[_avsRegistryCoordinator].quorumNumbers = _quorumNumbers;
         avsInfos[_avsRegistryCoordinator].socket = _socket;
@@ -71,7 +74,10 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
     ) external managerOnly {
         require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
+        require(!isAvsRegistered(_avsRegistryCoordinator), "AVS_ALREADY_REGISTERED");
         require(isRegisteredBlsKey(_avsRegistryCoordinator, _quorumNumbers, _socket, _params), "NOT_REGISTERED_BLS_KEY");
+
+        avsInfos[_avsRegistryCoordinator].isRegistered = true;
 
         IRegistryCoordinator(_avsRegistryCoordinator).registerOperator(_quorumNumbers, _socket, _params, _operatorSignature);
     }
@@ -86,6 +92,7 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
     ) external managerOnly {
         require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
+        require(!isAvsRegistered(_avsRegistryCoordinator), "AVS_ALREADY_REGISTERED");
         require(isRegisteredBlsKey(_avsRegistryCoordinator, _quorumNumbers, _socket, _params), "NOT_REGISTERED_BLS_KEY");
 
         IRegistryCoordinator(_avsRegistryCoordinator).registerOperatorWithChurn(_quorumNumbers, _socket, _params, _operatorKickParams, _churnApproverSignature, _operatorSignature);
@@ -143,6 +150,10 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
 
     function isAvsWhitelisted(address _avsRegistryCoordinator) public view returns (bool) {
         return avsInfos[_avsRegistryCoordinator].isWhitelisted;
+    }
+
+    function isAvsRegistered(address _avsRegistryCoordinator) public view returns (bool) {
+        return avsInfos[_avsRegistryCoordinator].isRegistered;
     }
 
     // Disabled all forward calls for now.
