@@ -25,7 +25,7 @@ import "forge-std/console2.sol";
 import "forge-std/console.sol";
 
 
-contract EigenLayerIntegraitonTest is TestSetup {
+contract EtherFiAvsOperatorsManager is TestSetup {
 
     uint256 id;
     address avsNodeRunner;
@@ -147,7 +147,7 @@ contract EigenLayerIntegraitonTest is TestSetup {
 
     function test_avs_directory() public {
         test_registerAsOperator();
-        
+
         IAVSDirectory avsDirectory = IAVSDirectory(avsOperatorsManager.avsDirectory());
         address eigenDA_servicemanager = 0x870679E138bCdf293b7Ff14dD44b70FC97e12fc0;
         address eigenYields = 0x5ACCC90436492F24E6aF278569691e2c942A676d;
