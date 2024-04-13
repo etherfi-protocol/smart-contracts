@@ -26,7 +26,9 @@ contract LiquidityPoolTest is TestSetup {
     uint256 public testnetFork;
 
     function setUp() public {
+        testnetFork = vm.createFork(vm.envString("TESTNET_RPC_URL"));
         setUpTests();
+        // initializeTestingFork(TESTNET_FORK);
 
         aliceProof = merkle.getProof(whiteListedAddresses, 3);
         bobProof = merkle.getProof(whiteListedAddresses, 4);
@@ -42,8 +44,6 @@ contract LiquidityPoolTest is TestSetup {
             0.1 ether
         );
         vm.stopPrank();
-
-        testnetFork = vm.createFork(vm.envString("GOERLI_RPC_URL"));
     }
 
     function test_DepositOrWithdrawOfZeroFails() public {
@@ -795,6 +795,7 @@ contract LiquidityPoolTest is TestSetup {
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
 
         report.numValidatorsToSpinUp = 4;
+        _initReportBlockStamp(report);
         _executeAdminTasks(report);
 
         //Move to a random time in the future
@@ -830,6 +831,7 @@ contract LiquidityPoolTest is TestSetup {
         IEtherFiOracle.OracleReport memory report2 = _emptyOracleReport();
 
         report2.numValidatorsToSpinUp = 14;
+        _initReportBlockStamp(report2);
         _executeAdminTasks(report2);
 
 

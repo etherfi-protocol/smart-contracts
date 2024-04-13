@@ -166,7 +166,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_getEigenPod() public {
-        initializeTestingFork(MAINNET_FORK);
+        initializeTestingFork(TESTNET_FORK);
 
         uint256 nonRestakedValidatorId = depositAndRegisterValidator(false);
         assertEq(managerInstance.getEigenPod(nonRestakedValidatorId), address(0x0));

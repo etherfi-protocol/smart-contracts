@@ -5,6 +5,13 @@ import "forge-std/console.sol";
 
 // import "@openzeppelin-upgradeable/contracts/interfaces/IERC20.sol";
 
+import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
+import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
+import "../src/eigenlayer-interfaces/IBeaconChainOracle.sol";
+import "../src/eigenlayer-interfaces/IDelegationManager.sol";
+import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
+import "../src/eigenlayer-interfaces/ITimelock.sol";
+
 import "../src/interfaces/IStakingManager.sol";
 import "../src/interfaces/IEtherFiNode.sol";
 import "../src/interfaces/ILiquidityPool.sol";
@@ -62,6 +69,12 @@ contract TestSetup is Test {
     IStrategy public wbEthStrategy;
     IStrategy public stEthStrategy;
     IEigenLayerStrategyManager public eigenLayerStrategyManager;
+    IDelayedWithdrawalRouter public eigenLayerDelayedWithdrawalRouter;
+    IBeaconChainOracle public beaconChainOracle;
+    BeaconChainOracleMock public beaconChainOracleMock;
+    IEigenPodManager public eigenLayerEigenPodManager;
+    IDelegationManager public eigenLayerDelegationManager;
+    ITimelock public eigenLayerTimelock;
 
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
 
@@ -239,8 +252,41 @@ contract TestSetup is Test {
 
         if (forkEnum == MAINNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+
+            cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
+            wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
+            stEth_Eth_Pool = ICurvePool(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
+            cbEth = IcbETH(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
+            wbEth = IwBETH(0xa2E3356610840701BDf5611a53974510Ae27E2e1);
+            stEth = ILido(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+            cbEthStrategy = IStrategy(0x54945180dB7943c0ed0FEE7EdaB2Bd24620256bc);
+            wbEthStrategy = IStrategy(0x7CA911E83dabf90C90dD3De5411a10F1A6112184);
+            stEthStrategy = IStrategy(0x93c4b944D05dfe6df7645A86cd2206016c51564D);
+            lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
+
+            eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
+            eigenLayerEigenPodManager = IEigenPodManager(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
+            eigenLayerDelegationManager = IDelegationManager(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+            eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
+
         } else if (forkEnum == TESTNET_FORK) {
-            vm.selectFork(vm.createFork(vm.envString("GOERLI_RPC_URL")));
+            vm.selectFork(vm.createFork(vm.envString("TESTNET_RPC_URL")));
+
+            // cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
+            // wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
+            stEth_Eth_Pool = ICurvePool(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
+            // cbEth = IcbETH(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
+            // wbEth = IwBETH(0xa2E3356610840701BDf5611a53974510Ae27E2e1);
+            stEth = ILido(0x3F1c547b21f65e10480dE3ad8E19fAAC46C95034 );
+            // cbEthStrategy = IStrategy(0x54945180dB7943c0ed0FEE7EdaB2Bd24620256bc);
+            // wbEthStrategy = IStrategy(0x7CA911E83dabf90C90dD3De5411a10F1A6112184);
+            stEthStrategy = IStrategy(0x7D704507b76571a51d9caE8AdDAbBFd0ba0e63d3);
+            lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
+
+            eigenLayerStrategyManager = IEigenLayerStrategyManager(0xdfB5f6CE42aAA7830E94ECFCcAd411beF4d4D5b6);
+            eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
+            eigenLayerDelegationManager = IDelegationManager(0xA44151489861Fe9e3055d95adC98FbD462B948e7);
+            eigenLayerTimelock = ITimelock(0xcF19CE0561052a7A7Ff21156730285997B350A7D);
         } else {
             revert("Unimplemented fork");
         }
@@ -256,13 +302,47 @@ contract TestSetup is Test {
         if (forkEnum == MAINNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
             addressProviderInstance = AddressProvider(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
-            owner = addressProviderInstance.owner();
+            owner = addressProviderInstance.getContractAddress("EtherFiTimelock");
             admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
+
+            cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
+            wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
+            stEth_Eth_Pool = ICurvePool(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
+            cbEth = IcbETH(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
+            wbEth = IwBETH(0xa2E3356610840701BDf5611a53974510Ae27E2e1);
+            stEth = ILido(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
+            cbEthStrategy = IStrategy(0x54945180dB7943c0ed0FEE7EdaB2Bd24620256bc);
+            wbEthStrategy = IStrategy(0x7CA911E83dabf90C90dD3De5411a10F1A6112184);
+            stEthStrategy = IStrategy(0x93c4b944D05dfe6df7645A86cd2206016c51564D);
+            lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
+
+            eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
+            eigenLayerEigenPodManager = IEigenPodManager(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
+            eigenLayerDelegationManager = IDelegationManager(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+            eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
+
         } else if (forkEnum == TESTNET_FORK) {
-            vm.selectFork(vm.createFork(vm.envString("GOERLI_RPC_URL")));
-            addressProviderInstance = AddressProvider(address(0x6E429db4E1a77bCe9B6F9EDCC4e84ea689c1C97e));
+            vm.selectFork(vm.createFork(vm.envString("TESTNET_RPC_URL")));
+            addressProviderInstance = AddressProvider(address(0x7c5EB0bE8af2eDB7461DfFa0Fd2856b3af63123e));
             owner = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
             admin = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
+
+            // cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
+            // wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
+            stEth_Eth_Pool = ICurvePool(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
+            // cbEth = IcbETH(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
+            // wbEth = IwBETH(0xa2E3356610840701BDf5611a53974510Ae27E2e1);
+            stEth = ILido(0x3F1c547b21f65e10480dE3ad8E19fAAC46C95034 );
+            // cbEthStrategy = IStrategy(0x54945180dB7943c0ed0FEE7EdaB2Bd24620256bc);
+            // wbEthStrategy = IStrategy(0x7CA911E83dabf90C90dD3De5411a10F1A6112184);
+            stEthStrategy = IStrategy(0x7D704507b76571a51d9caE8AdDAbBFd0ba0e63d3);
+            lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
+
+            eigenLayerStrategyManager = IEigenLayerStrategyManager(0xdfB5f6CE42aAA7830E94ECFCcAd411beF4d4D5b6);
+            eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
+            eigenLayerDelegationManager = IDelegationManager(0xA44151489861Fe9e3055d95adC98FbD462B948e7);
+            eigenLayerTimelock = ITimelock(0xcF19CE0561052a7A7Ff21156730285997B350A7D);
+
         } else {
             revert("Unimplemented fork");
         }
@@ -287,75 +367,22 @@ contract TestSetup is Test {
         node = EtherFiNode(payable(addressProviderInstance.getContractAddress("EtherFiNode")));
         earlyAdopterPoolInstance = EarlyAdopterPool(payable(addressProviderInstance.getContractAddress("EarlyAdopterPool")));
         withdrawRequestNFTInstance = WithdrawRequestNFT(addressProviderInstance.getContractAddress("WithdrawRequestNFT"));
-        etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         liquifierInstance = Liquifier(payable(addressProviderInstance.getContractAddress("Liquifier")));
-
-        assert(address(regulationsManagerInstance) != address(0x0));
-        assert(address(managerInstance) != address(0x0));
-        assert(address(liquidityPoolInstance) != address(0x0));
-        assert(address(eETHInstance) != address(0x0));
-        assert(address(weEthInstance) != address(0x0));
-        assert(address(membershipManagerV1Instance) != address(0x0));
-        assert(address(membershipNftInstance) != address(0x0));
-        assert(address(nftExchangeInstance) != address(0x0));
-        assert(address(auctionInstance) != address(0x0));
-        assert(address(stakingManagerInstance) != address(0x0));
-        assert(address(TNFTInstance) != address(0x0));
-        assert(address(BNFTInstance) != address(0x0));
-        assert(address(treasuryInstance) != address(0x0));
-        assert(address(nodeOperatorManagerInstance) != address(0x0));
-        assert(address(node) != address(0x0));
-        assert(address(earlyAdopterPoolInstance) != address(0x0));
-        assert(address(etherFiTimelockInstance) != address(0x0));
-
-     // TODO: doesn't currently exist on mainnet. But re-add this check after deploy
-     //   assert(address(withdrawRequestNFTInstance) != address(0x0));
+        etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
         
         vm.startPrank(owner);
             
-        if (forkEnum == MAINNET_FORK) {
-            liquifierImplementation = new Liquifier();
-            liquifierProxy = new UUPSProxy(address(liquifierImplementation), "");
-            liquifierInstance = Liquifier(payable(liquifierProxy));
-
-            cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
-            wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
-            stEth_Eth_Pool = ICurvePool(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
-            cbEth = IcbETH(0xBe9895146f7AF43049ca1c1AE358B0541Ea49704);
-            wbEth = IwBETH(0xa2E3356610840701BDf5611a53974510Ae27E2e1);
-            stEth = ILido(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
-            cbEthStrategy = IStrategy(0x54945180dB7943c0ed0FEE7EdaB2Bd24620256bc);
-            wbEthStrategy = IStrategy(0x7CA911E83dabf90C90dD3De5411a10F1A6112184);
-            stEthStrategy = IStrategy(0x93c4b944D05dfe6df7645A86cd2206016c51564D);
-            eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
-            lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
-            
-            liquifierInstance.initialize(
-                address(treasuryInstance),
-                address(liquidityPoolInstance),
-                address(eigenLayerStrategyManager),
-                address(lidoWithdrawalQueue),
-                address(stEth),
-                address(cbEth),
-                address(wbEth),
-                address(cbEth_Eth_Pool),
-                address(wbEth_Eth_Pool),
-                address(stEth_Eth_Pool),
-                3600
-            );
-
+        if (forkEnum == MAINNET_FORK) {            
+            liquifierInstance.upgradeTo(address(new Liquifier()));
+            liquifierInstance.initializeOnUpgrade(address(eigenLayerDelegationManager), address(0x1b81D678ffb9C0263b24A97847620C99d213eB14));
             liquifierInstance.updateAdmin(alice, true);
-            liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true, 0, 50, 1000); // 50 ether timeBoundCap, 1000 ether total cap
-            liquifierInstance.registerToken(address(cbEth), address(cbEthStrategy), true, 0, 50, 1000);
-            liquifierInstance.registerToken(address(wbEth), address(wbEthStrategy), true, 0, 50, 1000);
-
-            liquidityPoolInstance.upgradeTo(address(new LiquidityPool()));
-            liquidityPoolInstance.initializeOnUpgrade(address(auctionInstance), address(liquifierInstance));
         } else if (forkEnum == TESTNET_FORK) {
-
+            liquifierInstance.upgradeTo(address(new Liquifier()));
+            liquifierInstance.initializeOnUpgrade(address(eigenLayerDelegationManager), address(0));
+            liquifierInstance.updateAdmin(alice, true);
         }
 
         vm.stopPrank();
@@ -524,22 +551,22 @@ contract TestSetup is Test {
         liquifierInstance.initialize(
             address(treasuryInstance),
             address(liquidityPoolInstance),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            address(0),
-            0
+            address(eigenLayerStrategyManager),
+            address(lidoWithdrawalQueue),
+            address(stEth),
+            address(cbEth),
+            address(wbEth),
+            address(cbEth_Eth_Pool),
+            address(wbEth_Eth_Pool),
+            address(stEth_Eth_Pool),
+            3600
         );
 
         membershipManagerInstance.updateAdmin(alice, true);
         membershipNftInstance.updateAdmin(alice, true);
         withdrawRequestNFTInstance.updateAdmin(alice, true);
         liquidityPoolInstance.updateAdmin(alice, true);
-        liquifierInstance.updateAdmin(alice, true);
+        // liquifierInstance.updateAdmin(alice, true);
 
         // special case for forked tests utilizing oracle
         // can't use env variable because then it would apply to all tests including non-forked ones
@@ -548,6 +575,10 @@ contract TestSetup is Test {
         } else if (block.chainid == 5) {
             // goerli
             genesisSlotTimestamp = uint32(1616508000);
+        } else if (block.chainid == 17000) {
+            // holesky
+            genesisSlotTimestamp = 1695902400;
+            beaconChainOracle = IBeaconChainOracle(0x4C116BB629bff7A8373c2378bBd919f8349B8f25);
         } else {
             genesisSlotTimestamp = 0;
         }
@@ -593,14 +624,22 @@ contract TestSetup is Test {
         membershipNftInstance.initializeOnUpgrade(address(liquidityPoolInstance));
 
 
-        // configure eigenlayer dependency differently for mainnet vs goerli because we rely
+        // configure eigenlayer dependency differently for mainnet vs testnet because we rely
         // on the contracts already deployed by eigenlayer on those chains
+        bool restakingBnftDeposits;
         if (block.chainid == 1) {
+            restakingBnftDeposits = true;
             managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), 0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338, 0x7Fe7E9CC0F274d2435AD5d56D5fa73E47F6A23D8, 5);
             managerInstance.initializeOnUpgrade2(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+        } else if (block.chainid == 17000) {
+            restakingBnftDeposits = false;
+            eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
+            managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), 0x30770d7E3e71112d7A6b7259542D1f680a70e315, 0x642c646053eaf2254f088e9019ACD73d9AE0FA32, 5);
+            managerInstance.initializeOnUpgrade2(0xA44151489861Fe9e3055d95adC98FbD462B948e7);
         } else {
-            managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), 0xa286b84C96aF280a49Fe1F40B9627C2A2827df41, 0x89581561f1F98584F88b0d57c2180fb89225388f, 5);
-            managerInstance.initializeOnUpgrade2(0x1b7b8F6b258f95Cf9596EabB9aa18B62940Eb0a8);
+            restakingBnftDeposits = false;
+            managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), address(0), address(0), 5);
+            managerInstance.initializeOnUpgrade2(address(0));
         }
 
         _initOracleReportsforTesting();
@@ -609,6 +648,7 @@ contract TestSetup is Test {
         vm.startPrank(alice);
         liquidityPoolInstance.unPauseContract();
         liquidityPoolInstance.updateWhitelistStatus(false);
+        liquidityPoolInstance.setRestakeBnftDeposits(restakingBnftDeposits);
         vm.stopPrank();
 
         // Setup dependencies
@@ -809,6 +849,80 @@ contract TestSetup is Test {
         dataForVerification2.push(keccak256(abi.encodePacked(dan, uint256(1 ether), uint256(96768), uint32(0))));
 
         rootMigration2 = merkleMigration2.getRoot(dataForVerification2);
+    }
+
+    
+    function _perform_eigenlayer_upgrade() public {
+        // https://etherscan.io/tx/0x6cc1186ebeec36fe7e2762175367b4fdedf0ae2b6a6d880f996d8d450d1d58ec
+        // 
+        // {
+        // "txHash": "0x4420ca4d06e807fa03e84a11c1f80fe7e6f05de1996b983d388db13188a82177",
+        // "target": "0x369e6f597e22eab55ffb173c6d9cd234bd699111",
+        // "value": "0",
+        // "signature": "",
+        // "data": "0x6a76120200000000000000000000000040a2accbd92bca938b02010e17a5b8929b49130d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007a000000000000000000000000000000000000000000000000000000000000006248d80ff0a000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000005d3008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec400000000000000000000000039053d51b77dc0d36036fc1fcc8cb819df8ef37a0000000000000000000000001784be6401339fc0fedf7e9379409f5c1bfe9dda008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec4000000000000000000000000d92145c07f8ed1d392c1b88017934e301cc1c3cd000000000000000000000000f3234220163a757edf1e11a8a085638d9b236614008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec4000000000000000000000000858646372cc42e1a627fce94aa7a7033e7cf075a00000000000000000000000070f44c13944d49a236e3cd7a94f48f5dab6c619b008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec40000000000000000000000007fe7e9cc0f274d2435ad5d56d5fa73e47f6a23d80000000000000000000000004bb6731b02314d40abbffbc4540f508874014226008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec400000000000000000000000091e677b07f7af907ec9a428aafa9fc14a0d3a338000000000000000000000000e4297e3dadbc7d99e26a2954820f514cb50c5762005a2a4f2f3c18f09179b6703e63d9edd165909073000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000243659cfe60000000000000000000000008ba40da60f0827d027f029acee62609f0527a2550039053d51b77dc0d36036fc1fcc8cb819df8ef37a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024635bbd10000000000000000000000000000000000000000000000000000000000000c4e00091e677b07f7af907ec9a428aafa9fc14a0d3a33800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024c1de3aef000000000000000000000000343907185b71adf0eba9567538314396aa9854420091e677b07f7af907ec9a428aafa9fc14a0d3a33800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024463db0380000000000000000000000000000000000000000000000000000000065f1b0570039053d51b77dc0d36036fc1fcc8cb819df8ef37a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024fabc1cbc00000000000000000000000000000000000000000000000000000000000000000091e677b07f7af907ec9a428aafa9fc14a0d3a33800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024fabc1cbc000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000a6db1a8c5a981d1536266d2a393c5f8ddb210eaf00000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000",
+        // "eta": "1712559600"
+        // }
+
+        vm.warp(block.timestamp + 12 days);
+
+        // executeTransaction(address target, uint value, string memory signature, bytes memory data, uint eta)
+        vm.prank(eigenLayerTimelock.admin());
+        eigenLayerTimelock.executeTransaction(
+            0x369e6F597e22EaB55fFb173C6d9cD234BD699111,
+            0,
+            "",
+            hex"6a76120200000000000000000000000040a2accbd92bca938b02010e17a5b8929b49130d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007a000000000000000000000000000000000000000000000000000000000000006248d80ff0a000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000005d3008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec400000000000000000000000039053d51b77dc0d36036fc1fcc8cb819df8ef37a0000000000000000000000001784be6401339fc0fedf7e9379409f5c1bfe9dda008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec4000000000000000000000000d92145c07f8ed1d392c1b88017934e301cc1c3cd000000000000000000000000f3234220163a757edf1e11a8a085638d9b236614008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec4000000000000000000000000858646372cc42e1a627fce94aa7a7033e7cf075a00000000000000000000000070f44c13944d49a236e3cd7a94f48f5dab6c619b008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec40000000000000000000000007fe7e9cc0f274d2435ad5d56d5fa73e47f6a23d80000000000000000000000004bb6731b02314d40abbffbc4540f508874014226008b9566ada63b64d1e1dcf1418b43fd1433b724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499a88ec400000000000000000000000091e677b07f7af907ec9a428aafa9fc14a0d3a338000000000000000000000000e4297e3dadbc7d99e26a2954820f514cb50c5762005a2a4f2f3c18f09179b6703e63d9edd165909073000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000243659cfe60000000000000000000000008ba40da60f0827d027f029acee62609f0527a2550039053d51b77dc0d36036fc1fcc8cb819df8ef37a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024635bbd10000000000000000000000000000000000000000000000000000000000000c4e00091e677b07f7af907ec9a428aafa9fc14a0d3a33800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024c1de3aef000000000000000000000000343907185b71adf0eba9567538314396aa9854420091e677b07f7af907ec9a428aafa9fc14a0d3a33800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024463db0380000000000000000000000000000000000000000000000000000000065f1b0570039053d51b77dc0d36036fc1fcc8cb819df8ef37a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024fabc1cbc00000000000000000000000000000000000000000000000000000000000000000091e677b07f7af907ec9a428aafa9fc14a0d3a33800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000024fabc1cbc000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000a6db1a8c5a981d1536266d2a393c5f8ddb210eaf00000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000",
+            1712559600
+        );
+
+        vm.prank(eigenLayerTimelock.admin());
+        eigenLayerTimelock.executeTransaction(
+            0x369e6F597e22EaB55fFb173C6d9cD234BD699111,
+            0,
+            "",
+            hex"6A761202000000000000000000000000858646372CC42E1A627FCE94AA7A7033E7CF075A0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001A00000000000000000000000000000000000000000000000000000000000000024FABC1CBC0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000A6DB1A8C5A981D1536266D2A393C5F8DDB210EAF00000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000",
+            1713250800
+        );
+    }
+
+    function _perform_etherfi_upgrade() public {
+        vm.warp(block.timestamp + 3 days);
+
+        vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+
+        address[] memory targets = new address[](6);
+        targets[0] = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
+        targets[1] = 0x25e821b7197B146F7713C3b89B6A4D83516B912d;
+        targets[2] = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
+        targets[3] = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
+        targets[4] = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
+        targets[5] = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
+
+        bytes[] memory payloads = new bytes[](6);
+        payloads[0] = hex"3659cfe60000000000000000000000002225c97928934625e8382e6636d30f94c46b6ed3";
+        payloads[1] = hex"49370974000000000000000000000000191a8f7f67fdfc695f46d3d8e8422f4d848155c7";
+        payloads[2] = hex"3659cfe6000000000000000000000000f710e95a8f9eed9131b2700f885fad77ac8f5142";
+        payloads[3] = hex"4c73f49800000000000000000000000039053d51b77dc0d36036fc1fcc8cb819df8ef37a0000000000000000000000001b81d678ffb9c0263b24a97847620c99d213eb14";
+        payloads[4] = hex"de5faecc00000000000000000000000039053d51b77dc0d36036fc1fcc8cb819df8ef37a";
+        payloads[5] = hex"b57dade300000000000000000000000012582a27e5e19492b4fcd194a60f8f5e1aa31b0f0000000000000000000000000000000000000000000000000000000000000001";
+
+        uint256[] memory values = new uint256[](6);
+        values[0] = 0;
+        values[1] = 0;
+        values[2] = 0;
+        values[3] = 0;
+        values[4] = 0;
+        values[5] = 0;
+
+        etherFiTimelockInstance.executeBatch(
+            targets,
+            values,
+            payloads,
+            0x0,
+            0x0
+        );
+        vm.stopPrank();
     }
 
     function _upgradeMembershipManagerFromV0ToV1() internal {
@@ -1076,6 +1190,8 @@ contract TestSetup is Test {
         address admin;
         if (block.chainid == 1) {
             admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
+        } else if (block.chainid == 17000) {
+            admin = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
         } else {
             admin = alice;
         }
@@ -1291,6 +1407,12 @@ contract TestSetup is Test {
         address newImpl = address(new LiquidityPool());
         vm.prank(liquidityPoolInstance.owner());
         liquidityPoolInstance.upgradeTo(newImpl);
+    }
+
+    function _upgrade_liquifier() internal {
+        address newImpl = address(new Liquifier());
+        vm.prank(liquifierInstance.owner());
+        liquifierInstance.upgradeTo(newImpl);
     }
 
     function _to_uint256_array(uint256 _value) internal pure returns (uint256[] memory) {

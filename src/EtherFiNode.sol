@@ -5,6 +5,7 @@ import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 import "./eigenlayer-interfaces/IEigenPodManager.sol";
 import "./eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "forge-std/console.sol";
@@ -419,35 +420,42 @@ contract EtherFiNode is IEtherFiNode {
         return (payouts[0], payouts[1], payouts[2], payouts[3]);
     }
 
-    /// @notice Call the eigenPod contract
-    /// @param data to call eigenPod contract
-    function callEigenPod(bytes calldata data) external payable onlyEtherFiNodeManagerContract {
-        _executeCall(address(eigenPod), msg.value, data);
+
+    function callEigenPod(bytes memory data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
+        _verifyEigenPodCall(data);
+        return Address.functionCall(eigenPod, data);
     }
 
-    /// @notice Call the Eigenlayer delegation Manager contract
-    /// @param data to call eigenPod contract
-    function callDelegationManager(bytes calldata data) external payable onlyEtherFiNodeManagerContract {
-        _executeCall(address(IEtherFiNodesManager(etherFiNodesManager).delegationManager()), msg.value, data);
-    }
-
-    /// @notice Call the Eigenlayer EigenPod Manager contract
-    /// @param data to call contract
-    function callEigenPodManager(bytes calldata data) external payable onlyEtherFiNodeManagerContract {
-        _executeCall(address(IEtherFiNodesManager(etherFiNodesManager).eigenPodManager()), msg.value, data);
+    // As an optimization, it skips the call to 'etherFiNodesManager' back again to retrieve the target address
+    function forwardCall(address to, bytes memory data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
+        return Address.functionCall(to, data);
     }
     
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @notice Execute a low level call
-    /// @param to address to execute call
-    /// @param value amount of ETH to send with call
-    /// @param data bytes array to execute
-    function _executeCall(address to, uint256 value, bytes memory data) internal {
-        (bool success,) = address(to).call{value: value, gas: gasleft()}(data);
-        if (!success) revert CallFailed(data);
+    function _verifyEigenPodCall(bytes memory data) internal view {
+        bytes4 selector;
+        assembly {
+            selector := mload(add(data, 0x20))
+        }
+
+        // withdrawNonBeaconChainETHBalanceWei
+        if (selector == hex"e2c83445") {
+            require(data.length >= 36, "INVALID_DATA_LENGTH");
+            address recipient;
+            assembly {
+                recipient := mload(add(data, 0x24))
+            }
+            // No withdrawal to any other address than the safe
+            require (recipient == address(this), "INCORRECT_RECIPIENT");
+        }
+
+        // recoverTokens(IERC20[], uint256[], address)
+        if (selector == hex"dda3346c") {
+            revert("NOT_ALLOWED");
+        }
     }
 
     function _applyNonExitPenalty(
@@ -589,6 +597,7 @@ contract EtherFiNode is IEtherFiNode {
         if (!isRestakingEnabled) return;
 
         // EigenLayer has not enabled "true" restaking yet so we use this temporary mechanism
+        // TODO: remove this once EigenLayer has a proper proof based withdrawal system
         IEigenPod(eigenPod).withdrawBeforeRestaking();
     }
 

@@ -256,19 +256,6 @@
   },
   {
     "type": "function",
-    "name": "callDelegationManager",
-    "inputs": [
-      {
-        "name": "data",
-        "type": "bytes",
-        "internalType": "bytes"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "payable"
-  },
-  {
-    "type": "function",
     "name": "callEigenPod",
     "inputs": [
       {
@@ -277,21 +264,14 @@
         "internalType": "bytes"
       }
     ],
-    "outputs": [],
-    "stateMutability": "payable"
-  },
-  {
-    "type": "function",
-    "name": "callEigenPodManager",
-    "inputs": [
+    "outputs": [
       {
-        "name": "data",
+        "name": "",
         "type": "bytes",
         "internalType": "bytes"
       }
     ],
-    "outputs": [],
-    "stateMutability": "payable"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -362,6 +342,30 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "forwardCall",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "data",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "./IPauserRegistry.sol";
+import "src/eigenlayer-interfaces/IPauserRegistry.sol";
 
 /**
  * @title Adds pausability to a contract, with pausing & unpausing controlled by the `pauser` and `unpauser` of a PauserRegistry contract.
