@@ -32,6 +32,7 @@ contract EtherFiAvsOperatorsManager is
 
     IAVSDirectory public avsDirectory;
  
+    event ForwardedRunnerCall(uint256 indexed id, address target, bytes4 selector, bytes data);
     event CreatedEtherFiAvsOperator(uint256 indexed id, address etherFiAvsOperator);
     event RegisteredBlsKeyAsDelegatedNodeOperator(uint256 indexed id, address avsServiceManager, bytes quorumNumbers, string socket, IBLSApkRegistry.PubkeyRegistrationParams params);
     event RegisteredOperator(uint256 indexed id, address avsServiceManager, bytes quorumNumbers, string socket, IBLSApkRegistry.PubkeyRegistrationParams params, ISignatureUtils.SignatureWithSaltAndExpiry operatorSignature);
@@ -63,6 +64,17 @@ contract EtherFiAvsOperatorsManager is
 
     function initializeAvsDirectory(address _avsDirectory) external onlyOwner {
         avsDirectory = IAVSDirectory(_avsDirectory);
+    }
+
+    function runnerForwardCall(
+        uint256 _id,
+        address _target,
+        bytes4 _selector, 
+        bytes calldata _remainingCalldata
+    ) external onlyOperator(_id) {
+        avsOperators[_id].runnerForwardCall(_target, _selector, _remainingCalldata);
+
+        emit ForwardedRunnerCall(_id, _target, _selector, _remainingCalldata);
     }
 
     function registerBlsKeyAsDelegatedNodeOperator(

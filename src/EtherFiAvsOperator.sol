@@ -108,12 +108,12 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
     }
 
     function runnerForwardCall(
-        address _avsRegistryCoordinator, 
-        bytes4 _signature, 
+        address _target, 
+        bytes4 _selector, 
         bytes calldata _remainingCalldata) 
     external managerOnly returns (bytes memory) {
-        require(isValidOperatorCall(_avsRegistryCoordinator, _signature, _remainingCalldata), "INVALID_OPERATOR_CALL");
-        return Address.functionCall(_avsRegistryCoordinator, abi.encodePacked(_signature, _remainingCalldata));
+        require(isValidOperatorCall(_target, _selector, _remainingCalldata), "INVALID_OPERATOR_CALL");
+        return Address.functionCall(_target, abi.encodePacked(_selector, _remainingCalldata));
     }
 
     function forwardCall(address to, bytes calldata data) external managerOnly returns (bytes memory) {
@@ -156,9 +156,16 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         return avsInfos[_avsRegistryCoordinator].isRegistered;
     }
 
-    // Disabled all forward calls for now.
-    function isValidOperatorCall(address _avsRegistryCoordinator, bytes4 _signature, bytes calldata _remainingCalldata) public view returns (bool) {
+    function isValidOperatorCall(address _avsRegistryCoordinator, bytes4 _selector, bytes calldata _remainingCalldata) public view returns (bool) {
         if (!isAvsWhitelisted(_avsRegistryCoordinator)) return false;
+
+        if (_selector == hex"11d2c708") {
+            // Witness Chain
+            // OperatorRegistry.registerWatchtowerAsOperator(address watchtower, uint256 expiry, bytes memory signedMessage)
+            // - https://github.com/witnesschain-com/diligencewatchtower-contracts/blob/main/src/core/OperatorRegistry.sol#L158
+            return true;
+        }
+        
         return false;
     }
 
