@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-// import "@openzeppelin-upgradeable/contracts/interfaces/IERC20.sol";
 
 import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
@@ -866,30 +865,26 @@ contract TestSetup is Test {
     }
 
     function _perform_etherfi_upgrade() public {
-        vm.warp(block.timestamp + 3 days);
-
-        vm.startPrank(liquifierInstance.owner());
-        liquifierInstance.upgradeTo(address(new Liquifier()));
-        vm.stopPrank();
+        vm.warp(block.timestamp + 4 days);
 
         vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
 
         // Liquifier, initialize, register dummy
 
-        address[] memory targets = new address[](1);
+        address[] memory targets = new address[](3);
         targets[0] = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
-        // targets[1] = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
-        // targets[2] = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
+        targets[1] = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
+        targets[2] = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
 
-        bytes[] memory payloads = new bytes[](1);
-        payloads[0] = hex"B218FF8F000000000000000000000000D789870BEA40D056A4D26055D0BEFCC8755DA146";
-        // payloads[1] = hex"B218FF8F000000000000000000000000D789870BEA40D056A4D26055D0BEFCC8755DA146";
-        // payloads[2] = hex"91FF1EFE00000000000000000000000061FF310AC15A517A846DA08AC9F9ABF2A0F9A2BF000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001";
+        bytes[] memory payloads = new bytes[](3);
+        payloads[0] = hex"3659CFE600000000000000000000000061E2CA79CA3D90FD1440976A6C9641431B3F296A";
+        payloads[1] = hex"B218FF8F000000000000000000000000D789870BEA40D056A4D26055D0BEFCC8755DA146";
+        payloads[2] = hex"91FF1EFE00000000000000000000000083998E169026136760BE6AF93E776C2F352D4B28000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001";
 
-        uint256[] memory values = new uint256[](1);
+        uint256[] memory values = new uint256[](3);
         values[0] = 0;
-        // values[1] = 0;
-        // values[2] = 0;
+        values[1] = 0;
+        values[2] = 0;
 
         for (uint256 i = 0; i < targets.length; i++) {
             etherFiTimelockInstance.execute(
