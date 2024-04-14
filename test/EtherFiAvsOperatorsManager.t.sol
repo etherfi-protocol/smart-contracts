@@ -5,6 +5,7 @@ import "./TestSetup.sol";
 import "../src/EtherFiNode.sol";
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
+import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.sol";
 import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
 import "../src/eigenlayer-interfaces/IEigenPod.sol";
 import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
@@ -32,6 +33,7 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
     address ecdsaSigner;
 
     address eigenDA_registryCoordinator;
+    address eigenDA_servicemanager;
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
@@ -42,6 +44,7 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
         ecdsaSigner = address(100001);
 
         eigenDA_registryCoordinator = 0x0BAAc79acD45A023E19345c352d8a7a83C4e5656;
+        eigenDA_servicemanager = 0x870679E138bCdf293b7Ff14dD44b70FC97e12fc0;
     }
 
     function test_instantiateEtherFiAvsOperator() public {
@@ -161,10 +164,79 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
     }
 
     function test_ecdsa_signing() public {
-        test_registerAsOperator();
+        // https://etherscan.io/tx/0xa1f4dad18f453db36bd85ad953629772f43530d3cf35df7fbecc8dd7e9968e3c
+        
+        // (quorumNumbers = 0x00, 
+        //  socket = 176.96.139.105:32005;32004, 
+        //  params = {"pubkeyRegistrationSignature":{"X":"13930132857693227669286552740872125143110598440832128762691891535344523478758","Y":"6922746212735886673397038348770411476602736080156269360551930225918644776978"},
+        //  "pubkeyG1":{"X":"2386016606917945660190712972098427855269577476623723422867331055589384084269","Y":"14968962494564624642828972951024997596009870047682971310684803314690728181528"},
+        //  "pubkeyG2":{"X":["1212702844116721867258076029541971160984904577278437049781204783739431751522","19354825442469668588126245718346981213263864406248537535463071512803213558712"],"Y":["13931796655362966527501678217695731308545430570263064729277439379944371440611","4198997627479952975656875720441300210986176678754907589897275078042197531587"]}}, 
+        // operatorSignature = {
+            // "signature":"0x312273c7f514b89a8d0fb48e1c98c96ae79f5c5f85e705911b8174ab182d5f4379e1b4e86a2d2e8bce38737ce3982c7b10acc8558852aa3a828bfec8aa69f4c61c",
+            // "salt":"0x80807f7884635486c380ad928e5d596013fcd10211d60219cf9c5896e373d5cb",
+            // "expiry":"1713082353"})
 
-        EtherFiAvsOperator op = EtherFiAvsOperator(avsOperatorsManager.avsOperators(id));
-    
-        op.isValidSignature(bytes32(uint256(1)), abi.encode("hi"));
+        address operator = 0xD7ED603e90D11892e56f00B1462e6d1A9AE488F2;
+
+        bytes memory quorumNumbers = hex"";
+        string memory socket = "176.96.139.105:32005;32004";
+        IBLSApkRegistry.PubkeyRegistrationParams memory params = IBLSApkRegistry.PubkeyRegistrationParams({
+            pubkeyRegistrationSignature: BN254.G1Point(13930132857693227669286552740872125143110598440832128762691891535344523478758, 6922746212735886673397038348770411476602736080156269360551930225918644776978),
+            pubkeyG1: BN254.G1Point(2386016606917945660190712972098427855269577476623723422867331055589384084269, 14968962494564624642828972951024997596009870047682971310684803314690728181528),
+            pubkeyG2: BN254.G2Point([uint256(1212702844116721867258076029541971160984904577278437049781204783739431751522), uint256(19354825442469668588126245718346981213263864406248537535463071512803213558712)], [uint256(13931796655362966527501678217695731308545430570263064729277439379944371440611), uint256(4198997627479952975656875720441300210986176678754907589897275078042197531587)])
+        });
+
+        bytes memory signature = hex"312273c7f514b89a8d0fb48e1c98c96ae79f5c5f85e705911b8174ab182d5f4379e1b4e86a2d2e8bce38737ce3982c7b10acc8558852aa3a828bfec8aa69f4c61c";
+        bytes32 salt = 0x80807f7884635486c380ad928e5d596013fcd10211d60219cf9c5896e373d5cb;
+        uint256 expiry = 1713082353;
+
+        bytes32 digestHash = avsOperatorsManager.avsDirectory().calculateOperatorAVSRegistrationDigestHash(operator, eigenDA_servicemanager, salt, expiry);
+        (address recovered, ) = ECDSAUpgradeable.tryRecover(digestHash, signature);
+
+        assertEq(recovered, operator);
+    }
+
+    function test_etherfi_avs_operator_ecdsa_signing() public {
+        id = 1;
+        EtherFiAvsOperator operator = EtherFiAvsOperator(avsOperatorsManager.avsOperators(id));
+
+        // {"g1":{"x":"14682048844248429823678933932320371046009302447482901863644928760926518947807","y":"12215835973550124098437055367337109688124020846632972613877680582794369393084"},
+        // "g2":{"x":["19332451663609971713951767743362621541916788013662626247602434949566801778476","20056937139589370573837781264154272073733586985602668250675842052931325717680"],"y":["9873649666523697808239435396703138989657217149552120307506002550791314553684","13216492442761560063950923473947756990814256593313100299844099971436168113786"]},
+        // "signature":{"x":"6679173931504532118763927594024022787824572573762927863934917756721557630334","y":"13673888200931032843496612967090783658001186621787399890944828536350101178243"}}
+        
+        bytes memory quorumNumbers = hex"";
+        string memory socket = "127.0.0.1:32005;32004";
+        IBLSApkRegistry.PubkeyRegistrationParams memory params = IBLSApkRegistry.PubkeyRegistrationParams({
+            pubkeyRegistrationSignature: BN254.G1Point(6679173931504532118763927594024022787824572573762927863934917756721557630334, 13673888200931032843496612967090783658001186621787399890944828536350101178243),
+            pubkeyG1: BN254.G1Point(14682048844248429823678933932320371046009302447482901863644928760926518947807, 12215835973550124098437055367337109688124020846632972613877680582794369393084),
+            pubkeyG2: BN254.G2Point([uint256(19332451663609971713951767743362621541916788013662626247602434949566801778476), uint256(20056937139589370573837781264154272073733586985602668250675842052931325717680)], [uint256(9873649666523697808239435396703138989657217149552120307506002550791314553684), uint256(13216492442761560063950923473947756990814256593313100299844099971436168113786)])
+        });
+
+
+        // TODO: sign the digestHash with the ECDSA key
+        // You may modify (salt, expiry) as you want
+        bytes32 salt = 0x80807f7884635486c380ad928e5d596013fcd10211d60219cf9c5896e373d5cb;
+        uint256 expiry = block.timestamp + 28 days;
+        bytes32 digestHash = avsOperatorsManager.calculateOperatorAVSRegistrationDigestHash(id, eigenDA_servicemanager, salt, expiry);
+
+        bytes memory signature = hex""; // TODO
+
+        (address recovered, ) = ECDSAUpgradeable.tryRecover(digestHash, signature);
+        assertEq(recovered, address(operator));
+
+        vm.prank(avsOperatorsManager.owner());
+        avsOperatorsManager.updateAvsWhitelist(id, eigenDA_registryCoordinator, true);
+
+        vm.prank(operator.avsNodeRunner());
+        avsOperatorsManager.registerBlsKeyAsDelegatedNodeOperator(id, eigenDA_registryCoordinator, quorumNumbers, socket, params);
+
+        ISignatureUtils.SignatureWithSaltAndExpiry memory operatorSignature = ISignatureUtils.SignatureWithSaltAndExpiry({
+            signature: signature,
+            salt: salt,
+            expiry: expiry
+        });
+
+        vm.prank(avsOperatorsManager.owner());
+        avsOperatorsManager.registerOperator(id, eigenDA_registryCoordinator, quorumNumbers, socket, params, operatorSignature);
     }
 }
