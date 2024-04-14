@@ -145,7 +145,8 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
      * @param _signature Signature byte array associated with _data
     */
     function isValidSignature(bytes32 _digestHash, bytes memory _signature) public view override returns (bytes4 magicValue) {
-        return ECDSAUpgradeable.recover(_digestHash, _signature) == ecdsaSigner ? this.isValidSignature.selector : bytes4(0xffffffff);
+        (address recovered, ) = ECDSAUpgradeable.tryRecover(_digestHash, _signature);
+        return recovered == ecdsaSigner ? this.isValidSignature.selector : bytes4(0xffffffff);
     }
 
     function isAvsWhitelisted(address _avsRegistryCoordinator) public view returns (bool) {

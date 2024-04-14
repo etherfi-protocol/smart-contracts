@@ -159,4 +159,12 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
             avsDirectory.calculateOperatorAVSRegistrationDigestHash(address(avsOperatorsManager.avsOperators(id)), eigenDA_servicemanager, bytes32(abi.encode(1)), 1)
         );
     }
+
+    function test_ecdsa_signing() public {
+        test_registerAsOperator();
+
+        EtherFiAvsOperator op = EtherFiAvsOperator(avsOperatorsManager.avsOperators(id));
+    
+        op.isValidSignature(bytes32(uint256(1)), abi.encode("hi"));
+    }
 }
