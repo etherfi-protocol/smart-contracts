@@ -36,7 +36,7 @@ contract DeployEtherFiAvsOperatorsManager is Script {
 
         mgr.upgradeEtherFiAvsOperator(address(new EtherFiAvsOperator()));
         mgr.upgradeTo(address(new EtherFiAvsOperatorsManager()));
-        mgr.initializeAvsDirectory(avsDirectory);
+        // mgr.initializeAvsDirectory(avsDirectory);
 
         // mgr.instantiateEtherFiAvsOperator(1);
 
