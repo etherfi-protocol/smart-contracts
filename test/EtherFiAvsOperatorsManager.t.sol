@@ -20,6 +20,7 @@ import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
 import {BitmapUtils} from "../src/eigenlayer-libraries/BitmapUtils.sol";
 import {BN254} from "../src/eigenlayer-libraries/BN254.sol";
 import {IBLSApkRegistry} from "../src/eigenlayer-interfaces/IBLSApkRegistry.sol";
+import {IRegistryCoordinator} from "../src/eigenlayer-interfaces/IRegistryCoordinator.sol";
 // import {MockAVSDeployer} from "./eigenlayer-middleware/test/utils/MockAVSDeployer.sol";
 
 import "forge-std/console2.sol";
@@ -34,17 +35,30 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
 
     address eigenDA_registryCoordinator;
     address eigenDA_servicemanager;
+    address brevis_registryCoordinator;
+    address brevis_servicemanager;
 
     function setUp() public {
-        initializeRealisticFork(MAINNET_FORK);
+        initializeRealisticFork(TESTNET_FORK);
 
         _upgrade_etherfi_avs_operators_manager();
         
         avsNodeRunner = address(100000);
         ecdsaSigner = address(100001);
 
-        eigenDA_registryCoordinator = 0x0BAAc79acD45A023E19345c352d8a7a83C4e5656;
-        eigenDA_servicemanager = 0x870679E138bCdf293b7Ff14dD44b70FC97e12fc0;
+        if (block.chainid == 1) {
+            eigenDA_registryCoordinator = 0x0BAAc79acD45A023E19345c352d8a7a83C4e5656;
+            eigenDA_servicemanager = 0x870679E138bCdf293b7Ff14dD44b70FC97e12fc0;
+
+            brevis_registryCoordinator = 0x434621cfd8BcDbe8839a33c85aE2B2893a4d596C;
+            brevis_servicemanager = 0x9FC952BdCbB7Daca7d420fA55b942405B073A89d;
+        } else if (block.chainid == 17000) {
+            eigenDA_registryCoordinator = 0x0BAAc79acD45A023E19345c352d8a7a83C4e5656;
+            eigenDA_servicemanager = 0x870679E138bCdf293b7Ff14dD44b70FC97e12fc0;
+
+            brevis_registryCoordinator = 0x0dB4ceE042705d47Ef6C0818E82776359c3A80Ca;
+            brevis_servicemanager = 0x7A46219950d8a9bf2186549552DA35Bf6fb85b1F;
+        }
     }
 
     function test_instantiateEtherFiAvsOperator() public {
@@ -200,43 +214,54 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
         id = 1;
         EtherFiAvsOperator operator = EtherFiAvsOperator(avsOperatorsManager.avsOperators(id));
 
-        // {"g1":{"x":"14682048844248429823678933932320371046009302447482901863644928760926518947807","y":"12215835973550124098437055367337109688124020846632972613877680582794369393084"},
-        // "g2":{"x":["19332451663609971713951767743362621541916788013662626247602434949566801778476","20056937139589370573837781264154272073733586985602668250675842052931325717680"],"y":["9873649666523697808239435396703138989657217149552120307506002550791314553684","13216492442761560063950923473947756990814256593313100299844099971436168113786"]},
-        // "signature":{"x":"6679173931504532118763927594024022787824572573762927863934917756721557630334","y":"13673888200931032843496612967090783658001186621787399890944828536350101178243"}}
-        
-        bytes memory quorumNumbers = hex"";
-        string memory socket = "127.0.0.1:32005;32004";
-        IBLSApkRegistry.PubkeyRegistrationParams memory params = IBLSApkRegistry.PubkeyRegistrationParams({
-            pubkeyRegistrationSignature: BN254.G1Point(6679173931504532118763927594024022787824572573762927863934917756721557630334, 13673888200931032843496612967090783658001186621787399890944828536350101178243),
-            pubkeyG1: BN254.G1Point(14682048844248429823678933932320371046009302447482901863644928760926518947807, 12215835973550124098437055367337109688124020846632972613877680582794369393084),
-            pubkeyG2: BN254.G2Point([uint256(19332451663609971713951767743362621541916788013662626247602434949566801778476), uint256(20056937139589370573837781264154272073733586985602668250675842052931325717680)], [uint256(9873649666523697808239435396703138989657217149552120307506002550791314553684), uint256(13216492442761560063950923473947756990814256593313100299844099971436168113786)])
-        });
-
-
-        // TODO: sign the digestHash with the ECDSA key
-        // You may modify (salt, expiry) as you want
-        bytes32 salt = 0x80807f7884635486c380ad928e5d596013fcd10211d60219cf9c5896e373d5cb;
-        uint256 expiry = block.timestamp + 28 days;
-        bytes32 digestHash = avsOperatorsManager.calculateOperatorAVSRegistrationDigestHash(id, eigenDA_servicemanager, salt, expiry);
-
-        bytes memory signature = hex""; // TODO
-
-        (address recovered, ) = ECDSAUpgradeable.tryRecover(digestHash, signature);
-        assertEq(recovered, address(operator));
-
+        // Make sure the targe avs is whitelisted
         vm.prank(avsOperatorsManager.owner());
-        avsOperatorsManager.updateAvsWhitelist(id, eigenDA_registryCoordinator, true);
-
-        vm.prank(operator.avsNodeRunner());
-        avsOperatorsManager.registerBlsKeyAsDelegatedNodeOperator(id, eigenDA_registryCoordinator, quorumNumbers, socket, params);
+        avsOperatorsManager.updateAvsWhitelist(id, brevis_registryCoordinator, true);
 
         ISignatureUtils.SignatureWithSaltAndExpiry memory operatorSignature = ISignatureUtils.SignatureWithSaltAndExpiry({
-            signature: signature,
-            salt: salt,
-            expiry: expiry
+            signature: hex"896fb9e3673c86ff9fa7544e6c17afe82f9880af8fdd71ae1dd3d4859bec668845a9aff65566bc5187f80614a633ec4a465ff05a1bbd57d63d58396fce105b941c",
+            salt: hex"afaedbee4ef9fc4f2a7b025cf79dac693a6db429b2ec893061528cefb37c1862",
+            expiry: 1744685849
         });
 
+        bytes32 digestHash = avsOperatorsManager.calculateOperatorAVSRegistrationDigestHash(id, brevis_servicemanager, operatorSignature.salt, operatorSignature.expiry);
+        (address recovered, ) = ECDSAUpgradeable.tryRecover(digestHash, operatorSignature.signature);
+        assertEq(recovered, address(operator.ecdsaSigner()));
+
         vm.prank(avsOperatorsManager.owner());
-        avsOperatorsManager.registerOperator(id, eigenDA_registryCoordinator, quorumNumbers, socket, params, operatorSignature);
+        avsOperatorsManager.registerOperator(id, brevis_registryCoordinator, operatorSignature);
+    }
+
+    function test_bls_key_verification() public {
+        address registryCoordinator = brevis_registryCoordinator;
+
+        id = 1;
+        EtherFiAvsOperator operator = EtherFiAvsOperator(avsOperatorsManager.avsOperators(id));
+        EtherFiAvsOperator.AvsInfo memory avsInfo = avsOperatorsManager.getAvsInfo(id, registryCoordinator);
+        
+        IBLSApkRegistry.PubkeyRegistrationParams memory params = avsInfo.params;
+
+        BN254.G1Point memory pubkeyRegistrationMessageHash = IRegistryCoordinator(registryCoordinator).pubkeyRegistrationMessageHash(address(operator));
+
+        // gamma = h(sigma, P, P', H(m))
+        uint256 gamma = uint256(keccak256(abi.encodePacked(
+            params.pubkeyRegistrationSignature.X, 
+            params.pubkeyRegistrationSignature.Y, 
+            params.pubkeyG1.X, 
+            params.pubkeyG1.Y, 
+            params.pubkeyG2.X, 
+            params.pubkeyG2.Y, 
+            pubkeyRegistrationMessageHash.X, 
+            pubkeyRegistrationMessageHash.Y
+        ))) % BN254.FR_MODULUS;
+        
+        // e(sigma + P * gamma, [-1]_2) = e(H(m) + [1]_1 * gamma, P') 
+        require(BN254.pairing(
+            BN254.plus(params.pubkeyRegistrationSignature, BN254.scalar_mul(params.pubkeyG1, gamma)),
+            BN254.negGeneratorG2(),
+            BN254.plus(pubkeyRegistrationMessageHash, BN254.scalar_mul(BN254.generatorG1(), gamma)),
+            params.pubkeyG2
+        ), "BLSApkRegistry.registerBLSPublicKey: either the G1 signature is wrong, or G1 and G2 private key do not match");
+
     }
 }

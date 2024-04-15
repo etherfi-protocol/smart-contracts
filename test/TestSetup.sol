@@ -937,7 +937,6 @@ contract TestSetup is Test {
         vm.startPrank(avsOperatorsManager.owner());
         avsOperatorsManager.upgradeTo(address(new EtherFiAvsOperatorsManager()));
         avsOperatorsManager.upgradeEtherFiAvsOperator(address(new EtherFiAvsOperator()));
-        avsOperatorsManager.initializeAvsDirectory(0x135DDa560e946695d6f155dACaFC6f1F25C1F5AF);
         vm.stopPrank();
     }
 

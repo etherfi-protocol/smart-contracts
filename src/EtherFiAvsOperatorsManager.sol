@@ -92,29 +92,25 @@ contract EtherFiAvsOperatorsManager is
     function registerOperator(
         uint256 _id,
         address _avsRegistryCoordinator,
-        bytes calldata _quorumNumbers,
-        string calldata _socket,
-        IBLSApkRegistry.PubkeyRegistrationParams calldata _params,
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
     ) external onlyOperator(_id) {
-        avsOperators[_id].registerOperator(_avsRegistryCoordinator, _quorumNumbers, _socket, _params, _operatorSignature);
+        EtherFiAvsOperator.AvsInfo memory avsInfo = avsOperators[_id].getAvsInfo(_avsRegistryCoordinator);
+        avsOperators[_id].registerOperator(_avsRegistryCoordinator, _operatorSignature);
 
-        emit RegisteredOperator(_id, _avsRegistryCoordinator, _quorumNumbers, _socket, _params, _operatorSignature);
+        emit RegisteredOperator(_id, _avsRegistryCoordinator, avsInfo.quorumNumbers, avsInfo.socket, avsInfo.params, _operatorSignature);
     }
 
     function registerOperatorWithChurn(
         uint256 _id,
         address _avsRegistryCoordinator,
-        bytes calldata _quorumNumbers, 
-        string calldata _socket,
-        IBLSApkRegistry.PubkeyRegistrationParams calldata _params,
         IRegistryCoordinator.OperatorKickParam[] calldata _operatorKickParams,
         ISignatureUtils.SignatureWithSaltAndExpiry memory _churnApproverSignature,
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
     ) external onlyOperator(_id) {
-        avsOperators[_id].registerOperatorWithChurn(_avsRegistryCoordinator, _quorumNumbers, _socket, _params, _operatorKickParams, _churnApproverSignature, _operatorSignature);
+        EtherFiAvsOperator.AvsInfo memory avsInfo = avsOperators[_id].getAvsInfo(_avsRegistryCoordinator);
+        avsOperators[_id].registerOperatorWithChurn(_avsRegistryCoordinator, _operatorKickParams, _churnApproverSignature, _operatorSignature);
 
-        emit RegisteredOperator(_id, _avsRegistryCoordinator, _quorumNumbers, _socket, _params, _operatorSignature);
+        emit RegisteredOperator(_id, _avsRegistryCoordinator, avsInfo.quorumNumbers, avsInfo.socket, avsInfo.params, _operatorSignature);
     }
 
     function deregisterOperator(

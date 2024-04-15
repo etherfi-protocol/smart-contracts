@@ -68,34 +68,26 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
 
     function registerOperator(
         address _avsRegistryCoordinator,
-        bytes calldata _quorumNumbers,
-        string calldata _socket,
-        IBLSApkRegistry.PubkeyRegistrationParams calldata _params,
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
     ) external managerOnly {
         require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
         require(!isAvsRegistered(_avsRegistryCoordinator), "AVS_ALREADY_REGISTERED");
-        require(isRegisteredBlsKey(_avsRegistryCoordinator, _quorumNumbers, _socket, _params), "NOT_REGISTERED_BLS_KEY");
 
         avsInfos[_avsRegistryCoordinator].isRegistered = true;
 
-        IRegistryCoordinator(_avsRegistryCoordinator).registerOperator(_quorumNumbers, _socket, _params, _operatorSignature);
+        IRegistryCoordinator(_avsRegistryCoordinator).registerOperator(avsInfos[_avsRegistryCoordinator].quorumNumbers, avsInfos[_avsRegistryCoordinator].socket, avsInfos[_avsRegistryCoordinator].params, _operatorSignature);
     }
 
     function registerOperatorWithChurn(
         address _avsRegistryCoordinator,
-        bytes calldata _quorumNumbers, 
-        string calldata _socket,
-        IBLSApkRegistry.PubkeyRegistrationParams calldata _params,
         IRegistryCoordinator.OperatorKickParam[] calldata _operatorKickParams,
         ISignatureUtils.SignatureWithSaltAndExpiry memory _churnApproverSignature,
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
     ) external managerOnly {
         require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
         require(!isAvsRegistered(_avsRegistryCoordinator), "AVS_ALREADY_REGISTERED");
-        require(isRegisteredBlsKey(_avsRegistryCoordinator, _quorumNumbers, _socket, _params), "NOT_REGISTERED_BLS_KEY");
 
-        IRegistryCoordinator(_avsRegistryCoordinator).registerOperatorWithChurn(_quorumNumbers, _socket, _params, _operatorKickParams, _churnApproverSignature, _operatorSignature);
+        IRegistryCoordinator(_avsRegistryCoordinator).registerOperatorWithChurn(avsInfos[_avsRegistryCoordinator].quorumNumbers, avsInfos[_avsRegistryCoordinator].socket, avsInfos[_avsRegistryCoordinator].params, _operatorKickParams, _churnApproverSignature, _operatorSignature);
     }
 
     function deregisterOperator(
