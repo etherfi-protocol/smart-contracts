@@ -112,6 +112,14 @@ contract L2sTest is TestSetup {
         l1Receiver: 0x27e120C518a339c3d8b665E56c4503DF785985c2
     });
 
+    ConfigPerL2 LINEA = ConfigPerL2({
+        l2Eid: 30183,
+        l2Oft: 0x1Bf74C010E6320bab11e2e5A532b5AC15e0b8aA6,
+        l2SyncPool: 0x823106E745A62D0C2FC4d27644c62aDE946D9CCa,
+        l1dummyToken: 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf,
+        l1Receiver: 0x6F149F8bf1CB0245e70171c9972059C22294aa35
+    });
+
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
 
@@ -128,60 +136,76 @@ contract L2sTest is TestSetup {
         assertEq(liquifierInstance.l1SyncPool(), address(l1SyncPool));
     }
 
-    function test_BLAST_fast_sync() public {
-        uint256 amountIn = 1e18;
-        uint256 amountOut = 0.9e18;
+    function test_LINEA_fast_sync() public {
+        _test_fast_sync(LINEA);
+    }
 
-        _test_fast_sync(BLAST.l2Eid, BLAST.l2Oft, BLAST.l2SyncPool, BLAST.l1dummyToken, BLAST.l1Receiver, amountIn, amountOut);
+    function test_LINEA_slow_sync() public {
+        _test_slow_sync(LINEA);
+    }
+
+    function test_BLAST_fast_sync() public {
+        _test_fast_sync(BLAST);
     }
 
     function test_BLAST_slow_sync() public {
+        _test_slow_sync(BLAST);
+    }
+
+    function _test_fast_sync(ConfigPerL2 memory config) public {
+        uint256 amountIn = 1e18;
+        uint256 amountOut = 0.9e18;
+
+        _test_lzReceive(config, amountIn, amountOut);
+    }
+
+    function _test_slow_sync(ConfigPerL2 memory config) public {
         // 'amountOut' is less than the actual weETH amount that can be minted with 'amountIn' ETH
         // so the diff is considered as a fee and stay in the syncpool
         uint256 amountIn = 1e18;
         uint256 amountOut = 0.9e18;
 
         uint256 liquifier_eth_balance = address(liquifierInstance).balance;
-        uint256 liquifier_dummy_balance = IDummyToken(BLAST.l1dummyToken).balanceOf(address(liquifierInstance));
+        uint256 liquifier_dummy_balance = IDummyToken(config.l1dummyToken).balanceOf(address(liquifierInstance));
         uint256 lockbox_balance = weEthInstance.balanceOf(address(l1OftAdapter));
         uint256 actualAmountOut = _sharesForDepositAmount(amountIn);
 
-        _test_fast_sync(BLAST.l2Eid, BLAST.l2Oft, BLAST.l2SyncPool, BLAST.l1dummyToken, BLAST.l1Receiver, amountIn, amountOut);
+        _test_lzReceive(config, amountIn, amountOut);
 
         assertLt(amountOut, actualAmountOut);
         assertEq(address(liquifierInstance).balance, liquifier_eth_balance);
-        assertEq(IDummyToken(BLAST.l1dummyToken).balanceOf(address(liquifierInstance)), liquifier_dummy_balance + amountIn);
+        assertEq(IDummyToken(config.l1dummyToken).balanceOf(address(liquifierInstance)), liquifier_dummy_balance + amountIn);
         assertEq(weEthInstance.balanceOf(address(l1OftAdapter)), lockbox_balance + amountOut);
         
-        _test_slow_sync(BLAST.l2Eid, BLAST.l1Receiver, amountIn);
+        _test_onMessageReceived(config, amountIn);
 
         assertEq(address(liquifierInstance).balance, liquifier_eth_balance + amountIn);
-        assertEq(IDummyToken(BLAST.l1dummyToken).balanceOf(address(liquifierInstance)), liquifier_dummy_balance);
+        assertEq(IDummyToken(config.l1dummyToken).balanceOf(address(liquifierInstance)), liquifier_dummy_balance);
         assertEq(weEthInstance.balanceOf(address(l1OftAdapter)), lockbox_balance + amountOut);
     }
 
     // Slow Sync with the ETH bridged down to the L1
     // - transfer the `amountIn` dummyETH
-    function _test_slow_sync(uint32 l2Eid, address receiver, uint256 amountIn) internal { 
-        vm.deal(receiver, amountIn);
+    function _test_onMessageReceived(ConfigPerL2 memory config, uint256 amountIn) internal { 
+        vm.deal(config.l1Receiver, amountIn);
 
-        vm.prank(receiver);
-        l1SyncPool.onMessageReceived{value: amountIn}(l2Eid, 0, ETH_ADDRESS, amountIn, 0);
+        vm.prank(config.l1Receiver);
+        l1SyncPool.onMessageReceived{value: amountIn}(config.l2Eid, 0, ETH_ADDRESS, amountIn, 0);
     }
 
     // Fast Sync for native minting (input:`amountIn` ETH, output: `amountOut` weETH) at Layer 2 of Eid = `l2Eid`
     // - mint the `amountIn` amount of dummy token & transfer it to the Liquifier
     // - mint the <`amountIn` amount of eETH token & wrap it to weETH & transfer min(weETH balance, owed amount) to the lockbox (= L1 OFT Adapter)
-    function _test_fast_sync(uint32 l2Eid, address l2Oft, address l2SyncPool, address l1dummyToken, address l1Receiver, uint256 amountIn, uint256 amountOut) internal {
-        assertEq(address(l1SyncPool.getDummyToken(l2Eid)), l1dummyToken);
-        assertEq(l1SyncPool.getReceiver(l2Eid), l1Receiver);
+    function _test_lzReceive(ConfigPerL2 memory config, uint256 amountIn, uint256 amountOut) internal {
+        assertEq(address(l1SyncPool.getDummyToken(config.l2Eid)), config.l1dummyToken);
+        assertEq(l1SyncPool.getReceiver(config.l2Eid), config.l1Receiver);
 
-        IDummyToken dummyToken = IDummyToken(l1SyncPool.getDummyToken(l2Eid));
+        IDummyToken dummyToken = IDummyToken(l1SyncPool.getDummyToken(config.l2Eid));
 
         bytes memory message = abi.encode(ETH_ADDRESS, amountIn, amountOut);
 
         vm.prank(address(l1Endpoint));
-        l1SyncPool.lzReceive(Origin(l2Eid, _toBytes32(l2SyncPool), 0), 0, message, address(0), "");
+        l1SyncPool.lzReceive(Origin(config.l2Eid, _toBytes32(config.l2SyncPool), 0), 0, message, address(0), "");
     }
 
     function _sharesForDepositAmount(uint256 _depositAmount) internal view returns (uint256) {
