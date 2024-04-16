@@ -368,6 +368,7 @@ contract TestSetup is Test {
         withdrawRequestNFTInstance = WithdrawRequestNFT(addressProviderInstance.getContractAddress("WithdrawRequestNFT"));
         liquifierInstance = Liquifier(payable(addressProviderInstance.getContractAddress("Liquifier")));
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
+        etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
@@ -871,20 +872,23 @@ contract TestSetup is Test {
 
         // Liquifier, initialize, register dummy
 
-        address[] memory targets = new address[](3);
+        address[] memory targets = new address[](4);
         targets[0] = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
         targets[1] = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
         targets[2] = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
+        targets[3] = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
 
-        bytes[] memory payloads = new bytes[](3);
+        bytes[] memory payloads = new bytes[](4);
         payloads[0] = hex"3659CFE600000000000000000000000061E2CA79CA3D90FD1440976A6C9641431B3F296A";
         payloads[1] = hex"B218FF8F000000000000000000000000D789870BEA40D056A4D26055D0BEFCC8755DA146";
         payloads[2] = hex"F3820F2700000000000000000000000083998E169026136760BE6AF93E776C2F352D4B28000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001";
+        payloads[3] = hex"F3820F2700000000000000000000000061FF310AC15A517A846DA08AC9F9ABF2A0F9A2BF000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001";
 
-        uint256[] memory values = new uint256[](3);
+        uint256[] memory values = new uint256[](4);
         values[0] = 0;
         values[1] = 0;
         values[2] = 0;
+        values[3] = 0;
 
         for (uint256 i = 0; i < targets.length; i++) {
             etherFiTimelockInstance.execute(
