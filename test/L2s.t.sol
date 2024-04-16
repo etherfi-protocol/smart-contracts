@@ -120,6 +120,14 @@ contract L2sTest is TestSetup {
         l1Receiver: 0x6F149F8bf1CB0245e70171c9972059C22294aa35
     });
 
+    ConfigPerL2 MODE = ConfigPerL2({
+        l2Eid: 30260,
+        l2Oft: 0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A,
+        l2SyncPool: 0x52c4221Cb805479954CDE5accfF8C4DcaF96623B,
+        l1dummyToken: 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46,
+        l1Receiver: 0xC8Ad0949f33F02730cFf3b96E7F067E83De1696f
+    });
+
     address hypernative = 0x2b237B887daF752A57Eca25a163CC7A96F973FE8;
 
     function setUp() public {
@@ -139,6 +147,13 @@ contract L2sTest is TestSetup {
         assertEq(l1SyncPool.getLiquifier(), address(liquifierInstance));
         assertEq(l1SyncPool.getEEth(), address(eETHInstance));
         assertEq(liquifierInstance.l1SyncPool(), address(l1SyncPool));
+    }
+
+    function test_MODE_slow_sync() public {
+        uint256 amountIn = 1e18;
+        uint256 amountOut = 0.9e18;
+
+        _test_slow_sync(MODE, amountIn, amountOut, "", "");
     }
 
     function test_LINEA_fast_sync_fail_after_pause_by_etherfiadmin() public {
