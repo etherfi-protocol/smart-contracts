@@ -10,16 +10,15 @@ import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/IAccessControlUpgradeable.sol";
 
 import {IOFT} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
-import {IRateLimiter} from "../lib/Etherfi-SyncPools/contracts/interfaces/IRateLimiter.sol";
 import {IMintableERC20} from "../lib/Etherfi-SyncPools/contracts/interfaces/IMintableERC20.sol";
 import {IAggregatorV3} from "../lib/Etherfi-SyncPools/contracts/etherfi/interfaces/IAggregatorV3.sol";
 import {IL2ExchangeRateProvider} from "../lib/Etherfi-SyncPools/contracts/interfaces/IL2ExchangeRateProvider.sol";
 
-
 import "../src/BucketRateLimiter.sol";
+
 import "./NativeMintingConfigs.t.sol";
 
-interface IEtherFiOFT is IOFT, IRateLimiter, IMintableERC20, IAccessControlUpgradeable {
+interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable {
     function MINTER_ROLE() external view returns (bytes32);
     // function hasRole(bytes32 role, address account) external view returns (bool);
     // function grantRole(bytes32 role, address account) external;
@@ -56,7 +55,7 @@ contract NativeMintingL2 is TestSetup, NativeMintingConfigs {
     ConfigPerL2 targetL2; 
 
     IL2SyncPool l2SyncPool;
-    IEtherFiOFT oft;
+    IEtherFiOFT l2Oft;
     IL2ExchangeRateProvider exchangeRateProvider;
     IAggregatorV3 priceOracle;
     BucketRateLimiter l2SyncPoolRateLimiter;
@@ -76,7 +75,7 @@ contract NativeMintingL2 is TestSetup, NativeMintingConfigs {
         else if (block.chainid == 34443) targetL2 = MODE;
         else revert("Unsupported chain id");
 
-        oft = IEtherFiOFT(targetL2.l2Oft);
+        l2Oft = IEtherFiOFT(targetL2.l2Oft);
         l2SyncPool = IL2SyncPool(targetL2.l2SyncPool);
         exchangeRateProvider = IL2ExchangeRateProvider(targetL2.l2ExchagneRateProvider);
         priceOracle = IAggregatorV3(exchangeRateProvider.getRateParameters(ETH_ADDRESS).rateOracle);
@@ -102,7 +101,7 @@ contract NativeMintingL2 is TestSetup, NativeMintingConfigs {
         IL2SyncPool.Token memory tokenData = l2SyncPool.getTokenData(targetL2.l1dummyToken);
         (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound) = priceOracle.latestRoundData();
 
-        console.log("oft.hasRole(oft.MINTER_ROLE(), targetL2.l2SyncPool): ", oft.hasRole(oft.MINTER_ROLE(), targetL2.l2SyncPool));
+        console.log("l2Oft.hasRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool): ", l2Oft.hasRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool));
         console.log("l2SyncPool.getDstEid() == l1Eid: ", l2SyncPool.getDstEid() == l1Eid);
         console.log("l2SyncPool.getTokenOut() == targetL2.l2Oft: ", l2SyncPool.getTokenOut() == targetL2.l2Oft);
         console.log("l2SyncPool.getL2ExchangeRateProvider() == targetL2.l2ExchagneRateProvider: ", l2SyncPool.getL2ExchangeRateProvider() == targetL2.l2ExchagneRateProvider);
@@ -111,7 +110,7 @@ contract NativeMintingL2 is TestSetup, NativeMintingConfigs {
         console.log("priceOracle.latestRoundData().answer: ", uint256(answer));
         console.log("exchangeRateProvider.getConversionAmountUnsafe(ETH_ADDRESS, 10000): ", exchangeRateProvider.getConversionAmountUnsafe(ETH_ADDRESS, 10000));
 
-        // require(oft.hasRole(oft.MINTER_ROLE(), targetL2.l2SyncPool), "MINTER_ROLE not set");
+        // require(l2Oft.hasRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool), "MINTER_ROLE not set");
         // require(l2SyncPool.getDstEid() == l1Eid, "DstEid not set");
         // require(l2SyncPool.getTokenOut() == targetL2.l2Oft, "TokenOut not set");
         // require(l2SyncPool.getL2ExchangeRateProvider() == targetL2.l2ExchagneRateProvider, "ExchangeRateProvider not set");
@@ -119,24 +118,43 @@ contract NativeMintingL2 is TestSetup, NativeMintingConfigs {
         // require(tokenData.l1Address == ETH_ADDRESS, "Token data not set");
     }
 
+    // These are function calls on L2 required to go live on L2
     function _release_L2() internal {
-        vm.startPrank(oft.owner());
-        oft.grantRole(oft.MINTER_ROLE(), targetL2.l2SyncPool);
+        vm.startPrank(l2Oft.owner());
+        
+        // Grant the MINTER ROLE
+        l2Oft.grantRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool);
+
+        // Configure the rate limits
         exchangeRateProvider.setRateParameters(ETH_ADDRESS, targetL2.l2PriceOracle, 0, 24 hours);
-        l2SyncPool.
+        l2SyncPoolRateLimiter.setCapacity(0.0001 ether);
+        l2SyncPoolRateLimiter.setRefillRatePerSecond(0.0001 ether);
+        
+        // TODO: Transfer the ownership
+        // ...
+        
         vm.stopPrank();
     }
 
-    function test_oft_mint_BLAST() public {
+    function test_l2Oft_mint_BLAST() public {
         _setUp(BLAST.rpc_url);
         _release_L2();
 
         vm.deal(alice, 100 ether);
 
         vm.prank(alice);
-        l2SyncPool.deposit{value: 10}(ETH_ADDRESS, 10, 5);
-        
-        console.log("totalSupply: %s", oft.totalSupply());
+        vm.expectRevert("BucketRateLimiter: rate limit exceeded");
+        l2SyncPool.deposit{value: 100}(ETH_ADDRESS, 100, 50);
+
+        vm.warp(block.timestamp + 1);
+
+        vm.prank(alice);
+        uint256 mintAmount = l2SyncPool.deposit{value: 100}(ETH_ADDRESS, 100, 50);        
+
+        (uint64 capacity, uint64 remaining,,) = l2SyncPoolRateLimiter.limit();
+        assertEq(l2Oft.balanceOf(alice), mintAmount);
+        assertEq(address(l2SyncPool).balance, 100);
+        assertEq(remaining, (0.0001 ether / 1e12) - 1); // 100 is tiny.. counted as '1' (= 1e12 wei)
     }
 
 
