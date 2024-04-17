@@ -99,10 +99,13 @@ contract DeployEtherFiSuiteScript is Script {
             ethDepositContractAddress = 0xff50ed3d0ec03aC01D4C79aAd74928BFF48a7b2b;
         } else if (block.chainid == 1) {
             ethDepositContractAddress = 0x00000000219ab540356cBB839Cbe05303d7705Fa;
+        } else if (block.chainid == 11155111) {
+            ethDepositContractAddress = 0x8B0c2C4C8eB078bC6C01F48523764c8942c0c6C4;
         } else {
             assert(false);
         }
-        
+
+
         vm.startBroadcast(deployerPrivateKey);
 
         // Deploy contracts
@@ -175,7 +178,7 @@ contract DeployEtherFiSuiteScript is Script {
         eETHProxy = new UUPSProxy(address(eETHImplementation), "");
         eETHInstance = EETH(address(eETHProxy));
         eETHInstance.initialize(payable(address(liquidityPool)));
-        
+
         // Setup dependencies
         nodeOperatorManager.setAuctionContractAddress(address(auctionManager));
 
@@ -198,7 +201,7 @@ contract DeployEtherFiSuiteScript is Script {
         weEthInstance.initialize(payable(address(liquidityPool)), address(eETHInstance));
 
         regulationsManagerInstance.initializeNewWhitelist(initialHash);
-        
+
         vm.stopBroadcast();
 
         suiteAddressesStruct = suiteAddresses({

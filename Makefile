@@ -17,19 +17,21 @@ update:; forge update
 
 build:; forge build
 
-test :; forge test 
+test :; forge test
 
 snapshot :; forge snapshot
 
-slither :; slither ./src 
+slither :; slither ./src
 
 format :; prettier --write src/**/*.sol && prettier --write src/*.sol
 
 # solhint should be installed globally
 lint :; solhint src/**/*.sol && solhint src/*.sol
 #------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-# use the "@" to hide the command from your shell 
+# use the "@" to hide the command from your shell
 deploy-goerli-suite :; @forge script script/deploys/DeployEtherFISuite.s.sol:DeployEtherFiSuiteScript --rpc-url ${TESTNET_RPC_URL} --broadcast --verify  -vvvv --slow
+
+deploy-sepolia-suite :; @forge script script/deploys/DeployEtherFISuite.s.sol:DeployEtherFiSuiteScript --rpc-url ${TESTNET_RPC_URL} --broadcast --verify  -vvvv --slow
 
 deploy-goerli-early-reward-pool :; @forge script script/deploys/DeployEarlyAdopterPool.s.sol:DeployEarlyAdopterPoolScript --rpc-url ${TESTNET_RPC_URL} --broadcast --verify  -vvvv --slow
 
@@ -66,7 +68,7 @@ deploy-node-operator :;  forge script script/specialized/DeployNewNodeOperatorMa
 
 upgrade-all-phase-one-goerli :;  forge script script/upgrades/StakingManagerUpgradeScript.s.sol:StakingManagerUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/AuctionManagerUpgradeScript.s.sol:AuctionManagerUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/EtherFiNodeScript.s.sol:EtherFiNodeUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/BNFTUpgradeScript.s.sol:BNFTUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/TNFTUpgradeScript.s.sol:TNFTUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/EtherFiNodesManagerUpgradeScript.s.sol:EtherFiNodesManagerUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/ProtocolRevenueManagerUpgradeScript.s.sol:ProtocolRevenueManagerUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && bash script/extractABI.sh
 
-upgrade-all-phase-one-point-five-goerli :; forge script script/upgrades/LiquidityPoolUpgradeScript.s.sol:LiquidityPoolUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/MembershipManagerUpgradeScript.s.sol:MembershipManagerUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/MembershipNFTUpgradeScript.s.sol:MembershipNFTUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/WeETHUpgradeScript.s.sol:WeEthUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/EETHUpgradeScript.s.sol:EETHUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/RegulationsManagerUpgradeScript.s.sol:RegulationsManagerUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow 
+upgrade-all-phase-one-point-five-goerli :; forge script script/upgrades/LiquidityPoolUpgradeScript.s.sol:LiquidityPoolUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/MembershipManagerUpgradeScript.s.sol:MembershipManagerUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/MembershipNFTUpgradeScript.s.sol:MembershipNFTUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/WeETHUpgradeScript.s.sol:WeEthUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/EETHUpgradeScript.s.sol:EETHUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/RegulationsManagerUpgradeScript.s.sol:RegulationsManagerUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow
 
 upgrade-all-phase-two-goerli :; forge script script/upgrades/EtherFiOracleUpgradeScript.s.sol:EtherFiOracleUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/EtherFiAdminUpgradeScript.s.sol:EtherFiAdminUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/WithdrawRequestNFTUpgradeScript.s.sol:WithdrawRequestNFTUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow
 
@@ -111,7 +113,7 @@ upgrade-goerli-withdraw-request-nft :;  forge script script/upgrades/WithdrawReq
 
 upgrade-all-phase-one-contracts :;   forge script script/upgrades/StakingManagerUpgradeScript.s.sol:StakingManagerUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/AuctionManagerUpgradeScript.s.sol:AuctionManagerUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/EtherFiNodeScript.s.sol:EtherFiNodeUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/BNFTUpgradeScript.s.sol:BNFTUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/TNFTUpgradeScript.s.sol:TNFTUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/EtherFiNodesManagerUpgradeScript.s.sol:EtherFiNodesManagerUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/ProtocolRevenueManagerUpgradeScript.s.sol:ProtocolRevenueManagerUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && bash script/extractABI.sh
 
-upgrade-all-phase-one-point-five :;  forge script script/upgrades/LiquidityPoolUpgradeScript.s.sol:LiquidityPoolUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/MembershipManagerUpgradeScript.s.sol:MembershipManagerUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/MembershipNFTUpgradeScript.s.sol:MembershipNFTUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/WeETHUpgradeScript.s.sol:WeEthUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/EETHUpgradeScript.s.sol:EETHUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/RegulationsManagerUpgradeScript.s.sol:RegulationsManagerUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow 
+upgrade-all-phase-one-point-five :;  forge script script/upgrades/LiquidityPoolUpgradeScript.s.sol:LiquidityPoolUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/MembershipManagerUpgradeScript.s.sol:MembershipManagerUpgrade --rpc-url ${TESTNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/MembershipNFTUpgradeScript.s.sol:MembershipNFTUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/WeETHUpgradeScript.s.sol:WeEthUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/EETHUpgradeScript.s.sol:EETHUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/RegulationsManagerUpgradeScript.s.sol:RegulationsManagerUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow
 
 upgrade-all-phase-two :; forge script script/upgrades/EtherFiOracleUpgradeScript.s.sol:EtherFiOracleUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/EtherFiAdminUpgradeScript.s.sol:EtherFiAdminUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow && forge script script/upgrades/WithdrawRequestNFTUpgradeScript.s.sol:WithdrawRequestNFTUpgrade --rpc-url ${MAINNET_RPC_URL} --broadcast --verify -vvvv --slow
 
