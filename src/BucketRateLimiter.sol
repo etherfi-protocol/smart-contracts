@@ -32,7 +32,7 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         limit = BucketLimiter.create(0, 0);
     }
 
-    function updateRateLimit(address sender, address tokenIn, uint256 amountIn, uint256 amountOut) external {
+    function updateRateLimit(address sender, address tokenIn, uint256 amountIn, uint256 amountOut) external whenNotPaused {
         require(msg.sender == consumer, "NOT_CONSUMER");
         // Count both 'amountIn' and 'amountOut' as rate limit consumption
         uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut + 1e12 - 1) / 1e12);
