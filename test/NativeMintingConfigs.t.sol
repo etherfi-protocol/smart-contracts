@@ -16,11 +16,12 @@ contract NativeMintingConfigs {
         address l1Receiver;
     }
 
+    string l1RpcUrl = "https://mainnet.gateway.tenderly.co";
     uint32 l1Eid = 30101;
     address l1Endpoint = 0x1a44076050125825900e736c501f859c50fE728c;
     address ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
-    address l1SyncPool = 0xD789870beA40D056A4d26055d0bEFcC8755DA146;
+    address l1SyncPoolAddress = 0xD789870beA40D056A4d26055d0bEFcC8755DA146;
     address l1OftAdapter = 0xFE7fe01F8B9A76803aF3750144C2715D9bcf7D0D;
 
     ConfigPerL2 BLAST = ConfigPerL2({
@@ -55,7 +56,7 @@ contract NativeMintingConfigs {
         l2SyncPoolRateLimiter: 0x95F1138837F1158726003251B32ecd8732c76781,
         l2ExchagneRateProvider: 0xc42853c0C6624F42fcB8219aCeb67Ad188087DCB,
         l2PriceOracle: address(0),
-        l1dummyToken: 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46,
+        l1dummyToken: 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3,
         l1Receiver: 0xC8Ad0949f33F02730cFf3b96E7F067E83De1696f
     });
 

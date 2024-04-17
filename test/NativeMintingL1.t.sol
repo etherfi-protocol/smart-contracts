@@ -8,6 +8,8 @@ import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20Burnable
 import "forge-std/console2.sol";
 import "forge-std/console.sol";
 
+import "./NativeMintingConfigs.t.sol";
+
 struct Origin {
     uint32 srcEid;
     bytes32 sender;
@@ -90,44 +92,9 @@ interface ILayerZeroEndpointV2 {
 
 
 
-contract NativeMintingL1 is TestSetup {
-    struct ConfigPerL2 {
-        uint32 l2Eid;
-        address l2Oft;
-        address l2SyncPool;
-        address l1dummyToken;
-        address l1Receiver;
-    }
+contract NativeMintingL1 is TestSetup, NativeMintingConfigs {
 
-    IEtherfiL1SyncPoolETH l1SyncPool = IEtherfiL1SyncPoolETH(0xD789870beA40D056A4d26055d0bEFcC8755DA146);
-    address l1OftAdapter = 0xFE7fe01F8B9A76803aF3750144C2715D9bcf7D0D;
-    address l1Endpoint = 0x1a44076050125825900e736c501f859c50fE728c;
-    address ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
-
-    ConfigPerL2 BLAST = ConfigPerL2({
-        l2Eid: 30243,
-        l2Oft: 0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A,
-        l2SyncPool: 0x52c4221Cb805479954CDE5accfF8C4DcaF96623B,
-        l1dummyToken: 0x83998e169026136760bE6AF93e776C2F352D4b28,
-        l1Receiver: 0x27e120C518a339c3d8b665E56c4503DF785985c2
-    });
-
-    ConfigPerL2 LINEA = ConfigPerL2({
-        l2Eid: 30183,
-        l2Oft: 0x1Bf74C010E6320bab11e2e5A532b5AC15e0b8aA6,
-        l2SyncPool: 0x823106E745A62D0C2FC4d27644c62aDE946D9CCa,
-        l1dummyToken: 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf,
-        l1Receiver: 0x6F149F8bf1CB0245e70171c9972059C22294aa35
-    });
-
-    ConfigPerL2 MODE = ConfigPerL2({
-        l2Eid: 30260,
-        l2Oft: 0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A,
-        l2SyncPool: 0x52c4221Cb805479954CDE5accfF8C4DcaF96623B,
-        l1dummyToken: 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46,
-        l1Receiver: 0xC8Ad0949f33F02730cFf3b96E7F067E83De1696f
-    });
-
+    IEtherfiL1SyncPoolETH l1SyncPool = IEtherfiL1SyncPoolETH(l1SyncPoolAddress);
     address hypernative = 0x2b237B887daF752A57Eca25a163CC7A96F973FE8;
 
     function setUp() public {
