@@ -90,7 +90,7 @@ interface ILayerZeroEndpointV2 {
 
 
 
-contract L2sTest is TestSetup {
+contract NativeMintingL1 is TestSetup {
     struct ConfigPerL2 {
         uint32 l2Eid;
         address l2Oft;
