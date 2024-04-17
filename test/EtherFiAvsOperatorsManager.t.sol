@@ -40,6 +40,7 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
 
     function setUp() public {
         initializeRealisticFork(TESTNET_FORK);
+        // initializeRealisticFork(MAINNET_FORK);
 
         _upgrade_etherfi_avs_operators_manager();
         
@@ -59,6 +60,16 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
             brevis_registryCoordinator = 0x0dB4ceE042705d47Ef6C0818E82776359c3A80Ca;
             brevis_servicemanager = 0x7A46219950d8a9bf2186549552DA35Bf6fb85b1F;
         }
+    }
+
+    function test_bls_key_verification_mainnet_eigenDA() public {
+        initializeRealisticFork(MAINNET_FORK);
+        eigenDA_registryCoordinator = 0x0BAAc79acD45A023E19345c352d8a7a83C4e5656;
+        eigenDA_servicemanager = 0x870679E138bCdf293b7Ff14dD44b70FC97e12fc0;
+
+        id = 3;
+
+        _test_bls_key_verification(address(avsOperatorsManager.avsOperators(id)), eigenDA_registryCoordinator, avsOperatorsManager.getAvsInfo(id, eigenDA_registryCoordinator).params);
     }
 
     function test_instantiateEtherFiAvsOperator() public {
@@ -125,6 +136,8 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
         vm.prank(avsOperatorsManager.owner());
         avsOperatorsManager.updateAvsWhitelist(id, eigenDA_registryCoordinator, true);
 
+        // Incorrect BLS key...
+        vm.expectRevert();
         vm.prank(avsNodeRunner);
         avsOperatorsManager.registerBlsKeyAsDelegatedNodeOperator(id, eigenDA_registryCoordinator, quorumNumbers, socket, params);
     }
@@ -211,7 +224,6 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
         assertEq(recovered, avsOperatorsManager.ecdsaSigner(id));
 
         vm.prank(avsOperatorsManager.owner());
-        vm.expectRevert("RegistryCoordinator.registerOperator: operator count exceeds maximum");
         avsOperatorsManager.registerOperator(id, eigenDA_registryCoordinator, operatorSignature);
     }
 
@@ -241,8 +253,7 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
             pubkeyRegistrationMessageHash.X, 
             pubkeyRegistrationMessageHash.Y
         ))) % BN254.FR_MODULUS;
-        
-        // e(sigma + P * gamma, [-1]_2) = e(H(m) + [1]_1 * gamma, P') 
+
         require(BN254.pairing(
             BN254.plus(params.pubkeyRegistrationSignature, BN254.scalar_mul(params.pubkeyG1, gamma)),
             BN254.negGeneratorG2(),
@@ -250,5 +261,11 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
             params.pubkeyG2
         ), "BLSApkRegistry.registerBLSPublicKey: either the G1 signature is wrong, or G1 and G2 private key do not match");
 
+        
+        // e(sigma + P * gamma, [-1]_2) = e(H(m) + [1]_1 * gamma, P') 
+        require(
+            EtherFiAvsOperator(operator).verifyBlsKey(registryCoordinator, params),
+            "BLSApkRegistry.registerBLSPublicKey: either the G1 signature is wrong, or G1 and G2 private key do not match"
+        );
     }
 }

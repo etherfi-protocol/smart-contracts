@@ -60,6 +60,7 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
     ) external managerOnly {
         require(isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
         require(!isAvsRegistered(_avsRegistryCoordinator), "AVS_ALREADY_REGISTERED");
+        require(verifyBlsKey(_avsRegistryCoordinator, _params), "BLSApkRegistry.registerBLSPublicKey: either the G1 signature is wrong, or G1 and G2 private key do not match");
 
         avsInfos[_avsRegistryCoordinator].quorumNumbers = _quorumNumbers;
         avsInfos[_avsRegistryCoordinator].socket = _socket;
@@ -186,6 +187,34 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
 
         IBeacon beacon = IBeacon(implementationVariable);
         return beacon.implementation();
+    }
+
+    function verifyBlsKeyAgainstHash(BN254.G1Point memory pubkeyRegistrationMessageHash, IBLSApkRegistry.PubkeyRegistrationParams memory params) public view returns (bool) {
+        // gamma = h(sigma, P, P', H(m))
+        uint256 gamma = uint256(keccak256(abi.encodePacked(
+            params.pubkeyRegistrationSignature.X, 
+            params.pubkeyRegistrationSignature.Y, 
+            params.pubkeyG1.X, 
+            params.pubkeyG1.Y, 
+            params.pubkeyG2.X, 
+            params.pubkeyG2.Y, 
+            pubkeyRegistrationMessageHash.X, 
+            pubkeyRegistrationMessageHash.Y
+        ))) % BN254.FR_MODULUS;
+        
+        // e(sigma + P * gamma, [-1]_2) = e(H(m) + [1]_1 * gamma, P') 
+        return BN254.pairing(
+                BN254.plus(params.pubkeyRegistrationSignature, BN254.scalar_mul(params.pubkeyG1, gamma)),
+                BN254.negGeneratorG2(),
+                BN254.plus(pubkeyRegistrationMessageHash, BN254.scalar_mul(BN254.generatorG1(), gamma)),
+                params.pubkeyG2
+              );
+    }
+
+    function verifyBlsKey(address registryCoordinator, IBLSApkRegistry.PubkeyRegistrationParams memory params) public view returns (bool) {
+        BN254.G1Point memory pubkeyRegistrationMessageHash = IRegistryCoordinator(registryCoordinator).pubkeyRegistrationMessageHash(address(this));
+
+        return verifyBlsKeyAgainstHash(pubkeyRegistrationMessageHash, params);
     }
 
     modifier managerOnly() {
