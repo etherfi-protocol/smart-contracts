@@ -11,7 +11,10 @@ contract NativeMintingConfigs {
         address l2SyncPool;
         address l2SyncPoolRateLimiter;
         address l2ExchagneRateProvider;
+        
         address l2PriceOracle;
+        uint32 l2PriceOracleHeartBeat;
+
         address l2ContractControllerSafe;
 
         address l1dummyToken;
@@ -42,6 +45,7 @@ contract NativeMintingConfigs {
         l2SyncPoolRateLimiter: 0x6f257089bF046a02751b60767871953F3899652e,
         l2ExchagneRateProvider: 0xc42853c0C6624F42fcB8219aCeb67Ad188087DCB,
         l2PriceOracle: 0xcD96262Df56127f298b452FA40759632868A472a,
+        l2PriceOracleHeartBeat: 24 hours,
         l2ContractControllerSafe: 0xa4822d7d24747e6A1BAA171944585bad4434f2D5,
         l1dummyToken: 0x83998e169026136760bE6AF93e776C2F352D4b28,
         l1Receiver: 0x27e120C518a339c3d8b665E56c4503DF785985c2,
@@ -62,6 +66,7 @@ contract NativeMintingConfigs {
         l2SyncPoolRateLimiter: 0x3A19866D5E0fAE0Ce19Adda617f9d2B9fD5a3975,
         l2ExchagneRateProvider: 0x241a91F095B2020890Bc8518bea168C195518344,
         l2PriceOracle: address(0),
+        l2PriceOracleHeartBeat: 0,
         l2ContractControllerSafe: address(0),
         l1dummyToken: 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf,
         l1Receiver: 0x6F149F8bf1CB0245e70171c9972059C22294aa35,
@@ -82,7 +87,8 @@ contract NativeMintingConfigs {
         l2SyncPoolRateLimiter: 0x95F1138837F1158726003251B32ecd8732c76781,
         l2ExchagneRateProvider: 0xc42853c0C6624F42fcB8219aCeb67Ad188087DCB,
         l2ContractControllerSafe: 0xa4822d7d24747e6A1BAA171944585bad4434f2D5,
-        l2PriceOracle: address(0),
+        l2PriceOracle: 0x7C1DAAE7BB0688C9bfE3A918A4224041c7177256,
+        l2PriceOracleHeartBeat: 6 hours,
         l1dummyToken: 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3,
         l1Receiver: 0xC8Ad0949f33F02730cFf3b96E7F067E83De1696f,
 
