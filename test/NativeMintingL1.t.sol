@@ -270,7 +270,4 @@ contract NativeMintingL1 is TestSetup, NativeMintingConfigs {
         return (_depositAmount * eETHInstance.totalShares()) / totalPooledEther - 1; // rounding down
     }
 
-    function _toBytes32(address addr) internal pure returns (bytes32) {
-        return bytes32(uint256(uint160(addr)));
-    }
 }

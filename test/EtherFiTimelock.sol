@@ -212,4 +212,22 @@ contract TimelockTest is TestSetup {
     function test_generate_EtherFiOracle_updateAdmin() public {
         emit TimelockTransaction(address(etherFiOracleInstance), 0, abi.encodeWithSelector(bytes4(keccak256("updateAdmin(address,bool)")), 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, true), bytes32(0), bytes32(0), 259200);
     }
+
+    function test_updateDepositCap() public {
+        initializeRealisticFork(MAINNET_FORK);
+        _execute(
+            address(liquifierInstance),
+            hex"3beb5517000000000000000000000000ae7ab96520de3a18e5e111b5eaab095312d7fe840000000000000000000000000000000000000000000000000000000000001388000000000000000000000000000000000000000000000000000000000002bf20"
+        );
+    }
+
+    function _execute(address target, bytes memory data) internal {
+        vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+        etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+
+        vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
+
+        etherFiTimelockInstance.execute(target, 0, data, bytes32(0), bytes32(0));
+        vm.stopPrank();
+    }
 }

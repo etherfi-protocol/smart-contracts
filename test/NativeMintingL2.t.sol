@@ -14,6 +14,7 @@ import {IMintableERC20} from "../lib/Etherfi-SyncPools/contracts/interfaces/IMin
 import {IAggregatorV3} from "../lib/Etherfi-SyncPools/contracts/etherfi/interfaces/IAggregatorV3.sol";
 import {IL2ExchangeRateProvider} from "../lib/Etherfi-SyncPools/contracts/interfaces/IL2ExchangeRateProvider.sol";
 
+
 import "../src/BucketRateLimiter.sol";
 
 import "./NativeMintingConfigs.t.sol";
@@ -23,8 +24,13 @@ interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable {
     // function hasRole(bytes32 role, address account) external view returns (bool);
     // function grantRole(bytes32 role, address account) external;
     function owner() external view returns (address);
+
+    function isPeer(uint32 eid, bytes32 peer) external view returns (bool);
 }
 
+interface IEtherFiOwnable {
+    function owner() external view returns (address);
+}
 
 interface IL2SyncPool {
     struct Token {
@@ -34,11 +40,13 @@ interface IL2SyncPool {
         address l1Address;
     }
 
+    function owner() external view returns (address);
     function getL2ExchangeRateProvider() external view returns (address);
     function getRateLimiter() external view returns (address);
     function getTokenOut() external view returns (address);
     function getDstEid() external view returns (uint32);
     function getTokenData(address tokenIn) external view returns (Token memory);
+    function peers(uint32 eid) external view returns (bytes32);
     
     function deposit(address tokenIn, uint256 amountIn, uint256 minAmountOut) external payable returns (uint256);
     // function sync(address tokenIn, bytes calldata extraOptions, MessagingFee calldata fee) external payable returns (uint256, uint256);
@@ -52,21 +60,28 @@ interface IL2SyncPool {
 
 
 contract NativeMintingL2 is TestSetup, NativeMintingConfigs {
+    address deployer;
+    
     ConfigPerL2 targetL2; 
 
     IL2SyncPool l2SyncPool;
     IEtherFiOFT l2Oft;
-    IL2ExchangeRateProvider exchangeRateProvider;
-    IAggregatorV3 priceOracle;
+    IL2ExchangeRateProvider l2exchangeRateProvider;
+    IAggregatorV3 l2priceOracle;
     BucketRateLimiter l2SyncPoolRateLimiter;
 
+    bool fix;
+
     function setUp() public {
-        _setUp(BLAST.rpc_url);
+        // _setUp(BLAST.rpc_url);
     }
 
     function _setUp(string memory rpc_url) public {
         // initializeRealisticFork(MAINNET_FORK);
         // vm.createSelectFork(vm.envString("MAINNET_RPC_URL"));
+
+        uint256 pk = vm.envUint("PRIVATE_KEY");
+        deployer = vm.addr(pk);
 
         vm.createSelectFork(rpc_url);
 
@@ -75,31 +90,71 @@ contract NativeMintingL2 is TestSetup, NativeMintingConfigs {
         else if (block.chainid == 34443) targetL2 = MODE;
         else revert("Unsupported chain id");
 
+        _init();
+
         l2Oft = IEtherFiOFT(targetL2.l2Oft);
         l2SyncPool = IL2SyncPool(targetL2.l2SyncPool);
-        exchangeRateProvider = IL2ExchangeRateProvider(targetL2.l2ExchagneRateProvider);
-        priceOracle = IAggregatorV3(exchangeRateProvider.getRateParameters(ETH_ADDRESS).rateOracle);
+        l2exchangeRateProvider = IL2ExchangeRateProvider(targetL2.l2ExchagneRateProvider);
+        l2priceOracle = IAggregatorV3(l2exchangeRateProvider.getRateParameters(ETH_ADDRESS).rateOracle);
         l2SyncPoolRateLimiter = BucketRateLimiter(l2SyncPool.getRateLimiter());
+
     }
 
     function test_verify_BLAST() public {
         _setUp(BLAST.rpc_url);
-        _verify_L2_configuration();
+        _go();
     }
 
     function test_verify_LINEA() public {
         _setUp(LINEA.rpc_url);
-        _verify_L2_configuration();
+        _go();
     }
 
     function test_verify_MODE() public {
         _setUp(MODE.rpc_url);
-        _verify_L2_configuration();
+        _go();
     }
 
-    function _verify_L2_configuration() internal {
-        IL2SyncPool.Token memory tokenData = l2SyncPool.getTokenData(targetL2.l1dummyToken);
-        (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound) = priceOracle.latestRoundData();
+    function _go() internal {
+        vm.startPrank(deployer);
+        _verify_L2_configurations();
+        _verify_oft_wired();
+        _verify_syncpool_wired();
+        vm.stopPrank();
+    }
+
+    function _verify_oft_wired() internal {
+        console.log(targetL2.name, "L2Oft.IsPeer of");
+        bool isPeer = l2Oft.isPeer(l1Eid, _toBytes32(l1OftAdapter));
+        console.log("- ETH", isPeer);
+
+        for (uint256 i = 0; i < l2s.length; i++) {
+            if (targetL2.l2Eid == l2s[i].l2Eid) continue; 
+            bool isPeer = l2Oft.isPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft));
+            console.log("- ", l2s[i].name, isPeer);
+
+            if (!isPeer) {
+                console.log("eid, dest");
+                console.log(l2s[i].l2Eid);
+                console.logBytes32(_toBytes32(l2s[i].l2Oft));
+            }
+        }
+    }
+
+    function _verify_syncpool_wired() internal {
+        console.log(targetL2.name, "L2SyncPool.IsPeer of");
+        bool isPeer = (l2SyncPool.peers(l1Eid) == _toBytes32(l1SyncPoolAddress));
+        console.log("- ETH", isPeer);
+
+        if (!isPeer) {
+            console.log("call setPeer(eid, dest)");
+            console.log(l1Eid);
+            console.logBytes32(_toBytes32(l1SyncPoolAddress));
+        }
+    }
+
+    function _verify_L2_configurations() internal {
+        IL2SyncPool.Token memory tokenData = l2SyncPool.getTokenData(ETH_ADDRESS);
 
         console.log("l2Oft.hasRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool): ", l2Oft.hasRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool));
         console.log("l2SyncPool.getDstEid() == l1Eid: ", l2SyncPool.getDstEid() == l1Eid);
@@ -107,8 +162,26 @@ contract NativeMintingL2 is TestSetup, NativeMintingConfigs {
         console.log("l2SyncPool.getL2ExchangeRateProvider() == targetL2.l2ExchagneRateProvider: ", l2SyncPool.getL2ExchangeRateProvider() == targetL2.l2ExchagneRateProvider);
         console.log("l2SyncPool.getRateLimiter() == targetL2.l2SyncPoolRateLimiter: ", l2SyncPool.getRateLimiter() == targetL2.l2SyncPoolRateLimiter);
         console.log("l2SyncPool.tokens[ETH].l1Address == ETH", tokenData.l1Address == ETH_ADDRESS);
-        console.log("priceOracle.latestRoundData().answer: ", uint256(answer));
-        console.log("exchangeRateProvider.getConversionAmountUnsafe(ETH_ADDRESS, 10000): ", exchangeRateProvider.getConversionAmountUnsafe(ETH_ADDRESS, 10000));
+        
+
+        // (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound) = l2priceOracle.latestRoundData();
+        console.log("l2exchangeRateProvider.getRateParameters(ETH_ADDRESS).rateOracle == targetL2.l2PriceOracle: ", l2exchangeRateProvider.getRateParameters(ETH_ADDRESS).rateOracle == targetL2.l2PriceOracle);
+        // console.log("l2priceOracle.latestRoundData().answer: ", uint256(answer));
+        // console.log("l2exchangeRateProvider.getConversionAmountUnsafe(ETH_ADDRESS, 10000): ", l2exchangeRateProvider.getConversionAmountUnsafe(ETH_ADDRESS, 10000));
+
+        // Ownership checks
+        console.log("l2Oft.owner(): ", l2Oft.owner());
+        console.log("l2SyncPool.owner(): ", l2SyncPool.owner());
+        console.log("l2SyncPoolRateLimiter.owner(): ", l2SyncPoolRateLimiter.owner());
+        console.log("l2exchangeRateProvider.owner(): ", l2exchangeRateProvider.owner());
+        
+        console.log("l2Oft_ProxyAdmin.owner(): ", IEtherFiOwnable(targetL2.l2Oft_ProxyAdmin).owner());
+        console.log("l2SyncPool_ProxyAdmin.owner(): ", IEtherFiOwnable(targetL2.l2SyncPool_ProxyAdmin).owner());
+        console.log("l2ExchagneRateProvider_ProxyAdmin.owner(): ", IEtherFiOwnable(targetL2.l2ExchagneRateProvider_ProxyAdmin).owner());
+
+        if (!l2Oft.hasRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool)) {
+            l2Oft.grantRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool);
+        }
 
         // require(l2Oft.hasRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool), "MINTER_ROLE not set");
         // require(l2SyncPool.getDstEid() == l1Eid, "DstEid not set");
@@ -126,13 +199,17 @@ contract NativeMintingL2 is TestSetup, NativeMintingConfigs {
         l2Oft.grantRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool);
 
         // Configure the rate limits
-        exchangeRateProvider.setRateParameters(ETH_ADDRESS, targetL2.l2PriceOracle, 0, 24 hours);
+        l2exchangeRateProvider.setRateParameters(ETH_ADDRESS, targetL2.l2PriceOracle, 0, 24 hours);
         l2SyncPoolRateLimiter.setCapacity(0.0001 ether);
         l2SyncPoolRateLimiter.setRefillRatePerSecond(0.0001 ether);
         
         // TODO: Transfer the ownership
         // ...
-        
+        // address l2Oft;
+        // address l2SyncPool;
+        // address l2SyncPoolRateLimiter;
+        // address l2ExchagneRateProvider;
+        // address l2PriceOracle;
         vm.stopPrank();
     }
 
