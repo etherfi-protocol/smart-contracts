@@ -39,11 +39,11 @@ contract Deploy is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         owner = vm.envAddress("DEPLOYER");
 
-        uint256 step = 2;
+        uint256 step = 1;
         vm.startBroadcast(deployerPrivateKey);
-        
+
         if (step == 1) {
-            addressProvider = new AddressProvider(msg.sender);
+            addressProvider = AddressProvider(vm.envAddress("CONTRACT_REGISTRY"));
 
             list_all_contracts();
             deploy_all_contracts();
@@ -105,15 +105,25 @@ contract Deploy is Script {
             addressProvider.addContract(address(proxies[contractName]), contractName);
         }
 
-        // holesky
-        if (block.chainid == 17000) {
-            addressProvider.addContract(0x4242424242424242424242424242424242424242, "DepositContract");
+        // sepolia
+        if (block.chainid == 11155111) {
+            addressProvider.addContract(0x8B0c2C4C8eB078bC6C01F48523764c8942c0c6C4, "DepositContract");
             addressProvider.addContract(0x30770d7E3e71112d7A6b7259542D1f680a70e315, "EigenPodManager");
             addressProvider.addContract(0xA44151489861Fe9e3055d95adC98FbD462B948e7, "DelegationManager");
             addressProvider.addContract(0x642c646053eaf2254f088e9019ACD73d9AE0FA32, "DelayedWithdrawalRouter");
         } else {
             require(false, "fail");
         }
+
+        // holesky
+        // if (block.chainid == 17000) {
+            // addressProvider.addContract(0x4242424242424242424242424242424242424242, "DepositContract");
+            // addressProvider.addContract(0x30770d7E3e71112d7A6b7259542D1f680a70e315, "EigenPodManager");
+            // addressProvider.addContract(0xA44151489861Fe9e3055d95adC98FbD462B948e7, "DelegationManager");
+            // addressProvider.addContract(0x642c646053eaf2254f088e9019ACD73d9AE0FA32, "DelayedWithdrawalRouter");
+        // } else {
+            // require(false, "fail");
+        // }
     }
 
     function initialize_all_contracts() internal {
@@ -148,7 +158,7 @@ contract Deploy is Script {
             0.1 ether,
             30
         );
-    
+
         StakingManager(addressProvider.getContractAddress("StakingManager")).registerEtherFiNodeImplementationContract(implementations["EtherFiNode"]);
 
         {
@@ -170,7 +180,7 @@ contract Deploy is Script {
 
         {
             LiquidityPool liquidityPool = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));
-            
+
             liquidityPool.deposit{value: 1 ether}();
             assert(liquidityPool.getTotalPooledEther() == 1 ether);
         }

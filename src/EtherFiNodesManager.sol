@@ -97,40 +97,40 @@ contract EtherFiNodesManager is
     function initialize(
         address _addressProvider
     ) external initializer {
-        // AddressProvider addressProvider = AddressProvider(_addressProvider);
+        AddressProvider addressProvider = AddressProvider(_addressProvider);
 
-        // __Ownable_init();
-        // __UUPSUpgradeable_init();
-        // __ReentrancyGuard_init();
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
 
-        // treasuryContract = addressProvider.getContractAddress("Treasury");
-        // stakingManagerContract = addressProvider.getContractAddress("StakingManager");
-        // auctionManager = IAuctionManager(addressProvider.getContractAddress("AuctionManager"));
-        // tnft = TNFT(addressProvider.getContractAddress("TNFT"));
-        // bnft = BNFT(addressProvider.getContractAddress("BNFT"));
-        // eigenPodManager = IEigenPodManager(addressProvider.getContractAddress("EigenPodManager"));
-        // delayedWithdrawalRouter = IDelayedWithdrawalRouter(addressProvider.getContractAddress("DelayedWithdrawalRouter"));
-        // delegationManager = IDelegationManager(addressProvider.getContractAddress("DelegationManager"));
-        // admins[msg.sender] = true;
+        treasuryContract = addressProvider.getContractAddress("Treasury");
+        stakingManagerContract = addressProvider.getContractAddress("StakingManager");
+        auctionManager = IAuctionManager(addressProvider.getContractAddress("AuctionManager"));
+        tnft = TNFT(addressProvider.getContractAddress("TNFT"));
+        bnft = BNFT(addressProvider.getContractAddress("BNFT"));
+        eigenPodManager = IEigenPodManager(addressProvider.getContractAddress("EigenPodManager"));
+        delayedWithdrawalRouter = IDelayedWithdrawalRouter(addressProvider.getContractAddress("DelayedWithdrawalRouter"));
+        delegationManager = IDelegationManager(addressProvider.getContractAddress("DelegationManager"));
+        admins[msg.sender] = true;
 
-        // SCALE = 1_000_000;
-        // setStakingRewardsSplit(100_000, 0, 815_625, 84_375);
-        // nonExitPenaltyPrincipal = 1 ether;
-        // nonExitPenaltyDailyRate = 50;
-        // enableNodeRecycling = true;
-        // maxEigenlayerWithdrawals = 5;
+        SCALE = 1_000_000;
+        setStakingRewardsSplit(100_000, 0, 815_625, 84_375);
+        nonExitPenaltyPrincipal = 1 ether;
+        nonExitPenaltyDailyRate = 50;
+        enableNodeRecycling = true;
+        maxEigenlayerWithdrawals = 5;
     }
 
     function initializeOnUpgrade(address _etherFiAdmin, address _eigenPodManager, address _delayedWithdrawalRouter, uint8 _maxEigenlayerWithdrawals) public onlyOwner {
-        // admins[_etherFiAdmin] = true;
-        // eigenPodManager = IEigenPodManager(_eigenPodManager);
-        // delayedWithdrawalRouter = IDelayedWithdrawalRouter(_delayedWithdrawalRouter);
-        // maxEigenlayerWithdrawals = _maxEigenlayerWithdrawals;
+        admins[_etherFiAdmin] = true;
+        eigenPodManager = IEigenPodManager(_eigenPodManager);
+        delayedWithdrawalRouter = IDelayedWithdrawalRouter(_delayedWithdrawalRouter);
+        maxEigenlayerWithdrawals = _maxEigenlayerWithdrawals;
     }
 
     function initializeOnUpgrade2(address _delegationManager) external onlyOwner {
-        // if (address(delegationManager) != address(0)) return;
-        // delegationManager = IDelegationManager(delegationManager);
+        if (address(delegationManager) != address(0)) return;
+        delegationManager = IDelegationManager(delegationManager);
     }
 
     /// @notice Send the request to exit the validators as their T-NFT holder
@@ -149,25 +149,6 @@ contract EtherFiNodesManager is
             _updateExitRequestTimestamp(_validatorId, etherfiNode, uint32(block.timestamp));
 
             emit NodeExitRequested(_validatorId);
-        }
-    }
-
-    /// @notice Revert the exit request for the validators as their T-NFT holder
-    /// @param _validatorIds IDs of the validators
-    function batchRevertExitRequest(uint256[] calldata _validatorIds) external whenNotPaused {
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            uint256 _validatorId = _validatorIds[i];
-            address etherfiNode = etherfiNodeAddress[_validatorId];
-
-            // require (msg.sender == tnft.ownerOf(_validatorId), "NOT_TNFT_OWNER");
-            // require (phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
-            // require (isExitRequested(_validatorId), "NOT_ASKED");
-            require(msg.sender == tnft.ownerOf(_validatorId) && phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE && isExitRequested(_validatorId), "INVALID");
-
-            _updateEtherFiNode(_validatorId);
-            _updateExitRequestTimestamp(_validatorId, etherfiNode, 0);
-
-            emit NodeExitRequestReverted(_validatorId);
         }
     }
 
@@ -206,34 +187,11 @@ contract EtherFiNodesManager is
         }
     }
 
-    /// @notice Process the rewards skimming from the safe of the validator
-    ///         when the safe is being shared by the multiple validatators, it batch process all of their rewards skimming in one shot
-    /// @param _validatorId The validator Id
-    function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused {
-        address etherfiNode = etherfiNodeAddress[_validatorId];
-        _updateEtherFiNode(_validatorId);
-
-        // sweep rewards from eigenPod if any queued withdrawals are ready to be claimed
-        IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithdrawals, false);
-
-        // distribute the rewards payouts. It reverts if the safe's balance >= 16 ether
-        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
-        _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
-
-        emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
-    }
-
-    function batchPartialWithdraw(uint256[] calldata _validatorIds) external whenNotPaused{
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            partialWithdraw( _validatorIds[i]);
-        }
-    }
-
     // Optimized version of batchPartialWithdraw for a set of validators
     // such that they share the same {T,B}-NFT holders and Node Operator
     function batchPartialWithdrawOptimized(uint256[] calldata _validatorIds) external whenNotPaused {
         uint256[] memory payouts = new uint256[](4); // (toNodeOperator, toTnft, toBnft, toTreasury)
-        (address operator, address tnftOwner, address bnftOwner, address treasury) = 
+        (address operator, address tnftOwner, address bnftOwner, address treasury) =
             (auctionManager.getBidOwner(_validatorIds[0]), tnft.ownerOf(_validatorIds[0]), bnft.ownerOf(_validatorIds[0]), treasuryContract);
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
@@ -266,54 +224,6 @@ contract EtherFiNodesManager is
         _sendFund(treasury, payouts[3]);
     }
 
-    /// @notice process the full withdrawal
-    /// @dev This fullWithdrawal is allowed only after it's marked as EXITED.
-    /// @dev EtherFi will be monitoring the status of the validator nodes and mark them EXITED if they do;
-    /// @dev It is a point of centralization in Phase 1
-    /// @param _validatorId the validator Id to withdraw from
-    function fullWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused{
-        address etherfiNode = etherfiNodeAddress[_validatorId];
-        _updateEtherFiNode(_validatorId);
-        require (!IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithdrawals, true), "PENDING_WITHDRAWALS");
-        require(phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.EXITED, "NOT_EXITED");
-        
-        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = getFullWithdrawalPayouts(_validatorId);
-        _setValidatorPhase(etherfiNode, _validatorId, IEtherFiNode.VALIDATOR_PHASE.FULLY_WITHDRAWN); // EXITED -> FULLY_WITHDRAWN
-        _unRegisterValidator(_validatorId);
-        _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
-
-        tnft.burnFromWithdrawal(_validatorId);
-        bnft.burnFromWithdrawal(_validatorId);
-
-        emit FullWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
-    }
-
-    /// @notice Process the full withdrawal for multiple validators
-    /// @param _validatorIds The validator Ids
-    function batchFullWithdraw(uint256[] calldata _validatorIds) external whenNotPaused {
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            fullWithdraw(_validatorIds[i]);
-        }
-    }
-
-    // While ether.fi will trigger the partial withdrawal from all safe contracts before their balance hits 16 ether
-    // For the missed executions, this function will handle them:
-    //  - the safe's balance goes above 16 ETH 
-    //  - the Oracle confirms that none of the validators has exited & are pending for exits
-    function forcePartialWithdraw(uint256 _validatorId) external nonReentrant onlyAdmin {
-        address etherfiNode = etherfiNodeAddress[_validatorId];
-        _updateEtherFiNode(_validatorId);
-
-        // sweep rewards from eigenPod if any queued withdrawals are ready to be claimed
-        IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithdrawals, false);
-
-        // distribute the rewards payouts. It does not revert even if the safe's balance >= 16 ether
-        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, false);
-        _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
-
-        emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
-    }
-
     /// @notice Once the Oracle observes that the validator is being slashed, it marks the validator as being slashed
     ///         The validator marked as being slashed must exit in order to withdraw funds
     /// @param _validatorIds The validator Ids
@@ -324,20 +234,6 @@ contract EtherFiNodesManager is
             _updateEtherFiNode(_validatorIds[i]);
             _setValidatorPhase(etherfiNodeAddress[_validatorIds[i]], _validatorIds[i], IEtherFiNode.VALIDATOR_PHASE.BEING_SLASHED);
         }
-    }
-
-    /// @dev instantiate EtherFiNode and EigenPod proxy instances
-    /// @param _count How many instances to create
-    /// @param _enableRestaking Whether or not to instantiate an associated eigenPod. (This can still be done later)
-    function createUnusedWithdrawalSafe(uint256 _count, bool _enableRestaking) external returns (address[] memory) {
-        address[] memory createdSafes = new address[](_count);
-        for (uint256 i = 0; i < _count; i++) {
-            address newNode = IStakingManager(stakingManagerContract).instantiateEtherFiNode(_enableRestaking);
-            unusedWithdrawalSafes.push(newNode);
-
-            createdSafes[i] = address(newNode);
-        }
-        return createdSafes;
     }
 
     error AlreadyInstalled();
@@ -392,16 +288,6 @@ contract EtherFiNodesManager is
         _setValidatorPhase(_withdrawalSafeAddress, _validatorId, IEtherFiNode.VALIDATOR_PHASE.STAKE_DEPOSITED);
     }
 
-    /// @notice Unset the EtherFiNode contract for the validator ID
-    /// @param _validatorId ID of the validator associated
-    function unregisterValidator(uint256 _validatorId) external onlyStakingManagerContract {
-        // Called by StakingManager.CancelDeposit
-        // {STAKE_DEPOSITED, WAITING_FOR_APPROVAL} -> {NOT_INITIALIZED}
-        _updateEtherFiNode(_validatorId);
-        _setValidatorPhase(etherfiNodeAddress[_validatorId], _validatorId, IEtherFiNode.VALIDATOR_PHASE.NOT_INITIALIZED);
-        _unRegisterValidator(_validatorId);
-    }
-
     /// @notice Call the eigenPod contract
     /// @param data to call eigenPod contract
     function callEigenPod(uint256 _validatorId, bytes calldata data) external payable onlyAdmin {
@@ -444,7 +330,7 @@ contract EtherFiNodesManager is
     }
 
     error InvalidPenaltyRate();
-    /// @notice Sets the Non Exit Penalty 
+    /// @notice Sets the Non Exit Penalty
     /// @param _nonExitPenaltyPrincipal the new principal amount
     /// @param _nonExitPenaltyDailyRate the new non exit daily rate
     function setNonExitPenalty(uint64 _nonExitPenaltyDailyRate, uint64 _nonExitPenaltyPrincipal) public onlyAdmin {
@@ -521,20 +407,6 @@ contract EtherFiNodesManager is
         emit PhaseChanged(_validatorId, _newPhase);
     }
 
-    function _unRegisterValidator(uint256 _validatorId) internal {
-        address safeAddress = etherfiNodeAddress[_validatorId];
-        if (safeAddress == address(0)) revert NotInstalled();
-
-        IEtherFiNode(safeAddress).unRegisterValidator(_validatorId, validatorInfos[_validatorId]);
-
-        delete etherfiNodeAddress[_validatorId];
-        // delete validatorInfos[_validatorId];
-
-        if (IEtherFiNode(safeAddress).numAssociatedValidators() == 0) {
-            unusedWithdrawalSafes.push(safeAddress);
-        }
-    }
-
     // it returns the "total" payout amounts from the safe that the validator is associated with
     // it performs some sanity-checks on the validator status, safe balance
     function _getTotalRewardsPayoutsFromSafe(
@@ -550,14 +422,14 @@ contract EtherFiNodesManager is
         require(!_checkExit || IEtherFiNode(etherfiNode).numExitRequestsByTnft() == 0, "PENDING_EXIT_REQUEST");
         require(IEtherFiNode(etherfiNode).numExitedValidators() == 0, "NEED_FULL_WITHDRAWAL");
 
-        // Once the balance of the safe goes over 16 ETH, 
+        // Once the balance of the safe goes over 16 ETH,
         // it is impossible to tell if that ETH is from staking rewards or from principal (16 ETH ~ 32 ETH)
         // In such a case, the validator must exit and perform the full withdrawal
         // This is to prevent the principal of the exited validators from being mistakenly distributed out as rewards
-        // 
+        //
         // Therefore, someone should trigger 'partialWithdraw' from the safe before its accrued staking rewards goes above 16 ETH
         // The ether.fi's bot will handle this for a while, but in the long-term we will make it an incentivzed process such that the caller can get some fees
-        // 
+        //
         // The boolean flag '_checkMaxBalance' is FALSE only when this is called for 'forcePartialWithdraw'
         // where the Admin handles the case when the balance goes over 16 ETH
         require(!_checkExit || address(etherfiNode).balance < 16 ether, "MUST_EXIT");
@@ -620,7 +492,7 @@ contract EtherFiNodesManager is
     /// @notice Generates withdraw credentials for a validator
     /// @param _address associated with the validator for the withdraw credentials
     /// @return the generated withdraw key for the node
-    function generateWithdrawalCredentials(address _address) public pure returns (bytes memory) {   
+    function generateWithdrawalCredentials(address _address) public pure returns (bytes memory) {
         return abi.encodePacked(bytes1(0x01), bytes11(0x0), _address);
     }
 

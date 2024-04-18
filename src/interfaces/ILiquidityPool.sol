@@ -11,7 +11,7 @@ interface ILiquidityPool {
         uint8 v;
         bytes32 r;
         bytes32 s;
-    } 
+    }
 
     enum SourceOfFunds {
         UNDEFINED,
@@ -64,12 +64,11 @@ interface ILiquidityPool {
     function batchDepositAsBnftHolder(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, uint256 _validatorIdToCoUseWithdrawalSafe) external payable returns (uint256[] memory);
     function batchRegisterAsBnftHolder(bytes32 _depositRoot, uint256[] calldata _validatorIds, IStakingManager.DepositData[] calldata _registerValidatorDepositData, bytes32[] calldata _depositDataRootApproval, bytes[] calldata _signaturesForApprovalDeposit) external;
     function batchApproveRegistration(uint256[] memory _validatorIds, bytes[] calldata _pubKey, bytes[] calldata _signature) external;
-    function batchCancelDeposit(uint256[] calldata _validatorIds) external;
     function sendExitRequests(uint256[] calldata _validatorIds) external;
 
     function rebase(int128 _accruedRewards) external;
     function addEthAmountLockedForWithdrawal(uint128 _amount) external;
-    
+
     function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external;
     function updateAdmin(address _newAdmin, bool _isAdmin) external;
     function pauseContract() external;
