@@ -357,7 +357,7 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         vm.deal(alice, 100 ether);
 
         uint256 inputAmount = 0.00001 ether;
-        uint256 expectedOutputAmount = l2exchangeRateProvider.getConversionAmountUnsafe(ETH_ADDRESS, inputAmount);
+        uint256 expectedOutputAmount = l2exchangeRateProvider.getConversionAmount(ETH_ADDRESS, inputAmount);
 
         vm.prank(alice);
         uint256 mintAmount = l2SyncPool.deposit{value: inputAmount}(ETH_ADDRESS, inputAmount, expectedOutputAmount);        
