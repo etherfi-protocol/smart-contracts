@@ -14,13 +14,14 @@ import {IOFT} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.
 import {IMintableERC20} from "../lib/Etherfi-SyncPools/contracts/interfaces/IMintableERC20.sol";
 import {IAggregatorV3} from "../lib/Etherfi-SyncPools/contracts/etherfi/interfaces/IAggregatorV3.sol";
 import {IL2ExchangeRateProvider} from "../lib/Etherfi-SyncPools/contracts/interfaces/IL2ExchangeRateProvider.sol";
-
+import {IOAppCore} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/interfaces/IOAppCore.sol";
+import {EndpointV2} from "@layerzerolabs/lz-evm-protocol-v2/contracts/EndpointV2.sol";
 
 import "../src/BucketRateLimiter.sol";
 
 import "./NativeMintingConfigs.t.sol";
 
-interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable {
+interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable, IOAppCore {
     /**
      * @notice Rate Limit Configuration struct.
      * @param dstEid The destination endpoint id.
@@ -37,6 +38,7 @@ interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable {
     // function hasRole(bytes32 role, address account) external view returns (bool);
     // function grantRole(bytes32 role, address account) external;
     function owner() external view returns (address);
+    function delegate() external view returns (address);
 
     function isPeer(uint32 eid, bytes32 peer) external view returns (bool);
 
@@ -51,7 +53,12 @@ interface IEtherFiOwnable {
     function transferOwnership(address newOwner) external;
 }
 
-interface IL2SyncPool {
+interface IL2SyncPool is IOAppOptionsType3, IOAppCore {
+    struct MessagingFee {
+        uint256 nativeFee;
+        uint256 lzTokenFee;
+    }
+
     struct Token {
         uint256 unsyncedAmountIn;
         uint256 unsyncedAmountOut;
@@ -68,13 +75,14 @@ interface IL2SyncPool {
     function peers(uint32 eid) external view returns (bytes32);
     
     function deposit(address tokenIn, uint256 amountIn, uint256 minAmountOut) external payable returns (uint256);
-    // function sync(address tokenIn, bytes calldata extraOptions, MessagingFee calldata fee) external payable returns (uint256, uint256);
+    function sync(address tokenIn, bytes calldata extraOptions, MessagingFee calldata fee) external payable returns (uint256, uint256);
     
     function setL2ExchangeRateProvider(address l2ExchangeRateProvider) external;
     function setRateLimiter(address rateLimiter) external;
     function setTokenOut(address tokenOut) external;
     function setDstEid(uint32 dstEid) external;
     function setMinSyncAmount(address tokenIn, uint256 minSyncAmount) external;
+
 }
 
 
@@ -83,6 +91,8 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
     address deployer;
     
     ConfigPerL2 targetL2; 
+
+    EndpointV2 l2Endpoint;
 
     IL2SyncPool l2SyncPool;
     IEtherFiOFT l2Oft;
@@ -104,6 +114,7 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
 
         _init();
 
+        l2Endpoint = EndpointV2(targetL2.l2Endpoint);
         l2Oft = IEtherFiOFT(targetL2.l2Oft);
         l2SyncPool = IL2SyncPool(targetL2.l2SyncPool);
         l2exchangeRateProvider = IL2ExchangeRateProvider(targetL2.l2ExchagneRateProvider);
@@ -132,7 +143,22 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         _verify_L2_configurations();
         _verify_oft_wired();
         _verify_syncpool_wired();
-        _transfer_ownership();
+        _setup_DVN();
+
+        // _transfer_ownership();
+    }
+
+    function _setup_DVN() internal {
+        // vm.startPrank(l2Oft.owner());
+        // l2Oft.setDelegate(l2Oft.owner());
+        // l2SyncPool.setDelegate(l2Oft.owner());
+
+        vm.startBroadcast(pk);
+        _setUpOApp(targetL2.l2Oft, targetL2.l2Endpoint, targetL2.send302, targetL2.lzDvn, l1Eid);
+        _setUpOApp(targetL2.l2SyncPool, targetL2.l2Endpoint, targetL2.send302, targetL2.lzDvn, l1Eid);
+        vm.stopBroadcast();
+
+        // vm.stopPrank();
     }
 
     function _verify_oft_wired() internal {
@@ -204,6 +230,9 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         console.log("l2SyncPool_ProxyAdmin.owner(): ", IEtherFiOwnable(targetL2.l2SyncPool_ProxyAdmin).owner());
         console.log("l2ExchagneRateProvider_ProxyAdmin.owner(): ", IEtherFiOwnable(targetL2.l2ExchagneRateProvider_ProxyAdmin).owner());
 
+        console.log("l2Endpoint.delegates(l2Oft): ", l2Endpoint.delegates(address(l2Oft)));
+        console.log("l2Endpoint.delegates(l2SyncPool): ", l2Endpoint.delegates(address(l2SyncPool)));
+
         // vm.startBroadcast(pk);
         vm.startPrank(l2Oft.owner());
         if (!l2Oft.hasRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool)) {
@@ -221,7 +250,7 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
             rateLimits[0] = IEtherFiOFT.RateLimitConfig({dstEid: l2SyncPool.getDstEid(), limit: 3000 ether, window: 6 hours});
             l2Oft.setRateLimits(rateLimits);
         }
-        if (refillRate != 1 ether) {
+        if (refillRate != 1 ether / 1e12) {
             l2SyncPoolRateLimiter.setRefillRatePerSecond(1 ether);
         }
         vm.stopPrank();
@@ -243,6 +272,9 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
     function _transfer_ownership() internal {
         vm.startBroadcast(pk);
 
+        if (l2Endpoint.delegates(address(l2Oft)) != targetL2.l2ContractControllerSafe) l2Oft.setDelegate(targetL2.l2ContractControllerSafe);
+        if (l2Endpoint.delegates(address(l2SyncPool)) != targetL2.l2ContractControllerSafe) l2SyncPool.setDelegate(targetL2.l2ContractControllerSafe);
+
         if (IEtherFiOwnable(address(l2Oft)).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(address(l2Oft)).transferOwnership(targetL2.l2ContractControllerSafe);
         if (IEtherFiOwnable(address(l2SyncPool)).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(address(l2SyncPool)).transferOwnership(targetL2.l2ContractControllerSafe);
         if (IEtherFiOwnable(address(l2SyncPoolRateLimiter)).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(address(l2SyncPoolRateLimiter)).transferOwnership(targetL2.l2ContractControllerSafe);
@@ -253,6 +285,9 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         if (IEtherFiOwnable(targetL2.l2ExchagneRateProvider_ProxyAdmin).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(targetL2.l2ExchagneRateProvider_ProxyAdmin).transferOwnership(targetL2.l2ContractControllerSafe);
 
         vm.stopBroadcast();
+
+        require(l2Endpoint.delegates(address(l2Oft)) == targetL2.l2ContractControllerSafe, "OFT Delegate not set");
+        require(l2Endpoint.delegates(address(l2SyncPool)) == targetL2.l2ContractControllerSafe, "SyncPool Delegate not set");
 
         require(IEtherFiOwnable(address(l2Oft)).owner() == targetL2.l2ContractControllerSafe, "OFT ownership not transferred");
         require(IEtherFiOwnable(address(l2SyncPool)).owner() == targetL2.l2ContractControllerSafe, "SyncPool ownership not transferred");
@@ -303,6 +338,15 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         assertEq(l2Oft.balanceOf(alice), mintAmount);
         assertEq(address(l2SyncPool).balance, 100);
         assertEq(remaining, (0.0001 ether / 1e12) - 1); // 100 is tiny.. counted as '1' (= 1e12 wei)
+    }
+
+    function test_sync() public {
+        test_paused_by_cap_MODE();
+        
+        vm.prank(l2Oft.owner());
+        l2SyncPool.setMinSyncAmount(ETH_ADDRESS, 0);
+    
+        l2SyncPool.sync(ETH_ADDRESS, abi.encodePacked(), IL2SyncPool.MessagingFee({nativeFee: 0, lzTokenFee: 0}));
     }
 
 

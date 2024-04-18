@@ -10,12 +10,6 @@ import "forge-std/console.sol";
 
 import "./NativeMintingConfigs.t.sol";
 
-struct Origin {
-    uint32 srcEid;
-    bytes32 sender;
-    uint64 nonce;
-}
-
 contract IDummyToken is ERC20BurnableUpgradeable {    
     function mint(address to, uint256 amount) public {
         _mint(to, amount);
@@ -55,41 +49,6 @@ interface IEtherfiL1SyncPoolETH {
 
     function endpoint() external view returns (address);
 }
-
-interface ILayerZeroEndpointV2 {
-    // function quote(MessagingParams calldata _params, address _sender) external view returns (MessagingFee memory);
-
-    // function send(
-    //     MessagingParams calldata _params,
-    //     address _refundAddress
-    // ) external payable returns (MessagingReceipt memory);
-
-    function verify(Origin calldata _origin, address _receiver, bytes32 _payloadHash) external;
-
-    function verifiable(Origin calldata _origin, address _receiver) external view returns (bool);
-
-    function initializable(Origin calldata _origin, address _receiver) external view returns (bool);
-
-    function lzReceive(
-        Origin calldata _origin,
-        address _receiver,
-        bytes32 _guid,
-        bytes calldata _message,
-        bytes calldata _extraData
-    ) external payable;
-
-    // oapp can burn messages partially by calling this function with its own business logic if messages are verified in order
-    function clear(address _oapp, Origin calldata _origin, bytes32 _guid, bytes calldata _message) external;
-
-    function setLzToken(address _lzToken) external;
-
-    function lzToken() external view returns (address);
-
-    function nativeToken() external view returns (address);
-
-    function setDelegate(address _delegate) external;
-}
-
 
 
 contract NativeMintingL1 is TestSetup, NativeMintingConfigs {
