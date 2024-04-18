@@ -848,5 +848,171 @@
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "verifyBlsKey",
+    "inputs": [
+      {
+        "name": "registryCoordinator",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "params",
+        "type": "tuple",
+        "internalType": "struct IBLSApkRegistry.PubkeyRegistrationParams",
+        "components": [
+          {
+            "name": "pubkeyRegistrationSignature",
+            "type": "tuple",
+            "internalType": "struct BN254.G1Point",
+            "components": [
+              {
+                "name": "X",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "Y",
+                "type": "uint256",
+                "internalType": "uint256"
+              }
+            ]
+          },
+          {
+            "name": "pubkeyG1",
+            "type": "tuple",
+            "internalType": "struct BN254.G1Point",
+            "components": [
+              {
+                "name": "X",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "Y",
+                "type": "uint256",
+                "internalType": "uint256"
+              }
+            ]
+          },
+          {
+            "name": "pubkeyG2",
+            "type": "tuple",
+            "internalType": "struct BN254.G2Point",
+            "components": [
+              {
+                "name": "X",
+                "type": "uint256[2]",
+                "internalType": "uint256[2]"
+              },
+              {
+                "name": "Y",
+                "type": "uint256[2]",
+                "internalType": "uint256[2]"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "verifyBlsKeyAgainstHash",
+    "inputs": [
+      {
+        "name": "pubkeyRegistrationMessageHash",
+        "type": "tuple",
+        "internalType": "struct BN254.G1Point",
+        "components": [
+          {
+            "name": "X",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "Y",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      },
+      {
+        "name": "params",
+        "type": "tuple",
+        "internalType": "struct IBLSApkRegistry.PubkeyRegistrationParams",
+        "components": [
+          {
+            "name": "pubkeyRegistrationSignature",
+            "type": "tuple",
+            "internalType": "struct BN254.G1Point",
+            "components": [
+              {
+                "name": "X",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "Y",
+                "type": "uint256",
+                "internalType": "uint256"
+              }
+            ]
+          },
+          {
+            "name": "pubkeyG1",
+            "type": "tuple",
+            "internalType": "struct BN254.G1Point",
+            "components": [
+              {
+                "name": "X",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "Y",
+                "type": "uint256",
+                "internalType": "uint256"
+              }
+            ]
+          },
+          {
+            "name": "pubkeyG2",
+            "type": "tuple",
+            "internalType": "struct BN254.G2Point",
+            "components": [
+              {
+                "name": "X",
+                "type": "uint256[2]",
+                "internalType": "uint256[2]"
+              },
+              {
+                "name": "Y",
+                "type": "uint256[2]",
+                "internalType": "uint256[2]"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
   }
 ]
