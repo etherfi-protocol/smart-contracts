@@ -349,5 +349,18 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         l2SyncPool.sync(ETH_ADDRESS, abi.encodePacked(), IL2SyncPool.MessagingFee({nativeFee: 0, lzTokenFee: 0}));
     }
 
+    function test_mint_BLAST() public {
+        vm.createSelectFork(BLAST.rpc_url);
+        _setUp();
+
+        address alice = vm.addr(1);
+        vm.deal(alice, 100 ether);
+
+        uint256 inputAmount = 0.00001 ether;
+        uint256 expectedOutputAmount = l2exchangeRateProvider.getConversionAmountUnsafe(ETH_ADDRESS, inputAmount);
+
+        vm.prank(alice);
+        uint256 mintAmount = l2SyncPool.deposit{value: inputAmount}(ETH_ADDRESS, inputAmount, expectedOutputAmount);        
+    }
 
 }
