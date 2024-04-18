@@ -140,31 +140,31 @@ contract EtherFiAvsOperatorsManager is
         emit RegisteredAsOperator(_id, _detail);
     }
 
-    function modifyOperatorDetails(uint256 _id, IDelegationManager.OperatorDetails calldata _newOperatorDetails) external onlyOwner {
+    function modifyOperatorDetails(uint256 _id, IDelegationManager.OperatorDetails calldata _newOperatorDetails) external onlyAdmin {
         avsOperators[_id].modifyOperatorDetails(delegationManager, _newOperatorDetails);
 
         emit ModifiedOperatorDetails(_id, _newOperatorDetails);
     }
 
-    function updateOperatorMetadataURI(uint256 _id, string calldata _metadataURI) external onlyOwner {
+    function updateOperatorMetadataURI(uint256 _id, string calldata _metadataURI) external onlyAdmin {
         avsOperators[_id].updateOperatorMetadataURI(delegationManager, _metadataURI);
 
         emit UpdatedOperatorMetadataURI(_id, _metadataURI);
     }
 
-    function updateAvsNodeRunner(uint256 _id, address _avsNodeRunner) external onlyOwner {
+    function updateAvsNodeRunner(uint256 _id, address _avsNodeRunner) external onlyAdmin {
         avsOperators[_id].updateAvsNodeRunner(_avsNodeRunner);
 
         emit UpdatedAvsNodeRunner(_id, _avsNodeRunner);
     }
 
-    function updateAvsWhitelist(uint256 _id, address _avsRegistryCoordinator, bool _isWhitelisted) external onlyOwner {
+    function updateAvsWhitelist(uint256 _id, address _avsRegistryCoordinator, bool _isWhitelisted) external onlyAdmin {
         avsOperators[_id].updateAvsWhitelist(_avsRegistryCoordinator, _isWhitelisted);
 
         emit UpdatedAvsWhitelist(_id, _avsRegistryCoordinator, _isWhitelisted);
     }
 
-    function updateEcdsaSigner(uint256 _id, address _ecdsaSigner) external onlyOwner {
+    function updateEcdsaSigner(uint256 _id, address _ecdsaSigner) external onlyAdmin {
         avsOperators[_id].updateEcdsaSigner(_ecdsaSigner);
 
         emit UpdatedEcdsaSigner(_id, _ecdsaSigner);
@@ -250,8 +250,17 @@ contract EtherFiAvsOperatorsManager is
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
+    function _onlyAdmin() internal view {
+        require(admins[msg.sender] || msg.sender == owner(), "INCORRECT_CALLER");
+    }
+
     function _onlyOperator(uint256 _id) internal view {
         require(msg.sender == avsOperators[_id].avsNodeRunner() || admins[msg.sender] || msg.sender == owner(), "INCORRECT_CALLER");
+    }
+
+    modifier onlyAdmin() {
+        _onlyAdmin();
+        _;
     }
 
     modifier onlyOperator(uint256 _id) {
