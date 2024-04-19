@@ -20,7 +20,7 @@ contract IDummyToken is ERC20BurnableUpgradeable {
     }
 }
 
-interface IEtherfiL1SyncPoolETH {
+interface IEtherfiL1SyncPoolETH is IOAppCore {
     function getLiquifier() external view returns (address);
 
     function getEEth() external view returns (address);
@@ -47,25 +47,33 @@ interface IEtherfiL1SyncPoolETH {
         external
         payable;
 
-    function endpoint() external view returns (address);
+    // function endpoint() external view returns (ILayerZeroEndpointV2 iEndpoint);
+
+    // function peers(uint32 eid) external view returns (bytes32);
 }
 
 
 contract NativeMintingL1 is TestSetup, NativeMintingConfigs {
 
-    IEtherfiL1SyncPoolETH l1SyncPool = IEtherfiL1SyncPoolETH(l1SyncPoolAddress);
+    ILayerZeroEndpointV2 endpoint;
+    IEtherfiL1SyncPoolETH l1SyncPool;
+    OFTAdapter oftAdapter;
+
     address hypernative = 0x2b237B887daF752A57Eca25a163CC7A96F973FE8;
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
 
-        _perform_etherfi_upgrade();
+        l1SyncPool = IEtherfiL1SyncPoolETH(l1SyncPoolAddress);
+        endpoint = ILayerZeroEndpointV2(address(l1SyncPool.endpoint()));
+        oftAdapter = OFTAdapter(l1OftAdapter);
 
-        assertEq(l1SyncPool.endpoint(), l1Endpoint);
-        ILayerZeroEndpointV2 endpoint = ILayerZeroEndpointV2(address(l1SyncPool.endpoint()));
+        _init();
 
         vm.prank(liquifierInstance.owner());
         liquifierInstance.updatePauser(hypernative, true);
+
+        assertEq(address(l1SyncPool.endpoint()), l1Endpoint);
     }
 
 
@@ -228,5 +236,38 @@ contract NativeMintingL1 is TestSetup, NativeMintingConfigs {
         }
         return (_depositAmount * eETHInstance.totalShares()) / totalPooledEther - 1; // rounding down
     }
+
+    function test_verify_L1() public {
+        _verify_oft_wired();
+        _verify_syncpool_wired();
+        _setup_DVN();
+    }
+
+    function _verify_L1_configurations() internal {
+        
+    }
+
+    function _verify_oft_wired() internal {
+        for (uint256 i = 0; i < l2s.length; i++) {
+            bool isPeer = oftAdapter.isPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft));
+            console.log("- ", l2s[i].name, isPeer);
+        }
+    }
+    
+    function _verify_syncpool_wired() internal {
+        for (uint256 i = 0; i < l2s.length; i++) {
+            bool isPeer = (l1SyncPool.peers(l2s[i].l2Eid) == _toBytes32(l2s[i].l2SyncPool));
+            console.log("- ", l2s[i].name, isPeer);
+        }
+    }
+
+    function _setup_DVN() internal {
+        // - _setUpOApp(ethereum.oftToken, ETHEREUM.endpoint, ETHEREUM.send302, ETHEREUM.lzDvn, {L2s}.originEid);
+        for (uint256 i = 0; i < l2s.length; i++) {
+            _setUpOApp(l1OftAdapter, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid);
+            _setUpOApp(l1SyncPoolAddress, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid);
+        }
+    }
+    
 
 }

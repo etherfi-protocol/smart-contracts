@@ -10,13 +10,6 @@ import "forge-std/Test.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/IAccessControlUpgradeable.sol";
 
-import {IOFT} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
-import {IMintableERC20} from "../lib/Etherfi-SyncPools/contracts/interfaces/IMintableERC20.sol";
-import {IAggregatorV3} from "../lib/Etherfi-SyncPools/contracts/etherfi/interfaces/IAggregatorV3.sol";
-import {IL2ExchangeRateProvider} from "../lib/Etherfi-SyncPools/contracts/interfaces/IL2ExchangeRateProvider.sol";
-import {IOAppCore} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/interfaces/IOAppCore.sol";
-import {EndpointV2} from "@layerzerolabs/lz-evm-protocol-v2/contracts/EndpointV2.sol";
-
 import "../src/BucketRateLimiter.sol";
 
 import "./NativeMintingConfigs.t.sol";
@@ -143,7 +136,8 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         _verify_L2_configurations();
         _verify_oft_wired();
         _verify_syncpool_wired();
-        _setup_DVN();
+
+        // _setup_DVN(); // do only once
 
         // _transfer_ownership();
     }
@@ -154,8 +148,15 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         // l2SyncPool.setDelegate(l2Oft.owner());
 
         vm.startBroadcast(pk);
-        _setUpOApp(targetL2.l2Oft, targetL2.l2Endpoint, targetL2.send302, targetL2.lzDvn, l1Eid);
-        _setUpOApp(targetL2.l2SyncPool, targetL2.l2Endpoint, targetL2.send302, targetL2.lzDvn, l1Eid);
+        _setUpOApp(targetL2.l2Oft, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l1Eid);
+        _setUpOApp(targetL2.l2SyncPool, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l1Eid);
+
+        for (uint256 i = 0; i < l2s.length; i++) {
+            if (targetL2.l2Eid == l2s[i].l2Eid) continue;
+            if (l2s[i].send302 == address(0) || l2s[i].receive302 == address(0)) continue;
+            _setUpOApp(targetL2.l2Oft, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l2s[i].l2Eid);
+            _setUpOApp(targetL2.l2SyncPool, targetL2.l2Endpoint, targetL2.send302,targetL2.receive302, targetL2.lzDvn, l2s[i].l2Eid);
+        }
         vm.stopBroadcast();
 
         // vm.stopPrank();

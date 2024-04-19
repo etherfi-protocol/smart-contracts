@@ -7,6 +7,17 @@ import "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/IMessageLibManage
 import "@layerzerolabs/lz-evm-oapp-v2/contracts-upgradeable/oapp/libs/OptionsBuilder.sol";
 import "@layerzerolabs/lz-evm-oapp-v2/contracts-upgradeable/oapp/interfaces/IOAppOptionsType3.sol";
 import "@layerzerolabs/lz-evm-messagelib-v2/contracts/uln/UlnBase.sol";
+import "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/OFTAdapter.sol";
+
+
+import {IOFT} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
+import {IMintableERC20} from "../lib/Etherfi-SyncPools/contracts/interfaces/IMintableERC20.sol";
+import {IAggregatorV3} from "../lib/Etherfi-SyncPools/contracts/etherfi/interfaces/IAggregatorV3.sol";
+import {IL2ExchangeRateProvider} from "../lib/Etherfi-SyncPools/contracts/interfaces/IL2ExchangeRateProvider.sol";
+import {IOAppCore} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/interfaces/IOAppCore.sol";
+import {IOAppReceiver} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/interfaces/IOAppReceiver.sol";
+import {EndpointV2} from "@layerzerolabs/lz-evm-protocol-v2/contracts/EndpointV2.sol";
+
 
 contract NativeMintingConfigs {
     using OptionsBuilder for bytes;
@@ -56,6 +67,10 @@ contract NativeMintingConfigs {
 
     address l1SyncPoolAddress = 0xD789870beA40D056A4d26055d0bEFcC8755DA146;
     address l1OftAdapter = 0xFE7fe01F8B9A76803aF3750144C2715D9bcf7D0D;
+    address l1Send302 = 0xbB2Ea70C9E858123480642Cf96acbcCE1372dCe1;
+    address l1Receive302 = 0xc02Ab410f0734EFa3F14628780e6e695156024C2;
+    address[2] l1Dvn = [0x589dEDbD617e0CBcB916A9223F4d1300c294236b, 0xa59BA433ac34D2927232918Ef5B2eaAfcF130BA5];
+
 
     ConfigPerL2 BLAST = ConfigPerL2({
         name: "BLAST",
@@ -158,7 +173,7 @@ contract NativeMintingConfigs {
 
 
     // Call in L1
-    // - _setUpOApp(ethereum.oftToken, ETHEREUM.endpoint, ETHEREUM.send302, ETHEREUM.lzDvn, LINEA.originEid);
+    // - _setUpOApp(ethereum.oftToken, ETHEREUM.endpoint, ETHEREUM.send302, ETHEREUM.lzDvn, {L2s}.originEid);
     // ethereum.tokenIn = Constants.ETH_ADDRESS;
     // ethereum.tokenOut = EtherfiAddresses.weEth;
     // ethereum.liquifier = liquifier;
@@ -168,12 +183,15 @@ contract NativeMintingConfigs {
     // Call in L2 
     // - _setUpOApp(linea.tokenOut, LINEA.endpoint, LINEA.send302, LINEA.lzDvn, ETHEREUM.originEid);
     // - _setUpOApp(linea.syncPool, LINEA.endpoint, LINEA.send302, LINEA.lzDvn, ETHEREUM.originEid);
+    // - _setUpOApp(linea.tokenOut, LINEA.endpoint, LINEA.send302, LINEA.lzDvn, {Other L2s}.originEid);
+    // - _setUpOApp(linea.syncPool, LINEA.endpoint, LINEA.send302, LINEA.lzDvn, {Other L2s}.originEid);
     // linea.tokenIn = Constants.ETH_ADDRESS;
     // linea.tokenOut = oftToken;
     function _setUpOApp(
-        address originSyncPool,
+        address oApp,
         address originEndpoint,
         address originSend302,
+        address originReceive302,
         address[2] memory originDvns,
         uint32 dstEid
     ) internal {
@@ -184,7 +202,7 @@ contract NativeMintingConfigs {
             options: OptionsBuilder.newOptions().addExecutorLzReceiveOption(1_000_000, 0)
         });
 
-        IOAppOptionsType3(originSyncPool).setEnforcedOptions(enforcedOptions);
+        IOAppOptionsType3(oApp).setEnforcedOptions(enforcedOptions);
 
         SetConfigParam[] memory params = new SetConfigParam[](1);
         address[] memory requiredDVNs = new address[](2);
@@ -202,6 +220,7 @@ contract NativeMintingConfigs {
 
         params[0] = SetConfigParam(dstEid, 2, abi.encode(ulnConfig));
 
-        ILayerZeroEndpointV2(originEndpoint).setConfig(originSyncPool, originSend302, params);
+        ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originSend302, params);
+        ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originReceive302, params);
     }
 }
