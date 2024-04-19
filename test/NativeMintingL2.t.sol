@@ -100,7 +100,7 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         _verify_oft_wired();
         _verify_syncpool_wired();
 
-        _setup_DVN();
+        // _setup_DVN(); // only once
 
         // _transfer_ownership();
     }
@@ -126,6 +126,8 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
     }
 
     function _verify_oft_wired() internal {
+        vm.startBroadcast(pk);
+
         console.log(targetL2.name, "L2Oft.IsPeer of");
         bool isPeer = l2Oft.isPeer(l1Eid, _toBytes32(l1OftAdapter));
         console.log("- ETH", isPeer);
@@ -154,12 +156,15 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
             if (targetL2.l2Eid == bannedL2s[i].l2Eid) continue; 
             require(!l2Oft.isPeer(bannedL2s[i].l2Eid, _toBytes32(bannedL2s[i].l2Oft)), "OFT wired, but shouldn't");
         }
+
+        vm.stopBroadcast();
     }
 
     function _verify_syncpool_wired() internal {
         console.log(targetL2.name, "L2SyncPool.IsPeer of");
         bool isPeer = (l2SyncPool.peers(l1Eid) == _toBytes32(l1SyncPoolAddress));
         console.log("- ETH", isPeer);
+        
 
         require((l2SyncPool.peers(l1Eid) == _toBytes32(l1SyncPoolAddress)), "SyncPool not wired");
     }
@@ -334,6 +339,50 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         l2SyncPool.setMinSyncAmount(ETH_ADDRESS, 0);
     
         l2SyncPool.sync(ETH_ADDRESS, abi.encodePacked(), IL2SyncPool.MessagingFee({nativeFee: 0, lzTokenFee: 0}));
+    }
+
+    function test_oft_send_FAIL_RateLimitExceeded_1() public {
+        _oft_send_FAIL_RateLimitExceeded(BLAST, MODE);
+    }
+
+    function test_oft_send_FAIL_RateLimitExceeded_2() public {
+        _oft_send_FAIL_RateLimitExceeded(MODE, BLAST);
+    }
+
+    function _oft_send_FAIL_RateLimitExceeded(ConfigPerL2 memory _from, ConfigPerL2 memory _to) public {
+        vm.createSelectFork(_from.rpc_url);
+        _setUp();
+
+        address alice = vm.addr(1);
+        vm.deal(alice, 10 ether);
+
+        vm.startPrank(l2SyncPoolRateLimiter.owner());
+        l2SyncPoolRateLimiter.setRefillRatePerSecond(100 ether);
+        l2SyncPoolRateLimiter.setCapacity(100 ether);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1);
+
+        uint256 inputAmount = 10 ether;
+        uint256 expectedOutputAmount = l2exchangeRateProvider.getConversionAmount(ETH_ADDRESS, inputAmount);
+
+        vm.prank(alice);
+        uint256 mintAmount = l2SyncPool.deposit{value: inputAmount}(ETH_ADDRESS, inputAmount, expectedOutputAmount);
+
+        SendParam memory param = SendParam({
+            dstEid: _to.l2Eid,
+            to: _toBytes32(alice),
+            amountLD: 1 ether,
+            minAmountLD: 0.5 ether,
+            extraOptions: hex"",
+            composeMsg: hex"",
+            oftCmd: hex""
+        });
+
+        MessagingFee memory msgFee = MessagingFee({nativeFee: 0, lzTokenFee: 0});
+
+        vm.expectRevert(RateLimiter.RateLimitExceeded.selector);
+        l2Oft.send(param, msgFee, alice);
     }
 
     function test_mint_BLAST() public {

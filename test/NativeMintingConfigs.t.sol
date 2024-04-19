@@ -14,13 +14,15 @@ import "@layerzerolabs/lz-evm-messagelib-v2/contracts/uln/UlnBase.sol";
 import "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/OFTAdapter.sol";
 
 
-import {IOFT} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
+import {IOFT, SendParam, MessagingFee} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
 import {IMintableERC20} from "../lib/Etherfi-SyncPools/contracts/interfaces/IMintableERC20.sol";
 import {IAggregatorV3} from "../lib/Etherfi-SyncPools/contracts/etherfi/interfaces/IAggregatorV3.sol";
 import {IL2ExchangeRateProvider} from "../lib/Etherfi-SyncPools/contracts/interfaces/IL2ExchangeRateProvider.sol";
 import {IOAppCore} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/interfaces/IOAppCore.sol";
 import {IOAppReceiver} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/interfaces/IOAppReceiver.sol";
 import {EndpointV2} from "@layerzerolabs/lz-evm-protocol-v2/contracts/EndpointV2.sol";
+import { RateLimiter } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/utils/RateLimiter.sol";
+
 
 
 interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable, IOAppCore {
@@ -36,6 +38,15 @@ interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable, IOAppC
         uint256 window;
     }
 
+    /**
+    * @dev Struct representing OFT receipt information.
+    */
+    struct OFTReceipt {
+        uint256 amountSentLD; // Amount of tokens ACTUALLY debited from the sender in local decimals.
+        // @dev In non-default implementations, the amountReceivedLD COULD differ from this value.
+        uint256 amountReceivedLD; // Amount of tokens to be received on the remote side.
+    }
+
     function MINTER_ROLE() external view returns (bytes32);
     // function hasRole(bytes32 role, address account) external view returns (bool);
     // function grantRole(bytes32 role, address account) external;
@@ -48,6 +59,7 @@ interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable, IOAppC
 
     function getAmountCanBeSent(uint32 _dstEid) external view returns (uint256 currentAmountInFlight, uint256 amountCanBeSent);
     function rateLimits(uint32 _dstEid) external view returns (uint256, uint256, uint256, uint256);
+
 }
 
 interface IEtherFiOwnable {
