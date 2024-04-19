@@ -174,6 +174,8 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         (uint256 amountInFlight, uint256 lastUpdated, uint256 limit, uint256 window) = l2Oft.rateLimits(l2SyncPool.getDstEid());
         (uint64 capacity, uint64 remaining, uint64 lastRefill, uint64 refillRate) = l2SyncPoolRateLimiter.limit();
 
+        uint256 minSyncAmount = 50 ether;
+
         console.log("l2Oft.rateLimits(toL1).limit: ", limit);
         console.log("l2Oft.rateLimits(toL1).window: ", window);
         console.log("l2SyncPoolRateLimiter.limit().capacity: ", capacity);
@@ -184,7 +186,7 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         console.log("l2SyncPool.getL2ExchangeRateProvider() == targetL2.l2ExchagneRateProvider: ", l2SyncPool.getL2ExchangeRateProvider() == targetL2.l2ExchagneRateProvider);
         console.log("l2SyncPool.getRateLimiter() == targetL2.l2SyncPoolRateLimiter: ", l2SyncPool.getRateLimiter() == targetL2.l2SyncPoolRateLimiter);
         console.log("l2SyncPool.tokens[ETH].l1Address == ETH", tokenData.l1Address == ETH_ADDRESS);
-        console.log("l2SyncPool.tokens[ETH].minSyncAmount == 1000 ETH ", tokenData.minSyncAmount == 1000 ether);
+        console.log("l2SyncPool.tokens[ETH].minSyncAmount == minSyncAmount (= 50 ETH) ", tokenData.minSyncAmount == minSyncAmount);
         
         console.log("l2exchangeRateProvider.getRateParameters(ETH_ADDRESS).rateOracle == targetL2.l2PriceOracle: ", l2exchangeRateProvider.getRateParameters(ETH_ADDRESS).rateOracle == targetL2.l2PriceOracle);
         console.log("l2exchangeRateProvider.getRateParameters(ETH_ADDRESS).depositFee == 1e15: ", l2exchangeRateProvider.getRateParameters(ETH_ADDRESS).depositFee == 1e15);
@@ -204,7 +206,6 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         console.log("l2Endpoint.delegates(l2SyncPool): ", l2Endpoint.delegates(address(l2SyncPool)));
 
         vm.startBroadcast(pk);
-        uint256 minSyncAmount = 50 ether;
         if (!l2Oft.hasRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool)) {
             l2Oft.grantRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool);
         }
