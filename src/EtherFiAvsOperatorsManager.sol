@@ -89,11 +89,23 @@ contract EtherFiAvsOperatorsManager is
         emit RegisteredBlsKeyAsDelegatedNodeOperator(_id, _avsRegistryCoordinator, _quorumNumbers, _socket, _params);
     }
 
+    // we got angry with {gnosis, etherscan} to deal with the tuple type
+    function registerOperator(
+        uint256 _id,
+        address _avsRegistryCoordinator,
+        bytes calldata _signature,
+        bytes32 _salt,
+        uint256 _expiry
+    ) external onlyOperator(_id) {
+        ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature = ISignatureUtils.SignatureWithSaltAndExpiry(_signature, _salt, _expiry);
+        return registerOperator(_id, _avsRegistryCoordinator, _operatorSignature);
+    }
+
     function registerOperator(
         uint256 _id,
         address _avsRegistryCoordinator,
         ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature
-    ) external onlyOperator(_id) {
+    ) public onlyOperator(_id) {
         EtherFiAvsOperator.AvsInfo memory avsInfo = avsOperators[_id].getAvsInfo(_avsRegistryCoordinator);
         avsOperators[_id].registerOperator(_avsRegistryCoordinator, _operatorSignature);
 

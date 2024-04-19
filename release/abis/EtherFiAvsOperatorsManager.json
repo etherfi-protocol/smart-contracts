@@ -796,6 +796,39 @@
   },
   {
     "type": "function",
+    "name": "registerOperator",
+    "inputs": [
+      {
+        "name": "_id",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_avsRegistryCoordinator",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_signature",
+        "type": "bytes",
+        "internalType": "bytes"
+      },
+      {
+        "name": "_salt",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "_expiry",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "registerOperatorWithChurn",
     "inputs": [
       {
