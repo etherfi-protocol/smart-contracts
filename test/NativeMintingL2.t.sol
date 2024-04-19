@@ -7,44 +7,10 @@ import "forge-std/console2.sol";
 import "forge-std/console.sol";
 import "forge-std/Test.sol";
 
-import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/IAccessControlUpgradeable.sol";
-
 import "../src/BucketRateLimiter.sol";
 
 import "./NativeMintingConfigs.t.sol";
 
-interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable, IOAppCore {
-    /**
-     * @notice Rate Limit Configuration struct.
-     * @param dstEid The destination endpoint id.
-     * @param limit This represents the maximum allowed amount within a given window.
-     * @param window Defines the duration of the rate limiting window.
-     */
-    struct RateLimitConfig {
-        uint32 dstEid;
-        uint256 limit;
-        uint256 window;
-    }
-
-    function MINTER_ROLE() external view returns (bytes32);
-    // function hasRole(bytes32 role, address account) external view returns (bool);
-    // function grantRole(bytes32 role, address account) external;
-    function owner() external view returns (address);
-    function delegate() external view returns (address);
-
-    function isPeer(uint32 eid, bytes32 peer) external view returns (bool);
-
-    function setRateLimits(RateLimitConfig[] calldata _rateLimitConfigs) external;
-
-    function getAmountCanBeSent(uint32 _dstEid) external view returns (uint256 currentAmountInFlight, uint256 amountCanBeSent);
-    function rateLimits(uint32 _dstEid) external view returns (uint256, uint256, uint256, uint256);
-}
-
-interface IEtherFiOwnable {
-    function owner() external view returns (address);
-    function transferOwnership(address newOwner) external;
-}
 
 interface IL2SyncPool is IOAppOptionsType3, IOAppCore {
     struct MessagingFee {
@@ -80,9 +46,6 @@ interface IL2SyncPool is IOAppOptionsType3, IOAppCore {
 
 
 contract NativeMintingL2 is Test, NativeMintingConfigs {
-    uint256 pk;
-    address deployer;
-    
     ConfigPerL2 targetL2; 
 
     EndpointV2 l2Endpoint;
@@ -137,7 +100,7 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         _verify_oft_wired();
         _verify_syncpool_wired();
 
-        // _setup_DVN(); // do only once
+        _setup_DVN();
 
         // _transfer_ownership();
     }
@@ -149,13 +112,13 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
 
         vm.startBroadcast(pk);
         _setUpOApp(targetL2.l2Oft, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l1Eid);
-        _setUpOApp(targetL2.l2SyncPool, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l1Eid);
+        _setUpOApp_setConfig(targetL2.l2SyncPool, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l1Eid);
 
         for (uint256 i = 0; i < l2s.length; i++) {
             if (targetL2.l2Eid == l2s[i].l2Eid) continue;
             if (l2s[i].send302 == address(0) || l2s[i].receive302 == address(0)) continue;
             _setUpOApp(targetL2.l2Oft, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l2s[i].l2Eid);
-            _setUpOApp(targetL2.l2SyncPool, targetL2.l2Endpoint, targetL2.send302,targetL2.receive302, targetL2.lzDvn, l2s[i].l2Eid);
+            _setUpOApp_setConfig(targetL2.l2SyncPool, targetL2.l2Endpoint, targetL2.send302,targetL2.receive302, targetL2.lzDvn, l2s[i].l2Eid);
         }
         vm.stopBroadcast();
 
@@ -171,11 +134,13 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
             if (targetL2.l2Eid == l2s[i].l2Eid) continue; 
             bool isPeer = l2Oft.isPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft));
             console.log("- ", l2s[i].name, isPeer);
+        }
 
-            if (!isPeer) {
-                console.log("eid, dest");
-                console.log(l2s[i].l2Eid);
-                console.logBytes32(_toBytes32(l2s[i].l2Oft));
+        for (uint256 i = 0; i < bannedL2s.length; i++) {
+            if (targetL2.l2Eid == bannedL2s[i].l2Eid) continue; 
+            bool isPeer = l2Oft.isPeer(bannedL2s[i].l2Eid, _toBytes32(bannedL2s[i].l2Oft));
+            if (isPeer) {
+                l2Oft.setPeer(bannedL2s[i].l2Eid, _toBytes32(address(0)));
             }
         }
 
@@ -185,6 +150,10 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
             if (targetL2.l2Eid == l2s[i].l2Eid) continue; 
             require(l2Oft.isPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft)), "OFT not wired");
         }
+        for (uint256 i = 0; i < bannedL2s.length; i++) {
+            if (targetL2.l2Eid == bannedL2s[i].l2Eid) continue; 
+            require(!l2Oft.isPeer(bannedL2s[i].l2Eid, _toBytes32(bannedL2s[i].l2Oft)), "OFT wired, but shouldn't");
+        }
     }
 
     function _verify_syncpool_wired() internal {
@@ -192,11 +161,6 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         bool isPeer = (l2SyncPool.peers(l1Eid) == _toBytes32(l1SyncPoolAddress));
         console.log("- ETH", isPeer);
 
-        if (!isPeer) {
-            console.log("call setPeer(eid, dest)");
-            console.log(l1Eid);
-            console.logBytes32(_toBytes32(l1SyncPoolAddress));
-        }
         require((l2SyncPool.peers(l1Eid) == _toBytes32(l1SyncPoolAddress)), "SyncPool not wired");
     }
 
@@ -234,40 +198,62 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         console.log("l2Endpoint.delegates(l2Oft): ", l2Endpoint.delegates(address(l2Oft)));
         console.log("l2Endpoint.delegates(l2SyncPool): ", l2Endpoint.delegates(address(l2SyncPool)));
 
-        // vm.startBroadcast(pk);
-        vm.startPrank(l2Oft.owner());
+        vm.startBroadcast(pk);
+        uint256 minSyncAmount = 50 ether;
         if (!l2Oft.hasRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool)) {
             l2Oft.grantRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool);
         }
-        if (!(tokenData.minSyncAmount == 1000 ether)) {
-            l2SyncPool.setMinSyncAmount(ETH_ADDRESS, 1000 ether);
+        if (!(tokenData.minSyncAmount == minSyncAmount)) {
+            l2SyncPool.setMinSyncAmount(ETH_ADDRESS, minSyncAmount);
         }
         if (!(l2exchangeRateProvider.getRateParameters(ETH_ADDRESS).depositFee == 1e15)) {
             // deposit fee = 10 bp, fresh period
             l2exchangeRateProvider.setRateParameters(ETH_ADDRESS, targetL2.l2PriceOracle, 1e15, targetL2.l2PriceOracleHeartBeat);
         }
-        if (limit != 3000 ether || window != 6 hours) {
+
+        // Bridging Cap
+        uint256 target_briding_cap = 0 ether;
+        uint256 briding_cap_window = 24 hours;
+
+        // - L2 -> L1
+        if (limit != target_briding_cap || window != briding_cap_window) {
             IEtherFiOFT.RateLimitConfig[] memory rateLimits = new IEtherFiOFT.RateLimitConfig[](1);
-            rateLimits[0] = IEtherFiOFT.RateLimitConfig({dstEid: l2SyncPool.getDstEid(), limit: 3000 ether, window: 6 hours});
+            rateLimits[0] = IEtherFiOFT.RateLimitConfig({dstEid: l2SyncPool.getDstEid(), limit: target_briding_cap, window: briding_cap_window});
             l2Oft.setRateLimits(rateLimits);
         }
-        if (refillRate != 1 ether / 1e12) {
-            l2SyncPoolRateLimiter.setRefillRatePerSecond(1 ether);
+
+        // - L2 -> {L2}
+        for (uint256 i = 0; i < l2s.length; i++) {
+            if (targetL2.l2Eid == l2s[i].l2Eid) continue;
+            if (l2s[i].send302 == address(0) || l2s[i].receive302 == address(0)) continue;
+
+            (amountInFlight, lastUpdated, limit, window) = l2Oft.rateLimits(l2s[i].l2Eid);
+            if (limit != target_briding_cap || window != briding_cap_window) {
+                IEtherFiOFT.RateLimitConfig[] memory rateLimits = new IEtherFiOFT.RateLimitConfig[](1);
+                rateLimits[0] = IEtherFiOFT.RateLimitConfig({dstEid: l2s[i].l2Eid, limit: target_briding_cap, window: briding_cap_window});
+                l2Oft.setRateLimits(rateLimits);
+            }
         }
-        vm.stopPrank();
-        // vm.stopBroadcast();
+
+        // Native Minting Cap
+        uint256 target_native_minting_cap = 0.0001 ether;
+        if (refillRate != target_native_minting_cap / 1e12) {
+            l2SyncPoolRateLimiter.setRefillRatePerSecond(target_native_minting_cap);
+        }
+        vm.stopBroadcast();
 
         (amountInFlight, lastUpdated, limit, window) = l2Oft.rateLimits(l2SyncPool.getDstEid());
         (capacity, remaining, lastRefill, refillRate) = l2SyncPoolRateLimiter.limit();
 
-        require(limit == 3000 ether && window == 6 hours, "OFT Transfer Rate limit not set");
+        require(limit == target_briding_cap && window == briding_cap_window, "OFT Transfer Rate limit not set");
+        require(refillRate == target_native_minting_cap / 1e12, "");
+
         require(l2Oft.hasRole(l2Oft.MINTER_ROLE(), targetL2.l2SyncPool), "MINTER_ROLE not set");
         require(l2SyncPool.getDstEid() == l1Eid, "DstEid not set");
         require(l2SyncPool.getTokenOut() == targetL2.l2Oft, "TokenOut not set");
         require(l2SyncPool.getL2ExchangeRateProvider() == targetL2.l2ExchagneRateProvider, "ExchangeRateProvider not set");
         require(l2SyncPool.getRateLimiter() == targetL2.l2SyncPoolRateLimiter, "RateLimiter not set");
         require(tokenData.l1Address == ETH_ADDRESS, "Token data not set");
-        require(refillRate == 1 ether / 1e12, "");
     }
 
     function _transfer_ownership() internal {

@@ -6,9 +6,9 @@ pragma solidity ^0.8.20;
 import "forge-std/Script.sol";
 
 import "../../test/NativeMintingConfigs.t.sol";
-import "../../test/NativeMintingL2.t.sol";
+import "../../test/NativeMintingL1.t.sol";
 
-contract Deploy is Script, NativeMintingL2 {
+contract Deploy is Script, NativeMintingL1Suite {
  
     function run() public {
         pk = vm.envUint("PRIVATE_KEY");
@@ -16,7 +16,7 @@ contract Deploy is Script, NativeMintingL2 {
 
         _setUp();
 
-        _go();        
+        _go();
     }
 
 }

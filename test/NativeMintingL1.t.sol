@@ -52,30 +52,112 @@ interface IEtherfiL1SyncPoolETH is IOAppCore {
     // function peers(uint32 eid) external view returns (bytes32);
 }
 
-
-contract NativeMintingL1 is TestSetup, NativeMintingConfigs {
-
-    ILayerZeroEndpointV2 endpoint;
+contract NativeMintingL1Suite is Test, NativeMintingConfigs {
+    EndpointV2 endpoint;
     IEtherfiL1SyncPoolETH l1SyncPool;
     OFTAdapter oftAdapter;
 
     address hypernative = 0x2b237B887daF752A57Eca25a163CC7A96F973FE8;
 
-    function setUp() public {
-        initializeRealisticFork(MAINNET_FORK);
+    function _setUp() internal {
+        pk = vm.envUint("PRIVATE_KEY");
+        deployer = vm.addr(pk);
 
         l1SyncPool = IEtherfiL1SyncPoolETH(l1SyncPoolAddress);
-        endpoint = ILayerZeroEndpointV2(address(l1SyncPool.endpoint()));
+        endpoint = EndpointV2(address(l1SyncPool.endpoint()));
         oftAdapter = OFTAdapter(l1OftAdapter);
 
         _init();
 
-        vm.prank(liquifierInstance.owner());
-        liquifierInstance.updatePauser(hypernative, true);
-
         assertEq(address(l1SyncPool.endpoint()), l1Endpoint);
     }
 
+    function _go() internal {
+        if (endpoint.delegates(address(oftAdapter)) != deployer) oftAdapter.setDelegate(deployer);
+        if (endpoint.delegates(address(l1SyncPool)) != deployer) l1SyncPool.setDelegate(deployer);
+
+        _verify_oft_wired();
+        _verify_syncpool_wired();
+        _ensure_caps();
+        
+        // _setup_DVN(); // only once
+    }
+
+    function test_verify_L1() public {
+        _go();
+    }
+
+    function _verify_L1_configurations() internal {
+        
+    }
+
+    function _verify_oft_wired() internal {
+        vm.startBroadcast(pk);
+        for (uint256 i = 0; i < l2s.length; i++) {
+            bool isPeer = oftAdapter.isPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft));
+            console.log("OFT Wired? - ", l2s[i].name, isPeer);
+            if (!isPeer) {
+                oftAdapter.setPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft));
+            }
+        }
+        for (uint256 i = 0; i < bannedL2s.length; i++) {
+            bool isPeer = oftAdapter.isPeer(bannedL2s[i].l2Eid, _toBytes32(bannedL2s[i].l2Oft));
+            console.log("OFT Wired? - ", bannedL2s[i].name, isPeer);
+
+            if (isPeer) {
+                oftAdapter.setPeer(bannedL2s[i].l2Eid, _toBytes32(address(0)));
+            }
+        }
+        vm.stopBroadcast();
+    }
+    
+    function _verify_syncpool_wired() internal {
+        vm.startBroadcast(pk);
+        for (uint256 i = 0; i < l2s.length; i++) {
+            bool isPeer = (l1SyncPool.peers(l2s[i].l2Eid) == _toBytes32(l2s[i].l2SyncPool));
+            console.log("SyncPool Wired? - ", l2s[i].name, isPeer);
+            if (!isPeer) {
+                l1SyncPool.setPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2SyncPool));
+            }
+        }
+
+        for (uint256 i = 0; i < bannedL2s.length; i++) {
+            bool isPeer = (l1SyncPool.peers(bannedL2s[i].l2Eid) == _toBytes32(bannedL2s[i].l2SyncPool));
+            console.log("SyncPool Wired? - ", bannedL2s[i].name, isPeer);
+
+            if (isPeer) {
+                l1SyncPool.setPeer(bannedL2s[i].l2Eid, _toBytes32(address(0)));
+            }
+        }
+        vm.stopBroadcast();
+    }
+
+    function _setup_DVN() internal {
+        vm.startBroadcast(pk);
+        // - _setUpOApp(ethereum.oftToken, ETHEREUM.endpoint, ETHEREUM.send302, ETHEREUM.lzDvn, {L2s}.originEid);
+        for (uint256 i = 0; i < l2s.length; i++) {
+            _setUpOApp(l1OftAdapter, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid);
+            _setUpOApp_setConfig(l1SyncPoolAddress, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid);
+        }
+        vm.stopBroadcast();
+    }
+    
+    function _ensure_caps() internal {
+        uint256 target_briding_cap = 0 ether;
+        uint256 briding_cap_window = 24 hours;
+    }
+}
+
+contract NativeMintingL1 is TestSetup, NativeMintingL1Suite {
+
+    function setUp() public {
+        _setUp();
+
+        initializeRealisticFork(MAINNET_FORK);
+
+        vm.prank(liquifierInstance.owner());
+        liquifierInstance.updatePauser(hypernative, true);
+    }
 
     function test_sanity_check() public {
         assertEq(l1SyncPool.getLiquifier(), address(liquifierInstance));
@@ -236,38 +318,5 @@ contract NativeMintingL1 is TestSetup, NativeMintingConfigs {
         }
         return (_depositAmount * eETHInstance.totalShares()) / totalPooledEther - 1; // rounding down
     }
-
-    function test_verify_L1() public {
-        _verify_oft_wired();
-        _verify_syncpool_wired();
-        _setup_DVN();
-    }
-
-    function _verify_L1_configurations() internal {
-        
-    }
-
-    function _verify_oft_wired() internal {
-        for (uint256 i = 0; i < l2s.length; i++) {
-            bool isPeer = oftAdapter.isPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft));
-            console.log("- ", l2s[i].name, isPeer);
-        }
-    }
-    
-    function _verify_syncpool_wired() internal {
-        for (uint256 i = 0; i < l2s.length; i++) {
-            bool isPeer = (l1SyncPool.peers(l2s[i].l2Eid) == _toBytes32(l2s[i].l2SyncPool));
-            console.log("- ", l2s[i].name, isPeer);
-        }
-    }
-
-    function _setup_DVN() internal {
-        // - _setUpOApp(ethereum.oftToken, ETHEREUM.endpoint, ETHEREUM.send302, ETHEREUM.lzDvn, {L2s}.originEid);
-        for (uint256 i = 0; i < l2s.length; i++) {
-            _setUpOApp(l1OftAdapter, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid);
-            _setUpOApp(l1SyncPoolAddress, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid);
-        }
-    }
-    
 
 }

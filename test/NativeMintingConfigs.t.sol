@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
+import "@openzeppelin-upgradeable/contracts/access/IAccessControlUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
+
+
 import "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 import "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/IMessageLibManager.sol";
 import "@layerzerolabs/lz-evm-oapp-v2/contracts-upgradeable/oapp/libs/OptionsBuilder.sol";
@@ -17,6 +21,39 @@ import {IL2ExchangeRateProvider} from "../lib/Etherfi-SyncPools/contracts/interf
 import {IOAppCore} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/interfaces/IOAppCore.sol";
 import {IOAppReceiver} from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/interfaces/IOAppReceiver.sol";
 import {EndpointV2} from "@layerzerolabs/lz-evm-protocol-v2/contracts/EndpointV2.sol";
+
+
+interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable, IOAppCore {
+    /**
+     * @notice Rate Limit Configuration struct.
+     * @param dstEid The destination endpoint id.
+     * @param limit This represents the maximum allowed amount within a given window.
+     * @param window Defines the duration of the rate limiting window.
+     */
+    struct RateLimitConfig {
+        uint32 dstEid;
+        uint256 limit;
+        uint256 window;
+    }
+
+    function MINTER_ROLE() external view returns (bytes32);
+    // function hasRole(bytes32 role, address account) external view returns (bool);
+    // function grantRole(bytes32 role, address account) external;
+    function owner() external view returns (address);
+    function delegate() external view returns (address);
+
+    function isPeer(uint32 eid, bytes32 peer) external view returns (bool);
+
+    function setRateLimits(RateLimitConfig[] calldata _rateLimitConfigs) external;
+
+    function getAmountCanBeSent(uint32 _dstEid) external view returns (uint256 currentAmountInFlight, uint256 amountCanBeSent);
+    function rateLimits(uint32 _dstEid) external view returns (uint256, uint256, uint256, uint256);
+}
+
+interface IEtherFiOwnable {
+    function owner() external view returns (address);
+    function transferOwnership(address newOwner) external;
+}
 
 
 contract NativeMintingConfigs {
@@ -59,6 +96,10 @@ contract NativeMintingConfigs {
         address lzExecutor;
         address[2] lzDvn;
     }
+    
+    uint256 pk;
+    address deployer;
+
 
     string l1RpcUrl = "https://mainnet.gateway.tenderly.co";
     uint32 l1Eid = 30101;
@@ -160,11 +201,13 @@ contract NativeMintingConfigs {
     });
 
     ConfigPerL2[] l2s;
+    ConfigPerL2[] bannedL2s;
 
     function _init() public {
         l2s.push(BLAST);
-        l2s.push(LINEA);
         l2s.push(MODE);
+
+        bannedL2s.push(LINEA);
     }
 
     function _toBytes32(address addr) internal pure returns (bytes32) {
@@ -195,15 +238,30 @@ contract NativeMintingConfigs {
         address[2] memory originDvns,
         uint32 dstEid
     ) internal {
-        EnforcedOptionParam[] memory enforcedOptions = new EnforcedOptionParam[](1);
+        EnforcedOptionParam[] memory enforcedOptions = new EnforcedOptionParam[](2);
         enforcedOptions[0] = EnforcedOptionParam({
             eid: dstEid,
-            msgType: 0,
+            msgType: 1,
             options: OptionsBuilder.newOptions().addExecutorLzReceiveOption(1_000_000, 0)
         });
-
+        enforcedOptions[1] = EnforcedOptionParam({
+            eid: dstEid,
+            msgType: 2,
+            options: OptionsBuilder.newOptions().addExecutorLzReceiveOption(1_000_000, 0)
+        });
         IOAppOptionsType3(oApp).setEnforcedOptions(enforcedOptions);
 
+        _setUpOApp_setConfig(oApp, originEndpoint, originSend302, originReceive302, originDvns, dstEid);
+    }
+
+    function _setUpOApp_setConfig(
+        address oApp,
+        address originEndpoint,
+        address originSend302,
+        address originReceive302,
+        address[2] memory originDvns,
+        uint32 dstEid
+    ) internal {
         SetConfigParam[] memory params = new SetConfigParam[](1);
         address[] memory requiredDVNs = new address[](2);
         requiredDVNs[0] = originDvns[0];
