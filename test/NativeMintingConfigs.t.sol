@@ -63,8 +63,14 @@ interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable, IOAppC
 }
 
 interface IEtherFiOwnable {
+    function hasRole(bytes32 role, address account) external view returns (bool);
+
     function owner() external view returns (address);
     function transferOwnership(address newOwner) external;
+
+    function grantRole(bytes32 role, address account) external;
+    function renounceRole(bytes32 role, address account) external;
+
 }
 
 
@@ -117,12 +123,15 @@ contract NativeMintingConfigs {
     uint32 l1Eid = 30101;
     address l1Endpoint = 0x1a44076050125825900e736c501f859c50fE728c;
     address ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    address l1ContractController = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
 
     address l1SyncPoolAddress = 0xD789870beA40D056A4d26055d0bEFcC8755DA146;
     address l1OftAdapter = 0xFE7fe01F8B9A76803aF3750144C2715D9bcf7D0D;
     address l1Send302 = 0xbB2Ea70C9E858123480642Cf96acbcCE1372dCe1;
     address l1Receive302 = 0xc02Ab410f0734EFa3F14628780e6e695156024C2;
     address[2] l1Dvn = [0x589dEDbD617e0CBcB916A9223F4d1300c294236b, 0xa59BA433ac34D2927232918Ef5B2eaAfcF130BA5];
+
+    address l1SyncPool_ProxyAdmin = 0xDBf6bE120D4dc72f01534673a1223182D9F6261D;
 
 
     ConfigPerL2 BLAST = ConfigPerL2({
@@ -203,8 +212,8 @@ contract NativeMintingConfigs {
         l2Oft_ProxyAdmin: 0x2F6f3cc4a275C7951FB79199F01eD82421eDFb68,
         l2SyncPool_ProxyAdmin: 0x8f732e00d6CF2302775Df16d4110f0f7ad3780f9,
         l2ExchagneRateProvider_ProxyAdmin: 0xb4224E552016ba5D35b44608Cd4578fF7FCB6e82,
-        l1dummyToken_ProxyAdmin: address(0),
-        l1Receiver_ProxyAdmin: address(0),
+        l1dummyToken_ProxyAdmin: 0x59a5518aCE8e3d60C740503639B94bD86F7CEDF0,
+        l1Receiver_ProxyAdmin: 0xe85e493d78a4444bf5fC4A2E415AF530aEad6dd5,
 
         send302: 0x2367325334447C5E1E0f1b3a6fB947b262F58312,
         receive302: 0xc1B621b18187F74c8F6D52a6F709Dd2780C09821,

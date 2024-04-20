@@ -73,22 +73,55 @@ contract NativeMintingL1Suite is Test, NativeMintingConfigs {
     }
 
     function _go() internal {
-        if (endpoint.delegates(address(oftAdapter)) != deployer) oftAdapter.setDelegate(deployer);
-        if (endpoint.delegates(address(l1SyncPool)) != deployer) l1SyncPool.setDelegate(deployer);
+        // if (endpoint.delegates(address(oftAdapter)) != deployer) oftAdapter.setDelegate(deployer);
+        // if (endpoint.delegates(address(l1SyncPool)) != deployer) l1SyncPool.setDelegate(deployer);
 
         _verify_oft_wired();
         _verify_syncpool_wired();
         _ensure_caps();
+
+        _transfer_ownership();
         
-        // _setup_DVN(); // only once
+        // _setup_DVN(); // only once, DONE
     }
 
     function test_verify_L1() public {
         _go();
     }
 
-    function _verify_L1_configurations() internal {
-        
+    function _transfer_ownership() internal {
+        vm.startBroadcast(pk);
+        if (endpoint.delegates(address(l1SyncPool)) != l1ContractController) l1SyncPool.setDelegate(l1ContractController);
+        if (endpoint.delegates(address(oftAdapter)) != l1ContractController) oftAdapter.setDelegate(l1ContractController);
+
+        if (IEtherFiOwnable(l1SyncPool_ProxyAdmin).owner() != l1ContractController) IEtherFiOwnable(l1SyncPool_ProxyAdmin).transferOwnership(l1ContractController);
+
+        for (uint256 i = 0; i < l2s.length; i++) {
+            // Do the same above with
+            // - l2s[i].l1dummyToken
+            // - l2s[i].l1Receiver
+            // - l2s[i].l1dummyToken_ProxyAdmin
+            // - l2s[i].l1Receiver_ProxyAdmin
+
+            console.log(l2s[i].name, l2s[i].l1dummyToken);
+            
+            if (!IEtherFiOwnable(l2s[i].l1dummyToken).hasRole(bytes32(0), l1ContractController)) {
+                address prevOwner = deployer;
+                IEtherFiOwnable(l2s[i].l1dummyToken).grantRole(bytes32(0), l1ContractController);
+                IEtherFiOwnable(l2s[i].l1dummyToken).renounceRole(bytes32(0), prevOwner);
+            }
+            if (IEtherFiOwnable(l2s[i].l1Receiver).owner() != l1ContractController) IEtherFiOwnable(l2s[i].l1Receiver).transferOwnership(l1ContractController);
+            
+            if (IEtherFiOwnable(l2s[i].l1dummyToken_ProxyAdmin).owner() != l1ContractController) IEtherFiOwnable(l2s[i].l1dummyToken_ProxyAdmin).transferOwnership(l1ContractController);
+            if (IEtherFiOwnable(l2s[i].l1Receiver_ProxyAdmin).owner() != l1ContractController) IEtherFiOwnable(l2s[i].l1Receiver_ProxyAdmin).transferOwnership(l1ContractController);
+
+            require(IEtherFiOwnable(l2s[i].l1dummyToken).hasRole(bytes32(0), l1ContractController));
+            require(IEtherFiOwnable(l2s[i].l1Receiver).owner() == l1ContractController);
+            require(IEtherFiOwnable(l2s[i].l1dummyToken_ProxyAdmin).owner() == l1ContractController);
+            require(IEtherFiOwnable(l2s[i].l1Receiver_ProxyAdmin).owner() == l1ContractController);
+        }
+
+        vm.stopBroadcast();
     }
 
     function _verify_oft_wired() internal {

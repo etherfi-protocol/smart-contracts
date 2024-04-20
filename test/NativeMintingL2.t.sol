@@ -42,6 +42,11 @@ interface IL2SyncPool is IOAppOptionsType3, IOAppCore {
     function setDstEid(uint32 dstEid) external;
     function setMinSyncAmount(address tokenIn, uint256 minSyncAmount) external;
 
+    function quoteSync(address tokenIn, bytes calldata extraOptions, bool payInLzToken)
+        external
+        view
+        returns (MessagingFee memory msgFee);
+
 }
 
 
@@ -102,7 +107,7 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
 
         // _setup_DVN(); // only once
 
-        // _transfer_ownership();
+        _transfer_ownership();
     }
 
     function _setup_DVN() internal {
@@ -334,12 +339,18 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
     }
 
     function test_sync() public {
-        test_paused_by_cap_MODE();
+        vm.createSelectFork(BLAST.rpc_url);
+        _setUp();
+
+        vm.deal(l2Oft.owner(), 1 ether);
         
         vm.prank(l2Oft.owner());
         l2SyncPool.setMinSyncAmount(ETH_ADDRESS, 0);
+   
+        IL2SyncPool.MessagingFee memory fee = l2SyncPool.quoteSync(ETH_ADDRESS, abi.encodePacked(), false);
     
-        l2SyncPool.sync(ETH_ADDRESS, abi.encodePacked(), IL2SyncPool.MessagingFee({nativeFee: 0, lzTokenFee: 0}));
+        uint256 nativeFee;
+        l2SyncPool.sync{value: fee.nativeFee}(ETH_ADDRESS, abi.encodePacked(), fee);
     }
 
     function test_oft_send_FAIL_RateLimitExceeded_1() public {
