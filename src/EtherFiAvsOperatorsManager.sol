@@ -35,7 +35,6 @@ contract EtherFiAvsOperatorsManager is
     // Operator -> AvsServiceManager -> whitelisted
     // This structure mirrors how Eigenlayers AvsDirectory tracks operator data
     mapping(address => mapping(address => bool)) public operatorAvsWhitelist;
-    //mapping(address => mapping(address => IBLSApkRegistry.PubkeyRegistrationParams)) public operatorBLSKeys;
 
     // operator -> targetAddress -> selector -> allowed
     // allowed calls that AvsRunner can trigger from operator contract
@@ -219,6 +218,10 @@ contract EtherFiAvsOperatorsManager is
 
     function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
         admins[_address] = _isAdmin;
+    }
+
+    function updateAllowedOperatorCalls(uint256 _operatorId, address _target, bytes4 _selector, bool _allowed) external onlyAdmin {
+        allowedOperatorCalls[_operatorId][_target][_selector] = _allowed;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
