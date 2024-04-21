@@ -75,8 +75,41 @@ contract EtherFiAvsOperatorsManager is
         avsDirectory = IAVSDirectory(_avsDirectory);
     }
 
+
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  Eigenlayer Core  ----------------------------------
+    //--------------------------------------------------------------------------------------
+
+
+    // This registers the operator contract as delegatable operator within Eigenlayer's core contracts.
+    // Once an operator is registered, they cannot 'deregister' as an operator, and they will forever be considered "delegated to themself"
+    function registerAsOperator(uint256 _id, IDelegationManager.OperatorDetails calldata _detail, string calldata _metaDataURI) external onlyOwner {
+        avsOperators[_id].registerAsOperator(delegationManager, _detail, _metaDataURI);
+
+        emit RegisteredAsOperator(_id, _detail);
+    }
+
+    function modifyOperatorDetails(uint256 _id, IDelegationManager.OperatorDetails calldata _newOperatorDetails) external onlyAdmin {
+        avsOperators[_id].modifyOperatorDetails(delegationManager, _newOperatorDetails);
+
+        emit ModifiedOperatorDetails(_id, _newOperatorDetails);
+    }
+
+    function updateOperatorMetadataURI(uint256 _id, string calldata _metadataURI) external onlyAdmin {
+        avsOperators[_id].updateOperatorMetadataURI(delegationManager, _metadataURI);
+
+        emit UpdatedOperatorMetadataURI(_id, _metadataURI);
+    }
+
+    //--------------------------------------------------------------------------------------
+    //-----------------------------------  AVS Actions  ------------------------------------
+    //--------------------------------------------------------------------------------------
+
     error InvalidOperatorCall();
 
+    // Forward an arbitrary call to be run by the operator conract.
+    // That operator must be approved for the specific method and target
     function runnerForwardCall(uint256 _id, address _target, bytes4 _selector, bytes calldata _args) external onlyOperator(_id) {
 
         if (!isValidOperatorCall(_id, _target, _selector, _args)) revert InvalidOperatorCall();
@@ -85,12 +118,12 @@ contract EtherFiAvsOperatorsManager is
         emit ForwardedRunnerCall(_id, _target, _selector, _args);
     }
 
+    // Forward an arbitrary call to be run by the operator conract.
     function adminForwardCall(uint256 _id, address _target, bytes4 _selector, bytes calldata _args) external onlyAdmin {
 
         avsOperators[_id].forwardCall(_target, abi.encodePacked(_selector, _args));
         emit ForwardedRunnerCall(_id, _target, _selector, _args);
     }
-
 
     function isValidOperatorCall(uint256 _id, address _target, bytes4 _selector, bytes calldata _remainingCalldata) public view returns (bool) {
 
@@ -100,68 +133,7 @@ contract EtherFiAvsOperatorsManager is
         // could add other custom logic here that inspects payload or other data
 
         return true;
-
-
- //       if (!allowedOperatorCalls[selector]) revert MethodNotAllowed();
-  //      if (!isAvsWhitelisted(_avsRegistryCoordinator)) return false;
-
-  //      if (_selector == hex"11d2c708") {
-            // Witness Chain
-            // OperatorRegistry.registerWatchtowerAsOperator(address watchtower, uint256 expiry, bytes memory signedMessage)
-            // - https://github.com/witnesschain-com/diligencewatchtower-contracts/blob/main/src/core/OperatorRegistry.sol#L158
-   //         return true;
-    //    }
- 
-     //   return false;
     }
-
-
-    /*
-    function registerBlsKeyAsDelegatedNodeOperator(
-        uint256 _id, 
-        address _avsRegistryCoordinator, 
-        bytes calldata _quorumNumbers,
-        string calldata _socket,
-        IBLSApkRegistry.PubkeyRegistrationParams calldata _params
-    ) external onlyOperator(_id) {
-
-
-        require(avsOperators[_id].isAvsWhitelisted(_avsRegistryCoordinator), "AVS_NOT_WHITELISTED");
-
-        avsOperators[_id].registerBlsKeyAsDelegatedNodeOperator(_avsRegistryCoordinator, _quorumNumbers, _socket, _params);
-
-        emit RegisteredBlsKeyAsDelegatedNodeOperator(_id, _avsRegistryCoordinator, _quorumNumbers, _socket, _params);
-    }
-    */
-
-    /*
-
-            function registerOperator(
-        bytes calldata quorumNumbers,
-        string calldata socket,
-        IBLSApkRegistry.PubkeyRegistrationParams calldata params,
-        SignatureWithSaltAndExpiry memory operatorSignature
-    ) external onlyWhenNotPaused(PAUSED_REGISTER_OPERATOR) {
-
-        */
-
-
-        /*
-    // we got angry with {gnosis, etherscan} to deal with the tuple type
-    // This function will work for any AVS implementing the same interface as eigenDA
-    function registerEigenDALikeOperator(
-        uint256 _id,
-        address _avsRegistryCoordinator,
-        bytes calldata quorumNumbers,
-        string calldata socket,
-        bytes calldata _signature,
-        bytes32 _salt,
-        uint256 _expiry
-    ) external onlyOperator(_id) {
-        ISignatureUtils.SignatureWithSaltAndExpiry memory _operatorSignature = ISignatureUtils.SignatureWithSaltAndExpiry(_signature, _salt, _expiry);
-        return registerOperator(_id, _avsRegistryCoordinator, _operatorSignature);
-    }
-    */
 
     // This function will work for any AVS implementing the same interface as eigenDA
     function registerEigenDALikeOperator(
@@ -216,32 +188,6 @@ contract EtherFiAvsOperatorsManager is
         avsOperators[_id].deregisterEigenDALikeOperator(_avsRegistryCoordinator, _quorumNumbers);
 
         emit DeregisteredOperator(_id, _avsRegistryCoordinator, _quorumNumbers);
-    }
-
-
-    //--------------------------------------------------------------------------------------
-    //---------------------------------  Eigenlayer Core  ----------------------------------
-    //--------------------------------------------------------------------------------------
-
-
-    // This registers the operator contract as delegatable operator within Eigenlayer's core contracts.
-    // Once an operator is registered, they cannot 'deregister' as an operator, and they will forever be considered "delegated to themself"
-    function registerAsOperator(uint256 _id, IDelegationManager.OperatorDetails calldata _detail, string calldata _metaDataURI) external onlyOwner {
-        avsOperators[_id].registerAsOperator(delegationManager, _detail, _metaDataURI);
-
-        emit RegisteredAsOperator(_id, _detail);
-    }
-
-    function modifyOperatorDetails(uint256 _id, IDelegationManager.OperatorDetails calldata _newOperatorDetails) external onlyAdmin {
-        avsOperators[_id].modifyOperatorDetails(delegationManager, _newOperatorDetails);
-
-        emit ModifiedOperatorDetails(_id, _newOperatorDetails);
-    }
-
-    function updateOperatorMetadataURI(uint256 _id, string calldata _metadataURI) external onlyAdmin {
-        avsOperators[_id].updateOperatorMetadataURI(delegationManager, _metadataURI);
-
-        emit UpdatedOperatorMetadataURI(_id, _metadataURI);
     }
 
 
@@ -301,34 +247,22 @@ contract EtherFiAvsOperatorsManager is
         return _id;
     }
 
+    //--------------------------------------------------------------------------------------
+    //-------------------------------  View Functions  -------------------------------------
+    //--------------------------------------------------------------------------------------
 
-
-
-    // VIEW functions
-
-
+    // TODO: Rework to check registration status from AvsDirectory
     /*
-    function getAvsInfo(uint256 _id, address _avsRegistryCoordinator) external view returns (EtherFiAvsOperator.AvsInfo memory) {
-        return 
-        return avsOperators[_id].getAvsInfo(_avsRegistryCoordinator);
+    /// @param _id The id of etherfi avs operator
+    /// @param _avsServiceManager The AVS's service manager contract address
+    function avsOperatorStatus(uint256 _id, address _avsServiceManager) external view returns (IAVSDirectory.OperatorAVSRegistrationStatus) {
+        return avsDirectory.avsOperatorStatus(_avsServiceManager, address(avsOperators[_id]));
     }
     */
 
     function isAvsWhitelisted(uint256 _id, address _avsRegistryCoordinator) external view returns (bool) {
         return avsOperators[_id].isAvsWhitelisted(_avsRegistryCoordinator);
     }
-
-    /*
-    function isAvsRegistered(uint256 _id, address _avsRegistryCoordinator) external view returns (bool) {
-        return avsOperators[_id].isAvsRegistered(_avsRegistryCoordinator);
-    }
-    */
-
-    /*
-    function isRegisteredBlsKey(uint256 _id, address _avsRegistryCoordinator, bytes calldata _quorumNumbers, string calldata _socket, IBLSApkRegistry.PubkeyRegistrationParams calldata _params) external view returns (bool) {
-        return avsOperators[_id].isRegisteredBlsKey(_avsRegistryCoordinator, _quorumNumbers, _socket, _params);
-    }
-    */
 
     function avsNodeRunner(uint256 _id) external view returns (address) {
         return avsOperators[_id].avsNodeRunner();
@@ -342,6 +276,12 @@ contract EtherFiAvsOperatorsManager is
         return delegationManager.operatorDetails(address(avsOperators[_id]));
     }
 
+    // DEPRECATED
+    function getAvsInfo(uint256 _id, address _avsRegistryCoordinator) external view returns (EtherFiAvsOperator.AvsInfo memory) {
+         return avsOperators[_id].getAvsInfo(_avsRegistryCoordinator);
+    }
+
+
     /**
      * @notice Calculates the digest hash to be signed by an operator to register with an AVS
      * @param _id The id of etherfi avs operator
@@ -353,15 +293,6 @@ contract EtherFiAvsOperatorsManager is
         address _operator = address(avsOperators[_id]);
         return avsDirectory.calculateOperatorAVSRegistrationDigestHash(_operator, _avsServiceManager, _salt, _expiry);
     }
-
-    // TODO: Rework to check registration status from AvsDirectory
-    /*
-    /// @param _id The id of etherfi avs operator
-    /// @param _avsServiceManager The AVS's service manager contract address
-    function avsOperatorStatus(uint256 _id, address _avsServiceManager) external view returns (IAVSDirectory.OperatorAVSRegistrationStatus) {
-        return avsDirectory.avsOperatorStatus(_avsServiceManager, address(avsOperators[_id]));
-    }
-    */
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  Modifiers  -------------------------------------

@@ -159,6 +159,11 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         return verifyBlsKeyAgainstHash(pubkeyRegistrationMessageHash, params);
     }
 
+    function getAvsInfo(address _avsRegistryCoordinator) external view returns (AvsInfo memory) {
+        return avsInfos[_avsRegistryCoordinator];
+    }
+
+
     modifier managerOnly() {
         require(msg.sender == avsOperatorsManager, "NOT_MANAGER");
         _;
