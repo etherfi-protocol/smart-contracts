@@ -18,31 +18,46 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
     address public ecdsaSigner;   // ECDSA signer that ether.fi owns
     address public avsNodeRunner; // Staking Company such as DSRV, Pier Two, Nethermind, ...
 
+    // DEPRECATED
     struct AvsInfo {
         bool isWhitelisted;
-        bytes UNUSED_quorumNumbers;
-        string UNUSED_socket;
-        IBLSApkRegistry.PubkeyRegistrationParams UNUSED_params;
-        bool UNUSED_isRegistered;
+        bytes quorumNumbers;
+        string socket;
+        IBLSApkRegistry.PubkeyRegistrationParams params;
+        bool isRegistered;
     }
     mapping(address => AvsInfo) public avsInfos;
+
+
+    //--------------------------------------------------------------------------------------
+    //----------------------------------  Admin  -------------------------------------------
+    //--------------------------------------------------------------------------------------
 
     function initialize(address _avsOperatorsManager) external {
         require(avsOperatorsManager == address(0), "ALREADY_INITIALIZED");
         avsOperatorsManager = _avsOperatorsManager;
     }
 
-    // register this contract as a valid operator that can be delegated funds within eigenlayer core contracts
-    function registerAsOperator(IDelegationManager _delegationManager, IDelegationManager.OperatorDetails calldata _detail, string calldata _metaDataURI) external managerOnly {
-        _delegationManager.registerAsOperator(_detail, _metaDataURI);
+    /// @dev implementation address for beacon proxy.
+    ///      https://docs.openzeppelin.com/contracts/3.x/api/proxy#beacon
+    function implementation() external view returns (address) {
+        bytes32 slot = bytes32(uint256(keccak256('eip1967.proxy.beacon')) - 1);
+        address implementationVariable;
+        assembly {
+            implementationVariable := sload(slot)
+        }
+
+        IBeacon beacon = IBeacon(implementationVariable);
+        return beacon.implementation();
     }
 
-    function modifyOperatorDetails(IDelegationManager _delegationManager, IDelegationManager.OperatorDetails calldata _newOperatorDetails) external managerOnly {
-        _delegationManager.modifyOperatorDetails(_newOperatorDetails);
-    }
+    //--------------------------------------------------------------------------------------
+    //------------------------------  AVS Operations  --------------------------------------
+    //--------------------------------------------------------------------------------------
 
-    function updateOperatorMetadataURI(IDelegationManager _delegationManager, string calldata _metadataURI) external managerOnly {
-        _delegationManager.updateOperatorMetadataURI(_metadataURI);
+    // forwards a whitelisted call from the manager contract to an arbitrary target
+    function forwardCall(address to, bytes calldata data) external managerOnly returns (bytes memory) {
+        return Address.functionCall(to, data);
     }
 
     function registerEigenDALikeOperator(
@@ -87,9 +102,22 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         IRegistryCoordinator(_avsRegistryCoordinator).deregisterOperator(_quorumNumbers);
     }
 
-    // forwards a whitelisted call from the manager contract to an arbitrary target
-    function forwardCall(address to, bytes calldata data) external managerOnly returns (bytes memory) {
-        return Address.functionCall(to, data);
+
+    //--------------------------------------------------------------------------------------
+    //--------------------------------  AVS Metadata  --------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    // register this contract as a valid operator that can be delegated funds within eigenlayer core contracts
+    function registerAsOperator(IDelegationManager _delegationManager, IDelegationManager.OperatorDetails calldata _detail, string calldata _metaDataURI) external managerOnly {
+        _delegationManager.registerAsOperator(_detail, _metaDataURI);
+    }
+
+    function modifyOperatorDetails(IDelegationManager _delegationManager, IDelegationManager.OperatorDetails calldata _newOperatorDetails) external managerOnly {
+        _delegationManager.modifyOperatorDetails(_newOperatorDetails);
+    }
+
+    function updateOperatorMetadataURI(IDelegationManager _delegationManager, string calldata _metadataURI) external managerOnly {
+        _delegationManager.updateOperatorMetadataURI(_metadataURI);
     }
 
     function updateAvsNodeRunner(address _avsNodeRunner) external managerOnly {
@@ -103,6 +131,10 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
     function updateEcdsaSigner(address _ecdsaSigner) external managerOnly {
         ecdsaSigner = _ecdsaSigner;
     }
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  Signatures-  --------------------------------------
+    //--------------------------------------------------------------------------------------
 
     /**
      * @dev Should return whether the signature provided is valid for the provided data
@@ -118,17 +150,9 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         return avsInfos[_avsRegistryCoordinator].isWhitelisted;
     }
 
-    /// @dev implementation address for beacon proxy.
-    ///      https://docs.openzeppelin.com/contracts/3.x/api/proxy#beacon
-    function implementation() external view returns (address) {
-        bytes32 slot = bytes32(uint256(keccak256('eip1967.proxy.beacon')) - 1);
-        address implementationVariable;
-        assembly {
-            implementationVariable := sload(slot)
-        }
-
-        IBeacon beacon = IBeacon(implementationVariable);
-        return beacon.implementation();
+    // DEPRECATED
+    function getAvsInfo(address _avsRegistryCoordinator) external view returns (AvsInfo memory) {
+        return avsInfos[_avsRegistryCoordinator];
     }
 
     function verifyBlsKeyAgainstHash(BN254.G1Point memory pubkeyRegistrationMessageHash, IBLSApkRegistry.PubkeyRegistrationParams memory params) public view returns (bool) {
@@ -159,10 +183,9 @@ contract EtherFiAvsOperator is IERC1271Upgradeable, IBeacon {
         return verifyBlsKeyAgainstHash(pubkeyRegistrationMessageHash, params);
     }
 
-    function getAvsInfo(address _avsRegistryCoordinator) external view returns (AvsInfo memory) {
-        return avsInfos[_avsRegistryCoordinator];
-    }
-
+    //--------------------------------------------------------------------------------------
+    //------------------------------------  Modifiers  -------------------------------------
+    //--------------------------------------------------------------------------------------
 
     modifier managerOnly() {
         require(msg.sender == avsOperatorsManager, "NOT_MANAGER");

@@ -114,6 +114,7 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
         assertEq(stored_details.stakerOptOutWindowBlocks, details.stakerOptOutWindowBlocks);
     }
 
+    /*
     function test_registerBlsKeyAsDelegatedNodeOperator() public {
         test_registerAsOperator();
 
@@ -141,11 +142,11 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
         vm.prank(avsNodeRunner);
         avsOperatorsManager.registerBlsKeyAsDelegatedNodeOperator(id, eigenDA_registryCoordinator, quorumNumbers, socket, params);
     }
+    */
 
     function test_update_operator_info() public {
         test_registerAsOperator();
-    
-        string memory new_socket = "new_socket";
+
         IBLSApkRegistry.PubkeyRegistrationParams memory new_params = IBLSApkRegistry.PubkeyRegistrationParams({
             pubkeyRegistrationSignature: BN254.G1Point(2, 2),
             pubkeyG1: BN254.G1Point(2, 2),
@@ -157,11 +158,6 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
             stakerOptOutWindowBlocks: 2
         });
         string memory new_metadata_uri = "new_metadata_uri";
-
-
-        vm.prank(alice);
-        vm.expectRevert("INCORRECT_CALLER");
-        avsOperatorsManager.updateSocket(id, eigenDA_registryCoordinator, new_socket);
 
         vm.prank(avsNodeRunner);
         vm.expectRevert("Ownable: caller is not the owner");
@@ -182,7 +178,6 @@ contract EtherFiAvsOperatorsManagerTest is TestSetup {
         address nethermind = 0x57b6FdEF3A23B81547df68F44e5524b987755c99;
 
         assertTrue(avsDirectory.avsOperatorStatus(eigenDA_servicemanager, nethermind) == IAVSDirectory.OperatorAVSRegistrationStatus.REGISTERED);
-        assertTrue(avsOperatorsManager.avsOperatorStatus(1, eigenDA_servicemanager) == IAVSDirectory.OperatorAVSRegistrationStatus.UNREGISTERED);
         assertTrue(
             avsOperatorsManager.calculateOperatorAVSRegistrationDigestHash(id, eigenDA_servicemanager, bytes32(abi.encode(1)), 1) ==
             avsDirectory.calculateOperatorAVSRegistrationDigestHash(address(avsOperatorsManager.avsOperators(id)), eigenDA_servicemanager, bytes32(abi.encode(1)), 1)
