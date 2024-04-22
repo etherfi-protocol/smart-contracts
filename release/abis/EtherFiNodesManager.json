@@ -167,6 +167,19 @@
   },
   {
     "type": "function",
+    "name": "batchPartialWithdrawOptimized",
+    "inputs": [
+      {
+        "name": "_validatorIds",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "batchQueueRestakedWithdrawal",
     "inputs": [
       {

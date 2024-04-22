@@ -11,11 +11,10 @@ interface ISocketUpdater {
     event OperatorSocketUpdate(bytes32 indexed operatorId, string socket);
 
     // FUNCTIONS
-
+    
     /**
      * @notice Updates the socket of the msg.sender given they are a registered operator
      * @param socket is the new socket of the operator
      */
     function updateSocket(string memory socket) external;
 }
-

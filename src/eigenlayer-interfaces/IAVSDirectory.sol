@@ -64,4 +64,6 @@ interface IAVSDirectory is ISignatureUtils {
 
     /// @notice The EIP-712 typehash for the Registration struct used by the contract
     function OPERATOR_AVS_REGISTRATION_TYPEHASH() external view returns (bytes32);
+
+    function avsOperatorStatus(address avs, address operator) external view returns (OperatorAVSRegistrationStatus);
 }
