@@ -215,15 +215,31 @@ contract TimelockTest is TestSetup {
 
     function test_updateDepositCap() public {
         initializeRealisticFork(MAINNET_FORK);
-        _execute(
-            address(liquifierInstance),
-            hex"3beb5517000000000000000000000000ae7ab96520de3a18e5e111b5eaab095312d7fe840000000000000000000000000000000000000000000000000000000000001388000000000000000000000000000000000000000000000000000000000002bf20"
-        );
+        address target = address(liquifierInstance);
+        bytes4 selector = _selector("updateDepositCap(address,uint32,uint32)");
+        {
+            bytes memory data = abi.encodeWithSelector(selector, liquifierInstance.lido(), 5000, 180_000);
+            _execute(target, data, true);
+        }
+        {
+            bytes memory data = abi.encodeWithSelector(selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 2_000, 5_000);
+            _execute(target, data, false);
+        }
+        {
+            bytes memory data = abi.encodeWithSelector(selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 2_000, 5_000);
+            _execute(target, data, false);
+        }
     }
 
-    function _execute(address target, bytes memory data) internal {
+    function _selector(bytes memory signature) internal pure returns (bytes4) {
+        return bytes4(keccak256(signature));
+    }
+
+    function _execute(address target, bytes memory data, bool _alreadyScheduled) internal {
         vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
-        etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+        if (!_alreadyScheduled) {
+            etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+        }
 
         vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
 
