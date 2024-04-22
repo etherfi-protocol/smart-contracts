@@ -27,4 +27,4 @@
 	url = https://github.com/Layr-Labs/eigenlayer-contracts
 [submodule "lib/Etherfi-SyncPools"]
 	path = lib/Etherfi-SyncPools
-	url = https://github.com/JorgeAtPaladin/Etherfi-SyncPools
+	url = https://github.com/etherfi-protocol/Etherfi-SyncPools

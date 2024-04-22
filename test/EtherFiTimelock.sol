@@ -212,4 +212,38 @@ contract TimelockTest is TestSetup {
     function test_generate_EtherFiOracle_updateAdmin() public {
         emit TimelockTransaction(address(etherFiOracleInstance), 0, abi.encodeWithSelector(bytes4(keccak256("updateAdmin(address,bool)")), 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, true), bytes32(0), bytes32(0), 259200);
     }
+
+    function test_updateDepositCap() public {
+        initializeRealisticFork(MAINNET_FORK);
+        address target = address(liquifierInstance);
+        bytes4 selector = _selector("updateDepositCap(address,uint32,uint32)");
+        {
+            bytes memory data = abi.encodeWithSelector(selector, liquifierInstance.lido(), 5000, 180_000);
+            _execute(target, data, true);
+        }
+        {
+            bytes memory data = abi.encodeWithSelector(selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 2_000, 5_000);
+            _execute(target, data, false);
+        }
+        {
+            bytes memory data = abi.encodeWithSelector(selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 2_000, 5_000);
+            _execute(target, data, false);
+        }
+    }
+
+    function _selector(bytes memory signature) internal pure returns (bytes4) {
+        return bytes4(keccak256(signature));
+    }
+
+    function _execute(address target, bytes memory data, bool _alreadyScheduled) internal {
+        vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+        if (!_alreadyScheduled) {
+            etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+        }
+
+        vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
+
+        etherFiTimelockInstance.execute(target, 0, data, bytes32(0), bytes32(0));
+        vm.stopPrank();
+    }
 }
