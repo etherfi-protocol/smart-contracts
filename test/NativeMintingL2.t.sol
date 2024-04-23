@@ -71,6 +71,8 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         if (block.chainid == 59144) targetL2 = LINEA;
         else if (block.chainid == 81457) targetL2 = BLAST;
         else if (block.chainid == 34443) targetL2 = MODE;
+        else if (block.chainid == 56) targetL2 = BNB;
+        else if (block.chainid == 8453) targetL2 = BASE;
         else revert("Unsupported chain id");
 
         _init();
@@ -79,7 +81,8 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         l2Oft = IEtherFiOFT(targetL2.l2Oft);
         l2SyncPool = IL2SyncPool(targetL2.l2SyncPool);
         l2exchangeRateProvider = IL2ExchangeRateProvider(targetL2.l2ExchagneRateProvider);
-        l2SyncPoolRateLimiter = BucketRateLimiter(l2SyncPool.getRateLimiter());
+        if (targetL2.l2SyncPoolRateLimiter != address(0))
+            l2SyncPoolRateLimiter = BucketRateLimiter(l2SyncPool.getRateLimiter());
     }
 
     function test_verify_BLAST() public {
@@ -99,35 +102,81 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         _setUp();
         _go();
     }
+    
+    function _go_oft() internal {
+        _verify_L2_OFT_configuratinos();
+        // _verify_oft_wired();
+
+        _setup_DVN(true, false); // only once
+        // _transfer_ownership(true, false); // only at last
+    }
+
+    function _verify_L2_OFT_configuratinos() internal {
+        (uint256 amountInFlight, uint256 lastUpdated, uint256 limit, uint256 window) = l2Oft.rateLimits(l1Eid);
+
+        console.log("l2Oft.rateLimits(toL1).limit: ", limit);
+        console.log("l2Oft.rateLimits(toL1).window: ", window);
+        
+        console.log("l2Oft.owner(): ", l2Oft.owner());
+        console.log("l2Oft_ProxyAdmin.owner(): ", IEtherFiOwnable(targetL2.l2Oft_ProxyAdmin).owner());
+        console.log("l2Endpoint.delegates(l2Oft): ", l2Endpoint.delegates(address(l2Oft)));
+
+        vm.startBroadcast(pk);
+
+        // Bridging Cap
+        uint256 target_briding_cap = 4_000 ether;
+        uint256 briding_cap_window = 4 hours;
+
+        // - L2 -> L1
+        if (limit != target_briding_cap || window != briding_cap_window) {
+            IEtherFiOFT.RateLimitConfig[] memory rateLimits = new IEtherFiOFT.RateLimitConfig[](1);
+            rateLimits[0] = IEtherFiOFT.RateLimitConfig({dstEid: l1Eid, limit: target_briding_cap, window: briding_cap_window});
+            l2Oft.setRateLimits(rateLimits);
+        }
+        (amountInFlight, lastUpdated, limit, window) = l2Oft.rateLimits(l1Eid);
+        require(limit == target_briding_cap && window == briding_cap_window, "OFT Transfer Rate limit not set");
+
+        // - L2 -> {L2}
+        for (uint256 i = 0; i < l2s.length; i++) {
+            if (targetL2.l2Eid == l2s[i].l2Eid) continue;
+            if (l2s[i].send302 == address(0) || l2s[i].receive302 == address(0)) continue;
+
+            (amountInFlight, lastUpdated, limit, window) = l2Oft.rateLimits(l2s[i].l2Eid);
+            if (limit != target_briding_cap || window != briding_cap_window) {
+                IEtherFiOFT.RateLimitConfig[] memory rateLimits = new IEtherFiOFT.RateLimitConfig[](1);
+                rateLimits[0] = IEtherFiOFT.RateLimitConfig({dstEid: l2s[i].l2Eid, limit: target_briding_cap, window: briding_cap_window});
+                l2Oft.setRateLimits(rateLimits);
+            }
+        
+            (amountInFlight, lastUpdated, limit, window) = l2Oft.rateLimits(l2s[i].l2Eid);
+            require(limit == target_briding_cap && window == briding_cap_window, "OFT Transfer Rate limit not set");
+        }
+        vm.stopBroadcast();
+
+    }
 
     function _go() internal {
         _verify_L2_configurations();
         _verify_oft_wired();
         _verify_syncpool_wired();
 
-        // _setup_DVN(); // only once
+        // _setup_DVN(true, true); // only once
 
-        _transfer_ownership();
+        // _transfer_ownership(true, true); // only at last
     }
 
-    function _setup_DVN() internal {
-        // vm.startPrank(l2Oft.owner());
-        // l2Oft.setDelegate(l2Oft.owner());
-        // l2SyncPool.setDelegate(l2Oft.owner());
-
+    function _setup_DVN(bool _oft, bool _syncPool) internal {
         vm.startBroadcast(pk);
-        _setUpOApp(targetL2.l2Oft, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l1Eid);
-        _setUpOApp_setConfig(targetL2.l2SyncPool, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l1Eid);
+        if (_oft) _setUpOApp(targetL2.l2Oft, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l1Eid);
+        if (_syncPool) _setUpOApp_setConfig(targetL2.l2SyncPool, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l1Eid);
 
         for (uint256 i = 0; i < l2s.length; i++) {
             if (targetL2.l2Eid == l2s[i].l2Eid) continue;
             if (l2s[i].send302 == address(0) || l2s[i].receive302 == address(0)) continue;
-            _setUpOApp(targetL2.l2Oft, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l2s[i].l2Eid);
-            _setUpOApp_setConfig(targetL2.l2SyncPool, targetL2.l2Endpoint, targetL2.send302,targetL2.receive302, targetL2.lzDvn, l2s[i].l2Eid);
+            if (_oft) _setUpOApp(targetL2.l2Oft, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l2s[i].l2Eid);
+            if (_syncPool) _setUpOApp_setConfig(targetL2.l2SyncPool, targetL2.l2Endpoint, targetL2.send302,targetL2.receive302, targetL2.lzDvn, l2s[i].l2Eid);
         }
         vm.stopBroadcast();
-
-        // vm.stopPrank();
     }
 
     function _verify_oft_wired() internal {
@@ -136,11 +185,17 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         console.log(targetL2.name, "L2Oft.IsPeer of");
         bool isPeer = l2Oft.isPeer(l1Eid, _toBytes32(l1OftAdapter));
         console.log("- ETH", isPeer);
+        if (!isPeer) {
+            l2Oft.setPeer(l1Eid, _toBytes32(l1OftAdapter));
+        }
 
         for (uint256 i = 0; i < l2s.length; i++) {
             if (targetL2.l2Eid == l2s[i].l2Eid) continue; 
             bool isPeer = l2Oft.isPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft));
             console.log("- ", l2s[i].name, isPeer);
+            if (!isPeer) {
+                l2Oft.setPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft));
+            }
         }
 
         for (uint256 i = 0; i < bannedL2s.length; i++) {
@@ -267,34 +322,40 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         require(tokenData.l1Address == ETH_ADDRESS, "Token data not set");
     }
 
-    function _transfer_ownership() internal {
+    function _transfer_ownership(bool _oft, bool _syncPool) internal {
         vm.startBroadcast(pk);
 
-        if (l2Endpoint.delegates(address(l2Oft)) != targetL2.l2ContractControllerSafe) l2Oft.setDelegate(targetL2.l2ContractControllerSafe);
-        if (l2Endpoint.delegates(address(l2SyncPool)) != targetL2.l2ContractControllerSafe) l2SyncPool.setDelegate(targetL2.l2ContractControllerSafe);
+        if (_oft) {
+            if (l2Endpoint.delegates(address(l2Oft)) != targetL2.l2ContractControllerSafe) l2Oft.setDelegate(targetL2.l2ContractControllerSafe);
+            if (IEtherFiOwnable(address(l2Oft)).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(address(l2Oft)).transferOwnership(targetL2.l2ContractControllerSafe);
+            if (IEtherFiOwnable(targetL2.l2Oft_ProxyAdmin).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(targetL2.l2Oft_ProxyAdmin).transferOwnership(targetL2.l2ContractControllerSafe);
 
-        if (IEtherFiOwnable(address(l2Oft)).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(address(l2Oft)).transferOwnership(targetL2.l2ContractControllerSafe);
-        if (IEtherFiOwnable(address(l2SyncPool)).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(address(l2SyncPool)).transferOwnership(targetL2.l2ContractControllerSafe);
-        if (IEtherFiOwnable(address(l2SyncPoolRateLimiter)).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(address(l2SyncPoolRateLimiter)).transferOwnership(targetL2.l2ContractControllerSafe);
-        if (IEtherFiOwnable(address(l2exchangeRateProvider)).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(address(l2exchangeRateProvider)).transferOwnership(targetL2.l2ContractControllerSafe);
+            require(l2Endpoint.delegates(address(l2Oft)) == targetL2.l2ContractControllerSafe, "OFT Delegate not set");
+            require(IEtherFiOwnable(address(l2Oft)).owner() == targetL2.l2ContractControllerSafe, "OFT ownership not transferred");
+            require(IEtherFiOwnable(targetL2.l2Oft_ProxyAdmin).owner() == targetL2.l2ContractControllerSafe, "OFT ProxyAdmin ownership not transferred");
+        }
 
-        if (IEtherFiOwnable(targetL2.l2Oft_ProxyAdmin).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(targetL2.l2Oft_ProxyAdmin).transferOwnership(targetL2.l2ContractControllerSafe);
-        if (IEtherFiOwnable(targetL2.l2SyncPool_ProxyAdmin).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(targetL2.l2SyncPool_ProxyAdmin).transferOwnership(targetL2.l2ContractControllerSafe);
-        if (IEtherFiOwnable(targetL2.l2ExchagneRateProvider_ProxyAdmin).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(targetL2.l2ExchagneRateProvider_ProxyAdmin).transferOwnership(targetL2.l2ContractControllerSafe);
+        if (_syncPool) {
+            if (l2Endpoint.delegates(address(l2SyncPool)) != targetL2.l2ContractControllerSafe) l2SyncPool.setDelegate(targetL2.l2ContractControllerSafe);
 
+            if (IEtherFiOwnable(address(l2SyncPool)).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(address(l2SyncPool)).transferOwnership(targetL2.l2ContractControllerSafe);
+            if (IEtherFiOwnable(address(l2SyncPoolRateLimiter)).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(address(l2SyncPoolRateLimiter)).transferOwnership(targetL2.l2ContractControllerSafe);
+            if (IEtherFiOwnable(address(l2exchangeRateProvider)).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(address(l2exchangeRateProvider)).transferOwnership(targetL2.l2ContractControllerSafe);
+
+            if (IEtherFiOwnable(targetL2.l2SyncPool_ProxyAdmin).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(targetL2.l2SyncPool_ProxyAdmin).transferOwnership(targetL2.l2ContractControllerSafe);
+            if (IEtherFiOwnable(targetL2.l2ExchagneRateProvider_ProxyAdmin).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(targetL2.l2ExchagneRateProvider_ProxyAdmin).transferOwnership(targetL2.l2ContractControllerSafe);
+
+        
+            require(l2Endpoint.delegates(address(l2SyncPool)) == targetL2.l2ContractControllerSafe, "SyncPool Delegate not set");
+
+            require(IEtherFiOwnable(address(l2SyncPool)).owner() == targetL2.l2ContractControllerSafe, "SyncPool ownership not transferred");
+            require(IEtherFiOwnable(address(l2SyncPoolRateLimiter)).owner() == targetL2.l2ContractControllerSafe, "RateLimiter ownership not transferred");
+            require(IEtherFiOwnable(address(l2exchangeRateProvider)).owner() == targetL2.l2ContractControllerSafe, "ExchangeRateProvider ownership not transferred");
+
+            require(IEtherFiOwnable(targetL2.l2SyncPool_ProxyAdmin).owner() == targetL2.l2ContractControllerSafe, "SyncPool ProxyAdmin ownership not transferred");
+            require(IEtherFiOwnable(targetL2.l2ExchagneRateProvider_ProxyAdmin).owner() == targetL2.l2ContractControllerSafe, "ExchangeRateProvider ProxyAdmin ownership not transferred");
+        }
         vm.stopBroadcast();
-
-        require(l2Endpoint.delegates(address(l2Oft)) == targetL2.l2ContractControllerSafe, "OFT Delegate not set");
-        require(l2Endpoint.delegates(address(l2SyncPool)) == targetL2.l2ContractControllerSafe, "SyncPool Delegate not set");
-
-        require(IEtherFiOwnable(address(l2Oft)).owner() == targetL2.l2ContractControllerSafe, "OFT ownership not transferred");
-        require(IEtherFiOwnable(address(l2SyncPool)).owner() == targetL2.l2ContractControllerSafe, "SyncPool ownership not transferred");
-        require(IEtherFiOwnable(address(l2SyncPoolRateLimiter)).owner() == targetL2.l2ContractControllerSafe, "RateLimiter ownership not transferred");
-        require(IEtherFiOwnable(address(l2exchangeRateProvider)).owner() == targetL2.l2ContractControllerSafe, "ExchangeRateProvider ownership not transferred");
-
-        require(IEtherFiOwnable(targetL2.l2Oft_ProxyAdmin).owner() == targetL2.l2ContractControllerSafe, "OFT ProxyAdmin ownership not transferred");
-        require(IEtherFiOwnable(targetL2.l2SyncPool_ProxyAdmin).owner() == targetL2.l2ContractControllerSafe, "SyncPool ProxyAdmin ownership not transferred");
-        require(IEtherFiOwnable(targetL2.l2ExchagneRateProvider_ProxyAdmin).owner() == targetL2.l2ContractControllerSafe, "ExchangeRateProvider ProxyAdmin ownership not transferred");
     }
 
     // These are function calls on L2 required to go live on L2
@@ -409,6 +470,22 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
 
         vm.prank(alice);
         uint256 mintAmount = l2SyncPool.deposit{value: inputAmount}(ETH_ADDRESS, inputAmount, expectedOutputAmount);        
+    }
+
+    function test_setRateLimits_BLAST() public {
+        vm.createSelectFork(BLAST.rpc_url);
+        _setUp();
+
+        vm.startBroadcast(BLAST.l2ContractControllerSafe);
+
+        uint256 target_briding_cap = 4_000 ether;
+        uint256 briding_cap_window = 4 hours;
+
+        IEtherFiOFT.RateLimitConfig[] memory rateLimits = new IEtherFiOFT.RateLimitConfig[](1);
+        rateLimits[0] = IEtherFiOFT.RateLimitConfig({dstEid: l1Eid, limit: target_briding_cap, window: briding_cap_window});
+        l2Oft.setRateLimits(rateLimits);
+
+        vm.stopPrank();
     }
 
 }

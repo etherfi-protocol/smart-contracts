@@ -163,35 +163,6 @@ contract NativeMintingConfigs {
         lzDvn: [0xc097ab8CD7b053326DFe9fB3E3a31a0CCe3B526f, 0xDd7B5E1dB4AaFd5C8EC3b764eFB8ed265Aa5445B]
     });
 
-    ConfigPerL2 LINEA = ConfigPerL2({
-        name: "LINEA",
-        rpc_url: "https://1rpc.io/linea",
-
-        l2Eid: 30183,
-        l2Endpoint: 0x1a44076050125825900e736c501f859c50fE728c,
-
-        l2Oft: 0x1Bf74C010E6320bab11e2e5A532b5AC15e0b8aA6,
-        l2SyncPool: 0x823106E745A62D0C2FC4d27644c62aDE946D9CCa,
-        l2SyncPoolRateLimiter: 0x3A19866D5E0fAE0Ce19Adda617f9d2B9fD5a3975,
-        l2ExchagneRateProvider: 0x241a91F095B2020890Bc8518bea168C195518344,
-        l2PriceOracle: address(0),
-        l2PriceOracleHeartBeat: 0,
-        l2ContractControllerSafe: address(0),
-        l1dummyToken: 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf,
-        l1Receiver: 0x6F149F8bf1CB0245e70171c9972059C22294aa35,
-        
-        l2Oft_ProxyAdmin: address(0),
-        l2SyncPool_ProxyAdmin: address(0),
-        l2ExchagneRateProvider_ProxyAdmin: address(0),
-        l1dummyToken_ProxyAdmin: address(0),
-        l1Receiver_ProxyAdmin: address(0),
-
-        send302: address(0),
-        receive302: address(0),
-        lzExecutor: address(0),
-        lzDvn: [address(0), address(0)]
-    });
-
     ConfigPerL2 MODE = ConfigPerL2({
         name: "MODE",
         rpc_url: "https://mainnet.mode.network",
@@ -221,14 +192,132 @@ contract NativeMintingConfigs {
         lzDvn: [0xcd37CA043f8479064e10635020c65FfC005d36f6, 0xce8358bc28dd8296Ce8cAF1CD2b44787abd65887]
     });
 
+    ConfigPerL2 LINEA = ConfigPerL2({
+        name: "LINEA",
+        rpc_url: "https://1rpc.io/linea",
+
+        l2Eid: 30183,
+        l2Endpoint: 0x1a44076050125825900e736c501f859c50fE728c,
+
+        l2Oft: 0x1Bf74C010E6320bab11e2e5A532b5AC15e0b8aA6,
+        l2SyncPool: 0x823106E745A62D0C2FC4d27644c62aDE946D9CCa,
+        l2SyncPoolRateLimiter: 0x3A19866D5E0fAE0Ce19Adda617f9d2B9fD5a3975,
+        l2ExchagneRateProvider: 0x241a91F095B2020890Bc8518bea168C195518344,
+        l2PriceOracle: 0x100c8e61aB3BeA812A42976199Fc3daFbcDD7272,
+        l2PriceOracleHeartBeat: 6 hours,
+        l2ContractControllerSafe: 0xe4ff196Cd755566845D3dEBB1e2bD34123807eBc,
+        l1dummyToken: 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf,
+        l1Receiver: 0x6F149F8bf1CB0245e70171c9972059C22294aa35,
+        
+        l2Oft_ProxyAdmin: 0xE21B7A5e4c15156180a76F4747313a3485fC4163,
+        l2SyncPool_ProxyAdmin: 0x0F88DB75B9011B909b67c498cdcc1C0FD2308444,
+        l2ExchagneRateProvider_ProxyAdmin: 0x40B6a79A93f9596Fe6155c9a56f79482d831178f,
+        l1dummyToken_ProxyAdmin: 0xaa249a01a3D73611a27B735130Ab77fd6b0f5a3e,
+        l1Receiver_ProxyAdmin: 0x7c6261c2eD0Bd5e532B45C4E553e633cBF34063f,
+
+        send302: 0x32042142DD551b4EbE17B6FEd53131dd4b4eEa06,
+        receive302: 0xE22ED54177CE1148C557de74E4873619e6c6b205,
+        lzExecutor: 0x0408804C5dcD9796F22558464E6fE5bDdF16A7c7,
+        lzDvn: [0x129Ee430Cb2Ff2708CCADDBDb408a88Fe4FFd480, 0xDd7B5E1dB4AaFd5C8EC3b764eFB8ed265Aa5445B]
+    });
+
+    ConfigPerL2 BNB = ConfigPerL2({
+        name: "BNB",
+        rpc_url: "https://bsc-dataseed1.binance.org/",
+
+        l2Eid: 30102,
+        l2Endpoint: 0x1a44076050125825900e736c501f859c50fE728c,
+
+        l2Oft: 0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A,
+        l2SyncPool: address(0),
+        l2SyncPoolRateLimiter: address(0),
+        l2ExchagneRateProvider: address(0),
+        l2ContractControllerSafe: 0xD568c4D42147224a701A14468bEC9E9bccF571F5,
+        l2PriceOracle: address(0),
+        l2PriceOracleHeartBeat: 0,
+        l1dummyToken: address(0),
+        l1Receiver: address(0),
+
+        l2Oft_ProxyAdmin: 0x2F6f3cc4a275C7951FB79199F01eD82421eDFb68,
+        l2SyncPool_ProxyAdmin: address(0),
+        l2ExchagneRateProvider_ProxyAdmin: address(0),
+        l1dummyToken_ProxyAdmin: address(0),
+        l1Receiver_ProxyAdmin: address(0),
+
+        send302: 0x9F8C645f2D0b2159767Bd6E0839DE4BE49e823DE,
+        receive302: 0xB217266c3A98C8B2709Ee26836C98cf12f6cCEC1,
+        lzExecutor: 0x3ebD570ed38B1b3b4BC886999fcF507e9D584859,
+        lzDvn: [0x31F748a368a893Bdb5aBB67ec95F232507601A73, 0xfD6865c841c2d64565562fCc7e05e619A30615f0]
+    });
+
+    ConfigPerL2 BASE = ConfigPerL2({
+        name: "Base",
+        rpc_url: "https://base.drpc.org/",
+
+        l2Eid: 30184,
+        l2Endpoint: 0x1a44076050125825900e736c501f859c50fE728c,
+
+        l2Oft: 0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A,
+        l2SyncPool: address(0),
+        l2SyncPoolRateLimiter: address(0),
+        l2ExchagneRateProvider: address(0),
+        l2ContractControllerSafe: 0x7a00657a45420044bc526B90Ad667aFfaee0A868,
+        l2PriceOracle: address(0),
+        l2PriceOracleHeartBeat: 0,
+        l1dummyToken: address(0),
+        l1Receiver: address(0),
+
+        l2Oft_ProxyAdmin: 0x2F6f3cc4a275C7951FB79199F01eD82421eDFb68,
+        l2SyncPool_ProxyAdmin: address(0),
+        l2ExchagneRateProvider_ProxyAdmin: address(0),
+        l1dummyToken_ProxyAdmin: address(0),
+        l1Receiver_ProxyAdmin: address(0),
+
+        send302: 0xB5320B0B3a13cC860893E2Bd79FCd7e13484Dda2,
+        receive302: 0xc70AB6f32772f59fBfc23889Caf4Ba3376C84bAf,
+        lzExecutor: 0x2CCA08ae69E0C44b18a57Ab2A87644234dAebaE4,
+        lzDvn: [0x9e059a54699a285714207b43B055483E78FAac25, 0xcd37CA043f8479064e10635020c65FfC005d36f6]
+    });
+
+
+    // ConfigPerL2 ExampleL2 = ConfigPerL2({
+    //     name: "BNB",
+    //     rpc_url: "https://bsc-dataseed1.binance.org/",
+
+    //     l2Eid: 0,
+    //     l2Endpoint: address(0),
+
+    //     l2Oft: address(0),
+    //     l2SyncPool: address(0),
+    //     l2SyncPoolRateLimiter: address(0),
+    //     l2ExchagneRateProvider: address(0),
+    //     l2ContractControllerSafe: address(0),
+    //     l2PriceOracle: address(0),
+    //     l2PriceOracleHeartBeat: 0,
+    //     l1dummyToken: address(0),
+    //     l1Receiver: address(0),
+
+    //     l2Oft_ProxyAdmin: 0x2F6f3cc4a275C7951FB79199F01eD82421eDFb68,
+    //     l2SyncPool_ProxyAdmin: address(0),
+    //     l2ExchagneRateProvider_ProxyAdmin: address(0),
+    //     l1dummyToken_ProxyAdmin: address(0),
+    //     l1Receiver_ProxyAdmin: address(0),
+
+    //     send302: address(0),
+    //     receive302: address(0),
+    //     lzExecutor: address(0),
+    //     lzDvn: [address(0), address(0)]
+    // });
+
     ConfigPerL2[] l2s;
     ConfigPerL2[] bannedL2s;
 
     function _init() public {
         l2s.push(BLAST);
         l2s.push(MODE);
-
-        bannedL2s.push(LINEA);
+        l2s.push(BNB);
+        l2s.push(BASE);
+        l2s.push(LINEA);
     }
 
     function _toBytes32(address addr) internal pure returns (bytes32) {
@@ -271,6 +360,7 @@ contract NativeMintingConfigs {
             options: OptionsBuilder.newOptions().addExecutorLzReceiveOption(1_000_000, 0)
         });
         IOAppOptionsType3(oApp).setEnforcedOptions(enforcedOptions);
+        emit Transaction(address(oApp), abi.encodeWithSelector(IOAppOptionsType3(oApp).setEnforcedOptions.selector, enforcedOptions));
 
         _setUpOApp_setConfig(oApp, originEndpoint, originSend302, originReceive302, originDvns, dstEid);
     }
@@ -301,5 +391,15 @@ contract NativeMintingConfigs {
 
         ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originSend302, params);
         ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originReceive302, params);
+
+        emit Transaction(address(originEndpoint), abi.encodeWithSelector(ILayerZeroEndpointV2(originEndpoint).setConfig.selector, oApp, originSend302, params));
+        emit Transaction(address(originEndpoint), abi.encodeWithSelector(ILayerZeroEndpointV2(originEndpoint).setConfig.selector, oApp, originReceive302, params));
+    }
+
+
+    event Transaction(address target, bytes data);
+
+    function _selector(bytes memory signature) internal pure returns (bytes4) {
+        return bytes4(keccak256(signature));
     }
 }

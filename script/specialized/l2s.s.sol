@@ -16,7 +16,8 @@ contract Deploy is Script, NativeMintingL2 {
 
         _setUp();
 
-        _go();        
+        // _go();        
+        _go_oft();
     }
 
 }
