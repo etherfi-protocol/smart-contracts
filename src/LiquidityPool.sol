@@ -351,6 +351,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         require(_validatorIds.length == _registerValidatorDepositData.length && _validatorIds.length == _depositDataRootApproval.length && _validatorIds.length == _signaturesForApprovalDeposit.length, "lengths differ");
         
         numPendingDeposits -= uint32(_validatorIds.length);
+
+        // If the LP is the B-nft holder, the 1 ether (for each validator) is taken from the LP
+        // otherwise, the 1 ether is taken from the B-nft holder's separate deposit
+        if (isLpBnftHolder) {
+            totalValueOutOfLp += uint128(1 ether * _validatorIds.length);
+            totalValueInLp -= uint128(1 ether * _validatorIds.length);
+        }
+
         stakingManager.batchRegisterValidators{value: 1 ether * _validatorIds.length}(_depositRoot, _validatorIds, _bnftRecipient, address(this), _registerValidatorDepositData, msg.sender);
         
         for(uint256 i; i < _validatorIds.length; i++) {
@@ -383,6 +391,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         totalValueOutOfLp += uint128(30 ether * _validatorIds.length);
         totalValueInLp -= uint128(30 ether * _validatorIds.length);
 
+        // If the LP is the B-nft holder, the 1 ether (for each validator) is taken from the LP
+        // otherwise, the 1 ether is taken from the B-nft holder's separate deposit
+        if (isLpBnftHolder) {
+            totalValueOutOfLp += uint128(1 ether * _validatorIds.length);
+            totalValueInLp -= uint128(1 ether * _validatorIds.length);
+        }
+
         stakingManager.batchApproveRegistration{value: 31 ether * _validatorIds.length}(_validatorIds, _pubKey, _signature, depositDataRootApproval);
     }
 
@@ -403,7 +418,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             if(nodesManager.phase(_validatorIds[i]) == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) {
                 if (!isLpBnftHolder) returnAmount += 1 ether;
-                else totalValueInLp -= 1 ether;
                 emit ValidatorRegistrationCanceled(_validatorIds[i]);
             } else {
                 if (!isLpBnftHolder) returnAmount += 2 ether;
@@ -527,6 +541,17 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         if (!(msg.sender == address(etherFiAdminContract) || msg.sender == address(withdrawRequestNFT))) revert IncorrectCaller();
 
         ethAmountLockedForWithdrawal += _amount;
+    }
+
+    // This function can't change the TVL
+    // but used only to correct the errors in tracking {totalValueOutOfLp} and {totalValueInLp}
+    function updateTvlSplits(int128 _diffTotalValueOutOfLp, int128 _diffTotalValueInLp) external onlyOwner {
+        uint256 tvl = getTotalPooledEther();
+
+        totalValueOutOfLp = uint128(int128(totalValueOutOfLp) + _diffTotalValueOutOfLp);
+        totalValueInLp = uint128(int128(totalValueInLp) + _diffTotalValueInLp);
+
+        if(tvl != getTotalPooledEther()) revert();
     }
 
     function reduceEthAmountLockedForWithdrawal(uint128 _amount) external {
