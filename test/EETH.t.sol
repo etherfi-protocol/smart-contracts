@@ -4,17 +4,12 @@ import "./TestSetup.sol";
 
 contract EETHTest is TestSetup {
 
-    bytes32[] public aliceProof;
-    bytes32[] public bobProof;
-
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
 
     function setUp() public {
        
         setUpTests();
-        aliceProof = merkle.getProof(whiteListedAddresses, 3);
-        bobProof = merkle.getProof(whiteListedAddresses, 4);
     }
 
     function test_EETHInitializedCorrectly() public {

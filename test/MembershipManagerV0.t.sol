@@ -6,11 +6,7 @@ import "forge-std/console2.sol";
 
 contract MembershipManagerV0Test is TestSetup {
 
-    bytes32[] public aliceProof;
-    bytes32[] public danProof;
-    bytes32[] public shoneeProof;
-    bytes32[] public bobProof;
-    bytes32[] public ownerProof;
+
     bytes32[] public emptyProof;
 
     function setUp() public {
@@ -22,12 +18,6 @@ contract MembershipManagerV0Test is TestSetup {
         vm.startPrank(bob);
         eETHInstance.approve(address(membershipManagerInstance), 1_000_000_000 ether);
         vm.stopPrank();
-
-        aliceProof = merkle.getProof(whiteListedAddresses, 3);
-        danProof = merkle.getProof(whiteListedAddresses, 6);
-        shoneeProof = merkle.getProof(whiteListedAddresses, 11);
-        bobProof = merkle.getProof(whiteListedAddresses, 4);
-        ownerProof = merkle.getProof(whiteListedAddresses, 10);
     }
 
     function test_wrapEthBatch() public {
@@ -254,10 +244,7 @@ contract MembershipManagerV0Test is TestSetup {
         vm.stopPrank();
 
         // Alice Deposits into MembershipManager and receives eETH in return
-        bytes32[] memory _aliceProof = merkleMigration2.getProof(
-            dataForVerification2,
-            0
-        );
+        bytes32[] memory _aliceProof;
 
         // Alice confirms eligibility
         vm.startPrank(alice);
@@ -330,10 +317,8 @@ contract MembershipManagerV0Test is TestSetup {
         vm.stopPrank();
 
         // Alice Deposits into MembershipManager and receives eETH in return
-        bytes32[] memory aliceProof = merkleMigration2.getProof(
-            dataForVerification2,
-            0
-        );
+        bytes32[] memory aliceProof;
+
         vm.deal(alice, 100 ether);
         startHoax(alice);
         
@@ -713,7 +698,7 @@ contract MembershipManagerV0Test is TestSetup {
         membershipNftInstance.setUpForEap(rootMigration2, requiredEapPointsPerEapDeposit);
 
         vm.deal(alice, 100 ether);
-        bytes32[] memory aliceProof = merkleMigration2.getProof(dataForVerification2, 0);
+        bytes32[] memory aliceProof;
 
         vm.roll(17664247 + 1 weeks / 12);
 
@@ -781,89 +766,6 @@ contract MembershipManagerV0Test is TestSetup {
 
         vm.stopPrank();
     }
-
-    // function test_FeeWorksCorrectly() public {
-    //     launch_validator(); // there will be 2 validators from the beginning
-
-    //     vm.startPrank(alice);
-    //     membershipManagerInstance.setFeeAmounts(0.05 ether, 0.05 ether, 0.05 ether);
-    //     membershipManagerInstance.setFeeSplits(20, 80);
-    //     vm.stopPrank();
-
-    //     (uint256 mintFee, uint256 burnFee, uint256 upgradeFee) = membershipManagerInstance.getFees();
-    //     assertEq(mintFee, 0.05 ether);
-    //     assertEq(burnFee, 0.05 ether);
-    //     assertEq(upgradeFee, 0.05 ether);
-    //     assertEq(membershipManagerInstance.treasuryFeeSplitPercent(), 20);
-    //     assertEq(membershipManagerInstance.protocolRevenueFeeSplitPercent(), 80);
-
-    //     // Mint NFT
-    //     vm.prank(alice);
-    //     uint256 tokenId = membershipManagerInstance.wrapEth{value: 2 ether + mintFee}(2 ether, 0, aliceProof);
-    //     (uint256 amount,) = membershipManagerInstance.tokenDeposits(tokenId);
-
-    //     assertEq(amount, 2 ether);
-    //     assertEq(address(liquidityPoolInstance).balance, 2 ether);
-    //     assertEq(address(membershipManagerInstance).balance, mintFee); // totalFeesAccumulated
-    //     assertEq(eETHInstance.balanceOf(address(membershipManagerInstance)), 2 ether);
-    //     assertEq(membershipNftInstance.balanceOf(alice, tokenId), 1);
-    //     assertEq(membershipNftInstance.valueOf(tokenId), 2 ether);
-
-    //     skip(28 days);
-
-    //     // Top-up
-    //     vm.prank(alice);
-    //     membershipManagerInstance.topUpDepositWithEth{value: 1 ether + upgradeFee}(tokenId, 1 ether, 0, aliceProof);
-
-    //     assertEq(address(liquidityPoolInstance).balance, 3 ether);
-    //     assertEq(address(membershipManagerInstance).balance, mintFee + upgradeFee); // totalFeesAccumulated
-    //     assertEq(eETHInstance.balanceOf(address(membershipManagerInstance)), 3 ether);
-    //     assertEq(membershipNftInstance.valueOf(tokenId), 3 ether);
-
-    //     // Withdraw
-    //     vm.startPrank(alice);
-    //     uint256 requestId = membershipManagerInstance.requestWithdraw(tokenId, 1 ether);
-    //     _finalizeWithdrawalRequest(requestId);
-    //     withdrawRequestNFTInstance.claimWithdraw(requestId);
-    //     vm.stopPrank();
-
-    //     assertEq(address(liquidityPoolInstance).balance, 2 ether);
-    //     assertEq(address(membershipManagerInstance).balance, mintFee + upgradeFee); // totalFeesAccumulated
-    //     assertEq(eETHInstance.balanceOf(address(membershipManagerInstance)), 2 ether);
-    //     assertEq(membershipNftInstance.valueOf(tokenId), 2 ether);
-
-    //     // Burn NFT
-    //     uint256 aliceBalBefore = alice.balance;
-    //     vm.startPrank(alice);
-    //     uint256 requestId2 = membershipManagerInstance.requestWithdrawAndBurn(tokenId);
-    //     _finalizeWithdrawalRequest(requestId2);
-    //     withdrawRequestNFTInstance.claimWithdraw(requestId2);
-    //     vm.stopPrank();
-    //     (amount,) = membershipManagerInstance.tokenDeposits(tokenId);
-
-
-    //     assertEq(address(alice).balance, aliceBalBefore + 2 ether - burnFee);
-    //     assertEq(amount, 0 ether, "Token deposits should be 0");
-    //     assertEq(address(liquidityPoolInstance).balance, 0 ether);
-    //     assertEq(address(membershipManagerInstance).balance, mintFee + upgradeFee + burnFee, "membershipManager should have sum of 3 fees"); // totalFeesAccumulated
-    //     assertEq(eETHInstance.balanceOf(address(membershipManagerInstance)), 0 ether, "membershipManager should have 0 eETH");
-    //     assertEq(membershipNftInstance.balanceOf(alice, tokenId), 0, "alice should have 0 NFTs");
-
-    //     uint256 treasuryBalanceBefore = address(treasuryInstance).balance;
-    //     uint256 prmBalanceBefore = address(protocolRevenueManagerInstance).balance;
-
-    //     vm.startPrank(alice);
-
-    //     // should fail if accidentally sending fees to zero address
-    //     vm.expectRevert(MembershipManager.InvalidWithdraw.selector);
-    //     membershipManagerInstance.withdrawFees(mintFee + upgradeFee + burnFee, address(0x0));
-
-    //     membershipManagerInstance.withdrawFees(mintFee + upgradeFee + burnFee, address(protocolRevenueManagerInstance));
-
-    //     assertEq(address(protocolRevenueManagerInstance).balance, prmBalanceBefore + (mintFee + upgradeFee + burnFee));
-    //     assertEq(address(membershipManagerInstance).balance, 0 ether); // totalFeesAccumulated
-    //     vm.stopPrank();
-    // }
 
     function test_SettingFeesFail() public {
         vm.startPrank(owner);

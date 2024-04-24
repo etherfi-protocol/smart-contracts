@@ -8,9 +8,6 @@
 	path = lib/openzeppelin-contracts
 	url = https://github.com/openzeppelin/openzeppelin-contracts
 	branch = v4.8.0
-[submodule "lib/murky"]
-	path = lib/murky
-	url = https://github.com/dmfxyz/murky
 [submodule "lib/v3-core"]
 	path = lib/v3-core
 	url = https://github.com/Uniswap/v3-core

@@ -6,10 +6,6 @@ import "forge-std/console2.sol";
 
 contract MembershipNFTTest is TestSetup {
 
-    bytes32[] public aliceProof;
-    bytes32[] public bobProof;
-    bytes32[] public ownerProof;
-
     event MintingPaused(bool isPaused);
 
     function setUp() public {
@@ -21,10 +17,6 @@ contract MembershipNFTTest is TestSetup {
         vm.startPrank(bob);
         eETHInstance.approve(address(membershipManagerInstance), 1_000_000_000 ether);
         vm.stopPrank();
-
-        aliceProof = merkle.getProof(whiteListedAddresses, 3);
-        bobProof = merkle.getProof(whiteListedAddresses, 4);
-        ownerProof = merkle.getProof(whiteListedAddresses, 10);
     }
 
     function test_metadata() public {

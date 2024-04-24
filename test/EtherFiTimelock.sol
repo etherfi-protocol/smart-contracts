@@ -264,7 +264,7 @@ contract TimelockTest is TestSetup {
         if (!_alreadyScheduled) {
             etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
 
-            _build_gnosis_schedule_txn(target, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+            // _build_gnosis_schedule_txn(target, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
         }
 
         vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
@@ -281,21 +281,21 @@ contract TimelockTest is TestSetup {
         // "contractMethod":{"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"},{"internalType":"uint256","name":"delay","type":"uint256"}],"name":"schedule","payable":false},
         // "contractInputsValues":{"target":"0x9FFDF407cDe9a93c47611799DA23924Af3EF764F","value":"0","data":"0x3beb551700000000000000000000000061ff310ac15a517a846da08ac9f9abf2a0f9a2bf00000000000000000000000000000000000000000000000000000000000007d00000000000000000000000000000000000000000000000000000000000001388","predecessor":"0x0","salt":"0x0","delay":"259200"}";
         
-        operation = vm.serializeAddress(operation, "target", target);
-        operation = vm.serializeUint(operation, "value", 0);
-        operation = vm.serializeBytes(operation, "data", data);
-        operation = vm.serializeBytes32(operation, "predecessor", predecessor);
-        operation = vm.serializeBytes32(operation, "salt", salt);
-        operation = vm.serializeString(operation, "delay", delay);
+        operation = stdJson.serialize(operation, "target", target);
+        operation = stdJson.serialize(operation, "value", uint256(0));
+        operation = stdJson.serialize(operation, "data", data);
+        operation = stdJson.serialize(operation, "predecessor", predecessor);
+        operation = stdJson.serialize(operation, "salt", salt);
+        operation = stdJson.serialize(operation, "delay", delay);
         
-        obj = vm.serializeAddress(obj, "to", address(etherFiTimelockInstance));
-        obj = vm.serializeUint(obj, "value", 0);
-        obj = vm.serializeBytes(obj, "data", abi.encode());
-        obj = vm.serializeString(obj, "contractMethod", ' {"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"},{"internalType":"uint256","name":"delay","type":"uint256"}],"name":"schedule","payable":false} ');
-        obj = vm.serializeJson(obj, "contractInputsValues", operation);
+        obj = stdJson.serialize(obj, "to", address(etherFiTimelockInstance));
+        obj = stdJson.serialize(obj, "value", uint256(0));
+        obj = stdJson.serialize(obj, "data", abi.encode());
+        obj = stdJson.serialize(obj, "contractMethod", string(' {"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"},{"internalType":"uint256","name":"delay","type":"uint256"}],"name":"schedule","payable":false} '));
+        obj = stdJson.serialize(obj, "contractInputsValues", operation);
         // emit TimelockTransaction(target, 0, data, predecessor, salt, delay);
 
-        vm.writeJson(obj, "example.json");
+        stdJson.write(obj, string("./out/example.json"));
     }
 }
 
