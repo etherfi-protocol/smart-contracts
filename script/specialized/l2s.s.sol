@@ -13,11 +13,12 @@ contract Deploy is Script, NativeMintingL2 {
     function run() public {
         pk = vm.envUint("PRIVATE_KEY");
         deployer = vm.addr(pk);
-
         _setUp();
 
-        // _go();        
-        _go_oft();
+        targetL2Params = standby;
+
+        _go();        
+        // _go_oft();
     }
 
 }

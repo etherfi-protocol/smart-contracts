@@ -216,17 +216,41 @@ contract TimelockTest is TestSetup {
     function test_updateDepositCap() public {
         initializeRealisticFork(MAINNET_FORK);
         address target = address(liquifierInstance);
-        bytes4 selector = _selector("updateDepositCap(address,uint32,uint32)");
         {
-            bytes memory data = abi.encodeWithSelector(selector, liquifierInstance.lido(), 5000, 180_000);
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 2_000, 5_000);
             _execute(target, data, true);
         }
         {
-            bytes memory data = abi.encodeWithSelector(selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 2_000, 5_000);
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 2_000, 5_000);
+            _execute(target, data, true);
+        }
+        {
+            // LINEA
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf, 2_000, 5_000);
             _execute(target, data, false);
         }
         {
-            bytes memory data = abi.encodeWithSelector(selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 2_000, 5_000);
+            // BASE
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 2_000, 5_000);
+            _execute(target, data, false);
+        }
+
+        {
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 2_000, 10_000);
+            _execute(target, data, false);
+        }
+        {
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 2_000, 10_000);
+            _execute(target, data, false);
+        }
+        {
+            // LINEA
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf, 2_000, 10_000);
+            _execute(target, data, false);
+        }
+        {
+            // BASE
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 2_000, 10_000);
             _execute(target, data, false);
         }
     }
@@ -239,6 +263,8 @@ contract TimelockTest is TestSetup {
         vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
         if (!_alreadyScheduled) {
             etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+
+            _build_gnosis_schedule_txn(target, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
         }
 
         vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
@@ -246,4 +272,35 @@ contract TimelockTest is TestSetup {
         etherFiTimelockInstance.execute(target, 0, data, bytes32(0), bytes32(0));
         vm.stopPrank();
     }
+
+    function _build_gnosis_schedule_txn(address target, bytes memory data, bytes32 predecessor, bytes32 salt, uint256 delay) internal {
+        // {"to":"0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761","value":"0","data":null,"contractMethod":{"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"},{"internalType":"uint256","name":"delay","type":"uint256"}],"name":"schedule","payable":false},"contractInputsValues":{"target":"0x9FFDF407cDe9a93c47611799DA23924Af3EF764F","value":"0","data":"0x3beb551700000000000000000000000061ff310ac15a517a846da08ac9f9abf2a0f9a2bf00000000000000000000000000000000000000000000000000000000000007d00000000000000000000000000000000000000000000000000000000000001388","predecessor":"0x0","salt":"0x0","delay":"259200"}}
+        string memory operation = "";
+        string memory obj = "";
+        // string memory txn = "{"to":"0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761","value":"0","data":null,
+        // "contractMethod":{"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"},{"internalType":"uint256","name":"delay","type":"uint256"}],"name":"schedule","payable":false},
+        // "contractInputsValues":{"target":"0x9FFDF407cDe9a93c47611799DA23924Af3EF764F","value":"0","data":"0x3beb551700000000000000000000000061ff310ac15a517a846da08ac9f9abf2a0f9a2bf00000000000000000000000000000000000000000000000000000000000007d00000000000000000000000000000000000000000000000000000000000001388","predecessor":"0x0","salt":"0x0","delay":"259200"}";
+        
+        operation = vm.serializeAddress(operation, "target", target);
+        operation = vm.serializeUint(operation, "value", 0);
+        operation = vm.serializeBytes(operation, "data", data);
+        operation = vm.serializeBytes32(operation, "predecessor", predecessor);
+        operation = vm.serializeBytes32(operation, "salt", salt);
+        operation = vm.serializeString(operation, "delay", delay);
+        
+        obj = vm.serializeAddress(obj, "to", address(etherFiTimelockInstance));
+        obj = vm.serializeUint(obj, "value", 0);
+        obj = vm.serializeBytes(obj, "data", abi.encode());
+        obj = vm.serializeString(obj, "contractMethod", ' {"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"},{"internalType":"uint256","name":"delay","type":"uint256"}],"name":"schedule","payable":false} ');
+        obj = vm.serializeJson(obj, "contractInputsValues", operation);
+        // emit TimelockTransaction(target, 0, data, predecessor, salt, delay);
+
+        vm.writeJson(obj, "example.json");
+    }
 }
+
+// {"version":"1.0","chainId":"1","createdAt":1713949623894,"meta":{"name":"Transactions Batch","description":"","txBuilderVersion":"1.16.5","createdFromSafeAddress":"0xcdd57D11476c22d265722F68390b036f3DA48c21","createdFromOwnerAddress":"","checksum":"0x37b66d67757452f835ebc6540e283e27544d1414409577963593e7e535ce3ad9"},
+// "transactions":[
+// {"to":"0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761","value":"0","data":null,"contractMethod":{"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"},{"internalType":"uint256","name":"delay","type":"uint256"}],"name":"schedule","payable":false},"contractInputsValues":{"target":"0x9FFDF407cDe9a93c47611799DA23924Af3EF764F","value":"0","data":"0x3beb551700000000000000000000000061ff310ac15a517a846da08ac9f9abf2a0f9a2bf00000000000000000000000000000000000000000000000000000000000007d00000000000000000000000000000000000000000000000000000000000001388","predecessor":"0x0","salt":"0x0","delay":"259200"}}
+// ]
+// }

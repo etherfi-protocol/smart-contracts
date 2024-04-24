@@ -48,6 +48,7 @@ interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable, IOAppC
     }
 
     function MINTER_ROLE() external view returns (bytes32);
+    function DEFAULT_ADMIN_ROLE() external view returns (bytes32);
     // function hasRole(bytes32 role, address account) external view returns (bool);
     // function grantRole(bytes32 role, address account) external;
     function owner() external view returns (address);
@@ -59,7 +60,7 @@ interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable, IOAppC
 
     function getAmountCanBeSent(uint32 _dstEid) external view returns (uint256 currentAmountInFlight, uint256 amountCanBeSent);
     function rateLimits(uint32 _dstEid) external view returns (uint256, uint256, uint256, uint256);
-
+    
 }
 
 interface IEtherFiOwnable {
@@ -76,6 +77,48 @@ interface IEtherFiOwnable {
 
 contract NativeMintingConfigs {
     using OptionsBuilder for bytes;
+
+    struct L2Params {
+        uint256 minSyncAmount;
+        uint256 target_briding_cap ;
+        uint256 target_l2_to_l1_briding_cap;
+        uint256 briding_cap_window;
+        uint256 target_native_minting_cap;
+        uint256 target_native_minting_refill_rate; // per second
+        uint64 target_native_minting_fee; // 1e15 for 10 bps
+    }
+
+    L2Params prod = L2Params({
+        minSyncAmount: 50 ether,
+        target_briding_cap: 4_000 ether,
+        target_l2_to_l1_briding_cap: 0 ether,
+        briding_cap_window: 4 hours,
+        target_native_minting_cap: 1_000 ether,
+        target_native_minting_refill_rate: 1 ether,
+        target_native_minting_fee: 0
+    });
+
+    L2Params standby = L2Params({
+        minSyncAmount: 50 ether,
+        target_briding_cap: 0.0001 ether,
+        target_l2_to_l1_briding_cap: 0.0001 ether,
+        briding_cap_window: 1 minutes,
+        target_native_minting_cap: 0.0001 ether,
+        target_native_minting_refill_rate: 1 ether,
+        target_native_minting_fee: 0
+    });
+
+    L2Params standby_oftonly = L2Params({
+        minSyncAmount: 0 ether,
+        target_briding_cap: 0.0001 ether,
+        target_l2_to_l1_briding_cap: 0.0001 ether,
+        briding_cap_window: 4 hours,
+        target_native_minting_cap: 0,
+        target_native_minting_refill_rate: 0,
+        target_native_minting_fee: 0
+    });
+
+    L2Params targetL2Params;
 
     struct ConfigPerL2 {
         string name;
@@ -264,7 +307,7 @@ contract NativeMintingConfigs {
         l2ContractControllerSafe: 0x7a00657a45420044bc526B90Ad667aFfaee0A868,
         l2PriceOracle: address(0),
         l2PriceOracleHeartBeat: 0,
-        l1dummyToken: address(0),
+        l1dummyToken: address(0), // 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46
         l1Receiver: address(0),
 
         l2Oft_ProxyAdmin: 0x2F6f3cc4a275C7951FB79199F01eD82421eDFb68,
@@ -313,6 +356,7 @@ contract NativeMintingConfigs {
     ConfigPerL2[] bannedL2s;
 
     function _init() public {
+        if (l2s.length != 0) return;
         l2s.push(BLAST);
         l2s.push(MODE);
         l2s.push(BNB);
@@ -348,19 +392,25 @@ contract NativeMintingConfigs {
         address[2] memory originDvns,
         uint32 dstEid
     ) internal {
-        EnforcedOptionParam[] memory enforcedOptions = new EnforcedOptionParam[](2);
-        enforcedOptions[0] = EnforcedOptionParam({
-            eid: dstEid,
-            msgType: 1,
-            options: OptionsBuilder.newOptions().addExecutorLzReceiveOption(1_000_000, 0)
-        });
-        enforcedOptions[1] = EnforcedOptionParam({
-            eid: dstEid,
-            msgType: 2,
-            options: OptionsBuilder.newOptions().addExecutorLzReceiveOption(1_000_000, 0)
-        });
-        IOAppOptionsType3(oApp).setEnforcedOptions(enforcedOptions);
-        emit Transaction(address(oApp), abi.encodeWithSelector(IOAppOptionsType3(oApp).setEnforcedOptions.selector, enforcedOptions));
+        bytes memory options1 = IOAppOptionsType3(oApp).combineOptions(dstEid, 1, "");
+        bytes memory options2 = IOAppOptionsType3(oApp).combineOptions(dstEid, 2, "");
+        
+        if (options1.length == 0 || options2.length == 0) {
+            EnforcedOptionParam[] memory enforcedOptions = new EnforcedOptionParam[](2);
+            enforcedOptions[0] = EnforcedOptionParam({
+                eid: dstEid,
+                msgType: 1,
+                options: OptionsBuilder.newOptions().addExecutorLzReceiveOption(1_000_000, 0)
+            });
+            enforcedOptions[1] = EnforcedOptionParam({
+                eid: dstEid,
+                msgType: 2,
+                options: OptionsBuilder.newOptions().addExecutorLzReceiveOption(1_000_000, 0)
+            });
+
+            IOAppOptionsType3(oApp).setEnforcedOptions(enforcedOptions);
+            emit Transaction(address(oApp), abi.encodeWithSelector(IOAppOptionsType3(oApp).setEnforcedOptions.selector, enforcedOptions));
+        } 
 
         _setUpOApp_setConfig(oApp, originEndpoint, originSend302, originReceive302, originDvns, dstEid);
     }
@@ -389,11 +439,18 @@ contract NativeMintingConfigs {
 
         params[0] = SetConfigParam(dstEid, 2, abi.encode(ulnConfig));
 
-        ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originSend302, params);
-        ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originReceive302, params);
+        bytes memory configSend = ILayerZeroEndpointV2(originEndpoint).getConfig(oApp, originSend302, dstEid, 2);
+        bytes memory configReceive = ILayerZeroEndpointV2(originEndpoint).getConfig(oApp, originReceive302, dstEid, 2);
 
-        emit Transaction(address(originEndpoint), abi.encodeWithSelector(ILayerZeroEndpointV2(originEndpoint).setConfig.selector, oApp, originSend302, params));
-        emit Transaction(address(originEndpoint), abi.encodeWithSelector(ILayerZeroEndpointV2(originEndpoint).setConfig.selector, oApp, originReceive302, params));
+        if (configSend.length == 0) {
+            ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originSend302, params);
+            emit Transaction(address(originEndpoint), abi.encodeWithSelector(ILayerZeroEndpointV2(originEndpoint).setConfig.selector, oApp, originSend302, params));
+        }
+        
+        if (configReceive.length == 0) {
+            ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originReceive302, params);
+            emit Transaction(address(originEndpoint), abi.encodeWithSelector(ILayerZeroEndpointV2(originEndpoint).setConfig.selector, oApp, originReceive302, params));
+        }
     }
 
 
