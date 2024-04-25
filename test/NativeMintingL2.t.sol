@@ -60,8 +60,6 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
     IL2ExchangeRateProvider l2exchangeRateProvider;
     BucketRateLimiter l2SyncPoolRateLimiter;
 
-    bool fix;
-
     function setUp() public {
         pk = vm.envUint("PRIVATE_KEY");
         deployer = vm.addr(pk);
@@ -104,62 +102,20 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
     }
     
     function _go_oft() internal {
-        _verify_L2_OFT_configuratinos();
-        _verify_oft_wired();
+        _verify_L2_configurations(true, false, true);
 
-        // _setup_DVN(true, false); // only once
+        _setup_DVN(true, false);
+
         // _transfer_ownership(true, false); // only at last
     }
 
-    function _verify_L2_OFT_configuratinos() internal {
-        (uint256 amountInFlight, uint256 lastUpdated, uint256 limit, uint256 window) = l2Oft.rateLimits(l1Eid);
-
-        console.log("l2Oft.rateLimits(toL1).limit: ", limit);
-        console.log("l2Oft.rateLimits(toL1).window: ", window);
-        
-        console.log("l2Oft.owner(): ", l2Oft.owner());
-        console.log("l2Oft_ProxyAdmin.owner(): ", IEtherFiOwnable(targetL2.l2Oft_ProxyAdmin).owner());
-        console.log("l2Endpoint.delegates(l2Oft): ", l2Endpoint.delegates(address(l2Oft)));
-
-        vm.startBroadcast(pk);
-
-        // - L2 -> L1
-        if (limit != targetL2Params.target_l2_to_l1_briding_cap || window != targetL2Params.briding_cap_window) {
-            IEtherFiOFT.RateLimitConfig[] memory rateLimits = new IEtherFiOFT.RateLimitConfig[](1);
-            rateLimits[0] = IEtherFiOFT.RateLimitConfig({dstEid: l1Eid, limit: targetL2Params.target_l2_to_l1_briding_cap, window: targetL2Params.briding_cap_window});
-            l2Oft.setRateLimits(rateLimits);
-        }
-        (amountInFlight, lastUpdated, limit, window) = l2Oft.rateLimits(l1Eid);
-        require(limit == targetL2Params.target_l2_to_l1_briding_cap && window == targetL2Params.briding_cap_window, "OFT Transfer Rate limit not set");
-
-        // - L2 -> {L2}
-        for (uint256 i = 0; i < l2s.length; i++) {
-            if (targetL2.l2Eid == l2s[i].l2Eid) continue;
-            if (l2s[i].send302 == address(0) || l2s[i].receive302 == address(0)) continue;
-
-            (amountInFlight, lastUpdated, limit, window) = l2Oft.rateLimits(l2s[i].l2Eid);
-            if (limit != targetL2Params.target_briding_cap || window != targetL2Params.briding_cap_window) {
-                IEtherFiOFT.RateLimitConfig[] memory rateLimits = new IEtherFiOFT.RateLimitConfig[](1);
-                rateLimits[0] = IEtherFiOFT.RateLimitConfig({dstEid: l2s[i].l2Eid, limit: targetL2Params.target_briding_cap, window: targetL2Params.briding_cap_window});
-                l2Oft.setRateLimits(rateLimits);
-            }
-        
-            (amountInFlight, lastUpdated, limit, window) = l2Oft.rateLimits(l2s[i].l2Eid);
-            require(limit == targetL2Params.target_briding_cap && window == targetL2Params.briding_cap_window, "OFT Transfer Rate limit not set");
-        }
-        vm.stopBroadcast();
-
-    }
-
     function _go() internal {
-        _verify_L2_configurations();
-        _verify_oft_wired();
+        _verify_L2_configurations(true, true, true);
         _verify_syncpool_wired();
 
         _setup_DVN(true, true);
 
         // _transfer_ownership(true, true); // only at last
-
         vm.warp(block.timestamp + 1);
     }
 
@@ -174,52 +130,6 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
             if (_oft) _setUpOApp(targetL2.l2Oft, targetL2.l2Endpoint, targetL2.send302, targetL2.receive302, targetL2.lzDvn, l2s[i].l2Eid);
             if (_syncPool) _setUpOApp_setConfig(targetL2.l2SyncPool, targetL2.l2Endpoint, targetL2.send302,targetL2.receive302, targetL2.lzDvn, l2s[i].l2Eid);
         }
-        vm.stopBroadcast();
-    }
-
-    function _verify_oft_wired() internal {
-        vm.startBroadcast(pk);
-
-        console.log(targetL2.name, "L2Oft.IsPeer of");
-        (uint256 amountInFlight, uint256 lastUpdated, uint256 limit, uint256 window) = l2Oft.rateLimits(l1Eid);
-        bool isPeer = l2Oft.isPeer(l1Eid, _toBytes32(l1OftAdapter));
-        console.log("- ETH (isPeer, amountInFlight, limit, window)");
-        console.log(isPeer, amountInFlight / 1 ether, limit / 1 ether, window / 3600);
-        if (!isPeer) {
-            l2Oft.setPeer(l1Eid, _toBytes32(l1OftAdapter));
-        }
-
-        for (uint256 i = 0; i < l2s.length; i++) {
-            if (targetL2.l2Eid == l2s[i].l2Eid) continue; 
-            bool isPeer = l2Oft.isPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft));
-            (amountInFlight, lastUpdated, limit, window) = l2Oft.rateLimits(l2s[i].l2Eid);
-            
-            console.log("- ", l2s[i].name, " (isPeer, amountInFlight, limit, window)");
-            console.log(isPeer, amountInFlight / 1 ether, limit / 1 ether, window / 3600);
-            if (!isPeer) {
-                l2Oft.setPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft));
-            }
-        }
-
-        for (uint256 i = 0; i < bannedL2s.length; i++) {
-            if (targetL2.l2Eid == bannedL2s[i].l2Eid) continue; 
-            bool isPeer = l2Oft.isPeer(bannedL2s[i].l2Eid, _toBytes32(bannedL2s[i].l2Oft));
-            if (isPeer) {
-                l2Oft.setPeer(bannedL2s[i].l2Eid, _toBytes32(address(0)));
-            }
-        }
-
-        // use 'require' instead of log to actually force it
-        require(l2Oft.isPeer(l1Eid, _toBytes32(l1OftAdapter)), "OFT not wired");
-        for (uint256 i = 0; i < l2s.length; i++) {
-            if (targetL2.l2Eid == l2s[i].l2Eid) continue; 
-            require(l2Oft.isPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft)), "OFT not wired");
-        }
-        for (uint256 i = 0; i < bannedL2s.length; i++) {
-            if (targetL2.l2Eid == bannedL2s[i].l2Eid) continue; 
-            require(!l2Oft.isPeer(bannedL2s[i].l2Eid, _toBytes32(bannedL2s[i].l2Oft)), "OFT wired, but shouldn't");
-        }
-
         vm.stopBroadcast();
     }
 
@@ -240,9 +150,9 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         require((l2SyncPool.peers(l1Eid) == _toBytes32(l1SyncPoolAddress)), "SyncPool not wired");
     }
 
-    function _verify_L2_configurations() internal {
+    function _verify_L2_configurations(bool oft, bool syncPool, bool fix_if_wrong) internal {
 
-        if (address(l2SyncPool) != address(0)) {
+        if (syncPool &&  address(l2SyncPool) != address(0)) {
             IL2SyncPool.Token memory tokenData = l2SyncPool.getTokenData(ETH_ADDRESS);
             (uint64 capacity,,, uint64 refillRate) = l2SyncPoolRateLimiter.limit();
 
@@ -302,22 +212,25 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
 
         }
 
-        if (address(l2Oft) != address(0)) {
-            (,, uint256 limit, uint256 window) = l2Oft.rateLimits(l1Eid);
-
-            console.log("l2Oft.rateLimits(toL1).limit: ", limit);
-            console.log("l2Oft.rateLimits(toL1).window: ", window);
-
+        if (oft && address(l2Oft) != address(0)) {
             console.log("l2Oft.owner(): ", l2Oft.owner());
-   
             console.log("l2Oft_ProxyAdmin.owner(): ", IEtherFiOwnable(targetL2.l2Oft_ProxyAdmin).owner());
             console.log("l2Endpoint.delegates(l2Oft): ", l2Endpoint.delegates(address(l2Oft)));
 
             vm.startBroadcast(pk);
             // - L2 -> L1
-            if (limit != targetL2Params.target_briding_cap || window != targetL2Params.briding_cap_window) {
+            console.log(targetL2.name, "L2Oft.IsPeer of");
+            bool isPeer = l2Oft.isPeer(l1Eid, _toBytes32(l1OftAdapter));
+            console.log("- ETH", isPeer);
+            if (!isPeer && fix_if_wrong) {
+                console.log("- ETH setting to", isPeer);
+                l2Oft.setPeer(l1Eid, _toBytes32(l1OftAdapter));
+            }
+
+            (,, uint256 limit, uint256 window) = l2Oft.rateLimits(l1Eid);
+            if (limit != targetL2Params.target_l2_to_l1_briding_cap || window != targetL2Params.briding_cap_window) {
                 IEtherFiOFT.RateLimitConfig[] memory rateLimits = new IEtherFiOFT.RateLimitConfig[](1);
-                rateLimits[0] = IEtherFiOFT.RateLimitConfig({dstEid: l1Eid, limit: targetL2Params.target_briding_cap, window: targetL2Params.briding_cap_window});
+                rateLimits[0] = IEtherFiOFT.RateLimitConfig({dstEid: l1Eid, limit: targetL2Params.target_l2_to_l1_briding_cap, window: targetL2Params.briding_cap_window});
                 l2Oft.setRateLimits(rateLimits);
             }
 
@@ -332,13 +245,44 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
                     rateLimits[0] = IEtherFiOFT.RateLimitConfig({dstEid: l2s[i].l2Eid, limit: targetL2Params.target_briding_cap, window: targetL2Params.briding_cap_window});
                     l2Oft.setRateLimits(rateLimits);
                 }
+
+                bool isPeer = l2Oft.isPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft));
+                console.log("- ", l2s[i].name, isPeer);
+                if (!isPeer && fix_if_wrong) {
+                    console.log("- setting to ", l2s[i].name, isPeer);
+                    l2Oft.setPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft));
+                }
+            }
+            for (uint256 i = 0; i < bannedL2s.length; i++) {
+                if (targetL2.l2Eid == bannedL2s[i].l2Eid) continue; 
+                bool isPeer = l2Oft.isPeer(bannedL2s[i].l2Eid, _toBytes32(bannedL2s[i].l2Oft));
+                if (isPeer && fix_if_wrong) {
+                    l2Oft.setPeer(bannedL2s[i].l2Eid, _toBytes32(address(0)));
+                }
             }
             vm.stopBroadcast();
 
-            (, , limit, window) = l2Oft.rateLimits(l1Eid);
-            require(limit == targetL2Params.target_briding_cap && window == targetL2Params.briding_cap_window, "OFT Transfer Rate limit not set");
+            require(l2Oft.isPeer(l1Eid, _toBytes32(l1OftAdapter)), "OFT not wired");
+            for (uint256 i = 0; i < l2s.length; i++) {
+                if (targetL2.l2Eid == l2s[i].l2Eid) continue; 
+                require(l2Oft.isPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2Oft)), "OFT not wired");
+            }
+            for (uint256 i = 0; i < bannedL2s.length; i++) {
+                if (targetL2.l2Eid == bannedL2s[i].l2Eid) continue; 
+                require(!l2Oft.isPeer(bannedL2s[i].l2Eid, _toBytes32(bannedL2s[i].l2Oft)), "OFT wired, but shouldn't");
+            }
 
-        } 
+            (, , limit, window) = l2Oft.rateLimits(l1Eid);
+            require(limit == targetL2Params.target_l2_to_l1_briding_cap && window == targetL2Params.briding_cap_window, "OFT Transfer Rate limit not set");
+
+            for (uint256 i = 0; i < l2s.length; i++) {
+                if (targetL2.l2Eid == l2s[i].l2Eid) continue;
+                if (l2s[i].send302 == address(0) || l2s[i].receive302 == address(0)) continue;
+
+                (, , limit, window) = l2Oft.rateLimits(l2s[i].l2Eid);
+                require (limit == targetL2Params.target_briding_cap && window == targetL2Params.briding_cap_window, "OFT Transfer Rate limit not set");
+            }
+        }
     }
 
     function _transfer_ownership(bool _oft, bool _syncPool) internal {
@@ -543,7 +487,7 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
             vm.createSelectFork(l2s[i].rpc_url);
             _setUp();
 
-            _verify_oft_wired();
+            _verify_L2_configurations(true, false, false);
         }
     }
 
