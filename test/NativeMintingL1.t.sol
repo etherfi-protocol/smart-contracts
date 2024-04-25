@@ -53,6 +53,9 @@ interface IEtherfiL1SyncPoolETH is IOAppCore {
 }
 
 contract NativeMintingL1Suite is Test, NativeMintingConfigs {
+    uint256 pk;
+    address deployer;
+
     EndpointV2 endpoint;
     IEtherfiL1SyncPoolETH l1SyncPool;
     OFTAdapter oftAdapter;

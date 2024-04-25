@@ -35,22 +35,23 @@ interface IL2SyncPool is IOAppOptionsType3, IOAppCore {
     
     function deposit(address tokenIn, uint256 amountIn, uint256 minAmountOut) external payable returns (uint256);
     function sync(address tokenIn, bytes calldata extraOptions, MessagingFee calldata fee) external payable returns (uint256, uint256);
-    
+    function sync(address tokenIn, uint256 amountInToSync, uint256 amountOutToSync, bytes calldata extraOptions, MessagingFee calldata fee) external payable;
     function setL2ExchangeRateProvider(address l2ExchangeRateProvider) external;
     function setRateLimiter(address rateLimiter) external;
     function setTokenOut(address tokenOut) external;
     function setDstEid(uint32 dstEid) external;
     function setMinSyncAmount(address tokenIn, uint256 minSyncAmount) external;
 
-    function quoteSync(address tokenIn, bytes calldata extraOptions, bool payInLzToken)
-        external
-        view
-        returns (MessagingFee memory msgFee);
+    function quoteSync(address tokenIn, bytes calldata extraOptions, bool payInLzToken) external view returns (MessagingFee memory msgFee);
+    function quoteSync(address tokenIn, uint256 amountInToSync, uint256 amountOutToSync, bytes calldata extraOptions, bool payInLzToken) external view returns (MessagingFee memory msgFee);
 
 }
 
 
 contract NativeMintingL2 is Test, NativeMintingConfigs {
+    uint256 pk;
+    address deployer;
+
     ConfigPerL2 targetL2; 
 
     EndpointV2 l2Endpoint;
@@ -66,12 +67,7 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
     }
 
     function _setUp() public {
-        if (block.chainid == 59144) targetL2 = LINEA;
-        else if (block.chainid == 81457) targetL2 = BLAST;
-        else if (block.chainid == 34443) targetL2 = MODE;
-        else if (block.chainid == 56) targetL2 = BNB;
-        else if (block.chainid == 8453) targetL2 = BASE;
-        else revert("Unsupported chain id");
+        targetL2 = getL2Config();
 
         _init();
 
@@ -369,17 +365,19 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
     }
 
     function test_sync() public {
-        vm.createSelectFork(BLAST.rpc_url);
+        vm.createSelectFork(MODE.rpc_url);
         _setUp();
 
-        vm.deal(l2Oft.owner(), 1 ether);
+        address syko = vm.addr(1004);
+        vm.deal(syko, 1 ether);
         
-        vm.prank(l2Oft.owner());
-        l2SyncPool.setMinSyncAmount(ETH_ADDRESS, 0);
-   
+        vm.startPrank(syko);
+        _sync();
+        vm.stopPrank();
+    }
+
+    function _sync() internal {
         IL2SyncPool.MessagingFee memory fee = l2SyncPool.quoteSync(ETH_ADDRESS, abi.encodePacked(), false);
-    
-        uint256 nativeFee;
         l2SyncPool.sync{value: fee.nativeFee}(ETH_ADDRESS, abi.encodePacked(), fee);
     }
 
