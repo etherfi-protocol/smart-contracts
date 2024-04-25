@@ -291,7 +291,7 @@ contract TimelockTest is TestSetup {
     }
 
     function _output_execute_txn(address target, bytes memory data, bytes32 predecessor, bytes32 salt) internal {
-        bytes memory txn_data = abi.encodeWithSelector(EtherFiTimelock.execute.selector, target, 0, data, predecessor, salt);
+        bytes memory txn_data = abi.encodeWithSelector(TimelockController.execute.selector, target, 0, data, predecessor, salt);
         emit Transaction(address(etherFiTimelockInstance), 0, txn_data);
 
         string memory obj_k = "timelock_txn";
