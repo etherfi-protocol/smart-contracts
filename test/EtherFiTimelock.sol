@@ -6,7 +6,10 @@ import "../src/EtherFiTimelock.sol";
 import "forge-std/console2.sol";
 
 contract TimelockTest is TestSetup {
-    event TimelockTransaction(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
+
+    event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
+    event Execute(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt);
+    event Transaction(address to, uint256 value, bytes data);
 
     function test_timelock() public {
         initializeRealisticFork(MAINNET_FORK);
@@ -210,7 +213,7 @@ contract TimelockTest is TestSetup {
     }
 
     function test_generate_EtherFiOracle_updateAdmin() public {
-        emit TimelockTransaction(address(etherFiOracleInstance), 0, abi.encodeWithSelector(bytes4(keccak256("updateAdmin(address,bool)")), 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, true), bytes32(0), bytes32(0), 259200);
+        emit Schedule(address(etherFiOracleInstance), 0, abi.encodeWithSelector(bytes4(keccak256("updateAdmin(address,bool)")), 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, true), bytes32(0), bytes32(0), 259200);
     }
 
     function test_updateDepositCap() public {
@@ -263,48 +266,41 @@ contract TimelockTest is TestSetup {
         vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
         if (!_alreadyScheduled) {
             etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
-
-            _build_gnosis_schedule_txn(target, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+            _output_schedule_txn(target, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
         }
 
         vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
 
         etherFiTimelockInstance.execute(target, 0, data, bytes32(0), bytes32(0));
+        _output_execute_txn(target, data, bytes32(0), bytes32(0));
         vm.stopPrank();
     }
 
-    function _build_gnosis_schedule_txn(address target, bytes memory data, bytes32 predecessor, bytes32 salt, uint256 delay) internal {
-        // https://book.getfoundry.sh/cheatcodes/serialize-json
-        // 
+    function _output_schedule_txn(address target, bytes memory data, bytes32 predecessor, bytes32 salt, uint256 delay) internal {
+        bytes memory txn_data = abi.encodeWithSelector(TimelockController.schedule.selector, target, 0, data, predecessor, salt, delay);
+        emit Transaction(address(etherFiTimelockInstance), 0, txn_data);
 
-        string[] memory txns = new string[](1);
+        string memory obj_k = "timelock_txn";
+        stdJson.serialize(obj_k, "to", address(etherFiTimelockInstance));
+        stdJson.serialize(obj_k, "value", uint256(0));
+        string memory output = stdJson.serialize(obj_k, "data", txn_data);
 
-        string memory obj_k1 = "txn_input_values";
-        stdJson.serialize(obj_k1, "target", target);
-        stdJson.serialize(obj_k1, "value", uint256(0));
-        stdJson.serialize(obj_k1, "data", data);
-        stdJson.serialize(obj_k1, "predecessor", predecessor);
-        stdJson.serialize(obj_k1, "salt", salt);
-        string memory op = stdJson.serialize(obj_k1, "delay", delay);
-        
-        string memory obj_k2 = "timelock_txn";
-        stdJson.serialize(obj_k2, "to", address(etherFiTimelockInstance));
-        stdJson.serialize(obj_k2, "value", uint256(0));
-        stdJson.serialize(obj_k2, "data", abi.encode());
-        stdJson.serialize(obj_k2, "contractMethod", string(' {"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"},{"internalType":"uint256","name":"delay","type":"uint256"}],"name":"schedule","payable":false} '));
-        txns[0] = stdJson.serialize(obj_k2, "contractInputsValues", op);
+        string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
+        string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        stdJson.write(output, output_path);
+    }
 
-        string[] memory tests = new string[](2);
-        tests[0] = "1";
-        tests[1] = "2";
+    function _output_execute_txn(address target, bytes memory data, bytes32 predecessor, bytes32 salt) internal {
+        bytes memory txn_data = abi.encodeWithSelector(TimelockController.execute.selector, target, 0, data, predecessor, salt);
+        emit Transaction(address(etherFiTimelockInstance), 0, txn_data);
 
-        string memory obj_k3 = "output";
-        stdJson.serialize(obj_k3, "tests", tests);
-        stdJson.serialize(obj_k3, "version", string("1.0"));
-        stdJson.serialize(obj_k3, "chainId", string("1"));
-        stdJson.serialize(obj_k3, "createdAt", uint256(block.timestamp));
-        string memory output = stdJson.serialize(obj_k3, "transactions", txns);
+        string memory obj_k = "timelock_txn";
+        stdJson.serialize(obj_k, "to", address(etherFiTimelockInstance));
+        stdJson.serialize(obj_k, "value", uint256(0));
+        string memory output = stdJson.serialize(obj_k, "data", txn_data);
 
-        stdJson.write(output, string("./release/logs/example.json"));
+        string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
+        string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        stdJson.write(output, output_path);
     }
 }

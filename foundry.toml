@@ -2,7 +2,7 @@
 src = 'src'
 out = 'out'
 libs = ['lib']
-fs_permissions = [{ access = "read-write", path = "./release/logs"}, { access = "read", path = "./test" }]
+fs_permissions = [{ access = "read-write", path = "./release"}, { access = "read", path = "./test" }]
 gas_reports = ["*"]
 optimizer_runs = 2000
 extra_output = ["storageLayout"]
