@@ -6,11 +6,6 @@ import "forge-std/console2.sol";
 
 contract MembershipManagerTest is TestSetup {
 
-    bytes32[] public aliceProof;
-    bytes32[] public danProof;
-    bytes32[] public shoneeProof;
-    bytes32[] public bobProof;
-    bytes32[] public ownerProof;
     bytes32[] public emptyProof;
 
     function setUp() public {
@@ -23,11 +18,6 @@ contract MembershipManagerTest is TestSetup {
         eETHInstance.approve(address(membershipManagerInstance), 1_000_000_000 ether);
         vm.stopPrank();
 
-        aliceProof = merkle.getProof(whiteListedAddresses, 3);
-        danProof = merkle.getProof(whiteListedAddresses, 6);
-        shoneeProof = merkle.getProof(whiteListedAddresses, 11);
-        bobProof = merkle.getProof(whiteListedAddresses, 4);
-        ownerProof = merkle.getProof(whiteListedAddresses, 10);
 
         _upgradeMembershipManagerFromV0ToV1();
     }
@@ -272,10 +262,7 @@ contract MembershipManagerTest is TestSetup {
         vm.stopPrank();
 
         // Alice Deposits into MembershipManager and receives eETH in return
-        bytes32[] memory aliceProof = merkleMigration2.getProof(
-            dataForVerification2,
-            0
-        );
+        bytes32[] memory aliceProof;
 
         // Alice confirms eligibility
         vm.startPrank(alice);
@@ -348,10 +335,8 @@ contract MembershipManagerTest is TestSetup {
         vm.stopPrank();
 
         // Alice Deposits into MembershipManager and receives eETH in return
-        bytes32[] memory aliceProof = merkleMigration2.getProof(
-            dataForVerification2,
-            0
-        );
+        bytes32[] memory aliceProof;
+    
         vm.deal(alice, 100 ether);
         startHoax(alice);
         
@@ -766,7 +751,7 @@ contract MembershipManagerTest is TestSetup {
         membershipNftInstance.setUpForEap(rootMigration2, requiredEapPointsPerEapDeposit);
 
         vm.deal(alice, 100 ether);
-        bytes32[] memory aliceProof = merkleMigration2.getProof(dataForVerification2, 0);
+        bytes32[] memory aliceProof;
 
         vm.roll(17664247 + 1 weeks / 12);
 

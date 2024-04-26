@@ -53,6 +53,9 @@ interface IEtherfiL1SyncPoolETH is IOAppCore {
 }
 
 contract NativeMintingL1Suite is Test, NativeMintingConfigs {
+    uint256 pk;
+    address deployer;
+
     EndpointV2 endpoint;
     IEtherfiL1SyncPoolETH l1SyncPool;
     OFTAdapter oftAdapter;
@@ -77,12 +80,11 @@ contract NativeMintingL1Suite is Test, NativeMintingConfigs {
         // if (endpoint.delegates(address(l1SyncPool)) != deployer) l1SyncPool.setDelegate(deployer);
 
         _verify_oft_wired();
-        _verify_syncpool_wired();
-        _ensure_caps();
+        // _verify_syncpool_wired();
 
-        _transfer_ownership();
+        // _transfer_ownership();
         
-        // _setup_DVN(); // only once, DONE
+        // _setup_DVN(true, false); // only once, DONE
     }
 
     function test_verify_L1() public {
@@ -150,6 +152,7 @@ contract NativeMintingL1Suite is Test, NativeMintingConfigs {
             bool isPeer = (l1SyncPool.peers(l2s[i].l2Eid) == _toBytes32(l2s[i].l2SyncPool));
             console.log("SyncPool Wired? - ", l2s[i].name, isPeer);
             if (!isPeer) {
+                // emit Transaction(address(l1SyncPool), abi.encodeWithSelector(l1SyncPool.setPeer.selector, l2s[i].l2Eid, _toBytes32(l2s[i].l2SyncPool))
                 l1SyncPool.setPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2SyncPool));
             }
         }
@@ -165,19 +168,17 @@ contract NativeMintingL1Suite is Test, NativeMintingConfigs {
         vm.stopBroadcast();
     }
 
-    function _setup_DVN() internal {
+    function _setup_DVN(bool _oft, bool _syncPool) internal {
         vm.startBroadcast(pk);
+        if (_oft && endpoint.delegates(address(oftAdapter)) != deployer) oftAdapter.setDelegate(deployer);
+        if (_syncPool && endpoint.delegates(address(l1SyncPool)) != deployer) l1SyncPool.setDelegate(deployer);
+
         // - _setUpOApp(ethereum.oftToken, ETHEREUM.endpoint, ETHEREUM.send302, ETHEREUM.lzDvn, {L2s}.originEid);
         for (uint256 i = 0; i < l2s.length; i++) {
-            _setUpOApp(l1OftAdapter, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid);
-            _setUpOApp_setConfig(l1SyncPoolAddress, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid);
+            if (_oft) _setUpOApp(l1OftAdapter, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid);
+            if (_syncPool) _setUpOApp_setConfig(l1SyncPoolAddress, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid);
         }
         vm.stopBroadcast();
-    }
-    
-    function _ensure_caps() internal {
-        uint256 target_briding_cap = 0 ether;
-        uint256 briding_cap_window = 24 hours;
     }
 }
 

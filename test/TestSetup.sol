@@ -40,7 +40,6 @@ import "../src/helpers/AddressProvider.sol";
 import "./DepositDataGeneration.sol";
 import "./DepositContract.sol";
 import "./Attacker.sol";
-import "../lib/murky/src/Merkle.sol";
 import "./TestERC20.sol";
 
 import "../src/archive/MembershipManagerV0.sol";
@@ -173,13 +172,8 @@ contract TestSetup is Test {
 
     EtherFiTimelock public etherFiTimelockInstance;
 
-    Merkle merkle;
     bytes32 root;
-
-    Merkle merkleMigration;
     bytes32 rootMigration;
-
-    Merkle merkleMigration2;
     bytes32 rootMigration2;
 
     uint64[] public requiredEapPointsPerEapDeposit;
@@ -657,14 +651,6 @@ contract TestSetup is Test {
         _setUpNodeOperatorWhitelist();
         vm.stopPrank();
 
-        _merkleSetup();
-
-        vm.startPrank(owner);
-        _merkleSetupMigration();
-
-        vm.startPrank(owner);
-        _merkleSetupMigration2();
-
         nodeOperatorManagerInstance.setAuctionContractAddress(address(auctionInstance));
 
         auctionInstance.setStakingManagerContractAddress(address(stakingManagerInstance));
@@ -720,36 +706,8 @@ contract TestSetup is Test {
     }
 
     function _merkleSetup() internal {
-        merkle = new Merkle();
-
-        whiteListedAddresses.push(keccak256(abi.encodePacked(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931)));
-        whiteListedAddresses.push(keccak256(abi.encodePacked(0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf)));
-        whiteListedAddresses.push(keccak256(abi.encodePacked(0xCDca97f61d8EE53878cf602FF6BC2f260f10240B)));
-
-        whiteListedAddresses.push(keccak256(abi.encodePacked(alice)));
-
-        whiteListedAddresses.push(keccak256(abi.encodePacked(bob)));
-
-        whiteListedAddresses.push(keccak256(abi.encodePacked(chad)));
-
-        whiteListedAddresses.push(keccak256(abi.encodePacked(dan)));
-
-        whiteListedAddresses.push(keccak256(abi.encodePacked(elvis)));
-
-        whiteListedAddresses.push(keccak256(abi.encodePacked(greg)));
-
-        whiteListedAddresses.push(keccak256(abi.encodePacked(address(liquidityPoolInstance))));
-
-        whiteListedAddresses.push(keccak256(abi.encodePacked(owner)));
-        //Needed a whitelisted address that hasn't been registered as a node operator
-        whiteListedAddresses.push(keccak256(abi.encodePacked(shonee)));
-
-        root = merkle.getRoot(whiteListedAddresses);
     }
 
-    function getWhitelistMerkleProof(uint256 index) internal view returns (bytes32[] memory) {
-        return merkle.getProof(whiteListedAddresses, index);
-    }
 
     function _initializeMembershipTiers() internal {
         uint40 requiredPointsForTier = 0;
@@ -787,71 +745,8 @@ contract TestSetup is Test {
     }
 
     function _merkleSetupMigration() internal {
-        merkleMigration = new Merkle();
-        dataForVerification.push(
-            keccak256(
-                abi.encodePacked(alice, uint256(0), uint256(10), uint256(0), uint256(0), uint256(0), uint256(400))
-            )
-        );
-        dataForVerification.push(
-            keccak256(
-                abi.encodePacked(
-                    0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931,
-                    uint256(0.2 ether),
-                    uint256(0),
-                    uint256(0),
-                    uint256(0),
-                    uint256(0),
-                    uint256(652_000_000_000)
-                )
-            )
-        );
-        dataForVerification.push(
-            keccak256(
-                abi.encodePacked(chad, uint256(0), uint256(10), uint256(0), uint256(50), uint256(0), uint256(9464))
-            )
-        );
-        dataForVerification.push(
-            keccak256(
-                abi.encodePacked(bob, uint256(0.1 ether), uint256(0), uint256(0), uint256(0), uint256(0), uint256(400))
-            )
-        );
-        dataForVerification.push(
-            keccak256(
-                abi.encodePacked(dan, uint256(0.1 ether), uint256(0), uint256(0), uint256(0), uint256(0), uint256(800))
-            )
-        );
-        rootMigration = merkleMigration.getRoot(dataForVerification);
-        requiredEapPointsPerEapDeposit.push(0);
-        requiredEapPointsPerEapDeposit.push(0); // we want all EAP users to be at least Silver
-        requiredEapPointsPerEapDeposit.push(100);
-        requiredEapPointsPerEapDeposit.push(400);
-        vm.stopPrank();
-
-        vm.prank(alice);
-        membershipNftInstance.setUpForEap(rootMigration, requiredEapPointsPerEapDeposit);
     }
 
-    function _merkleSetupMigration2() internal {
-        merkleMigration2 = new Merkle();
-        dataForVerification2.push(
-            keccak256(
-                abi.encodePacked(
-                    alice,
-                    uint256(1 ether),
-                    uint256(103680),
-                    uint32(16970393 - 10) // 10 blocks before the last gold
-                )
-            )
-        );
-        dataForVerification2.push(keccak256(abi.encodePacked(bob, uint256(2 ether), uint256(141738), uint32(0))));
-        dataForVerification2.push(keccak256(abi.encodePacked(chad, uint256(2 ether), uint256(139294), uint32(0))));
-        dataForVerification2.push(keccak256(abi.encodePacked(dan, uint256(1 ether), uint256(96768), uint32(0))));
-
-        rootMigration2 = merkleMigration2.getRoot(dataForVerification2);
-    }
-
-    
     function _perform_eigenlayer_upgrade() public {
         vm.warp(block.timestamp + 12 days);
 

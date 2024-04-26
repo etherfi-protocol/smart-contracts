@@ -6,7 +6,10 @@ import "../src/EtherFiTimelock.sol";
 import "forge-std/console2.sol";
 
 contract TimelockTest is TestSetup {
-    event TimelockTransaction(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
+
+    event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
+    event Execute(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt);
+    event Transaction(address to, uint256 value, bytes data);
 
     function test_timelock() public {
         initializeRealisticFork(MAINNET_FORK);
@@ -210,23 +213,47 @@ contract TimelockTest is TestSetup {
     }
 
     function test_generate_EtherFiOracle_updateAdmin() public {
-        emit TimelockTransaction(address(etherFiOracleInstance), 0, abi.encodeWithSelector(bytes4(keccak256("updateAdmin(address,bool)")), 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, true), bytes32(0), bytes32(0), 259200);
+        emit Schedule(address(etherFiOracleInstance), 0, abi.encodeWithSelector(bytes4(keccak256("updateAdmin(address,bool)")), 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, true), bytes32(0), bytes32(0), 259200);
     }
 
     function test_updateDepositCap() public {
         initializeRealisticFork(MAINNET_FORK);
         address target = address(liquifierInstance);
-        bytes4 selector = _selector("updateDepositCap(address,uint32,uint32)");
         {
-            bytes memory data = abi.encodeWithSelector(selector, liquifierInstance.lido(), 5000, 180_000);
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 2_000, 5_000);
             _execute(target, data, true);
         }
         {
-            bytes memory data = abi.encodeWithSelector(selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 2_000, 5_000);
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 2_000, 5_000);
+            _execute(target, data, true);
+        }
+        {
+            // LINEA
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf, 2_000, 5_000);
             _execute(target, data, false);
         }
         {
-            bytes memory data = abi.encodeWithSelector(selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 2_000, 5_000);
+            // BASE
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 2_000, 5_000);
+            _execute(target, data, false);
+        }
+
+        {
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 2_000, 10_000);
+            _execute(target, data, false);
+        }
+        {
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 2_000, 10_000);
+            _execute(target, data, false);
+        }
+        {
+            // LINEA
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf, 2_000, 10_000);
+            _execute(target, data, false);
+        }
+        {
+            // BASE
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 2_000, 10_000);
             _execute(target, data, false);
         }
     }
@@ -239,11 +266,47 @@ contract TimelockTest is TestSetup {
         vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
         if (!_alreadyScheduled) {
             etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+            _output_schedule_txn(target, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
         }
 
         vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
 
         etherFiTimelockInstance.execute(target, 0, data, bytes32(0), bytes32(0));
+        _output_execute_txn(target, data, bytes32(0), bytes32(0));
         vm.stopPrank();
     }
+
+    function _output_schedule_txn(address target, bytes memory data, bytes32 predecessor, bytes32 salt, uint256 delay) internal {
+        bytes memory txn_data = abi.encodeWithSelector(TimelockController.schedule.selector, target, 0, data, predecessor, salt, delay);
+        emit Transaction(address(etherFiTimelockInstance), 0, txn_data);
+
+        string memory obj_k = "timelock_txn";
+        stdJson.serialize(obj_k, "to", address(etherFiTimelockInstance));
+        stdJson.serialize(obj_k, "value", uint256(0));
+        string memory output = stdJson.serialize(obj_k, "data", txn_data);
+
+        string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
+        string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        stdJson.write(output, output_path);
+    }
+
+    function _output_execute_txn(address target, bytes memory data, bytes32 predecessor, bytes32 salt) internal {
+        bytes memory txn_data = abi.encodeWithSelector(TimelockController.execute.selector, target, 0, data, predecessor, salt);
+        emit Transaction(address(etherFiTimelockInstance), 0, txn_data);
+
+        string memory obj_k = "timelock_txn";
+        stdJson.serialize(obj_k, "to", address(etherFiTimelockInstance));
+        stdJson.serialize(obj_k, "value", uint256(0));
+        string memory output = stdJson.serialize(obj_k, "data", txn_data);
+
+        string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
+        string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        stdJson.write(output, output_path);
+    }
 }
+
+// {"version":"1.0","chainId":"1","createdAt":1713949623894,"meta":{"name":"Transactions Batch","description":"","txBuilderVersion":"1.16.5","createdFromSafeAddress":"0xcdd57D11476c22d265722F68390b036f3DA48c21","createdFromOwnerAddress":"","checksum":"0x37b66d67757452f835ebc6540e283e27544d1414409577963593e7e535ce3ad9"},
+// "transactions":[
+// {"to":"0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761","value":"0","data":null,"contractMethod":{"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"},{"internalType":"uint256","name":"delay","type":"uint256"}],"name":"schedule","payable":false},"contractInputsValues":{"target":"0x9FFDF407cDe9a93c47611799DA23924Af3EF764F","value":"0","data":"0x3beb551700000000000000000000000061ff310ac15a517a846da08ac9f9abf2a0f9a2bf00000000000000000000000000000000000000000000000000000000000007d00000000000000000000000000000000000000000000000000000000000001388","predecessor":"0x0","salt":"0x0","delay":"259200"}}
+// ]
+// }
