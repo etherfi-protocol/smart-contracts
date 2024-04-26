@@ -91,7 +91,7 @@ contract NativeMintingConfigs is L2Constants {
     L2Params prod = L2Params({
         minSyncAmount: 50 ether,
         target_briding_cap: 4_000 ether,
-        target_l2_to_l1_briding_cap: 0 ether,
+        target_l2_to_l1_briding_cap: 200 ether,
         briding_cap_window: 4 hours,
         target_native_minting_cap: 1_000 ether,
         target_native_minting_refill_rate: 1 ether,
