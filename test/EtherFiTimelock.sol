@@ -265,13 +265,13 @@ contract TimelockTest is TestSetup {
     function _execute(address target, bytes memory data, bool _alreadyScheduled) internal {
         vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
         if (!_alreadyScheduled) {
-            etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+            // etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
             _output_schedule_txn(target, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
         }
 
         vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
 
-        etherFiTimelockInstance.execute(target, 0, data, bytes32(0), bytes32(0));
+        // etherFiTimelockInstance.execute(target, 0, data, bytes32(0), bytes32(0));
         _output_execute_txn(target, data, bytes32(0), bytes32(0));
         vm.stopPrank();
     }

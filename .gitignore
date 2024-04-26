@@ -17,6 +17,7 @@ coverage.json
 typechain
 typechain-types
 .vscode/
+release/logs/txns/*
 
 # Hardhat files
 cache
