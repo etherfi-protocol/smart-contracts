@@ -22,6 +22,9 @@ for file in ../release/logs/txns/*.json; do
 
     # extract relevant fields and format the transaction JSON
     jq '{ to: .to, value: (.value | tostring), data: .data }' $file >> $output_file
+
+    # make sure the same file won't be used again
+    rm $file
 done
 
 echo '] }' >> $output_file
