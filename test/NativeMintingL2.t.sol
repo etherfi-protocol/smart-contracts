@@ -102,7 +102,7 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
 
         _setup_DVN(true, false);
 
-        // _transfer_ownership(true, false); // only at last
+        _transfer_ownership(true, false); // only at last
     }
 
     function _go() internal {
@@ -111,7 +111,8 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
 
         _setup_DVN(true, true);
 
-        // _transfer_ownership(true, true); // only at last
+        _transfer_ownership(true, true); // only at last
+
         vm.warp(block.timestamp + 1);
     }
 
@@ -284,13 +285,13 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
     function _transfer_ownership(bool _oft, bool _syncPool) internal {
         vm.startBroadcast(pk);
 
-        if (_oft) {
+        if (_oft && address(l2Oft) != address(0)) {
             if (l2Endpoint.delegates(address(l2Oft)) != targetL2.l2ContractControllerSafe) l2Oft.setDelegate(targetL2.l2ContractControllerSafe);
             if (IEtherFiOwnable(address(l2Oft)).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(address(l2Oft)).transferOwnership(targetL2.l2ContractControllerSafe);
             if (IEtherFiOwnable(targetL2.l2Oft_ProxyAdmin).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(targetL2.l2Oft_ProxyAdmin).transferOwnership(targetL2.l2ContractControllerSafe);
             if (IEtherFiOwnable(address(l2Oft)).hasRole(l2Oft.DEFAULT_ADMIN_ROLE(), deployer)) {
-                l2Oft.revokeRole(l2Oft.DEFAULT_ADMIN_ROLE(), deployer);
                 l2Oft.grantRole(l2Oft.DEFAULT_ADMIN_ROLE(), targetL2.l2ContractControllerSafe);
+                l2Oft.revokeRole(l2Oft.DEFAULT_ADMIN_ROLE(), deployer);
             }
 
             require(l2Endpoint.delegates(address(l2Oft)) == targetL2.l2ContractControllerSafe, "OFT Delegate not set");
@@ -300,7 +301,7 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
             require(IEtherFiOwnable(address(l2Oft)).hasRole(l2Oft.DEFAULT_ADMIN_ROLE(), targetL2.l2ContractControllerSafe), "OFT Admin not transferred");
         }
 
-        if (_syncPool) {
+        if (_syncPool && address(l2SyncPool) != address(0)) {
             if (l2Endpoint.delegates(address(l2SyncPool)) != targetL2.l2ContractControllerSafe) l2SyncPool.setDelegate(targetL2.l2ContractControllerSafe);
 
             if (IEtherFiOwnable(address(l2SyncPool)).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(address(l2SyncPool)).transferOwnership(targetL2.l2ContractControllerSafe);
@@ -309,7 +310,6 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
 
             if (IEtherFiOwnable(targetL2.l2SyncPool_ProxyAdmin).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(targetL2.l2SyncPool_ProxyAdmin).transferOwnership(targetL2.l2ContractControllerSafe);
             if (IEtherFiOwnable(targetL2.l2ExchagneRateProvider_ProxyAdmin).owner() != targetL2.l2ContractControllerSafe) IEtherFiOwnable(targetL2.l2ExchagneRateProvider_ProxyAdmin).transferOwnership(targetL2.l2ContractControllerSafe);
-
         
             require(l2Endpoint.delegates(address(l2SyncPool)) == targetL2.l2ContractControllerSafe, "SyncPool Delegate not set");
 
