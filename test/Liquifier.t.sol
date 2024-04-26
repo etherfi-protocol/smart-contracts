@@ -775,4 +775,11 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.unPauseContract();
 
     }
+
+    function test_getTotalPooledEther() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        liquidityPoolInstance.getTotalPooledEther();
+        liquifierInstance.getTotalPooledEther();
+    }
 }

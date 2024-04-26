@@ -216,27 +216,36 @@ contract TimelockTest is TestSetup {
         emit Schedule(address(etherFiOracleInstance), 0, abi.encodeWithSelector(bytes4(keccak256("updateAdmin(address,bool)")), 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, true), bytes32(0), bytes32(0), 259200);
     }
 
-    function test_updateDepositCap() public {
+    function test_registerToken() public {
         initializeRealisticFork(MAINNET_FORK);
         address target = address(liquifierInstance);
+
         {
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 2_000, 5_000);
-            _execute(target, data, true);
-        }
-        {
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 2_000, 5_000);
-            _execute(target, data, true);
+            // MODE
+            bytes memory data = abi.encodeWithSelector(Liquifier.registerToken.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, address(0), true, 0, 2_000, 10_000, true);
+            _execute(target, data, false);
         }
         {
             // LINEA
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf, 2_000, 5_000);
+            bytes memory data = abi.encodeWithSelector(Liquifier.registerToken.selector, 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf, address(0), true, 0, 2_000, 10_000, true);
             _execute(target, data, false);
         }
-        {
-            // BASE
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 2_000, 5_000);
-            _execute(target, data, false);
-        }
+    }
+
+    function test_updateDepositCap() public {
+        initializeRealisticFork(MAINNET_FORK);
+        address target = address(liquifierInstance);
+
+        // {
+        //     // LINEA
+        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf, 2_000, 5_000);
+        //     _execute(target, data, false);
+        // }
+        // {
+        //     // BASE
+        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 2_000, 5_000);
+        //     _execute(target, data, false);
+        // }
 
         {
             bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 2_000, 10_000);
@@ -246,16 +255,16 @@ contract TimelockTest is TestSetup {
             bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 2_000, 10_000);
             _execute(target, data, false);
         }
-        {
-            // LINEA
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf, 2_000, 10_000);
-            _execute(target, data, false);
-        }
-        {
-            // BASE
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 2_000, 10_000);
-            _execute(target, data, false);
-        }
+        // {
+        //     // LINEA
+        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf, 2_000, 10_000);
+        //     _execute(target, data, false);
+        // }
+        // {
+        //     // BASE
+        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 2_000, 10_000);
+        //     _execute(target, data, false);
+        // }
     }
 
     function _selector(bytes memory signature) internal pure returns (bytes4) {
