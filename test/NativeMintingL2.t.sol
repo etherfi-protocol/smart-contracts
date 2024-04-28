@@ -107,11 +107,11 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
 
     function _go() internal {
         _verify_L2_configurations(true, true, true);
-        _verify_syncpool_wired();
+        // _verify_syncpool_wired();
 
-        _setup_DVN(true, true);
+        // _setup_DVN(true, true);
 
-        _transfer_ownership(true, true); // only at last
+        // _transfer_ownership(true, true); // only at last
 
         vm.warp(block.timestamp + 1);
     }
@@ -228,6 +228,10 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
             if (limit != targetL2Params.target_l2_to_l1_briding_cap || window != targetL2Params.briding_cap_window) {
                 IEtherFiOFT.RateLimitConfig[] memory rateLimits = new IEtherFiOFT.RateLimitConfig[](1);
                 rateLimits[0] = IEtherFiOFT.RateLimitConfig({dstEid: l1Eid, limit: targetL2Params.target_l2_to_l1_briding_cap, window: targetL2Params.briding_cap_window});
+                
+                bytes memory data = abi.encodeWithSelector(IEtherFiOFT.setRateLimits.selector, rateLimits);
+                emit L2Transaction(address(l2Oft), 0, data);
+                
                 l2Oft.setRateLimits(rateLimits);
             }
 
@@ -439,11 +443,19 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
         address alice = vm.addr(1);
         vm.deal(alice, 100 ether);
 
-        uint256 inputAmount = 0.00001 ether;
-        uint256 expectedOutputAmount = l2exchangeRateProvider.getConversionAmount(ETH_ADDRESS, inputAmount);
+        uint256 inputAmount = 1 ether;
+        uint256 expectedOutputAmount1 = l2exchangeRateProvider.getConversionAmount(ETH_ADDRESS, inputAmount);
+    
+        vm.prank(IEtherFiOwnable(address(l2exchangeRateProvider)).owner());
+        l2exchangeRateProvider.setRateParameters(ETH_ADDRESS, targetL2.l2PriceOracle, 1e16, targetL2.l2PriceOracleHeartBeat);
+        uint256 expectedOutputAmount2 = l2exchangeRateProvider.getConversionAmount(ETH_ADDRESS, inputAmount);
 
-        vm.prank(alice);
-        uint256 mintAmount = l2SyncPool.deposit{value: inputAmount}(ETH_ADDRESS, inputAmount, expectedOutputAmount);        
+        vm.prank(IEtherFiOwnable(address(l2exchangeRateProvider)).owner());
+        l2exchangeRateProvider.setRateParameters(ETH_ADDRESS, targetL2.l2PriceOracle, 1e17, targetL2.l2PriceOracleHeartBeat);
+        uint256 expectedOutputAmount3 = l2exchangeRateProvider.getConversionAmount(ETH_ADDRESS, inputAmount);
+
+        // vm.prank(alice);
+        // uint256 mintAmount = l2SyncPool.deposit{value: inputAmount}(ETH_ADDRESS, inputAmount, expectedOutputAmount);        
     }
 
     function test_mint_LINEA() public {

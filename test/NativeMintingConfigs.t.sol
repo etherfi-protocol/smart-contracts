@@ -76,6 +76,8 @@ interface IEtherFiOwnable {
 
 
 contract NativeMintingConfigs is L2Constants {
+    event L2Transaction(address to, uint256 value, bytes data);
+
     using OptionsBuilder for bytes;
 
     struct L2Params {
@@ -91,11 +93,11 @@ contract NativeMintingConfigs is L2Constants {
     L2Params prod = L2Params({
         minSyncAmount: 50 ether,
         target_briding_cap: 4_000 ether,
-        target_l2_to_l1_briding_cap: 200 ether,
-        briding_cap_window: 4 hours,
+        target_l2_to_l1_briding_cap: 100 ether,
+        briding_cap_window: 1 hours,
         target_native_minting_cap: 1_000 ether,
         target_native_minting_refill_rate: 1 ether,
-        target_native_minting_fee: 0
+        target_native_minting_fee: uint64(35 * 1e14)
     });
 
     L2Params standby = L2Params({
@@ -177,7 +179,7 @@ contract NativeMintingConfigs is L2Constants {
             });
 
             IOAppOptionsType3(oApp).setEnforcedOptions(enforcedOptions);
-            emit Transaction(address(oApp), abi.encodeWithSelector(IOAppOptionsType3(oApp).setEnforcedOptions.selector, enforcedOptions));
+            emit L2Transaction(address(oApp), 0, abi.encodeWithSelector(IOAppOptionsType3(oApp).setEnforcedOptions.selector, enforcedOptions));
         } 
 
         _setUpOApp_setConfig(oApp, originEndpoint, originSend302, originReceive302, originDvns, dstEid);
@@ -212,17 +214,14 @@ contract NativeMintingConfigs is L2Constants {
 
         if (configSend.length == 0) {
             ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originSend302, params);
-            emit Transaction(address(originEndpoint), abi.encodeWithSelector(ILayerZeroEndpointV2(originEndpoint).setConfig.selector, oApp, originSend302, params));
+            emit L2Transaction(address(originEndpoint), 0, abi.encodeWithSelector(ILayerZeroEndpointV2(originEndpoint).setConfig.selector, oApp, originSend302, params));
         }
         
         if (configReceive.length == 0) {
             ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originReceive302, params);
-            emit Transaction(address(originEndpoint), abi.encodeWithSelector(ILayerZeroEndpointV2(originEndpoint).setConfig.selector, oApp, originReceive302, params));
+            emit L2Transaction(address(originEndpoint), 0, abi.encodeWithSelector(ILayerZeroEndpointV2(originEndpoint).setConfig.selector, oApp, originReceive302, params));
         }
     }
-
-
-    event Transaction(address target, bytes data);
 
     function _selector(bytes memory signature) internal pure returns (bytes4) {
         return bytes4(keccak256(signature));

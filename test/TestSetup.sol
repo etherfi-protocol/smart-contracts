@@ -48,6 +48,12 @@ import "../src/EtherFiAdmin.sol";
 import "../src/EtherFiTimelock.sol";
 
 contract TestSetup is Test {
+
+    event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
+    event Execute(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt);
+    event Transaction(address to, uint256 value, bytes data);
+
+
     uint256 public constant kwei = 10 ** 3;
     uint256 public slippageLimit = 50;
 
@@ -366,18 +372,22 @@ contract TestSetup is Test {
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
-        
         vm.startPrank(owner);
             
         if (forkEnum == MAINNET_FORK) {            
             liquifierInstance.upgradeTo(address(new Liquifier()));
-            liquifierInstance.initializeOnUpgrade(address(eigenLayerDelegationManager), address(0x1b81D678ffb9C0263b24A97847620C99d213eB14));
             liquifierInstance.updateAdmin(alice, true);
         } else if (forkEnum == TESTNET_FORK) {
             liquifierInstance.upgradeTo(address(new Liquifier()));
-            liquifierInstance.initializeOnUpgrade(address(eigenLayerDelegationManager), address(0));
             liquifierInstance.updateAdmin(alice, true);
         }
+
+        // address impl = address(new BucketRateLimiter());
+        // BucketRateLimiter rateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
+        // rateLimiter.initialize();
+        // rateLimiter.updateConsumer(address(liquifierInstance));
+
+        // liquifierInstance.initializeRateLimiter(address(rateLimiter));
 
         vm.stopPrank();
     }
@@ -1387,5 +1397,65 @@ contract TestSetup is Test {
         }
 
         return (depositDataArray, depositDataRootsForApproval, sig, pubKey);
+    }
+
+    function _execute_timelock(address target, bytes memory data, bool _alreadyScheduled) internal {
+        vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+        if (!_alreadyScheduled) {
+            etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+            _output_schedule_txn(target, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+        }
+
+        vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
+
+        etherFiTimelockInstance.execute(target, 0, data, bytes32(0), bytes32(0));
+        _output_execute_timelock_txn(target, data, bytes32(0), bytes32(0));
+        vm.stopPrank();
+    }
+
+    function _20240428_updateDepositCap() internal {
+        {
+            _execute_timelock(
+                0x9FFDF407cDe9a93c47611799DA23924Af3EF764F, 
+                hex"3BEB551700000000000000000000000083998E169026136760BE6AF93E776C2F352D4B280000000000000000000000000000000000000000000000000000000000000FA00000000000000000000000000000000000000000000000000000000000004E20", 
+                true
+            );
+        }
+        {
+            _execute_timelock(
+                0x9FFDF407cDe9a93c47611799DA23924Af3EF764F, 
+                hex"3BEB5517000000000000000000000000DC400F3DA3EA5DF0B7B6C127AE2E54CE55644CF30000000000000000000000000000000000000000000000000000000000000FA00000000000000000000000000000000000000000000000000000000000004E20", 
+                true
+            );
+        }
+    }
+
+
+    function _output_schedule_txn(address target, bytes memory data, bytes32 predecessor, bytes32 salt, uint256 delay) internal {
+        bytes memory txn_data = abi.encodeWithSelector(TimelockController.schedule.selector, target, 0, data, predecessor, salt, delay);
+        emit Transaction(address(etherFiTimelockInstance), 0, txn_data);
+
+        string memory obj_k = "timelock_txn";
+        stdJson.serialize(obj_k, "to", address(etherFiTimelockInstance));
+        stdJson.serialize(obj_k, "value", uint256(0));
+        string memory output = stdJson.serialize(obj_k, "data", txn_data);
+
+        string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
+        string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        stdJson.write(output, output_path);
+    }
+
+    function _output_execute_timelock_txn(address target, bytes memory data, bytes32 predecessor, bytes32 salt) internal {
+        bytes memory txn_data = abi.encodeWithSelector(TimelockController.execute.selector, target, 0, data, predecessor, salt);
+        emit Transaction(address(etherFiTimelockInstance), 0, txn_data);
+
+        string memory obj_k = "timelock_txn";
+        stdJson.serialize(obj_k, "to", address(etherFiTimelockInstance));
+        stdJson.serialize(obj_k, "value", uint256(0));
+        string memory output = stdJson.serialize(obj_k, "data", txn_data);
+
+        string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
+        string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        stdJson.write(output, output_path);
     }
 }

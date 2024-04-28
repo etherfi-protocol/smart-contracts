@@ -590,7 +590,6 @@ contract LiquifierTest is TestSetup {
 
         vm.startPrank(owner);
         dummyToken = new DummyERC20();
-        liquifierInstance.initializeL1SyncPool(l1SyncPool);
         liquifierInstance.registerToken(address(dummyToken), address(0), true, 0, 50, 1000, true);
         vm.stopPrank();
     }
@@ -778,6 +777,7 @@ contract LiquifierTest is TestSetup {
 
     function test_getTotalPooledEther() public {
         initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
 
         liquidityPoolInstance.getTotalPooledEther();
         liquifierInstance.getTotalPooledEther();

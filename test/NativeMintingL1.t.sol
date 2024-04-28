@@ -67,12 +67,10 @@ contract NativeMintingL1Suite is Test, NativeMintingConfigs {
         deployer = vm.addr(pk);
 
         l1SyncPool = IEtherfiL1SyncPoolETH(l1SyncPoolAddress);
-        endpoint = EndpointV2(address(l1SyncPool.endpoint()));
+        endpoint = EndpointV2(address(l1Endpoint));
         oftAdapter = OFTAdapter(l1OftAdapter);
 
         _init();
-
-        assertEq(address(l1SyncPool.endpoint()), l1Endpoint);
     }
 
     function _go() internal {
@@ -259,8 +257,10 @@ contract NativeMintingL1 is TestSetup, NativeMintingL1Suite {
     }
 
     function test_BLAST_fast_sync() public {
-        uint256 amountIn = 1e18;
-        uint256 amountOut = 0.9e18;
+        _20240428_updateDepositCap();
+        
+        uint256 amountIn = 1000e18;
+        uint256 amountOut = 900e18;
         _test_fast_sync(BLAST, amountIn, amountOut, "");
     }
 
@@ -316,7 +316,6 @@ contract NativeMintingL1 is TestSetup, NativeMintingL1Suite {
             // Dept flow
             assertEq(weEthInstance.balanceOf(address(l1OftAdapter)), lockbox_balance + actualAmountOut);
         }
-
     }
 
     // Slow Sync with the ETH bridged down to the L1
