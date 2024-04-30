@@ -3,7 +3,7 @@
 Smart Contracts for ether.fi ethereum staking protocol.
 
 From 2024/02/15, we have migrated from our private repo to this public one.
-We start with the shallow copy of the latest commit of the prevate one.
+We start with the shallow copy of the latest commit of the private one.
 
 # EtherFi smart contracts setup
 
@@ -55,7 +55,7 @@ forge test --fork-url <your_rpc_url>>
 
 ### Build Troubleshooting Tips
 
-In case you run into an issue of `forge` not being able to find a compatible version of solidity compiler for one of your contracts/scripts, you may want to install the solidity version manager `svm`. To be able to do so, you will need to have [Rust](https://www.rust-lang.org/tools/install) installed on your system and with it the acompanying package manager `cargo`. Once that is done, to install `svm` run the following command:
+In case you run into an issue of `forge` not being able to find a compatible version of solidity compiler for one of your contracts/scripts, you may want to install the solidity version manager `svm`. To be able to do so, you will need to have [Rust](https://www.rust-lang.org/tools/install) installed on your system and with it the accompanying package manager `cargo`. Once that is done, to install `svm` run the following command:
 
 ```zsh
 cargo install svm-rs
@@ -94,7 +94,7 @@ If you have a ReadMe file and test folder already, move them off the root before
 yarn hardhat
 ```
 
-You will have to run the below everytime you modify the foundry library. Open remappings.txt when done and make sure all remappings are correct. Sometimes weird remappings can be genrated.
+You will have to run the below every time you modify the foundry library. Open remappings.txt when done and make sure all remappings are correct. Sometimes weird remappings can be generated.
 
 ```zsh
 forge remappings > remappings.txt

@@ -52,7 +52,7 @@ forge test --fork-url <your_rpc_url>>
 
 ### Build Troubleshooting Tips
 
-In case you run into an issue of `forge` not being able to find a compatible version of solidity compiler for one of your contracts/scripts, you may want to install the solidity version manager `svm`. To be able to do so, you will need to have [Rust](https://www.rust-lang.org/tools/install) installed on your system and with it the acompanying package manager `cargo`. Once that is done, to install `svm` run the following command:
+In case you run into an issue of `forge` not being able to find a compatible version of solidity compiler for one of your contracts/scripts, you may want to install the solidity version manager `svm`. To be able to do so, you will need to have [Rust](https://www.rust-lang.org/tools/install) installed on your system and with it the accompanying package manager `cargo`. Once that is done, to install `svm` run the following command:
 
 ```zsh
 cargo install svm-rs
@@ -86,11 +86,11 @@ goerli = { key = "${ETHERSCAN_API_KEY}" }
 
 The first part refers to the RPC endpoint to be used when deploying. You can get this through Alchemy or Infura. Simply create an account and create a new RPC endpoint, selecting the respective network you wish to deploy to.
 
-The second part relates to the etherscan API key that will be used for verifying the contracts on etherscan. If you prefer to keep you contracts unverified, this part can be skipped. To generate an API key, create an account on etherscan and select generate API key.
+The second part relates to the etherscan API key that will be used for verifying the contracts on etherscan. If you prefer to keep your contracts unverified, this part can be skipped. To generate an API key, create an account on etherscan and select generate API key.
 
 ### Updating env file
 
-Many variables used in deployment, such as the deployer private key, are advised to be kept private. An env file is a great way to achieve this. Make a copy of the .example.env file and create a new file called .env in the root directory. In this file, you will store your RPC endpoint, private key as well as etehrscan api key. Fill in the required parameters in the .env to aid the deployment process.
+Many variables used in deployment, such as the deployer private key, are advised to be kept private. An env file is a great way to achieve this. Make a copy of the .example.env file and create a new file called .env in the root directory. In this file, you will store your RPC endpoint, private key as well as etherscan api key. Fill in the required parameters in the .env to aid the deployment process.
 
 ### Deploy Script
 
@@ -123,7 +123,7 @@ bytes32[] memory proofFour = merkle.getProof(data, 3);
 bytes32[] memory proofFive = merkle.getProof(data, 4);
 ```
 
-The above generates a bytes32 array holding five public addresses. If you want more or less, you can add and removes lines as you see fit. However it is important to update the following line accordingly:
+The above generates a bytes32 array holding five public addresses. If you want more or less, you can add and remove lines as you see fit. However it is important to update the following line accordingly:
 
 ```zsh
 bytes32[] memory data = new bytes32[](5);
@@ -179,7 +179,7 @@ If you have a ReadMe file and test folder already, move them off the root before
 yarn hardhat
 ```
 
-You will have to run the below everytime you modify the foundry library. Open remappings.txt when done and make sure all remappings are correct. Sometimes weird remappings can be genrated.
+You will have to run the below every time you modify the foundry library. Open remappings.txt when done and make sure all remappings are correct. Sometimes weird remappings can be generated.
 
 ```zsh
 forge remappings > remappings.txt
