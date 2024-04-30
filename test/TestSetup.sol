@@ -1399,17 +1399,18 @@ contract TestSetup is Test {
         return (depositDataArray, depositDataRootsForApproval, sig, pubKey);
     }
 
-    function _execute_timelock(address target, bytes memory data, bool _alreadyScheduled) internal {
+    function _execute_timelock(address target, bytes memory data, bool _schedule, bool _log_schedule, bool _execute, bool _log_execute) internal {
         vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
-        if (!_alreadyScheduled) {
-            etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
-            _output_schedule_txn(target, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
-        }
+        
+        if (_schedule) etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+        if (_log_schedule) _output_schedule_txn(target, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
 
         vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
 
-        etherFiTimelockInstance.execute(target, 0, data, bytes32(0), bytes32(0));
-        _output_execute_timelock_txn(target, data, bytes32(0), bytes32(0));
+        if (_execute) etherFiTimelockInstance.execute(target, 0, data, bytes32(0), bytes32(0));
+        if (_log_execute) _output_execute_timelock_txn(target, data, bytes32(0), bytes32(0));
+
+        vm.warp(block.timestamp + 1);
         vm.stopPrank();
     }
 
@@ -1418,14 +1419,20 @@ contract TestSetup is Test {
             _execute_timelock(
                 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F, 
                 hex"3BEB551700000000000000000000000083998E169026136760BE6AF93E776C2F352D4B280000000000000000000000000000000000000000000000000000000000000FA00000000000000000000000000000000000000000000000000000000000004E20", 
-                true
+                false,
+                false,
+                true,
+                false
             );
         }
         {
             _execute_timelock(
                 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F, 
                 hex"3BEB5517000000000000000000000000DC400F3DA3EA5DF0B7B6C127AE2E54CE55644CF30000000000000000000000000000000000000000000000000000000000000FA00000000000000000000000000000000000000000000000000000000000004E20", 
-                true
+                false,
+                false,
+                true,
+                false
             );
         }
     }

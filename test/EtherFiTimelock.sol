@@ -219,34 +219,34 @@ contract TimelockTest is TestSetup {
         {
             // MODE
             bytes memory data = abi.encodeWithSelector(Liquifier.registerToken.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, address(0), true, 0, 2_000, 10_000, true);
-            _execute_timelock(target, data, false);
+            _execute_timelock(target, data, false, false, true, true);
         }
         {
             // LINEA
             bytes memory data = abi.encodeWithSelector(Liquifier.registerToken.selector, 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf, address(0), true, 0, 2_000, 10_000, true);
-            _execute_timelock(target, data, false);
+            _execute_timelock(target, data, false, false, true, true);
         }
     }
 
     function test_updateDepositCap() public {
         initializeRealisticFork(MAINNET_FORK);
         address target = address(liquifierInstance);
+        // {
+        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 4_000, 20_000);
+        //     _execute_timelock(target, data, false, false, true, true);
+        // }
+        // {
+        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 4_000, 20_000);
+        //     _execute_timelock(target, data, false, false, true, true);
+        // }
         {
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 4_000, 20_000);
-            _execute_timelock(target, data, true);
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 1_000, 100_000);
+            _execute_timelock(target, data, true, true, true, false);
         }
-        {
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 4_000, 20_000);
-            _execute_timelock(target, data, true);
-        }
-        {
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 1_000, 100_000);
-            _execute_timelock(target, data, false);
-        }
-        {
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 1_000, 100_000);
-            _execute_timelock(target, data, false);
-        }
+        // {
+        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 1_000, 100_000);
+        //     _execute_timelock(target, data, true, true, true, false);
+        // }
 
         // {
         //     // LINEA

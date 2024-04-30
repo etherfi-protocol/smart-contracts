@@ -20,6 +20,7 @@ contract Deploy is Script {
         if (block.chainid == 59144) l2syncpool = 0x823106E745A62D0C2FC4d27644c62aDE946D9CCa; // LINEA
         else if (block.chainid == 81457) l2syncpool = 0x52c4221Cb805479954CDE5accfF8C4DcaF96623B; // BLAST
         else if (block.chainid == 34443) l2syncpool = 0x52c4221Cb805479954CDE5accfF8C4DcaF96623B; // MODE
+        else if (block.chainid == 8453) l2syncpool = 0xc38e046dFDAdf15f7F56853674242888301208a5; // BASE
         else revert("Unsupported chain id");
 
         vm.startBroadcast(deployerPrivateKey);
@@ -33,8 +34,6 @@ contract Deploy is Script {
         IL2SyncPool(l2syncpool).setRateLimiter(address(limiter));
 
         vm.stopBroadcast();
-
-
 
         // TEST
 

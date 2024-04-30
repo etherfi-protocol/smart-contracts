@@ -50,7 +50,7 @@ interface IEtherFiOFT is IOFT, IMintableERC20, IAccessControlUpgradeable, IOAppC
     function MINTER_ROLE() external view returns (bytes32);
     function DEFAULT_ADMIN_ROLE() external view returns (bytes32);
     // function hasRole(bytes32 role, address account) external view returns (bool);
-    // function grantRole(bytes32 role, address account) external;
+    function grantRole(bytes32 role, address account) external;
     function owner() external view returns (address);
     function delegate() external view returns (address);
 
@@ -93,11 +93,11 @@ contract NativeMintingConfigs is L2Constants {
     L2Params prod = L2Params({
         minSyncAmount: 50 ether,
         target_briding_cap: 4_000 ether,
-        target_l2_to_l1_briding_cap: 100 ether,
-        briding_cap_window: 1 hours,
-        target_native_minting_cap: 1_000 ether,
+        target_l2_to_l1_briding_cap: 200 ether,
+        briding_cap_window: 4 hours,
+        target_native_minting_cap: 3_600 ether,
         target_native_minting_refill_rate: 1 ether,
-        target_native_minting_fee: uint64(35 * 1e14)
+        target_native_minting_fee: uint64(20 * 1e14)
     });
 
     L2Params standby = L2Params({
@@ -160,24 +160,37 @@ contract NativeMintingConfigs is L2Constants {
         address originSend302,
         address originReceive302,
         address[2] memory originDvns,
-        uint32 dstEid
+        uint32 dstEid,
+        bool isSyncPool
     ) internal {
-        bytes memory options1 = IOAppOptionsType3(oApp).combineOptions(dstEid, 1, "");
-        bytes memory options2 = IOAppOptionsType3(oApp).combineOptions(dstEid, 2, "");
-        
-        if (options1.length == 0 || options2.length == 0) {
-            EnforcedOptionParam[] memory enforcedOptions = new EnforcedOptionParam[](2);
-            enforcedOptions[0] = EnforcedOptionParam({
-                eid: dstEid,
-                msgType: 1,
-                options: OptionsBuilder.newOptions().addExecutorLzReceiveOption(1_000_000, 0)
-            });
-            enforcedOptions[1] = EnforcedOptionParam({
-                eid: dstEid,
-                msgType: 2,
-                options: OptionsBuilder.newOptions().addExecutorLzReceiveOption(1_000_000, 0)
-            });
+        EnforcedOptionParam[] memory enforcedOptions;
+        if (isSyncPool) {
+            if (IOAppOptionsType3(oApp).combineOptions(dstEid, 0, "").length == 0) {
+                enforcedOptions = new EnforcedOptionParam[](1);
+                enforcedOptions[0] = EnforcedOptionParam({
+                    eid: dstEid,
+                    msgType: 0,
+                    options: OptionsBuilder.newOptions().addExecutorLzReceiveOption(1_000_000, 0)
+                });
+            }
+        } else {
+            if (IOAppOptionsType3(oApp).combineOptions(dstEid, 1, "").length == 0 || IOAppOptionsType3(oApp).combineOptions(dstEid, 2, "").length == 0) {
+                enforcedOptions = new EnforcedOptionParam[](2);
+                enforcedOptions[0] = EnforcedOptionParam({
+                    eid: dstEid,
+                    msgType: 1,
+                    options: OptionsBuilder.newOptions().addExecutorLzReceiveOption(1_000_000, 0)
+                });
+                enforcedOptions[1] = EnforcedOptionParam({
+                    eid: dstEid,
+                    msgType: 2,
+                    options: OptionsBuilder.newOptions().addExecutorLzReceiveOption(1_000_000, 0)
+                });
 
+            }
+        }
+        
+        if (enforcedOptions.length > 0) {
             IOAppOptionsType3(oApp).setEnforcedOptions(enforcedOptions);
             emit L2Transaction(address(oApp), 0, abi.encodeWithSelector(IOAppOptionsType3(oApp).setEnforcedOptions.selector, enforcedOptions));
         } 

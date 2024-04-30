@@ -535,7 +535,7 @@ contract LiquifierTest is TestSetup {
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
         uint256 lpBalance = address(liquidityPoolInstance).balance;
 
-        uint256 inputAmount = 100 ether;
+        uint256 inputAmount = 50 ether;
 
         vm.startPrank(alice);
 
@@ -563,7 +563,7 @@ contract LiquifierTest is TestSetup {
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
         uint256 lpBalance = address(liquidityPoolInstance).balance;
 
-        uint256 inputAmount = 100 ether;
+        uint256 inputAmount = 50 ether;
 
         vm.startPrank(alice);
 
