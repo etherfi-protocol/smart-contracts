@@ -97,7 +97,7 @@ contract NativeMintingConfigs is L2Constants {
         briding_cap_window: 4 hours,
         target_native_minting_cap: 3_600 ether,
         target_native_minting_refill_rate: 1 ether,
-        target_native_minting_fee: uint64(20 * 1e14)
+        target_native_minting_fee: uint64(0 * 1e14)
     });
 
     L2Params standby = L2Params({
@@ -191,8 +191,8 @@ contract NativeMintingConfigs is L2Constants {
         }
         
         if (enforcedOptions.length > 0) {
-            IOAppOptionsType3(oApp).setEnforcedOptions(enforcedOptions);
             emit L2Transaction(address(oApp), 0, abi.encodeWithSelector(IOAppOptionsType3(oApp).setEnforcedOptions.selector, enforcedOptions));
+            IOAppOptionsType3(oApp).setEnforcedOptions(enforcedOptions);
         } 
 
         _setUpOApp_setConfig(oApp, originEndpoint, originSend302, originReceive302, originDvns, dstEid);
@@ -226,13 +226,13 @@ contract NativeMintingConfigs is L2Constants {
         bytes memory configReceive = ILayerZeroEndpointV2(originEndpoint).getConfig(oApp, originReceive302, dstEid, 2);
 
         if (configSend.length == 0) {
-            ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originSend302, params);
             emit L2Transaction(address(originEndpoint), 0, abi.encodeWithSelector(ILayerZeroEndpointV2(originEndpoint).setConfig.selector, oApp, originSend302, params));
+            ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originSend302, params);
         }
         
         if (configReceive.length == 0) {
-            ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originReceive302, params);
             emit L2Transaction(address(originEndpoint), 0, abi.encodeWithSelector(ILayerZeroEndpointV2(originEndpoint).setConfig.selector, oApp, originReceive302, params));
+            ILayerZeroEndpointV2(originEndpoint).setConfig(oApp, originReceive302, params);
         }
     }
 

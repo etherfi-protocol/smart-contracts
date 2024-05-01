@@ -199,9 +199,11 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
 
             // Native Minting Cap
             if (capacity != targetL2Params.target_native_minting_cap / 1e12) {
+                emit L2Transaction(address(l2SyncPoolRateLimiter), 0, abi.encodeWithSelector(BucketRateLimiter.setCapacity.selector, targetL2Params.target_native_minting_cap));
                 l2SyncPoolRateLimiter.setCapacity(targetL2Params.target_native_minting_cap);
             }
             if (refillRate != targetL2Params.target_native_minting_refill_rate / 1e12) {
+                emit L2Transaction(address(l2SyncPoolRateLimiter), 0, abi.encodeWithSelector(BucketRateLimiter.setRefillRatePerSecond.selector, targetL2Params.target_native_minting_refill_rate));
                 l2SyncPoolRateLimiter.setRefillRatePerSecond(targetL2Params.target_native_minting_refill_rate);
             }
             vm.stopBroadcast();
