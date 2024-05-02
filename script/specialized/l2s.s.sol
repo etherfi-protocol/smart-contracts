@@ -16,14 +16,6 @@ contract Deploy is Script, NativeMintingL2 {
         
         targetL2Params = prod;
         
-        // _init();
-        // for (uint256 i = 0; i < l2s.length; i++) {
-        //     vm.createSelectFork(l2s[i].rpc_url);
-        //     _setUp();
-        //     _go();
-        //     // _verify_oft_wired();
-        // }
-        
         _setUp();
         // _verify_L2_OFT_configuratinos();
 

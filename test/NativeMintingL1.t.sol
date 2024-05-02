@@ -67,24 +67,22 @@ contract NativeMintingL1Suite is Test, NativeMintingConfigs {
         deployer = vm.addr(pk);
 
         l1SyncPool = IEtherfiL1SyncPoolETH(l1SyncPoolAddress);
-        endpoint = EndpointV2(address(l1SyncPool.endpoint()));
+        endpoint = EndpointV2(address(l1Endpoint));
         oftAdapter = OFTAdapter(l1OftAdapter);
 
         _init();
-
-        assertEq(address(l1SyncPool.endpoint()), l1Endpoint);
     }
 
     function _go() internal {
         // if (endpoint.delegates(address(oftAdapter)) != deployer) oftAdapter.setDelegate(deployer);
         // if (endpoint.delegates(address(l1SyncPool)) != deployer) l1SyncPool.setDelegate(deployer);
 
-        _verify_oft_wired();
-        // _verify_syncpool_wired();
+        // _verify_oft_wired();
+        _verify_syncpool_wired();
 
         // _transfer_ownership();
         
-        // _setup_DVN(true, false); // only once, DONE
+        _setup_DVN(true, true); // only once, DONE
     }
 
     function test_verify_L1() public {
@@ -149,15 +147,17 @@ contract NativeMintingL1Suite is Test, NativeMintingConfigs {
     function _verify_syncpool_wired() internal {
         vm.startBroadcast(pk);
         for (uint256 i = 0; i < l2s.length; i++) {
+            if (l2s[i].l2SyncPool == address(0)) continue;
             bool isPeer = (l1SyncPool.peers(l2s[i].l2Eid) == _toBytes32(l2s[i].l2SyncPool));
             console.log("SyncPool Wired? - ", l2s[i].name, isPeer);
             if (!isPeer) {
-                // emit Transaction(address(l1SyncPool), abi.encodeWithSelector(l1SyncPool.setPeer.selector, l2s[i].l2Eid, _toBytes32(l2s[i].l2SyncPool))
+                // emit Transaction(address(l1SyncPool), abi.encodeWithSelector(l1SyncPool.setPeer.selector, l2s[i].l2Eid, _toBytes32(l2s[i].l2SyncPool)));
                 l1SyncPool.setPeer(l2s[i].l2Eid, _toBytes32(l2s[i].l2SyncPool));
             }
         }
 
         for (uint256 i = 0; i < bannedL2s.length; i++) {
+            if (l2s[i].l2SyncPool == address(0)) continue;
             bool isPeer = (l1SyncPool.peers(bannedL2s[i].l2Eid) == _toBytes32(bannedL2s[i].l2SyncPool));
             console.log("SyncPool Wired? - ", bannedL2s[i].name, isPeer);
 
@@ -175,8 +175,8 @@ contract NativeMintingL1Suite is Test, NativeMintingConfigs {
 
         // - _setUpOApp(ethereum.oftToken, ETHEREUM.endpoint, ETHEREUM.send302, ETHEREUM.lzDvn, {L2s}.originEid);
         for (uint256 i = 0; i < l2s.length; i++) {
-            if (_oft) _setUpOApp(l1OftAdapter, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid);
-            if (_syncPool) _setUpOApp_setConfig(l1SyncPoolAddress, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid);
+            if (_oft) _setUpOApp(l1OftAdapter, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid, false);
+            if (_syncPool) _setUpOApp(l1SyncPoolAddress, l1Endpoint, l1Send302, l1Receive302, l1Dvn, l2s[i].l2Eid, true);
         }
         vm.stopBroadcast();
     }
@@ -259,8 +259,10 @@ contract NativeMintingL1 is TestSetup, NativeMintingL1Suite {
     }
 
     function test_BLAST_fast_sync() public {
-        uint256 amountIn = 1e18;
-        uint256 amountOut = 0.9e18;
+        _20240428_updateDepositCap();
+        
+        uint256 amountIn = 1000e18;
+        uint256 amountOut = 900e18;
         _test_fast_sync(BLAST, amountIn, amountOut, "");
     }
 
@@ -316,7 +318,6 @@ contract NativeMintingL1 is TestSetup, NativeMintingL1Suite {
             // Dept flow
             assertEq(weEthInstance.balanceOf(address(l1OftAdapter)), lockbox_balance + actualAmountOut);
         }
-
     }
 
     // Slow Sync with the ETH bridged down to the L1

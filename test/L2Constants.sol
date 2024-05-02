@@ -12,6 +12,9 @@ contract L2Constants {
         uint32 l2Eid;
         address l2Endpoint;
 
+        address l1Messenger;
+        address l2Messenger;
+
         address l2Oft;
         address l2SyncPool;
         address l2SyncPoolRateLimiter;
@@ -74,6 +77,9 @@ contract L2Constants {
         l2Eid: 30243,
         l2Endpoint: 0x1a44076050125825900e736c501f859c50fE728c,
 
+        l1Messenger: 0x5D4472f31Bd9385709ec61305AFc749F0fA8e9d0,
+        l2Messenger: 0x4200000000000000000000000000000000000007,
+
         l2Oft: 0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A,
         l2SyncPool: 0x52c4221Cb805479954CDE5accfF8C4DcaF96623B,
         l2SyncPoolRateLimiter: 0x6f257089bF046a02751b60767871953F3899652e,
@@ -102,6 +108,9 @@ contract L2Constants {
 
         l2Eid: 30260,
         l2Endpoint: 0x1a44076050125825900e736c501f859c50fE728c,
+
+        l1Messenger: 0x95bDCA6c8EdEB69C98Bd5bd17660BaCef1298A6f,
+        l2Messenger: 0xC0d3c0d3c0D3c0D3C0d3C0D3C0D3c0d3c0d30007,
 
         l2Oft: 0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A,
         l2SyncPool: 0x52c4221Cb805479954CDE5accfF8C4DcaF96623B,
@@ -132,6 +141,9 @@ contract L2Constants {
         l2Eid: 30183,
         l2Endpoint: 0x1a44076050125825900e736c501f859c50fE728c,
 
+        l1Messenger: 0xd19d4B5d358258f05D7B411E21A1460D11B0876F,
+        l2Messenger: 0x508Ca82Df566dCD1B0DE8296e70a96332cD644ec,
+
         l2Oft: 0x1Bf74C010E6320bab11e2e5A532b5AC15e0b8aA6,
         l2SyncPool: 0x823106E745A62D0C2FC4d27644c62aDE946D9CCa,
         l2SyncPoolRateLimiter: 0x3A19866D5E0fAE0Ce19Adda617f9d2B9fD5a3975,
@@ -160,6 +172,9 @@ contract L2Constants {
 
         l2Eid: 30102,
         l2Endpoint: 0x1a44076050125825900e736c501f859c50fE728c,
+
+        l1Messenger: address(0),
+        l2Messenger: address(0),
 
         l2Oft: 0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A,
         l2SyncPool: address(0),
@@ -190,21 +205,24 @@ contract L2Constants {
         l2Eid: 30184,
         l2Endpoint: 0x1a44076050125825900e736c501f859c50fE728c,
 
+        l1Messenger: 0x866E82a600A1414e583f7F13623F1aC5d58b0Afa,
+        l2Messenger: 0x4200000000000000000000000000000000000007,
+
         l2Oft: 0x04C0599Ae5A44757c0af6F9eC3b93da8976c150A,
-        l2SyncPool: address(0),
-        l2SyncPoolRateLimiter: address(0),
-        l2ExchagneRateProvider: address(0),
+        l2SyncPool: 0xc38e046dFDAdf15f7F56853674242888301208a5,
+        l2SyncPoolRateLimiter: 0xe6e0fe0C3Ac45d1FE71AF7853007467eE89e1e67,
+        l2ExchagneRateProvider: 0xF2c5519c634796B73dE90c7Dc27B4fEd560fC3ca,
         l2ContractControllerSafe: 0x7a00657a45420044bc526B90Ad667aFfaee0A868,
-        l2PriceOracle: address(0),
-        l2PriceOracleHeartBeat: 0,
-        l1dummyToken: address(0), // 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46
-        l1Receiver: address(0),
+        l2PriceOracle: 0x35e9D7001819Ea3B39Da906aE6b06A62cfe2c181, // CL
+        l2PriceOracleHeartBeat: 24 hours,
+        l1dummyToken: 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46,
+        l1Receiver: 0x8963C96186bd05995AdaA9E1fda25B7181CCBc37,
 
         l2Oft_ProxyAdmin: 0x2F6f3cc4a275C7951FB79199F01eD82421eDFb68,
-        l2SyncPool_ProxyAdmin: address(0),
-        l2ExchagneRateProvider_ProxyAdmin: address(0),
-        l1dummyToken_ProxyAdmin: address(0),
-        l1Receiver_ProxyAdmin: address(0),
+        l2SyncPool_ProxyAdmin: 0x9055c6EF7Cb895D550368fE7B38Be346E7eA9eE6,
+        l2ExchagneRateProvider_ProxyAdmin: 0x7Ce9B21e86778Bb6D06CF107f1C154cB5635598f,
+        l1dummyToken_ProxyAdmin: 0x915B16B555872A084B3512169b1F1dC089C3ca9A,
+        l1Receiver_ProxyAdmin: 0x0df531532cf25156b1fe91232F41B4c9AA514125,
 
         send302: 0xB5320B0B3a13cC860893E2Bd79FCd7e13484Dda2,
         receive302: 0xc70AB6f32772f59fBfc23889Caf4Ba3376C84bAf,
