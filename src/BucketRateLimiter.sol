@@ -17,6 +17,8 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     mapping(address => bool) public admins;
     mapping(address => bool) public pausers;
 
+    mapping(address => BucketLimiter.Limit) public limitsPerToken;
+
     event UpdatedAdmin(address indexed admin, bool status);
     event UpdatedPauser(address indexed pauser, bool status);
 
@@ -37,12 +39,15 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         // Count both 'amountIn' and 'amountOut' as rate limit consumption
         uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut + 1e12 - 1) / 1e12);
         require(BucketLimiter.consume(limit, consumedAmount), "BucketRateLimiter: rate limit exceeded");
+        require(limitsPerToken[tokenIn].lastRefill == 0 || BucketLimiter.consume(limitsPerToken[tokenIn], consumedAmount), "BucketRateLimiter: token rate limit exceeded");
     }
 
-    function canConsume(uint256 amountIn, uint256 amountOut) external view returns (bool) {
+    function canConsume(address tokenIn, uint256 amountIn, uint256 amountOut) external view returns (bool) {
         // Count both 'amountIn' and 'amountOut' as rate limit consumption
         uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut + 1e12 - 1) / 1e12);
-        return BucketLimiter.canConsume(limit, consumedAmount);
+        bool globalConsumable = BucketLimiter.canConsume(limit, consumedAmount);
+        bool perTokenConsumable = limitsPerToken[tokenIn].lastRefill == 0 || BucketLimiter.canConsume(limitsPerToken[tokenIn], consumedAmount);
+        return globalConsumable && perTokenConsumable;
     }
 
     function setCapacity(uint256 capacity) external onlyOwner {
@@ -55,6 +60,24 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
         BucketLimiter.setRefillRate(limit, refillRate64);
+    }
+
+    function registerToken(address token, uint256 capacity, uint256 refillRate) external onlyOwner {
+        uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
+        uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
+        limitsPerToken[token] = BucketLimiter.create(capacity64, refillRate64);
+    }
+
+    function setCapacityPerToken(address token, uint256 capacity) external onlyOwner {
+        // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
+        uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
+        BucketLimiter.setCapacity(limitsPerToken[token], capacity64);
+    }
+
+    function setRefillRatePerSecondPerToken(address token, uint256 refillRate) external onlyOwner {
+        // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
+        uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
+        BucketLimiter.setRefillRate(limitsPerToken[token], refillRate64);
     }
 
     function updateConsumer(address _consumer) external onlyOwner {

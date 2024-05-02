@@ -442,19 +442,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function getImplementation() external view returns (address) {
         return _getImplementation();
     }
-
-    function totalCap(address _token) public view returns (uint256) {
-        // TODO
-        // return uint256(1 ether) * tokenInfos[_token].totalCapInEther;
-    }
-
+    
     function totalDeposited(address _token) public view returns (uint256) {
         return tokenInfos[_token].totalDeposited;
     }
 
     function isDepositCapReached(address _token, uint256 _amount) public view returns (bool) {
         uint256 amountOut = quoteByMarketValue(_token, _amount);
-        return rateLimiter.canConsume(_amount, amountOut);
+        return rateLimiter.canConsume(_token, _amount, amountOut);
     }
 
     /* INTERNAL FUNCTIONS */
