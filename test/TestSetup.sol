@@ -177,6 +177,7 @@ contract TestSetup is Test {
     TVLOracle tvlOracle;
 
     EtherFiTimelock public etherFiTimelockInstance;
+    BucketRateLimiter public bucketRateLimiter;
 
     bytes32 root;
     bytes32 rootMigration;
@@ -382,12 +383,17 @@ contract TestSetup is Test {
             liquifierInstance.updateAdmin(alice, true);
         }
 
-        // address impl = address(new BucketRateLimiter());
-        // BucketRateLimiter rateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
-        // rateLimiter.initialize();
-        // rateLimiter.updateConsumer(address(liquifierInstance));
+        address impl = address(new BucketRateLimiter());
+        bucketRateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
+        bucketRateLimiter.initialize();
+        bucketRateLimiter.updateConsumer(address(liquifierInstance));
 
-        // liquifierInstance.initializeRateLimiter(address(rateLimiter));
+        bucketRateLimiter.setCapacity(40 ether);
+        bucketRateLimiter.setRefillRatePerSecond(1 ether);
+
+        vm.warp(block.timestamp + 1 days);
+
+        liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
 
         vm.stopPrank();
     }
@@ -661,6 +667,7 @@ contract TestSetup is Test {
         _setUpNodeOperatorWhitelist();
         vm.stopPrank();
 
+        vm.startPrank(owner);
         nodeOperatorManagerInstance.setAuctionContractAddress(address(auctionInstance));
 
         auctionInstance.setStakingManagerContractAddress(address(stakingManagerInstance));

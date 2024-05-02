@@ -39,6 +39,12 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         require(BucketLimiter.consume(limit, consumedAmount), "BucketRateLimiter: rate limit exceeded");
     }
 
+    function canConsume(uint256 amountIn, uint256 amountOut) external view returns (bool) {
+        // Count both 'amountIn' and 'amountOut' as rate limit consumption
+        uint64 consumedAmount = SafeCast.toUint64((amountIn + amountOut + 1e12 - 1) / 1e12);
+        return BucketLimiter.canConsume(limit, consumedAmount);
+    }
+
     function setCapacity(uint256 capacity) external onlyOwner {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
