@@ -230,6 +230,37 @@ contract L2Constants {
         lzDvn: [0x9e059a54699a285714207b43B055483E78FAac25, 0xcd37CA043f8479064e10635020c65FfC005d36f6]
     });
 
+    ConfigPerL2 TRON = ConfigPerL2({
+        name: "TRON",
+        rpc_url: "https://rpc.ankr.com/http/tron",
+
+        l2Eid: 0,
+        l2Endpoint: address(0),
+
+        l1Messenger: address(0),
+        l2Messenger: address(0),
+
+        l2Oft: address(0),
+        l2SyncPool: address(0),
+        l2SyncPoolRateLimiter: address(0),
+        l2ExchagneRateProvider: address(0),
+        l2ContractControllerSafe: address(0),
+        l2PriceOracle: address(0),
+        l2PriceOracleHeartBeat: 0,
+        l1dummyToken: address(0),
+        l1Receiver: address(0),
+
+        l2Oft_ProxyAdmin: 0x2F6f3cc4a275C7951FB79199F01eD82421eDFb68,
+        l2SyncPool_ProxyAdmin: address(0),
+        l2ExchagneRateProvider_ProxyAdmin: address(0),
+        l1dummyToken_ProxyAdmin: address(0),
+        l1Receiver_ProxyAdmin: address(0),
+
+        send302: address(0),
+        receive302: address(0),
+        lzExecutor: address(0),
+        lzDvn: [address(0), address(0)]
+    });
 
     // ConfigPerL2 ExampleL2 = ConfigPerL2({
     //     name: "BNB",
