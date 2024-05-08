@@ -79,6 +79,7 @@ contract EtherFiNodesManager is
 
     event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
     event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
+    event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -122,18 +123,6 @@ contract EtherFiNodesManager is
         bnft = BNFT(_bnftContract);
     }
 
-    function initializeOnUpgrade(address _etherFiAdmin, address _eigenPodManager, address _delayedWithdrawalRouter, uint8 _maxEigenlayerWithdrawals) public onlyOwner {
-        admins[_etherFiAdmin] = true;
-        eigenPodManager = IEigenPodManager(_eigenPodManager);
-        delayedWithdrawalRouter = IDelayedWithdrawalRouter(_delayedWithdrawalRouter);
-        maxEigenlayerWithdrawals = _maxEigenlayerWithdrawals;
-    }
-
-    function initializeOnUpgrade2(address _delegationManager) external onlyOwner {
-        if (address(delegationManager) != address(0)) return;
-        delegationManager = IDelegationManager(_delegationManager);
-    }
-
     /// @notice Send the request to exit the validators as their T-NFT holder
     ///         The B-NFT holder must serve the request otherwise their bond will get penalized gradually
     /// @param _validatorIds IDs of the validators
@@ -142,10 +131,10 @@ contract EtherFiNodesManager is
             uint256 _validatorId = _validatorIds[i];
             address etherfiNode = etherfiNodeAddress[_validatorId];
 
-            require (msg.sender == tnft.ownerOf(_validatorId), "NOT_TNFT_OWNER");
-            require (phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
-            require (!isExitRequested(_validatorId), "ASKED");
-            // require (msg.sender == tnft.ownerOf(_validatorId) && phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE && !isExitRequested(_validatorId), "INVALID");
+            // require (msg.sender == tnft.ownerOf(_validatorId), "NOT_TNFT_OWNER");
+            // require (phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
+            // require (!isExitRequested(_validatorId), "ASKED");
+            require (msg.sender == tnft.ownerOf(_validatorId) && phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE && !isExitRequested(_validatorId), "INVALID");
 
             _updateEtherFiNode(_validatorId);
             _updateExitRequestTimestamp(_validatorId, etherfiNode, uint32(block.timestamp));
@@ -187,7 +176,7 @@ contract EtherFiNodesManager is
 
             _updateEtherFiNode(_validatorId);
 
-            IEtherFiNode(etherfiNode).processNodeExit();
+            bytes32[] memory withdrawalRoots = IEtherFiNode(etherfiNode).processNodeExit(_validatorId);
             validatorInfos[_validatorId].exitTimestamp = _exitTimestamps[i];
 
             _setValidatorPhase(etherfiNode, _validatorId, IEtherFiNode.VALIDATOR_PHASE.EXITED);
@@ -195,6 +184,7 @@ contract EtherFiNodesManager is
             numberOfValidators -= 1;
 
             emit NodeExitProcessed(_validatorId);
+            emit QueuedRestakingWithdrawal(_validatorId, etherfiNode, withdrawalRoots);
         }
     }
 
@@ -207,6 +197,13 @@ contract EtherFiNodesManager is
             IEtherFiNode(etherfiNode).queueRestakedWithdrawal();
         }
     }
+
+    // function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[][] memory withdrawals, uint256[][] calldata middlewareTimesIndexes) external {
+    //     for (uint256 i = 0; i < _validatorIds.length; i++) {
+    //         address etherfiNode = etherfiNodeAddress[_validatorIds[i]];
+    //         IEtherFiNode(etherfiNode).completeQueuedWithdrawals(withdrawals[i], middlewareTimesIndexes[i]);
+    //     }
+    // }
 
     /// @notice Process the rewards skimming from the safe of the validator
     ///         when the safe is being shared by the multiple validatators, it batch process all of their rewards skimming in one shot
@@ -229,43 +226,6 @@ contract EtherFiNodesManager is
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             partialWithdraw( _validatorIds[i]);
         }
-    }
-
-    // Optimized version of batchPartialWithdraw for a set of validators
-    // such that they share the same {T,B}-NFT holders and Node Operator
-    function batchPartialWithdrawOptimized(uint256[] calldata _validatorIds) external whenNotPaused {
-        uint256[] memory payouts = new uint256[](4); // (toNodeOperator, toTnft, toBnft, toTreasury)
-        (address operator, address tnftOwner, address bnftOwner, address treasury) = 
-            (auctionManager.getBidOwner(_validatorIds[0]), tnft.ownerOf(_validatorIds[0]), bnft.ownerOf(_validatorIds[0]), treasuryContract);
-
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            uint256 _validatorId = _validatorIds[i];
-            require (auctionManager.getBidOwner(_validatorId) == operator && tnft.ownerOf(_validatorId) == tnftOwner && bnft.ownerOf(_validatorId) == bnftOwner, "INVALID");
-
-            address etherfiNode = etherfiNodeAddress[_validatorId];
-            _updateEtherFiNode(_validatorId);
-
-            // sweep rewards from eigenPod if any queued withdrawals are ready to be claimed
-            IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithdrawals, false);
-
-            // distribute the rewards payouts. It reverts if the safe's balance >= 16 ether
-            (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
-
-            uint256 total = toOperator + toTnft + toBnft + toTreasury;
-            IEtherFiNode(etherfiNode).moveFundsToManager(total);
-
-            payouts[0] += toOperator;
-            payouts[1] += toTnft;
-            payouts[2] += toBnft;
-            payouts[3] += toTreasury;
-
-            emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
-        }
-
-        _sendFund(operator, payouts[0]);
-        _sendFund(tnftOwner, payouts[1]);
-        _sendFund(bnftOwner, payouts[2]);
-        _sendFund(treasury, payouts[3]);
     }
 
     /// @notice process the full withdrawal
@@ -554,7 +514,7 @@ contract EtherFiNodesManager is
             IEtherFiNode(_node).updateNumberOfAssociatedValidators(1, 0);
         }
         if (_newPhase == IEtherFiNode.VALIDATOR_PHASE.FULLY_WITHDRAWN) {
-            IEtherFiNode(_node).updateNumberOfAssociatedValidators(0, 1);
+            IEtherFiNode(_node).processFullWithdraw(_validatorId);
         }
         if (_newPhase == IEtherFiNode.VALIDATOR_PHASE.EXITED) {
             IEtherFiNode(_node).updateNumExitedValidators(1, 0);
@@ -778,7 +738,7 @@ contract EtherFiNodesManager is
     error NotStakingManager();
 
     function _requireAdmin() internal view virtual {
-        require(admins[msg.sender] || msg.sender == owner(), "NOT_ADMIN");
+        if (!admins[msg.sender] && msg.sender != owner()) revert NotAdmin();
     }
 
     function _onlyStakingManagerContract() internal view virtual {

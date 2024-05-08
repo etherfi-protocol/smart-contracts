@@ -3,6 +3,9 @@ pragma solidity ^0.8.13;
 
 import "./IEtherFiNodesManager.sol";
 
+import "../eigenlayer-interfaces/IDelegationManager.sol";
+
+
 interface IEtherFiNode {
     // State Transition Diagram for StateMachine contract:
     //
@@ -66,8 +69,10 @@ interface IEtherFiNode {
     function createEigenPod() external;
     function hasOutstaingEigenPodWithdrawalsQueuedBeforeExit() external view returns (bool);
     function isRestakingEnabled() external view returns (bool);
-    function processNodeExit() external;
+    function processNodeExit(uint256 _validatorId) external returns (bytes32[] memory withdrawalRoots);
+    function processFullWithdraw(uint256 _validatorId) external;
     function queueRestakedWithdrawal() external;
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes) external;
     function updateNumberOfAssociatedValidators(uint16 _up, uint16 _down) external;
     function updateNumExitedValidators(uint16 _up, uint16 _down) external;
     function registerValidator(uint256 _validatorId, bool _enableRestaking) external;

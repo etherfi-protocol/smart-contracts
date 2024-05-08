@@ -66,7 +66,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.stopPrank();
 
         vm.startPrank(owner);
-        managerInstance.initializeOnUpgrade2(address(eigenLayerDelegationManager));
         liquidityPoolInstance.setRestakeBnftDeposits(true);
         vm.stopPrank();
     }

@@ -672,7 +672,7 @@ contract EtherFiNodeTest is TestSetup {
         assertTrue(IEtherFiNode(etherFiNode).DEPRECATED_exitTimestamp() == 0);
 
         vm.expectRevert("INCORRECT_CALLER");
-        IEtherFiNode(etherFiNode).processNodeExit();
+        IEtherFiNode(etherFiNode).processNodeExit(1);
 
         vm.expectRevert("NOT_ADMIN");
         vm.prank(bob);
@@ -1867,27 +1867,199 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(toTreasury, 0);
     }
 
-    function test_mainnet_fullWithdraw_after_upgrade() public {
+    function test_mainnet_369_verifyAndProcessWithdrawals() public {
         initializeRealisticFork(MAINNET_FORK);
 
-        uint256 validatorId = 2285;
+        _upgrade_etherfi_node_contract();   
+        _upgrade_etherfi_nodes_manager_contract(); 
 
-        vm.deal(managerInstance.getEigenPod(validatorId), 16 ether);
+        uint256 validatorId = 369;
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
+        IEigenPod eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
 
+        assertEq(eigenPod.withdrawableRestakedExecutionLayerGwei(), 0);
+    
+        // verifyAndProcessWithdrawals
+        address(eigenPod).call{value: 0, gas:1_000_000}(hex"e251ef52000000000000000000000000000000000000000000000000000000006638fa3b00000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000001800000000000000000000000000000000000000000000000000000000000000c8000000000000000000000000000000000000000000000000000000000000012a00000000000000000000000000000000000000000000000000000000000001400198834354f1ac0ae8a3ec4011b706e7a92e948d256a856a9a3e5e2e93b402a6700000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000060ebbfe960bd141e77f95b0dd1951955996425cf85ce29076159ad3f47f92ca916c96893dc0d8b73a12310ced273450fbedc2e6c6cf2d620bd46685e3869143042a78115593b93f98909f98c3068e1cf7639232052413970cf1c8017bafc00e30e00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000018000000000000000000000000000000000000000000000000000000000000002e000000000000000000000000000000000000000000000000000000000000003600000000000000000000000000000000000000000000000000000000000000460000000000000000000000000000000000000000000000000000000000000052000000000000000000000000000000000000000000000000000000000000010d500000000000000000000000000000000000000000000000000000000000001520000000000000000000000000000000000000000000000000000000000000008172978eb77844db83a9ef01dcbfbe0b7c7ad11056759193e8d3958d70f7785e4d51089000000000000000000000000000000000000000000000000000000000053fa3266000000000000000000000000000000000000000000000000000000000d9c14261ee928c31797186c89a831477580f0d3bc6098e4f9350bfecf7faa150000000000000000000000000000000000000000000000000000000000000140cf0b5956fe1d61b770a8de6fffd31b9c3f8fc775bc3901beb3039480f3786e57cfb96e0f7cde640f7ba9d33824f3be1975608519d2d2c90334ec06a0ff94c78420613ded12606d94c0db03794b3faea365c887903fbd0bb00aeba3e61799d83b5a4dea179c54ee96af9fccf0eafe1dc916a784e5c99c79c82f6e0ace928e694510000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000d06a859dcd26f8e77721786d904cac9467441b60014adebfd1c53a36475e08d486ef1de76000fd36f915a0349cd8a763eab2e30b118355f7d29f9a9153cfb3ac599e350eee2a8c703de1e86b09d872c48d797662ce7d7985cb027c14775b9cde536d98837f2dd165a55d5eeae91485954472d56f246df256bf3cae19352a123c00000000000000000000000000000000000000000000000000000000000000607974100000000000000000000000000000000000000000000000000000000000c1351b147c463120ebcb0ad88eeb7a419e4bc3d7c028470bd5100cfff242761feacdf609c77f95b539ac5460b188d1c6d95149ea9b6ea74453f672e0dca1f8ca00000000000000000000000000000000000000000000000000000000000000e04770848f71241cb0132ae23a72dcea11cb58a2ab6506d12dc697701beb5ad53ab46f0c01805fe212e15907981b757e6c496b0cb06664224655613dcec82505bbdb56114e00fdd4c1f85c892bf35ac9a89289aaecb1ebd0a96cde606a748b5d717e466931f54f3a09f6ccc9560d49542e6d4ed92c252fb90e9198abed364857830000000000000000000000000000000000000000000000000000000000000000f5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b1c163e09fade42b03be003c55e37415cb3d10d5c1da601b3c62ccf149cb610a400000000000000000000000000000000000000000000000000000000000000a0f1c4da000000000000000000000000000000000000000000000000000000000015ba0de266825f5463fab0eca873bf9973a8eec557faa7a1bff9d4a7c68ca5baaf85706b6aae3e00b9737d6cf05fd942f1a1e3ac4469c8bede52be92b4259a41599e350eee2a8c703de1e86b09d872c48d797662ce7d7985cb027c14775b9cde536d98837f2dd165a55d5eeae91485954472d56f246df256bf3cae19352a123c0000000000000000000000000000000000000000000000000000000000000580ccc56b18a55d998d7ab9b382ae063c915cd760d4e15b3adf43a6c409b70f2fd00abdb98c72a995f612149a87870c3ecf36750de9cd77d6c64b56e646846beb992fadd6eeaa6da03aeb4d9e51d293dcf4e18c4c964ae8d94ae66bcd7de70d33440ec142a21e471ccdec4880d59364999c157d803051863f9d4f66383898aa5a98c6f7c620b5ca9119a62f386d033fefa5b71e133146305c84bc1598a473d5da45e4f0286f5eaae92452191fd475ce6436bff1a8be5e48080d2fe01bc732929694f2d7d99760ac1b4c7b66c78bdcf8694e67f2473809057b02db03f6843c4c3eb9381fdc6d61d8039ee2a58c54da54d7194a5945fe8b4784d83a3d911deebf8d43b348e74b019611b93602acfc7950a47e73eded3e7917d5aebfd4a500fbe93b3aa2c093aa38d591b490461426b9e38c840957fb285149b789e0b8cbcc34bd9fe9217b0db835e8767d87b41c99fc4453d7f927b3a77193ba6c5b908ac7a38c7d6fb023133925aec522a3b82385be2e96b57a2bd82a7d4a02f94b420e5b0160ce1f122950d23a65b16be7db5e79cca1788918979d724db7b1cd9c4098a52d532db3a35e638be25190d875880a5738069b223c8bc6820cf3a380bd35c9a6371ca0de52038cdd03b6f3252a5765baefe6a1420824d0e4e3e386706fb029a7bf1308711c9760f6e42caabff33a492674530611e489b57791ffc687e5cda81d239226feed47d70c7cae3b1358a0ebfd75f87172e9e6167b2ce9ed2ae6d050d9bd9e0169c78009fdf07fc56a11f122370658a353aaa542ed63e44c4bc15ff4cd105ab33c4798d0e92891c6bff8e0828a487fb7668a6ad8649993fa1e6f9f09d496f6d2329efde052aa15429fae05bad4d0b1d7c64da64d03d7a1854a588c2cb8430c0d30d5fb5effea691d833f3c53c00b390c08aaffa8294e48c7790f4d4ab18c4d943087eb0ddba57e35f6d286673802a4af5975e22506c7cf4c64bb6be5ee11527f2c460485af574848585860d57ea2bd50835e0b5a2a296e0dcb014483c82debb54f506d86582d252405b840018792cad2bf1259f1ef5aa5f887e13cb2f0094f51e1ffff0ad7e659772f9534c195c815efc4014ef1e1daed4404c06385d11192e92b6cf04127db05441cd833107a52be852868890e4317e6a02ab47683aa75964220b7d05f875f140027ef5118a2247bbb84ce8f2f0f1123623085daf7960c329f5fdf6af5f5bbdb6be9ef8aa618e4bf8073960867171e29676f8b284dea6a08a85eb58d900f5e182e3c50ef74969ea16c7726c549757cc23523c369587da7293784d49a7502ffcfb0340b1d7885688500ca308161a7f96b62df9d083b71fcc8f2bb8fe6b1689256c0d385f42f5bbe2027a22c1996e110ba97c171d3e5948de92beb8d0d63c39ebade8509e0ae3c9c3876fb5fa112be18f905ecacfecb92057603ab95eec8b2e541cad4e91de38385f2e046619f54496c2382cb6cacd5b98c26f5a4f893e908917775b62bff23294dbbe3a1cd8e6cc1c35b4801887b646a6f81f17fcddba7b592e3133393c16194fac7431abf2f5485ed711db282183c819e08ebaa8a8d7fe3af8caa085a7639a832001457dfb9128a8061142ad0335629ff23ff9cfeb3c337d7a51a6fbf00b9e34c52e1c9195c969bd4e7a0bfd51d5c5bed9c1167e71f0aa83cc32edfbefa9f4d3e0174ca85182eec9f3a09f6a6c0df6377a510d756010000000000000000000000000000000000000000000000000000000000003c3a060000000000000000000000000000000000000000000000000000000000e97c869919e7a3846613f4bf3f72a86df0af9f9faabddb35008a266c54f74022db56114e00fdd4c1f85c892bf35ac9a89289aaecb1ebd0a96cde606a748b5d71436c8971f0963e274db592074eef4608740fc2360665e961c7839a847d24ddd9771133e804d0a5ceaf4ced110260eb4941823d137d7d90d2ecc5e0bc48828f020000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000005c045f8cf05beedeb84fcae091fcb2ee47004764d17f457990ae3896426107c7a3732b1992669e48276043927cf519ff38fc16607f58ad93459c4495f32899fea09472a67b3cad7814ea1c0c18d43bb75140be02840bfd89cd46aa112fecd74dd904eff388ad7b3fa8679413441b329d86682937c3769b9af03307d150912dd4cf967ebb5be4d7d11360483dbea5eb821ef42d625ef387fcf8eeef520a4941520bcd88969552805e6b880a95b8e51ebd43b5a0326a59d6234f884d6301e48007c23ab68ce7484c4eaa534b4a7e4ca941981911623be2e822bd4263b78f57fb13e8256fc4b4f33ce0b8a1d67d911d3b288a3f7bd83dba6a94732bbe91743e996ebe845609139d009d32bfacee0d976cb7764418115a056b1d6c960559e3ae81fb2ca124adeceb195bb9ddcace33bf9389857a49434ad906678722485a99b9e0d32a5d878c5edcf3de0d11c8801ec3922b84dd12f67ae0593a38c8301d033a5607ed890abff4d542f85ef28766754556da1ee16ee0a62975669ab998be62bda776ab8a537662433c44d2740e3c87e02304cd4a0554ad89ed03267b8b0106f04474dc13e22deead7ee01a015cf87c3a1c64e03d4d30e8e3ea2f0e41440402e3f12b0e539a821fb189ff9073fab3fadf25340b4e0d0b2ecca2119872ab94390f9697c846c02f5bcbc84ea5361fa90162f418ba33b1de0e010bfc33e1cf68eb3ab493399dae9312d93b698d08a504776d3e30937419f14d7fc50b0cf25b6076c6f29d838783e078f41855d97fa5f8ddafd16c71291a654d79b03d5b87e20cc6f17f522377a8b66f7436c8e7d8644a2bc37cd0445239bd4996de321d4b81b335286380fdef893e908917775b62bff23294dbbe3a1cd8e6cc1c35b4801887b646a6f81f17f4704e8367b63754276b4d91c5bcc943f1388380f743c7554c1ed3083d73c7bd68a8d7fe3af8caa085a7639a832001457dfb9128a8061142ad0335629ff23ff9cfeb3c337d7a51a6fbf00b9e34c52e1c9195c969bd4e7a0bfd51d5c5bed9c1167e71f0aa83cc32edfbefa9f4d3e0174ca85182eec9f3a09f6a6c0df6377a510d731206fa80a50bb6abe29085058f16212212a60eec8f049fecb92d8c8e0a84bc021352bfecbeddde993839f614c3dac0a3ee37543f9b412b16199dc158e23b544619e312724bb6d7c3153ed9de791d764a366b389af13c58bf8a8d90481a467657cdd2986268250628d0c10e385c58c6191e6fbe05191bcc04f133f2cea72c1c4848930bd7ba8cac54661072113fb278869e07bb8587f91392933374d017bcbe18869ff2c22b28cc10510d9853292803328be4fb0e80495e8bb8d271f5b889636b5fe28e79f1b850f8658246ce9b6a1e7b49fc06db7143e8fe0b4f2b0c5523a5c985e929f70af28d0bdd1a90a808f977f597c7c778c489e98d3bd8910d31ac0f7c6f67e02e6e4e1bdefb994c6098953f34636ba2b6ca20a4721d2b26a886722ff1c9a7e5ff1cf48b4ad1582d3f4e4a1004f3b20d8c5a2b71387a4254ad933ebc52f075ae229646b6f6aed19a5e372cf295081401eb893ff599b3f9acc0c0d3e7d328921deb59612076801e8cd61592107b5c67c79b846595cc6320c395b46362cbfb909fdb236ad2411b4e4883810a074b840464689986c3f8a8091827e17c32755d8fb3687ba3ba49f342c77f5a1f89bec83d811446e1a467139213d640b6a74f7210d4f8e7e1039790e7bf4efa207555a10a6db1dd4b95da313aaa88b88fe76ad21b516cbc645ffe34ab5de1c8aef8cd4e7f8d2b51e8e1456adc7563cda206fab261500000000000000000000000000000000000000000000000000000000003459160000000000000000000000000000000000000000000000000000000000cf134aae33d75aa66ba5a51906b0adfbaeeae302d3c82a20ce1dee250616d9b6e3b20a20d924029ce9cc5677310c9965596487bda5f842ab4625a0fff41aefa0e8381811d500984752da2fc221daa869d370eda79e41f5b15e1bf5a9d58e0a8aef897b9fbedb7d8d522483a67ee115d67cba2363f207742491dfbbebdbad36740000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000089c37f28ca0901d81d9af4258607e2c0959e5c0e908470dac8c5027cd967f0ad2010000000000000000000000afd81a1f8062a383f9d5e067af3a6eb5f517102400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e2c3030000000000000000000000000000000000000000000000000000000000f3c30300000000000000000000000000000000000000000000000000000000007e460400000000000000000000000000000000000000000000000000000000007e47040000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000004230b9e0200000000000000000000000000000000000000000000000000000000930f100000000000000000000000000000000000000000000000000000000000afd81a1f8062a383f9d5e067af3a6eb5f51710240000000000000000000000004091267407000000000000000000000000000000000000000000000000000000");
+
+        assertEq(eigenPod.withdrawableRestakedExecutionLayerGwei(), 32 ether / 1 gwei);
+    }
+
+    function test_mainnet_369_processNodeExit_without_withdrawal_proved() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        _upgrade_etherfi_node_contract();    
+        _upgrade_etherfi_nodes_manager_contract(); 
+
+        uint256 validatorId = 369;
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
+        IEigenPod eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
+        IDelegationManager mgr = managerInstance.delegationManager();
+        IEigenPodManager eigenPodManager = managerInstance.eigenPodManager();
+
+        //  call `ProcessNodeExit` to initiate the queued withdrawal
         uint256[] memory validatorIds = new uint256[](1);
         uint32[] memory exitTimestamps = new uint32[](1);
         validatorIds[0] = validatorId;
         exitTimestamps[0] = uint32(block.timestamp);
+        
         hoax(managerInstance.owner());
+        vm.expectRevert("WITHDRAWAL_NOT_PROVED");
         managerInstance.processNodeExit(validatorIds, exitTimestamps);
+    }
 
-        vm.expectRevert("PENDING_WITHDRAWALS");
-        managerInstance.fullWithdraw(validatorId);
+    function test_mainnet_369_queueWithdrawals_by_rando_fails() public {
+        test_mainnet_369_verifyAndProcessWithdrawals();  
 
-        _moveClock(7 * 7200);
+        uint256 validatorId = 369;
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
+        IEigenPod eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
+        IDelegationManager mgr = managerInstance.delegationManager();
+        IEigenPodManager eigenPodManager = managerInstance.eigenPodManager();
+
+        IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
+        IStrategy[] memory strategies = new IStrategy[](1);
+        uint256[] memory shares = new uint256[](1);
+
+        strategies[0] = mgr.beaconChainETHStrategy();
+        shares[0] = uint256(eigenPod.withdrawableRestakedExecutionLayerGwei()) * uint256(1 gwei);
+        params[0] = IDelegationManager.QueuedWithdrawalParams({
+            strategies: strategies,
+            shares: shares,
+            withdrawer: nodeAddress
+        });
+
+        // Caller != withdrawer
+        vm.expectRevert("DelegationManager.queueWithdrawal: withdrawer must be staker");
+        vm.prank(alice);
+        mgr.queueWithdrawals(params);
+    }
+
+    function test_mainnet_369_processNodeExit() public returns (IDelegationManager.Withdrawal memory) {
+        test_mainnet_369_verifyAndProcessWithdrawals();  
+
+        uint256 validatorId = 369;
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
+        IEigenPod eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
+        IDelegationManager mgr = managerInstance.delegationManager();
+        IEigenPodManager eigenPodManager = managerInstance.eigenPodManager();
+
+        // Calculate TVL does not work once the eigenPod's balance goes above 16 ether since we cannot tell if it is the reward or exited fund
+        // ether.fi will perform `verifyAndProcessWithdrawals` and `processNodeExit` to mark the validator as exited
+        // Then, it will call `calculateTVL` to get the correct TVL
+        vm.expectRevert();
+        managerInstance.calculateTVL(validatorId, 0 ether);
+
+        IDelegationManager.Withdrawal memory withdrawal;
+        IERC20[] memory tokens = new IERC20[](1);
+        {
+            IStrategy[] memory strategies = new IStrategy[](1);
+            strategies[0] = mgr.beaconChainETHStrategy();
+            uint256[] memory shares = new uint256[](1);
+            shares[0] = uint256(eigenPod.withdrawableRestakedExecutionLayerGwei()) * 1 gwei;
+            withdrawal = IDelegationManager.Withdrawal({
+                staker: nodeAddress,
+                delegatedTo: mgr.delegatedTo(nodeAddress),
+                withdrawer: nodeAddress,
+                nonce: mgr.cumulativeWithdrawalsQueued(nodeAddress),
+                startBlock: uint32(block.number),
+                strategies: strategies,
+                shares: shares
+            });      
+
+            bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
+            console.logBytes32(withdrawalRoot);      
+        }
+
+        // 2. call `ProcessNodeExit` to initiate the queued withdrawal
+        uint256[] memory validatorIds = new uint256[](1);
+        {
+            uint32[] memory exitTimestamps = new uint32[](1);
+            validatorIds[0] = validatorId;
+            exitTimestamps[0] = uint32(block.timestamp);
+            
+            hoax(managerInstance.owner());
+            managerInstance.processNodeExit(validatorIds, exitTimestamps);
+            // It calls `DelegationManager::undelegate` which emits the event `WithdrawalQueued`
+        }
+
+        // 'calculateTVL' now works
+        managerInstance.calculateTVL(validatorId, 0 ether);
+
+        return withdrawal;
+    }
+
+    function test_mainnet_369_completeQueuedWithdrawal() public {
+        IDelegationManager.Withdrawal memory withdrawal = test_mainnet_369_processNodeExit();
+
+        uint256 validatorId = 369;
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
+        IDelegationManager mgr = managerInstance.delegationManager();
+        // IEigenPodManager eigenPodManager = managerInstance.eigenPodManager();
+        uint256[] memory validatorIds = new uint256[](1);
+        validatorIds[0] = validatorId;
+
+        // mgr.completeQueuedWithdrawal(withdrawal, tokens, 0, true);
+        IDelegationManager.Withdrawal[][] memory withdrawals = new IDelegationManager.Withdrawal[][](1);
+        uint256[][] memory middlewareTimesIndexes = new uint256[][](1);
+        withdrawals[0] = new IDelegationManager.Withdrawal[](1);
+        middlewareTimesIndexes[0] = new uint256[](1);
+        withdrawals[0][0] = withdrawal;
+        middlewareTimesIndexes[0][0] = 0;
+        
+        // IERC20[] memory tokens = new IERC20[](1);
+        // bytes[] memory data = new bytes[](1);
+        // data[0] = abi.encodeWithSelector(IDelegationManager.completeQueuedWithdrawal.selector, withdrawal, tokens, 0, true);
+
+        // // FAIL, the forward call is not allowed for `completeQueuedWithdrawal`
+        // vm.expectRevert("NOT_ALLOWED");
+        // vm.prank(owner);
+        // managerInstance.callDelegationManager(validatorIds, data);
+
+        // // FAIL, if the `minWithdrawalDelayBlocks` is not passed
+        // vm.prank(owner);
+        // vm.expectRevert("DelegationManager._completeQueuedWithdrawal: minWithdrawalDelayBlocks period has not yet passed");
+        // managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes);
+
+        // // 1. Wait
+        // // Wait 'minDelayBlock' after the `verifyAndProcessWithdrawals`
+        // {
+        //     uint256 minDelayBlock = Math.max(mgr.minWithdrawalDelayBlocks(), mgr.strategyWithdrawalDelayBlocks(mgr.beaconChainETHStrategy()));
+        //     vm.roll(block.number + minDelayBlock);
+        // }
+
+        // // uint256 prevEtherFiNodeAddress = address(nodeAddress).balance;
+
+        // // FAIL, call by a rando
+        // vm.expectRevert("DelegationManager._completeQueuedWithdrawal: only withdrawer can complete action");
+        // mgr.completeQueuedWithdrawal(withdrawal, tokens, 0, true);
+
+        // // 2. DelegationManager.completeQueuedWithdrawal            
+        // managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes);
+
+        // assertEq(address(nodeAddress).balance, prevEtherFiNodeAddress + 32 ether);
+        // assertEq(eigenPodManager.podOwnerShares(nodeAddress), 0);
+    }
+
+    function test_mainnet_369_fullWithdraw() public {
+        test_mainnet_369_completeQueuedWithdrawal();
+
+        uint256 validatorId = 369;
 
         managerInstance.fullWithdraw(validatorId);
     }
+
+    function test_mainnet_369_fullWithdraw_without_completeQueuedWithdrawal() public {
+        IDelegationManager.Withdrawal memory withdrawal = test_mainnet_369_processNodeExit();
+
+        uint256 validatorId = 369;
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
+
+        vm.deal(nodeAddress, 32 ether);
+
+        managerInstance.fullWithdraw(validatorId);
+    }
+
 
     function test_mainnet_partialWithdraw_after_upgrade() public {
         initializeRealisticFork(MAINNET_FORK);

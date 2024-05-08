@@ -639,17 +639,12 @@ contract TestSetup is Test {
         bool restakingBnftDeposits;
         if (block.chainid == 1) {
             restakingBnftDeposits = true;
-            managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), 0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338, 0x7Fe7E9CC0F274d2435AD5d56D5fa73E47F6A23D8, 5);
-            managerInstance.initializeOnUpgrade2(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+            eigenLayerEigenPodManager = IEigenPodManager(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
         } else if (block.chainid == 17000) {
             restakingBnftDeposits = false;
             eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
-            managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), 0x30770d7E3e71112d7A6b7259542D1f680a70e315, 0x642c646053eaf2254f088e9019ACD73d9AE0FA32, 5);
-            managerInstance.initializeOnUpgrade2(0xA44151489861Fe9e3055d95adC98FbD462B948e7);
         } else {
             restakingBnftDeposits = false;
-            managerInstance.initializeOnUpgrade(address(etherFiAdminInstance), address(0), address(0), 5);
-            managerInstance.initializeOnUpgrade2(address(0));
         }
 
         _initOracleReportsforTesting();

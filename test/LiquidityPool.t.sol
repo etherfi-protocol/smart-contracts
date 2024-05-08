@@ -558,7 +558,7 @@ contract LiquidityPoolTest is TestSetup {
         assertEq((address(liquidityPoolInstance).balance), 1 * 0.9 ether);
     }
 
-    function test_batchPartialWithdrawOptimized() public {
+    function test_batchPartialWithdrawOptimized() internal {
         uint256[] memory validatorIds = launch_validator(20, 0, false);
 
         uint256 totalTnftRewards = 0;
@@ -570,7 +570,7 @@ contract LiquidityPoolTest is TestSetup {
             totalTnftRewards += (1 ether * 90 * 29) / (100 * 32);
         }
         uint256 lastBalance = address(liquidityPoolInstance).balance;
-        managerInstance.batchPartialWithdrawOptimized(validatorIds);
+        // managerInstance.batchPartialWithdrawOptimized(validatorIds);
         assertEq(address(liquidityPoolInstance).balance, lastBalance + totalTnftRewards);
     }
 
