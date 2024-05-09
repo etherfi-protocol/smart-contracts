@@ -397,7 +397,9 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
 
     function _sync() internal {
         IL2SyncPool.MessagingFee memory fee = l2SyncPool.quoteSync(ETH_ADDRESS, abi.encodePacked(), false);
-        l2SyncPool.sync{value: fee.nativeFee}(ETH_ADDRESS, abi.encodePacked(), fee);
+        // l2SyncPool.sync{value: uint256(110 * fee.nativeFee / 100)}(ETH_ADDRESS, abi.encodePacked(), fee);
+        uint256  messageServiceFee = 0.0001 ether;
+        l2SyncPool.sync{value: fee.nativeFee + messageServiceFee}(ETH_ADDRESS, abi.encodePacked(), fee);
     }
 
     function test_oft_send_FAIL_RateLimitExceeded_1() public {
