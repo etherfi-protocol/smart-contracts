@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../eigenlayer-interfaces/IStrategyManager.sol";
-import "../eigenlayer-interfaces/IStrategy.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";  // CERTORA MUNGE
+import {IStrategyManager} from "../eigenlayer-interfaces/IStrategyManager.sol";  // CERTORA MUNGE
+import {IStrategy} from "../eigenlayer-interfaces/IStrategy.sol";
 import "../eigenlayer-interfaces/IPauserRegistry.sol";
 
 // cbETH-ETH mainnet: 0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A

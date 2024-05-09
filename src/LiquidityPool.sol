@@ -12,7 +12,7 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import "./interfaces/IRegulationsManager.sol";
 import "./interfaces/IStakingManager.sol";
-import "./interfaces/IEtherFiNodesManager.sol";
+import {IEtherFiNodesManager, IEtherFiNode} from "./interfaces/IEtherFiNodesManager.sol";  // CERTORA MUNGE
 import "./interfaces/IeETH.sol";
 import "./interfaces/IStakingManager.sol";
 import "./interfaces/IMembershipManager.sol";
@@ -21,7 +21,7 @@ import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IEtherFiAdmin.sol";
 import "./interfaces/IAuctionManager.sol";
-import "./interfaces/ILiquifier.sol";
+import {ILiquifier} from "./interfaces/ILiquifier.sol";  // CERTORA MUNGE
 import "forge-std/console.sol";
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {

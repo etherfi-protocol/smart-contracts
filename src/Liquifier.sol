@@ -9,7 +9,17 @@ import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./interfaces/ILiquifier.sol";
+import {
+    ILiquifier,
+    ILidoWithdrawalQueue,
+    ICurvePool,
+    ICurvePoolQuoter1,
+    ICurvePoolQuoter2,
+    IcbETH,
+    IwBETH,
+    ILido,
+    IEigenLayerStrategyManager
+} from "./interfaces/ILiquifier.sol";  // CERTORA MUNGE
 import "./interfaces/ILiquidityPool.sol";
 
 import "./eigenlayer-interfaces/IStrategyManager.sol";
