@@ -267,6 +267,7 @@ contract TestSetup is Test {
             eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
             eigenLayerEigenPodManager = IEigenPodManager(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
             eigenLayerDelegationManager = IDelegationManager(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+            eigenLayerDelayedWithdrawalRouter = IDelayedWithdrawalRouter(0x7Fe7E9CC0F274d2435AD5d56D5fa73E47F6A23D8);
             eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
 
         } else if (forkEnum == TESTNET_FORK) {
@@ -444,14 +445,7 @@ contract TestSetup is Test {
         managerImplementation = new EtherFiNodesManager();
         etherFiNodeManagerProxy = new UUPSProxy(address(managerImplementation), "");
         managerInstance = EtherFiNodesManager(payable(address(etherFiNodeManagerProxy)));
-        managerInstance.initialize(
-            address(treasuryInstance),
-            address(auctionInstance),
-            address(stakingManagerInstance),
-            address(TNFTInstance),
-            address(BNFTInstance)
-        );
-        managerInstance.updateAdmin(alice, true);
+        
 
         TNFTInstance.initializeOnUpgrade(address(managerInstance));
         BNFTInstance.initializeOnUpgrade(address(managerInstance));
@@ -572,6 +566,20 @@ contract TestSetup is Test {
             3600
         );
 
+        managerInstance.initialize(
+            address(treasuryInstance),
+            address(auctionInstance),
+            address(stakingManagerInstance),
+            address(TNFTInstance),
+            address(BNFTInstance),
+            address(eigenLayerEigenPodManager),
+            address(eigenLayerDelayedWithdrawalRouter),
+            address(eigenLayerDelegationManager)
+        );
+        managerInstance.updateAdmin(address(etherFiAdminInstance), true);
+        managerInstance.updateAdmin(alice, true);
+
+
         membershipManagerInstance.updateAdmin(alice, true);
         membershipNftInstance.updateAdmin(alice, true);
         withdrawRequestNFTInstance.updateAdmin(alice, true);
@@ -626,6 +634,7 @@ contract TestSetup is Test {
             10000,
             0
         );
+        etherFiAdminInstance.updateAdmin(alice, true);
 
         etherFiOracleInstance.setEtherFiAdmin(address(etherFiAdminInstance));
         liquidityPoolInstance.initializeOnUpgrade(address(auctionManagerProxy), address(liquifierInstance));
@@ -639,7 +648,10 @@ contract TestSetup is Test {
         bool restakingBnftDeposits;
         if (block.chainid == 1) {
             restakingBnftDeposits = true;
+            eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
             eigenLayerEigenPodManager = IEigenPodManager(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
+            eigenLayerDelegationManager = IDelegationManager(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+            eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
         } else if (block.chainid == 17000) {
             restakingBnftDeposits = false;
             eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);

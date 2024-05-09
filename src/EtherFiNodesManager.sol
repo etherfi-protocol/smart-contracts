@@ -107,7 +107,10 @@ contract EtherFiNodesManager is
         address _auctionContract,
         address _stakingManagerContract,
         address _tnftContract,
-        address _bnftContract
+        address _bnftContract,
+        address _eigenPodManager, 
+        address _delayedWithdrawalRouter,
+        address _delegationManager
     ) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -121,6 +124,12 @@ contract EtherFiNodesManager is
         auctionManager = IAuctionManager(_auctionContract);
         tnft = TNFT(_tnftContract);
         bnft = BNFT(_bnftContract);
+
+        maxEigenlayerWithdrawals = 5;
+
+        eigenPodManager = IEigenPodManager(_eigenPodManager);
+        delayedWithdrawalRouter = IDelayedWithdrawalRouter(_delayedWithdrawalRouter);
+        delegationManager = IDelegationManager(_delegationManager);
     }
 
     /// @notice Send the request to exit the validators as their T-NFT holder
@@ -198,12 +207,12 @@ contract EtherFiNodesManager is
         }
     }
 
-    // function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[][] memory withdrawals, uint256[][] calldata middlewareTimesIndexes) external {
-    //     for (uint256 i = 0; i < _validatorIds.length; i++) {
-    //         address etherfiNode = etherfiNodeAddress[_validatorIds[i]];
-    //         IEtherFiNode(etherfiNode).completeQueuedWithdrawals(withdrawals[i], middlewareTimesIndexes[i]);
-    //     }
-    // }
+    function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes) external {
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            address etherfiNode = etherfiNodeAddress[_validatorIds[i]];
+            IEtherFiNode(etherfiNode).completeQueuedWithdrawal(withdrawals[i], middlewareTimesIndexes[i]);
+        }
+    }
 
     /// @notice Process the rewards skimming from the safe of the validator
     ///         when the safe is being shared by the multiple validatators, it batch process all of their rewards skimming in one shot

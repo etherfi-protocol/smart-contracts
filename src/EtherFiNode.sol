@@ -204,20 +204,34 @@ contract EtherFiNode is IEtherFiNode {
     }
 
     function processFullWithdraw(uint256 _validatorId) external onlyEtherFiNodeManagerContract ensureLatestVersion {
+        updateNumberOfAssociatedValidators(0, 1);
+
         if (isRestakingEnabled) {
             require(completedWithdrawalFromRestakingInGwei >= 32 ether / 1 gwei, "INSUFFICIENT_BALANCE");
             completedWithdrawalFromRestakingInGwei -= uint64(32 ether / 1 gwei);
-
-            updateNumberOfAssociatedValidators(0, 1);
         }
     }
 
-    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes) external {
+    function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, uint256 middlewareTimesIndexes) external {
+        IDelegationManager.Withdrawal[] memory _withdrawals = new IDelegationManager.Withdrawal[](1);
+        _withdrawals[0] = withdrawals;
+        uint256[] memory _middlewareTimesIndexes = new uint256[](1);
+        _middlewareTimesIndexes[0] = middlewareTimesIndexes;
+        return _completeQueuedWithdrawals(_withdrawals, _middlewareTimesIndexes);
+    }
+
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] memory middlewareTimesIndexes) external {
+        return _completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes);
+    }
+
+    function _completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] memory middlewareTimesIndexes) internal {
         uint256 totalAmount = 0;
 
         bool[] memory receiveAsTokens = new bool[](withdrawals.length);
         IERC20[][] memory tokens = new IERC20[][](withdrawals.length);
         for (uint256 i = 0; i < withdrawals.length; i++) {
+            require(withdrawals[i].withdrawer == address(this) && withdrawals[i].staker == address(this), "INVALID");
+
             receiveAsTokens[i] = true;
             tokens[i] = new IERC20[](withdrawals[i].strategies.length);
             for (uint256 j = 0; j < withdrawals[i].shares.length; j++) {
@@ -478,7 +492,7 @@ contract EtherFiNode is IEtherFiNode {
         }
 
         // withdrawNonBeaconChainETHBalanceWei
-        if (selector == hex"e2c83445") {
+        if (selector == IEigenPod.withdrawNonBeaconChainETHBalanceWei.selector) {
             require(data.length >= 36, "INVALID_DATA_LENGTH");
             address recipient;
             assembly {
@@ -489,7 +503,7 @@ contract EtherFiNode is IEtherFiNode {
         }
 
         // recoverTokens(IERC20[], uint256[], address)
-        if (selector == hex"dda3346c") {
+        if (selector == IEigenPod.recoverTokens.selector) {
             revert("NOT_ALLOWED");
         }
     }
@@ -628,19 +642,6 @@ contract EtherFiNode is IEtherFiNode {
         return false;
     }
 
-    /// @notice has enough time passed since the node exit was processed so that all associated funds can be claimed
-    /// @dev this is a simple heuristic that should be correct 99% of the time. Nothing really bad can happen if it reports a false positive
-    function canClaimRestakedFullWithdrawal() external view returns (bool) {
-
-        // validator not exited yet
-        if (restakingObservedExitBlock == 0) return false;
-
-        // check if enough time has passed since the exit
-        IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
-        uint256 delayBlocks = delayedWithdrawalRouter.withdrawalDelayBlocks();
-        return (block.number - delayBlocks > restakingObservedExitBlock);
-    }
-
     function queueRestakedWithdrawal() public {
         if (!isRestakingEnabled) return;
 
@@ -658,6 +659,9 @@ contract EtherFiNode is IEtherFiNode {
             // We make the `processNodeExit` to call directly `_queueRestakedFullWithdrawal` instead of calling this function
 
             // _queueRestakedFullWithdrawal();
+
+            uint256 amountToWithdraw = IEigenPod(eigenPod).nonBeaconChainETHBalanceWei();
+            IEigenPod(eigenPod).withdrawNonBeaconChainETHBalanceWei(address(this), amountToWithdraw);
         }
     }
 

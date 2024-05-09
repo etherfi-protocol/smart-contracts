@@ -19,8 +19,21 @@ contract LiquidityPoolTest is TestSetup {
         setUpTests();
         // initializeTestingFork(TESTNET_FORK);
 
+        _initBid();
+    }
+
+    function _initBid() internal {
         vm.deal(alice, 100 ether);
+
+        vm.startPrank(owner);
+        nodeOperatorManagerInstance.updateAdmin(alice, true);
+        liquidityPoolInstance.updateAdmin(alice, true);
+        vm.stopPrank();
+    
         vm.startPrank(alice);
+        _setUpNodeOperatorWhitelist();
+        _approveNodeOperators();
+
         nodeOperatorManagerInstance.registerNodeOperator(
             _ipfsHash,
             10000
@@ -937,40 +950,35 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_RestakedDepositFromBNFTHolder() public {
-        // re-run setup now that we have fork selected. Probably a better way we can do this
-        vm.selectFork(testnetFork);
-        setUp();
+        initializeRealisticFork(MAINNET_FORK);
+        _initBid();
 
-        // set BNFT players to restake on deposit
-        vm.prank(alice);
+        vm.deal(alice, 1000 ether);
+        vm.startPrank(alice);
+
+        uint256[] memory bidIds;
+        uint256[] memory validatorIds;
+
+        registerAsBnftHolder(alice);
+        bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
+
+        liquidityPoolInstance.updateBnftMode(false);
         liquidityPoolInstance.setRestakeBnftDeposits(true);
 
-        vm.startPrank(alice);
-        registerAsBnftHolder(alice);
-        registerAsBnftHolder(greg);
-
-        vm.deal(alice, 100000 ether);
-        vm.deal(greg, 100000 ether);
-
-        //Alice deposits funds into the LP to allow for validators to be spun and the calculations can work in dutyForWeek
         liquidityPoolInstance.deposit{value: 120 ether}();
-        vm.stopPrank();
-
-        startHoax(alice);
         bidIds = auctionInstance.createBid{value: 1 ether}(
             10,
             0.1 ether
         );
-        vm.stopPrank();
 
         address bnftHolder = alice;
         startHoax(bnftHolder);
         processedBids = liquidityPoolInstance.batchDepositAsBnftHolder{value: 8 ether}(bidIds, 4);
 
-        assertEq(stakingManagerInstance.bidIdToStaker(11), bnftHolder);
-        assertEq(stakingManagerInstance.bidIdToStaker(12), bnftHolder);
-        assertEq(stakingManagerInstance.bidIdToStaker(13), bnftHolder);
-        assertEq(stakingManagerInstance.bidIdToStaker(14), bnftHolder);
+        assertEq(stakingManagerInstance.bidIdToStaker(bidIds[0]), bnftHolder);
+        assertEq(stakingManagerInstance.bidIdToStaker(bidIds[1]), bnftHolder);
+        assertEq(stakingManagerInstance.bidIdToStaker(bidIds[2]), bnftHolder);
+        assertEq(stakingManagerInstance.bidIdToStaker(bidIds[3]), bnftHolder);
 
         // verify that created nodes have associated eigenPods
         IEtherFiNode node = IEtherFiNode(managerInstance.etherfiNodeAddress(bidIds[0]));

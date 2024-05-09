@@ -21,7 +21,10 @@ contract EtherFiNodesManagerTest is TestSetup {
             address(auctionInstance),
             address(stakingManagerInstance),
             address(TNFTInstance),
-            address(BNFTInstance)
+            address(BNFTInstance),
+            address(0),
+            address(0),
+            address(0)
         );
         
         vm.prank(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
@@ -77,7 +80,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_SetStakingRewardsSplit() public {
-        vm.expectRevert("NOT_ADMIN");
+        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
         vm.prank(bob);
         managerInstance.setStakingRewardsSplit(100000, 100000, 400000, 400000);
 
@@ -98,7 +101,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_setEnableNodeRecycling() public {
-        vm.expectRevert("NOT_ADMIN");
+        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
         vm.prank(bob);
         managerInstance.setEnableNodeRecycling(true);
 
@@ -112,7 +115,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_SetNonExitPenaltyPrincipal() public {
-        vm.expectRevert("NOT_ADMIN");
+        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
         vm.prank(bob);
         managerInstance.setNonExitPenalty(300, 2 ether);
 
@@ -125,7 +128,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_SetNonExitPenaltyDailyRate() public {
-        vm.expectRevert("NOT_ADMIN");
+        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
         vm.prank(bob);
         managerInstance.setNonExitPenalty(300, 2 ether);
 
@@ -166,7 +169,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_getEigenPod() public {
-        initializeTestingFork(TESTNET_FORK);
+        initializeTestingFork(MAINNET_FORK);
 
         uint256 nonRestakedValidatorId = depositAndRegisterValidator(false);
         assertEq(managerInstance.getEigenPod(nonRestakedValidatorId), address(0x0));
@@ -324,7 +327,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         assertEq(managerInstance.isExitRequested(bidId[0]), false);
 
         hoax(alice);
-        vm.expectRevert("NOT_TNFT_OWNER");
+        vm.expectRevert("INVALID");
         managerInstance.batchSendExitRequest(_to_uint256_array(bidId[0]));
 
         hoax(0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf);
