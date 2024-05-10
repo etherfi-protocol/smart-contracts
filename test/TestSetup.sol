@@ -702,7 +702,6 @@ contract TestSetup is Test {
         vm.stopPrank();
 
         vm.prank(alice);
-        managerInstance.setEnableNodeRecycling(true);
 
         _initializeMembershipTiers();
         _initializePeople();

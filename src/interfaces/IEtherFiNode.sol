@@ -71,7 +71,7 @@ interface IEtherFiNode {
     function isRestakingEnabled() external view returns (bool);
     function processNodeExit(uint256 _validatorId) external returns (bytes32[] memory withdrawalRoots);
     function processFullWithdraw(uint256 _validatorId) external;
-    function queueRestakedWithdrawal() external;
+    function queueRestakedWithdrawal() external returns (bytes32[] memory withdrawalRoots);
     function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes) external;
     function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, uint256 middlewareTimesIndexes) external;
     function updateNumberOfAssociatedValidators(uint16 _up, uint16 _down) external;

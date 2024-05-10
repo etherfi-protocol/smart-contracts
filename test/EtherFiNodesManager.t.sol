@@ -99,21 +99,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         assertEq(tnft, 400000);
         assertEq(bnft, 400000);
     }
-
-    function test_setEnableNodeRecycling() public {
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
-        vm.prank(bob);
-        managerInstance.setEnableNodeRecycling(true);
-
-        vm.prank(alice);
-        managerInstance.setEnableNodeRecycling(true);
-        assertEq(managerInstance.enableNodeRecycling(), true);
-
-        vm.prank(alice);
-        managerInstance.setEnableNodeRecycling(false);
-        assertEq(managerInstance.enableNodeRecycling(), false);
-    }
-
+    
     function test_SetNonExitPenaltyPrincipal() public {
         vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
         vm.prank(bob);
@@ -173,11 +159,9 @@ contract EtherFiNodesManagerTest is TestSetup {
 
         uint256 nonRestakedValidatorId = depositAndRegisterValidator(false);
         assertEq(managerInstance.getEigenPod(nonRestakedValidatorId), address(0x0));
-        assertEq(managerInstance.isRestakingEnabled(nonRestakedValidatorId), false);
 
         uint256 restakedValidatorId = depositAndRegisterValidator(true);
         assert(managerInstance.getEigenPod(restakedValidatorId) != address(0x0));
-        assertEq(managerInstance.isRestakingEnabled(restakedValidatorId), true);
     }
 
     function test_CreateEtherFiNode() public {
@@ -257,23 +241,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         // original premade safe should be on top of the stack after being recycled
         assertEq(managerInstance.unusedWithdrawalSafes(1), premadeSafe[0]);
         assertEq(managerInstance.unusedWithdrawalSafes(0), safe2[0]);
-
-
-        // disable use of recycled validators
-        vm.prank(alice);
-        managerInstance.setEnableNodeRecycling(false);
-
-        // create a new bid
-        vm.deal(alice, 33 ether);
-        vm.prank(alice);
-        bidId = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-        processedBids = stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidId, false);
-
-        // recycled validator should not have been used because of toggle
-        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 2);
-        assert(managerInstance.etherfiNodeAddress(processedBids[0]) != managerInstance.unusedWithdrawalSafes(1));
-        assert(managerInstance.etherfiNodeAddress(processedBids[0]) != address(0));
-
     }
 
     function test_createMultipleUnusedWithdrawalSafes() public {

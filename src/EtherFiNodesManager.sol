@@ -59,7 +59,7 @@ contract EtherFiNodesManager is
     // stack of re-usable withdrawal safes to save gas
     address[] public unusedWithdrawalSafes;
 
-    bool public enableNodeRecycling;
+    bool public DEPRECATED_enableNodeRecycling;
 
     mapping(uint256 => ValidatorInfo) private validatorInfos;
 
@@ -149,25 +149,6 @@ contract EtherFiNodesManager is
             _updateExitRequestTimestamp(_validatorId, etherfiNode, uint32(block.timestamp));
 
             emit NodeExitRequested(_validatorId);
-        }
-    }
-
-    /// @notice Revert the exit request for the validators as their T-NFT holder
-    /// @param _validatorIds IDs of the validators
-    function batchRevertExitRequest(uint256[] calldata _validatorIds) external whenNotPaused {
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            uint256 _validatorId = _validatorIds[i];
-            address etherfiNode = etherfiNodeAddress[_validatorId];
-
-            // require (msg.sender == tnft.ownerOf(_validatorId), "NOT_TNFT_OWNER");
-            // require (phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
-            // require (isExitRequested(_validatorId), "NOT_ASKED");
-            require(msg.sender == tnft.ownerOf(_validatorId) && phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE && isExitRequested(_validatorId), "INVALID");
-
-            _updateEtherFiNode(_validatorId);
-            _updateExitRequestTimestamp(_validatorId, etherfiNode, 0);
-
-            emit NodeExitRequestReverted(_validatorId);
         }
     }
 
@@ -317,7 +298,7 @@ contract EtherFiNodesManager is
 
     function allocateEtherFiNode(bool _enableRestaking) external onlyStakingManagerContract returns (address withdrawalSafeAddress) {
         // can I re-use an existing safe
-        if (unusedWithdrawalSafes.length > 0 && enableNodeRecycling) {
+        if (unusedWithdrawalSafes.length > 0) {
             // pop
             withdrawalSafeAddress = unusedWithdrawalSafes[unusedWithdrawalSafes.length-1];
             unusedWithdrawalSafes.pop();
@@ -471,11 +452,6 @@ contract EtherFiNodesManager is
         maxEigenlayerWithdrawals = _max;
     }
 
-    /// @notice set whether newly spun up validators should use a previously recycled node (if available) to save gas
-    function setEnableNodeRecycling(bool _enabled) external onlyAdmin {
-        enableNodeRecycling = _enabled;
-    }
-
     /// @notice Increments the number of validators by a certain amount
     /// @param _count how many new validators to increment by
     function incrementNumberOfValidators(uint64 _count) external onlyStakingManagerContract {
@@ -490,10 +466,6 @@ contract EtherFiNodesManager is
 
     function updateEigenLayerOperatingAdmin(address _address, bool _isAdmin) external onlyOwner {
         eigenLayerOperatingAdmin[_address] = _isAdmin;
-    }
-
-    function disableEigenLayerOperatingAdmin(address _addres) external onlyAdmin {
-        eigenLayerOperatingAdmin[_addres] = false;
     }
 
     // Pauses the contract
@@ -729,12 +701,6 @@ contract EtherFiNodesManager is
     function getEigenPod(uint256 _validatorId) public view returns (address) {
         IEtherFiNode etherfiNode = IEtherFiNode(etherfiNodeAddress[_validatorId]);
         return etherfiNode.eigenPod();
-    }
-
-    /// @notice return whether the provided validator is configured for restaknig via eigenLayer
-    function isRestakingEnabled(uint256 _validatorId) public view returns (bool) {
-        IEtherFiNode etherfiNode = IEtherFiNode(etherfiNodeAddress[_validatorId]);
-        return etherfiNode.isRestakingEnabled();
     }
 
     /// @notice Fetches the address of the implementation contract currently being used by the proxy

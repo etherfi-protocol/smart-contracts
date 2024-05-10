@@ -35,8 +35,9 @@ contract EtherFiNode is IEtherFiNode {
     mapping(uint256 => uint256) public associatedValidatorIndices;
     uint256[] public associatedValidatorIds;
 
-    uint64 public pendingWithdrawalFromRestakingInGwei;
-    uint64 public completedWithdrawalFromRestakingInGwei;
+    // Track the amount of pending/completed withdrawals;
+    uint64 public pendingWithdrawalFromRestakingInGwei; // incremented when the delayed withdrawal (from EigenPod to EtherFiNode) is queued, decremented when it is completed
+    uint64 public completedWithdrawalFromRestakingInGwei; // incremented when the delayed withdarwal is completed, decremented when the fund is withdrawan (from EtherFiNode to the externals via fullWithdraw call)
 
     error CallFailed(bytes data);
 
@@ -191,7 +192,7 @@ contract EtherFiNode is IEtherFiNode {
 
     /// @notice process the exit
     // TODO: make it permission-less call
-    function processNodeExit(uint256 _validatorId) external onlyEtherFiNodeManagerContract ensureLatestVersion returns (bytes32[] memory withdrawalRoots) {
+    function processNodeExit(uint256 _validatorId) external onlyEtherFiNodeManagerContract ensureLatestVersion returns (bytes32[] memory fullWithdrawalRoots) {
         if (isRestakingEnabled) {
             // eigenLayer bookeeping
             // we need to mark a block from which we know all beaconchain eth has been moved to the eigenPod
@@ -199,7 +200,8 @@ contract EtherFiNode is IEtherFiNode {
             // (eigenLayer withdrawals are tied to blocknumber instead of timestamp)
             restakingObservedExitBlock = uint32(block.number);
 
-            withdrawalRoots = _queueRestakedFullWithdrawal(_validatorId);
+            fullWithdrawalRoots = queueRestakedWithdrawal();
+            require(fullWithdrawalRoots.length == 1, "NO_FULLWITHDRAWAL_QUEUED");
         }
     }
 
@@ -207,6 +209,7 @@ contract EtherFiNode is IEtherFiNode {
         updateNumberOfAssociatedValidators(0, 1);
 
         if (isRestakingEnabled) {
+            // TODO: revisit for the case of slashing
             require(completedWithdrawalFromRestakingInGwei >= 32 ether / 1 gwei, "INSUFFICIENT_BALANCE");
             completedWithdrawalFromRestakingInGwei -= uint64(32 ether / 1 gwei);
         }
@@ -239,11 +242,11 @@ contract EtherFiNode is IEtherFiNode {
             }
         }
 
-        IDelegationManager mgr = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
-        mgr.completeQueuedWithdrawals(withdrawals, tokens, middlewareTimesIndexes, receiveAsTokens);
-
         pendingWithdrawalFromRestakingInGwei -= uint64(totalAmount / 1 gwei);
         completedWithdrawalFromRestakingInGwei += uint64(totalAmount / 1 gwei);
+
+        IDelegationManager mgr = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
+        mgr.completeQueuedWithdrawals(withdrawals, tokens, middlewareTimesIndexes, receiveAsTokens);
     }
 
     /// @dev transfer funds from the withdrawal safe to the 4 associated parties (bNFT, tNFT, treasury, nodeOperator)
@@ -642,41 +645,56 @@ contract EtherFiNode is IEtherFiNode {
         return false;
     }
 
-    function queueRestakedWithdrawal() public {
-        if (!isRestakingEnabled) return;
+    // returns the withdrawal roots for the queued full-withdrawals
+    // the {NonBeaconChainEthWithdrawal, partial withdraw}'s queued withdrawals can be retrieved (indexed) on DelayedWithdrawalRouter
+    function queueRestakedWithdrawal() public returns (bytes32[] memory fullWithdrawalRoots) {
+        if (!isRestakingEnabled) return fullWithdrawalRoots;
 
         if (!IEigenPod(eigenPod).hasRestaked()) {
             // EigenPod has never re-staked. Then, just withdraw the funds to the withdrawal safe
             IEigenPod(eigenPod).withdrawBeforeRestaking();
         } else {
-            // There are two flows of withdrawals: partial and full withdrawals.
-            // - In the partial withdrawal, the verified withdrawal amount is sent immediately to the withdrawal safe. So, we don't need to handle that here
+            // There are three flows of withdrawals from EL: {NonBeaconChainEthWithdrawal, partial withdraw, full withdrawal}
+            // All flows are subject to the DelayedWithdrawal put by the EL's DelayedWithdrawalRouter
+            // - In the NonBeaconChainEthWithdrawal, the verification is not required and the withdrawal is queued upon the call to `withdrawNonBeaconChainETHBalanceWei`
+            // - In the partial withdrawal, the verified withdrawal is immeidately queued 
             // https://github.com/Layr-Labs/eigenlayer-contracts/tree/90a0f6aee79b4a38e1b63b32f9627f21b1162fbb/src/contracts/pods/EigenPod.sol#L717
-            // - In the full withdrawal, the verified withdrawal amount is kept in the EigenPod until we call `DelegationManager.queueWithdrawals` to withdraw the funds to the withdrawal safe
+            // - In the full withdrawal, the verified withdrawal amount is kept in the EigenPod until we call `DelegationManager.queueWithdrawals`
             // https://github.com/Layr-Labs/eigenlayer-contracts/tree/90a0f6aee79b4a38e1b63b32f9627f21b1162fbb/src/contracts/pods/EigenPod.sol#L685
-            // Therefore, here we only need to handle the full withdrawal flow
-            // However, since this call is not ready for the permision-less call.
-            // We make the `processNodeExit` to call directly `_queueRestakedFullWithdrawal` instead of calling this function
-
-            // _queueRestakedFullWithdrawal();
-
-            uint256 amountToWithdraw = IEigenPod(eigenPod).nonBeaconChainETHBalanceWei();
-            IEigenPod(eigenPod).withdrawNonBeaconChainETHBalanceWei(address(this), amountToWithdraw);
+            // 
+            // Therefore, here we only need to queue {NonBeaconChainEthWithdrawal, full withdrawal}
+            _queueNonBeaconChainEthWithdrawal();
+            fullWithdrawalRoots = _queueRestakedFullWithdrawal();
         }
     }
 
-    // Once the `EigenPod.activeValidatorCount()` is available. We can make it permission-less
-    function _queueRestakedFullWithdrawal(uint256 _validatorId) internal returns (bytes32[] memory withdrawalRoots) {
-        if (!IEigenPod(eigenPod).hasRestaked()) return withdrawalRoots;
-        require(IEigenPod(eigenPod).withdrawableRestakedExecutionLayerGwei() >= 32 ether / 1 gwei, "NO_WITHDRAWAL_PROVED");
+    function _queueNonBeaconChainEthWithdrawal() internal {
+        uint256 amountToWithdraw = IEigenPod(eigenPod).nonBeaconChainETHBalanceWei();
+        if (amountToWithdraw > 0) IEigenPod(eigenPod).withdrawNonBeaconChainETHBalanceWei(address(this), amountToWithdraw);
+    }
 
-        // TODO:
-        // We actually need check that the full-withdrwal proof for the validator of `_validatorId` is verified
-        // However, we don't have the correct mapping from valiatorId to validatorIndex
+    // Once the `EigenPod.activeValidatorCount()` is available. We can make it permission-less
+    function _queueRestakedFullWithdrawal() internal returns (bytes32[] memory fullWithdrawalRoots) {
+        if (!IEigenPod(eigenPod).hasRestaked()) return fullWithdrawalRoots;
+
+        // calculate the pending amount. The withdrawal proof verification will update the EigenPod's `withdrawableRestakedExecutionLayerGwei` value
+        uint256 unclaimedFullWithdrawalAmountInGwei = IEigenPod(eigenPod).withdrawableRestakedExecutionLayerGwei() - pendingWithdrawalFromRestakingInGwei;
+        if (unclaimedFullWithdrawalAmountInGwei == 0) return fullWithdrawalRoots;
+
+        // TODO: revisit for the case of slashing
+        // we will need to re-visit this logic once the EigenLayer's slashing mechanism is implemented
+        // + we need to consider the slashing amount in the full withdrawal from the beacon layer as well
+        require(unclaimedFullWithdrawalAmountInGwei >= 32 ether / 1 gwei, "SLASHED");
+
+        // Update the pending withdrawal amount
+        // Note that the call to `DelegationManager.queueWithdrawals(...)` won't update the EigenPod's `withdrawableRestakedExecutionLayerGwei`
+        // It is updated only when the withdrawal is completed by the `DelegationManager.completeQueuedWithdrawals(...)`
+        // That is why we use two variables for accounting
+        pendingWithdrawalFromRestakingInGwei += uint64(32 ether / 1 gwei);
 
         IDelegationManager mgr = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
 
-        // Queue withdrawal for whatever amount is available
+        // Queue the withdrawal for whatever amount is available
         IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
         IStrategy[] memory strategies = new IStrategy[](1);
         uint256[] memory shares = new uint256[](1);
@@ -689,9 +707,7 @@ contract EtherFiNode is IEtherFiNode {
             withdrawer: address(this)
         });
 
-        withdrawalRoots = mgr.queueWithdrawals(params);
-
-        pendingWithdrawalFromRestakingInGwei += uint64(32 ether / 1 gwei);
+        fullWithdrawalRoots = mgr.queueWithdrawals(params);
     }
 
 

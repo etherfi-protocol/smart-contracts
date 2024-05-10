@@ -456,7 +456,7 @@ contract LiquifierTest is TestSetup {
 
         vm.startPrank(alice);
 
-        uint256 inputAmount = 100 ether;
+        uint256 inputAmount = 50 ether;
 
         uint256 exchangeRate = IWBETH(address(cbEth)).exchangeRate();
         uint256 maxSlippageBp = 40; // 0.40%
