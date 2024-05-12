@@ -24,3 +24,8 @@ cache
 artifacts
 
 .DS_Store
+
+# Certora files
+.certora_internal/
+.certora_recent_jobs.json
+.zip-output-url.txt
