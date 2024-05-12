@@ -80,7 +80,7 @@ rst_prolog = """
 
 
 # -- codelink_extension configuration ----------------------------------------
-code_path_override = "/../../"  # Repository root
+code_path_override = "../../../"  # Repository root
 link_to_github = True
 
 
