@@ -6,6 +6,7 @@ Basic types of rules
    :caption: Contents:
 
    simple_rule
+   simple_voting_rule
 
 .. bug_injection
 .. intro_slides
