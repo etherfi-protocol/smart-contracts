@@ -9,8 +9,7 @@ Basic types of rules
    simple_voting_rule
    bug_injection
    intro_slides
+   misc_rules
+   vacuity
 
-.. erc20
-.. misc_rules
-.. vacuity
 .. exercises
