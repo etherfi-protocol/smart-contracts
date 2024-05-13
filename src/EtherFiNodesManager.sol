@@ -198,6 +198,11 @@ contract EtherFiNodesManager is
     /// @notice Process the rewards skimming from the safe of the validator
     ///         when the safe is being shared by the multiple validatators, it batch process all of their rewards skimming in one shot
     /// @param _validatorId The validator Id
+    /// Full Flow of the partial withdrawal for a validator
+    //  1. validator is exited & fund is withdrawn from the beacon chain
+    //  2. perform `EigenPod.verifyAndProcessWithdrawals` for the partial withdrawals. It triggers `DelayedWithdrawalRouter.createDelayedWithdrawal`
+    //  3. wait for 'withdrawalDelayBlocks' (= 7 days) delay to be passed
+    //  4. Finally, perform `EtherFiNodesManager.partialWithdraw` for the validator
     function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
@@ -223,6 +228,13 @@ contract EtherFiNodesManager is
     /// @dev EtherFi will be monitoring the status of the validator nodes and mark them EXITED if they do;
     /// @dev It is a point of centralization in Phase 1
     /// @param _validatorId the validator Id to withdraw from
+    /// Full Flow of the full withdrawal for a validator
+    //  1. validator is exited & fund is withdrawn from the beacon chain
+    //  2. perform `EigenPod.verifyAndProcessWithdrawals` for the full withdrawal
+    //  3. perform `EtherFiNodesManager.processNodeExit` which calls `DelegationManager.queueWithdrawals`
+    //  4. wait for 'minWithdrawalDelayBlocks' (= 7 days) delay to be passed
+    //  5. perform `EtherFiNodesManager.completeQueuedWithdrawals` which calls `DelegationManager.completeQueuedWithdrawal`
+    //  6. Finally, perform `EtherFiNodesManager.fullWithdraw`
     function fullWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused{
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);

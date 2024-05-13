@@ -701,8 +701,6 @@ contract TestSetup is Test {
 
         vm.stopPrank();
 
-        vm.prank(alice);
-
         _initializeMembershipTiers();
         _initializePeople();
         _initializeEtherFiAdmin();
