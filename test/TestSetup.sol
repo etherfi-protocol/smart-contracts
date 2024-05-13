@@ -1465,4 +1465,15 @@ contract TestSetup is Test {
         string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
         stdJson.write(output, output_path);
     }
+    
+    function _dump_gnosis_txn(address target, uint256 value, bytes memory data) internal {
+        string memory obj_k = "timelock_txn";
+        stdJson.serialize(obj_k, "to", target);
+        stdJson.serialize(obj_k, "value", value);
+        string memory output = stdJson.serialize(obj_k, "data", data);
+
+        string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
+        string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        stdJson.write(output, output_path);
+    }
 }

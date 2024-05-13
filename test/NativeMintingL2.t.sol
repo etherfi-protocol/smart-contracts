@@ -384,22 +384,29 @@ contract NativeMintingL2 is Test, NativeMintingConfigs {
     }
 
     function test_sync() public {
-        vm.createSelectFork(BASE.rpc_url);
+        vm.createSelectFork(MODE.rpc_url);
         _setUp();
 
-        address syko = vm.addr(1004);
-        vm.deal(syko, 1 ether);
+        vm.deal(l2SyncPool.owner(), 100 ether);
         
-        vm.startPrank(syko);
+        vm.startPrank(l2SyncPool.owner());
         _sync();
         vm.stopPrank();
     }
 
     function _sync() internal {
-        IL2SyncPool.MessagingFee memory fee = l2SyncPool.quoteSync(ETH_ADDRESS, abi.encodePacked(), false);
+        uint256 amountIn = 0.1 ether;
+        uint256 amountOut = l2exchangeRateProvider.getConversionAmountUnsafe(ETH_ADDRESS, amountIn);
+        IL2SyncPool.MessagingFee memory fee = l2SyncPool.quoteSync(ETH_ADDRESS, amountIn, amountOut, abi.encodePacked(), false);
         // l2SyncPool.sync{value: uint256(110 * fee.nativeFee / 100)}(ETH_ADDRESS, abi.encodePacked(), fee);
-        uint256  messageServiceFee = 0.0001 ether;
-        l2SyncPool.sync{value: fee.nativeFee + messageServiceFee}(ETH_ADDRESS, abi.encodePacked(), fee);
+        // uint256  messageServiceFee = 0.0001 ether;
+        uint256  messageServiceFee = 0;
+        // l2SyncPool.sync{value: fee.nativeFee + messageServiceFee}(ETH_ADDRESS, amountIn, amountOut, abi.encodePacked(), fee);
+
+        bytes memory data = abi.encodeWithSignature("sync(address,uint256,uint256,bytes,(uint256,uint256))", ETH_ADDRESS, amountIn, amountOut, abi.encodePacked(), fee);
+        emit L2Transaction(address(l2SyncPool), fee.nativeFee + messageServiceFee, data);
+
+        address(l2SyncPool).call{value: fee.nativeFee + messageServiceFee}(data);
     }
 
     function test_oft_send_FAIL_RateLimitExceeded_1() public {

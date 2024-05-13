@@ -10,6 +10,11 @@ import "forge-std/console.sol";
 
 import "./NativeMintingConfigs.t.sol";
 
+interface IL1Receiver {
+    function onMessageReceived(bytes calldata message) external;
+}
+
+
 contract IDummyToken is ERC20BurnableUpgradeable {    
     function mint(address to, uint256 amount) public {
         _mint(to, amount);
@@ -35,6 +40,8 @@ interface IEtherfiL1SyncPoolETH is IOAppCore {
 
     function setDummyToken(uint32 originEid, address dummyToken) external;
 
+    function setReceiver(uint32 originEid, address receiver) external;
+
     function lzReceive(
         Origin calldata origin,
         bytes32 guid,
@@ -50,6 +57,8 @@ interface IEtherfiL1SyncPoolETH is IOAppCore {
     // function endpoint() external view returns (ILayerZeroEndpointV2 iEndpoint);
 
     // function peers(uint32 eid) external view returns (bytes32);
+
+    function owner() external view returns (address);
 }
 
 contract NativeMintingL1Suite is Test, NativeMintingConfigs {
@@ -61,6 +70,7 @@ contract NativeMintingL1Suite is Test, NativeMintingConfigs {
     OFTAdapter oftAdapter;
 
     address hypernative = 0x2b237B887daF752A57Eca25a163CC7A96F973FE8;
+
 
     function _setUp() internal {
         pk = vm.envUint("PRIVATE_KEY");
@@ -354,4 +364,94 @@ contract NativeMintingL1 is TestSetup, NativeMintingL1Suite {
         return (_depositAmount * eETHInstance.totalShares()) / totalPooledEther - 1; // rounding down
     }
 
+    function test_fill_the_gaps() public {
+        // bytes[] memory withdrawal_txs_data = new bytes[]();
+        bytes memory withdrawal_tx_data;
+
+        // - https://explorer.mode.network/tx/0xd09ec792a04f27f84282c117cb6686fd2a5778c5ff090d773ba3cc98fae3749f
+        withdrawal_tx_data = hex"d764ad0b000100000000000000000000000000000000000000000000000000000000000000000000000000000000000052c4221cb805479954cde5accff8c4dcaf96623b000000000000000000000000c8ad0949f33f02730cff3b96e7f067e83de1696f00000000000000000000000000000000000000000000005baba2490a2ddcc956000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000e43a69197e000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000007634cbc9734011ca69e502a8180c7c00160435712b342200c6ae1b25f21cd7eebce6000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee00000000000000000000000000000000000000000000005baba2490a2ddcc9560000000000000000000000000000000000000000000000585a9fec6d427f07d400000000000000000000000000000000000000000000000000000000";
+        // withdrawal_txs_data.push(withdrawal_tx_data);
+
+        // - https://explorer.mode.network/tx/0x5e0c8328e4541a8cfdeada8d645130b06782b570d1ec40d9694f6d429605d31c
+        withdrawal_tx_data = hex"d764ad0b000100000000000000000000000000000000000000000000000000000000000100000000000000000000000052c4221cb805479954cde5accff8c4dcaf96623b000000000000000000000000c8ad0949f33f02730cff3b96e7f067e83de1696f000000000000000000000000000000000000000000000051595e1ab9a4fda2df000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000e43a69197e000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000007634d20917f39259d5e1f63997aa83943676e2bffd84caaf99b41cf8bea923b7e943000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000000000000000000000000000000000051595e1ab9a4fda2df00000000000000000000000000000000000000000000004e713a1b913f290d0e00000000000000000000000000000000000000000000000000000000";
+        // withdrawal_txs_data.push(withdrawal_tx_data);
+
+        // - https://explorer.mode.network/tx/0x08e7a03f6a0391bec7d09829ae854ce5b9b8a91df5ef5ec999fc9b5a39dfd5ae
+        withdrawal_tx_data = hex"d764ad0b000100000000000000000000000000000000000000000000000000000000000200000000000000000000000052c4221cb805479954cde5accff8c4dcaf96623b000000000000000000000000c8ad0949f33f02730cff3b96e7f067e83de1696f00000000000000000000000000000000000000000000000b93f449a33421ce11000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000e43a69197e000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000076347f529ec0ca43ba7cfe321ce4586c1e9ae2d918deffa2207915f47b292d930f8b000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee00000000000000000000000000000000000000000000000b93f449a33421ce1100000000000000000000000000000000000000000000000b29771981e789cb2b00000000000000000000000000000000000000000000000000000000";
+        // withdrawal_txs_data.push(withdrawal_tx_data);
+        
+        // - https://explorer.mode.network/tx/0xc7537232f8c1ba03b1bfe92782ebd28d9cd359b682918e751672475eae5b4a31
+        withdrawal_tx_data = hex"d764ad0b000100000000000000000000000000000000000000000000000000000000000300000000000000000000000052c4221cb805479954cde5accff8c4dcaf96623b000000000000000000000000c8ad0949f33f02730cff3b96e7f067e83de1696f000000000000000000000000000000000000000000000020cdb4e527f596c6de000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000e43a69197e000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000076344cf823fc555a0f574d0b481b492741747dd5abe476368ec0d2c2e9651204a864000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000000000000000000000000000000000020cdb4e527f596c6de00000000000000000000000000000000000000000000001f9f53c09836b9508400000000000000000000000000000000000000000000000000000000";
+        // withdrawal_txs_data.push(withdrawal_tx_data);
+        
+        // - https://explorer.mode.network/tx/0x803c0fc86ad9d12a42c3cda863971c661943e8be819d353e02d8be6141ffe3e3
+        withdrawal_tx_data = hex"d764ad0b000100000000000000000000000000000000000000000000000000000000000400000000000000000000000052c4221cb805479954cde5accff8c4dcaf96623b000000000000000000000000c8ad0949f33f02730cff3b96e7f067e83de1696f00000000000000000000000000000000000000000000002f2d775d16e05327b1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000e43a69197e000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000000000000000000000000000000763482eaa12954abba8fd75b013e1868c075439242f49e68b00254029d71aa9100d0000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee00000000000000000000000000000000000000000000002f2d775d16e05327b100000000000000000000000000000000000000000000002d78b9f25cfa5b50b800000000000000000000000000000000000000000000000000000000";
+        // withdrawal_txs_data.push(withdrawal_tx_data);
+        _fill_the_gap(withdrawal_tx_data);
+    }
+
+
+    function _fill_the_gap(bytes memory withdrawal_tx_data) internal {
+        (uint32 originEid, bytes32 guid, address tokenIn, uint256 amountIn, uint256 amountOut) = _fetchMessageToSyncPool(withdrawal_tx_data);
+        guid = hex"";
+        amountIn = 0.001 ether;
+        amountOut = weEthInstance.getWeETHByeETH(amountIn);
+
+
+        console.log("originEid", originEid);
+        console.log("guid");
+        console.logBytes32(guid);
+        console.log("tokenIn", tokenIn);
+        console.log("amountIn", amountIn);
+        console.log("amountOut", amountOut);
+
+
+        address currentReceiver = l1SyncPool.getReceiver(originEid);
+
+        l1ContractController = 0x144F237DF7697BA6A34c01aa856a144944db10dB;
+
+        // 1. prepare for ETH
+        // vm.deal(l1ContractController, amountIn);
+
+        // 2. update so that the contract controller can trigger `onMessageReceived`
+        // vm.prank(l1ContractController);
+        // l1SyncPool.setReceiver(originEid, l1ContractController);
+        emit Transaction(address(l1SyncPool), 0, abi.encodeWithSelector(l1SyncPool.setReceiver.selector, originEid, l1ContractController));
+        _dump_gnosis_txn(address(l1SyncPool), 0, abi.encodeWithSelector(l1SyncPool.setReceiver.selector, originEid, l1ContractController));
+        vm.warp(block.timestamp + 1);
+
+        // 3. do it
+        // vm.prank(l1ContractController);
+        // l1SyncPool.onMessageReceived{value: amountIn}(originEid, guid, tokenIn, amountIn, amountOut);
+        emit Transaction(address(l1SyncPool), amountIn, abi.encodeWithSelector(l1SyncPool.onMessageReceived.selector, originEid, guid, tokenIn, amountIn, amountOut));
+        _dump_gnosis_txn(address(l1SyncPool), amountIn, abi.encodeWithSelector(l1SyncPool.onMessageReceived.selector, originEid, guid, tokenIn, amountIn, amountOut));
+        vm.warp(block.timestamp + 1);
+
+        // 4. revert back the receiver setup
+        // vm.prank(l1ContractController);
+        // l1SyncPool.setReceiver(originEid, currentReceiver);
+        emit Transaction(address(l1SyncPool), 0, abi.encodeWithSelector(l1SyncPool.setReceiver.selector, originEid, currentReceiver));
+        _dump_gnosis_txn(address(l1SyncPool), 0, abi.encodeWithSelector(l1SyncPool.setReceiver.selector, originEid, currentReceiver));
+        vm.warp(block.timestamp + 1);
+    }
+
+    function _fetchMessageToReceiver(bytes memory withdrawal_tx_data) internal returns (bytes memory) {
+        bytes memory tmp = this.removeSignature(withdrawal_tx_data);
+        (,,address target,,,bytes memory message) = abi.decode(tmp, (uint256, address, address, uint256, uint256, bytes));
+        return message;
+    }
+
+    function _fetchMessageToSyncPool(bytes memory withdrawal_tx_data) internal returns (uint32 originEid, bytes32 guid, address tokenIn, uint256 amountIn, uint256 amountOut) {
+        bytes memory message = _fetchMessageToReceiver(withdrawal_tx_data);
+
+        bytes memory tmp = this.removeSignature(message);
+        (bytes memory data) = abi.decode(tmp, (bytes));
+
+        (originEid, guid, tokenIn, amountIn, amountOut) = abi.decode(data, (uint32, bytes32, address, uint256, uint256));        
+    }
+
+    // remove signature
+    function removeSignature(bytes calldata data) public returns (bytes memory) {
+        return abi.encodePacked(data[4:]);
+    }
 }
