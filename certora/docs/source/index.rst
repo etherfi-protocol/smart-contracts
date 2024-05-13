@@ -13,7 +13,7 @@ These are lecture notes for the Certora Prover training for ether.fi.
 
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Contents:
    :numbered: 2
 
