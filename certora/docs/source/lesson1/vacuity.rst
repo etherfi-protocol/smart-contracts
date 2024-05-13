@@ -36,9 +36,9 @@ Requirement causing revert
 
 
 .. index::
-   :name: rule_sanity_sec
    single: rule_sanity
    single: sanity
+   :name: rule_sanity_sec
 
 Rule sanity
 -----------
