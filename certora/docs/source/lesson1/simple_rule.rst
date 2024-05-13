@@ -79,7 +79,8 @@ Config file fields
 
 ``files``
    The relevant files to compile (determines the files in the *scene*).
-   A list of ``"<solidity_file>:<contract>"`` strings.
+   A list of ``"<solidity_file>:<contract>"`` strings. If the contract name is the same
+   as the file name, the contract can be omitted.
 
 ``verify``
    Syntax ``"<contract_to_verify>:<spec_file_path>"``.
