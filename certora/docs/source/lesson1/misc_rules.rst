@@ -79,6 +79,56 @@ Shows that using the first key is possible.
    :cvlobject: satisfyExampleFirstKey
 
 
+Relational properties
+---------------------
+We'll use the
+:clink:`Voting contract</certora/training-examples/lesson1/solidity_intro/Voting.sol>`
+for this examples.
+
+.. dropdown:: Voting contract
+
+   .. literalinclude:: ../../../training-examples/lesson1/solidity_intro/Voting.sol
+      :language: solidity
+
+* The following rule shows that the change in total votes equals the sum of
+  changes in the in-favor and against results.
+* Note the use of the :cvl:`mathint` type, this is explained in
+  :ref:`integer_types_in_cvl` below.
+* Report: `relational rule report`_.
+
+.. cvlinclude:: ../../../training-examples/lesson1/solidity_intro/VotingRelational.spec
+   :cvlobject: changeVotesIntegrity
+   :caption: :clink:`Relational rule changeVotesIntegrity</certora/training-examples/lesson1/solidity_intro/VotingRelational.spec>`
+
+
+.. index::
+   single: mathint
+   single: type; mathint
+   single: integer; casting
+   :name: integer_types_in_cvl
+
+Detour - integer types in CVL
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+CVL supports all integer types that are available in solidity, such as :cvl:`uint8`.
+In addition, CVL has the *mathematical integer* type: :cvl:`mathint`. These types
+obey the following two rules:
+
+#. All arithmetic operations (i.e. :cvl:`+`, :cvl:`-`, :cvl:`*`, :cvl:`/`, and :cvl:`%`)
+   return :cvl:`mathint` type
+#. When using comparison operators, such as: :cvl:`==`, and :cvl:`<=`, on integer types
+   both sides *must have the same type*
+
+These rules mean that sometimes you will need to cast a solidity integer type to a
+:cvl:`mathint` and vice versa. To cast an integer into :cvl:`mathint` use the function
+:cvl:`to_mathint`. To cast :cvl:`mathint x` to a solidity integer type, say
+:cvl:`uint128`, there are two possible functions:
+
+* :cvl:`require_uint128(x)` - in this case the Prover will ignore all cases where
+  there is *overflow* (i.e. :cvl:`x > max_uint128`) or *underflow* (i.e. :cvl:`x < 0`)
+* :cvl:`assert_uint128(x)` - in this case an overflow or an underflow will cause a
+  violation
+
+
 .. Links
    -----
 
@@ -99,3 +149,6 @@ Shows that using the first key is possible.
 
 .. _satisfy rules report:
    https://prover.certora.com/output/98279/f91296f5dc414d1abf8dd419d7004e53?anonymousKey=2f5196be77f896a9db8d52f50e556324cac723d7
+
+.. _relational rule report:
+   https://prover.certora.com/output/98279/27bc2b39079743c79708bf957c0ea031?anonymousKey=27a3e9120f8c29907ebdae2de2387e040f622e06
