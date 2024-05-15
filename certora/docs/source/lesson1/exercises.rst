@@ -34,17 +34,18 @@ Rule writing
 
 Finding bugs
 ^^^^^^^^^^^^
-The folder :clink:`buggy_voting </lesson1/buggy_voting>` holds several buggy
-implementations of the :clink:`Voting contract </lesson1/solidity_intro/Voting.sol>`.
+The folder :clink:`buggy_voting </certora/training-examples/lesson1/buggy_voting>`
+holds several buggy implementations of the
+:clink:`Voting contract </certora/training-examples/lesson1/solidity_intro/Voting.sol>`.
 
 #. Use the rules you wrote (or any other rules) to find the bugs in:
 
-   * :clink:`VotingBug1.sol </lesson1/buggy_voting/VotingBug1.sol>`
-   * :clink:`VotingBug2.sol </lesson1/buggy_voting/VotingBug2.sol>`
-   * :clink:`VotingBug3.sol </lesson1/buggy_voting/VotingBug3.sol>`
-   * :clink:`VotingBug4.sol </lesson1/buggy_voting/VotingBug4.sol>`
+   * :clink:`VotingBug1.sol </certora/training-examples/lesson1/buggy_voting/VotingBug1.sol>`
+   * :clink:`VotingBug2.sol </certora/training-examples/lesson1/buggy_voting/VotingBug2.sol>`
+   * :clink:`VotingBug3.sol </certora/training-examples/lesson1/buggy_voting/VotingBug3.sol>`
+   * :clink:`VotingBug4.sol </certora/training-examples/lesson1/buggy_voting/VotingBug4.sol>`
 
 #. Write a rule that finds the bug in:
 
-   * :clink:`VotingBug5.sol </lesson1/buggy_voting/VotingBug5.sol>`
+   * :clink:`VotingBug5.sol </certora/training-examples/lesson1/buggy_voting/VotingBug5.sol>`
 
