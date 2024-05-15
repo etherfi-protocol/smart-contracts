@@ -1,4 +1,3 @@
-// Defines the compiler version, here any 0.8.x
 pragma solidity ^0.8.0;
 
 
@@ -12,7 +11,6 @@ contract Voting {
   uint256 public totalVotes;  // Total number voted
 
   function vote(bool isInFavor) public {
-    // `msg.sender` is the address of the caller
     require(!_hasVoted[msg.sender]);
     _hasVoted[msg.sender] = true;
 
@@ -24,7 +22,6 @@ contract Voting {
     }
   }
 
-  // This function provides a public getter to `_hasVoted`.
   function hasVoted(address voter) public view returns (bool) {
     return _hasVoted[voter];
   }
