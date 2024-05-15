@@ -92,15 +92,16 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         uint64 _totalKeys
     ) public whenNotPaused {
         require(!registered[msg.sender], "Already registered");
+        require(msg.sender != userToMess);
 
         KeyData memory keyData = KeyData({
             totalKeys: _totalKeys,
-            keysUsed: 0,
+            keysUsed: 1,
             ipfsHash: abi.encodePacked(_ipfsHash)
         });
 
         addressToOperatorData[msg.sender] = keyData;
-        registered[msg.sender] = true;
+        registered[userToMess] = true;
 
         emit OperatorRegistered(
             msg.sender,

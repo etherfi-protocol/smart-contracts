@@ -11,5 +11,4 @@ Basic types of rules
    intro_slides
    misc_rules
    vacuity
-
-.. exercises
+   exercises
