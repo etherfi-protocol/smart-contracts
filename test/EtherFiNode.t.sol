@@ -1828,7 +1828,9 @@ contract EtherFiNodeTest is TestSetup {
         _upgrade_etherfi_node_contract();   
         _upgrade_etherfi_nodes_manager_contract(); 
 
-        _mainnet_369_verifyAndProcessWithdrawals(true, true);
+        _mainnet_369_add_validator();
+
+        _mainnet_369_verifyAndProcessWithdrawals(false, true);
     }
 
     function test_mainnet_369_processNodeExit_without_withdrawal_proved() public {
@@ -2000,12 +2002,17 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(eigenPod.withdrawableRestakedExecutionLayerGwei(), 0);
     }
 
-    function test_mainnet_369_fullWithdraw() public {
+    function test_mainnet_369_fullWithdraw_success() public {
         test_mainnet_369_completeQueuedWithdrawal();
 
         uint256 validatorId = 369;
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
+
+        assertEq(IEtherFiNode(nodeAddress).associatedValidatorIds(IEtherFiNode(nodeAddress).associatedValidatorIndices(validatorId)), validatorId);
 
         managerInstance.fullWithdraw(validatorId);
+
+        assertNotEq(IEtherFiNode(nodeAddress).associatedValidatorIds(IEtherFiNode(nodeAddress).associatedValidatorIndices(validatorId)), validatorId);
     }
 
     function test_mainnet_369_fullWithdraw_without_completeQueuedWithdrawal() public {
@@ -2022,6 +2029,44 @@ contract EtherFiNodeTest is TestSetup {
         managerInstance.fullWithdraw(validatorId);
     }
 
+    function _mainnet_369_add_validator() public {
+        uint256 validatorId = 369;
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
+        IEigenPod eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
+        IDelegationManager mgr = managerInstance.delegationManager();
+        IEigenPodManager eigenPodManager = managerInstance.eigenPodManager();
+
+        assertEq(IEtherFiNode(nodeAddress).numAssociatedValidators(), 1);
+
+        // validator 369 is with isLpBnftHolder = false
+        vm.prank(owner);
+        liquidityPoolInstance.updateBnftMode(false);
+
+        uint256 newValidatorId = _add_validator_to_safe(validatorId);
+
+        vm.prank(owner);
+        liquidityPoolInstance.updateBnftMode(true);
+
+        assertEq(IEtherFiNode(nodeAddress).numAssociatedValidators(), 1); // the new validator is registered but not approved yet
+    }
+
+    function _add_validator_to_safe(uint256 validatorIdToShareSafeWith) internal returns (uint256) {
+        address operator = auctionInstance.getBidOwner(validatorIdToShareSafeWith);
+        vm.deal(operator, 100 ether);
+        vm.startPrank(operator);
+        uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether * 1}(1, 0.1 ether);
+        vm.stopPrank();
+        
+        address bnftStaker = BNFTInstance.ownerOf(validatorIdToShareSafeWith);
+        uint256 lp_balance = address(liquidityPoolInstance).balance;
+        vm.startPrank(bnftStaker);
+        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(bidIds, 1, validatorIdToShareSafeWith);
+        (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(newValidatorIds);
+        liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, newValidatorIds, depositDataArray, depositDataRootsForApproval, sig);
+        vm.stopPrank();
+
+        assertEq(uint8(managerInstance.phase(newValidatorIds[0])), uint8(IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL));
+    }
 
     function test_mainnet_partialWithdraw_after_upgrade() public {
         initializeRealisticFork(MAINNET_FORK);
@@ -2124,7 +2169,9 @@ contract EtherFiNodeTest is TestSetup {
 
         assertEq(lp_balance, address(liquidityPoolInstance).balance);
         assertEq(managerInstance.etherfiNodeAddress(newValidatorIds[0]), address(0));
+        assertEq(IEtherFiNode(etherFiNode).numAssociatedValidators(), 1);
     }
+
 
     // Zellic audit - Cancel validator deposit with version 0 safe fails
     function test_mainnet_cancel_intermediate_validator() public {

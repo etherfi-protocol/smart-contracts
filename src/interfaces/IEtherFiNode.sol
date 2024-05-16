@@ -57,6 +57,7 @@ interface IEtherFiNode {
     function getRewardsPayouts(uint32 _exitRequestTimestamp, IEtherFiNodesManager.RewardsSplit memory _splits) external view returns (uint256, uint256, uint256, uint256);
     function getFullWithdrawalPayouts(IEtherFiNodesManager.ValidatorInfo memory _info, IEtherFiNodesManager.RewardsSplit memory _SRsplits) external view returns (uint256, uint256, uint256, uint256);
     function associatedValidatorIds(uint256 _index) external view returns (uint256);
+    function associatedValidatorIndices(uint256 _validatorId) external view returns (uint256);
     function validatePhaseTransition(VALIDATOR_PHASE _currentPhase, VALIDATOR_PHASE _newPhase) external pure returns (bool);
 
     function DEPRECATED_exitRequestTimestamp() external view returns (uint32);
