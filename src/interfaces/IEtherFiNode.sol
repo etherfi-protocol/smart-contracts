@@ -67,7 +67,6 @@ interface IEtherFiNode {
     function initialize(address _etherFiNodesManager) external;
     function claimQueuedWithdrawals(uint256 maxNumWithdrawals, bool _checkIfHasOutstandingEigenLayerWithdrawals) external returns (bool);
     function createEigenPod() external;
-    function hasOutstaingEigenPodWithdrawalsQueuedBeforeExit() external view returns (bool);
     function isRestakingEnabled() external view returns (bool);
     function processNodeExit(uint256 _validatorId) external returns (bytes32[] memory withdrawalRoots);
     function processFullWithdraw(uint256 _validatorId) external;
