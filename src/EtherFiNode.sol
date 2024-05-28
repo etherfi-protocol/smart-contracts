@@ -22,7 +22,7 @@ contract EtherFiNode is IEtherFiNode {
     uint32 public DEPRECATED_stakingStartTimestamp;
     VALIDATOR_PHASE public DEPRECATED_phase;
 
-    uint32 public DEPRECATED_restakingObservedExitBlock; 
+    uint32 public restakingObservedExitBlock;
     address public eigenPod;
     bool public isRestakingEnabled;
 
@@ -38,8 +38,6 @@ contract EtherFiNode is IEtherFiNode {
     // Track the amount of pending/completed withdrawals;
     uint64 public pendingWithdrawalFromRestakingInGwei; // incremented when the delayed withdrawal (from EigenPod to EtherFiNode) is queued, decremented when it is completed
     uint64 public completedWithdrawalFromRestakingInGwei; // incremented when the delayed withdarwal is completed, decremented when the fund is withdrawan (from EtherFiNode to the externals via fullWithdraw call)
-
-    mapping(uint256 => uint32) restakingObservedExitBlocks;
 
     error CallFailed(bytes data);
 
@@ -167,8 +165,8 @@ contract EtherFiNode is IEtherFiNode {
             delete associatedValidatorIndices[_validatorId];
         }
 
-        restakingObservedExitBlocks[_validatorId] = 0;
         if (numAssociatedValidators() == 0) {
+            restakingObservedExitBlock = 0;
             isRestakingEnabled = false;
             return true;
         }
@@ -202,7 +200,7 @@ contract EtherFiNode is IEtherFiNode {
             // we need to mark a block from which we know all beaconchain eth has been moved to the eigenPod
             // so that we can properly calculate exit payouts and ensure queued withdrawals have been resolved
             // (eigenLayer withdrawals are tied to blocknumber instead of timestamp)
-            restakingObservedExitBlocks[_validatorId] = uint32(block.number);
+            restakingObservedExitBlock = uint32(block.number);
 
             fullWithdrawalRoots = queueRestakedWithdrawal();
             require(fullWithdrawalRoots.length == 1, "NO_FULLWITHDRAWAL_QUEUED");
@@ -710,11 +708,7 @@ contract EtherFiNode is IEtherFiNode {
             IDelayedWithdrawalRouter.DelayedWithdrawal[] memory unclaimedWithdrawals = delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this));
             for (uint256 i = 0; i < unclaimedWithdrawals.length; i++) {
 
-                // I'm not sure I want to go ahead with this change to restakingObservedExitBlocks
-                // I don't think we could properly migrate any nodes that have multiple validators per safe
-                // and at least one of the validators has exited? Maybe that doesn't affect any existing nodes?
-                uint256 TODO_validatorId = 5;
-                if (unclaimedWithdrawals[i].blockCreated < restakingObservedExitBlocks[TODO_validatorId]) {
+                if (unclaimedWithdrawals[i].blockCreated < restakingObservedExitBlock) {
                     // unclaimed withdrawal from before oracle observed exit
                     return true;
                 }
