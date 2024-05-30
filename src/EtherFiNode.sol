@@ -27,13 +27,12 @@ contract EtherFiNode is IEtherFiNode {
     bool public isRestakingEnabled;
 
     uint16 public version;
-    uint16 private _numAssociatedValidators;
+    uint16 private _numAssociatedValidators; // num validators in {LIVE, BEING_SLASHED, EXITED} phase
     uint16 public numExitRequestsByTnft;
     uint16 public numExitedValidators; // EXITED & but not FULLY_WITHDRAWN
 
-    // TODO: see if we really need to maintain the validator Ids on-chain
     mapping(uint256 => uint256) public associatedValidatorIndices;
-    uint256[] public associatedValidatorIds;
+    uint256[] public associatedValidatorIds; // validators in {STAKE_DEPOSITED, WAITING_FOR_APPROVAL, LIVE, BEING_SLASHED, EXITED} phase
 
     // Track the amount of pending/completed withdrawals;
     uint64 public pendingWithdrawalFromRestakingInGwei; // incremented when the delayed withdrawal (from EigenPod to EtherFiNode) is queued, decremented when it is completed
@@ -105,6 +104,7 @@ contract EtherFiNode is IEtherFiNode {
 
     // At version 0, an EtherFiNode contract is associated with only one validator
     // After version 1, it can be associated with multiple validators having the same (B-nft, T-nft, node operator) 
+    // returns the number of the validators in {LIVE, BEING_SLASHED, EXITED} phase associated with this safe
     function numAssociatedValidators() public view returns (uint256) {
         if (version == 0) {
             // For the safe at version 0, `phase` variable is still valid and can be used to check if the validator is still active 
@@ -121,7 +121,6 @@ contract EtherFiNode is IEtherFiNode {
     function registerValidator(uint256 _validatorId, bool _enableRestaking) public onlyEtherFiNodeManagerContract ensureLatestVersion {
         require(numAssociatedValidators() == 0 || isRestakingEnabled == _enableRestaking, "restaking status mismatch");
 
-        // TODO: see if we really need to maintain the validator Ids on-chain
         {
             uint256 index = associatedValidatorIds.length;
             associatedValidatorIds.push(_validatorId);
@@ -152,7 +151,6 @@ contract EtherFiNode is IEtherFiNode {
             numExitRequestsByTnft -= 1;
         }
 
-        // TODO: see if we really need to maintain the validator Ids on-chain
         {
             uint256 index = associatedValidatorIndices[_validatorId];
             uint256 endIndex = associatedValidatorIds.length - 1;
@@ -164,8 +162,10 @@ contract EtherFiNode is IEtherFiNode {
             associatedValidatorIds.pop();
             delete associatedValidatorIndices[_validatorId];
         }
+        
+        if (associatedValidatorIds.length == 0) {
+            require(numAssociatedValidators() == 0, "INVALID_STATE");
 
-        if (numAssociatedValidators() == 0) {
             restakingObservedExitBlock = 0;
             isRestakingEnabled = false;
             return true;

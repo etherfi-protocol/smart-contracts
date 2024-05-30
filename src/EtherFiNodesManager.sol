@@ -15,6 +15,7 @@ import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
 import "./TNFT.sol";
 import "./BNFT.sol";
+import "forge-std/console.sol";
 
 
 contract EtherFiNodesManager is
@@ -520,12 +521,12 @@ contract EtherFiNodesManager is
         address safeAddress = etherfiNodeAddress[_validatorId];
         if (safeAddress == address(0)) revert NotInstalled();
 
-        IEtherFiNode(safeAddress).unRegisterValidator(_validatorId, validatorInfos[_validatorId]);
+        bool doRecycle = IEtherFiNode(safeAddress).unRegisterValidator(_validatorId, validatorInfos[_validatorId]);
 
         delete etherfiNodeAddress[_validatorId];
         // delete validatorInfos[_validatorId];
 
-        if (IEtherFiNode(safeAddress).numAssociatedValidators() == 0) {
+        if (doRecycle) {
             unusedWithdrawalSafes.push(safeAddress);
         }
     }
