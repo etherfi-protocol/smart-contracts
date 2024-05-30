@@ -22,7 +22,7 @@ contract EtherFiNode is IEtherFiNode {
     uint32 public DEPRECATED_stakingStartTimestamp;
     VALIDATOR_PHASE public DEPRECATED_phase;
 
-    uint32 public restakingObservedExitBlock; 
+    uint32 public restakingObservedExitBlock;
     address public eigenPod;
     bool public isRestakingEnabled;
 
@@ -47,7 +47,9 @@ contract EtherFiNode is IEtherFiNode {
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {}
+    constructor() {
+        etherFiNodesManager = address(0x000000000000000000000000000000000000dEaD); // prevent initialization of the proxy implementation
+    }
 
     /// @notice Based on the sources where they come from, the staking rewards are split into
     ///  - those from the execution layer: transaction fees and MEV
@@ -150,7 +152,7 @@ contract EtherFiNode is IEtherFiNode {
         }
 
         {
-            uint256 index = associatedValidatorIndices[_validatorId];        
+            uint256 index = associatedValidatorIndices[_validatorId];
             uint256 endIndex = associatedValidatorIds.length - 1;
             uint256 end = associatedValidatorIds[endIndex];
 
@@ -163,6 +165,7 @@ contract EtherFiNode is IEtherFiNode {
         
         if (associatedValidatorIds.length == 0) {
             require(numAssociatedValidators() == 0, "INVALID_STATE");
+
             restakingObservedExitBlock = 0;
             isRestakingEnabled = false;
             return true;
@@ -515,7 +518,7 @@ contract EtherFiNode is IEtherFiNode {
         assembly {
             selector := mload(add(data, 0x20))
         }
-        bool allowed = (selector != IDelegationManager.completeQueuedWithdrawal.selector && selector == IDelegationManager.completeQueuedWithdrawals.selector);
+        bool allowed = (selector != IDelegationManager.completeQueuedWithdrawal.selector && selector != IDelegationManager.completeQueuedWithdrawals.selector);
         require (allowed, "NOT_ALLOWED");
     }
 
@@ -618,35 +621,9 @@ contract EtherFiNode is IEtherFiNode {
         emit EigenPodCreated(address(this), eigenPod);
     }
 
-    // Check that all withdrawals initiated before the observed exit of the node have been claimed.
-    // This check ignores withdrawals queued after the observed exit of a node to prevent a denial of serviec
-    // in which an attacker keeps sending small amounts of eth to the eigenPod and queuing more withdrawals
-    //
-    // We don't need to worry about unbounded array length because anyone can call claimQueuedWithdrawals()
-    // with a variable number of withdrawals to process if the queue ever became to large.
-    // This function can go away once we have a proof based withdrawal system.
-    function hasOutstaingEigenPodWithdrawalsQueuedBeforeExit() public view returns (bool) {
-        if (!isRestakingEnabled) return false;
-
-        if (!IEigenPod(eigenPod).hasRestaked()) {
-            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
-            IDelayedWithdrawalRouter.DelayedWithdrawal[] memory unclaimedWithdrawals = delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this));
-            for (uint256 i = 0; i < unclaimedWithdrawals.length; i++) {
-                if (unclaimedWithdrawals[i].blockCreated < restakingObservedExitBlock) {
-                    // unclaimed withdrawal from before oracle observed exit
-                    return true;
-                }
-            }
-        } else {
-            
-        }
-
-        return false;
-    }
-
     // returns the withdrawal roots for the queued full-withdrawals
     // the {NonBeaconChainEthWithdrawal, partial withdraw}'s queued withdrawals can be retrieved (indexed) on DelayedWithdrawalRouter
-    function queueRestakedWithdrawal() public returns (bytes32[] memory fullWithdrawalRoots) {
+    function queueRestakedWithdrawal() public onlyEtherFiNodeManagerContract returns (bytes32[] memory fullWithdrawalRoots) {
         if (!isRestakingEnabled) return fullWithdrawalRoots;
 
         if (!IEigenPod(eigenPod).hasRestaked()) {
@@ -723,11 +700,22 @@ contract EtherFiNode is IEtherFiNode {
             delayedWithdrawalRouter.claimDelayedWithdrawals(address(this), maxNumWithdrawals);
         }
 
+
         if (_checkIfHasOutstandingEigenLayerWithdrawals) {
-            return hasOutstaingEigenPodWithdrawalsQueuedBeforeExit();
-        } else {
-            return false;
+
+            if (!isRestakingEnabled) return false;
+            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
+            IDelayedWithdrawalRouter.DelayedWithdrawal[] memory unclaimedWithdrawals = delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this));
+            for (uint256 i = 0; i < unclaimedWithdrawals.length; i++) {
+
+                if (unclaimedWithdrawals[i].blockCreated < restakingObservedExitBlock) {
+                    // unclaimed withdrawal from before oracle observed exit
+                    return true;
+                }
+            }
         }
+
+        return false;
     }
 
     function validatePhaseTransition(VALIDATOR_PHASE _currentPhase, VALIDATOR_PHASE _newPhase) public pure returns (bool) {
