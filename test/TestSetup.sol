@@ -660,7 +660,8 @@ contract TestSetup is Test {
         _approveNodeOperators();
         _setUpNodeOperatorWhitelist();
         vm.stopPrank();
-
+        
+        vm.startPrank(owner);
         nodeOperatorManagerInstance.setAuctionContractAddress(address(auctionInstance));
 
         auctionInstance.setStakingManagerContractAddress(address(stakingManagerInstance));
