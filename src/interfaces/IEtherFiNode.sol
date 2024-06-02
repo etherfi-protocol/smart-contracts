@@ -66,12 +66,13 @@ interface IEtherFiNode {
 
     // Non-VIEW functions
     function initialize(address _etherFiNodesManager) external;
-    function claimQueuedWithdrawals(uint256 maxNumWithdrawals, bool _checkIfHasOutstandingEigenLayerWithdrawals) external returns (bool);
+    function claimDelayedWithdrawalRouterWithdrawals(uint256 maxNumWithdrawals, bool _checkIfHasOutstandingEigenLayerWithdrawals, uint256 _validatorId) external returns (bool);
     function createEigenPod() external;
     function isRestakingEnabled() external view returns (bool);
     function processNodeExit(uint256 _validatorId) external returns (bytes32[] memory withdrawalRoots);
     function processFullWithdraw(uint256 _validatorId) external;
-    function queueRestakedWithdrawal() external returns (bytes32[] memory withdrawalRoots);
+    function queueEigenpodFullWithdrawal() external returns (bytes32[] memory withdrawalRoots);
+    function queuePhase1PartialWithdrawal() external;
     function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes) external;
     function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, uint256 middlewareTimesIndexes) external;
     function updateNumberOfAssociatedValidators(uint16 _up, uint16 _down) external;

@@ -150,7 +150,7 @@ contract EtherFiNodeTest is TestSetup {
 
         vm.roll(block.number + (50400) + 1);
 
-        safeInstance.claimQueuedWithdrawals(1, false);
+        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorIds[0]);
 
         assertEq(address(safeInstance).balance, 2 ether);
         assertEq(address(safeInstance.eigenPod()).balance, 0 ether);
@@ -192,7 +192,7 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(toBnft, 2 ether + (1 ether * 90 * 3) / (100 * 32));
 
         // queue the withdrawal of the rewards. Funds have been sent to the DelayedWithdrawalRouter
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
         (_withdrawalSafe, _eigenPod, _delayedWithdrawalRouter) = safeInstance.splitBalanceInExecutionLayer();
         assertEq(_withdrawalSafe, 0 ether);
         assertEq(_eigenPod, 0 ether);
@@ -219,7 +219,7 @@ contract EtherFiNodeTest is TestSetup {
 
         // wait and claim the first queued withdrawal
         vm.roll(block.number + (50400) + 1);
-        safeInstance.claimQueuedWithdrawals(1, false);
+        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorId);
         (_withdrawalSafe, _eigenPod, _delayedWithdrawalRouter) = safeInstance.splitBalanceInExecutionLayer();
         assertEq(_withdrawalSafe, 1 ether);
         assertEq(_eigenPod, 2 ether);
@@ -244,7 +244,7 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(address(safeInstance.eigenPod()).balance, 1 ether);
 
         // queue the withdrawal of the rewards. Funds have been sent to the DelayedWithdrawalRouter
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
         assertEq(address(safeInstance).balance, 0 ether);
         assertEq(address(safeInstance.eigenPod()).balance, 0 ether);
 
@@ -252,22 +252,22 @@ contract EtherFiNodeTest is TestSetup {
         _transferTo(address(safeInstance.eigenPod()), 0.5 ether);
 
         // attempt to claim queued withdrawals but not enough time has passed (no funds moved to safe)
-        safeInstance.claimQueuedWithdrawals(1, false);
+        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorId);
         assertEq(address(safeInstance).balance, 0 ether);
         assertEq(address(safeInstance.eigenPod()).balance, 0.5 ether);
 
         // wait and claim
         vm.roll(block.number + (50400) + 1);
-        safeInstance.claimQueuedWithdrawals(1, false);
+        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorId);
         assertEq(address(safeInstance).balance, 1 ether);
         assertEq(address(safeInstance.eigenPod()).balance, 0.5 ether);
 
         // now queue up multiple different rewards (0.5 ether remain in pod from previous step)
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
         _transferTo(address(safeInstance.eigenPod()), 0.5 ether);
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
         _transferTo(address(safeInstance.eigenPod()), 0.5 ether);
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
 
         assertEq(address(safeInstance.eigenPod()).balance, 0 ether);
 
@@ -278,7 +278,7 @@ contract EtherFiNodeTest is TestSetup {
         // The ability to claim a subset of outstanding withdrawals is to avoid a denial of service
         // attack in which the attacker creates too many withdrawals for us to process in 1 tx
         vm.roll(block.number + (50400) + 1);
-        safeInstance.claimQueuedWithdrawals(2, false);
+        safeInstance.claimDelayedWithdrawalRouterWithdrawals(2, false, validatorId);
 
 
         unclaimedWithdrawals = managerInstance.delayedWithdrawalRouter().getUserDelayedWithdrawals(address(safeInstance));
@@ -373,7 +373,7 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 0 ether);
 
         // queue withdrawal
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
         assertEq(safeInstance.totalBalanceInExecutionLayer(), 1 ether);
         assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 0 ether);
 
@@ -388,18 +388,18 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 1 ether);
 
         // claim that withdrawal
-        safeInstance.claimQueuedWithdrawals(1, false);
+        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorId);
         assertEq(safeInstance.totalBalanceInExecutionLayer(), 2 ether);
         assertEq(address(safeInstance).balance, 1 ether);
         assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 1 ether);
 
         // queue multiple but only some that are claimable
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
         _transferTo(safeInstance.eigenPod(), 1 ether);
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
         vm.roll(block.number + (50400) + 1);
         _transferTo(safeInstance.eigenPod(), 1 ether);
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
         assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 3 ether);
         assertEq(safeInstance.totalBalanceInExecutionLayer(), 4 ether);
     }
@@ -416,7 +416,7 @@ contract EtherFiNodeTest is TestSetup {
         exitRequestTimestamps[0] = uint32(block.timestamp);
 
         _transferTo(safeInstance.eigenPod(), 1 ether);
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
 
         IDelayedWithdrawalRouter.DelayedWithdrawal[] memory unclaimedWithdrawals = managerInstance.delayedWithdrawalRouter().getUserDelayedWithdrawals(address(safeInstance));
         assertEq(unclaimedWithdrawals.length, 1);
@@ -424,15 +424,15 @@ contract EtherFiNodeTest is TestSetup {
 
         // attacker now sends funds and queues claims
         _transferTo(safeInstance.eigenPod(), 1 ether);
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
         _transferTo(safeInstance.eigenPod(), 1 ether);
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
         _transferTo(safeInstance.eigenPod(), 1 ether);
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
         _transferTo(safeInstance.eigenPod(), 1 ether);
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
         _transferTo(safeInstance.eigenPod(), 1 ether);
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
 
         unclaimedWithdrawals = managerInstance.delayedWithdrawalRouter().getUserDelayedWithdrawals(address(safeInstance));
         assertEq(unclaimedWithdrawals.length, 6);
@@ -448,7 +448,7 @@ contract EtherFiNodeTest is TestSetup {
 
         // attacker sends more eth to pod that will not be able to be able to be withdrawn immediately
         _transferTo(safeInstance.eigenPod(), 1 ether);
-        safeInstance.queueRestakedWithdrawal();
+        safeInstance.queuePhase1PartialWithdrawal();
         _transferTo(safeInstance.eigenPod(), 1 ether);
 
         vm.prank(alice);
@@ -1984,7 +1984,7 @@ contract EtherFiNodeTest is TestSetup {
         // The later `fullWithdraw` should succeed even though there are still some unclaimed withdrawals
         // this is because we only enforce that all withdrawals before the observed exit of the node have completed
         _transferTo(address(managerInstance.getEigenPod(validatorId)), 0.0001 ether);
-        IEtherFiNode(nodeAddress).queueRestakedWithdrawal();
+        IEtherFiNode(nodeAddress).queuePhase1PartialWithdrawal();
 
         uint256 prevEtherFiNodeAddress = address(nodeAddress).balance;
 
@@ -2251,7 +2251,7 @@ contract EtherFiNodeTest is TestSetup {
         }
     }
 
-    function test_ForcePartialWithdraw_claimQueuedWithdrawals_succeeds() public {
+    function test_ForcePartialWithdraw_claimDelayedWithdrawalRouterWithdrawals_succeeds() public {
         initializeTestingFork(MAINNET_FORK);
         uint256 validatorId = depositAndRegisterValidator(true);
         address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
@@ -2264,8 +2264,8 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(address(etherfiNode).balance, 1 ether);
         assertEq(address(eigenPod).balance, 1 ether);
 
-        // queueRestakedWithdrawal
-        IEtherFiNode(etherfiNode).queueRestakedWithdrawal();
+        // queuePhase1PartialWithdrawal
+        IEtherFiNode(etherfiNode).queuePhase1PartialWithdrawal();
 
         // 7 days passed
         vm.roll(block.number + (50400) + 1);

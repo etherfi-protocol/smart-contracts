@@ -180,12 +180,12 @@ contract EtherFiNodesManager is
     }
 
     /// @notice queue a withdrawal of eth from an eigenPod. You must wait for the queuing period
-    ///         defined by eigenLayer before you can finish the withdrawal via etherFiNode.claimQueuedWithdrawals()
+    ///         defined by eigenLayer before you can finish the withdrawal via etherFiNode.claimDelayedWithdrawalRouterWithdrawals()
     /// @param _validatorIds The validator Ids
     function batchQueueRestakedWithdrawal(uint256[] calldata _validatorIds) public onlyAdmin whenNotPaused {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address etherfiNode = etherfiNodeAddress[_validatorIds[i]];
-            IEtherFiNode(etherfiNode).queueRestakedWithdrawal();
+            IEtherFiNode(etherfiNode).queueEigenpodFullWithdrawal();
         }
     }
 
@@ -209,7 +209,7 @@ contract EtherFiNodesManager is
         _updateEtherFiNode(_validatorId);
 
         // sweep rewards from eigenPod if any queued withdrawals are ready to be claimed
-        IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithdrawals, false);
+        IEtherFiNode(etherfiNode).claimDelayedWithdrawalRouterWithdrawals(maxEigenlayerWithdrawals, false, _validatorId);
 
         // distribute the rewards payouts. It reverts if the safe's balance >= 16 ether
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
@@ -239,7 +239,7 @@ contract EtherFiNodesManager is
     function fullWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused{
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
-        require (!IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithdrawals, true), "PENDING_WITHDRAWALS");
+        require (!IEtherFiNode(etherfiNode).claimDelayedWithdrawalRouterWithdrawals(maxEigenlayerWithdrawals, true, _validatorId), "PENDING_WITHDRAWALS");
         require(phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.EXITED, "NOT_EXITED");
         
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = getFullWithdrawalPayouts(_validatorId);
@@ -270,7 +270,7 @@ contract EtherFiNodesManager is
         _updateEtherFiNode(_validatorId);
 
         // sweep rewards from eigenPod if any queued withdrawals are ready to be claimed
-        IEtherFiNode(etherfiNode).claimQueuedWithdrawals(maxEigenlayerWithdrawals, false);
+        IEtherFiNode(etherfiNode).claimDelayedWithdrawalRouterWithdrawals(maxEigenlayerWithdrawals, false, _validatorId);
 
         // distribute the rewards payouts. It does not revert even if the safe's balance >= 16 ether
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, false);
