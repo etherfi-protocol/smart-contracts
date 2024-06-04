@@ -21,6 +21,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     address p2p;
     address dsrv;
+    address etherfi_avs_operator_1;
 
     uint256[] validatorIds;
     uint256 validatorId;
@@ -47,7 +48,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // - Mainnet
         // https://beaconcha.in/validator/1293592#withdrawals
         // bid Id = validator Id = 21397
-        validatorId = 21397;
+        validatorId = 16818;
         pubkey = hex"a9c09c47ad6c0c5c397521249be41c8b81b139c3208923ec3c95d7f99c57686ab66fe75ea20103a1291578592d11c2c2";
 
         // {EigenPod, EigenPodOwner} used in EigenLayer's unit test
@@ -373,25 +374,33 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     // activateStaking & verifyWithdrawalCredentials & delegate to p2p
     function test_delegateTo() public {
-        test_verifyWithdrawalCredentials_32ETH();
+        validatorId = 16818;
+        pubkey = hex"b2b8e945bbf2b492ef4f6a46eb408389f273b2bc46ec1a11ad1a2385254418190ecd1c7b8ac2fd21ab28bf7b63ba396d";
+        etherfi_avs_operator_1 = 0xfB487f216CA24162119C0C6Ae015d680D7569C2f;
+        podOwner = managerInstance.etherfiNodeAddress(validatorId);
 
-        test_registerAsOperator();
+        address operator = etherfi_avs_operator_1;
+        address mainnet_earningsReceiver = 0x88C3c0AeAC97287E71D78bb97138727A60b2623b;
+
+        // test_verifyWithdrawalCredentials_32ETH();
+
+        // test_registerAsOperator();
 
         bytes4 selector = bytes4(keccak256("delegateTo(address,(bytes,uint256),bytes32)"));
         IDelegationManager.SignatureWithExpiry memory signatureWithExpiry;
         bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, p2p, signatureWithExpiry, bytes32(0));
+        data[0] = abi.encodeWithSelector(selector, operator, signatureWithExpiry, bytes32(0));
 
         // Confirm, the earningsReceiver is set to treasuryInstance
-        assertEq(eigenLayerDelegationManager.earningsReceiver(p2p), address(treasuryInstance));
-        assertEq(eigenLayerDelegationManager.operatorShares(p2p, eigenLayerDelegationManager.beaconChainETHStrategy()), 0);
+        assertEq(eigenLayerDelegationManager.earningsReceiver(operator), address(mainnet_earningsReceiver));
+        assertEq(eigenLayerDelegationManager.operatorShares(operator, eigenLayerDelegationManager.beaconChainETHStrategy()), 0);
         assertEq(eigenLayerDelegationManager.isDelegated(podOwner), false);
 
         vm.startPrank(owner);
         managerInstance.callDelegationManager(validatorIds, data);
         vm.stopPrank();
 
-        assertEq(eigenLayerDelegationManager.operatorShares(p2p, eigenLayerDelegationManager.beaconChainETHStrategy()), 32 ether);
+        assertEq(eigenLayerDelegationManager.operatorShares(operator, eigenLayerDelegationManager.beaconChainETHStrategy()), 32 ether);
         assertEq(eigenLayerDelegationManager.isDelegated(podOwner), true);
     }
 

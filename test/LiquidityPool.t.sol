@@ -5,17 +5,6 @@ import "./TestSetup.sol";
 import "forge-std/Test.sol";
 
 contract LiquidityPoolTest is TestSetup {
-
-    bytes32[] public aliceProof;
-    bytes32[] public bobProof;
-    bytes32[] public henryProof;
-    bytes32[] public elvisProof;
-    bytes32[] public chadProof;
-    bytes32[] public gregProof;
-    bytes32[] public ownerProof;
-    bytes32[] public firstIndexPlayerProof;
-    bytes32[] public beforeFirstIndexPlayerProof;
-    bytes32[] public lastIndexPlayerProof;
     uint256[] public processedBids;
     uint256[] public validatorArray;
     uint256[] public bidIds;
@@ -29,9 +18,6 @@ contract LiquidityPoolTest is TestSetup {
         testnetFork = vm.createFork(vm.envString("TESTNET_RPC_URL"));
         setUpTests();
         // initializeTestingFork(TESTNET_FORK);
-
-        aliceProof = merkle.getProof(whiteListedAddresses, 3);
-        bobProof = merkle.getProof(whiteListedAddresses, 4);
 
         vm.deal(alice, 100 ether);
         vm.startPrank(alice);
@@ -796,11 +782,6 @@ contract LiquidityPoolTest is TestSetup {
     }
     
     function test_DepositAsBnftHolderSimple() public {
-
-        bobProof = merkle.getProof(whiteListedAddresses, 4);
-        henryProof = merkle.getProof(whiteListedAddresses, 11);
-        aliceProof = merkle.getProof(whiteListedAddresses, 3);
-        chadProof = merkle.getProof(whiteListedAddresses, 5);
         
         //Sets up the list of BNFT holders
         setUpBnftHolders();
@@ -904,9 +885,6 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_DepositWhenUserDeRegisters() public {
-
-        henryProof = merkle.getProof(whiteListedAddresses, 11);
-        aliceProof = merkle.getProof(whiteListedAddresses, 3);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         report.numValidatorsToSpinUp = 21;

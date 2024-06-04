@@ -7,13 +7,9 @@ import "forge-std/console2.sol";
 import "./TestSetup.sol";
 
 contract WithdrawRequestNFTTest is TestSetup {
-    bytes32[] public aliceProof;
-    bytes32[] public bobProof;
 
     function setUp() public {
         setUpTests();
-        aliceProof = merkle.getProof(whiteListedAddresses, 3);
-        bobProof = merkle.getProof(whiteListedAddresses, 4);
     }
 
     function test_WithdrawRequestNftInitializedCorrectly() public {

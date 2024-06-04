@@ -4,16 +4,8 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 
 contract WeETHTest is TestSetup {
-
-    bytes32[] public aliceProof;
-    bytes32[] public bobProof;
-    bytes32[] public gregProof;
-
     function setUp() public {
         setUpTests();
-        aliceProof = merkle.getProof(whiteListedAddresses, 3);
-        bobProof = merkle.getProof(whiteListedAddresses, 4);
-        gregProof = merkle.getProof(whiteListedAddresses, 8);
     }
 
     function test_UpdatedName() public {

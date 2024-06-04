@@ -535,7 +535,7 @@ contract LiquifierTest is TestSetup {
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
         uint256 lpBalance = address(liquidityPoolInstance).balance;
 
-        uint256 inputAmount = 650 ether;
+        uint256 inputAmount = 50 ether;
 
         vm.startPrank(alice);
 
@@ -546,7 +546,7 @@ contract LiquifierTest is TestSetup {
         uint256 beforeBalance = address(liquifierInstance).balance;
 
         uint256 exchangeRate = IWBETH(address(wbEth)).exchangeRate();
-        uint256 maxSlippageBp = 100;
+        uint256 maxSlippageBp = 50; // 0.5%
         uint256 minOutput = (exchangeRate * inputAmount * (10000 - maxSlippageBp)) / 10000 / 1e18;
         liquifierInstance.pancakeSwapForEth(address(wbEth), inputAmount, 500, minOutput, 3600);
 
@@ -563,7 +563,7 @@ contract LiquifierTest is TestSetup {
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
         uint256 lpBalance = address(liquidityPoolInstance).balance;
 
-        uint256 inputAmount = 1 ether;
+        uint256 inputAmount = 50 ether;
 
         vm.startPrank(alice);
 
@@ -574,7 +574,7 @@ contract LiquifierTest is TestSetup {
         uint256 beforeBalance = address(liquifierInstance).balance;
 
         uint256 exchangeRate = IWBETH(address(cbEth)).exchangeRate();
-        uint256 maxSlippageBp = 1000; // 10%
+        uint256 maxSlippageBp = 50; // 0.5%
         uint256 minOutput = (exchangeRate * inputAmount * (10000 - maxSlippageBp)) / 10000 / 1e18;
         liquifierInstance.pancakeSwapForEth(address(cbEth), inputAmount, 500, minOutput, 3600);
 
@@ -590,7 +590,6 @@ contract LiquifierTest is TestSetup {
 
         vm.startPrank(owner);
         dummyToken = new DummyERC20();
-        liquifierInstance.initializeL1SyncPool(l1SyncPool);
         liquifierInstance.registerToken(address(dummyToken), address(0), true, 0, 50, 1000, true);
         vm.stopPrank();
     }
@@ -774,5 +773,13 @@ contract LiquifierTest is TestSetup {
         vm.prank(owner);
         liquifierInstance.unPauseContract();
 
+    }
+
+    function test_getTotalPooledEther() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+
+        liquidityPoolInstance.getTotalPooledEther();
+        liquifierInstance.getTotalPooledEther();
     }
 }
