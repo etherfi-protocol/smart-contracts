@@ -8,14 +8,9 @@ import "forge-std/Script.sol";
 import "../../test/NativeMintingConfigs.t.sol";
 import "../../test/NativeMintingL2.t.sol";
 
-contract Deploy is NativeMintingL2 {
-
-    constructor() {
-        IS_TEST = false;
-    }
-
+contract Deploy is Script, NativeMintingL2 {
+ 
     function run() public {
-
         pk = vm.envUint("PRIVATE_KEY");
         deployer = vm.addr(pk);
         

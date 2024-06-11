@@ -21,10 +21,7 @@ contract EtherFiNodesManagerTest is TestSetup {
             address(auctionInstance),
             address(stakingManagerInstance),
             address(TNFTInstance),
-            address(BNFTInstance),
-            address(0),
-            address(0),
-            address(0)
+            address(BNFTInstance)
         );
         
         vm.prank(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
@@ -80,7 +77,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_SetStakingRewardsSplit() public {
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert("NOT_ADMIN");
         vm.prank(bob);
         managerInstance.setStakingRewardsSplit(100000, 100000, 400000, 400000);
 
@@ -99,9 +96,23 @@ contract EtherFiNodesManagerTest is TestSetup {
         assertEq(tnft, 400000);
         assertEq(bnft, 400000);
     }
-    
+
+    function test_setEnableNodeRecycling() public {
+        vm.expectRevert("NOT_ADMIN");
+        vm.prank(bob);
+        managerInstance.setEnableNodeRecycling(true);
+
+        vm.prank(alice);
+        managerInstance.setEnableNodeRecycling(true);
+        assertEq(managerInstance.enableNodeRecycling(), true);
+
+        vm.prank(alice);
+        managerInstance.setEnableNodeRecycling(false);
+        assertEq(managerInstance.enableNodeRecycling(), false);
+    }
+
     function test_SetNonExitPenaltyPrincipal() public {
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert("NOT_ADMIN");
         vm.prank(bob);
         managerInstance.setNonExitPenalty(300, 2 ether);
 
@@ -114,7 +125,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_SetNonExitPenaltyDailyRate() public {
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert("NOT_ADMIN");
         vm.prank(bob);
         managerInstance.setNonExitPenalty(300, 2 ether);
 
@@ -155,13 +166,15 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_getEigenPod() public {
-        initializeTestingFork(MAINNET_FORK);
+        initializeTestingFork(TESTNET_FORK);
 
         uint256 nonRestakedValidatorId = depositAndRegisterValidator(false);
         assertEq(managerInstance.getEigenPod(nonRestakedValidatorId), address(0x0));
+        assertEq(managerInstance.isRestakingEnabled(nonRestakedValidatorId), false);
 
         uint256 restakedValidatorId = depositAndRegisterValidator(true);
         assert(managerInstance.getEigenPod(restakedValidatorId) != address(0x0));
+        assertEq(managerInstance.isRestakingEnabled(restakedValidatorId), true);
     }
 
     function test_CreateEtherFiNode() public {
@@ -241,6 +254,23 @@ contract EtherFiNodesManagerTest is TestSetup {
         // original premade safe should be on top of the stack after being recycled
         assertEq(managerInstance.unusedWithdrawalSafes(1), premadeSafe[0]);
         assertEq(managerInstance.unusedWithdrawalSafes(0), safe2[0]);
+
+
+        // disable use of recycled validators
+        vm.prank(alice);
+        managerInstance.setEnableNodeRecycling(false);
+
+        // create a new bid
+        vm.deal(alice, 33 ether);
+        vm.prank(alice);
+        bidId = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
+        processedBids = stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidId, false);
+
+        // recycled validator should not have been used because of toggle
+        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 2);
+        assert(managerInstance.etherfiNodeAddress(processedBids[0]) != managerInstance.unusedWithdrawalSafes(1));
+        assert(managerInstance.etherfiNodeAddress(processedBids[0]) != address(0));
+
     }
 
     function test_createMultipleUnusedWithdrawalSafes() public {
@@ -294,7 +324,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         assertEq(managerInstance.isExitRequested(bidId[0]), false);
 
         hoax(alice);
-        vm.expectRevert("INVALID");
+        vm.expectRevert("NOT_TNFT_OWNER");
         managerInstance.batchSendExitRequest(_to_uint256_array(bidId[0]));
 
         hoax(0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf);

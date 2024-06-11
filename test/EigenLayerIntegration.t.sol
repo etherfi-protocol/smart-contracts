@@ -66,6 +66,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.stopPrank();
 
         vm.startPrank(owner);
+        managerInstance.initializeOnUpgrade2(address(eigenLayerDelegationManager));
         liquidityPoolInstance.setRestakeBnftDeposits(true);
         vm.stopPrank();
     }
@@ -285,7 +286,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         vm.roll(block.number + (50400) + 1);
 
-        ws.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorId);
+        ws.claimQueuedWithdrawals(1, false);
         
         (uint256 new_new_withdrawalSafe, uint256 new_new_eigenPod, uint256 new_new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
         assertEq(new_new_withdrawalSafe, _withdrawalSafe + _eigenPod);
@@ -342,7 +343,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         vm.roll(block.number + (50400) + 1);
 
-        ws.claimDelayedWithdrawalRouterWithdrawals(5, false, validatorId);
+        ws.claimQueuedWithdrawals(5, false);
         
         // 4.
         (uint256 new_new_withdrawalSafe, uint256 new_new_eigenPod, uint256 new_new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();

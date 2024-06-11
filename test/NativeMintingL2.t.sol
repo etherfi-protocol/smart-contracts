@@ -6,7 +6,6 @@ import "./TestSetup.sol";
 import "forge-std/console2.sol";
 import "forge-std/console.sol";
 import "forge-std/Test.sol";
-import "forge-std/Script.sol";
 
 import "../src/BucketRateLimiter.sol";
 

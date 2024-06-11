@@ -454,6 +454,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         nodesManager.batchSendExitRequest(_validatorIds);
     }
 
+    function revertExitRequests(uint256[] calldata _validatorIds) external onlyAdmin {
+        nodesManager.batchRevertExitRequest(_validatorIds);
+    }
+
     /// @notice Rebase by ether.fi
     function rebase(int128 _accruedRewards) public {
         if (msg.sender != address(membershipManager)) revert IncorrectCaller();
