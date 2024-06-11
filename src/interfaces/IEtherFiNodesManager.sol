@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+
 import "./IEtherFiNode.sol";
+
 import "../eigenlayer-interfaces/IEigenPodManager.sol";
 import "../eigenlayer-interfaces/IDelegationManager.sol";
 import "../eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
+
 
 interface IEtherFiNodesManager {
 
@@ -51,7 +54,6 @@ interface IEtherFiNodesManager {
 
     function batchQueueRestakedWithdrawal(uint256[] calldata _validatorIds) external;
     function batchSendExitRequest(uint256[] calldata _validatorIds) external;
-    function batchRevertExitRequest(uint256[] calldata _validatorIds) external;
     function batchFullWithdraw(uint256[] calldata _validatorIds) external;
     function batchPartialWithdraw(uint256[] calldata _validatorIds) external;
     function fullWithdraw(uint256 _validatorId) external;

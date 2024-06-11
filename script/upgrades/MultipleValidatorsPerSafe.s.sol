@@ -69,7 +69,6 @@ contract MultipleValidatorsPerSafe is Script {
             emit TimelockTransaction(address(tnft), 0, genUpgradeTo(address(tnft), address(TNFTNewImpl)), bytes32(0), bytes32(0), minDelay);
             emit TimelockTransaction(address(nodesManager), 0, genUpgradeTo(address(nodesManager), address(EtherFiNodesManagerNewImpl)), bytes32(0), bytes32(0), minDelay);
             emit TimelockTransaction(address(stakingManager), 0, abi.encodeWithSelector(getSelector("upgradeEtherFiNode(address)"), address(EtherFiNodeNewImpl)), bytes32(0), bytes32(0), minDelay);
-            emit TimelockTransaction(address(nodesManager), 0, abi.encodeWithSelector(getSelector("initializeOnUpgrade2(address)"), el_delegationManager), bytes32(0), bytes32(0), minDelay);
 
             // Perform the upgrades manually by the timelock
         } else if (block.chainid == 5) {
@@ -86,7 +85,6 @@ contract MultipleValidatorsPerSafe is Script {
             nodesManager.upgradeTo(address(EtherFiNodesManagerNewImpl));
 
             stakingManager.upgradeEtherFiNode(address(EtherFiNodeNewImpl));
-            nodesManager.initializeOnUpgrade2(el_delegationManager);
         }
 
         vm.stopBroadcast();
