@@ -660,7 +660,7 @@ contract TestSetup is Test {
         _approveNodeOperators();
         _setUpNodeOperatorWhitelist();
         vm.stopPrank();
-        
+
         vm.startPrank(owner);
         nodeOperatorManagerInstance.setAuctionContractAddress(address(auctionInstance));
 
@@ -675,9 +675,6 @@ contract TestSetup is Test {
         stakingManagerInstance.registerTNFTContract(address(TNFTInstance));
         stakingManagerInstance.registerBNFTContract(address(BNFTInstance));
 
-        vm.stopPrank();
-
-        vm.startPrank(owner);
 
         depGen = new DepositDataGeneration();
 
@@ -1192,8 +1189,10 @@ contract TestSetup is Test {
         uint128 amount = withdrawRequestNFTInstance.getRequest(_requestId).amountOfEEth;
         vm.stopPrank();
 
-        vm.prank(address(etherFiAdminInstance));
-        liquidityPoolInstance.addEthAmountLockedForWithdrawal(amount);
+        if (withdrawRequestNFTInstance.isValid(_requestId)) {
+            vm.prank(address(etherFiAdminInstance));
+            liquidityPoolInstance.addEthAmountLockedForWithdrawal(amount);
+        }
     }
 
     function _upgrade_multiple_validators_per_safe() internal {
