@@ -49,8 +49,6 @@ contract EigenPodMock is IEigenPod, Test {
     /// @notice This returns the status of a given validator
     function validatorStatus(bytes32 pubkeyHash) external view returns(VALIDATOR_STATUS) {}
 
-    function activeValidatorCount() external view returns (uint256) {}
-
 
     function verifyWithdrawalCredentials(
         uint64 oracleTimestamp,

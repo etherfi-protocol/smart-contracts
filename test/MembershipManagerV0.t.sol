@@ -281,6 +281,67 @@ contract MembershipManagerV0Test is TestSetup {
         vm.stopPrank();
     }
 
+    function test_EapMigrationWorks() public {
+        vm.warp(1689764603 - 8 weeks);
+        vm.roll(17726813 - (8 weeks) / 12);
+
+        /// @notice This test uses ETH to test the withdrawal and deposit flow due to the complexity of deploying a local wETH/ERC20 pool for swaps
+
+        // Alice claims her funds after the snapshot has been taken. 
+        // She then deposits her ETH into the MembershipManager and has her points allocated to her
+
+        // Actors deposit into EAP
+        startHoax(alice);
+        earlyAdopterPoolInstance.depositEther{value: 1 ether}();
+        vm.stopPrank();
+
+        skip(8 weeks);
+
+        // PAUSE CONTRACTS AND GET READY FOR SNAPSHOT
+        vm.startPrank(owner);
+        earlyAdopterPoolInstance.pauseContract();
+        vm.stopPrank();
+
+        /// SNAPSHOT FROM PYTHON SCRIPT GETS TAKEN HERE
+        // Alice's Points are 103680 
+
+        /// MERKLE TREE GETS GENERATED AND UPDATED
+        vm.prank(alice);
+        membershipNftInstance.setUpForEap(rootMigration2, requiredEapPointsPerEapDeposit);
+
+        vm.roll(17664247 + 1 weeks / 12);
+
+        // Alice Withdraws
+        vm.startPrank(alice);
+        earlyAdopterPoolInstance.withdraw();
+        vm.stopPrank();
+
+        // Alice Deposits into MembershipManager and receives eETH in return
+        bytes32[] memory aliceProof;
+
+        vm.deal(alice, 100 ether);
+        startHoax(alice);
+        
+        uint256 tokenId = membershipManagerInstance.wrapEthForEap{value: 2 ether}(
+            2 ether,
+            0,
+            16970393 - 10, // 10 blocks before the last gold
+            1 ether,
+            103680,
+            aliceProof
+        );
+        vm.stopPrank();
+
+        assertEq(address(membershipManagerInstance).balance, 0 ether);
+        assertEq(address(liquidityPoolInstance).balance, 2 ether);
+
+        // Check that Alice has received membership points
+        assertEq(membershipNftInstance.valueOf(tokenId), 2 ether);
+        assertEq(membershipNftInstance.tierOf(tokenId), 2); // Gold
+        assertEq(eETHInstance.balanceOf(address(membershipManagerInstance)), 2 ether);
+    }
+
+
     function test_StakingRewards() public {
         vm.deal(alice, 100 ether);
 
@@ -613,6 +674,59 @@ contract MembershipManagerV0Test is TestSetup {
         assertEq(membershipNftInstance.tierOf(aliceToken), 1);
         assertEq(membershipNftInstance.balanceOf(alice, aliceToken), 0);
         assertEq(membershipNftInstance.balanceOf(bob, aliceToken), 1);
+    }
+
+    function test_MixedDeposits() public {
+        vm.warp(1689764603 - 8 weeks);
+        vm.roll(17726813 - (8 weeks) / 12);
+
+        // Alice claims her funds after the snapshot has been taken. 
+        // She then deposits her ETH into the MembershipManager and has her points allocated to her
+        // Then, she top-ups with ETH and eETH
+
+        // Actors deposit into EAP
+        startHoax(alice);
+        earlyAdopterPoolInstance.depositEther{value: 1 ether}();
+        vm.stopPrank();
+
+        skip(28 days);
+
+        /// MERKLE TREE GETS GENERATED AND UPDATED
+        vm.prank(owner);
+        earlyAdopterPoolInstance.pauseContract();
+        vm.prank(alice);
+        membershipNftInstance.setUpForEap(rootMigration2, requiredEapPointsPerEapDeposit);
+
+        vm.deal(alice, 100 ether);
+        bytes32[] memory aliceProof;
+
+        vm.roll(17664247 + 1 weeks / 12);
+
+        // Alice Withdraws
+        vm.startPrank(alice);
+        earlyAdopterPoolInstance.withdraw();
+
+        // Alice Deposits into MembershipManager and receives membership points in return
+        uint256 tokenId = membershipManagerInstance.wrapEthForEap{value: 2 ether}(2 ether, 0, 16970393 - 10, 1 ether, 103680, aliceProof);
+        
+        assertEq(membershipNftInstance.valueOf(tokenId), 2 ether);
+        assertEq(membershipNftInstance.tierOf(tokenId), 2); // Gold
+
+        // Top-up with ETH
+        membershipManagerInstance.topUpDepositWithEth{value: 0.2 ether}(tokenId, 0.2 ether, 0 ether);
+        assertEq(membershipNftInstance.valueOf(tokenId), 2.2 ether);
+
+        skip(28 days);
+
+        /*
+        TODO: re-enable when EEth is brought back
+        // Top-up with EETH
+        liquidityPoolInstance.deposit{value: 0.2 ether}(alice, aliceProof);
+        membershipManagerInstance.topUpDepositWithEEth(tokenId, 0.1 ether, 0.1 ether);
+        assertEq(membershipNftInstance.valueOf(tokenId), 2.4 ether);
+        */
+
+        vm.stopPrank();
     }
 
     function test_upgradeFee() public {

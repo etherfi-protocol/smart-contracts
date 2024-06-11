@@ -9,11 +9,7 @@ import "../../test/NativeMintingConfigs.t.sol";
 import "../../test/NativeMintingL1.t.sol";
 
 contract Deploy is Script, NativeMintingL1Suite {
-    
-    constructor() {
-        IS_TEST = false;
-    }
-
+ 
     function run() public {
         pk = vm.envUint("PRIVATE_KEY");
         deployer = vm.addr(pk);

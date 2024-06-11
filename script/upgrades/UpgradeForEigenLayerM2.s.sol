@@ -87,8 +87,8 @@ contract UpgradeForEigenLayerM2 is Script {
             stakingManager.upgradeEtherFiNode(address(EtherFiNodeNewImpl));
 
             // liquifier.initializeOnUpgrade(el_delegationManager, pancakeRouter);
-            // nodesManager.initializeOnUpgrade2(el_delegationManager);
-            // nodesManager.updateEigenLayerOperatingAdmin(el_admin, true);
+            nodesManager.initializeOnUpgrade2(el_delegationManager);
+            nodesManager.updateEigenLayerOperatingAdmin(el_admin, true);
         }
 
         vm.stopBroadcast();
