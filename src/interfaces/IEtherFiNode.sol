@@ -3,6 +3,9 @@ pragma solidity ^0.8.13;
 
 import "./IEtherFiNodesManager.sol";
 
+import "../eigenlayer-interfaces/IDelegationManager.sol";
+
+
 interface IEtherFiNode {
     // State Transition Diagram for StateMachine contract:
     //
@@ -54,6 +57,7 @@ interface IEtherFiNode {
     function getRewardsPayouts(uint32 _exitRequestTimestamp, IEtherFiNodesManager.RewardsSplit memory _splits) external view returns (uint256, uint256, uint256, uint256);
     function getFullWithdrawalPayouts(IEtherFiNodesManager.ValidatorInfo memory _info, IEtherFiNodesManager.RewardsSplit memory _SRsplits) external view returns (uint256, uint256, uint256, uint256);
     function associatedValidatorIds(uint256 _index) external view returns (uint256);
+    function associatedValidatorIndices(uint256 _validatorId) external view returns (uint256);
     function validatePhaseTransition(VALIDATOR_PHASE _currentPhase, VALIDATOR_PHASE _newPhase) external pure returns (bool);
 
     function DEPRECATED_exitRequestTimestamp() external view returns (uint32);
@@ -62,12 +66,15 @@ interface IEtherFiNode {
 
     // Non-VIEW functions
     function initialize(address _etherFiNodesManager) external;
-    function claimQueuedWithdrawals(uint256 maxNumWithdrawals, bool _checkIfHasOutstandingEigenLayerWithdrawals) external returns (bool);
+    function claimDelayedWithdrawalRouterWithdrawals(uint256 maxNumWithdrawals, bool _checkIfHasOutstandingEigenLayerWithdrawals, uint256 _validatorId) external returns (bool);
     function createEigenPod() external;
-    function hasOutstaingEigenPodWithdrawalsQueuedBeforeExit() external view returns (bool);
     function isRestakingEnabled() external view returns (bool);
-    function processNodeExit() external;
-    function queueRestakedWithdrawal() external;
+    function processNodeExit(uint256 _validatorId) external returns (bytes32[] memory withdrawalRoots);
+    function processFullWithdraw(uint256 _validatorId) external;
+    function queueEigenpodFullWithdrawal() external returns (bytes32[] memory withdrawalRoots);
+    function queuePhase1PartialWithdrawal() external;
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes) external;
+    function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, uint256 middlewareTimesIndexes) external;
     function updateNumberOfAssociatedValidators(uint16 _up, uint16 _down) external;
     function updateNumExitedValidators(uint16 _up, uint16 _down) external;
     function registerValidator(uint256 _validatorId, bool _enableRestaking) external;
