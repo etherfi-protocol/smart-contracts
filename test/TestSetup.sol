@@ -177,7 +177,8 @@ contract TestSetup is Test {
     TVLOracle tvlOracle;
 
     EtherFiTimelock public etherFiTimelockInstance;
-    BucketRateLimiter public bucketRateLimiter;
+
+    address public l1OftAdapterAddress = 0xFE7fe01F8B9A76803aF3750144C2715D9bcf7D0D;
 
     bytes32 root;
     bytes32 rootMigration;
@@ -372,6 +373,18 @@ contract TestSetup is Test {
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
     }
 
+    function _create_bucket_rate_limiter(address consumer, uint256 capacity, uint256 refil_rate_per_sec) internal returns (address) {
+        address impl = address(new BucketRateLimiter());
+        BucketRateLimiter bucketRateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
+        bucketRateLimiter.initialize();
+        bucketRateLimiter.updateConsumer(consumer);
+
+        bucketRateLimiter.setCapacity(capacity);
+        bucketRateLimiter.setRefillRatePerSecond(refil_rate_per_sec);
+
+        return address(bucketRateLimiter);
+    }
+
     function setUpLiquifier(uint8 forkEnum) internal {
         vm.startPrank(owner);
             
@@ -383,17 +396,11 @@ contract TestSetup is Test {
             liquifierInstance.updateAdmin(alice, true);
         }
 
-        address impl = address(new BucketRateLimiter());
-        bucketRateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
-        bucketRateLimiter.initialize();
-        bucketRateLimiter.updateConsumer(address(liquifierInstance));
-
-        bucketRateLimiter.setCapacity(40 ether);
-        bucketRateLimiter.setRefillRatePerSecond(1 ether);
+        address rate_limiter = _create_bucket_rate_limiter(address(liquifierInstance), 40 ether, 1 ether);
 
         vm.warp(block.timestamp + 1 days);
 
-        liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
+        liquifierInstance.initializeRateLimiter(address(rate_limiter));
 
         vm.stopPrank();
     }
@@ -632,7 +639,9 @@ contract TestSetup is Test {
         stakingManagerInstance.initializeOnUpgrade(address(nodeOperatorManagerInstance), address(etherFiAdminInstance));
         auctionInstance.initializeOnUpgrade(address(membershipManagerInstance), 1 ether, address(etherFiAdminInstance), address(nodeOperatorManagerInstance));
         membershipNftInstance.initializeOnUpgrade(address(liquidityPoolInstance));
-
+        
+        address rate_limiter_on_oft_adapter = _create_bucket_rate_limiter(address(weEthInstance), 10 ether, 1 ether);
+        weEthInstance.initializeOnUpgrade(l1OftAdapterAddress, rate_limiter_on_oft_adapter);
 
         // configure eigenlayer dependency differently for mainnet vs testnet because we rely
         // on the contracts already deployed by eigenlayer on those chains

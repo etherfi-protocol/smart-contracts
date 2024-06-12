@@ -289,4 +289,22 @@ contract WeETHTest is TestSetup {
         weEthInstance.unwrap(1 ether);
         assertEq(eETHInstance.balanceOf(bob), 1.333333333333333332 ether);
     }
+
+    function test_rate_limit_on_oft_adapter() public {
+        vm.warp(block.timestamp + 10);
+        vm.deal(l1OftAdapterAddress, 100 ether);
+
+        vm.startPrank(l1OftAdapterAddress);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        eETHInstance.approve(address(weEthInstance), 100 ether);
+        weEthInstance.wrap(100 ether);
+        vm.stopPrank();
+
+        vm.prank(l1OftAdapterAddress);
+        weEthInstance.transfer(bob, 5 ether);
+
+        vm.prank(l1OftAdapterAddress);
+        vm.expectRevert("BucketRateLimiter: rate limit exceeded");
+        weEthInstance.transfer(bob, 5 ether);
+    }
 }

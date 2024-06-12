@@ -9,6 +9,9 @@ import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRateProvider.sol";
 
+import "src/interfaces/IRateLimiter.sol";
+
+
 contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider {
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -16,6 +19,8 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
 
     IeETH public eETH;
     ILiquidityPool public liquidityPool;
+    address public oftAdapter;
+    IRateLimiter public rateLimiterOnOftAdapter;
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -36,6 +41,11 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         __Ownable_init();
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
+    }
+
+    function initializeOnUpgrade(address _oftAdapter, address _rateLimiterOnOftAdapter) external onlyOwner {
+        oftAdapter = _oftAdapter;
+        rateLimiterOnOftAdapter = IRateLimiter(_rateLimiterOnOftAdapter);
     }
 
     /// @dev name changed from the version initially deployed
@@ -79,6 +89,19 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
+
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal override virtual {
+        if (from != oftAdapter || oftAdapter == address(0)) return;
+
+        // When the weETH OFT arrives from other chains,
+        // the weETH in OFT Adapter contract is transferred to the `to` address.
+        // The rate limiter is updated with the amount of weETH transferred and block malicious draining.
+        rateLimiterOnOftAdapter.updateRateLimit(oftAdapter, address(this), amount, amount);
+    }
 
     function _authorizeUpgrade(
         address newImplementation
