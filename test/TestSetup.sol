@@ -184,9 +184,9 @@ contract TestSetup is Test {
     TVLOracle tvlOracle;
 
     EtherFiTimelock public etherFiTimelockInstance;
-    BucketRateLimiter public bucketRateLimiter;
 
     Pauser public pauserInstance;
+    BucketRateLimiter public bucketRateLimiter;
 
     bytes32 root;
     bytes32 rootMigration;
@@ -408,8 +408,6 @@ contract TestSetup is Test {
         bucketRateLimiter.setRefillRatePerSecond(1 ether);
 
         vm.warp(block.timestamp + 1 days);
-
-        // liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
 
         vm.stopPrank();
     }
