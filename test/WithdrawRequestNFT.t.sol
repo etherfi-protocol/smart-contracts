@@ -323,4 +323,99 @@ contract WithdrawRequestNFTTest is TestSetup {
         // We processed the withdrawal of 8 wei ETH. 
         // --> The rest 0.16 wei ETH is effectively distributed to the other eETH holders.
     }
+
+
+    // It depicts the scenario where bob's WithdrawalRequest NFT is stolen by alice.
+    // The owner invalidates the request 
+    function test_InvalidatedRequestNft_after_finalization() public returns (uint256 requestId) {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        uint96 amountOfEEth = 1 ether;
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), amountOfEEth);
+
+        vm.prank(bob);
+        requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
+
+        vm.prank(bob);
+        withdrawRequestNFTInstance.transferFrom(bob, alice, requestId);
+
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice, "Alice should own the NFT");
+
+        _finalizeWithdrawalRequest(requestId);
+
+        assertTrue(withdrawRequestNFTInstance.isValid(requestId), "Request should be valid");
+
+        vm.prank(alice);
+        withdrawRequestNFTInstance.invalidateRequest(requestId);
+    }
+
+    function test_InvalidatedRequestNft_before_finalization() public returns (uint256 requestId) {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        uint96 amountOfEEth = 1 ether;
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), amountOfEEth);
+
+        vm.prank(bob);
+        requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
+
+        vm.prank(bob);
+        withdrawRequestNFTInstance.transferFrom(bob, alice, requestId);
+
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice, "Alice should own the NFT");
+
+        vm.prank(alice);
+        withdrawRequestNFTInstance.invalidateRequest(requestId);
+
+        _finalizeWithdrawalRequest(requestId);
+    }
+
+    function test_InvalidatedRequestNft_NonTransferrable() public {
+        uint256 requestId = test_InvalidatedRequestNft_after_finalization();
+
+        vm.prank(alice);
+        vm.expectRevert("INVALID_REQUEST");
+        withdrawRequestNFTInstance.transferFrom(alice, bob, requestId);
+    }
+
+    function test_seizeInvalidAndMintNew_revert_if_not_owner() public {
+        uint256 requestId = test_InvalidatedRequestNft_after_finalization();
+        uint256 claimableAmount = withdrawRequestNFTInstance.getRequest(requestId).amountOfEEth;
+
+        // REVERT if not owner
+        vm.prank(alice);
+        vm.expectRevert("Ownable: caller is not the owner");
+        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad);
+    }
+
+    function test_InvalidatedRequestNft_seizeInvalidAndMintNew_1() public {
+        uint256 requestId = test_InvalidatedRequestNft_after_finalization();
+        uint256 claimableAmount = withdrawRequestNFTInstance.getRequest(requestId).amountOfEEth;
+        uint256 chadBalance = address(chad).balance;
+
+        vm.prank(owner);
+        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad);
+
+        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
+        assertEq(address(chad).balance, chadBalance + claimableAmount, "Chad should receive the claimable amount");
+    }
+
+    function test_InvalidatedRequestNft_seizeInvalidAndMintNew_2() public {
+        uint256 requestId = test_InvalidatedRequestNft_before_finalization();
+        uint256 claimableAmount = withdrawRequestNFTInstance.getRequest(requestId).amountOfEEth;
+        uint256 chadBalance = address(chad).balance;
+
+        vm.prank(owner);
+        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad);
+
+        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
+        assertEq(address(chad).balance, chadBalance + claimableAmount, "Chad should receive the claimable amount");
+    }
 }

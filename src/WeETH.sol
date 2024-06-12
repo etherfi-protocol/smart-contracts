@@ -102,7 +102,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         return liquidityPool.amountForShare(_weETHAmount);
     }
 
-    // Amount of weETH for 1 eETH
+    // Amount of eETH for 1 weETH
     function getRate() external view returns (uint256) {
         return getEETHByWeETH(1 ether);
     }

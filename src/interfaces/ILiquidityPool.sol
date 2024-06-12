@@ -69,6 +69,7 @@ interface ILiquidityPool {
 
     function rebase(int128 _accruedRewards) external;
     function addEthAmountLockedForWithdrawal(uint128 _amount) external;
+    function reduceEthAmountLockedForWithdrawal(uint128 _amount) external;
     
     function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external;
     function updateAdmin(address _newAdmin, bool _isAdmin) external;
