@@ -66,6 +66,11 @@ library BucketLimiter {
         });
     }
 
+    function canConsume(Limit memory limit, uint64 amount) external view returns (bool) {
+        _refill(limit);
+        return limit.remaining >= amount;
+    }
+
     /*
      * Consumes the given amount from the bucket, if there is sufficient capacity, and returns
      * whether the bucket had enough remaining capacity to consume the amount.

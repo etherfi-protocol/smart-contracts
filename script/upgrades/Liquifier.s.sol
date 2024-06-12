@@ -85,7 +85,7 @@ contract Upgrade is Script {
             require(deployer == liquifier.owner(), "Only the owner can upgrade the contract");
 
             liquifier.upgradeTo(address(LiquifierNewImpl));
-            liquifier.initializeL1SyncPool(l1syncpool);
+            // liquifier.initializeL1SyncPool(l1syncpool);
         }
 
         vm.stopBroadcast();

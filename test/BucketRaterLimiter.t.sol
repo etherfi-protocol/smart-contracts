@@ -65,6 +65,31 @@ contract BucketRateLimiterTest is Test {
 
         vm.stopPrank();
     }
+
+    function test_consume_per_token() public {
+        vm.startPrank(limiter.owner());
+
+        address token = address(1);
+        limiter.registerToken(token, 100 ether, 100 ether);
+        limiter.setCapacity(1000 ether);
+        limiter.setRefillRatePerSecond(1000 ether);
+
+        vm.warp(block.timestamp + 1);
+
+        limiter.updateRateLimit(address(0), token, 50 ether, 50 ether);
+
+        vm.expectRevert("BucketRateLimiter: token rate limit exceeded");
+        limiter.updateRateLimit(address(0), token, 50 ether, 50 ether);
+
+        vm.warp(block.timestamp + 1);
+
+        vm.expectRevert("BucketRateLimiter: token rate limit exceeded");
+        limiter.updateRateLimit(address(0), token, 51 ether, 50 ether);
+
+        limiter.updateRateLimit(address(0), token, 50 ether, 50 ether);
+
+        vm.stopPrank();
+    }
     
     function test_access_control() public {
         vm.expectRevert("Ownable: caller is not the owner");

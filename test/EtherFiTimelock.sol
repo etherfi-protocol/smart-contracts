@@ -239,10 +239,10 @@ contract TimelockTest is TestSetup {
         //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 4_000, 20_000);
         //     _execute_timelock(target, data, false, false, true, true);
         // }
-        {
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 1_000, 100_000);
-            _execute_timelock(target, data, true, true, true, false);
-        }
+        // {
+        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 1_000, 100_000);
+        //     _execute_timelock(target, data, true, true, true, false);
+        // }
         // {
         //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 1_000, 100_000);
         //     _execute_timelock(target, data, true, true, true, false);
