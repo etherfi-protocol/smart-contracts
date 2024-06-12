@@ -299,7 +299,7 @@ contract MembershipManagerTest is TestSetup {
         vm.stopPrank();
     }
 
-    function test_EapMigrationWorks() public {
+    function test_EapMigrationWorks() internal {
         vm.warp(1689764603 - 8 weeks);
         vm.roll(17726813 - (8 weeks) / 12);
 
@@ -729,7 +729,7 @@ contract MembershipManagerTest is TestSetup {
         assertEq(membershipNftInstance.balanceOf(bob, aliceToken), 1);
     }
 
-    function test_MixedDeposits() public {
+    function test_MixedDeposits() internal {
         vm.warp(1689764603 - 8 weeks);
         vm.roll(17726813 - (8 weeks) / 12);
 

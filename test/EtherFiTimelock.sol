@@ -212,7 +212,7 @@ contract TimelockTest is TestSetup {
         emit Schedule(address(etherFiOracleInstance), 0, abi.encodeWithSelector(bytes4(keccak256("updateAdmin(address,bool)")), 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, true), bytes32(0), bytes32(0), 259200);
     }
 
-    function test_registerToken() public {
+    function test_registerToken() internal {
         initializeRealisticFork(MAINNET_FORK);
         address target = address(liquifierInstance);
 
@@ -228,7 +228,7 @@ contract TimelockTest is TestSetup {
         }
     }
 
-    function test_updateDepositCap() public {
+    function test_updateDepositCap() internal {
         initializeRealisticFork(MAINNET_FORK);
         address target = address(liquifierInstance);
         // {
