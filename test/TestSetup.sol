@@ -712,6 +712,7 @@ contract TestSetup is Test {
         stakingManagerInstance.registerTNFTContract(address(TNFTInstance));
         stakingManagerInstance.registerBNFTContract(address(BNFTInstance));
 
+
         depGen = new DepositDataGeneration();
 
         attacker = new Attacker(address(liquidityPoolInstance));
