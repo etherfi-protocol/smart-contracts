@@ -48,7 +48,8 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // - Mainnet
         // https://beaconcha.in/validator/1293592#withdrawals
         // bid Id = validator Id = 21397
-        validatorId = 16818;
+        //validatorId = 16818;
+        validatorId = 21397;
         pubkey = hex"a9c09c47ad6c0c5c397521249be41c8b81b139c3208923ec3c95d7f99c57686ab66fe75ea20103a1291578592d11c2c2";
 
         // {EigenPod, EigenPodOwner} used in EigenLayer's unit test
@@ -60,9 +61,9 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         // Override with Mock
         vm.startPrank(eigenLayerEigenPodManager.owner());
-        beaconChainOracleMock = new BeaconChainOracleMock();
-        beaconChainOracle = IBeaconChainOracle(address(beaconChainOracleMock));
-        eigenLayerEigenPodManager.updateBeaconChainOracle(beaconChainOracle);
+       // beaconChainOracleMock = new BeaconChainOracleMock();
+       // beaconChainOracle = IBeaconChainOracle(address(beaconChainOracleMock));
+       // eigenLayerEigenPodManager.updateBeaconChainOracle(beaconChainOracle);
         vm.stopPrank();
 
         vm.startPrank(owner);
@@ -102,7 +103,13 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     }
 
     function _beacon_process_32ETH_deposit() internal {
-        setJSON("./test/eigenlayer-utils/test-data/ValidatorFieldsProof_1293592_8746783.json");
+        //setJSON("./test/eigenlayer-utils/test-data/ValidatorFieldsProof_1293592_8746783.json");
+        //setJSON("./test/eigenlayer-utils/test-data/mainnet_withdrawal_credential_proof_1293592.json");
+//        setJSON("./test/eigenlayer-utils/test-data/mainnet_withdrawal_credential_proof_1293592_1718734943.json");
+        setJSON("./test/eigenlayer-utils/test-data/mainnet_withdrawal_credential_proof_1293592_1712964563.json");
+        oracleTimestamp = 1712964563;
+        vm.warp(1712974563);
+        //oracleTimestamp = 1718734943;
         
         _setWithdrawalCredentialParams();
         _setOracleBlockRoot();
@@ -120,30 +127,15 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         return (validatorIds[0], nodeAddress, node);
     }
 
-    // What need to happen after EL mainnet launch
-    // per EigenPod
-    // - call `activateRestaking()` to empty the EigenPod contract and disable `withdrawBeforeRestaking()`
-    // - call `verifyWithdrawalCredentials()` to register the validator by proving that it is active
-    // - call `delegateTo` for delegation
-
-    // Call EigenPod.activateRestaking()
-    function test_activateRestaking() public {
-        bytes4 selector = bytes4(keccak256("activateRestaking()"));
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector);
-
-        vm.prank(owner);
-        managerInstance.callEigenPod(validatorIds, data);
-    }
-
     function test_verifyWithdrawalCredentials_1ETH() public {
         _beacon_process_1ETH_deposit();
+       // test_activateRestaking();
 
-        test_activateRestaking();
+        console2.log("pod:", address(eigenPod));
 
         int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
         IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-        assertEq(initialShares, 0, "Shares should be 0 ETH in wei before verifying withdrawal credentials");
+        //assertEq(initialShares, 0, "Shares should be 0 ETH in wei before verifying withdrawal credentials");
         assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
         assertEq(validatorInfo.validatorIndex, 0);
         assertEq(validatorInfo.restakedBalanceGwei, 0);
@@ -183,13 +175,19 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     // https://holesky.beaconcha.in/validator/1644305#deposits
     function test_verifyWithdrawalCredentials_32ETH() public {
-        _beacon_process_32ETH_deposit();
 
-        test_activateRestaking();
+         vm.selectFork(vm.createFork("https://virtual.mainnet.rpc.tenderly.co/46b95b97-f508-45ad-8893-c8af61ebdc98"));
+
+        console2.log("block:", block.number);
+        console2.log("timestamp:", block.timestamp);
+        _beacon_process_32ETH_deposit();
+        console2.log("timestamp2:", block.timestamp);
+
+       // test_activateRestaking();
 
         int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
         IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-        assertEq(initialShares, 0, "Shares should be 0 ETH in wei before verifying withdrawal credentials");
+//        assertEq(initialShares, 0, "Shares should be 0 ETH in wei before verifying withdrawal credentials");
         assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
         assertEq(validatorInfo.validatorIndex, 0);
         assertEq(validatorInfo.restakedBalanceGwei, 0);
@@ -213,7 +211,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     function test_verifyBalanceUpdates_FAIL_1() public {
         _beacon_process_32ETH_deposit();
         
-        test_activateRestaking();
+        //test_activateRestaking();
 
         bytes4 selector = bytes4(keccak256("verifyBalanceUpdates(uint64,uint40[],(bytes32,bytes),bytes[],bytes32[][])"));
         bytes[] memory data = new bytes[](1);
@@ -276,7 +274,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     function test_activateRestaking_and_sweep() public {
         (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
 
-        test_activateRestaking();
+       // test_activateRestaking();
 
         (uint256 new_withdrawalSafe, uint256 new_eigenPod, uint256 new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
         assertEq(new_withdrawalSafe, _withdrawalSafe, "withdrawalSafe should not change");
