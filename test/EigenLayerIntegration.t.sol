@@ -69,6 +69,18 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.startPrank(owner);
         liquidityPoolInstance.setRestakeBnftDeposits(true);
         vm.stopPrank();
+
+        EtherFiNodesManager newManagerImpl = new EtherFiNodesManager();
+        EtherFiNode newNodeImpl = new EtherFiNode();
+
+        vm.startPrank(managerInstance.owner());
+        managerInstance.upgradeTo(address(newManagerImpl));
+        vm.stopPrank();
+        vm.startPrank(stakingManagerInstance.owner());
+        stakingManagerInstance.upgradeEtherFiNode(address(newNodeImpl));
+        vm.stopPrank();
+
+
     }
 
     function _setWithdrawalCredentialParams() public {
@@ -84,22 +96,12 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         withdrawalCredentialProofs[0] = abi.encodePacked(getWithdrawalCredentialProof()); // Validator fields are proven here
         // validatorFieldsProofs[0] = abi.encodePacked(getValidatorFieldsProof());
         validatorFields[0] = getValidatorFields();
-
-        // Get an oracle timestamp        
-        // vm.warp(block.timestamp + 1 days);
-        // oracleTimestamp = uint64(block.timestamp);
-    }
-
-    function _setOracleBlockRoot() internal {
-        // bytes32 latestBlockRoot = getLatestBlockRoot();
-        // beaconChainOracleMock.setOracleBlockRootAtTimestamp(latestBlockRoot);
     }
 
     function _beacon_process_1ETH_deposit() internal {
         setJSON("./test/eigenlayer-utils/test-data/ValidatorFieldsProof_1293592_8654000.json");
         
         _setWithdrawalCredentialParams();
- //       _setOracleBlockRoot();
     }
 
     function _beacon_process_32ETH_deposit() internal {
@@ -110,7 +112,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.warp(1712974563);
         
         _setWithdrawalCredentialParams();
-//        _setOracleBlockRoot();
     }
 
     function _beacon_process_partial_withdrawals() internal {
@@ -125,7 +126,11 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         return (validatorIds[0], nodeAddress, node);
     }
 
+    // TODO: to fix, need to create a historical fork at a point where a validator
+    // had 1 eth and then generate the proof at that point
     function test_verifyWithdrawalCredentials_1ETH() public {
+
+        vm.selectFork(vm.createFork(vm.envString("HISTORICAL_PROOF_RPC_URL")));
         _beacon_process_1ETH_deposit();
 
         console2.log("pod:", address(eigenPod));
@@ -284,7 +289,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     }
 
     function test_withdrawNonBeaconChainETHBalanceWei() public {
-//        test_activateRestaking_and_sweep();
 
         // 1.
         (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
@@ -303,7 +307,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         vm.prank(owner);
         vm.expectRevert("INCORRECT_RECIPIENT");
-        managerInstance.callEigenPod(validatorIds, data);        
+        managerInstance.callEigenPod(validatorIds, data);
 
         data[0] = abi.encodeWithSelector(selector, podOwner, 1 ether);
         vm.prank(owner);
@@ -318,7 +322,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.roll(block.number + (50400) + 1);
 
         ws.claimDelayedWithdrawalRouterWithdrawals(5, false, validatorId);
-        
+
         // 4.
         (uint256 new_new_withdrawalSafe, uint256 new_new_eigenPod, uint256 new_new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
         assertEq(_withdrawalSafe + 1 ether, new_new_withdrawalSafe);
