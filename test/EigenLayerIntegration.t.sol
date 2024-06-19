@@ -46,9 +46,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         dsrv = address(1001);
 
         // - Mainnet
-        // https://beaconcha.in/validator/1293592#withdrawals
         // bid Id = validator Id = 21397
-        //validatorId = 16818;
         validatorId = 21397;
         pubkey = hex"a9c09c47ad6c0c5c397521249be41c8b81b139c3208923ec3c95d7f99c57686ab66fe75ea20103a1291578592d11c2c2";
 
@@ -60,11 +58,13 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         ws = EtherFiNode(payable(podOwner));
 
         // Override with Mock
+        /*
         vm.startPrank(eigenLayerEigenPodManager.owner());
-       // beaconChainOracleMock = new BeaconChainOracleMock();
-       // beaconChainOracle = IBeaconChainOracle(address(beaconChainOracleMock));
-       // eigenLayerEigenPodManager.updateBeaconChainOracle(beaconChainOracle);
+        beaconChainOracleMock = new BeaconChainOracleMock();
+        beaconChainOracle = IBeaconChainOracle(address(beaconChainOracleMock));
+        eigenLayerEigenPodManager.updateBeaconChainOracle(beaconChainOracle);
         vm.stopPrank();
+        */
 
         vm.startPrank(owner);
         liquidityPoolInstance.setRestakeBnftDeposits(true);
@@ -133,8 +133,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.selectFork(vm.createFork(vm.envString("HISTORICAL_PROOF_RPC_URL")));
         _beacon_process_1ETH_deposit();
 
-        console2.log("pod:", address(eigenPod));
-
         int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
         IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
         //assertEq(initialShares, 0, "Shares should be 0 ETH in wei before verifying withdrawal credentials");
@@ -179,11 +177,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     function test_verifyWithdrawalCredentials_32ETH() public {
 
         vm.selectFork(vm.createFork(vm.envString("HISTORICAL_PROOF_RPC_URL")));
-
-        console2.log("block:", block.number);
-        console2.log("timestamp:", block.timestamp);
-        console2.log("timestamp2:", block.timestamp);
-
 
         int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
         IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
