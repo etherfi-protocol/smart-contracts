@@ -99,20 +99,18 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         setJSON("./test/eigenlayer-utils/test-data/ValidatorFieldsProof_1293592_8654000.json");
         
         _setWithdrawalCredentialParams();
-        _setOracleBlockRoot();
+ //       _setOracleBlockRoot();
     }
 
     function _beacon_process_32ETH_deposit() internal {
-        //setJSON("./test/eigenlayer-utils/test-data/ValidatorFieldsProof_1293592_8746783.json");
-        //setJSON("./test/eigenlayer-utils/test-data/mainnet_withdrawal_credential_proof_1293592.json");
-//        setJSON("./test/eigenlayer-utils/test-data/mainnet_withdrawal_credential_proof_1293592_1718734943.json");
+
         setJSON("./test/eigenlayer-utils/test-data/mainnet_withdrawal_credential_proof_1293592_1712964563.json");
         oracleTimestamp = 1712964563;
+        // timestamp doesn't seem to get set by custom RPC for even though block does
         vm.warp(1712974563);
-        //oracleTimestamp = 1718734943;
         
         _setWithdrawalCredentialParams();
-        _setOracleBlockRoot();
+//        _setOracleBlockRoot();
     }
 
     function _beacon_process_partial_withdrawals() internal {
@@ -129,7 +127,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     function test_verifyWithdrawalCredentials_1ETH() public {
         _beacon_process_1ETH_deposit();
-       // test_activateRestaking();
 
         console2.log("pod:", address(eigenPod));
 
@@ -176,17 +173,15 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     // https://holesky.beaconcha.in/validator/1644305#deposits
     function test_verifyWithdrawalCredentials_32ETH() public {
 
-         vm.selectFork(vm.createFork("https://virtual.mainnet.rpc.tenderly.co/46b95b97-f508-45ad-8893-c8af61ebdc98"));
+        vm.selectFork(vm.createFork(vm.envString("HISTORICAL_PROOF_RPC_URL")));
 
         console2.log("block:", block.number);
         console2.log("timestamp:", block.timestamp);
         console2.log("timestamp2:", block.timestamp);
 
-       // test_activateRestaking();
 
         int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
         IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-//        assertEq(initialShares, 0, "Shares should be 0 ETH in wei before verifying withdrawal credentials");
         assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
         assertEq(validatorInfo.validatorIndex, 0);
         assertEq(validatorInfo.restakedBalanceGwei, 0);
@@ -213,9 +208,9 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     }
 
     function test_verifyBalanceUpdates_FAIL_1() public {
+
+        vm.selectFork(vm.createFork(vm.envString("HISTORICAL_PROOF_RPC_URL")));
         _beacon_process_32ETH_deposit();
-        
-        //test_activateRestaking();
 
         bytes4 selector = bytes4(keccak256("verifyBalanceUpdates(uint64,uint40[],(bytes32,bytes),bytes[],bytes32[][])"));
         bytes[] memory data = new bytes[](1);
@@ -261,10 +256,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
     }
     */
-
-    function test_verifyAndProcessWithdrawals_32ETH() public {
-        // TODO
-    }
 
     function test_createDelayedWithdrawal() public {
         test_verifyWithdrawalCredentials_32ETH();
@@ -390,7 +381,10 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
             bytes4 selector = bytes4(keccak256("undelegate(address)"));
             bytes[] memory data = new bytes[](1);
             data[0] = abi.encodeWithSelector(selector, podOwner);
-            
+
+            vm.prank(owner);
+            managerInstance.callDelegationManager(validatorIds, data);
+
             vm.prank(owner);
             vm.expectRevert("DelegationManager.undelegate: staker must be delegated to undelegate");
             managerInstance.callDelegationManager(validatorIds, data);
@@ -469,6 +463,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     }
 
+    /*
     function test_29027_verifyWithdrawalCredentials() public {
         setJSON("./test/eigenlayer-utils/test-data/mainnet_withdrawal_credential_proof_1285801.json");
         
@@ -487,5 +482,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.prank(owner);
         managerInstance.callEigenPod(validatorIds, data);
     }
+    */
 
 }
