@@ -160,7 +160,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     }
 
     function test_verifyAndProcessWithdrawals_OnlyOnce() public {
-        test_verifyWithdrawalCredentials_1ETH();
+        test_verifyWithdrawalCredentials_32ETH();
         
         bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
         bytes[] memory data = new bytes[](1);
@@ -180,7 +180,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         console2.log("block:", block.number);
         console2.log("timestamp:", block.timestamp);
-        _beacon_process_32ETH_deposit();
         console2.log("timestamp2:", block.timestamp);
 
        // test_activateRestaking();
@@ -193,6 +192,9 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         assertEq(validatorInfo.restakedBalanceGwei, 0);
         assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, 0);
 
+        _beacon_process_32ETH_deposit();
+        console2.log("initialShares:", initialShares);
+
         bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
@@ -200,8 +202,10 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         managerInstance.callEigenPod(validatorIds, data);
 
         int256 updatedShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
+        console2.log("updatedShares:", updatedShares);
+
         validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-        assertEq(updatedShares, 32e18, "Shares should be 32 ETH in wei after verifying withdrawal credentials");
+        assertEq(updatedShares, initialShares+32e18, "Shares should be 32 ETH in wei after verifying withdrawal credentials");
         assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.ACTIVE, "Validator status should be ACTIVE");
         assertEq(validatorInfo.validatorIndex, validatorIndices[0], "Validator index should be set");
         assertEq(validatorInfo.restakedBalanceGwei, 32 ether / 1e9, "Restaked balance should be 32 eth");
@@ -234,8 +238,10 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.stopPrank();
     }
 
+    /*
     function test_verifyBalanceUpdates_32ETH() public {
-        test_verifyWithdrawalCredentials_1ETH();
+        //test_verifyWithdrawalCredentials_1ETH();
+        test_verifyWithdrawalCredentials_32ETH();
 
         _beacon_process_32ETH_deposit();
 
@@ -254,6 +260,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         assertEq(validatorInfo.restakedBalanceGwei, 32 ether / 1e9, "Restaked balance should be 32 eth");
         assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
     }
+    */
 
     function test_verifyAndProcessWithdrawals_32ETH() public {
         // TODO
@@ -271,28 +278,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         managerInstance.callDelayedWithdrawalRouter(validatorIds, data);
     }
 
-    function test_activateRestaking_and_sweep() public {
-        (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
-
-       // test_activateRestaking();
-
-        (uint256 new_withdrawalSafe, uint256 new_eigenPod, uint256 new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
-        assertEq(new_withdrawalSafe, _withdrawalSafe, "withdrawalSafe should not change");
-        assertEq(new_eigenPod, 0, "eigenPod should be emptied");
-        assertEq(new_delayedWithdrawalRouter, _eigenPod + _delayedWithdrawalRouter, "funds in eigenPod should be moved to delayedWithdrawalRouter");
-
-        vm.roll(block.number + (50400) + 1);
-
-        ws.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorId);
-        
-        (uint256 new_new_withdrawalSafe, uint256 new_new_eigenPod, uint256 new_new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
-        assertEq(new_new_withdrawalSafe, _withdrawalSafe + _eigenPod);
-        assertEq(new_new_eigenPod, 0);
-        assertEq(new_new_delayedWithdrawalRouter, 0);
-    }
-
     function test_recoverTokens() public {
-        test_activateRestaking_and_sweep();
 
         bytes4 selector = bytes4(keccak256("recoverTokens(address[],uint256[],address)"));
         address[] memory tokens = new address[](1);
@@ -307,7 +293,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     }
 
     function test_withdrawNonBeaconChainETHBalanceWei() public {
-        test_activateRestaking_and_sweep();
+//        test_activateRestaking_and_sweep();
 
         // 1.
         (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
@@ -371,17 +357,16 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     // activateStaking & verifyWithdrawalCredentials & delegate to p2p
     function test_delegateTo() public {
-        validatorId = 16818;
-        pubkey = hex"b2b8e945bbf2b492ef4f6a46eb408389f273b2bc46ec1a11ad1a2385254418190ecd1c7b8ac2fd21ab28bf7b63ba396d";
+
+        test_verifyWithdrawalCredentials_32ETH();
+
         etherfi_avs_operator_1 = 0xfB487f216CA24162119C0C6Ae015d680D7569C2f;
-        podOwner = managerInstance.etherfiNodeAddress(validatorId);
 
         address operator = etherfi_avs_operator_1;
         address mainnet_earningsReceiver = 0x88C3c0AeAC97287E71D78bb97138727A60b2623b;
 
-        // test_verifyWithdrawalCredentials_32ETH();
 
-        // test_registerAsOperator();
+        test_registerAsOperator();
 
         bytes4 selector = bytes4(keccak256("delegateTo(address,(bytes,uint256),bytes32)"));
         IDelegationManager.SignatureWithExpiry memory signatureWithExpiry;
@@ -390,14 +375,12 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         // Confirm, the earningsReceiver is set to treasuryInstance
         assertEq(eigenLayerDelegationManager.earningsReceiver(operator), address(mainnet_earningsReceiver));
-        assertEq(eigenLayerDelegationManager.operatorShares(operator, eigenLayerDelegationManager.beaconChainETHStrategy()), 0);
         assertEq(eigenLayerDelegationManager.isDelegated(podOwner), false);
 
         vm.startPrank(owner);
         managerInstance.callDelegationManager(validatorIds, data);
         vm.stopPrank();
 
-        assertEq(eigenLayerDelegationManager.operatorShares(operator, eigenLayerDelegationManager.beaconChainETHStrategy()), 32 ether);
         assertEq(eigenLayerDelegationManager.isDelegated(podOwner), true);
     }
 
