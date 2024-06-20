@@ -28,6 +28,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
     event WithdrawRequestInvalidated(uint32 indexed requestId);
     event WithdrawRequestValidated(uint32 indexed requestId);
+    event WithdrawRequestSeized(uint32 indexed requestId);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -71,7 +72,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         require(ownerOf(tokenId) != address(0), "Already Claimed");
 
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
-        require(request.isValid, "Request is not valid");
 
         // send the lesser value of the originally requested amount of eEth or the current eEth value of the shares
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
@@ -84,15 +84,19 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @notice called by the NFT owner to claim their ETH
     /// @dev burns the NFT and transfers ETH from the liquidity pool to the owner minus any fee, withdraw request must be valid and finalized
     /// @param tokenId the id of the withdraw request and associated NFT
-    function claimWithdraw(uint256 tokenId) public {
+    function claimWithdraw(uint256 tokenId) external {
+        return _claimWithdraw(tokenId, ownerOf(tokenId));
+    }
+    
+    function _claimWithdraw(uint256 tokenId, address recipient) internal {
         require(ownerOf(tokenId) == msg.sender, "Not the owner of the NFT");
-
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
+        require(request.isValid, "Request is not valid");
+
         uint256 fee = uint256(request.feeGwei) * 1 gwei;
         uint256 amountToWithdraw = getClaimableAmount(tokenId);
 
-        // transfer eth to requester
-        address recipient = ownerOf(tokenId);
+        // transfer eth to recipient
         _burn(tokenId);
         delete _requests[tokenId];
 
@@ -112,7 +116,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     function batchClaimWithdraw(uint256[] calldata tokenIds) external {
         for (uint256 i = 0; i < tokenIds.length; i++) {
-            claimWithdraw(tokenIds[i]);
+            _claimWithdraw(tokenIds[i], ownerOf(tokenIds[i]));
         }
     }
 
@@ -125,12 +129,42 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         eETH.burnShares(address(this), amount);
     }
 
+    // Given an invalidated withdrawal request NFT of ID `requestId`:,
+    // - burn the NFT
+    // - withdraw its ETH to the `recipient`
+    function seizeInvalidRequest(uint256 requestId, address recipient) external onlyOwner {
+        require(!_requests[requestId].isValid, "Request is valid");
+        require(ownerOf(requestId) != address(0), "Already Claimed");
+
+        // Bring the NFT to the `msg.sender` == contract owner
+        _transfer(ownerOf(requestId), owner(), requestId);
+
+        // Undo its invalidation to claim
+        _requests[requestId].isValid = true;
+
+        // its ETH amount is not locked
+        // - if it was finalized when being invalidated, we revoked it via `reduceEthAmountLockedForWithdrawal`
+        // - if it was not finalized when being invalidated, it was not locked
+        uint256 ethAmount = getClaimableAmount(requestId);
+        liquidityPool.addEthAmountLockedForWithdrawal(uint128(ethAmount));
+
+        // withdraw the ETH to the recipient
+        _claimWithdraw(requestId, recipient);
+
+        emit WithdrawRequestSeized(uint32(requestId));
+    }
+
     function getRequest(uint256 requestId) external view returns (IWithdrawRequestNFT.WithdrawRequest memory) {
         return _requests[requestId];
     }
 
-    function isFinalized(uint256 requestId) external view returns (bool) {
+    function isFinalized(uint256 requestId) public view returns (bool) {
         return requestId <= lastFinalizedRequestId;
+    }
+
+    function isValid(uint256 requestId) public view returns (bool) {
+        require(_exists(requestId), "Request does not exist");
+        return _requests[requestId].isValid;
     }
 
     function finalizeRequests(uint256 requestId) external onlyAdmin {
@@ -138,7 +172,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function invalidateRequest(uint256 requestId) external onlyAdmin {
-        require(_requests[requestId].isValid, "Request is not valid");
+        require(isValid(requestId), "Request is not valid");
+
+        if (isFinalized(requestId)) {
+            uint256 ethAmount = getClaimableAmount(requestId);
+            liquidityPool.reduceEthAmountLockedForWithdrawal(uint128(ethAmount));
+        }
+
         _requests[requestId].isValid = false;
 
         emit WithdrawRequestInvalidated(uint32(requestId));
@@ -154,6 +194,14 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
         require(_address != address(0), "Cannot be address zero");
         admins[_address] = _isAdmin;
+    }
+
+    // invalid NFTs is non-transferable except for the case they are being burnt by the owner via `seizeInvalidRequest`
+    function _beforeTokenTransfer(address from, address to, uint256 firstTokenId, uint256 batchSize) internal override {
+        for (uint256 i = 0; i < batchSize; i++) {
+            uint256 tokenId = firstTokenId + i;
+            require(_requests[tokenId].isValid || msg.sender == owner(), "INVALID_REQUEST");
+        }
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
