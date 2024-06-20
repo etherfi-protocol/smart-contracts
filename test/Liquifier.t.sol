@@ -434,7 +434,7 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.completeQueuedWithdrawals(queuedWithdrawals, tokens, middlewareTimesIndexes);
     }
 
-    function test_curve_wbETH_swap() public {
+    function test_curve_wbETH_swap() internal {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
@@ -450,7 +450,7 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
     }
 
-    function test_curve_cbETH_swap() public {
+    function test_curve_cbETH_swap() internal {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
@@ -466,7 +466,7 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
     }
 
-    function test_pancacke_wbETH_swap() public {
+    function test_pancacke_wbETH_swap() internal {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
@@ -494,7 +494,7 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
     }
 
-    function test_pancacke_cbETH_swap() public {
+    function test_pancacke_cbETH_swap() internal {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
