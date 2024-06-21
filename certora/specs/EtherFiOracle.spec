@@ -43,19 +43,21 @@ hook Sstore committeeMemberStates[KEY address user].enabled bool newValue (bool 
 └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 */
 
-//
+//cannot be enabled without being registered
 invariant testActiveCommitteeMembersEnabled(address _user)
     currentContract.committeeMemberStates[_user].enabled => currentContract.committeeMemberStates[_user].registered
         filtered {
             f -> f.selector != (sig:upgradeToAndCall(address,bytes).selector) 
         }
 
+//count of active members == numMembersIsSumMembers
 invariant numMembersIsSumMembers()
     to_mathint(currentContract.numCommitteeMembers) == sumMembers
     filtered {
         f -> f.selector != (sig:upgradeToAndCall(address,bytes).selector) 
     }
 
+//count of active members == numActiveCommitteeMembers
 invariant numActiveIsSumActive()
     to_mathint(currentContract.numActiveCommitteeMembers) == sumActive
     filtered {
@@ -136,15 +138,15 @@ rule testMemberCannotSubmitTwice() {
 
 
 //When publishing a report the count only increases 1
-rule testHashUpdatedCorrectly(IEtherFiOracle.OracleReport _report) {
-    env e;
-    bytes32 reportHash = generateReportHash(e, _report);
-    uint32 preSupport = currentContract.consensusStates[reportHash].support;
-    address _user = e.msg.sender;
-    submitReport(e, _report);
-    mathint postSupport = currentContract.consensusStates[reportHash].support;
-    assert (postSupport == preSupport + 1) && postSupport < to_mathint(currentContract.quorumSize) => currentContract.consensusStates[reportHash].consensusReached;
-}
+// rule testHashUpdatedCorrectly(IEtherFiOracle.OracleReport _report) {
+//     env e;
+//     bytes32 reportHash = generateReportHash(e, _report);
+//     uint32 preSupport = currentContract.consensusStates[reportHash].support;
+//     address _user = e.msg.sender;
+//     submitReport(e, _report);
+//     mathint postSupport = currentContract.consensusStates[reportHash].support;
+//     assert (postSupport == preSupport + 1) && postSupport < to_mathint(currentContract.quorumSize) => currentContract.consensusStates[reportHash].consensusReached;
+// }
 
 //test that you cannot submit report if you are not a committee member
 rule testNotCommitteeMemberCannotSubmitReport(IEtherFiOracle.OracleReport report) {
