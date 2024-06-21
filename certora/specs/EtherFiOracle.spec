@@ -76,7 +76,6 @@ invariant invariantTotalMoreThanActive(address _user)
     {
         preserved {
             requireInvariant testActiveCommitteeMembersEnabled(_user);
-            requireInvariant invariantCannotBeEnabledAndNotActive(_user);
             requireInvariant numMembersIsSumMembers();
             requireInvariant numActiveIsSumActive();
         }
