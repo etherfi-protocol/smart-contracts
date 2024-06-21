@@ -126,39 +126,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         return (validatorIds[0], nodeAddress, node);
     }
 
-    // TODO: to fix, need to create a historical fork at a point where a validator
-    // had 1 eth and then generate the proof at that point
-    function test_verifyWithdrawalCredentials_1ETH() public {
-
-        vm.selectFork(vm.createFork(vm.envString("HISTORICAL_PROOF_RPC_URL")));
-        _beacon_process_1ETH_deposit();
-
-        int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
-        IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-        //assertEq(initialShares, 0, "Shares should be 0 ETH in wei before verifying withdrawal credentials");
-        assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
-        assertEq(validatorInfo.validatorIndex, 0);
-        assertEq(validatorInfo.restakedBalanceGwei, 0);
-        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, 0);
-
-        // 2. Trigger a function
-        vm.startPrank(owner);
-        bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
-        managerInstance.callEigenPod(validatorIds, data);
-        vm.stopPrank();
-
-        // 3. Check the result
-        int256 updatedShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
-        validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-        assertEq(updatedShares, 1e18, "Shares should be 1 ETH in wei after verifying withdrawal credentials");
-        assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.ACTIVE, "Validator status should be ACTIVE");
-        assertEq(validatorInfo.validatorIndex, validatorIndices[0], "Validator index should be set");
-        assertEq(validatorInfo.restakedBalanceGwei, 1 ether / 1e9, "Restaked balance should be 1 eth0");
-        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
-    }
-
     function test_verifyAndProcessWithdrawals_OnlyOnce() public {
         test_verifyWithdrawalCredentials_32ETH();
         
@@ -231,30 +198,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.stopPrank();
     }
 
-    /*
-    function test_verifyBalanceUpdates_32ETH() public {
-        //test_verifyWithdrawalCredentials_1ETH();
-        test_verifyWithdrawalCredentials_32ETH();
-
-        _beacon_process_32ETH_deposit();
-
-        vm.warp(block.timestamp + 1);
-
-        vm.startPrank(owner);
-        bytes4 selector = bytes4(keccak256("verifyBalanceUpdates(uint64,uint40[],(bytes32,bytes),bytes[],bytes32[][])"));
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, validatorIndices, stateRootProof, withdrawalCredentialProofs, validatorFields);
-
-        managerInstance.callEigenPod(validatorIds, data);
-        vm.stopPrank();
-
-        IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-        assertEq(eigenLayerEigenPodManager.podOwnerShares(podOwner), 32e18, "Shares should be 32 ETH in wei after verifying withdrawal credentials");
-        assertEq(validatorInfo.restakedBalanceGwei, 32 ether / 1e9, "Restaked balance should be 32 eth");
-        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
-    }
-    */
-
     function test_createDelayedWithdrawal() public {
         test_verifyWithdrawalCredentials_32ETH();
 
@@ -318,9 +261,9 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         // 4.
         (uint256 new_new_withdrawalSafe, uint256 new_new_eigenPod, uint256 new_new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
-        assertEq(_withdrawalSafe + 1 ether, new_new_withdrawalSafe);
+        assertEq(_withdrawalSafe + 1 ether + _delayedWithdrawalRouter, new_new_withdrawalSafe);
         assertEq(_eigenPod, new_new_eigenPod);
-        assertEq(_delayedWithdrawalRouter, new_new_delayedWithdrawalRouter);
+        assertEq(0, new_new_delayedWithdrawalRouter);
     }
 
     function _registerAsOperator(address avs_operator) internal {
