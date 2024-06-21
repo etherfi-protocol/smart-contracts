@@ -24,3 +24,4 @@ cache
 artifacts
 
 .DS_Store
+.certora_internal/*
