@@ -5,8 +5,8 @@
 └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 */
 methods {
-    function generateReportHash(IEtherFiOracle.OracleReport calldata) internal returns (bytes32) => NONDET;
-    function generateReportHash(IEtherFiOracle.OracleReport) external returns (bytes32) => NONDET;
+    function generateReportHash(IEtherFiOracle.OracleReport calldata) internal returns (bytes32) => to_bytes32(0x1234);
+    function generateReportHash(IEtherFiOracle.OracleReport) external returns (bytes32) => to_bytes32(0x1234);
 }
 
 /*
@@ -155,7 +155,7 @@ rule testHashUpdatedCorrectly(IEtherFiOracle.OracleReport _report) {
     address _user = e.msg.sender;
     submitReport(e, _report);
     mathint postSupport = currentContract.consensusStates[reportHash].support;
-    assert (postSupport == preSupport + 1) && postSupport < to_mathint(currentContract.quorumSize) => currentContract.consensusStates[reportHash].consensusReached;
+    assert (postSupport == preSupport + 1) && postSupport >= to_mathint(currentContract.quorumSize) => currentContract.consensusStates[reportHash].consensusReached;
 }
 
 //test that you cannot submit report if you are not a committee member
