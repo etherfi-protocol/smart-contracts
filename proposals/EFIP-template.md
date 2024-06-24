@@ -1,8 +1,11 @@
-# Template for EFIPs
+# [EFIP-XXXX] Template for EFIPs
 
-- **Author**: Name (@github_handle) 
-- **Date**: YYYY-MM-DD
+Leave the numbering of EFIP as unassigned. The EFIP editor will assign it when it gets merged.
+We will assign them purely sequentially from the latest one.
 
+**Author**: Name (contact) 
+
+**Date**: YYYY-MM-DD
 
 ## Summary
 
