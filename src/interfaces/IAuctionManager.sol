@@ -9,6 +9,14 @@ interface IAuctionManager {
         bool isActive;
     }
 
+    struct BatchedBid {
+        uint16 numBids;
+        uint16 isActiveBits;
+        uint32 amountPerBidInGwei;
+        uint32 bidderPubKeyStartIndex;
+        address bidderAddress;
+    }
+
     function initialize(address _nodeOperatorManagerContract) external;
 
     function getBidOwner(uint256 _bidId) external view returns (address);
