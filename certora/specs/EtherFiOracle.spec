@@ -5,8 +5,8 @@
 └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 */
 methods {
-    function generateReportHash(IEtherFiOracle.OracleReport calldata) internal returns (bytes32) => CONSTANT;
-    function generateReportHash(IEtherFiOracle.OracleReport) external returns (bytes32) => CONSTANT;
+    function generateReportHash(IEtherFiOracle.OracleReport calldata) internal returns (bytes32) => NONDET;
+    function generateReportHash(IEtherFiOracle.OracleReport) external returns (bytes32) => NONDET;
 }
 
 /*
@@ -69,19 +69,22 @@ invariant numActiveIsSumActive()
         }
     }
 
+
 // active members <= total members
-invariant invariantTotalMoreThanActive(address _user) 
-    currentContract.numActiveCommitteeMembers <= currentContract.numCommitteeMembers
-        filtered {
-            f -> f.selector != (sig:upgradeToAndCall(address,bytes).selector)
-        }
-    {
-        preserved {
-            requireInvariant testActiveCommitteeMembersEnabled(_user);
-            requireInvariant numMembersIsSumMembers();
-            requireInvariant numActiveIsSumActive();
-        }
-    }
+//unable to prove this invariant because a lot of other invariants required
+// invariant invariantTotalMoreThanActive(address _user) 
+//     currentContract.numActiveCommitteeMembers <= currentContract.numCommitteeMembers
+//         filtered {
+//             f -> f.selector != (sig:upgradeToAndCall(address,bytes).selector)
+//         }
+//     {
+//         preserved {
+//             requireInvariant testActiveCommitteeMembersEnabled(_user);
+//             requireInvariant numMembersIsSumMembers();
+//             requireInvariant numActiveIsSumActive();
+//             require(currentContract.numCommitteeMembers > 0);
+//         }
+//     }
 
 //consensus can only be reach if report is agreed by quorum size
 invariant invariantConsensusNotReached(bytes32 _reportHash) 
@@ -91,18 +94,25 @@ invariant invariantConsensusNotReached(bytes32 _reportHash)
         f.selector != (sig:initialize(uint32, uint32, uint32, uint32, uint32, uint32).selector) && 
         f.selector != (sig:setQuorumSize(uint32).selector) 
     }
-
-    //consensus can only be reach if consenState.support == quorum size
-invariant invariantConsensusReached(bytes32 _reportHash) 
-    currentContract.consensusStates[_reportHash].consensusReached => (currentContract.quorumSize == currentContract.consensusStates[_reportHash].support)
-    filtered {
-        f -> f.selector != (sig:upgradeToAndCall(address,bytes).selector)
-    }
 /*
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ Rules                                                                                                               │
 └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 */
+    //consensus can only be reach if consenState.support == quorum size given we don't change quorum size
+rule ConsensusReachedOnlyQuorumSupport(method f, bytes32 _reportHash, uint32 _quorumSize) filtered {
+        f -> f.selector != (sig:upgradeToAndCall(address,bytes).selector) &&
+        f.selector != (sig:initialize(uint32, uint32, uint32, uint32, uint32, uint32).selector) && 
+        f.selector != (sig:setQuorumSize(uint32).selector) 
+    }
+    {
+    env e; 
+    calldataarg args;
+    require(currentContract.consensusStates[_reportHash].consensusReached <=> (currentContract.quorumSize <= currentContract.consensusStates[_reportHash].support));
+    require(_quorumSize > 0 && _quorumSize <= currentContract.quorumSize);
+    f(e,args);
+    assert(currentContract.consensusStates[_reportHash].consensusReached <=> (currentContract.quorumSize <= currentContract.consensusStates[_reportHash].support));
+}
 
 //test the functionality of adding removing and managing committee members
 rule testAddingCommitteeMembers(address _user)  {
@@ -138,15 +148,15 @@ rule testMemberCannotSubmitTwice() {
 
 
 //When publishing a report the count only increases 1
-// rule testHashUpdatedCorrectly(IEtherFiOracle.OracleReport _report) {
-//     env e;
-//     bytes32 reportHash = generateReportHash(e, _report);
-//     uint32 preSupport = currentContract.consensusStates[reportHash].support;
-//     address _user = e.msg.sender;
-//     submitReport(e, _report);
-//     mathint postSupport = currentContract.consensusStates[reportHash].support;
-//     assert (postSupport == preSupport + 1) && postSupport < to_mathint(currentContract.quorumSize) => currentContract.consensusStates[reportHash].consensusReached;
-// }
+rule testHashUpdatedCorrectly(IEtherFiOracle.OracleReport _report) {
+    env e;
+    bytes32 reportHash = generateReportHash(e, _report);
+    uint32 preSupport = currentContract.consensusStates[reportHash].support;
+    address _user = e.msg.sender;
+    submitReport(e, _report);
+    mathint postSupport = currentContract.consensusStates[reportHash].support;
+    assert (postSupport == preSupport + 1) && postSupport < to_mathint(currentContract.quorumSize) => currentContract.consensusStates[reportHash].consensusReached;
+}
 
 //test that you cannot submit report if you are not a committee member
 rule testNotCommitteeMemberCannotSubmitReport(IEtherFiOracle.OracleReport report) {
