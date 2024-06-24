@@ -2077,6 +2077,7 @@ contract EtherFiNodeTest is TestSetup {
         address bnftStaker = BNFTInstance.ownerOf(validatorIdToShareSafeWith);
         uint256 lp_balance = address(liquidityPoolInstance).balance;
         vm.startPrank(bnftStaker);
+        vm.deal(bnftStaker, 2 ether);
         uint256[] memory newValidatorIds = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(bidIds, 1, validatorIdToShareSafeWith);
         (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(newValidatorIds);
         liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, newValidatorIds, depositDataArray, depositDataRootsForApproval, sig);
