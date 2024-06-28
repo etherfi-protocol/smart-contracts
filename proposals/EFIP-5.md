@@ -11,7 +11,7 @@ This EFIP aims to improve the security of ether.fi eETH/weETH by introducing a w
 
 ## Motivation
 
-While ERC20's extension on `Permit` brings convenience by using off-chain signatures for authorization, it also introduces risks. We have been seeing growing incidents of phishing attacks, where users are tricked into signing a permit for a malicious contract.
+While ERC20's extension on `Permit` brings convenience by using off-chain signatures for authorization, it is a well-known vulnerability that can lead to [phishing attacks](https://cointelegraph.com/magazine/phishing-crypto-erc-20-bait-scammers/). We have also been seeing growing incidents of incidents, where eETH/weETH users are tricked into signing a permit for a malicious contract or address.
 
 In addition, the funds can be sent to the malicious contracts or addresses by the owner or the malicious contracts can lock the funds by transferring them to the blacklisted addresses. This can lead to the loss of funds or the funds being locked forever.
 
@@ -87,8 +87,8 @@ contract EETH {
 
 ## References
 
-A list of relevant links like for this proposal e.g.
-- USDCv2 https://etherscan.io/address/0x43506849d7c04f9138d1a2050bbf3a0c054402dd#code
+- Ethereum’s ERC-20 design flaws are a crypto scammer’s best friend [link](https://cointelegraph.com/magazine/phishing-crypto-erc-20-bait-scammers/)
+- USDCv2 [link](https://etherscan.io/address/0x43506849d7c04f9138d1a2050bbf3a0c054402dd)
 
 ## Copyright
 
