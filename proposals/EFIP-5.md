@@ -6,20 +6,19 @@
 
 ## Summary
 
-This EFIP aims to improve the security of ether.fi eETH/weETH by introducing a whitelist mechanism on `spender` of `permit`, a blacklist mechanism on `transfer`, and a rescue mechanism for the blacklisted or locked funds.
+This EFIP aims to improve the security of ether.fi eETH/weETH by introducing a whitelist on `spender` of `permit` and a blacklist on `transfer`.
 
 
 ## Motivation
 
 While ERC20's extension on `Permit` brings convenience by using off-chain signatures for authorization, it is a well-known vulnerability that can lead to [phishing attacks](https://cointelegraph.com/magazine/phishing-crypto-erc-20-bait-scammers/). We have also been seeing growing incidents of incidents, where eETH/weETH users are tricked into signing a permit for a malicious contract or address.
 
-In addition, the funds can be sent to the malicious contracts or addresses by the owner or the malicious contracts can lock the funds by transferring them to the blacklisted addresses. This can lead to the loss of funds or the funds being locked forever.
+In addition, the funds can be sent to the malicious contracts or addresses by the owner or the malicious contracts can lock the funds by transferring them to the malicious addresses. This can lead to the loss of funds or the funds being locked forever.
 
-Note that [USDCv2](https://etherscan.io/address/0x43506849d7c04f9138d1a2050bbf3a0c054402dd#code) by Circle implements the blacklist and rescue mechanisms.
 
 ## Proposal
 
-The below are PoC implementation for each feature. Note that the actual implementation may vary.
+The below are PoC implementations. The actual implementation may vary.
 
 ### Whitelist on `spender` of `permit`
 
@@ -52,6 +51,8 @@ contract EETH {
 
 It introduces a blacklist mechanism on `transfer`. It will prevent the transfer of tokens to the blacklisted addresses. This will help to prevent the funds from being sent to the malicious contracts or addresses.
 
+Note that [USDCv2](https://etherscan.io/address/0x43506849d7c04f9138d1a2050bbf3a0c054402dd#code) by Circle implements the blacklist.
+
 ```
 contract EETH {
     ...
@@ -65,25 +66,6 @@ contract EETH {
     }
 }
 ```
-
-### Rescue
-
-It introduces a rescue mechanism for the blacklisted or locked funds. It will allow the owner to rescue the funds from the blacklisted or locked addresses. This will help to recover the funds in case of any accidental or malicious transfers.
-
-```
-contract EETH {
-    ...
-    
-    mapping(address => bool) public blacklisted;
-
-    function _transfer(address _sender, address _recipient, uint256 _amount) internal {
-        require(!blacklisted[_sender] || !blacklisted[_recipient], "EETH: blacklisted address");
-        
-        ...
-    }
-}
-```
-
 
 ## References
 
