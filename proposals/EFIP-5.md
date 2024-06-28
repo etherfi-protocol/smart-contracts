@@ -1,4 +1,4 @@
-# [EFIP-5] Security Improvements for eETH/weETH: Whitelist on `spender` of `permit`, blacklist on `transfer`, and rescue mechanism
+# [EFIP-5] Security Improvements for eETH/weETH: Whitelist on `spender` of `permit` and Blacklist on `transfer`
 
 **Author**: syko (seongyun@ether.fi)
 
