@@ -22,21 +22,13 @@ Therefore, this optimization can help save the protocol 100eth per year which is
 
 ## Proposal
 
-### Simple Solution:
 1. Add functionality in liquidity pool to mint shares for treasury/EOA
 
 2. Add call to the EtherfiAdmin to mint the shares
 
 3. Upgrade treasury to be able to transfer eeth (only required if we make it payout to treasury)
 
-### Simple Solution + Node Operator Payout Automation:
-1. Deploy a NodeOperator Registry Contract to serve as the central hub for all node operator information. This contract will store details such as the name, address, number of validators run by each node operator, number of live validators, and any other necessary information. Implement functionality that takes an array of rewards payable to each node operator and transfers the rewards accordingly.
 
-2. Upgrade the EtherFiOracle contract so that OracleReport also includes an array indicating how much each node operator should be rewarded.
-
-
-### Simple Solution + Node Operator Payout Automation socialized:
-1. Deploy a NodeOperator Registry Contract to serve as the central hub for all node operator information. This contract will store details such as the name, address, number of validators run by each node operator, number of live validators, and any other necessary information. Implement functionality to transfer the balance of eETH to all node operators based on their validator count in the live phase. Everything else is the same as the simple solution.
 
 ## References
 
