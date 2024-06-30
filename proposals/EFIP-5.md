@@ -22,7 +22,7 @@ The below are PoC implementations. The actual implementation may vary.
 
 ### Whitelist on `spender` of `permit`
 
-It introduces a whitelist mechanism on `spender` of `permit`. It will only allow the permit to be signed only for the whitelisted addresses to be the `spender` such as the well-known DEXes or lending protocols.
+It introduces a whitelist mechanism on `spender` of `permit`. It will only allow whitelisted addresses to be the `spender` such as the well-known DEXes or lending protocols.
 
 ```
 contract EETH {
