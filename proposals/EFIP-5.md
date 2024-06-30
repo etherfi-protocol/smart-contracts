@@ -49,7 +49,7 @@ contract EETH {
 
 ### Blacklist on `transfer`
 
-It introduces a blacklist mechanism on `transfer`. It will prevent the transfer of tokens to the blacklisted addresses. This will help to prevent the funds from being sent to the malicious contracts or addresses.
+It introduces a blacklist mechanism on `transfer`. It will prevent the transfer of tokens to and from blacklisted addresses. This will help to prevent the funds from being sent to the malicious contracts or addresses.
 
 Note that [USDCv2](https://etherscan.io/address/0x43506849d7c04f9138d1a2050bbf3a0c054402dd#code) by Circle implements the blacklist.
 
