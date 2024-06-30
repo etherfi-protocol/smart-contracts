@@ -60,7 +60,7 @@ contract EETH {
     mapping(address => bool) public blacklisted;
 
     function _transfer(address _sender, address _recipient, uint256 _amount) internal {
-        require(!blacklisted[_sender] || !blacklisted[_recipient], "EETH: blacklisted address");
+        require(!blacklisted[_sender] && !blacklisted[_recipient], "EETH: blacklisted address");
 
         ...
     }
