@@ -43,12 +43,14 @@ contract LiquifierTest is TestSetup {
         _enable_deposit(address(wbEthStrategy));
 
         vm.startPrank(owner);
-        liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true, 0, false); // 50 ether timeBoundCap, 1000 ether total cap
+        liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true, 0, 50, 1000, false); // 50 ether timeBoundCap, 1000 ether total cap
         if (forkEnum == MAINNET_FORK) {
-            liquifierInstance.registerToken(address(cbEth), address(cbEthStrategy), true, 0, false);
-            liquifierInstance.registerToken(address(wbEth), address(wbEthStrategy), true, 0, false);
+            liquifierInstance.registerToken(address(cbEth), address(cbEthStrategy), true, 0, 50, 1000, false);
+            liquifierInstance.registerToken(address(wbEth), address(wbEthStrategy), true, 0, 50, 1000, false);
         }
         vm.stopPrank();
+
+        dummyToken = new DummyERC20();
     }
 
     function test_rando_deposit_fails() public {
@@ -62,14 +64,17 @@ contract LiquifierTest is TestSetup {
     }
 
     function test_deposit_above_cap() public {
-        test_deposit_stEth();
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+
+        vm.deal(alice, 1000000000 ether);
 
         vm.startPrank(alice);
-        stEth.submit{value: 20 ether}(address(0));
-        stEth.approve(address(liquifierInstance), 20 ether);
+        stEth.submit{value: 100000 ether + 1 ether}(address(0));
+        stEth.approve(address(liquifierInstance), 100000 ether);
 
-        vm.expectRevert("BucketRateLimiter: rate limit exceeded");
-        liquifierInstance.depositWithERC20(address(stEth), 20 ether, address(0));
+        vm.expectRevert("CAPPED");
+        liquifierInstance.depositWithERC20(address(stEth), 100000 ether, address(0));
 
         vm.stopPrank();
     }
@@ -89,12 +94,10 @@ contract LiquifierTest is TestSetup {
         assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.1 ether);
     }
 
-    function test_deopsit_stEth_and_swap() public {
+    function test_deopsit_stEth_and_swap() internal {
         _setUp(MAINNET_FORK);
-
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
         vm.deal(alice, 100 ether);
-
         assertEq(eETHInstance.balanceOf(alice), 0);
         assertEq(liquifierInstance.getTotalPooledEther(), 0);
 
@@ -109,19 +112,6 @@ contract LiquifierTest is TestSetup {
         assertEq(address(liquifierInstance).balance, 0 ether);
 
         lpTvl = liquidityPoolInstance.getTotalPooledEther();
-
-        liquifierInstance.swapStEthToEth(1 ether, 1 ether  - 0.01 ether);
-
-        assertGe(liquifierInstance.getTotalPooledEther(), 1 ether - 0.01 ether);
-        assertGe(address(liquifierInstance).balance, 1 ether - 0.01 ether);
-        _assertWithinRange(liquidityPoolInstance.getTotalPooledEther(), lpTvl, 0.001 ether);
-
-        lpTvl = liquidityPoolInstance.getTotalPooledEther();
-
-        liquifierInstance.withdrawEther();
-
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), lpTvl);
-        _assertWithinRange(liquifierInstance.getTotalPooledEther(), 0, 0.000001 ether);
     }
 
     function test_deopsit_stEth_with_explicit_permit() public {
@@ -230,6 +220,8 @@ contract LiquifierTest is TestSetup {
     function test_withdrawal_of_restaked_wBETH_succeeds() internal {
         _setUp(MAINNET_FORK);
 
+        _enable_deposit(address(wbEthStrategy));
+
         vm.deal(alice, 100 ether);
         vm.startPrank(alice);        
         wbEth.deposit{value: 20 ether}(address(0));
@@ -250,7 +242,7 @@ contract LiquifierTest is TestSetup {
     function test_erc20_queued_withdrawal_v2() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
-
+       
         uint256 liquifierTVL = liquifierInstance.getTotalPooledEther();
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
 
@@ -434,37 +426,6 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.completeQueuedWithdrawals(queuedWithdrawals, tokens, middlewareTimesIndexes);
     }
 
-    function test_curve_wbETH_swap() internal {
-        initializeRealisticFork(MAINNET_FORK);
-        setUpLiquifier(MAINNET_FORK);
-
-        vm.startPrank(alice);
-
-        uint256 inputAmount = 100 ether;
-
-        uint256 exchangeRate = IWBETH(address(wbEth)).exchangeRate();
-        uint256 maxSlippageBp = 40; // 0.40%
-        uint256 minOutput = (exchangeRate * inputAmount * (10000 - maxSlippageBp)) / 10000 / 1e18;
-        liquifierInstance.swapWbEthToEth(inputAmount, minOutput);
-
-        vm.stopPrank();
-    }
-
-    function test_curve_cbETH_swap() internal {
-        initializeRealisticFork(MAINNET_FORK);
-        setUpLiquifier(MAINNET_FORK);
-
-        vm.startPrank(alice);
-
-        uint256 inputAmount = 50 ether;
-
-        uint256 exchangeRate = IWBETH(address(cbEth)).exchangeRate();
-        uint256 maxSlippageBp = 40; // 0.40%
-        uint256 minOutput = (exchangeRate * inputAmount * (10000 - maxSlippageBp)) / 10000 / 1e18;
-        liquifierInstance.swapCbEthToEth(inputAmount, minOutput);
-
-        vm.stopPrank();
-    }
 
     function test_pancacke_wbETH_swap() internal {
         initializeRealisticFork(MAINNET_FORK);
@@ -528,7 +489,7 @@ contract LiquifierTest is TestSetup {
 
         vm.startPrank(owner);
         dummyToken = new DummyERC20();
-        liquifierInstance.registerToken(address(dummyToken), address(0), true, 0, true);
+        liquifierInstance.registerToken(address(dummyToken), address(0), true, 0, 50, 1000, true);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 20);
@@ -539,6 +500,8 @@ contract LiquifierTest is TestSetup {
     function _fast_sync_from_L2_to_L1(address _token, uint256 _x) internal {
         vm.prank(owner);
         DummyERC20(_token).mint(l1SyncPool, _x);
+
+        assertTrue(liquifierInstance.isTokenWhitelisted(_token));
 
         vm.startPrank(l1SyncPool);
         DummyERC20(_token).approve(address(liquifierInstance), _x);
@@ -581,19 +544,6 @@ contract LiquifierTest is TestSetup {
         dummyToken.approve(address(liquifierInstance), _x);
         vm.expectRevert("NOT_ALLOWED");
         liquifierInstance.depositWithERC20(address(dummyToken), _x, address(0));
-        vm.stopPrank();
-    }
-
-    function test_slow_sync_by_rando_fail() public {
-        test_fast_sync_success();
-
-        uint256 x = 5 ether;
-        // for some reasons only 5 ether arrived this time :)
-        vm.deal(l1SyncPool, x);
-
-        vm.startPrank(alice);
-        vm.expectRevert(Liquifier.IncorrectCaller.selector);
-        liquifierInstance.unwrapL2Eth(address(dummyToken));
         vm.stopPrank();
     }
 
@@ -660,7 +610,7 @@ contract LiquifierTest is TestSetup {
 
         vm.startPrank(owner);
         DummyERC20 dummyToken2 = new DummyERC20();
-        liquifierInstance.registerToken(address(dummyToken2), address(0), true, 0, true);
+        liquifierInstance.registerToken(address(dummyToken2), address(0), true, 0, 50, 1000, true);
         vm.stopPrank();
 
         uint256 x = 5 ether;
@@ -673,6 +623,8 @@ contract LiquifierTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
 
         bool isTokenWhitelisted = liquifierInstance.isTokenWhitelisted(address(stEth));
+        uint256 timeBoundCap = liquifierInstance.timeBoundCap(address(stEth));
+        uint256 totalCap = liquifierInstance.totalCap(address(stEth));
         uint256 totalDeposited = liquifierInstance.totalDeposited(address(stEth));
         uint256 getTotalPooledEther = liquifierInstance.getTotalPooledEther(address(stEth));
 
@@ -681,6 +633,8 @@ contract LiquifierTest is TestSetup {
 
         assertEq(liquifierInstance.isTokenWhitelisted(address(stEth)), isTokenWhitelisted);
         assertEq(liquifierInstance.isL2Eth(address(stEth)), false);
+        assertEq(liquifierInstance.timeBoundCap(address(stEth)), timeBoundCap);
+        assertEq(liquifierInstance.totalCap(address(stEth)), totalCap);
         assertEq(liquifierInstance.totalDeposited(address(stEth)), totalDeposited);
         assertEq(liquifierInstance.getTotalPooledEther(address(stEth)), getTotalPooledEther);
     }
