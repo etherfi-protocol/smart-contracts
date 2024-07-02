@@ -38,6 +38,10 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     bytes[] validatorFieldsProofs;
     bytes32[][] validatorFields;
 
+    event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
+    event WithdrawalQueued(bytes32 withdrawalRoot, IDelegationManager.Withdrawal withdrawal);
+
+
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
 
@@ -79,8 +83,131 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.startPrank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(address(newNodeImpl));
         vm.stopPrank();
+    }
+
+    // better forking experience for cases when you have nested tests because of solidity stack limits
+    mapping(string => uint256) createdForks;
+
+    function createOrSelectFork(string memory forkURL) public {
+        if (createdForks[forkURL] == 0) {
+            createdForks[forkURL] = vm.createFork(forkURL);
+        }
+        vm.selectFork(createdForks[forkURL]);
+
+        // upgrade fork to latest version of code
+        address newManagerImpl = address(new EtherFiNodesManager());
+        address newNodeImpl = address(new EtherFiNode());
+        vm.prank(managerInstance.owner());
+        managerInstance.upgradeTo(newManagerImpl);
+        vm.prank(stakingManagerInstance.owner());
+        stakingManagerInstance.upgradeEtherFiNode(newNodeImpl);
+    }
+
+    function test_fullWithdraw_812() public {
+
+        createOrSelectFork(vm.envString("HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL"));
+
+        uint256 validatorId = 812;
+
+        address admin = managerInstance.owner();
+        EtherFiNode node = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
+        IEigenPod pod = IEigenPod(node.eigenPod());
+
+        uint256 nodeBalanceBeforeWithdrawal = address(node).balance;
+
+        // at stack limit so need to subdivide tests
+        vm.prank(admin);
+        test_completeQueuedWithdrawal_812();
+
+        console2.log("blah:", nodeBalanceBeforeWithdrawal, address(node).balance);
+
+        assertEq(address(node).balance, nodeBalanceBeforeWithdrawal + 32 ether, "Balance did not increase as expected");
+
+    }
+
+    // This test hits the local variable stack limit. You can call this test as a starting point for additional
+    // tests of the the withdrawal flow
+    function test_completeQueuedWithdrawal_812() public {
+        createOrSelectFork(vm.envString("HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL"));
+
+        IDelegationManager delegationManager = managerInstance.delegationManager();
+
+        uint256 validatorId = 812;
+
+        uint256[] memory validatorIds = new uint256[](1);
+        uint32[] memory exitTimestamps = new uint32[](1);
+        validatorIds[0] = validatorId;
+        exitTimestamps[0] = 20206627;
+
+        address admin = managerInstance.owner();
+        EtherFiNode node = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
+        IEigenPod pod = IEigenPod(node.eigenPod());
+        console2.log("hasRestaked:", pod.hasRestaked());
 
 
+        // Gather all fields required for recreating the Withdrawal struct. Quite a complicated object.
+        // Our proof infra will be able to grab these fields by enumerating the DelegationManager.WithdrawalQueued event
+
+        // only withdrawing eth not LSTs
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = delegationManager.beaconChainETHStrategy();
+
+        // All shares proven by full withdrawal proof that wasn't immediately queued into delayedWithdrawalRouter
+        // I believe this should always be exactly 32 eth per validator unless the validator had been slashed.
+        // All the partial withdrawals including the partial portion of the full withdrawal were immediately queued into delayedWithdrawalRouter
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = uint256(pod.withdrawableRestakedExecutionLayerGwei()) * 1 gwei;
+
+        // how many withdrawals initiated by this eigenpod
+        uint256 nonce = delegationManager.cumulativeWithdrawalsQueued(address(node));
+
+        // block the original withdrawal was queued
+        uint32 startBlock = 20216438;
+
+        IDelegationManager.Withdrawal memory withdrawal = IDelegationManager.Withdrawal({
+            staker: address(node),
+            delegatedTo: address(0x5b9B3Cf0202a1a3Dc8f527257b7E6002D23D8c85),
+            withdrawer: address(node),
+            nonce: nonce,
+            startBlock: startBlock,
+            strategies: strategies,
+            shares: shares
+        });
+
+        // withdrawal root is hash of the withdrawal object, "keccak256(abi.encode(withdrawal));"
+        bytes32 withdrawalRoot = delegationManager.calculateWithdrawalRoot(withdrawal);
+        assertEq(withdrawalRoot, 0x8a9e9fe2cb3ce091210d7b101553268a94c23f0d1f93b52ea3c04467731a9390);
+
+        // ensure emitted event matches our simulation
+        vm.expectEmit(false, false, false, true);
+        emit WithdrawalQueued(withdrawalRoot, withdrawal);
+
+        // check the event emitted by our contracts
+        bytes32[] memory withdrawalRoots = new bytes32[](1);
+        withdrawalRoots[0] = withdrawalRoot;
+        vm.expectEmit(true, true, false, true);
+        emit QueuedRestakingWithdrawal(validatorId, address(node), withdrawalRoots);
+
+        // actual exit call that will result in the both of the above events and the queuing of the withdrawal
+        vm.prank(admin);
+        managerInstance.processNodeExit(validatorIds, exitTimestamps);
+
+        // prepare to trigger claim from EtherfiNodesManager
+        uint256[] memory middlewareTimeIndexes = new uint256[](1); // currently unused by eigenlayer
+        IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+        withdrawals[0] = withdrawal;
+
+        // claim should fail because not enough time has passed
+        vm.expectRevert("DelegationManager._completeQueuedWithdrawal: minWithdrawalDelayBlocks period has not yet passed");
+        vm.prank(admin);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimeIndexes);
+
+        // wait 7 days
+        vm.roll(block.number + 7200 * 7);
+
+        // complete the withdrawal to the pod
+        vm.prank(admin);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimeIndexes);
     }
 
     function _setWithdrawalCredentialParams() public {
