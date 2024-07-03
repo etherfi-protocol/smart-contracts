@@ -47,6 +47,7 @@ import "../src/EtherFiOracle.sol";
 import "../src/EtherFiAdmin.sol";
 import "../src/EtherFiTimelock.sol";
 
+import "../src/BucketRateLimiter.sol";
 
 contract TestSetup is Test {
 
@@ -399,7 +400,7 @@ contract TestSetup is Test {
 
         vm.warp(block.timestamp + 1 days);
 
-        liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
+        // liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
 
         vm.stopPrank();
     }
