@@ -47,6 +47,8 @@ import "../src/EtherFiOracle.sol";
 import "../src/EtherFiAdmin.sol";
 import "../src/EtherFiTimelock.sol";
 
+import "../src/BucketRateLimiter.sol";
+
 contract TestSetup is Test {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
@@ -394,7 +396,7 @@ contract TestSetup is Test {
 
         vm.warp(block.timestamp + 1 days);
 
-        liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
+        // liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
 
         vm.stopPrank();
     }
