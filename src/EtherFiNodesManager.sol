@@ -68,6 +68,9 @@ contract EtherFiNodesManager is
 
     mapping(address => bool) public eigenLayerOperatingAdmin;
 
+    mapping(address => mapping(bytes4 => bool)) public allowedOperatorCalls;
+
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------

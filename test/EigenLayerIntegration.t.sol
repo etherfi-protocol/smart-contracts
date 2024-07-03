@@ -40,6 +40,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
     event WithdrawalQueued(bytes32 withdrawalRoot, IDelegationManager.Withdrawal withdrawal);
+    event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
 
 
     function setUp() public {
@@ -108,7 +109,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         createOrSelectFork(vm.envString("HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL"));
 
         uint256 validatorId = 812;
-
         address admin = managerInstance.owner();
         EtherFiNode node = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
         IEigenPod pod = IEigenPod(node.eigenPod());
@@ -116,13 +116,17 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         uint256 nodeBalanceBeforeWithdrawal = address(node).balance;
 
         // at stack limit so need to subdivide tests
-        vm.prank(admin);
         test_completeQueuedWithdrawal_812();
-
-        console2.log("blah:", nodeBalanceBeforeWithdrawal, address(node).balance);
 
         assertEq(address(node).balance, nodeBalanceBeforeWithdrawal + 32 ether, "Balance did not increase as expected");
 
+        // my arbitrarily picked timestamp causes node operator to be fully punished
+        // important property is just that funds flow successfully to appropriate parties
+        vm.expectEmit(true, true, false, true);
+        emit FullWithdrawal(validatorId, address(node), 0, 30026957263471875000, 2002788682428125000, 3305105100000000);
+        managerInstance.fullWithdraw(validatorId);
+
+        assertEq(address(node).balance, 0, "funds did not get withdrawn as expected");
     }
 
     // This test hits the local variable stack limit. You can call this test as a starting point for additional
@@ -142,8 +146,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         address admin = managerInstance.owner();
         EtherFiNode node = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
         IEigenPod pod = IEigenPod(node.eigenPod());
-        console2.log("hasRestaked:", pod.hasRestaked());
-
 
         // Gather all fields required for recreating the Withdrawal struct. Quite a complicated object.
         // Our proof infra will be able to grab these fields by enumerating the DelegationManager.WithdrawalQueued event
