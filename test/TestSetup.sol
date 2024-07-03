@@ -47,6 +47,7 @@ import "../src/EtherFiOracle.sol";
 import "../src/EtherFiAdmin.sol";
 import "../src/EtherFiTimelock.sol";
 
+
 contract TestSetup is Test {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
@@ -168,6 +169,8 @@ contract TestSetup is Test {
 
     EtherFiNode public node;
     Treasury public treasuryInstance;
+
+    IERC20 public ethfiToken;
 
     Attacker public attacker;
     RevertAttacker public revertAttacker;
@@ -321,6 +324,8 @@ contract TestSetup is Test {
             eigenLayerEigenPodManager = IEigenPodManager(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
             eigenLayerDelegationManager = IDelegationManager(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
             eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
+
+            ethfiToken = IERC20(0xFe0c30065B384F05761f15d0CC899D4F9F9Cc0eB);
 
         } else if (forkEnum == TESTNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("TESTNET_RPC_URL")));
