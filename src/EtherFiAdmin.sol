@@ -21,6 +21,10 @@ interface IEtherFiPausable {
 
 contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
+    struct AdminTask {
+        bytes32 operationHash;
+    }
+
     IEtherFiOracle public etherFiOracle;
     IStakingManager public stakingManager;
     IAuctionManager public auctionManager;
@@ -41,6 +45,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint32 public lastAdminExecutionBlock;
 
     mapping(address => bool) public pausers;
+
+    mapping(string => AdminTask[]) public pendingAdminOperations;
 
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
@@ -153,7 +159,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         numValidatorsToSpinUp = _report.numValidatorsToSpinUp;
 
         _handleAccruedRewards(_report);
-        _handleValidators(_report, _pubKey, _signature);
+        _handleValidators(reportHash, _report, _pubKey, _signature);
         _handleWithdrawals(_report);
         _handleTargetFundsAllocations(_report);
 
@@ -162,6 +168,31 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         lastAdminExecutionBlock = uint32(block.number);
 
         emit AdminOperationsExecuted(msg.sender, reportHash);
+    }
+
+    // Process `liquidityPool.batchApproveRegistration` for the last task in the pending queue
+    function AdminTask_ApproveValidators(bytes32 _reportHash, uint256[] memory _validatorsToApprove, bytes[] calldata _pubKey, bytes[] calldata _signature) external isAdmin() {
+        AdminTask memory task = _dequeuePendingTask("validatorsToApprove");
+
+        require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
+        require(task.operationHash == keccak256(abi.encode(_reportHash, _validatorsToApprove, _pubKey, _signature)), "EtherFiAdmin: invalid task");
+
+        liquidityPool.batchApproveRegistration(_validatorsToApprove, _pubKey, _signature);
+    }
+
+    // FIFO is better?
+    // should we support random-access so that the admin can process the pending transactions in any order?
+    function _dequeuePendingTask(string memory _operation) internal returns (AdminTask memory) {
+        AdminTask[] storage tasks = pendingAdminOperations[_operation];
+        require(tasks.length > 0, "EtherFiAdmin: no pending tasks");
+
+        AdminTask memory task = tasks[tasks.length - 1];
+        tasks.pop();
+    }
+
+    function _enqueueAdminTask(string memory _operation, bytes32 _operationHash) internal {
+        AdminTask memory op = AdminTask(_operationHash);
+        pendingAdminOperations[_operation].push(op);
     }
 
     function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report) internal {
@@ -189,25 +220,48 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         membershipManager.rebase(_report.accruedRewards);
     }
 
-    function _handleValidators(IEtherFiOracle.OracleReport calldata _report, bytes[] calldata _pubKey, bytes[] calldata _signature) internal {
+    function _enqueueAdminTask_ApproveValidators(bytes32 _reportHash, uint256[] memory _validatorsToApprove, bytes[] calldata _pubKey, bytes[] calldata _signature) internal {
+        /// @dev I had to hard-code the batchSize to 25 because of the stack too deep error
+        // uint256 batchSize = 25;
+
+        uint256 numBatches = (_validatorsToApprove.length + 25 - 1) / 25;
+        for (uint256 i = 0; i < numBatches; i++) {
+            uint256 start = i * 25;
+            uint256 end = (i + 1) * 25 > _validatorsToApprove.length ? _validatorsToApprove.length : (i + 1) * 25;
+
+            uint256[] memory validatorsToApproveBatch = new uint256[](end - start);
+            bytes[] memory pubKeyBatch = new bytes[](end - start);
+            bytes[] memory signatureBatch = new bytes[](end - start);
+            for (uint256 j = start; j < end; j++) {
+                validatorsToApproveBatch[j - start] = _validatorsToApprove[j];
+                pubKeyBatch[j - start] = _pubKey[j];
+                signatureBatch[j - start] = _signature[j];
+            }
+
+            _enqueueAdminTask("validatorsToApprove", keccak256(abi.encode(_reportHash, validatorsToApproveBatch, pubKeyBatch, signatureBatch)));
+        }
+    }
+
+    function _handleValidators(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report, bytes[] calldata _pubKey, bytes[] calldata _signature) internal {
         // validatorsToApprove
         if (_report.validatorsToApprove.length > 0) {
-            liquidityPool.batchApproveRegistration(_report.validatorsToApprove, _pubKey, _signature);
+            _enqueueAdminTask_ApproveValidators(_reportHash, _report.validatorsToApprove,  _pubKey, _signature);
+            // liquidityPool.batchApproveRegistration(_report.validatorsToApprove, _pubKey, _signature);
         }
 
         // liquidityPoolValidatorsToExit
         if (_report.liquidityPoolValidatorsToExit.length > 0) {
-            liquidityPool.sendExitRequests(_report.liquidityPoolValidatorsToExit);
+            // liquidityPool.sendExitRequests(_report.liquidityPoolValidatorsToExit);
         }
 
         // exitedValidators
         if (_report.exitedValidators.length > 0) {
-            etherFiNodesManager.processNodeExit(_report.exitedValidators, _report.exitedValidatorsExitTimestamps);
+            // etherFiNodesManager.processNodeExit(_report.exitedValidators, _report.exitedValidatorsExitTimestamps);
         }
 
         // slashedValidators
         if (_report.slashedValidators.length > 0) {
-            etherFiNodesManager.markBeingSlashed(_report.slashedValidators);
+            // etherFiNodesManager.markBeingSlashed(_report.slashedValidators);
         }
     }
 
