@@ -153,6 +153,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         numValidatorsToSpinUp = _report.numValidatorsToSpinUp;
 
         _handleAccruedRewards(_report);
+        _handleProtocolFees(_report);
         _handleValidators(_report, _pubKey, _signature);
         _handleWithdrawals(_report);
         _handleTargetFundsAllocations(_report);
@@ -164,8 +165,14 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit AdminOperationsExecuted(msg.sender, reportHash);
     }
 
+    //protocol owns the eth that was distributed to NO and treasury in eigenpods and etherfinodes 
+    function _handleProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal { 
+        require(_report.protocolFees >= 0, "EtherFiAdmin: protocol fees can't be negative");
+        liquidityPool.payProtocolFees(_report.protocolFees);
+    }
+
     function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report) internal {
-        if (_report.accruedRewards == 0) {
+        if (_report.protocolAccruedRewards == 0) {
             return;
         }
 
@@ -181,12 +188,12 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         int256 currentTVL = int128(uint128(liquidityPool.getTotalPooledEther()));
         int256 apr;
         if (currentTVL > 0) {
-            apr = 10000 * (_report.accruedRewards * 365 days) / (currentTVL * elapsedTime);
+            apr = 10000 * (_report.protocolAccruedRewards * 365 days) / (currentTVL * elapsedTime);
         }
         int256 absApr = (apr > 0) ? apr : - apr;
         require(absApr <= acceptableRebaseAprInBps, "EtherFiAdmin: TVL changed too much");
 
-        membershipManager.rebase(_report.accruedRewards);
+        membershipManager.rebase(_report.protocolAccruedRewards);
     }
 
     function _handleValidators(IEtherFiOracle.OracleReport calldata _report, bytes[] calldata _pubKey, bytes[] calldata _signature) internal {

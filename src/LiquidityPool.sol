@@ -23,6 +23,7 @@ import "./interfaces/IEtherFiAdmin.sol";
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/ILiquifier.sol";
 import "forge-std/console.sol";
+import "forge-std/StdMath.sol";
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
     //--------------------------------------------------------------------------------------
@@ -42,6 +43,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     uint128 public totalValueInLp;
 
     address public DEPRECATED_admin;
+    address public treasury;
 
     uint32 public numPendingDeposits; // number of validator deposits, which needs 'registerValidator'
 
@@ -462,10 +464,27 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
     }
 
+    function payProtocolFees(int128 _protocolFees) public {
+        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
+        uint256 absProtocolFees = stdMath.abs(_protocolFees);
+        uint256 treasuryShares = sharesForAmount(absProtocolFees);
+        stdMath.abs(_protocolFees);
+        totalValueOutOfLp = uint128(int128(totalValueOutOfLp) + _protocolFees);
+        if(_protocolFees > 0) {
+            eETH.mintShares(treasury, treasuryShares);
+        } else {
+            eETH.burnShares(treasury, treasuryShares);
+        }
+    }
+
+    function setTreasury(address _treasury) external onlyAdmin {
+        treasury = _treasury;
+    }
+
     /// @notice Whether or not nodes created via bNFT deposits should be restaked
     function setRestakeBnftDeposits(bool _restake) external onlyAdmin {
         restakeBnftDeposits = _restake;
-    }
+}
 
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
