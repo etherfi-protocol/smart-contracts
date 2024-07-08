@@ -73,8 +73,8 @@ interface IEtherFiNode {
     function processFullWithdraw(uint256 _validatorId) external;
     function queueEigenpodFullWithdrawal() external returns (bytes32[] memory withdrawalRoots);
     function queuePhase1PartialWithdrawal() external;
-    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes) external;
-    function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, uint256 middlewareTimesIndexes) external;
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes, bool _receiveAsTokens) external;
+    function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, uint256 middlewareTimesIndexes, bool _receiveAsTokens) external;
     function updateNumberOfAssociatedValidators(uint16 _up, uint16 _down) external;
     function updateNumExitedValidators(uint16 _up, uint16 _down) external;
     function registerValidator(uint256 _validatorId, bool _enableRestaking) external;

@@ -189,10 +189,10 @@ contract EtherFiNodesManager is
         }
     }
 
-    function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes) external {
+    function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes, bool _receiveAsTokens) external onlyEigenLayerOperatingAdmin {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address etherfiNode = etherfiNodeAddress[_validatorIds[i]];
-            IEtherFiNode(etherfiNode).completeQueuedWithdrawal(withdrawals[i], middlewareTimesIndexes[i]);
+            IEtherFiNode(etherfiNode).completeQueuedWithdrawal(withdrawals[i], middlewareTimesIndexes[i], _receiveAsTokens);
         }
     }
 
