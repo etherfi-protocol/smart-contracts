@@ -32,6 +32,7 @@ import "../src/WeETH.sol";
 import "../src/MembershipManager.sol";
 import "../src/MembershipNFT.sol";
 import "../src/EarlyAdopterPool.sol";
+import "../src/RoleRegistry.sol";
 import "../src/TVLOracle.sol";
 import "../src/UUPSProxy.sol";
 import "../src/WithdrawRequestNFT.sol";
@@ -168,6 +169,9 @@ contract TestSetup is Test {
 
     EtherFiNode public node;
     Treasury public treasuryInstance;
+
+    RoleRegistry public roleRegistry;
+    RoleRegistry public roleRegistryImplementation;
 
     Attacker public attacker;
     RevertAttacker public revertAttacker;
@@ -398,6 +402,7 @@ contract TestSetup is Test {
 
         vm.stopPrank();
     }
+
 
     function setUpTests() internal {
         vm.startPrank(owner);
@@ -688,7 +693,6 @@ contract TestSetup is Test {
         stakingManagerInstance.registerTNFTContract(address(TNFTInstance));
         stakingManagerInstance.registerBNFTContract(address(BNFTInstance));
 
-
         depGen = new DepositDataGeneration();
 
         attacker = new Attacker(address(liquidityPoolInstance));
@@ -703,6 +707,19 @@ contract TestSetup is Test {
         _initializeEtherFiAdmin();
 
         admin = alice;
+
+        // configure starting roles
+        setupRoleRegistry();
+    }
+
+    function setupRoleRegistry() public {
+        roleRegistryImplementation = new RoleRegistry();
+
+        bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
+        roleRegistry = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
+
+        //vm.prank(admin);
+        //roleRegistry.initialize();
     }
 
     function _initOracleReportsforTesting() internal {
