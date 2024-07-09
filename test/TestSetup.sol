@@ -717,9 +717,6 @@ contract TestSetup is Test {
 
         bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
         roleRegistry = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
-
-        //vm.prank(admin);
-        //roleRegistry.initialize();
     }
 
     function _initOracleReportsforTesting() internal {
