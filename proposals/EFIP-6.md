@@ -18,10 +18,6 @@ The benefit of this proposal is that by having 1 address where execution layer +
 2. Remove functionality of partialWithdraw to transfer funds from withdrawal safe unless funds exit
 3. Create spilter contract that is able to spilt bnft, liquidity pool and the treasury's execution layer rewards. 
 
-
-
-
-
 ## References
 WIP
 
