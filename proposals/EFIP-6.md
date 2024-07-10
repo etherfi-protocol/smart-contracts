@@ -1,4 +1,4 @@
-# [EFIP-6] Execution Rewards Optimization 
+# [EFIP-6] EL Rewards Directed to Spilter Contract
 
 **Author**: Vaibhav Valecha (vaibhav@ether.fi)
 
@@ -9,22 +9,23 @@
 The purpose of this EFIP is to optimize reward skimming which can be done by configuring all the validators to distribute execution layer rewards to a dedicated spilter contract that handles accepting execution layer rewards in eth and spilts the rewards to the bnft, liquidity pool and the treasury.
 
 ## Motivation
+Currently, for a validator, its execution layer rewards and MEV are sent to its withdrawal safe (ether.fi node) contract, and its consensus layer rewards are sent to its EigenPod contracts. The process of skimming rewards is coupled together, so the execution layer rewards and consensus layer rewards are skimmed at the same time. Therefore, to skim only the execution layer rewards, over 20,000 withdrawal safe contracts need to be skimmed, and due to the tight coupling, the consensus layer rewards also need to be skimmed resulting in prohibitively large gas cost. 
 
-The benefit of this proposal is that it optimizes gas costs by allowing us to skim execution layer rewards from one address instead of transferring execution rewards from all of our etherfinode contract to the desired address. With the current state of the contracts skimming the eigenpods and the etherficontracts tightly coupled therefore, eth must be transferred from eigenpods and etherfinodes at the same time, whereas with this proposal we could skim the execution layer rewards separatly. The gas cost to skim all execution layer rewards and consensus rewards in batches of 40 is 50K validator / 40 * 8M gas * 8gwei = 80eth. And we can say half of that cost is to withdraw the execution layer rewards. By having 1 address where execution layer rewards flow to from the validators then we only need to make 1 transaction to send all execution layer rewards to the treasury and the cost of that is negliable. Therefore, this solution will save the protocol 40eth per year which is equivalent to 40*$4000 = $160,000.
-
+The benefit of this proposal is that by having 1 address where execution layer + MEV rewards flow to from all validators and decoupling the the consensus and execution layer rewards we only require 1 transaction to distribute execution layer rewards. Therefore, this solution will save the protocol 40eth per year.
 
 ## Proposal
-1. Add functionality in liquidity pool to mint shares for treasury/EOA
+1. Have all node operator's configure their validator's to send their execution layer rewards to the spilter contract
+2. Remove functionality of partialWithdraw to transfer funds from withdrawal safe unless funds exit
+3. Create spilter contract that is able to spilt bnft, liquidity pool and the treasury's execution layer rewards. 
 
-2. Add call to the EtherfiAdmin to mint the shares
 
-3. Upgrade treasury to be able to transfer eeth (only required if we make it payout to treasury)
 
 
 
 ## References
+WIP
 
-This architecture of paying the treasury and node operators in ETH was inspired by Lido's protocol, which holds stETH in its treasury instead of ETH.
+
 
 ## Copyright
 
