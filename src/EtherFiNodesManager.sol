@@ -8,6 +8,7 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
+import "@openzeppelin/contracts/access/IAccessControl.sol";
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
@@ -36,7 +37,7 @@ contract EtherFiNodesManager is
 
     address public treasuryContract;
     address public stakingManagerContract;
-    address public DEPRECATED_protocolRevenueManagerContract;
+    IAccessControl public roleRegistry;
 
     // validatorId == bidId -> withdrawalSafeAddress
     mapping(uint256 => address) public etherfiNodeAddress;
@@ -44,13 +45,13 @@ contract EtherFiNodesManager is
     TNFT public tnft;
     BNFT public bnft;
     IAuctionManager public auctionManager;
-    IProtocolRevenueManager public DEPRECATED_protocolRevenueManager;
+    bytes32 public EIGENPOD_ADMIN_ROLE = keccak256("EIGENPOD_ADMIN_ROLE");
 
     RewardsSplit public stakingRewardsSplit;
     RewardsSplit public DEPRECATED_protocolRewardsSplit;
 
     address public DEPRECATED_admin;
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
 
     IEigenPodManager public eigenPodManager;
     IDelayedWithdrawalRouter public delayedWithdrawalRouter;
@@ -66,9 +67,10 @@ contract EtherFiNodesManager is
 
     IDelegationManager public delegationManager;
 
-    mapping(address => bool) public eigenLayerOperatingAdmin;
+    mapping(address => bool) public DEPRECATED_eigenLayerOperatingAdmin;
 
-    mapping(address => mapping(bytes4 => bool)) public allowedOperatorCalls;
+    // role -> function selector
+    mapping(bytes32 => mapping(bytes4 => bool)) public allowedForwardedEigenpodCalls;
 
 
     //--------------------------------------------------------------------------------------
@@ -162,7 +164,7 @@ contract EtherFiNodesManager is
     function processNodeExit(
         uint256[] calldata _validatorIds,
         uint32[] calldata _exitTimestamps
-    ) external onlyAdmin nonReentrant whenNotPaused {
+    ) external onlyRole(EIGENPOD_ADMIN_ROLE) nonReentrant whenNotPaused {
         if (_validatorIds.length != _exitTimestamps.length) revert InvalidParams();
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             uint256 _validatorId = _validatorIds[i];
@@ -746,11 +748,6 @@ contract EtherFiNodesManager is
 
     modifier onlyStakingManagerContract() {
         _onlyStakingManagerContract();
-        _;
-    }
-
-    modifier onlyAdmin() {
-        _requireAdmin();
         _;
     }
 
