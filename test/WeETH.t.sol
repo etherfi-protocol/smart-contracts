@@ -42,6 +42,7 @@ contract WeETHTest is TestSetup {
         //Approve the wrapped eth contract to spend 100 eEth
         eETHInstance.approve(address(weEthInstance), 100 ether);
         weEthInstance.wrap(5 ether);
+        vm.stopPrank();
 
         assertEq(weEthInstance.balanceOf(alice), 5 ether);
         assertEq(eETHInstance.balanceOf(alice), 5 ether);
@@ -288,5 +289,56 @@ contract WeETHTest is TestSetup {
         vm.startPrank(bob);
         weEthInstance.unwrap(1 ether);
         assertEq(eETHInstance.balanceOf(bob), 1.333333333333333332 ether);
+    }
+
+    function test_PermitWhitelistWeETH() public {
+        // allocationg weETH to alice
+        test_WrapWorksCorrectly();
+
+        // alice approves bob to spend 1 ether of weETH
+        bytes32 permitHash = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                weEthInstance.DOMAIN_SEPARATOR(),
+                keccak256(abi.encode(
+                    keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
+                    alice,
+                    address(bob),
+                    1 ether,
+                    weEthInstance.nonces(alice),
+                    block.timestamp
+                ))
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, permitHash);
+
+        vm.expectRevert("weETH: spender not whitelisted");
+        weEthInstance.permit(alice, bob, 1 ether, block.timestamp, v, r, s);
+
+        address[] memory whitelist = new address[](1);
+        whitelist[0] = bob;
+        vm.prank(owner);
+        weEthInstance.setWhitelistedSpender(whitelist, true);
+
+        weEthInstance.permit(alice, bob, 1 ether, block.timestamp, v, r, s);
+        vm.prank(bob);
+        weEthInstance.transferFrom(alice, bob, 1 ether);
+    }
+
+    function test_TransferBlacklistWeETH() public {
+        // allocationg weETH to alice
+        test_WrapWorksCorrectly();
+        
+        vm.prank(alice);
+        weEthInstance.transfer(bob, 1 ether);
+
+        vm.prank(owner);
+        address[] memory blacklist = new address[](1);
+        blacklist[0] = bob;
+        weEthInstance.setBlacklistedRecipient(blacklist, true);
+
+        vm.prank(alice);
+        vm.expectRevert("weETH: recipient blacklisted");
+        weEthInstance.transfer(bob, 1 ether);
     }
 }
