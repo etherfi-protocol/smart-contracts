@@ -1,4 +1,4 @@
-# [EFIP-4] Rewards Skimming Optimization 
+# [EFIP-4] Processing staking to {Treasury, Node Operators} in eETH
 
 **Author**: Vaibhav Valecha (vaibhav@ether.fi)
 
@@ -13,20 +13,19 @@ To address this, during the rebase operation, instead of minting shares of 90% o
 
 ## Motivation
 
-The benefit of this proposal is that it optimizes gas costs by allowing us to skim the etherfinode contracts and eigenpods at our discretion, whenever gas price are low and when we believe there is a sufficent amount of ether accumulated to the contracts. Furthermore it gives more clear visibility on how much rewards have been accumulated by the treasury. The required gas required for the partialWithdraw of 40 validator is 8,000,000. Therefore if we are skimming rewards quarter for half our validators to get the rewards to payout to node operators we are spending yearly: 25K validator / 40 * 8M gas * 8gwei * 4 times year = 160eth. Since with this optimization of paying the node operators in eeth we are not required to skimming the rewards on a quarter basis and we can just perform this operator once every year. Additionally, we have more choice on when we want to skim the rewards and are likely to skim consistently when gas is cheaper. If we skim once a year for all validator and adding the cost to mint shares to the treasury and assume a 25% gas reduction from the average price of 8gwei then the cost of skimming is: 50K validator / 40 * 8M gas * 6gwei * 1 time a year + 365 days * 8gwei * 100000 (gas required to deposit) =60eth. 
+Currently, every quarter we need to skim rewards from the withdrawal safes and eigenpods to pay the node operator. This results in high gas costs due to 40k contracts accumulating ETH that must be transferred to the treasury. Additionally, the need to perform skimming for node operator payouts reduces our flexibility on timing, preventing us from waiting for very low gas prices. Furthermore, tracking eth accrued to the treasury is not optimizable since 40k contract balance needs to be queried.
 
-Therefore, this optimization can help save the protocol 100eth per year which is approximately $400,000.
-
-
+Paying our node operators and the treasury in eETH reduces gas costs by allowing us to skim withdrawal safes and eigenpods at our discretion, when gas prices are low. This also allows us to skim annually instead of quarterly. If we skim annually and achieve a 25% lower gas price, we can reduce our gas costs by 80%. Additionally, minting eETH to the treasury during the rebase provides easy, daily updates on the accrued ETH for the treasury and node operators.
 
 
 ## Proposal
+To implement this proposal, we need to report the rewards accrued to the treasury and node operators and mint the corresponding amount of shares to the treasury during each rebase. Here are the steps to implement the proposal:
 
-1. Add functionality in liquidity pool to mint shares for treasury/EOA
-
-2. Add call to the EtherfiAdmin to mint the shares
-
-3. Upgrade treasury to be able to transfer eeth (only required if we make it payout to treasury)
+1. Add the rewards accrued for the treasury and node operators to the oracle report.  
+2. Add functionality in liquidity pool to mint shares for treasury/EOA
+3. Add call to the EtherfiAdmin to mint the shares within executeTask
+4. Add functionality for the treasury to transfer and withdraw eETH for ETH
+5. Call setStakingRewardsSplit to set the treasury's allocation to 0 and reallocate it to the tNFT.
 
 
 
