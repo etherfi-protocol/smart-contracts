@@ -21,8 +21,9 @@ interface IEtherFiPausable {
 
 contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
-    struct AdminTask {
-        bytes32 operationHash;
+    struct TaskStatus {
+        bool completed;
+        bool exists;
     }
 
     IEtherFiOracle public etherFiOracle;
@@ -46,10 +47,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     mapping(address => bool) public pausers;
 
-    mapping(string => AdminTask[]) public pendingAdminOperations;
+    mapping(bytes32 => TaskStatus) public ValidatorApprovalTaskStatus;
 
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
+    event ValidatorApprovalTaskCreated(bytes32 indexed _reportHash, uint256[] _validatorsToApprove);
+    event ValidatorApprovalTaskCompleted(bytes32 indexed _reportHash, uint256[] _validatorsToApprove);
+    event ValidatorApprovalTaskInvalidated(bytes32 indexed _reportHash, uint256[] _validatorsToApprove);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -171,28 +175,18 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     // Process `liquidityPool.batchApproveRegistration` for the last task in the pending queue
-    function AdminTask_ApproveValidators(bytes32 _reportHash, uint256[] memory _validatorsToApprove, bytes[] calldata _pubKey, bytes[] calldata _signature) external isAdmin() {
-        AdminTask memory task = _dequeuePendingTask("validatorsToApprove");
-
+    function AdminTask_ApproveValidatorTask(bytes32 _reportHash, uint256[] memory _validatorsToApprove, bytes[] calldata _pubKey, bytes[] calldata _signature) external isAdmin() {
         require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
-        require(task.operationHash == keccak256(abi.encode(_reportHash, _validatorsToApprove, _pubKey, _signature)), "EtherFiAdmin: invalid task");
+        require(ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, _validatorsToApprove))].exists, "EtherFiAdmin: task doesn't exist");
 
         liquidityPool.batchApproveRegistration(_validatorsToApprove, _pubKey, _signature);
+        ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, _validatorsToApprove))].completed = true;
+        emit ValidatorApprovalTaskCompleted(_reportHash, _validatorsToApprove);
     }
 
-    // FIFO is better?
-    // should we support random-access so that the admin can process the pending transactions in any order?
-    function _dequeuePendingTask(string memory _operation) internal returns (AdminTask memory) {
-        AdminTask[] storage tasks = pendingAdminOperations[_operation];
-        require(tasks.length > 0, "EtherFiAdmin: no pending tasks");
-
-        AdminTask memory task = tasks[tasks.length - 1];
-        tasks.pop();
-    }
-
-    function _enqueueAdminTask(string memory _operation, bytes32 _operationHash) internal {
-        AdminTask memory op = AdminTask(_operationHash);
-        pendingAdminOperations[_operation].push(op);
+    function AdminTask_InvalidateValidatorTask(bytes32 _reportHash, uint256[] calldata validatorsToApprove) internal {
+        ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, validatorsToApprove))].exists = false;
+        emit ValidatorApprovalTaskCompleted(_reportHash, validatorsToApprove);
     }
 
     function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report) internal {
@@ -220,7 +214,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         membershipManager.rebase(_report.accruedRewards);
     }
 
-    function _enqueueAdminTask_ApproveValidators(bytes32 _reportHash, uint256[] memory _validatorsToApprove, bytes[] calldata _pubKey, bytes[] calldata _signature) internal {
+    function _batchAdminTask_ApproveValidators(bytes32 _reportHash, uint256[] memory _validatorsToApprove) internal {
         /// @dev I had to hard-code the batchSize to 25 because of the stack too deep error
         // uint256 batchSize = 25;
 
@@ -234,18 +228,16 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             bytes[] memory signatureBatch = new bytes[](end - start);
             for (uint256 j = start; j < end; j++) {
                 validatorsToApproveBatch[j - start] = _validatorsToApprove[j];
-                pubKeyBatch[j - start] = _pubKey[j];
-                signatureBatch[j - start] = _signature[j];
             }
-
-            _enqueueAdminTask("validatorsToApprove", keccak256(abi.encode(_reportHash, validatorsToApproveBatch, pubKeyBatch, signatureBatch)));
+            ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, _validatorsToApprove))].exists = true;
+            emit ValidatorApprovalTaskAdded(keccak256(_reportHash, validatorsToApproveBatch));
         }
     }
 
     function _handleValidators(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report, bytes[] calldata _pubKey, bytes[] calldata _signature) internal {
         // validatorsToApprove
         if (_report.validatorsToApprove.length > 0) {
-            _enqueueAdminTask_ApproveValidators(_reportHash, _report.validatorsToApprove,  _pubKey, _signature);
+            _batchAdminTask_ApproveValidators(_reportHash, _report.validatorsToApprove);
             // liquidityPool.batchApproveRegistration(_report.validatorsToApprove, _pubKey, _signature);
         }
 
