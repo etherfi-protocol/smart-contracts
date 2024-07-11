@@ -21,7 +21,7 @@ The existing timelock will remain in place to handle the most critical actions, 
 
 	1. Deploy OpenZeppelin Access Control v5
     2. Configure Access Control contract to have permission to unpausing smart contracts with a 15 minute timelock
-	3.	Maintaining the 3-day timelock for other critical actions, such as contract upgrades.
+	3. Maintaining the 3-day timelock for other critical actions, such as contract upgrades.
 
 ## References
 
