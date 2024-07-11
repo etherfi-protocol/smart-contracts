@@ -95,6 +95,8 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         }
         vm.selectFork(createdForks[forkURL]);
 
+
+
         // upgrade fork to latest version of code
         address newManagerImpl = address(new EtherFiNodesManager());
         address newNodeImpl = address(new EtherFiNode());
@@ -102,11 +104,13 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         managerInstance.upgradeTo(newManagerImpl);
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(newNodeImpl);
+
     }
 
     function test_fullWithdraw_812() public {
 
         createOrSelectFork(vm.envString("HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL"));
+
 
         uint256 validatorId = 812;
         address admin = managerInstance.owner();
@@ -133,6 +137,9 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     // tests of the the withdrawal flow
     function test_completeQueuedWithdrawal_812() public {
         createOrSelectFork(vm.envString("HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL"));
+
+        // tenderly fork was made before role updates so update here
+        setupRoleRegistry();
 
         IDelegationManager delegationManager = managerInstance.delegationManager();
 

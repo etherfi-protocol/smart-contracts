@@ -594,7 +594,7 @@ contract TestSetup is Test {
         */
 
         vm.startPrank(owner);
-        managerInstance.initializeRoleRegistry(address(roleRegistry));
+        managerInstance.setRoleRegistry(address(roleRegistry));
         membershipManagerInstance.updateAdmin(alice, true);
         membershipNftInstance.updateAdmin(alice, true);
         withdrawRequestNFTInstance.updateAdmin(alice, true);
@@ -730,7 +730,15 @@ contract TestSetup is Test {
         roleRegistry.grantRole(managerInstance.EXTERNAL_CALLER_ROLE(), admin);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), admin);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), admin);
+        roleRegistry.grantRole(managerInstance.NODE_ADMIN_ROLE(), owner);
+        roleRegistry.grantRole(managerInstance.EIGENPOD_CALLER_ROLE(), owner);
+        roleRegistry.grantRole(managerInstance.EXTERNAL_CALLER_ROLE(), owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), owner);
         vm.stopPrank();
+
+        vm.prank(owner);
+        managerInstance.setRoleRegistry(address(roleRegistry));
     }
 
     function _initOracleReportsforTesting() internal {

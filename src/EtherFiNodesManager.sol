@@ -149,10 +149,6 @@ contract EtherFiNodesManager is
         delegationManager = IDelegationManager(_delegationManager);
     }
 
-    function initializeRoleRegistry(address _roleRegistry) external onlyOwner {
-        require(address(roleRegistry) == address(0x00), "already initialized role registry");
-        roleRegistry = RoleRegistry(_roleRegistry);
-    }
 
     /// @notice Send the request to exit the validators as their T-NFT holder
     ///         The B-NFT holder must serve the request otherwise their bond will get penalized gradually
@@ -459,6 +455,10 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  SETTER   --------------------------------------
     //--------------------------------------------------------------------------------------
+
+    function setRoleRegistry(address _roleRegistry) external onlyOwner {
+        roleRegistry = RoleRegistry(_roleRegistry);
+    }
 
     /// @notice Sets the staking rewards split
     /// @notice Splits must add up to the SCALE of 1_000_000
