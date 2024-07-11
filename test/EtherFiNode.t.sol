@@ -632,7 +632,7 @@ contract EtherFiNodeTest is TestSetup {
         vm.expectRevert("INCORRECT_CALLER");
         IEtherFiNode(etherFiNode).processNodeExit(1);
 
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert(EtherFiNodesManager.IncorrectRole.selector);
         vm.prank(bob);
         managerInstance.processNodeExit(validatorIds, exitTimestamps);
         IEtherFiNodesManager.ValidatorInfo memory info = managerInstance.getValidatorInfo(validatorIds[0]);
@@ -721,7 +721,7 @@ contract EtherFiNodeTest is TestSetup {
 
         vm.deal(etherfiNode, 4 ether);
 
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert(EtherFiNodesManager.IncorrectRole.selector);
         vm.prank(bob);
         managerInstance.markBeingSlashed(bidId);
 
@@ -2346,7 +2346,7 @@ contract EtherFiNodeTest is TestSetup {
         // Earned >= 16 ether
         _transferTo(etherfiNode, 16 ether);
 
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert(EtherFiNodesManager.IncorrectRole.selector);
         managerInstance.forcePartialWithdraw(validatorId);
 
         vm.prank(alice);

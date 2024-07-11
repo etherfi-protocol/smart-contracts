@@ -9,6 +9,7 @@ import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "@openzeppelin/contracts/access/IAccessControl.sol";
+import "./RoleRegistry.sol";
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
@@ -37,7 +38,7 @@ contract EtherFiNodesManager is
 
     address public treasuryContract;
     address public stakingManagerContract;
-    IAccessControl public roleRegistry;
+    RoleRegistry public roleRegistry;
 
     // validatorId == bidId -> withdrawalSafeAddress
     mapping(uint256 => address) public etherfiNodeAddress;
@@ -45,7 +46,7 @@ contract EtherFiNodesManager is
     TNFT public tnft;
     BNFT public bnft;
     IAuctionManager public auctionManager;
-    bytes32 public EIGENPOD_ADMIN_ROLE = keccak256("EIGENPOD_ADMIN_ROLE");
+    IProtocolRevenueManager public DEPRECATED_protocolRevenueManager;
 
     RewardsSplit public stakingRewardsSplit;
     RewardsSplit public DEPRECATED_protocolRewardsSplit;
@@ -71,7 +72,16 @@ contract EtherFiNodesManager is
 
     // role -> function selector
     mapping(bytes32 => mapping(bytes4 => bool)) public allowedForwardedEigenpodCalls;
+    // role -> function -> target_address
+    mapping(bytes32 => mapping(bytes4 => bool)) public allowedForwardedExternalCalls;
 
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ROLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 constant public NODE_ADMIN_ROLE = keccak256("EFNM_NODE_ADMIN_ROLE");
+    bytes32 constant public EIGENPOD_CALLER_ROLE = keccak256("EFNM_EIGENPOD_CALLER_ROLE");
+    bytes32 constant public EXTERNAL_CALLER_ROLE = keccak256("EFNM_EXTERNAL_CALLER_ROLE");
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -100,6 +110,7 @@ contract EtherFiNodesManager is
 
     error InvalidParams();
     error NonZeroAddress();
+    error IncorrectRole();
 
     /// @dev Sets the revenue splits on deployment
     /// @dev AuctionManager, treasury and deposit contracts must be deployed first
@@ -164,8 +175,10 @@ contract EtherFiNodesManager is
     function processNodeExit(
         uint256[] calldata _validatorIds,
         uint32[] calldata _exitTimestamps
-    ) external onlyRole(EIGENPOD_ADMIN_ROLE) nonReentrant whenNotPaused {
+    ) external nonReentrant whenNotPaused {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if (_validatorIds.length != _exitTimestamps.length) revert InvalidParams();
+
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             uint256 _validatorId = _validatorIds[i];
             address etherfiNode = etherfiNodeAddress[_validatorId];
@@ -187,7 +200,8 @@ contract EtherFiNodesManager is
     /// @notice queue a withdrawal of eth from an eigenPod. You must wait for the queuing period
     ///         defined by eigenLayer before you can finish the withdrawal via etherFiNode.claimDelayedWithdrawalRouterWithdrawals()
     /// @param _validatorIds The validator Ids
-    function batchQueueRestakedWithdrawal(uint256[] calldata _validatorIds) public onlyAdmin whenNotPaused {
+    function batchQueueRestakedWithdrawal(uint256[] calldata _validatorIds) public whenNotPaused {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address etherfiNode = etherfiNodeAddress[_validatorIds[i]];
             IEtherFiNode(etherfiNode).queueEigenpodFullWithdrawal();
@@ -270,7 +284,9 @@ contract EtherFiNodesManager is
     // For the missed executions, this function will handle them:
     //  - the safe's balance goes above 16 ETH 
     //  - the Oracle confirms that none of the validators has exited & are pending for exits
-    function forcePartialWithdraw(uint256 _validatorId) external nonReentrant onlyAdmin {
+    function forcePartialWithdraw(uint256 _validatorId) external nonReentrant {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
 
@@ -289,7 +305,9 @@ contract EtherFiNodesManager is
     /// @param _validatorIds The validator Ids
     function markBeingSlashed(
         uint256[] calldata _validatorIds
-    ) external whenNotPaused onlyAdmin {
+    ) external whenNotPaused {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             _updateEtherFiNode(_validatorIds[i]);
             _setValidatorPhase(etherfiNodeAddress[_validatorIds[i]], _validatorIds[i], IEtherFiNode.VALIDATOR_PHASE.BEING_SLASHED);
@@ -383,7 +401,9 @@ contract EtherFiNodesManager is
     // - 
     // - verifyBalanceUpdates
     // - verifyAndProcessWithdrawals
-    function callEigenPod(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
+    function callEigenPod(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
+        if (!roleRegistry.hasRole(EIGENPOD_CALLER_ROLE, msg.sender)) revert IncorrectRole();
+
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(data[i]);
@@ -397,7 +417,9 @@ contract EtherFiNodesManager is
     // - undelegate(address staker)
     // - completeQueuedWithdrawal
     // - queueWithdrawals
-    function callDelegationManager(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
+    function callDelegationManager(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
+        if (!roleRegistry.hasRole(EXTERNAL_CALLER_ROLE, msg.sender)) revert IncorrectRole();
+
         address to = address(delegationManager);
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
@@ -409,7 +431,9 @@ contract EtherFiNodesManager is
     /// @notice Call the Eigenlayer EigenPod Manager contract
     /// @param data to call contract
     // - recordBeaconChainETHBalanceUpdate
-    function callEigenPodManager(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
+    function callEigenPodManager(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
+        if (!roleRegistry.hasRole(EXTERNAL_CALLER_ROLE, msg.sender)) revert IncorrectRole();
+
         address to = address(eigenPodManager);
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
@@ -417,7 +441,9 @@ contract EtherFiNodesManager is
         }
     }
 
-    function callDelayedWithdrawalRouter(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
+    function callDelayedWithdrawalRouter(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
+        if (!roleRegistry.hasRole(EXTERNAL_CALLER_ROLE, msg.sender)) revert IncorrectRole();
+
         address to = address(delayedWithdrawalRouter);
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
@@ -435,10 +461,10 @@ contract EtherFiNodesManager is
     /// @param _nodeOperator the split going to the nodeOperator
     /// @param _tnft the split going to the tnft holder
     /// @param _bnft the split going to the bnft holder
-    function setStakingRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnft)
-        public onlyAdmin
-    {
+    function setStakingRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnft) public {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if (_treasury + _nodeOperator + _tnft + _bnft != SCALE) revert InvalidParams();
+
         stakingRewardsSplit.treasury = _treasury;
         stakingRewardsSplit.nodeOperator = _nodeOperator;
         stakingRewardsSplit.tnft = _tnft;
@@ -449,8 +475,10 @@ contract EtherFiNodesManager is
     /// @notice Sets the Non Exit Penalty 
     /// @param _nonExitPenaltyPrincipal the new principal amount
     /// @param _nonExitPenaltyDailyRate the new non exit daily rate
-    function setNonExitPenalty(uint64 _nonExitPenaltyDailyRate, uint64 _nonExitPenaltyPrincipal) public onlyAdmin {
+    function setNonExitPenalty(uint64 _nonExitPenaltyDailyRate, uint64 _nonExitPenaltyPrincipal) public {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if(_nonExitPenaltyDailyRate > 10000) revert InvalidPenaltyRate();
+
         nonExitPenaltyPrincipal = _nonExitPenaltyPrincipal;
         nonExitPenaltyDailyRate = _nonExitPenaltyDailyRate;
     }
@@ -466,7 +494,9 @@ contract EtherFiNodesManager is
 
     /// @notice set maximum number of queued eigenlayer withdrawals that can be processed in 1 tx
     /// @param _max max number of queued withdrawals
-    function setMaxEigenLayerWithdrawals(uint8 _max) external onlyAdmin {
+    function setMaxEigenLayerWithdrawals(uint8 _max) external {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         maxEigenlayerWithdrawals = _max;
     }
 
@@ -476,23 +506,15 @@ contract EtherFiNodesManager is
         numberOfValidators += _count;
     }
 
-    /// @notice Updates the address of the admin
-    /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        admins[_address] = _isAdmin;
-    }
-
-    function updateEigenLayerOperatingAdmin(address _address, bool _isAdmin) external onlyOwner {
-        eigenLayerOperatingAdmin[_address] = _isAdmin;
-    }
-
     // Pauses the contract
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
     // Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 
@@ -727,19 +749,10 @@ contract EtherFiNodesManager is
         return _getImplementation();
     }
 
-    error NotAdmin();
     error NotStakingManager();
-
-    function _requireAdmin() internal view virtual {
-        if (!admins[msg.sender] && msg.sender != owner()) revert NotAdmin();
-    }
 
     function _onlyStakingManagerContract() internal view virtual {
         if (msg.sender != stakingManagerContract) revert NotStakingManager();
-    }
-
-    function _eigenLayerOperatingAdmin() internal view virtual {
-        if (!eigenLayerOperatingAdmin[msg.sender] && !admins[msg.sender] && msg.sender != owner()) revert NotAdmin();
     }
 
     //--------------------------------------------------------------------------------------
@@ -748,11 +761,6 @@ contract EtherFiNodesManager is
 
     modifier onlyStakingManagerContract() {
         _onlyStakingManagerContract();
-        _;
-    }
-
-    modifier onlyEigenLayerOperatingAdmin() {
-        _eigenLayerOperatingAdmin();
         _;
     }
 }

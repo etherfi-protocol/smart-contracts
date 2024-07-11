@@ -581,8 +581,11 @@ contract TestSetup is Test {
             address(eigenLayerDelayedWithdrawalRouter),
             address(eigenLayerDelegationManager)
         );
+        /*
+        // TODO: redo these roles with new system
         managerInstance.updateAdmin(address(etherFiAdminInstance), true);
         managerInstance.updateAdmin(alice, true);
+        */
 
 
         membershipManagerInstance.updateAdmin(alice, true);

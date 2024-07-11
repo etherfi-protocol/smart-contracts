@@ -47,9 +47,7 @@ interface IEtherFiNodesManager {
     function numberOfValidators() external view returns (uint64);
     function maxEigenlayerWithdrawals() external view returns (uint8);
 
-    function admins(address _address) external view returns (bool);
-
-    // Non-VIEW functions    
+    // Non-VIEW functions
     function updateEtherFiNode(uint256 _validatorId) external;
 
     function batchQueueRestakedWithdrawal(uint256[] calldata _validatorIds) external;
@@ -68,8 +66,7 @@ interface IEtherFiNodesManager {
     function setNonExitPenalty(uint64 _nonExitPenaltyDailyRate, uint64 _nonExitPenaltyPrincipal) external;
     function setStakingRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnf) external;
     function unregisterValidator(uint256 _validatorId) external;
-    
-    function updateAdmin(address _address, bool _isAdmin) external;
+
     function pauseContract() external;
     function unPauseContract() external;
 }
