@@ -163,7 +163,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         numValidatorsToSpinUp = _report.numValidatorsToSpinUp;
 
         _handleAccruedRewards(_report);
-        _handleValidators(reportHash, _report, _pubKey, _signature);
+        _handleValidators(reportHash, _report);
         _handleWithdrawals(_report);
         _handleTargetFundsAllocations(_report);
 
@@ -186,7 +186,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function AdminTask_InvalidateValidatorTask(bytes32 _reportHash, uint256[] calldata validatorsToApprove) internal {
         ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, validatorsToApprove))].exists = false;
-        emit ValidatorApprovalTaskCompleted(_reportHash, validatorsToApprove);
+        emit ValidatorApprovalTaskInvalidated(_reportHash, validatorsToApprove);
     }
 
     function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report) internal {
@@ -224,17 +224,15 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             uint256 end = (i + 1) * 25 > _validatorsToApprove.length ? _validatorsToApprove.length : (i + 1) * 25;
 
             uint256[] memory validatorsToApproveBatch = new uint256[](end - start);
-            bytes[] memory pubKeyBatch = new bytes[](end - start);
-            bytes[] memory signatureBatch = new bytes[](end - start);
             for (uint256 j = start; j < end; j++) {
                 validatorsToApproveBatch[j - start] = _validatorsToApprove[j];
             }
             ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, _validatorsToApprove))].exists = true;
-            emit ValidatorApprovalTaskAdded(keccak256(_reportHash, validatorsToApproveBatch));
+            emit ValidatorApprovalTaskCreated(_reportHash, validatorsToApproveBatch);
         }
     }
 
-    function _handleValidators(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report, bytes[] calldata _pubKey, bytes[] calldata _signature) internal {
+    function _handleValidators(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report) internal {
         // validatorsToApprove
         if (_report.validatorsToApprove.length > 0) {
             _batchAdminTask_ApproveValidators(_reportHash, _report.validatorsToApprove);
