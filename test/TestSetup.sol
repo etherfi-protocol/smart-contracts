@@ -581,13 +581,20 @@ contract TestSetup is Test {
             address(eigenLayerDelayedWithdrawalRouter),
             address(eigenLayerDelegationManager)
         );
+        vm.stopPrank();
+
+        // configure starting roles
+        admin = alice;
+        setupRoleRegistry();
+
         /*
         // TODO: redo these roles with new system
         managerInstance.updateAdmin(address(etherFiAdminInstance), true);
         managerInstance.updateAdmin(alice, true);
         */
 
-
+        vm.startPrank(owner);
+        managerInstance.initializeRoleRegistry(address(roleRegistry));
         membershipManagerInstance.updateAdmin(alice, true);
         membershipNftInstance.updateAdmin(alice, true);
         withdrawRequestNFTInstance.updateAdmin(alice, true);
@@ -709,10 +716,6 @@ contract TestSetup is Test {
         _initializePeople();
         _initializeEtherFiAdmin();
 
-        admin = alice;
-
-        // configure starting roles
-        setupRoleRegistry();
     }
 
     function setupRoleRegistry() public {
@@ -720,6 +723,14 @@ contract TestSetup is Test {
 
         bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
         roleRegistry = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
+
+        vm.startPrank(admin);
+        roleRegistry.grantRole(managerInstance.NODE_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(managerInstance.EIGENPOD_CALLER_ROLE(), admin);
+        roleRegistry.grantRole(managerInstance.EXTERNAL_CALLER_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), admin);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), admin);
+        vm.stopPrank();
     }
 
     function _initOracleReportsforTesting() internal {

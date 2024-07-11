@@ -10,7 +10,7 @@ contract RoleRegistryTest is TestSetup {
     event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender);
 
     function test_DisableInitializer() public {
-        vm.expectRevert("Initalizable: contract is already initialized");
+        vm.expectRevert("Initializable: contract is already initialized");
         vm.prank(owner);
         BNFTImplementation.initialize(address(stakingManagerInstance));
     }

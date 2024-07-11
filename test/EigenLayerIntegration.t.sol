@@ -229,7 +229,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     function _beacon_process_1ETH_deposit() internal {
         setJSON("./test/eigenlayer-utils/test-data/ValidatorFieldsProof_1293592_8654000.json");
-        
+
         _setWithdrawalCredentialParams();
     }
 
@@ -239,7 +239,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         oracleTimestamp = 1712964563;
         // timestamp doesn't seem to get set by custom RPC for even though block does
         vm.warp(1712974563);
-        
+
         _setWithdrawalCredentialParams();
     }
 

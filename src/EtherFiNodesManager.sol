@@ -17,7 +17,7 @@ import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
 import "./TNFT.sol";
 import "./BNFT.sol";
-import "forge-std/console.sol";
+import "forge-std/console2.sol";
 
 
 contract EtherFiNodesManager is
@@ -147,6 +147,11 @@ contract EtherFiNodesManager is
         eigenPodManager = IEigenPodManager(_eigenPodManager);
         delayedWithdrawalRouter = IDelayedWithdrawalRouter(_delayedWithdrawalRouter);
         delegationManager = IDelegationManager(_delegationManager);
+    }
+
+    function initializeRoleRegistry(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized role registry");
+        roleRegistry = RoleRegistry(_roleRegistry);
     }
 
     /// @notice Send the request to exit the validators as their T-NFT holder
