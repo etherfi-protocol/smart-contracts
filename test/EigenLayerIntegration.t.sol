@@ -394,9 +394,15 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
             withdrawals[0] = withdrawal;
             middlewareTimesIndexes[0] = 0;
 
+            vm.prank(owner);
+            vm.expectRevert();
+            EtherFiNode(payable(nodeAddress)).completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, false);
+
+            vm.prank(owner);
             vm.expectRevert();
             managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
 
+            vm.prank(owner);
             managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, false);
         }
     }
@@ -450,9 +456,15 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         withdrawals[0] = withdrawal;
         middlewareTimesIndexes[0] = 0;
 
+        vm.prank(owner);
+        vm.expectRevert();
+        EtherFiNode(payable(nodeAddress)).completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, false);
+
+        vm.prank(owner);
         vm.expectRevert();
         managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, false);
 
+        vm.prank(owner);
         managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
     }
 

@@ -226,7 +226,7 @@ contract EtherFiNode is IEtherFiNode {
         }
     }
 
-    function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, uint256 middlewareTimesIndexes, bool _receiveAsTokens) external {
+    function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, uint256 middlewareTimesIndexes, bool _receiveAsTokens) external onlyEtherFiNodeManagerContract {
         IDelegationManager.Withdrawal[] memory _withdrawals = new IDelegationManager.Withdrawal[](1);
         _withdrawals[0] = withdrawals;
         uint256[] memory _middlewareTimesIndexes = new uint256[](1);
@@ -234,7 +234,7 @@ contract EtherFiNode is IEtherFiNode {
         return _completeQueuedWithdrawals(_withdrawals, _middlewareTimesIndexes, _receiveAsTokens);
     }
 
-    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] memory middlewareTimesIndexes, bool _receiveAsTokens) external {
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] memory middlewareTimesIndexes, bool _receiveAsTokens) external onlyEtherFiNodeManagerContract {
         return _completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, _receiveAsTokens);
     }
 
