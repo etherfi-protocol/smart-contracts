@@ -516,19 +516,24 @@ contract EtherFiNode is IEtherFiNode {
             require (recipient == address(this), "INCORRECT_RECIPIENT");
         }
 
+        /*
         // recoverTokens(IERC20[], uint256[], address)
         if (selector == IEigenPod.recoverTokens.selector) {
             revert("NOT_ALLOWED");
         }
+        */
     }
 
     function _verifyForwardCall(address to, bytes memory data) internal view {
+
+        // can add extra restrictions to specific calls here i.e. checking specific paramaters
+        /*
         bytes4 selector;
         assembly {
             selector := mload(add(data, 0x20))
         }
-        bool allowed = (selector != IDelegationManager.completeQueuedWithdrawal.selector && selector != IDelegationManager.completeQueuedWithdrawals.selector);
-        require (allowed, "NOT_ALLOWED");
+        if (selector == ...) { custom logic }
+        */
     }
 
     function _applyNonExitPenalty(
