@@ -464,17 +464,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
     }
 
-    function payProtocolFees(int128 _protocolFees) public {
+    function payProtocolFees(uint128 _protocolFees) public {
         if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
-        uint256 absProtocolFees = stdMath.abs(_protocolFees);
-        uint256 treasuryShares = sharesForAmount(absProtocolFees);
-        stdMath.abs(_protocolFees);
+        uint256 treasuryShares = sharesForAmount(_protocolFees);
         totalValueOutOfLp = uint128(int128(totalValueOutOfLp) + _protocolFees);
-        if(_protocolFees > 0) {
-            eETH.mintShares(treasury, treasuryShares);
-        } else {
-            eETH.burnShares(treasury, treasuryShares);
-        }
+        eETH.mintShares(treasury, treasuryShares);
     }
 
     function setTreasury(address _treasury) external onlyAdmin {
