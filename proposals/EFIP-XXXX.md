@@ -15,12 +15,12 @@ Currently, when HyperNative pauses our smart contracts (SCs) in response to aler
 
 ## Proposal
 
-To achieve this, we will deploy the OpenZeppelin Access Control v5 contract to manage all necessary functionality. This contract is very powerful with numerous features include fine-grained timelock functionality.
+To achieve this, we will deploy the OpenZeppelin Access Control v5 contract to manage all necessary functionality. This contract is very powerful with numerous features including fine-grained timelock functionality.
 
 The existing timelock will remain in place to handle the most critical actions, such as upgrading contracts. However, it can delegate other actions with varying degrees of locking. Specifically, we propose:
 
 	1. Deploy OpenZeppelin Access Control v5
-    2. Configure Access Control contract to have permission to unpausing smart contracts with a 15 minute timelock
+    2. Configure Access Control contract to have permission for unpausing smart contracts with a 15 minute timelock
 	3. Maintaining the 3-day timelock for other critical actions, such as contract upgrades.
 
 ## References
