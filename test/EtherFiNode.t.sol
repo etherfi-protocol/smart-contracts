@@ -418,7 +418,10 @@ contract EtherFiNodeTest is TestSetup {
         data[0] = abi.encodeWithSelector(selector, safe, address(eigenPod).balance);
 
         vm.prank(owner);
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.updateAllowedForwardedEigenpodCalls(selector, true);
+
+        vm.prank(owner);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
     }
 
     function test_restakedAttackerCantBlockWithdraw() public {
@@ -1983,7 +1986,7 @@ contract EtherFiNodeTest is TestSetup {
         // FAIL, the forward call is not allowed for `completeQueuedWithdrawal`
         vm.expectRevert("NOT_ALLOWED");
         vm.prank(owner);
-        managerInstance.callDelegationManager(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
 
         // FAIL, if the `minWithdrawalDelayBlocks` is not passed
         vm.prank(owner);

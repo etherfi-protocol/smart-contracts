@@ -728,11 +728,13 @@ contract TestSetup is Test {
         roleRegistry.grantRole(managerInstance.NODE_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(managerInstance.EIGENPOD_CALLER_ROLE(), admin);
         roleRegistry.grantRole(managerInstance.EXTERNAL_CALLER_ROLE(), admin);
+        roleRegistry.grantRole(managerInstance.WHITELIST_UPDATER(), admin);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), admin);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), admin);
         roleRegistry.grantRole(managerInstance.NODE_ADMIN_ROLE(), owner);
         roleRegistry.grantRole(managerInstance.EIGENPOD_CALLER_ROLE(), owner);
         roleRegistry.grantRole(managerInstance.EXTERNAL_CALLER_ROLE(), owner);
+        roleRegistry.grantRole(managerInstance.WHITELIST_UPDATER(), owner);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), owner);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), owner);
         vm.stopPrank();

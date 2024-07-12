@@ -71,17 +71,18 @@ contract EtherFiNodesManager is
     mapping(address => bool) public DEPRECATED_eigenLayerOperatingAdmin;
 
     // function -> allowed
-    mapping(bytes32 => mapping(bytes4 => bool)) public allowedForwardedEigenpodCalls;
+    mapping(bytes4 => bool) public allowedForwardedEigenpodCalls;
     // function -> target_address -> allowed
-    mapping(bytes32 => mapping(bytes4 => mapping(address => bool))) public allowedForwardedExternalCalls;
+    mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
     bytes32 constant public NODE_ADMIN_ROLE = keccak256("EFNM_NODE_ADMIN_ROLE");
-    //bytes32 constant public EIGENPOD_CALLER_ROLE = keccak256("EFNM_EIGENPOD_CALLER_ROLE");
-    //bytes32 constant public EXTERNAL_CALLER_ROLE = keccak256("EFNM_EXTERNAL_CALLER_ROLE");
+    bytes32 constant public WHITELIST_UPDATER = keccak256("EFNM_WHITELIST_UPDATER");
+    bytes32 constant public EIGENPOD_CALLER_ROLE = keccak256("EFNM_EIGENPOD_CALLER_ROLE");
+    bytes32 constant public EXTERNAL_CALLER_ROLE = keccak256("EFNM_EXTERNAL_CALLER_ROLE");
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -97,8 +98,8 @@ contract EtherFiNodesManager is
     event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
 
-    event AllowedForwardedExternalCallsUpdated(bytes32 indexed _role, bytes4 indexed selecor, address indexed _target, bool _allowed);
-    event AllowedForwardedEigenpodCallsUpdated(bytes32 indexed _role, bytes4 indexed selecor, bool _allowed);
+    event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
+    event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -400,35 +401,29 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
 
     /// @notice Update the whitelist for external calls that can be executed by an EtherfiNode
-    /// @param _role OZ AccessControl role
     /// @param _selector method selector
     /// @param _target call target for forwarded call
     /// @param _allowed enable or disable the call
-    function updateAllowedForwardedExternalCalls(bytes32 _role, bytes4 _selector, address _target, bool _allowed) external {
-        // you must be an admin of this contract as well as the admin of the role you are updating call permissions of
-        if (!roleRegistry.hasRole(roleRegistry.getRoleAdmin(_role), msg.sender)) revert IncorrectRole();
-        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function updateAllowedForwardedExternalCalls(bytes4 _selector, address _target, bool _allowed) external onlyOwner {
+        if (!roleRegistry.hasRole(WHITELIST_UPDATER, msg.sender)) revert IncorrectRole();
 
-        allowedForwardedExternalCalls[_role][_selector][_target] = _allowed;
-        emit AllowedForwardedExternalCallsUpdated(_role, _selector, _target, _allowed);
+        allowedForwardedExternalCalls[_selector][_target] = _allowed;
+        emit AllowedForwardedExternalCallsUpdated(_selector, _target, _allowed);
     }
 
     /// @notice Update the whitelist for external calls that can be executed against the corresponding eigenpod
-    /// @param _role OZ AccessControl role
     /// @param _selector method selector
     /// @param _allowed enable or disable the call
-    function updateAllowedForwardedEigenpodCalls(bytes32 _role, bytes4 _selector, bool _allowed) external {
-        // you must be an admin of this contract as well as the admin of the role you are updating call permissions of
-        if (!roleRegistry.hasRole(roleRegistry.getRoleAdmin(_role), msg.sender)) revert IncorrectRole();
-        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function updateAllowedForwardedEigenpodCalls(bytes4 _selector, bool _allowed) external {
+        if (!roleRegistry.hasRole(WHITELIST_UPDATER, msg.sender)) revert IncorrectRole();
 
-        allowedForwardedEigenpodCalls[_role][_selector] = _allowed;
-        emit AllowedForwardedEigenpodCallsUpdated(_role, _selector, _allowed);
+        allowedForwardedEigenpodCalls[_selector] = _allowed;
+        emit AllowedForwardedEigenpodCallsUpdated(_selector, _allowed);
     }
+
 
     // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/pods/EigenPod.sol
     /// @notice Call the eigenPod contract
-    /// @param data to call eigenPod contract
     // - withdrawBeforeRestaking
     // - activateRestaking
     // - verifyWithdrawalCredentials
@@ -437,21 +432,26 @@ contract EtherFiNodesManager is
     // - 
     // - verifyBalanceUpdates
     // - verifyAndProcessWithdrawals
-    function callEigenPod(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
-
-        bytes4 selector;
-        assembly {
-            selector := mload(add(data, 0x20))
-        }
-        if (!allowedForwardedEigenpodCalls[
+    function forwardEigenpodCall(uint256[] calldata _validatorIds, bytes[] calldata _data) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
         if (!roleRegistry.hasRole(EIGENPOD_CALLER_ROLE, msg.sender)) revert IncorrectRole();
 
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(data[i]);
+            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(_data[i]);
         }
     }
 
+    function forwardExternalCall(uint256[] calldata _validatorIds, bytes[] calldata _data, address _target) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
+        if (!roleRegistry.hasRole(EXTERNAL_CALLER_ROLE, msg.sender)) revert IncorrectRole();
+
+        returnData = new bytes[](_validatorIds.length);
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(_target, _data[i]);
+        }
+    }
+
+
+    /*
     // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/core/DelegationManager.sol
     /// @notice Call the Eigenlayer delegation Manager contract
     /// @param data to call eigenPod contract

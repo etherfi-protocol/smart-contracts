@@ -272,7 +272,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // Can perform 'verifyWithdrawalCredentials' only once
         vm.prank(owner);
         vm.expectRevert("EigenPod.verifyCorrectWithdrawalCredentials: Validator must be inactive to prove withdrawal credentials");
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
         vm.stopPrank();
     }
 
@@ -295,7 +295,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
         vm.prank(owner);
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
 
         int256 updatedShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
         console2.log("updatedShares:", updatedShares);
@@ -322,7 +322,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // Calling 'verifyBalanceUpdates' before 'verifyWithdrawalCredentials' should fail
         vm.prank(owner);
         vm.expectRevert("EigenPod.verifyBalanceUpdate: Validator not active");
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
         vm.stopPrank();
 
         vm.warp(oracleTimestamp + 5 hours);
@@ -330,7 +330,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // If the proof is too old, it should fail
         vm.prank(owner);
         vm.expectRevert("EigenPod.verifyBalanceUpdates: specified timestamp is too far in past");
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
         vm.stopPrank();
     }
 
@@ -343,7 +343,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         vm.prank(owner);
         vm.expectRevert("DelayedWithdrawalRouter.onlyEigenPod: not podOwner's EigenPod");
-        managerInstance.callDelayedWithdrawalRouter(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delayedWithdrawalRouter()));
     }
 
     function test_recoverTokens() public {
@@ -357,7 +357,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         vm.prank(owner);
         vm.expectRevert("NOT_ALLOWED");
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
     }
 
     function test_withdrawNonBeaconChainETHBalanceWei() public {
@@ -379,11 +379,11 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         vm.prank(owner);
         vm.expectRevert("INCORRECT_RECIPIENT");
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
 
         data[0] = abi.encodeWithSelector(selector, podOwner, 1 ether);
         vm.prank(owner);
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
 
         // 3.
         (new_withdrawalSafe, new_eigenPod, new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
@@ -445,7 +445,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         assertEq(eigenLayerDelegationManager.isDelegated(podOwner), false);
 
         vm.startPrank(owner);
-        managerInstance.callDelegationManager(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
         vm.stopPrank();
 
         assertEq(eigenLayerDelegationManager.isDelegated(podOwner), true);
@@ -459,16 +459,16 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
             data[0] = abi.encodeWithSelector(selector, podOwner);
 
             vm.prank(owner);
-            managerInstance.callDelegationManager(validatorIds, data);
+            managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
 
             vm.prank(owner);
             vm.expectRevert("DelegationManager.undelegate: staker must be delegated to undelegate");
-            managerInstance.callDelegationManager(validatorIds, data);
+            managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
 
             test_delegateTo();
 
             vm.prank(owner);
-            managerInstance.callDelegationManager(validatorIds, data);
+            managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
         }
 
         // 2. delegate to dsrv
@@ -479,7 +479,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
             data[0] = abi.encodeWithSelector(selector, dsrv, signatureWithExpiry, bytes32(0));
 
             vm.startPrank(owner);
-            managerInstance.callDelegationManager(validatorIds, data);
+            managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
             vm.stopPrank();
         }
     }
@@ -496,22 +496,22 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         selector = bytes4(keccak256("nonBeaconChainETHBalanceWei()"));
         data[0] = abi.encodeWithSelector(selector);
         vm.expectRevert();
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
 
         selector = bytes4(keccak256("ethPOS()"));
         data[0] = abi.encodeWithSelector(selector);
         vm.expectRevert();
-        managerInstance.callDelegationManager(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.eigenPodManager()));
 
         selector = bytes4(keccak256("domainSeparator()"));
         data[0] = abi.encodeWithSelector(selector);
         vm.expectRevert();
-        managerInstance.callEigenPodManager(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
 
         selector = bytes4(keccak256("withdrawalDelayBlocks()"));
         data[0] = abi.encodeWithSelector(selector);
         vm.expectRevert();
-        managerInstance.callDelayedWithdrawalRouter(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delayedWithdrawalRouter()));
 
         vm.stopPrank();
 
@@ -521,19 +521,19 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         selector = bytes4(keccak256("nonBeaconChainETHBalanceWei()"));
         data[0] = abi.encodeWithSelector(selector);
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
 
         selector = bytes4(keccak256("ethPOS()"));
         data[0] = abi.encodeWithSelector(selector);
-        managerInstance.callEigenPodManager(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.eigenPodManager()));
 
         selector = bytes4(keccak256("domainSeparator()"));
         data[0] = abi.encodeWithSelector(selector);
-        managerInstance.callDelegationManager(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
 
         selector = bytes4(keccak256("withdrawalDelayBlocks()"));
         data[0] = abi.encodeWithSelector(selector);
-        managerInstance.callDelayedWithdrawalRouter(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delayedWithdrawalRouter()));
 
         vm.stopPrank();
 

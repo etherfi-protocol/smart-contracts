@@ -47,6 +47,8 @@ contract EtherFiNode is IEtherFiNode {
     // (eigenLayer withdrawals are tied to blocknumber instead of timestamp)
     mapping(uint256 => uint32) restakingObservedExitBlocks;
 
+    error ForwardedCallNotAllowed();
+    error InvalidForwardedCall();
     error CallFailed(bytes data);
 
     event EigenPodCreated(address indexed nodeAddress, address indexed podAddress);
@@ -483,58 +485,54 @@ contract EtherFiNode is IEtherFiNode {
         return (payouts[0], payouts[1], payouts[2], payouts[3]);
     }
 
-
-    function callEigenPod(bytes memory data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
-        _verifyEigenPodCall(data);
-        return Address.functionCall(eigenPod, data);
-    }
-
-    // As an optimization, it skips the call to 'etherFiNodesManager' back again to retrieve the target address
-    function forwardCall(address to, bytes memory data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
-        _verifyForwardCall(to, data);
-        return Address.functionCall(to, data);
-    }
-    
     //--------------------------------------------------------------------------------------
-    //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
+    //-------------------------------- CALL FORWARDING  ------------------------------------
     //--------------------------------------------------------------------------------------
 
-    function _verifyEigenPodCall(bytes memory data) internal view {
-        bytes4 selector;
-        assembly {
-            selector := mload(add(data, 0x20))
-        }
+    function callEigenPod(bytes calldata _data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
+        _verifyEigenPodCall(_data);
+        return Address.functionCall(eigenPod, _data);
+    }
+
+    function forwardCall(address _to, bytes calldata _data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
+        _verifyForwardCall(_to, _data);
+        return Address.functionCall(_to, _data);
+    }
+
+    function _verifyEigenPodCall(bytes calldata _data) internal view {
+
+        if (_data.length < 4) revert InvalidForwardedCall();
+        bytes4 selector = bytes4(_data[:4]);
+
+        // can add extra restrictions to specific calls here i.e. checking specific paramaters
+        if (!IEtherFiNodesManager(etherFiNodesManager).allowedForwardedEigenpodCalls(selector)) revert ForwardedCallNotAllowed();
 
         // withdrawNonBeaconChainETHBalanceWei
         if (selector == IEigenPod.withdrawNonBeaconChainETHBalanceWei.selector) {
-            require(data.length >= 36, "INVALID_DATA_LENGTH");
-            address recipient;
-            assembly {
-                recipient := mload(add(data, 0x24))
-            }
+            require(_data.length == 68, "INVALID_DATA_LENGTH");
+            address recipient = address(bytes20(_data[16:36]));
+
             // No withdrawal to any other address than the safe
             require (recipient == address(this), "INCORRECT_RECIPIENT");
         }
 
-        /*
-        // recoverTokens(IERC20[], uint256[], address)
-        if (selector == IEigenPod.recoverTokens.selector) {
-            revert("NOT_ALLOWED");
-        }
-        */
     }
 
-    function _verifyForwardCall(address to, bytes memory data) internal view {
+    function _verifyForwardCall(address _to, bytes calldata _data) internal view {
+
+        if (_data.length < 4) revert InvalidForwardedCall();
+        bytes4 selector = bytes4(_data[:4]);
+
+        if (!IEtherFiNodesManager(etherFiNodesManager).allowedForwardedExternalCalls(selector, _to)) revert ForwardedCallNotAllowed();
 
         // can add extra restrictions to specific calls here i.e. checking specific paramaters
-        /*
-        bytes4 selector;
-        assembly {
-            selector := mload(add(data, 0x20))
-        }
-        if (selector == ...) { custom logic }
-        */
+        // if (selector == ...) { custom logic }
     }
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
+    //--------------------------------------------------------------------------------------
+
 
     function _applyNonExitPenalty(
         IEtherFiNodesManager.ValidatorInfo memory _info, 

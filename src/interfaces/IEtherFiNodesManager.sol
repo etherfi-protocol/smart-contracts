@@ -47,6 +47,9 @@ interface IEtherFiNodesManager {
     function numberOfValidators() external view returns (uint64);
     function maxEigenlayerWithdrawals() external view returns (uint8);
 
+    function allowedForwardedEigenpodCalls(bytes4 _selector) external view returns (bool);
+    function allowedForwardedExternalCalls(bytes4 _selector, address _target) external view returns (bool);
+
     // Non-VIEW functions
     function updateEtherFiNode(uint256 _validatorId) external;
 
