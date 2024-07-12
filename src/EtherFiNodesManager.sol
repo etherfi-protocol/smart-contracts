@@ -531,7 +531,7 @@ contract EtherFiNodesManager is
 
     // Unpauses the contract
     function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 
