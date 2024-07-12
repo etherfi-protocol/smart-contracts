@@ -594,7 +594,6 @@ contract TestSetup is Test {
         */
 
         vm.startPrank(owner);
-        managerInstance.setRoleRegistry(address(roleRegistry));
         membershipManagerInstance.updateAdmin(alice, true);
         membershipNftInstance.updateAdmin(alice, true);
         withdrawRequestNFTInstance.updateAdmin(alice, true);
@@ -719,10 +718,21 @@ contract TestSetup is Test {
     }
 
     function setupRoleRegistry() public {
-        roleRegistryImplementation = new RoleRegistry();
 
-        bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
-        roleRegistry = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
+        // TODO: I don't love the coupling here but it was too easy to make tests
+        // where the roleRegistry global var diverged from the one set in the manager instance.
+        // We should work toward a better system that for each contract, will deploy+initialize
+        // proxy if it doesn't exist, or upgrade to the latest version otherwise
+        if (address(managerInstance.roleRegistry()) == address(0x0)) {
+
+            // deploy new versions of role registry
+            roleRegistryImplementation = new RoleRegistry();
+            bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
+            roleRegistry = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
+
+            vm.prank(managerInstance.owner());
+            managerInstance.initializeV2dot5(address(roleRegistry));
+        }
 
         vm.startPrank(admin);
         roleRegistry.grantRole(managerInstance.NODE_ADMIN_ROLE(), admin);
@@ -738,9 +748,6 @@ contract TestSetup is Test {
         roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), owner);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), owner);
         vm.stopPrank();
-
-        vm.prank(owner);
-        managerInstance.setRoleRegistry(address(roleRegistry));
     }
 
     function _initOracleReportsforTesting() internal {

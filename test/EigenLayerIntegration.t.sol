@@ -84,20 +84,26 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.startPrank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(address(newNodeImpl));
         vm.stopPrank();
+
+        setupRoleRegistry();
     }
 
     // better forking experience for cases when you have nested tests because of solidity stack limits
     mapping(string => uint256) createdForks;
 
     function createOrSelectFork(string memory forkURL) public {
-        if (createdForks[forkURL] == 0) {
-            createdForks[forkURL] = vm.createFork(forkURL);
+
+        // fork already exists
+        if (createdForks[forkURL] != 0) {
+            vm.selectFork(createdForks[forkURL]);
+            return;
         }
+
+        createdForks[forkURL] = vm.createFork(forkURL);
         vm.selectFork(createdForks[forkURL]);
 
-
-
-        // upgrade fork to latest version of code
+        // upgrade fork to latest version of code that doesn't exist from when forks were made
+        // We should come up with a long term solution for this kind of situation
         address newManagerImpl = address(new EtherFiNodesManager());
         address newNodeImpl = address(new EtherFiNode());
         vm.prank(managerInstance.owner());
@@ -105,12 +111,12 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(newNodeImpl);
 
+        setupRoleRegistry();
     }
 
     function test_fullWithdraw_812() public {
 
         createOrSelectFork(vm.envString("HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL"));
-
 
         uint256 validatorId = 812;
         address admin = managerInstance.owner();
@@ -137,9 +143,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     // tests of the the withdrawal flow
     function test_completeQueuedWithdrawal_812() public {
         createOrSelectFork(vm.envString("HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL"));
-
-        // tenderly fork was made before role updates so update here
-        setupRoleRegistry();
 
         IDelegationManager delegationManager = managerInstance.delegationManager();
 
@@ -269,6 +272,10 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
 
+        // whitelist this external call
+        vm.prank(managerInstance.owner());
+        managerInstance.updateAllowedForwardedEigenpodCalls(selector, true);
+
         // Can perform 'verifyWithdrawalCredentials' only once
         vm.prank(owner);
         vm.expectRevert("EigenPod.verifyCorrectWithdrawalCredentials: Validator must be inactive to prove withdrawal credentials");
@@ -279,7 +286,8 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     // https://holesky.beaconcha.in/validator/1644305#deposits
     function test_verifyWithdrawalCredentials_32ETH() public {
 
-        vm.selectFork(vm.createFork(vm.envString("HISTORICAL_PROOF_RPC_URL")));
+        createOrSelectFork(vm.envString("HISTORICAL_PROOF_RPC_URL"));
+        setupRoleRegistry();
 
         int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
         IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
@@ -294,6 +302,11 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
+
+        // whitelist this external call
+        vm.prank(managerInstance.owner());
+        managerInstance.updateAllowedForwardedEigenpodCalls(selector, true);
+
         vm.prank(owner);
         managerInstance.forwardEigenpodCall(validatorIds, data);
 
@@ -336,14 +349,19 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     function test_createDelayedWithdrawal() public {
         test_verifyWithdrawalCredentials_32ETH();
+        address delayedWithdrawalRouter = address(managerInstance.delayedWithdrawalRouter());
 
         bytes4 selector = bytes4(keccak256("createDelayedWithdrawal(address,address)"));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, podOwner, alice);
 
+        // whitelist this external call
+        vm.prank(managerInstance.owner());
+        managerInstance.updateAllowedForwardedExternalCalls(selector, delayedWithdrawalRouter, true);
+
         vm.prank(owner);
         vm.expectRevert("DelayedWithdrawalRouter.onlyEigenPod: not podOwner's EigenPod");
-        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delayedWithdrawalRouter()));
+        managerInstance.forwardExternalCall(validatorIds, data, delayedWithdrawalRouter);
     }
 
     function test_recoverTokens() public {
@@ -356,7 +374,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         data[0] = abi.encodeWithSelector(selector, tokens, amounts, recipients);
 
         vm.prank(owner);
-        vm.expectRevert("NOT_ALLOWED");
+        vm.expectRevert(EtherFiNode.ForwardedCallNotAllowed.selector);
         managerInstance.forwardEigenpodCall(validatorIds, data);
     }
 
@@ -376,6 +394,10 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         bytes4 selector = bytes4(keccak256("withdrawNonBeaconChainETHBalanceWei(address,uint256)"));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, alice, 1 ether);
+
+        // whitelist this external call
+        vm.prank(managerInstance.owner());
+        managerInstance.updateAllowedForwardedEigenpodCalls(selector, true);
 
         vm.prank(owner);
         vm.expectRevert("INCORRECT_RECIPIENT");
@@ -425,12 +447,16 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     // activateStaking & verifyWithdrawalCredentials & delegate to p2p
     function test_delegateTo() public {
 
+        createOrSelectFork(vm.envString("HISTORICAL_PROOF_RPC_URL"));
+
         test_verifyWithdrawalCredentials_32ETH();
 
         etherfi_avs_operator_1 = 0xfB487f216CA24162119C0C6Ae015d680D7569C2f;
 
         address operator = etherfi_avs_operator_1;
         address mainnet_earningsReceiver = 0x88C3c0AeAC97287E71D78bb97138727A60b2623b;
+        address delegationManager = address(managerInstance.delegationManager());
+        address delayedWithdrawalRouter = address(managerInstance.delayedWithdrawalRouter());
 
 
         test_registerAsOperator();
@@ -440,35 +466,43 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, operator, signatureWithExpiry, bytes32(0));
 
+        // whitelist this external call
+        vm.prank(managerInstance.owner());
+        managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
+
         // Confirm, the earningsReceiver is set to treasuryInstance
         assertEq(eigenLayerDelegationManager.earningsReceiver(operator), address(mainnet_earningsReceiver));
         assertEq(eigenLayerDelegationManager.isDelegated(podOwner), false);
 
         vm.startPrank(owner);
-        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
+        managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
         vm.stopPrank();
 
         assertEq(eigenLayerDelegationManager.isDelegated(podOwner), true);
     }
 
     function test_undelegate() public {
+        createOrSelectFork(vm.envString("HISTORICAL_PROOF_RPC_URL"));
+        address delegationManager = address(managerInstance.delegationManager());
+
         // 1. activateStaking & verifyWithdrawalCredentials & delegate to p2p & undelegate from p2p
         {
             bytes4 selector = bytes4(keccak256("undelegate(address)"));
             bytes[] memory data = new bytes[](1);
             data[0] = abi.encodeWithSelector(selector, podOwner);
 
-            vm.prank(owner);
-            managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
+            // whitelist this external call
+            vm.prank(managerInstance.owner());
+            managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
 
             vm.prank(owner);
             vm.expectRevert("DelegationManager.undelegate: staker must be delegated to undelegate");
-            managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
+            managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
 
             test_delegateTo();
 
             vm.prank(owner);
-            managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
+            managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
         }
 
         // 2. delegate to dsrv
@@ -478,62 +512,80 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
             bytes[] memory data = new bytes[](1);
             data[0] = abi.encodeWithSelector(selector, dsrv, signatureWithExpiry, bytes32(0));
 
+            // whitelist this external call
+            vm.prank(managerInstance.owner());
+            managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
+
             vm.startPrank(owner);
-            managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
+            managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
             vm.stopPrank();
         }
     }
 
     // Only {eigenLayerOperatingAdmin / Admin / Owner} can perform EigenLayer-related actions
     function test_access_control() public {
+
+        setupRoleRegistry();
+
         bytes4 selector = bytes4(keccak256(""));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector);
 
+        address eigenPodManager = address(managerInstance.eigenPodManager());
+        address delegationManager = address(managerInstance.delegationManager());
+        address delayedWithdrawalRouter = address(managerInstance.delayedWithdrawalRouter());
+
         // FAIL
         vm.startPrank(chad);
 
-        selector = bytes4(keccak256("nonBeaconChainETHBalanceWei()"));
-        data[0] = abi.encodeWithSelector(selector);
+        bytes4 selector1 = bytes4(keccak256("nonBeaconChainETHBalanceWei()"));
+        data[0] = abi.encodeWithSelector(selector1);
         vm.expectRevert();
         managerInstance.forwardEigenpodCall(validatorIds, data);
 
-        selector = bytes4(keccak256("ethPOS()"));
-        data[0] = abi.encodeWithSelector(selector);
+        bytes4 selector2 = bytes4(keccak256("ethPOS()"));
+        data[0] = abi.encodeWithSelector(selector2);
         vm.expectRevert();
-        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.eigenPodManager()));
+        managerInstance.forwardExternalCall(validatorIds, data, eigenPodManager);
 
-        selector = bytes4(keccak256("domainSeparator()"));
-        data[0] = abi.encodeWithSelector(selector);
+        bytes4 selector3 = bytes4(keccak256("domainSeparator()"));
+        data[0] = abi.encodeWithSelector(selector3);
         vm.expectRevert();
-        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
+        managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
 
-        selector = bytes4(keccak256("withdrawalDelayBlocks()"));
-        data[0] = abi.encodeWithSelector(selector);
+        bytes4 selector4 = bytes4(keccak256("withdrawalDelayBlocks()"));
+        data[0] = abi.encodeWithSelector(selector4);
         vm.expectRevert();
-        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delayedWithdrawalRouter()));
+        managerInstance.forwardExternalCall(validatorIds, data, delayedWithdrawalRouter);
 
         vm.stopPrank();
 
+        // Update permissions
+        vm.startPrank(admin);
+        roleRegistry.grantRole(managerInstance.EIGENPOD_CALLER_ROLE(), chad);
+        roleRegistry.grantRole(managerInstance.EXTERNAL_CALLER_ROLE(), chad);
+        vm.stopPrank();
+
+        vm.startPrank(managerInstance.owner());
+        managerInstance.updateAllowedForwardedEigenpodCalls(selector1, true);
+        managerInstance.updateAllowedForwardedExternalCalls(selector2, eigenPodManager, true);
+        managerInstance.updateAllowedForwardedExternalCalls(selector3, delegationManager, true);
+        managerInstance.updateAllowedForwardedExternalCalls(selector4, delayedWithdrawalRouter, true);
+        vm.stopPrank();
+
         // SUCCEEDS
-        address el_operating_admin = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
-        vm.startPrank(el_operating_admin);
+        vm.startPrank(chad);
 
-        selector = bytes4(keccak256("nonBeaconChainETHBalanceWei()"));
-        data[0] = abi.encodeWithSelector(selector);
-        managerInstance.forwardEigenpodCall(validatorIds, data);
+        data[0] = abi.encodeWithSelector(selector1);
 
-        selector = bytes4(keccak256("ethPOS()"));
-        data[0] = abi.encodeWithSelector(selector);
-        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.eigenPodManager()));
+        data[0] = abi.encodeWithSelector(selector2);
+        managerInstance.forwardExternalCall(validatorIds, data, eigenPodManager);
 
-        selector = bytes4(keccak256("domainSeparator()"));
-        data[0] = abi.encodeWithSelector(selector);
-        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
+        data[0] = abi.encodeWithSelector(selector3);
+        managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
 
-        selector = bytes4(keccak256("withdrawalDelayBlocks()"));
-        data[0] = abi.encodeWithSelector(selector);
-        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delayedWithdrawalRouter()));
+        data[0] = abi.encodeWithSelector(selector4);
+        managerInstance.forwardExternalCall(validatorIds, data, delayedWithdrawalRouter);
 
         vm.stopPrank();
 

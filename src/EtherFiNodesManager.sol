@@ -38,7 +38,7 @@ contract EtherFiNodesManager is
 
     address public treasuryContract;
     address public stakingManagerContract;
-    RoleRegistry public roleRegistry;
+    address public DEPRECATED_protocolRevenueManagerContract;
 
     // validatorId == bidId -> withdrawalSafeAddress
     mapping(uint256 => address) public etherfiNodeAddress;
@@ -46,10 +46,10 @@ contract EtherFiNodesManager is
     TNFT public tnft;
     BNFT public bnft;
     IAuctionManager public auctionManager;
-    IProtocolRevenueManager public DEPRECATED_protocolRevenueManager;
+    address public DEPRECATED_protocolRevenueManager;
 
     RewardsSplit public stakingRewardsSplit;
-    RewardsSplit public DEPRECATED_protocolRewardsSplit;
+    uint256 public DEPRECATED_protocolRewardsSplit;
 
     address public DEPRECATED_admin;
     mapping(address => bool) public DEPRECATED_admins;
@@ -70,6 +70,7 @@ contract EtherFiNodesManager is
 
     mapping(address => bool) public DEPRECATED_eigenLayerOperatingAdmin;
 
+    RoleRegistry public roleRegistry;
     // function -> allowed
     mapping(bytes4 => bool) public allowedForwardedEigenpodCalls;
     // function -> target_address -> allowed
@@ -152,6 +153,22 @@ contract EtherFiNodesManager is
         eigenPodManager = IEigenPodManager(_eigenPodManager);
         delayedWithdrawalRouter = IDelayedWithdrawalRouter(_delayedWithdrawalRouter);
         delegationManager = IDelegationManager(_delegationManager);
+    }
+
+    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+
+        // clear out deprecated variables so its easier for us to re-initialize in future
+        DEPRECATED_protocolRevenueManagerContract = address(0x0);
+        DEPRECATED_protocolRevenueManager = address(0x0);
+        DEPRECATED_protocolRewardsSplit = 0;
+        DEPRECATED_admin = address(0x0);
+        DEPRECATED_enableNodeRecycling = false;
+
+        // TODO: compile list of values in DEPRECATED_admins to clear out
+        // TODO: compile list of values in DEPRECATED_eigenLayerOperatingAdmin to clear out
+
+        roleRegistry = RoleRegistry(_roleRegistry);
     }
 
 
@@ -492,14 +509,11 @@ contract EtherFiNodesManager is
             returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
         }
     }
+    */
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  SETTER   --------------------------------------
     //--------------------------------------------------------------------------------------
-
-    function setRoleRegistry(address _roleRegistry) external onlyOwner {
-        roleRegistry = RoleRegistry(_roleRegistry);
-    }
 
     /// @notice Sets the staking rewards split
     /// @notice Splits must add up to the SCALE of 1_000_000
