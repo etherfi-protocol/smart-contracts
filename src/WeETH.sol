@@ -8,6 +8,7 @@ import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-ERC20Pe
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRateProvider.sol";
+import "forge-std/console.sol";
 
 contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider {
     //--------------------------------------------------------------------------------------
@@ -44,7 +45,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     }
 
     /// @notice Wraps eEth
-    /// @param _eETHAmount the amount of eEth to wrap
+/// @param _eETHAmount the amount of eEth to wrap
     /// @return returns the amount of weEth the user receives
     function wrap(uint256 _eETHAmount) public returns (uint256) {
         require(_eETHAmount > 0, "weETH: can't wrap zero eETH");
@@ -74,6 +75,13 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         _burn(msg.sender, _weETHAmount);
         eETH.transfer(msg.sender, eETHAmount);
         return eETHAmount;
+    }
+
+    /// @notice Transfer weEth out of treasury to the owner
+    function rescueTreasuryWeeth() public onlyOwner {
+        address treasury = 0x6329004E903B7F420245E7aF3f355186f2432466;
+        uint256 treasuryBal = balanceOf(treasury);
+       _transfer(treasury, msg.sender, treasuryBal);
     }
 
     //--------------------------------------------------------------------------------------
