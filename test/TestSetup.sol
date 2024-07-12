@@ -587,12 +587,6 @@ contract TestSetup is Test {
         admin = alice;
         setupRoleRegistry();
 
-        /*
-        // TODO: redo these roles with new system
-        managerInstance.updateAdmin(address(etherFiAdminInstance), true);
-        managerInstance.updateAdmin(alice, true);
-        */
-
         vm.startPrank(owner);
         membershipManagerInstance.updateAdmin(alice, true);
         membershipNftInstance.updateAdmin(alice, true);

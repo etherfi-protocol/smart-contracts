@@ -17,7 +17,7 @@ import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
 import "./TNFT.sol";
 import "./BNFT.sol";
-import "forge-std/console2.sol";
+import "forge-std/console.sol";
 
 
 contract EtherFiNodesManager is
@@ -157,6 +157,7 @@ contract EtherFiNodesManager is
 
     function initializeV2dot5(address _roleRegistry) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
+        require(DEPRECATED_protocolRevenueManager != address(0x00), "already initialized");
 
         // clear out deprecated variables so its easier for us to re-initialize in future
         DEPRECATED_protocolRevenueManagerContract = address(0x0);
@@ -466,50 +467,6 @@ contract EtherFiNodesManager is
             returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(_target, _data[i]);
         }
     }
-
-
-    /*
-    // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/core/DelegationManager.sol
-    /// @notice Call the Eigenlayer delegation Manager contract
-    /// @param data to call eigenPod contract
-    // - delegateTo(address operator, SignatureWithExpiry memory approverSignatureAndExpiry, bytes32 approverSalt)
-    // - undelegate(address staker)
-    // - completeQueuedWithdrawal
-    // - queueWithdrawals
-    function callDelegationManager(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
-        if (!roleRegistry.hasRole(EXTERNAL_CALLER_ROLE, msg.sender)) revert IncorrectRole();
-
-        address to = address(delegationManager);
-        returnData = new bytes[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
-        }
-    }
-
-    // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/pods/EigenPodManager.sol
-    /// @notice Call the Eigenlayer EigenPod Manager contract
-    /// @param data to call contract
-    // - recordBeaconChainETHBalanceUpdate
-    function callEigenPodManager(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
-        if (!roleRegistry.hasRole(EXTERNAL_CALLER_ROLE, msg.sender)) revert IncorrectRole();
-
-        address to = address(eigenPodManager);
-        returnData = new bytes[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
-        }
-    }
-
-    function callDelayedWithdrawalRouter(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
-        if (!roleRegistry.hasRole(EXTERNAL_CALLER_ROLE, msg.sender)) revert IncorrectRole();
-
-        address to = address(delayedWithdrawalRouter);
-        returnData = new bytes[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
-        }
-    }
-    */
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  SETTER   --------------------------------------
