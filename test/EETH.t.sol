@@ -348,7 +348,11 @@ contract EETHTest is TestSetup {
         eETHInstance.setBlacklistedRecipient(blacklist, true);
 
         vm.prank(alice);
-        vm.expectRevert("eETH: recipient blacklisted");
+        vm.expectRevert("eETH: blacklisted address");
         eETHInstance.transfer(bob, 1 ether);
+
+        vm.prank(bob);
+        vm.expectRevert("eETH: blacklisted address");
+        eETHInstance.transfer(alice, 1 ether);
     }
 }

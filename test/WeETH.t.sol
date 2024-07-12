@@ -338,7 +338,11 @@ contract WeETHTest is TestSetup {
         weEthInstance.setBlacklistedRecipient(blacklist, true);
 
         vm.prank(alice);
-        vm.expectRevert("weETH: recipient blacklisted");
+        vm.expectRevert("weETH: blacklisted address");
         weEthInstance.transfer(bob, 1 ether);
+
+        vm.prank(bob);
+        vm.expectRevert("weETH: blacklisted address");
+        weEthInstance.transfer(alice, 1 ether);
     }
 }

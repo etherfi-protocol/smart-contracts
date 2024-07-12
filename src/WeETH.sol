@@ -114,7 +114,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         address to,
         uint256 amount
     ) internal override {
-        require(blacklistedRecipient[to] == false, "weETH: recipient blacklisted");
+        require(!blacklistedRecipient[from] && !blacklistedRecipient[to], "weETH: blacklisted address");
         super._transfer(from, to, amount);
     }
 
