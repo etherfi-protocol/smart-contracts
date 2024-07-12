@@ -157,7 +157,6 @@ contract EtherFiNodesManager is
 
     function initializeV2dot5(address _roleRegistry) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
-        require(DEPRECATED_protocolRevenueManager != address(0x00), "already initialized");
 
         // clear out deprecated variables so its easier for us to re-initialize in future
         DEPRECATED_protocolRevenueManagerContract = address(0x0);

@@ -741,6 +741,8 @@ contract TestSetup is Test {
         roleRegistry.grantRole(managerInstance.WHITELIST_UPDATER(), owner);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), owner);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
         vm.stopPrank();
     }
 
