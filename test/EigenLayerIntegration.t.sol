@@ -522,6 +522,126 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         }
     }
 
+    function test_completeQueuedWithdrawals_338_for_withdrawal_from_undelegate() public {
+        uint256[] memory validatorIds = new uint256[](1);
+        validatorIds[0] = 338;
+        uint32[] memory timeStamps = new uint32[](1);
+        timeStamps[0] = 0;
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorIds[0]);
+
+        IDelegationManager mgr = managerInstance.delegationManager();
+
+        // 1. completeQueuedWithdrawal
+        // the withdrawal was queued by `undelegate` in https://etherscan.io/tx/0xd0e400ecd6711cf2f8e5ea97585c864db6d3ffb4d248d3e6d97a66b3683ec98b
+        {
+            // 
+            // {
+            // 'staker': '0x7aC9b51aB907715194F407C15191fce0F3771254',
+            // 'delegatedTo': '0x5b9B3Cf0202a1a3Dc8f527257b7E6002D23D8c85', 
+            // 'withdrawer': '0x7aC9b51aB907715194F407C15191fce0F3771254', 
+            // 'nonce': 0, 
+            // 'startBlock': 19692808, 
+            // 'strategies': ['0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0'], 
+            // 'shares': [32000000000000000000]
+            // }
+            IDelegationManager.Withdrawal memory withdrawal;
+            IERC20[] memory tokens = new IERC20[](1);
+            IStrategy[] memory strategies = new IStrategy[](1);
+            strategies[0] = IStrategy(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0);
+            uint256[] memory shares = new uint256[](1);
+            shares[0] = 32000000000000000000;
+            withdrawal = IDelegationManager.Withdrawal({
+                staker: 0x7aC9b51aB907715194F407C15191fce0F3771254,
+                delegatedTo: 0x5b9B3Cf0202a1a3Dc8f527257b7E6002D23D8c85,
+                withdrawer: 0x7aC9b51aB907715194F407C15191fce0F3771254,
+                nonce: 0,
+                startBlock: 19692808,
+                strategies: strategies,
+                shares: shares
+            });      
+            
+            bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
+            assertTrue(mgr.pendingWithdrawals(withdrawalRoot));
+
+            IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+            uint256[] memory middlewareTimesIndexes = new uint256[](1);
+            withdrawals[0] = withdrawal;
+            middlewareTimesIndexes[0] = 0;
+
+            vm.prank(owner);
+            vm.expectRevert();
+            EtherFiNode(payable(nodeAddress)).completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, false);
+
+            vm.prank(owner);
+            vm.expectRevert();
+            managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
+
+            vm.prank(owner);
+            managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, false);
+        }
+    }
+
+    function test_completeQueuedWithdrawals_338_e2e() public {
+        uint256[] memory validatorIds = new uint256[](1);
+        validatorIds[0] = 338;
+        uint32[] memory timeStamps = new uint32[](1);
+        timeStamps[0] = 0;
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorIds[0]);
+
+        IDelegationManager mgr = managerInstance.delegationManager();
+
+        // 1. completeQueuedWithdrawal for withdrawal from undelegate
+        test_completeQueuedWithdrawals_338_for_withdrawal_from_undelegate();
+
+        // 2. call `ProcessNodeExit` to initiate the queued withdrawal
+        IDelegationManager.Withdrawal memory withdrawal;
+        {
+            IStrategy[] memory strategies = new IStrategy[](1);
+            strategies[0] = mgr.beaconChainETHStrategy();
+            uint256[] memory shares = new uint256[](1);
+            shares[0] = 32 ether;
+            withdrawal = IDelegationManager.Withdrawal({
+                staker: nodeAddress,
+                delegatedTo: mgr.delegatedTo(nodeAddress),
+                withdrawer: nodeAddress,
+                nonce: mgr.cumulativeWithdrawalsQueued(nodeAddress),
+                startBlock: uint32(block.number),
+                strategies: strategies,
+                shares: shares
+            });      
+        }
+        
+        vm.prank(owner);
+        managerInstance.processNodeExit(validatorIds, timeStamps);
+    
+        // 3. Wait
+        // Wait 'minDelayBlock' after the `verifyAndProcessWithdrawals`
+        {
+            uint256 minDelayBlock = Math.max(mgr.minWithdrawalDelayBlocks(), mgr.strategyWithdrawalDelayBlocks(mgr.beaconChainETHStrategy()));
+            vm.roll(block.number + minDelayBlock);
+        }
+
+
+        // 4. DelegationManager.completeQueuedWithdrawal            
+        bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
+
+        IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+        uint256[] memory middlewareTimesIndexes = new uint256[](1);
+        withdrawals[0] = withdrawal;
+        middlewareTimesIndexes[0] = 0;
+
+        vm.prank(owner);
+        vm.expectRevert();
+        EtherFiNode(payable(nodeAddress)).completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, false);
+
+        vm.prank(owner);
+        vm.expectRevert();
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, false);
+
+        vm.prank(owner);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
+    }
+
     // Only {eigenLayerOperatingAdmin / Admin / Owner} can perform EigenLayer-related actions
     function test_access_control() public {
 

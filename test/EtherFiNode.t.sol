@@ -1907,9 +1907,12 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_mainnet_369_processNodeExit_success() public returns (IDelegationManager.Withdrawal memory) {
-        test_mainnet_369_verifyAndProcessWithdrawals();  
+        // test_mainnet_369_verifyAndProcessWithdrawals();  
+        initializeRealisticFork(MAINNET_FORK);
 
-        uint256 validatorId = 369;
+        vm.warp(block.timestamp + 7 * 24 * 3600);
+
+        uint256 validatorId = 338;
         address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
         IEigenPod eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
         IDelegationManager mgr = managerInstance.delegationManager();
@@ -1991,7 +1994,7 @@ contract EtherFiNodeTest is TestSetup {
         // FAIL, if the `minWithdrawalDelayBlocks` is not passed
         vm.prank(owner);
         vm.expectRevert("DelegationManager._completeQueuedWithdrawal: minWithdrawalDelayBlocks period has not yet passed");
-        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
 
         // 1. Wait
         // Wait 'minDelayBlock' after the `verifyAndProcessWithdrawals`
@@ -2015,7 +2018,7 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(eigenPod.withdrawableRestakedExecutionLayerGwei(), 32 ether / 1 gwei);
 
         // 2. DelegationManager.completeQueuedWithdrawal            
-        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
 
         assertEq(address(nodeAddress).balance, prevEtherFiNodeAddress + 32 ether);
         assertEq(eigenPodManager.podOwnerShares(nodeAddress), 0);
