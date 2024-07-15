@@ -178,9 +178,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function AdminTask_ApproveValidatorTask(bytes32 _reportHash, uint256[] memory _validatorsToApprove, bytes[] calldata _pubKey, bytes[] calldata _signature) external isAdmin() {
         require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
         require(ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, _validatorsToApprove))].exists, "EtherFiAdmin: task doesn't exist");
-
-        liquidityPool.batchApproveRegistration(_validatorsToApprove, _pubKey, _signature);
         ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, _validatorsToApprove))].completed = true;
+        liquidityPool.batchApproveRegistration(_validatorsToApprove, _pubKey, _signature);
         emit ValidatorApprovalTaskCompleted(_reportHash, _validatorsToApprove);
     }
 
@@ -214,7 +213,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         membershipManager.rebase(_report.accruedRewards);
     }
 
-    function _batchAdminTask_ApproveValidators(bytes32 _reportHash, uint256[] memory _validatorsToApprove) internal {
+    function _enqueueTask_ApproveValidators(bytes32 _reportHash, uint256[] memory _validatorsToApprove) internal {
         /// @dev I had to hard-code the batchSize to 25 because of the stack too deep error
         // uint256 batchSize = 25;
 
@@ -227,7 +226,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             for (uint256 j = start; j < end; j++) {
                 validatorsToApproveBatch[j - start] = _validatorsToApprove[j];
             }
-            ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, _validatorsToApprove))].exists = true;
+            ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, _validatorsToApprove))] = TaskStatus({completed: false, exists: true});
             emit ValidatorApprovalTaskCreated(_reportHash, validatorsToApproveBatch);
         }
     }
@@ -235,7 +234,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function _handleValidators(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report) internal {
         // validatorsToApprove
         if (_report.validatorsToApprove.length > 0) {
-            _batchAdminTask_ApproveValidators(_reportHash, _report.validatorsToApprove);
+            _enqueueTask_ApproveValidators(_reportHash, _report.validatorsToApprove);
             // liquidityPool.batchApproveRegistration(_report.validatorsToApprove, _pubKey, _signature);
         }
 
