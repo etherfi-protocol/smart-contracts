@@ -48,7 +48,6 @@ contract EtherFiNode is IEtherFiNode {
     mapping(uint256 => uint32) restakingObservedExitBlocks;
 
     error ForwardedCallNotAllowed();
-    error InvalidForwardedCall();
     error CallFailed(bytes data);
 
     event EigenPodCreated(address indexed nodeAddress, address indexed podAddress);
@@ -505,44 +504,13 @@ contract EtherFiNode is IEtherFiNode {
     //--------------------------------------------------------------------------------------
 
     function callEigenPod(bytes calldata _data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
-        _verifyEigenPodCall(_data);
         return Address.functionCall(eigenPod, _data);
     }
 
     function forwardCall(address _to, bytes calldata _data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
-        _verifyForwardCall(_to, _data);
         return Address.functionCall(_to, _data);
     }
 
-    function _verifyEigenPodCall(bytes calldata _data) internal view {
-
-        if (_data.length < 4) revert InvalidForwardedCall();
-        bytes4 selector = bytes4(_data[:4]);
-
-        // can add extra restrictions to specific calls here i.e. checking specific paramaters
-        if (!IEtherFiNodesManager(etherFiNodesManager).allowedForwardedEigenpodCalls(selector)) revert ForwardedCallNotAllowed();
-
-        // withdrawNonBeaconChainETHBalanceWei
-        if (selector == IEigenPod.withdrawNonBeaconChainETHBalanceWei.selector) {
-            require(_data.length == 68, "INVALID_DATA_LENGTH");
-            address recipient = address(bytes20(_data[16:36]));
-
-            // No withdrawal to any other address than the safe
-            require (recipient == address(this), "INCORRECT_RECIPIENT");
-        }
-
-    }
-
-    function _verifyForwardCall(address _to, bytes calldata _data) internal view {
-
-        if (_data.length < 4) revert InvalidForwardedCall();
-        bytes4 selector = bytes4(_data[:4]);
-
-        if (!IEtherFiNodesManager(etherFiNodesManager).allowedForwardedExternalCalls(selector, _to)) revert ForwardedCallNotAllowed();
-
-        // can add extra restrictions to specific calls here i.e. checking specific paramaters
-        // if (selector == ...) { custom logic }
-    }
 
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------

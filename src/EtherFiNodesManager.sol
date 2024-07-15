@@ -117,6 +117,7 @@ contract EtherFiNodesManager is
     error NonZeroAddress();
     error IncorrectRole();
     error ForwardedCallNotAllowed();
+    error InvalidForwardedCall();
 
     /// @dev Sets the revenue splits on deployment
     /// @dev AuctionManager, treasury and deposit contracts must be deployed first
@@ -439,7 +440,6 @@ contract EtherFiNodesManager is
         emit AllowedForwardedEigenpodCallsUpdated(_selector, _allowed);
     }
 
-
     // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/pods/EigenPod.sol
     /// @notice Call the eigenPod contract
     // - withdrawBeforeRestaking
@@ -455,6 +455,7 @@ contract EtherFiNodesManager is
 
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
+            _verifyForwardedEigenpodCall(_data[i], _validatorIds[i]);
             returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(_data[i]);
         }
     }
@@ -464,8 +465,39 @@ contract EtherFiNodesManager is
 
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
+            _verifyForwardedExternalCall(_target, _data[i], _validatorIds[i]);
             returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(_target, _data[i]);
         }
+    }
+
+    function _verifyForwardedEigenpodCall(bytes calldata _data, uint256 _validatorId) internal view {
+
+        if (_data.length < 4) revert InvalidForwardedCall();
+        bytes4 selector = bytes4(_data[:4]);
+
+        // can add extra restrictions to specific calls here i.e. checking specific paramaters
+        if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
+
+        // withdrawNonBeaconChainETHBalanceWei
+        if (selector == IEigenPod.withdrawNonBeaconChainETHBalanceWei.selector) {
+            require(_data.length == 68, "INVALID_DATA_LENGTH");
+            address recipient = address(bytes20(_data[16:36]));
+
+            // No withdrawal to any other address than the safe
+            require (recipient == etherfiNodeAddress[_validatorId], "INCORRECT_RECIPIENT");
+        }
+
+    }
+
+    function _verifyForwardedExternalCall(address _to, bytes calldata _data, uint256 _validatorId) internal view {
+
+        if (_data.length < 4) revert InvalidForwardedCall();
+        bytes4 selector = bytes4(_data[:4]);
+
+        if (!allowedForwardedExternalCalls[selector][_to]) revert ForwardedCallNotAllowed();
+
+        // can add extra restrictions to specific calls here i.e. checking specific paramaters
+        // if (selector == ...) { custom logic }
     }
 
     //--------------------------------------------------------------------------------------
