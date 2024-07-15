@@ -159,32 +159,34 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         // Gather all fields required for recreating the Withdrawal struct. Quite a complicated object.
         // Our proof infra will be able to grab these fields by enumerating the DelegationManager.WithdrawalQueued event
+        IDelegationManager.Withdrawal memory withdrawal;
+        {
+            // only withdrawing eth not LSTs
+            IStrategy[] memory strategies = new IStrategy[](1);
+            strategies[0] = delegationManager.beaconChainETHStrategy();
 
-        // only withdrawing eth not LSTs
-        IStrategy[] memory strategies = new IStrategy[](1);
-        strategies[0] = delegationManager.beaconChainETHStrategy();
+            // All shares proven by full withdrawal proof that wasn't immediately queued into delayedWithdrawalRouter
+            // I believe this should always be exactly 32 eth per validator unless the validator had been slashed.
+            // All the partial withdrawals including the partial portion of the full withdrawal were immediately queued into delayedWithdrawalRouter
+            uint256[] memory shares = new uint256[](1);
+            shares[0] = uint256(pod.withdrawableRestakedExecutionLayerGwei()) * 1 gwei;
 
-        // All shares proven by full withdrawal proof that wasn't immediately queued into delayedWithdrawalRouter
-        // I believe this should always be exactly 32 eth per validator unless the validator had been slashed.
-        // All the partial withdrawals including the partial portion of the full withdrawal were immediately queued into delayedWithdrawalRouter
-        uint256[] memory shares = new uint256[](1);
-        shares[0] = uint256(pod.withdrawableRestakedExecutionLayerGwei()) * 1 gwei;
+            // how many withdrawals initiated by this eigenpod
+            uint256 nonce = delegationManager.cumulativeWithdrawalsQueued(address(node));
 
-        // how many withdrawals initiated by this eigenpod
-        uint256 nonce = delegationManager.cumulativeWithdrawalsQueued(address(node));
+            // block the original withdrawal was queued
+            uint32 startBlock = 20216438;
 
-        // block the original withdrawal was queued
-        uint32 startBlock = 20216438;
-
-        IDelegationManager.Withdrawal memory withdrawal = IDelegationManager.Withdrawal({
-            staker: address(node),
-            delegatedTo: address(0x5b9B3Cf0202a1a3Dc8f527257b7E6002D23D8c85),
-            withdrawer: address(node),
-            nonce: nonce,
-            startBlock: startBlock,
-            strategies: strategies,
-            shares: shares
-        });
+            withdrawal = IDelegationManager.Withdrawal({
+                staker: address(node),
+                delegatedTo: address(0x5b9B3Cf0202a1a3Dc8f527257b7E6002D23D8c85),
+                withdrawer: address(node),
+                nonce: nonce,
+                startBlock: startBlock,
+                strategies: strategies,
+                shares: shares
+            });
+        }
 
         // withdrawal root is hash of the withdrawal object, "keccak256(abi.encode(withdrawal));"
         bytes32 withdrawalRoot = delegationManager.calculateWithdrawalRoot(withdrawal);
@@ -209,17 +211,19 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
         withdrawals[0] = withdrawal;
 
+        bool receiveAsTokens = true;
+
         // claim should fail because not enough time has passed
         vm.expectRevert("DelegationManager._completeQueuedWithdrawal: minWithdrawalDelayBlocks period has not yet passed");
         vm.prank(admin);
-        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimeIndexes);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimeIndexes, receiveAsTokens);
 
         // wait 7 days
         vm.roll(block.number + 7200 * 7);
 
         // complete the withdrawal to the pod
         vm.prank(admin);
-        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimeIndexes);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimeIndexes, receiveAsTokens);
     }
 
     function _setWithdrawalCredentialParams() public {
