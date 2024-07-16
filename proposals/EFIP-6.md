@@ -1,4 +1,4 @@
-# [EFIP-XXXX] Fine-Grained Timelock
+# [EFIP-6] Fine-Grained Timelock
 
 
 **Author**: jtdev (jacob@ether.fi) 
