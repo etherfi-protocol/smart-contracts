@@ -7,7 +7,7 @@
 
 ## Summary
 
-EFIP-8 proposes to rescue the weEth held by the treasury contract, which lacks the functionality to transfer ERC20 tokens or upgrade the contract. This can be achieved by upgrading the weEth contract to add a function that allows the owner to transfer the weEth out of the treasury contract and only the treasury contract.  
+EFIP-8 proposes to rescue the weEth held by the [ether.fi treasury contract](https://etherscan.io/address/0x6329004e903b7f420245e7af3f355186f2432466), which lacks the functionality to transfer ERC20 tokens or upgrade the contract. This can be achieved by upgrading the weEth contract to add a function that allows the owner to transfer the weEth out of the treasury contract and only the treasury contract.  
 
 
 ## Motivation
