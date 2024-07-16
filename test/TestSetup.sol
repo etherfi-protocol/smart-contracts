@@ -32,6 +32,7 @@ import "../src/WeETH.sol";
 import "../src/MembershipManager.sol";
 import "../src/MembershipNFT.sol";
 import "../src/EarlyAdopterPool.sol";
+import "../src/RoleRegistry.sol";
 import "../src/TVLOracle.sol";
 import "../src/UUPSProxy.sol";
 import "../src/WithdrawRequestNFT.sol";
@@ -46,6 +47,8 @@ import "../src/archive/MembershipManagerV0.sol";
 import "../src/EtherFiOracle.sol";
 import "../src/EtherFiAdmin.sol";
 import "../src/EtherFiTimelock.sol";
+
+import "../src/BucketRateLimiter.sol";
 
 contract TestSetup is Test {
 
@@ -168,6 +171,9 @@ contract TestSetup is Test {
 
     EtherFiNode public node;
     Treasury public treasuryInstance;
+
+    RoleRegistry public roleRegistry;
+    RoleRegistry public roleRegistryImplementation;
 
     Attacker public attacker;
     RevertAttacker public revertAttacker;
@@ -394,10 +400,11 @@ contract TestSetup is Test {
 
         vm.warp(block.timestamp + 1 days);
 
-        liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
+        // liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
 
         vm.stopPrank();
     }
+
 
     function setUpTests() internal {
         vm.startPrank(owner);
@@ -576,10 +583,13 @@ contract TestSetup is Test {
             address(eigenLayerDelayedWithdrawalRouter),
             address(eigenLayerDelegationManager)
         );
-        managerInstance.updateAdmin(address(etherFiAdminInstance), true);
-        managerInstance.updateAdmin(alice, true);
+        vm.stopPrank();
 
+        // configure starting roles
+        admin = alice;
+        setupRoleRegistry();
 
+        vm.startPrank(owner);
         membershipManagerInstance.updateAdmin(alice, true);
         membershipNftInstance.updateAdmin(alice, true);
         withdrawRequestNFTInstance.updateAdmin(alice, true);
@@ -688,7 +698,6 @@ contract TestSetup is Test {
         stakingManagerInstance.registerTNFTContract(address(TNFTInstance));
         stakingManagerInstance.registerBNFTContract(address(BNFTInstance));
 
-
         depGen = new DepositDataGeneration();
 
         attacker = new Attacker(address(liquidityPoolInstance));
@@ -702,7 +711,41 @@ contract TestSetup is Test {
         _initializePeople();
         _initializeEtherFiAdmin();
 
-        admin = alice;
+    }
+
+    function setupRoleRegistry() public {
+
+        // TODO: I don't love the coupling here but it was too easy to make tests
+        // where the roleRegistry global var diverged from the one set in the manager instance.
+        // We should work toward a better system that for each contract, will deploy+initialize
+        // proxy if it doesn't exist, or upgrade to the latest version otherwise
+        if (address(managerInstance.roleRegistry()) == address(0x0)) {
+
+            // deploy new versions of role registry
+            roleRegistryImplementation = new RoleRegistry();
+            bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
+            roleRegistry = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
+
+            vm.prank(managerInstance.owner());
+            managerInstance.initializeV2dot5(address(roleRegistry));
+        }
+
+        vm.startPrank(admin);
+        roleRegistry.grantRole(managerInstance.NODE_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(managerInstance.EIGENPOD_CALLER_ROLE(), admin);
+        roleRegistry.grantRole(managerInstance.EXTERNAL_CALLER_ROLE(), admin);
+        roleRegistry.grantRole(managerInstance.WHITELIST_UPDATER(), admin);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), admin);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), admin);
+        roleRegistry.grantRole(managerInstance.NODE_ADMIN_ROLE(), owner);
+        roleRegistry.grantRole(managerInstance.EIGENPOD_CALLER_ROLE(), owner);
+        roleRegistry.grantRole(managerInstance.EXTERNAL_CALLER_ROLE(), owner);
+        roleRegistry.grantRole(managerInstance.WHITELIST_UPDATER(), owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
+        vm.stopPrank();
     }
 
     function _initOracleReportsforTesting() internal {

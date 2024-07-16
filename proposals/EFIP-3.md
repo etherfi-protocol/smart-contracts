@@ -26,7 +26,6 @@ It implements the following withdrawal flows:
     5. perform `EtherFiNodesManager.completeQueuedWithdrawals` which calls `DelegationManager.completeQueuedWithdrawal`
     6. Finally, perform `EtherFiNodesManager.fullWithdraw`
 
-
 - Partial Withdrawal
     1. validator's rewards is withdrawn from the beacon chain
     2. perform `EigenPod.verifyAndProcessWithdrawals` for the partial withdrawals. It triggers `DelayedWithdrawalRouter.createDelayedWithdrawal`
@@ -35,10 +34,18 @@ It implements the following withdrawal flows:
 
 For the details in the implementation, plz check the PR.
 
+## (2024/07/11) Update
+
+Extended the `completeQueuedWithdrawals` to handle the withdrawal requests for `undelegate` as well.
+
+The audit reviewer don't see a risk on the hotfix. The report is available [here](./references/NM-0217-extension-of-withdrawal-with-EL-m2.md)
+
+
 ## References
 
 - [Pull Request #58](https://github.com/etherfi-protocol/smart-contracts/pull/58)
 - [Audit review](./references/NM-0217-withdrawal-with-eigenlayer-m2.md)
+- [Audit review on extension 2024/07/11](./references/NM-0217-extension-of-withdrawal-with-EL-m2.md)
 
 ## Copyright
 

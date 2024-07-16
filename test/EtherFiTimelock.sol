@@ -7,6 +7,7 @@ import "forge-std/console2.sol";
 
 contract TimelockTest is TestSetup {
 
+    // TODO: redo this test since it relies on update admin function that no longer exists
     function test_timelock() public {
         initializeRealisticFork(MAINNET_FORK);
 
@@ -34,10 +35,11 @@ contract TimelockTest is TestSetup {
         // attempt to call an onlyOwner function with the previous owner
         vm.prank(owner);
         vm.expectRevert("Ownable: caller is not the owner");
-        managerInstance.updateAdmin(admin, true);
+        managerInstance.renounceOwnership();
 
-        // encoded data for EtherFiNodesManager.UpdateAdmin(admin, true)
-        bytes memory data = hex"670a6fd9000000000000000000000000cf03dd0a894ef79cb5b601a43c4b25e3ae4c67ed0000000000000000000000000000000000000000000000000000000000000001";
+        // encoded data for EtherFiNodesManager.setMaxEigenlayerWithdrawals(1)
+        uint8 maxWithdrawals = 1;
+        bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.setMaxEigenLayerWithdrawals.selector, maxWithdrawals);
 
         // attempt to directly execute with timelock. Not allowed to do tx before queuing it
         vm.prank(owner);
@@ -62,7 +64,7 @@ contract TimelockTest is TestSetup {
             1 days                    // time before operation can be run
         );
 
-        // schedule updateAdmin tx
+        // schedule tx
         vm.prank(owner);
         tl.schedule(
             address(managerInstance), // target
@@ -127,11 +129,13 @@ contract TimelockTest is TestSetup {
             0                         // optional salt
         );
 
-        // admin account should now have admin permissions on EtherfiNodesManager
-        assertEq(managerInstance.admins(admin), true);
+        // values should be updated
+        assertEq(managerInstance.maxEigenlayerWithdrawals(), maxWithdrawals);
+
 
         // queue and execute a tx to undo that change
-        bytes memory undoData = hex"670a6fd9000000000000000000000000cf03dd0a894ef79cb5b601a43c4b25e3ae4c67ed0000000000000000000000000000000000000000000000000000000000000000";
+        maxWithdrawals = 5;
+        bytes memory undoData = abi.encodeWithSelector(EtherFiNodesManager.setMaxEigenLayerWithdrawals.selector, maxWithdrawals);
         vm.prank(admin);
         tl.schedule(
             address(managerInstance), // target
@@ -150,7 +154,7 @@ contract TimelockTest is TestSetup {
             0,                        // optional predecessor
             0                         // optional salt
         );
-        assertEq(managerInstance.admins(admin), false);
+        assertEq(managerInstance.maxEigenlayerWithdrawals(), maxWithdrawals);
 
         // non-proposer should not be able to schedule tx
         address rando = vm.addr(0x987654321);

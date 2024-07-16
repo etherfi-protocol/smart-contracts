@@ -418,7 +418,10 @@ contract EtherFiNodeTest is TestSetup {
         data[0] = abi.encodeWithSelector(selector, safe, address(eigenPod).balance);
 
         vm.prank(owner);
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.updateAllowedForwardedEigenpodCalls(selector, true);
+
+        vm.prank(owner);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
     }
 
     function test_restakedAttackerCantBlockWithdraw() public {
@@ -632,7 +635,7 @@ contract EtherFiNodeTest is TestSetup {
         vm.expectRevert("INCORRECT_CALLER");
         IEtherFiNode(etherFiNode).processNodeExit(1);
 
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert(EtherFiNodesManager.IncorrectRole.selector);
         vm.prank(bob);
         managerInstance.processNodeExit(validatorIds, exitTimestamps);
         IEtherFiNodesManager.ValidatorInfo memory info = managerInstance.getValidatorInfo(validatorIds[0]);
@@ -721,7 +724,7 @@ contract EtherFiNodeTest is TestSetup {
 
         vm.deal(etherfiNode, 4 ether);
 
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert(EtherFiNodesManager.IncorrectRole.selector);
         vm.prank(bob);
         managerInstance.markBeingSlashed(bidId);
 
@@ -1904,9 +1907,12 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_mainnet_369_processNodeExit_success() public returns (IDelegationManager.Withdrawal memory) {
-        test_mainnet_369_verifyAndProcessWithdrawals();  
+        // test_mainnet_369_verifyAndProcessWithdrawals();  
+        initializeRealisticFork(MAINNET_FORK);
 
-        uint256 validatorId = 369;
+        vm.warp(block.timestamp + 7 * 24 * 3600);
+
+        uint256 validatorId = 338;
         address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
         IEigenPod eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
         IDelegationManager mgr = managerInstance.delegationManager();
@@ -1983,12 +1989,12 @@ contract EtherFiNodeTest is TestSetup {
         // FAIL, the forward call is not allowed for `completeQueuedWithdrawal`
         vm.expectRevert("NOT_ALLOWED");
         vm.prank(owner);
-        managerInstance.callDelegationManager(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
 
         // FAIL, if the `minWithdrawalDelayBlocks` is not passed
         vm.prank(owner);
         vm.expectRevert("DelegationManager._completeQueuedWithdrawal: minWithdrawalDelayBlocks period has not yet passed");
-        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
 
         // 1. Wait
         // Wait 'minDelayBlock' after the `verifyAndProcessWithdrawals`
@@ -2012,7 +2018,7 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(eigenPod.withdrawableRestakedExecutionLayerGwei(), 32 ether / 1 gwei);
 
         // 2. DelegationManager.completeQueuedWithdrawal            
-        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
 
         assertEq(address(nodeAddress).balance, prevEtherFiNodeAddress + 32 ether);
         assertEq(eigenPodManager.podOwnerShares(nodeAddress), 0);
@@ -2346,7 +2352,7 @@ contract EtherFiNodeTest is TestSetup {
         // Earned >= 16 ether
         _transferTo(etherfiNode, 16 ether);
 
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert(EtherFiNodesManager.IncorrectRole.selector);
         managerInstance.forcePartialWithdraw(validatorId);
 
         vm.prank(alice);

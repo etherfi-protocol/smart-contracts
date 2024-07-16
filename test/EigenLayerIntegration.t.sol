@@ -38,6 +38,11 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     bytes[] validatorFieldsProofs;
     bytes32[][] validatorFields;
 
+    event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
+    event WithdrawalQueued(bytes32 withdrawalRoot, IDelegationManager.Withdrawal withdrawal);
+    event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
+
+
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
 
@@ -80,7 +85,145 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         stakingManagerInstance.upgradeEtherFiNode(address(newNodeImpl));
         vm.stopPrank();
 
+        setupRoleRegistry();
+    }
 
+    // better forking experience for cases when you have nested tests because of solidity stack limits
+    mapping(string => uint256) createdForks;
+
+    function createOrSelectFork(string memory forkURL) public {
+
+        // fork already exists
+        if (createdForks[forkURL] != 0) {
+            vm.selectFork(createdForks[forkURL]);
+            return;
+        }
+
+        createdForks[forkURL] = vm.createFork(forkURL);
+        vm.selectFork(createdForks[forkURL]);
+
+        // upgrade fork to latest version of code that doesn't exist from when forks were made
+        // We should come up with a long term solution for this kind of situation
+        address newManagerImpl = address(new EtherFiNodesManager());
+        address newNodeImpl = address(new EtherFiNode());
+        vm.prank(managerInstance.owner());
+        managerInstance.upgradeTo(newManagerImpl);
+        vm.prank(stakingManagerInstance.owner());
+        stakingManagerInstance.upgradeEtherFiNode(newNodeImpl);
+
+        setupRoleRegistry();
+    }
+
+    function test_fullWithdraw_812() public {
+
+        createOrSelectFork(vm.envString("HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL"));
+
+        uint256 validatorId = 812;
+        address admin = managerInstance.owner();
+        EtherFiNode node = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
+        IEigenPod pod = IEigenPod(node.eigenPod());
+
+        uint256 nodeBalanceBeforeWithdrawal = address(node).balance;
+
+        // at stack limit so need to subdivide tests
+        test_completeQueuedWithdrawal_812();
+
+        assertEq(address(node).balance, nodeBalanceBeforeWithdrawal + 32 ether, "Balance did not increase as expected");
+
+        // my arbitrarily picked timestamp causes node operator to be fully punished
+        // important property is just that funds flow successfully to appropriate parties
+        vm.expectEmit(true, true, false, true);
+        emit FullWithdrawal(validatorId, address(node), 0, 30026957263471875000, 2002788682428125000, 3305105100000000);
+        managerInstance.fullWithdraw(validatorId);
+
+        assertEq(address(node).balance, 0, "funds did not get withdrawn as expected");
+    }
+
+    // This test hits the local variable stack limit. You can call this test as a starting point for additional
+    // tests of the the withdrawal flow
+    function test_completeQueuedWithdrawal_812() public {
+        createOrSelectFork(vm.envString("HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL"));
+
+        IDelegationManager delegationManager = managerInstance.delegationManager();
+
+        uint256 validatorId = 812;
+
+        uint256[] memory validatorIds = new uint256[](1);
+        uint32[] memory exitTimestamps = new uint32[](1);
+        validatorIds[0] = validatorId;
+        exitTimestamps[0] = 20206627;
+
+        address admin = managerInstance.owner();
+        EtherFiNode node = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
+        IEigenPod pod = IEigenPod(node.eigenPod());
+
+        // Gather all fields required for recreating the Withdrawal struct. Quite a complicated object.
+        // Our proof infra will be able to grab these fields by enumerating the DelegationManager.WithdrawalQueued event
+        IDelegationManager.Withdrawal memory withdrawal;
+        {
+            // only withdrawing eth not LSTs
+            IStrategy[] memory strategies = new IStrategy[](1);
+            strategies[0] = delegationManager.beaconChainETHStrategy();
+
+            // All shares proven by full withdrawal proof that wasn't immediately queued into delayedWithdrawalRouter
+            // I believe this should always be exactly 32 eth per validator unless the validator had been slashed.
+            // All the partial withdrawals including the partial portion of the full withdrawal were immediately queued into delayedWithdrawalRouter
+            uint256[] memory shares = new uint256[](1);
+            shares[0] = uint256(pod.withdrawableRestakedExecutionLayerGwei()) * 1 gwei;
+
+            // how many withdrawals initiated by this eigenpod
+            uint256 nonce = delegationManager.cumulativeWithdrawalsQueued(address(node));
+
+            // block the original withdrawal was queued
+            uint32 startBlock = 20216438;
+
+            withdrawal = IDelegationManager.Withdrawal({
+                staker: address(node),
+                delegatedTo: address(0x5b9B3Cf0202a1a3Dc8f527257b7E6002D23D8c85),
+                withdrawer: address(node),
+                nonce: nonce,
+                startBlock: startBlock,
+                strategies: strategies,
+                shares: shares
+            });
+        }
+
+        // withdrawal root is hash of the withdrawal object, "keccak256(abi.encode(withdrawal));"
+        bytes32 withdrawalRoot = delegationManager.calculateWithdrawalRoot(withdrawal);
+        assertEq(withdrawalRoot, 0x8a9e9fe2cb3ce091210d7b101553268a94c23f0d1f93b52ea3c04467731a9390);
+
+        // ensure emitted event matches our simulation
+        vm.expectEmit(false, false, false, true);
+        emit WithdrawalQueued(withdrawalRoot, withdrawal);
+
+        // check the event emitted by our contracts
+        bytes32[] memory withdrawalRoots = new bytes32[](1);
+        withdrawalRoots[0] = withdrawalRoot;
+        vm.expectEmit(true, true, false, true);
+        emit QueuedRestakingWithdrawal(validatorId, address(node), withdrawalRoots);
+
+        // actual exit call that will result in the both of the above events and the queuing of the withdrawal
+        vm.prank(admin);
+        managerInstance.processNodeExit(validatorIds, exitTimestamps);
+
+        // prepare to trigger claim from EtherfiNodesManager
+        uint256[] memory middlewareTimeIndexes = new uint256[](1); // currently unused by eigenlayer
+        IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+        withdrawals[0] = withdrawal;
+
+        bool receiveAsTokens = true;
+
+        // claim should fail because not enough time has passed
+        vm.expectRevert("DelegationManager._completeQueuedWithdrawal: minWithdrawalDelayBlocks period has not yet passed");
+        vm.prank(admin);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimeIndexes, receiveAsTokens);
+
+        // wait 7 days
+        vm.roll(block.number + 7200 * 7);
+
+        // complete the withdrawal to the pod
+        vm.prank(admin);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimeIndexes, receiveAsTokens);
     }
 
     function _setWithdrawalCredentialParams() public {
@@ -100,7 +243,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     function _beacon_process_1ETH_deposit() internal {
         setJSON("./test/eigenlayer-utils/test-data/ValidatorFieldsProof_1293592_8654000.json");
-        
+
         _setWithdrawalCredentialParams();
     }
 
@@ -110,7 +253,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         oracleTimestamp = 1712964563;
         // timestamp doesn't seem to get set by custom RPC for even though block does
         vm.warp(1712974563);
-        
+
         _setWithdrawalCredentialParams();
     }
 
@@ -133,17 +276,22 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
 
+        // whitelist this external call
+        vm.prank(managerInstance.owner());
+        managerInstance.updateAllowedForwardedEigenpodCalls(selector, true);
+
         // Can perform 'verifyWithdrawalCredentials' only once
         vm.prank(owner);
         vm.expectRevert("EigenPod.verifyCorrectWithdrawalCredentials: Validator must be inactive to prove withdrawal credentials");
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
         vm.stopPrank();
     }
 
     // https://holesky.beaconcha.in/validator/1644305#deposits
     function test_verifyWithdrawalCredentials_32ETH() public {
 
-        vm.selectFork(vm.createFork(vm.envString("HISTORICAL_PROOF_RPC_URL")));
+        createOrSelectFork(vm.envString("HISTORICAL_PROOF_RPC_URL"));
+        setupRoleRegistry();
 
         int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
         IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
@@ -158,8 +306,13 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
+
+        // whitelist this external call
+        vm.prank(managerInstance.owner());
+        managerInstance.updateAllowedForwardedEigenpodCalls(selector, true);
+
         vm.prank(owner);
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
 
         int256 updatedShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
         console2.log("updatedShares:", updatedShares);
@@ -186,7 +339,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // Calling 'verifyBalanceUpdates' before 'verifyWithdrawalCredentials' should fail
         vm.prank(owner);
         vm.expectRevert("EigenPod.verifyBalanceUpdate: Validator not active");
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
         vm.stopPrank();
 
         vm.warp(oracleTimestamp + 5 hours);
@@ -194,20 +347,25 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // If the proof is too old, it should fail
         vm.prank(owner);
         vm.expectRevert("EigenPod.verifyBalanceUpdates: specified timestamp is too far in past");
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
         vm.stopPrank();
     }
 
     function test_createDelayedWithdrawal() public {
         test_verifyWithdrawalCredentials_32ETH();
+        address delayedWithdrawalRouter = address(managerInstance.delayedWithdrawalRouter());
 
         bytes4 selector = bytes4(keccak256("createDelayedWithdrawal(address,address)"));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, podOwner, alice);
 
+        // whitelist this external call
+        vm.prank(managerInstance.owner());
+        managerInstance.updateAllowedForwardedExternalCalls(selector, delayedWithdrawalRouter, true);
+
         vm.prank(owner);
         vm.expectRevert("DelayedWithdrawalRouter.onlyEigenPod: not podOwner's EigenPod");
-        managerInstance.callDelayedWithdrawalRouter(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, delayedWithdrawalRouter);
     }
 
     function test_recoverTokens() public {
@@ -220,8 +378,8 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         data[0] = abi.encodeWithSelector(selector, tokens, amounts, recipients);
 
         vm.prank(owner);
-        vm.expectRevert("NOT_ALLOWED");
-        managerInstance.callEigenPod(validatorIds, data);
+        vm.expectRevert(EtherFiNode.ForwardedCallNotAllowed.selector);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
     }
 
     function test_withdrawNonBeaconChainETHBalanceWei() public {
@@ -241,13 +399,17 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, alice, 1 ether);
 
+        // whitelist this external call
+        vm.prank(managerInstance.owner());
+        managerInstance.updateAllowedForwardedEigenpodCalls(selector, true);
+
         vm.prank(owner);
         vm.expectRevert("INCORRECT_RECIPIENT");
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
 
         data[0] = abi.encodeWithSelector(selector, podOwner, 1 ether);
         vm.prank(owner);
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
 
         // 3.
         (new_withdrawalSafe, new_eigenPod, new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
@@ -289,12 +451,16 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     // activateStaking & verifyWithdrawalCredentials & delegate to p2p
     function test_delegateTo() public {
 
+        createOrSelectFork(vm.envString("HISTORICAL_PROOF_RPC_URL"));
+
         test_verifyWithdrawalCredentials_32ETH();
 
         etherfi_avs_operator_1 = 0xfB487f216CA24162119C0C6Ae015d680D7569C2f;
 
         address operator = etherfi_avs_operator_1;
         address mainnet_earningsReceiver = 0x88C3c0AeAC97287E71D78bb97138727A60b2623b;
+        address delegationManager = address(managerInstance.delegationManager());
+        address delayedWithdrawalRouter = address(managerInstance.delayedWithdrawalRouter());
 
 
         test_registerAsOperator();
@@ -304,35 +470,43 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, operator, signatureWithExpiry, bytes32(0));
 
+        // whitelist this external call
+        vm.prank(managerInstance.owner());
+        managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
+
         // Confirm, the earningsReceiver is set to treasuryInstance
         assertEq(eigenLayerDelegationManager.earningsReceiver(operator), address(mainnet_earningsReceiver));
         assertEq(eigenLayerDelegationManager.isDelegated(podOwner), false);
 
         vm.startPrank(owner);
-        managerInstance.callDelegationManager(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
         vm.stopPrank();
 
         assertEq(eigenLayerDelegationManager.isDelegated(podOwner), true);
     }
 
     function test_undelegate() public {
+        createOrSelectFork(vm.envString("HISTORICAL_PROOF_RPC_URL"));
+        address delegationManager = address(managerInstance.delegationManager());
+
         // 1. activateStaking & verifyWithdrawalCredentials & delegate to p2p & undelegate from p2p
         {
             bytes4 selector = bytes4(keccak256("undelegate(address)"));
             bytes[] memory data = new bytes[](1);
             data[0] = abi.encodeWithSelector(selector, podOwner);
 
-            vm.prank(owner);
-            managerInstance.callDelegationManager(validatorIds, data);
+            // whitelist this external call
+            vm.prank(managerInstance.owner());
+            managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
 
             vm.prank(owner);
             vm.expectRevert("DelegationManager.undelegate: staker must be delegated to undelegate");
-            managerInstance.callDelegationManager(validatorIds, data);
+            managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
 
             test_delegateTo();
 
             vm.prank(owner);
-            managerInstance.callDelegationManager(validatorIds, data);
+            managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
         }
 
         // 2. delegate to dsrv
@@ -342,62 +516,200 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
             bytes[] memory data = new bytes[](1);
             data[0] = abi.encodeWithSelector(selector, dsrv, signatureWithExpiry, bytes32(0));
 
+            // whitelist this external call
+            vm.prank(managerInstance.owner());
+            managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
+
             vm.startPrank(owner);
-            managerInstance.callDelegationManager(validatorIds, data);
+            managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
             vm.stopPrank();
         }
     }
 
+    function test_completeQueuedWithdrawals_338_for_withdrawal_from_undelegate() public {
+        uint256[] memory validatorIds = new uint256[](1);
+        validatorIds[0] = 338;
+        uint32[] memory timeStamps = new uint32[](1);
+        timeStamps[0] = 0;
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorIds[0]);
+
+        IDelegationManager mgr = managerInstance.delegationManager();
+
+        // 1. completeQueuedWithdrawal
+        // the withdrawal was queued by `undelegate` in https://etherscan.io/tx/0xd0e400ecd6711cf2f8e5ea97585c864db6d3ffb4d248d3e6d97a66b3683ec98b
+        {
+            // 
+            // {
+            // 'staker': '0x7aC9b51aB907715194F407C15191fce0F3771254',
+            // 'delegatedTo': '0x5b9B3Cf0202a1a3Dc8f527257b7E6002D23D8c85', 
+            // 'withdrawer': '0x7aC9b51aB907715194F407C15191fce0F3771254', 
+            // 'nonce': 0, 
+            // 'startBlock': 19692808, 
+            // 'strategies': ['0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0'], 
+            // 'shares': [32000000000000000000]
+            // }
+            IDelegationManager.Withdrawal memory withdrawal;
+            IERC20[] memory tokens = new IERC20[](1);
+            IStrategy[] memory strategies = new IStrategy[](1);
+            strategies[0] = IStrategy(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0);
+            uint256[] memory shares = new uint256[](1);
+            shares[0] = 32000000000000000000;
+            withdrawal = IDelegationManager.Withdrawal({
+                staker: 0x7aC9b51aB907715194F407C15191fce0F3771254,
+                delegatedTo: 0x5b9B3Cf0202a1a3Dc8f527257b7E6002D23D8c85,
+                withdrawer: 0x7aC9b51aB907715194F407C15191fce0F3771254,
+                nonce: 0,
+                startBlock: 19692808,
+                strategies: strategies,
+                shares: shares
+            });      
+            
+            bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
+            assertTrue(mgr.pendingWithdrawals(withdrawalRoot));
+
+            IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+            uint256[] memory middlewareTimesIndexes = new uint256[](1);
+            withdrawals[0] = withdrawal;
+            middlewareTimesIndexes[0] = 0;
+
+            vm.prank(owner);
+            vm.expectRevert();
+            EtherFiNode(payable(nodeAddress)).completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, false);
+
+            vm.prank(owner);
+            vm.expectRevert();
+            managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
+
+            vm.prank(owner);
+            managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, false);
+        }
+    }
+
+    function test_completeQueuedWithdrawals_338_e2e() public {
+        uint256[] memory validatorIds = new uint256[](1);
+        validatorIds[0] = 338;
+        uint32[] memory timeStamps = new uint32[](1);
+        timeStamps[0] = 0;
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorIds[0]);
+
+        IDelegationManager mgr = managerInstance.delegationManager();
+
+        // 1. completeQueuedWithdrawal for withdrawal from undelegate
+        test_completeQueuedWithdrawals_338_for_withdrawal_from_undelegate();
+
+        // 2. call `ProcessNodeExit` to initiate the queued withdrawal
+        IDelegationManager.Withdrawal memory withdrawal;
+        {
+            IStrategy[] memory strategies = new IStrategy[](1);
+            strategies[0] = mgr.beaconChainETHStrategy();
+            uint256[] memory shares = new uint256[](1);
+            shares[0] = 32 ether;
+            withdrawal = IDelegationManager.Withdrawal({
+                staker: nodeAddress,
+                delegatedTo: mgr.delegatedTo(nodeAddress),
+                withdrawer: nodeAddress,
+                nonce: mgr.cumulativeWithdrawalsQueued(nodeAddress),
+                startBlock: uint32(block.number),
+                strategies: strategies,
+                shares: shares
+            });      
+        }
+        
+        vm.prank(owner);
+        managerInstance.processNodeExit(validatorIds, timeStamps);
+    
+        // 3. Wait
+        // Wait 'minDelayBlock' after the `verifyAndProcessWithdrawals`
+        {
+            uint256 minDelayBlock = Math.max(mgr.minWithdrawalDelayBlocks(), mgr.strategyWithdrawalDelayBlocks(mgr.beaconChainETHStrategy()));
+            vm.roll(block.number + minDelayBlock);
+        }
+
+
+        // 4. DelegationManager.completeQueuedWithdrawal            
+        bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
+
+        IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+        uint256[] memory middlewareTimesIndexes = new uint256[](1);
+        withdrawals[0] = withdrawal;
+        middlewareTimesIndexes[0] = 0;
+
+        vm.prank(owner);
+        vm.expectRevert();
+        EtherFiNode(payable(nodeAddress)).completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, false);
+
+        vm.prank(owner);
+        vm.expectRevert();
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, false);
+
+        vm.prank(owner);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
+    }
+
     // Only {eigenLayerOperatingAdmin / Admin / Owner} can perform EigenLayer-related actions
     function test_access_control() public {
+
+        setupRoleRegistry();
+
         bytes4 selector = bytes4(keccak256(""));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector);
 
+        address eigenPodManager = address(managerInstance.eigenPodManager());
+        address delegationManager = address(managerInstance.delegationManager());
+        address delayedWithdrawalRouter = address(managerInstance.delayedWithdrawalRouter());
+
         // FAIL
         vm.startPrank(chad);
 
-        selector = bytes4(keccak256("nonBeaconChainETHBalanceWei()"));
-        data[0] = abi.encodeWithSelector(selector);
+        bytes4 selector1 = bytes4(keccak256("nonBeaconChainETHBalanceWei()"));
+        data[0] = abi.encodeWithSelector(selector1);
         vm.expectRevert();
-        managerInstance.callEigenPod(validatorIds, data);
+        managerInstance.forwardEigenpodCall(validatorIds, data);
 
-        selector = bytes4(keccak256("ethPOS()"));
-        data[0] = abi.encodeWithSelector(selector);
+        bytes4 selector2 = bytes4(keccak256("ethPOS()"));
+        data[0] = abi.encodeWithSelector(selector2);
         vm.expectRevert();
-        managerInstance.callDelegationManager(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, eigenPodManager);
 
-        selector = bytes4(keccak256("domainSeparator()"));
-        data[0] = abi.encodeWithSelector(selector);
+        bytes4 selector3 = bytes4(keccak256("domainSeparator()"));
+        data[0] = abi.encodeWithSelector(selector3);
         vm.expectRevert();
-        managerInstance.callEigenPodManager(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
 
-        selector = bytes4(keccak256("withdrawalDelayBlocks()"));
-        data[0] = abi.encodeWithSelector(selector);
+        bytes4 selector4 = bytes4(keccak256("withdrawalDelayBlocks()"));
+        data[0] = abi.encodeWithSelector(selector4);
         vm.expectRevert();
-        managerInstance.callDelayedWithdrawalRouter(validatorIds, data);
+        managerInstance.forwardExternalCall(validatorIds, data, delayedWithdrawalRouter);
 
         vm.stopPrank();
 
+        // Update permissions
+        vm.startPrank(admin);
+        roleRegistry.grantRole(managerInstance.EIGENPOD_CALLER_ROLE(), chad);
+        roleRegistry.grantRole(managerInstance.EXTERNAL_CALLER_ROLE(), chad);
+        vm.stopPrank();
+
+        vm.startPrank(managerInstance.owner());
+        managerInstance.updateAllowedForwardedEigenpodCalls(selector1, true);
+        managerInstance.updateAllowedForwardedExternalCalls(selector2, eigenPodManager, true);
+        managerInstance.updateAllowedForwardedExternalCalls(selector3, delegationManager, true);
+        managerInstance.updateAllowedForwardedExternalCalls(selector4, delayedWithdrawalRouter, true);
+        vm.stopPrank();
+
         // SUCCEEDS
-        address el_operating_admin = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
-        vm.startPrank(el_operating_admin);
+        vm.startPrank(chad);
 
-        selector = bytes4(keccak256("nonBeaconChainETHBalanceWei()"));
-        data[0] = abi.encodeWithSelector(selector);
-        managerInstance.callEigenPod(validatorIds, data);
+        data[0] = abi.encodeWithSelector(selector1);
 
-        selector = bytes4(keccak256("ethPOS()"));
-        data[0] = abi.encodeWithSelector(selector);
-        managerInstance.callEigenPodManager(validatorIds, data);
+        data[0] = abi.encodeWithSelector(selector2);
+        managerInstance.forwardExternalCall(validatorIds, data, eigenPodManager);
 
-        selector = bytes4(keccak256("domainSeparator()"));
-        data[0] = abi.encodeWithSelector(selector);
-        managerInstance.callDelegationManager(validatorIds, data);
+        data[0] = abi.encodeWithSelector(selector3);
+        managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
 
-        selector = bytes4(keccak256("withdrawalDelayBlocks()"));
-        data[0] = abi.encodeWithSelector(selector);
-        managerInstance.callDelayedWithdrawalRouter(validatorIds, data);
+        data[0] = abi.encodeWithSelector(selector4);
+        managerInstance.forwardExternalCall(validatorIds, data, delayedWithdrawalRouter);
 
         vm.stopPrank();
 

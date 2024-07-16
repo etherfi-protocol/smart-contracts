@@ -549,8 +549,8 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_all_pause() public {
-        vm.startPrank(alice);
 
+        vm.startPrank(alice);
         etherFiAdminInstance.pause(true, true, true, false, false, false);
         etherFiAdminInstance.pause(true, true, true, false, false, false);
         etherFiAdminInstance.pause(true, true, true, true, true, true);

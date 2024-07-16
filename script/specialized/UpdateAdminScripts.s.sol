@@ -40,7 +40,6 @@ contract UpdateAdmins is Script {
 
         address admin = vm.envAddress("ADMIN");
         
-        EtherFiNodesManager(payable(etherFiNodesManager)).updateAdmin(admin, true); 
         // ProtocolRevenueManager(payable(protocolRevenueManager)).updateAdmin(admin);  // DEPRECATED
         AuctionManager(auctionManager).updateAdmin(admin, true); 
         StakingManager(stakingManager).updateAdmin(admin, true); 

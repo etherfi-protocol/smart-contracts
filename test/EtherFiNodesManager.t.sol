@@ -80,7 +80,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_SetStakingRewardsSplit() public {
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert(EtherFiNodesManager.IncorrectRole.selector);
         vm.prank(bob);
         managerInstance.setStakingRewardsSplit(100000, 100000, 400000, 400000);
 
@@ -101,7 +101,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
     
     function test_SetNonExitPenaltyPrincipal() public {
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert(EtherFiNodesManager.IncorrectRole.selector);
         vm.prank(bob);
         managerInstance.setNonExitPenalty(300, 2 ether);
 
@@ -114,7 +114,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_SetNonExitPenaltyDailyRate() public {
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert(EtherFiNodesManager.IncorrectRole.selector);
         vm.prank(bob);
         managerInstance.setNonExitPenalty(300, 2 ether);
 

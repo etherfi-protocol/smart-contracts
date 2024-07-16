@@ -8,6 +8,8 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
+import "@openzeppelin/contracts/access/IAccessControl.sol";
+import "./RoleRegistry.sol";
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
@@ -44,13 +46,13 @@ contract EtherFiNodesManager is
     TNFT public tnft;
     BNFT public bnft;
     IAuctionManager public auctionManager;
-    IProtocolRevenueManager public DEPRECATED_protocolRevenueManager;
+    address public DEPRECATED_protocolRevenueManager;
 
     RewardsSplit public stakingRewardsSplit;
-    RewardsSplit public DEPRECATED_protocolRewardsSplit;
+    uint256 public DEPRECATED_protocolRewardsSplit;
 
     address public DEPRECATED_admin;
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
 
     IEigenPodManager public eigenPodManager;
     IDelayedWithdrawalRouter public delayedWithdrawalRouter;
@@ -66,7 +68,22 @@ contract EtherFiNodesManager is
 
     IDelegationManager public delegationManager;
 
-    mapping(address => bool) public eigenLayerOperatingAdmin;
+    mapping(address => bool) public DEPRECATED_eigenLayerOperatingAdmin;
+
+    RoleRegistry public roleRegistry;
+    // function -> allowed
+    mapping(bytes4 => bool) public allowedForwardedEigenpodCalls;
+    // function -> target_address -> allowed
+    mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls;
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ROLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 constant public NODE_ADMIN_ROLE = keccak256("EFNM_NODE_ADMIN_ROLE");
+    bytes32 constant public WHITELIST_UPDATER = keccak256("EFNM_WHITELIST_UPDATER");
+    bytes32 constant public EIGENPOD_CALLER_ROLE = keccak256("EFNM_EIGENPOD_CALLER_ROLE");
+    bytes32 constant public EXTERNAL_CALLER_ROLE = keccak256("EFNM_EXTERNAL_CALLER_ROLE");
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -82,6 +99,9 @@ contract EtherFiNodesManager is
     event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
 
+    event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
+    event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
+
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
@@ -95,6 +115,9 @@ contract EtherFiNodesManager is
 
     error InvalidParams();
     error NonZeroAddress();
+    error IncorrectRole();
+    error ForwardedCallNotAllowed();
+    error InvalidForwardedCall();
 
     /// @dev Sets the revenue splits on deployment
     /// @dev AuctionManager, treasury and deposit contracts must be deployed first
@@ -133,6 +156,23 @@ contract EtherFiNodesManager is
         delegationManager = IDelegationManager(_delegationManager);
     }
 
+    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+
+        // clear out deprecated variables so its easier for us to re-initialize in future
+        DEPRECATED_protocolRevenueManagerContract = address(0x0);
+        DEPRECATED_protocolRevenueManager = address(0x0);
+        DEPRECATED_protocolRewardsSplit = 0;
+        DEPRECATED_admin = address(0x0);
+        DEPRECATED_enableNodeRecycling = false;
+
+        // TODO: compile list of values in DEPRECATED_admins to clear out
+        // TODO: compile list of values in DEPRECATED_eigenLayerOperatingAdmin to clear out
+
+        roleRegistry = RoleRegistry(_roleRegistry);
+    }
+
+
     /// @notice Send the request to exit the validators as their T-NFT holder
     ///         The B-NFT holder must serve the request otherwise their bond will get penalized gradually
     /// @param _validatorIds IDs of the validators
@@ -159,8 +199,10 @@ contract EtherFiNodesManager is
     function processNodeExit(
         uint256[] calldata _validatorIds,
         uint32[] calldata _exitTimestamps
-    ) external onlyAdmin nonReentrant whenNotPaused {
+    ) external nonReentrant whenNotPaused {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if (_validatorIds.length != _exitTimestamps.length) revert InvalidParams();
+
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             uint256 _validatorId = _validatorIds[i];
             address etherfiNode = etherfiNodeAddress[_validatorId];
@@ -182,17 +224,19 @@ contract EtherFiNodesManager is
     /// @notice queue a withdrawal of eth from an eigenPod. You must wait for the queuing period
     ///         defined by eigenLayer before you can finish the withdrawal via etherFiNode.claimDelayedWithdrawalRouterWithdrawals()
     /// @param _validatorIds The validator Ids
-    function batchQueueRestakedWithdrawal(uint256[] calldata _validatorIds) public onlyAdmin whenNotPaused {
+    function batchQueueRestakedWithdrawal(uint256[] calldata _validatorIds) public whenNotPaused {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address etherfiNode = etherfiNodeAddress[_validatorIds[i]];
             IEtherFiNode(etherfiNode).queueEigenpodFullWithdrawal();
         }
     }
 
-    function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes) external {
+    function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes, bool _receiveAsTokens) external {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address etherfiNode = etherfiNodeAddress[_validatorIds[i]];
-            IEtherFiNode(etherfiNode).completeQueuedWithdrawal(withdrawals[i], middlewareTimesIndexes[i]);
+            IEtherFiNode(etherfiNode).completeQueuedWithdrawal(withdrawals[i], middlewareTimesIndexes[i], _receiveAsTokens);
         }
     }
 
@@ -265,7 +309,9 @@ contract EtherFiNodesManager is
     // For the missed executions, this function will handle them:
     //  - the safe's balance goes above 16 ETH 
     //  - the Oracle confirms that none of the validators has exited & are pending for exits
-    function forcePartialWithdraw(uint256 _validatorId) external nonReentrant onlyAdmin {
+    function forcePartialWithdraw(uint256 _validatorId) external nonReentrant {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
 
@@ -284,7 +330,9 @@ contract EtherFiNodesManager is
     /// @param _validatorIds The validator Ids
     function markBeingSlashed(
         uint256[] calldata _validatorIds
-    ) external whenNotPaused onlyAdmin {
+    ) external whenNotPaused {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             _updateEtherFiNode(_validatorIds[i]);
             _setValidatorPhase(etherfiNodeAddress[_validatorIds[i]], _validatorIds[i], IEtherFiNode.VALIDATOR_PHASE.BEING_SLASHED);
@@ -367,9 +415,33 @@ contract EtherFiNodesManager is
         _unRegisterValidator(_validatorId);
     }
 
+    //--------------------------------------------------------------------------------------
+    //-------------------------------- CALL FORWARDING  ------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @notice Update the whitelist for external calls that can be executed by an EtherfiNode
+    /// @param _selector method selector
+    /// @param _target call target for forwarded call
+    /// @param _allowed enable or disable the call
+    function updateAllowedForwardedExternalCalls(bytes4 _selector, address _target, bool _allowed) external onlyOwner {
+        if (!roleRegistry.hasRole(WHITELIST_UPDATER, msg.sender)) revert IncorrectRole();
+
+        allowedForwardedExternalCalls[_selector][_target] = _allowed;
+        emit AllowedForwardedExternalCallsUpdated(_selector, _target, _allowed);
+    }
+
+    /// @notice Update the whitelist for external calls that can be executed against the corresponding eigenpod
+    /// @param _selector method selector
+    /// @param _allowed enable or disable the call
+    function updateAllowedForwardedEigenpodCalls(bytes4 _selector, bool _allowed) external {
+        if (!roleRegistry.hasRole(WHITELIST_UPDATER, msg.sender)) revert IncorrectRole();
+
+        allowedForwardedEigenpodCalls[_selector] = _allowed;
+        emit AllowedForwardedEigenpodCallsUpdated(_selector, _allowed);
+    }
+
     // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/pods/EigenPod.sol
     /// @notice Call the eigenPod contract
-    /// @param data to call eigenPod contract
     // - withdrawBeforeRestaking
     // - activateRestaking
     // - verifyWithdrawalCredentials
@@ -378,46 +450,54 @@ contract EtherFiNodesManager is
     // - 
     // - verifyBalanceUpdates
     // - verifyAndProcessWithdrawals
-    function callEigenPod(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
+    function forwardEigenpodCall(uint256[] calldata _validatorIds, bytes[] calldata _data) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
+        if (!roleRegistry.hasRole(EIGENPOD_CALLER_ROLE, msg.sender)) revert IncorrectRole();
+
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(data[i]);
+            _verifyForwardedEigenpodCall(_data[i], _validatorIds[i]);
+            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(_data[i]);
         }
     }
 
-    // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/core/DelegationManager.sol
-    /// @notice Call the Eigenlayer delegation Manager contract
-    /// @param data to call eigenPod contract
-    // - delegateTo(address operator, SignatureWithExpiry memory approverSignatureAndExpiry, bytes32 approverSalt)
-    // - undelegate(address staker)
-    // - completeQueuedWithdrawal
-    // - queueWithdrawals
-    function callDelegationManager(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
-        address to = address(delegationManager);
+    function forwardExternalCall(uint256[] calldata _validatorIds, bytes[] calldata _data, address _target) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
+        if (!roleRegistry.hasRole(EXTERNAL_CALLER_ROLE, msg.sender)) revert IncorrectRole();
+
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
+            _verifyForwardedExternalCall(_target, _data[i], _validatorIds[i]);
+            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(_target, _data[i]);
         }
     }
 
-    // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/pods/EigenPodManager.sol
-    /// @notice Call the Eigenlayer EigenPod Manager contract
-    /// @param data to call contract
-    // - recordBeaconChainETHBalanceUpdate
-    function callEigenPodManager(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
-        address to = address(eigenPodManager);
-        returnData = new bytes[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
+    function _verifyForwardedEigenpodCall(bytes calldata _data, uint256 _validatorId) internal view {
+
+        if (_data.length < 4) revert InvalidForwardedCall();
+        bytes4 selector = bytes4(_data[:4]);
+
+        // can add extra restrictions to specific calls here i.e. checking specific paramaters
+        if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
+
+        // withdrawNonBeaconChainETHBalanceWei
+        if (selector == IEigenPod.withdrawNonBeaconChainETHBalanceWei.selector) {
+            require(_data.length == 68, "INVALID_DATA_LENGTH");
+            address recipient = address(bytes20(_data[16:36]));
+
+            // No withdrawal to any other address than the safe
+            require (recipient == etherfiNodeAddress[_validatorId], "INCORRECT_RECIPIENT");
         }
+
     }
 
-    function callDelayedWithdrawalRouter(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
-        address to = address(delayedWithdrawalRouter);
-        returnData = new bytes[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
-        }
+    function _verifyForwardedExternalCall(address _to, bytes calldata _data, uint256 _validatorId) internal view {
+
+        if (_data.length < 4) revert InvalidForwardedCall();
+        bytes4 selector = bytes4(_data[:4]);
+
+        if (!allowedForwardedExternalCalls[selector][_to]) revert ForwardedCallNotAllowed();
+
+        // can add extra restrictions to specific calls here i.e. checking specific paramaters
+        // if (selector == ...) { custom logic }
     }
 
     //--------------------------------------------------------------------------------------
@@ -430,10 +510,10 @@ contract EtherFiNodesManager is
     /// @param _nodeOperator the split going to the nodeOperator
     /// @param _tnft the split going to the tnft holder
     /// @param _bnft the split going to the bnft holder
-    function setStakingRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnft)
-        public onlyAdmin
-    {
+    function setStakingRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnft) public {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if (_treasury + _nodeOperator + _tnft + _bnft != SCALE) revert InvalidParams();
+
         stakingRewardsSplit.treasury = _treasury;
         stakingRewardsSplit.nodeOperator = _nodeOperator;
         stakingRewardsSplit.tnft = _tnft;
@@ -444,8 +524,10 @@ contract EtherFiNodesManager is
     /// @notice Sets the Non Exit Penalty 
     /// @param _nonExitPenaltyPrincipal the new principal amount
     /// @param _nonExitPenaltyDailyRate the new non exit daily rate
-    function setNonExitPenalty(uint64 _nonExitPenaltyDailyRate, uint64 _nonExitPenaltyPrincipal) public onlyAdmin {
+    function setNonExitPenalty(uint64 _nonExitPenaltyDailyRate, uint64 _nonExitPenaltyPrincipal) public {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if(_nonExitPenaltyDailyRate > 10000) revert InvalidPenaltyRate();
+
         nonExitPenaltyPrincipal = _nonExitPenaltyPrincipal;
         nonExitPenaltyDailyRate = _nonExitPenaltyDailyRate;
     }
@@ -461,7 +543,9 @@ contract EtherFiNodesManager is
 
     /// @notice set maximum number of queued eigenlayer withdrawals that can be processed in 1 tx
     /// @param _max max number of queued withdrawals
-    function setMaxEigenLayerWithdrawals(uint8 _max) external onlyAdmin {
+    function setMaxEigenLayerWithdrawals(uint8 _max) external {
+        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         maxEigenlayerWithdrawals = _max;
     }
 
@@ -471,23 +555,15 @@ contract EtherFiNodesManager is
         numberOfValidators += _count;
     }
 
-    /// @notice Updates the address of the admin
-    /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        admins[_address] = _isAdmin;
-    }
-
-    function updateEigenLayerOperatingAdmin(address _address, bool _isAdmin) external onlyOwner {
-        eigenLayerOperatingAdmin[_address] = _isAdmin;
-    }
-
     // Pauses the contract
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
     // Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 
@@ -722,19 +798,10 @@ contract EtherFiNodesManager is
         return _getImplementation();
     }
 
-    error NotAdmin();
     error NotStakingManager();
-
-    function _requireAdmin() internal view virtual {
-        if (!admins[msg.sender] && msg.sender != owner()) revert NotAdmin();
-    }
 
     function _onlyStakingManagerContract() internal view virtual {
         if (msg.sender != stakingManagerContract) revert NotStakingManager();
-    }
-
-    function _eigenLayerOperatingAdmin() internal view virtual {
-        if (!eigenLayerOperatingAdmin[msg.sender] && !admins[msg.sender] && msg.sender != owner()) revert NotAdmin();
     }
 
     //--------------------------------------------------------------------------------------
@@ -743,16 +810,6 @@ contract EtherFiNodesManager is
 
     modifier onlyStakingManagerContract() {
         _onlyStakingManagerContract();
-        _;
-    }
-
-    modifier onlyAdmin() {
-        _requireAdmin();
-        _;
-    }
-
-    modifier onlyEigenLayerOperatingAdmin() {
-        _eigenLayerOperatingAdmin();
         _;
     }
 }
