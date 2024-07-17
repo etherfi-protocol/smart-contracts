@@ -22,73 +22,14 @@ contract EtherFiNodeTest is TestSetup {
 
     uint256[] bidId;
     EtherFiNode safeInstance;
-    EtherFiNode restakingSafe;
 
     function setUp() public {
         setUpTests();
 
-        vm.prank(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            _ipfsHash,
-            5
-        );
-
-        hoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        bidId = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-
-        startHoax(0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf);
-
-        uint256[] memory bidIdArray = new uint256[](1);
-        bidIdArray[0] = bidId[0];
-
-        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
-            bidIdArray,
-            false
-        );
-
+        bidId = new uint256[](1);
+        bidId[0] = depositAndRegisterValidator(false);
         address etherFiNode = managerInstance.etherfiNodeAddress(bidId[0]);
-
-        assertTrue(
-            managerInstance.phase(bidId[0]) ==
-                IEtherFiNode.VALIDATOR_PHASE.STAKE_DEPOSITED
-        );
-
-        IStakingManager.DepositData[]
-            memory depositDataArray = new IStakingManager.DepositData[](1);
-
-        bytes32 root = depGen.generateDepositRoot(
-            hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-            hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-            //managerInstance.generateWithdrawalCredentials(etherFiNode),
-            managerInstance.getWithdrawalCredentials(bidId[0]),
-            32 ether
-        );
-
-        IStakingManager.DepositData memory depositData = IStakingManager
-            .DepositData({
-                publicKey: hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-                signature: hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-                depositDataRoot: root,
-                ipfsHashForEncryptedValidatorKey: "test_ipfs"
-        });
-
-        depositDataArray[0] = depositData;
-
-        stakingManagerInstance.batchRegisterValidators(zeroRoot, bidId, depositDataArray);
-        vm.stopPrank();
-
-        assertTrue(
-            managerInstance.phase(bidId[0]) ==
-                IEtherFiNode.VALIDATOR_PHASE.LIVE
-        );
-
         safeInstance = EtherFiNode(payable(etherFiNode));
-
-        assertEq(address(etherFiNode).balance, 0 ether);
-        assertEq(
-            auctionInstance.accumulatedRevenue(),
-            0.1 ether
-        );
     }
 
 
@@ -508,114 +449,6 @@ contract EtherFiNodeTest is TestSetup {
         BNFTInstance.ownerOf(validatorId);
     }
 
-    function test_EtherFiNodeMultipleSafesWorkCorrectly() public {
-
-        vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            aliceIPFSHash,
-            5
-        );
-
-        vm.prank(chad);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            aliceIPFSHash,
-            5
-        );
-
-        hoax(alice);
-        uint256[] memory bidId1 = auctionInstance.createBid{value: 0.4 ether}(
-            1,
-            0.4 ether
-        );
-
-        hoax(chad);
-        uint256[] memory bidId2 = auctionInstance.createBid{value: 0.3 ether}(
-            1,
-            0.3 ether
-        );
-
-        hoax(bob);
-        uint256[] memory bidIdArray = new uint256[](1);
-        bidIdArray[0] = bidId1[0];
-
-        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
-            bidIdArray,
-            false
-        );
-
-        hoax(dan);
-        bidIdArray = new uint256[](1);
-        bidIdArray[0] = bidId2[0];
-
-        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
-            bidIdArray,
-            false
-        );
-
-        {
-            address staker_2 = stakingManagerInstance.bidIdToStaker(bidId1[0]);
-            address staker_3 = stakingManagerInstance.bidIdToStaker(bidId2[0]);
-            assertEq(staker_2, bob);
-            assertEq(staker_3, dan);
-        }
-
-        address etherFiNode = managerInstance.etherfiNodeAddress(bidId1[0]);
-
-        IStakingManager.DepositData[]
-            memory depositDataArray = new IStakingManager.DepositData[](1);
-
-        root = depGen.generateDepositRoot(
-            hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-            hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-            managerInstance.generateWithdrawalCredentials(etherFiNode),
-            32 ether
-        );
-
-        IStakingManager.DepositData memory depositData = IStakingManager
-            .DepositData({
-                publicKey: hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-                signature: hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-                depositDataRoot: root,
-                ipfsHashForEncryptedValidatorKey: "test_ipfs"
-            });
-
-        depositDataArray[0] = depositData;
-
-        startHoax(bob);
-        stakingManagerInstance.batchRegisterValidators(zeroRoot, bidId1, depositDataArray);
-        vm.stopPrank();
-
-        assertEq(address(managerInstance.etherfiNodeAddress(bidId1[0])).balance, 0);
-
-        etherFiNode = managerInstance.etherfiNodeAddress(bidId2[0]);
-
-        IStakingManager.DepositData[]
-            memory depositDataArray2 = new IStakingManager.DepositData[](1);
-
-        root = depGen.generateDepositRoot(
-            hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-            hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-            managerInstance.generateWithdrawalCredentials(etherFiNode),
-            32 ether
-        );
-
-        depositData = IStakingManager
-            .DepositData({
-                publicKey: hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-                signature: hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-                depositDataRoot: root,
-                ipfsHashForEncryptedValidatorKey: "test_ipfs"
-            });
-        
-        depositDataArray2[0] = depositData;
-
-        startHoax(dan);
-        stakingManagerInstance.batchRegisterValidators(zeroRoot, bidId2, depositDataArray2);
-        vm.stopPrank();
-
-        assertEq(address(managerInstance.etherfiNodeAddress(bidId2[0])).balance, 0);
-    }
-
     function test_markExitedWorksCorrectly() public {
         uint256[] memory validatorIds = new uint256[](1);
         validatorIds[0] = bidId[0];
@@ -674,8 +507,8 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_partialWithdrawRewardsDistribution() public {
-        address nodeOperator = 0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931;
-        address staker = 0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf;
+        address nodeOperator = elvis;
+        address staker = alice;
         address etherfiNode = managerInstance.etherfiNodeAddress(bidId[0]);
 
         // Transfer the T-NFT to 'dan'
@@ -760,7 +593,7 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_partialWithdrawAfterExitRequest() public {
-        address nodeOperator = 0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931;
+        address nodeOperator = elvis;
         address staker = 0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf;
         address etherfiNode = managerInstance.etherfiNodeAddress(bidId[0]);
 
@@ -789,7 +622,7 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_processNodeDistributeProtocolRevenueCorrectly() public {
-        address nodeOperator = 0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931;
+        address nodeOperator = elvis;
         address staker = 0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf;
 
         uint256[] memory validatorIds = new uint256[](1);
@@ -903,8 +736,8 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_partialWithdrawAfterExitFails() public {
-        address nodeOperator = 0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931;
-        address staker = 0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf;
+        address nodeOperator = elvis;
+        address staker = alice;
 
         uint256[] memory validatorIds = new uint256[](1);
         validatorIds[0] = bidId[0];
@@ -1361,17 +1194,21 @@ contract EtherFiNodeTest is TestSetup {
         validatorIds[0] = validatorId;
         exitRequestTimestamps[0] = uint32(block.timestamp);
 
-        address nodeOperator = 0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931;
-        address staker = 0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf;
 
         // Transfer the T-NFT to 'dan' (Just for testing scenario)
-        vm.prank(staker);
-        TNFTInstance.transferFrom(staker, dan, bidId[0]);
+        vm.prank(alice);
+        TNFTInstance.transferFrom(alice, dan, validatorIds[0]);
 
-        uint256 nodeOperatorBalance = address(nodeOperator).balance;
-        uint256 treasuryBalance = address(treasuryInstance).balance;
-        uint256 bnftStakerBalance = address(staker).balance;
-        uint256 tNftStakerBalance = address(dan).balance;
+        address nodeOperator = elvis;
+        address bnftStaker = BNFTInstance.ownerOf(validatorIds[0]);
+        address tnftStaker = TNFTInstance.ownerOf(validatorIds[0]);
+
+        uint256[] memory balances = new uint256[](4);
+
+        balances[0] = address(nodeOperator).balance;
+        balances[1] = address(treasuryInstance).balance;
+        balances[2] = address(bnftStaker).balance;
+        balances[3] = address(tnftStaker).balance;
 
         // Simulate the withdrawal from Beacon Network to Execution Layer
         _transferTo(etherfiNode, 32 ether + 1 ether);
@@ -1383,10 +1220,10 @@ contract EtherFiNodeTest is TestSetup {
         managerInstance.processNodeExit(validatorIds, exitRequestTimestamps); // Marked as EXITED
         managerInstance.batchFullWithdraw(validatorIds); // Full Withdrawal!
 
-        assertEq(address(nodeOperator).balance, nodeOperatorBalance + tvls[0]);
-        assertEq(address(dan).balance, tNftStakerBalance + tvls[1]);
-        assertEq(address(staker).balance, bnftStakerBalance + tvls[2]);
-        assertEq(address(treasuryInstance).balance, treasuryBalance + tvls[3]);
+        assertEq(address(nodeOperator).balance, balances[0] + tvls[0]);
+        assertEq(address(treasuryInstance).balance, balances[1] + tvls[3]);
+        assertEq(address(bnftStaker).balance, balances[2] + tvls[2]);
+        assertEq(address(tnftStaker).balance, balances[3] + tvls[1]);
     }
 
     function test_withdrawFundsFailsWhenReceiverConsumedTooMuchGas() public {
@@ -2525,64 +2362,4 @@ contract EtherFiNodeTest is TestSetup {
         vm.expectRevert("INVALID");
         managerInstance.batchSendExitRequest(_to_uint256_array(bidId[0]));
     }
-
-    // Zellic-Audit-Issue 4
-    function test_wrong_staker_on_fails_1() public {
-        vm.deal(alice, 100000 ether);
-
-        vm.startPrank(alice);
-        liquidityPoolInstance.deposit{value: 32 ether * 1}();
-
-        registerAsBnftHolder(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFSHash, 5);
-
-        {
-            uint256[] memory bidId1 = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
-            uint256[] memory newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(bidId1, 1);
-        }
-
-        uint256[] memory bidId1 = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
-        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidId1, false);
-
-        (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(bidId1);
-
-        vm.expectRevert("Wrong flow");
-        liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, bidId1, depositDataArray, depositDataRootsForApproval, sig);
-        vm.stopPrank();
-    }
-
-    // Zellic-Audit-Issue 4
-    function test_wrong_staker_on_fails_2() public {
-        vm.deal(alice, 100000 ether);
-
-        vm.startPrank(alice);
-        liquidityPoolInstance.deposit{value: 32 ether * 1}();
-
-        registerAsBnftHolder(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFSHash, 5);
-
-        uint256[] memory bidId1 = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
-        liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(bidId1, 1);
-
-        uint256[] memory bidId2 = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
-        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidId2, false);
-
-        // Confirm that the LP flow can't affect the 32 ETH staker flow
-        {
-            (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(bidId2);
-            vm.expectRevert("Wrong flow");
-            liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, bidId2, depositDataArray, depositDataRootsForApproval, sig);
-        }
-
-        // Confirm that the 32ETH flow can't affect the LP flow
-        {
-            IStakingManager.DepositData[] memory depositDataArray = _prepareForDepositData(bidId1, 32 ether);
-            vm.expectRevert("Wrong flow");
-            stakingManagerInstance.batchRegisterValidators(zeroRoot, bidId1, depositDataArray);
-        }
-
-        vm.stopPrank();
-    }
-
-
 }

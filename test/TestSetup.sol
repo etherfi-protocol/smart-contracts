@@ -867,23 +867,26 @@ contract TestSetup is Test {
     }
 
     function _approveNodeOperators() internal {
-        address[] memory users = new address[](4);
+        address[] memory users = new address[](5);
         users[0] = address(alice);
         users[1] = address(bob);
         users[2] = address(bob);
         users[3] = address(owner);
+        users[4] = address(elvis);
 
-        ILiquidityPool.SourceOfFunds[] memory approvedTags = new ILiquidityPool.SourceOfFunds[](4);
+        ILiquidityPool.SourceOfFunds[] memory approvedTags = new ILiquidityPool.SourceOfFunds[](5);
         approvedTags[0] = ILiquidityPool.SourceOfFunds.EETH;
         approvedTags[1] = ILiquidityPool.SourceOfFunds.ETHER_FAN;
         approvedTags[2] = ILiquidityPool.SourceOfFunds.EETH;
         approvedTags[3] = ILiquidityPool.SourceOfFunds.EETH;
+        approvedTags[4] = ILiquidityPool.SourceOfFunds.EETH;
 
-        bool[] memory approvals = new bool[](4);
+        bool[] memory approvals = new bool[](5);
         approvals[0] = true;
         approvals[1] = true;
         approvals[2] = true;
         approvals[3] = true;
+        approvals[4] = true;
 
         nodeOperatorManagerInstance.batchUpdateOperatorsApprovedTags(users, approvedTags, approvals);
 
@@ -1020,40 +1023,35 @@ contract TestSetup is Test {
     }
 
     function depositAndRegisterValidator(bool restaked) public returns (uint256) {
-        vm.deal(alice, 33 ether);
-        vm.startPrank(alice);
+        _transferTo(elvis, 0.1 ether);
 
+        vm.startPrank(elvis);
         // if we call this multiple times in a test, don't blow up
         try  nodeOperatorManagerInstance.registerNodeOperator("fake_ipfs_hash", 10) {
         } catch {}
 
         // create a new bid
         uint256[] memory createdBids = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
+        vm.stopPrank();
+
+        return _depositAndRegisterValidator(createdBids[0], restaked);
+    }
+
+    function _depositAndRegisterValidator(uint256 bidId, bool restaked) internal returns (uint256) {
+        vm.deal(alice, 33 ether);
+        uint256[] memory createdBids = new uint256[](1);
+        createdBids[0] = bidId;
 
         // deposit against that bid with restaking enabled
-        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether * createdBids.length}(createdBids, restaked);
+        vm.prank(address(liquidityPoolInstance));
+        stakingManagerInstance.batchDepositWithBidIds(createdBids, 1, alice, alice, alice, ILiquidityPool.SourceOfFunds.EETH, restaked, 0);
 
-        // Register the validator and send deposited eth to depositContract/Beaconchain
-        // signatures are not checked but roots need to match
-        bytes32 depositRoot = depGen.generateDepositRoot(
-            hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-            hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-            managerInstance.getWithdrawalCredentials(createdBids[0]),
-            32 ether
-        );
-        IStakingManager.DepositData memory depositData = IStakingManager
-            .DepositData({
-                publicKey: hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-                signature: hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-                depositDataRoot: depositRoot,
-                ipfsHashForEncryptedValidatorKey: "validator_unit_tests"
-        });
-        IStakingManager.DepositData[] memory depositDatas = new IStakingManager.DepositData[](1);
-        depositDatas[0] = depositData;
-        stakingManagerInstance.batchRegisterValidators(zeroRoot, createdBids, depositDatas);
+        (IStakingManager.DepositData[] memory depositDataArray,,,) = _prepareForValidatorRegistration(createdBids);
+        vm.deal(address(liquidityPoolInstance), 1 ether);
+        vm.prank(address(liquidityPoolInstance));
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, createdBids, alice, alice, depositDataArray, alice);
 
-        vm.stopPrank();
-        return createdBids[0];
+        return bidId;
     }
 
     function launch_validator() internal returns (uint256[] memory) {
@@ -1294,8 +1292,6 @@ contract TestSetup is Test {
         address newImpl = address(new StakingManager());
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeTo(newImpl);
-
-        assert(stakingManagerInstance.isFullStakeEnabled() == false);
     }
 
     function _upgrade_liquidity_pool_contract() internal {
