@@ -197,7 +197,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     // Process `liquidityPool.batchApproveRegistration` for the last task in the pending queue
-    function AdminTask_ApproveValidatorTask(bytes32 _reportHash, uint256[] memory _validatorsToApprove, bytes[] calldata _pubKey, bytes[] calldata _signature) external isAdmin() {
+    function AdminTask_ApproveValidatorTask(bytes32 _reportHash, uint256[] calldata _validatorsToApprove, bytes[] calldata _pubKey, bytes[] calldata _signature) external isAdmin() {
         require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
         require(ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, _validatorsToApprove))].exists, "EtherFiAdmin: task doesn't exist");
         ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, _validatorsToApprove))].completed = true;
@@ -206,6 +206,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function AdminTask_InvalidateValidatorTask(bytes32 _reportHash, uint256[] calldata validatorsToApprove) internal {
+        require(ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, validatorsToApprove))].exists, "EtherFiAdmin: task doesn't exist");
+        require(!ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, validatorsToApprove))].completed, "EtherFiAdmin: task already completed");
         ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, validatorsToApprove))].exists = false;
         emit ValidatorApprovalTaskInvalidated(_reportHash, validatorsToApprove);
     }
@@ -235,7 +237,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         membershipManager.rebase(_report.accruedRewards);
     }
 
-    function _enqueueTask_ApproveValidators(bytes32 _reportHash, uint256[] memory _validatorsToApprove) internal {
+    function _enqueueTask_ApproveValidators(bytes32 _reportHash, uint256[] calldata _validatorsToApprove) internal {
         /// @dev I had to hard-code the batchSize to 25 because of the stack too deep error
         // uint256 batchSize = 25;
 
@@ -248,7 +250,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             for (uint256 j = start; j < end; j++) {
                 validatorsToApproveBatch[j - start] = _validatorsToApprove[j];
             }
-            ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, _validatorsToApprove))] = TaskStatus({completed: false, exists: true});
+            ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, validatorsToApproveBatch))] = TaskStatus({completed: false, exists: true});
             emit ValidatorApprovalTaskCreated(_reportHash, validatorsToApproveBatch);
         }
     }
