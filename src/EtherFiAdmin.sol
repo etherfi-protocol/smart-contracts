@@ -152,6 +152,28 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return true;
     }
 
+    function executeTasks2(IEtherFiOracle.OracleReport calldata _report) external isAdmin() {
+        bytes32 reportHash = etherFiOracle.generateReportHash(_report);
+        uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
+        require(etherFiOracle.isConsensusReached(reportHash), "EtherFiAdmin: report didn't reach consensus");
+        require(slotForNextReportToProcess() == _report.refSlotFrom, "EtherFiAdmin: report has wrong `refSlotFrom`");
+        require(blockForNextReportToProcess() == _report.refBlockFrom, "EtherFiAdmin: report has wrong `refBlockFrom`");
+        require(current_slot >= postReportWaitTimeInSlots + etherFiOracle.getConsensusSlot(reportHash), "EtherFiAdmin: report is too fresh");
+
+        numValidatorsToSpinUp = _report.numValidatorsToSpinUp;
+
+        _handleAccruedRewards(_report);
+        _handleValidators(reportHash, _report);
+        _handleWithdrawals(_report);
+        _handleTargetFundsAllocations(_report);
+
+        lastHandledReportRefSlot = _report.refSlotTo;
+        lastHandledReportRefBlock = _report.refBlockTo;
+        lastAdminExecutionBlock = uint32(block.number);
+
+        emit AdminOperationsExecuted(msg.sender, reportHash);
+    }
+
     function executeTasks(IEtherFiOracle.OracleReport calldata _report, bytes[] calldata _pubKey, bytes[] calldata _signature) external isAdmin() {
         bytes32 reportHash = etherFiOracle.generateReportHash(_report);
         uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
