@@ -14,6 +14,7 @@ interface IStakingManager {
     struct StakerInfo {
         address staker;
         ILiquidityPool.SourceOfFunds sourceOfFund;
+        bytes10 hash;
     }
 
     function bidIdToStaker(uint256 id) external view returns (address);

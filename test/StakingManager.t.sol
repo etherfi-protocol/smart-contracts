@@ -207,19 +207,18 @@ contract StakingManagerTest is TestSetup {
         vm.prank(alice);
         stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, henry, bob, depositDataArray, alice);
 
+        address randomAddress = vm.addr(121232);
+        vm.expectRevert("INCORRECT_HASH");
+        vm.prank(address(liquidityPoolInstance));
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, randomAddress, bob, depositDataArray, alice);
+
+        vm.expectRevert("INCORRECT_HASH");
+        vm.prank(address(liquidityPoolInstance));
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, henry, randomAddress, depositDataArray, alice);
+
         vm.expectRevert("INCORRECT_CALLER");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, henry, bob, depositDataArray, chad);
-
-
-        // TODO: {T, B}-NFTs can be minted to any address
-        // vm.expectRevert("INCORRECT_CALLER");
-        // vm.prank(address(liquidityPoolInstance));
-        // stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, henry, chad, depositDataArray, alice);
-
-        // vm.expectRevert("");
-        // vm.prank(address(liquidityPoolInstance));
-        // stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, chad, bob, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, henry, bob, depositDataArray, randomAddress);
 
         vm.expectEmit(true, true, true, true);
         emit ValidatorRegistered(alice, henry, bob, validatorId[0], hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c", "test_ipfs");
@@ -229,7 +228,6 @@ contract StakingManagerTest is TestSetup {
         vm.expectRevert("INVALID_PHASE_TRANSITION");
         vm.prank(address(liquidityPoolInstance));
         stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, henry, bob, depositDataArray, alice);
-
     }
 
     function test_BatchDepositWithBidIdsFailsIfNotEnoughActiveBids() public {

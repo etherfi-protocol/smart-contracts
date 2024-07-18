@@ -340,6 +340,10 @@ contract StakingManager is
         bytes32 depositDataRoot = depositRootGenerator.generateDepositRoot(_depositData.publicKey, _depositData.signature, withdrawalCredentials, _depositAmount);
         require(depositDataRoot == _depositData.depositDataRoot, "WRONG_ROOT");
 
+        bytes32 fullHash = keccak256(abi.encode(_validatorId, _staker, _tNftRecipient, _bNftRecipient));
+        bytes10 truncatedHash = bytes10(fullHash);
+        require(truncatedHash == bidIdToStakerInfo[_validatorId].hash, "INCORRECT_HASH");
+
         if(_tNftRecipient == liquidityPoolContract) {
             // Deposits are split into two (1 ETH, 31 ETH). The latter is by the ether.fi Oracle
             nodesManager.setValidatorPhase(_validatorId, IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL);
@@ -372,7 +376,11 @@ contract StakingManager is
     /// @notice Update the state of the contract now that a deposit has been made
     /// @param _bidId The bid that won the right to the deposit
     function _processDeposit(uint256 _bidId, address _staker, address _tnftHolder, address _bnftHolder, bool _enableRestaking, ILiquidityPool.SourceOfFunds _source, uint256 _validatorIdToShareWithdrawalSafe) internal {
-        bidIdToStakerInfo[_bidId] = StakerInfo(_staker, _source);
+        // Compute the keccak256 hash of the input data
+        bytes32 fullHash = keccak256(abi.encode(_bidId, _staker, _tnftHolder, _bnftHolder));
+        bytes10 truncatedHash = bytes10(fullHash);
+        
+        bidIdToStakerInfo[_bidId] = StakerInfo(_staker, _source, truncatedHash);
         uint256 validatorId = _bidId;
 
         // register a withdrawalSafe for this bid/validator, creating a new one if necessary
