@@ -20,7 +20,7 @@ import "src/eigenlayer-interfaces/IPauserRegistry.sol";
  * indicates specifically that if the *third bit* of `_paused` is flipped -- i.e. it is a '1' -- then deposits should be paused
  */
 
-interface IPausable {
+interface IEigenPausable {
     /// @notice Emitted when the `pauserRegistry` is set to `newPauserRegistry`.
     event PauserRegistrySet(IPauserRegistry pauserRegistry, IPauserRegistry newPauserRegistry);
 
