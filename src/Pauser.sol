@@ -122,7 +122,10 @@ contract Pauser is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @notice Deletes a scheduled unpause action.
     */
     function deleteUnpause(bytes32 _id) external onlyRole(PAUSER_ADMIN) {
-        require(unpauseExecutionTime[_id] != _DONE_TIMESTAMP, "Unpause already executed");
+        uint256 timestamp = unpauseExecutionTime[_id];
+        require(timestamp != 0, "Unpause operation is not scheduled");
+        require(timestamp != _DONE_TIMESTAMP, "Unpause already executed");
+
         delete unpauseExecutionTime[_id];
         emit UnpauseDeleted(_id);
     }
