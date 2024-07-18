@@ -73,8 +73,13 @@ contract PauserTest is TestSetup {
 
     function test_pauseAll() public {
         // testing the removal and addition of pausables
-        pauser.removePausable(0); // removing the `liquifier`
+        uint256 liquifierIndex = pauser.getPausableIndex(address(liquifierInstance));
+        pauser.removePausable(liquifierIndex); // removing the `liquifier`
         pauser.addPausable(IPausable(address(auctionInstance)));
+        vm.expectRevert("Contract not found");
+        pauser.getPausableIndex(address(liquifierInstance));
+        uint256 auctionIndex = pauser.getPausableIndex(address(auctionInstance));
+        assertTrue(auctionIndex == 1);
 
         // pausing updated pausables array
         pauser.pauseAll();
@@ -130,7 +135,7 @@ contract PauserTest is TestSetup {
     function test_Reverts() public {
         roleRegistry.revokeRole(pauser.PAUSER_ADMIN(), alice);
 
-        vm.expectRevert("Pauser: sender requires permission");
+        vm.expectRevert("Sender requires permission");
         pauser.removePausable(0);
 
         roleRegistry.grantRole(pauser.PAUSER_ADMIN(), alice);

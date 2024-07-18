@@ -264,14 +264,15 @@ contract Pauser is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     // ========================================= GETTER FUNCTIONS =========================================
 
     /**
-     * @notice Ensures enough time has past to execute an unpause action and that it hasn't arleady been executed.
+     * @notice Gets the index of a contract in the pausables array if it exists.
      */
-    function _validateUnpause(bytes32 _id) internal view {
-        uint256 timestamp = unpauseExecutionTime[_id];
-
-        require(timestamp != 0, "Unpause operation is not scheduled");
-        require(timestamp != _DONE_TIMESTAMP, "Unpause operation already executed");
-        require(timestamp <= block.timestamp, "Unpause operation not past delay");
+    function getPausableIndex(address _contractAddress) external view returns (uint256) {
+        for (uint256 i = 0; i < pausables.length; ++i) {
+            if (address(pausables[i]) == _contractAddress) {
+                return i;
+            }
+        }
+        revert("Contract not found");
     }
 
     /**
@@ -311,10 +312,21 @@ contract Pauser is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         return keccak256(abi.encode(pausables, _timestampProposedProposed));
     }
 
+    /**
+     * @notice Ensures enough time has past to execute an unpause action and that it hasn't arleady been executed.
+     */
+    function _validateUnpause(bytes32 _id) internal view {
+        uint256 timestamp = unpauseExecutionTime[_id];
+
+        require(timestamp != 0, "Unpause operation is not scheduled");
+        require(timestamp != _DONE_TIMESTAMP, "Unpause operation already executed");
+        require(timestamp <= block.timestamp, "Unpause operation not past delay");
+    }
+
     // ========================================= MODIFIERS =========================================
 
     modifier onlyRole(bytes32 _role) {
-        require(roleRegistry.hasRole(_role, msg.sender), "Pauser: sender requires permission");
+        require(roleRegistry.hasRole(_role, msg.sender), "Sender requires permission");
         _;
     }
 }
