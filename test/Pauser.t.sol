@@ -5,7 +5,6 @@ import "./TestSetup.sol";
 import "../src/Pauser.sol";
 
 contract PauserTest is TestSetup {
-
     uint256 public constant INITIAL_DELAY = 1200; // 20 minutes
     Pauser pauser;
     IPausable[] initialPausables;
@@ -57,6 +56,19 @@ contract PauserTest is TestSetup {
         pauser.pauseSingle(IPausable(address(liquifierInstance)));
         vm.expectRevert("Unpause operation already executed");
         pauser.executeUnpauseSingle(IPausable(address(liquifierInstance)), 1);
+
+        // unpausing with an `updatedDelay`
+        pauser.updateDelay(INITIAL_DELAY + 600);
+        uint256 currentTimestamp = block.timestamp;
+        pauser.scheduleUnpauseSingle(IPausable(address(liquifierInstance)));
+        vm.warp(block.timestamp + INITIAL_DELAY + 599);
+        vm.expectRevert("Unpause operation not past delay");
+        pauser.executeUnpauseSingle(IPausable(address(liquifierInstance)), currentTimestamp);
+
+        // warping past the delay period
+        vm.warp(block.timestamp + 1);
+        pauser.executeUnpauseSingle(IPausable(address(liquifierInstance)), currentTimestamp);
+
     }
 
     function test_pauseAll() public {
@@ -127,5 +139,4 @@ contract PauserTest is TestSetup {
         vm.expectRevert(Pauser.Pauser__IndexOutOfBounds.selector);
         pauser.removePausable(1);
     }
-
 }
