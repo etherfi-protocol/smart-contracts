@@ -45,7 +45,13 @@ contract Pauser is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     //============================== ROLES ================================
 
+    /**
+     * @notice Contract specific roles.
+     */
     bytes32 public constant PAUSER_ADMIN = keccak256("PAUSER_ADMIN");
+    /**
+     * @notice Protocol specific roles.
+     */
     bytes32 public constant PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
     bytes32 public constant PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
     bytes32 public constant PROTOCOL_UPGRADER = keccak256("PROTOCOL_UPGRADER");
