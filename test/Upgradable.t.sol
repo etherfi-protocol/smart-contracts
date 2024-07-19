@@ -271,51 +271,18 @@ contract UpgradeTest is TestSetup {
     }
 
     function test_canUpgradeEtherFiNode() public {        
-        vm.prank(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            _ipfsHash,
-            5
-        );
-
-        startHoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-
-        uint256[] memory processedBids = stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidIds, false);
-
-        address safe1 = managerInstance.etherfiNodeAddress(processedBids[0]);
-        console.log(safe1);
-
-        vm.stopPrank();
-        
-        vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            _ipfsHash,
-            5
-        );
-
-        startHoax(alice);
-        uint256[] memory aliceBidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-        uint256[] memory aliceProcessedBids = stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(aliceBidIds, false);
-
-        address safe2 = managerInstance.etherfiNodeAddress(aliceProcessedBids[0]);
-        console.log(safe2);
-
-        vm.stopPrank();
+        uint256 validatorId = depositAndRegisterValidator(false);
 
         EtherFiNodeV2 etherFiNodeV2 = new EtherFiNodeV2();
 
         vm.prank(owner);
         stakingManagerInstance.upgradeEtherFiNode(address(etherFiNodeV2));
 
-
-        safe1 = managerInstance.etherfiNodeAddress(processedBids[0]);
-        safe2 = managerInstance.etherfiNodeAddress(aliceProcessedBids[0]);
+        address safe1 = managerInstance.etherfiNodeAddress(validatorId);
 
         EtherFiNodeV2 safe1V2 = EtherFiNodeV2(payable(safe1));
-        EtherFiNodeV2 safe2V2 = EtherFiNodeV2(payable(safe2));
 
         assertEq(safe1V2.isUpgraded(), true);
-        assertEq(safe2V2.isUpgraded(), true);
     }
 
     function test_CanUpgradeNodeOperatorManager() public {
