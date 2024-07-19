@@ -397,4 +397,29 @@ contract EtherFiNodesManagerTest is TestSetup {
         managerInstance.batchFullWithdraw(ids);
 
     }
+
+    function test_eip1271_signature() public {
+        address node = managerInstance.etherfiNodeAddress(bidId[0]);
+        bytes32 digestHash = keccak256(abi.encode("test"));
+
+        // the signature signed by 'chad' is not accepted because he is not an admin
+        {
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(4, digestHash);
+            bytes memory signature = abi.encodePacked(r, s, v);
+            assertEq(EtherFiNode(payable(node)).isValidSignature(digestHash, signature), bytes4(0xffffffff));
+        }
+
+        // Chad becomes an admin
+        vm.prank(owner);
+        managerInstance.updateEigenLayerOperatingAdmin(chad, true);
+        assertTrue(managerInstance.eigenLayerOperatingAdmin(chad));
+
+        // it works now
+        {
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(4, digestHash);
+            bytes memory signature = abi.encodePacked(r, s, v);
+            assertEq(EtherFiNode(payable(node)).isValidSignature(digestHash, signature), EtherFiNode.isValidSignature.selector);
+        }
+
+    }
 }
