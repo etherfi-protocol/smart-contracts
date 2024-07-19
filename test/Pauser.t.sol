@@ -21,6 +21,7 @@ contract PauserTest is TestSetup {
         pauser = Pauser(address(new UUPSProxy(address(pauserImplementation), initializerData)));
 
         // giving the pauser contract the permissions it needs to pause and unpause the contracts
+        // TODO: refactor to integrate with `RoleRegistry` tests once the configuration plan is planned
         vm.startPrank(owner);
         liquifierInstance.updatePauser(address(pauser), true);
         liquifierInstance.transferOwnership(address(pauser));
@@ -29,8 +30,8 @@ contract PauserTest is TestSetup {
 
         // setting contract roles
         vm.startPrank(admin);
-        roleRegistry.grantRole(pauser.PROTOCOL_PAUSER(), alice);
-        roleRegistry.grantRole(pauser.PROTOCOL_UNPAUSER(), alice);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), alice);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), alice);
         roleRegistry.grantRole(pauser.PAUSER_ADMIN(), alice);
         vm.startPrank(alice);
     }
@@ -40,35 +41,15 @@ contract PauserTest is TestSetup {
         pauser.pauseSingle(IPausable(address(liquifierInstance)));
         pauser.pauseSingle(IPausable(address(etherFiOracleInstance)));
         assertTrue(liquifierInstance.paused());
-
-        // scheduling the unpause of `liquifier` and warping past the delay
-        pauser.scheduleUnpauseSingle(IPausable(address(liquifierInstance)));
-        assertTrue(liquifierInstance.paused());
-        vm.warp(block.timestamp + INITIAL_DELAY);
+        assertTrue(etherFiOracleInstance.paused());
 
         // testing single unpause execution
-        vm.expectRevert("Unpause operation is not scheduled");
-        pauser.executeUnpauseSingle(IPausable(address(etherFiOracleInstance)), 1);
-        pauser.executeUnpauseSingle(IPausable(address(liquifierInstance)), 1);
+        pauser.unpauseSingle(IPausable(address(liquifierInstance)));
         assertFalse(liquifierInstance.paused());
+        assertTrue(etherFiOracleInstance.paused());
 
-        // testing re-use of executed unpause
-        pauser.pauseSingle(IPausable(address(liquifierInstance)));
-        vm.expectRevert("Unpause operation already executed");
-        pauser.executeUnpauseSingle(IPausable(address(liquifierInstance)), 1);
-
-        // unpausing with an `updatedDelay`
-        pauser.updateDelay(INITIAL_DELAY + 600);
-        uint256 currentTimestamp = block.timestamp;
-        pauser.scheduleUnpauseSingle(IPausable(address(liquifierInstance)));
-        vm.warp(block.timestamp + INITIAL_DELAY + 599);
-        vm.expectRevert("Unpause operation not past delay");
-        pauser.executeUnpauseSingle(IPausable(address(liquifierInstance)), currentTimestamp);
-
-        // warping past the delay period
-        vm.warp(block.timestamp + 1);
-        pauser.executeUnpauseSingle(IPausable(address(liquifierInstance)), currentTimestamp);
-
+        vm.expectRevert("Pausable: not paused");
+        pauser.unpauseSingle(IPausable(address(liquifierInstance)));
     }
 
     function test_pauseAll() public {
@@ -76,8 +57,10 @@ contract PauserTest is TestSetup {
         uint256 liquifierIndex = pauser.getPausableIndex(address(liquifierInstance));
         pauser.removePausable(liquifierIndex); // removing the `liquifier`
         pauser.addPausable(IPausable(address(auctionInstance)));
+
         vm.expectRevert("Contract not found");
         pauser.getPausableIndex(address(liquifierInstance));
+
         uint256 auctionIndex = pauser.getPausableIndex(address(auctionInstance));
         assertTrue(auctionIndex == 1);
 
@@ -86,53 +69,24 @@ contract PauserTest is TestSetup {
         assertFalse(liquifierInstance.paused());
         assertTrue(etherFiOracleInstance.paused());
         assertTrue(auctionInstance.paused());
-
-        vm.warp(531531);
-        bytes32 id = pauser.scheduleUnpauseAll();
-
-        // delay period has not passed yet
-        vm.warp(block.timestamp + INITIAL_DELAY - 1);
-        assertFalse(pauser.isExecutable(id));
-        vm.expectRevert("Unpause operation not past delay");
-        pauser.executeUnpauseAll(531531);
-
-        // warping past the delay period to executable state
-        vm.warp(block.timestamp + 1);
-        assertTrue(pauser.isExecutable(id));
-        pauser.executeUnpauseAll(531531);
-        assertFalse(etherFiOracleInstance.paused());
-        assertFalse(auctionInstance.paused());
     }
 
     function test_pauseMulti() public {
         pauser.addPausable(IPausable(address(auctionInstance)));
 
-        // pausing the `liquifier` and `etherFiOracle`
+        // pausing the `liquifier` and `etherFiOracle` from initialPausables
         pauser.pauseMultiple(initialPausables);
         assertTrue(liquifierInstance.paused());
         assertTrue(etherFiOracleInstance.paused());
         assertFalse(auctionInstance.paused());
 
-        bytes32 id = pauser.scheduleUnpauseMultiple(initialPausables);
-        vm.warp(block.timestamp + INITIAL_DELAY);
-
-        // removing a scheduled unpause operation
-        assertTrue(pauser.isExecutable(id));
-        pauser.deleteUnpause(id);
-        assertFalse(pauser.isExecutable(id));
-        vm.expectRevert("Unpause operation is not scheduled");
-        pauser.executeUnpauseMultiple(initialPausables, 1);
-
-        // executing a `scheduleUnpauseMultiple` operation
-        uint256 currentTimestamp = block.timestamp;
-        pauser.scheduleUnpauseMultiple(initialPausables);
-        vm.warp(block.timestamp + INITIAL_DELAY);
-        pauser.executeUnpauseMultiple(initialPausables, currentTimestamp);
+        // unpausing the `liquifier` and `etherFiOracle` from initialPausables
+        pauser.unpauseMultiple(initialPausables);
         assertFalse(liquifierInstance.paused());
         assertFalse(etherFiOracleInstance.paused());
     }
 
-    function test_Reverts() public {
+    function test_reverts() public {
         roleRegistry.revokeRole(pauser.PAUSER_ADMIN(), alice);
 
         vm.expectRevert("Sender requires permission");
@@ -143,5 +97,9 @@ contract PauserTest is TestSetup {
 
         vm.expectRevert(Pauser.Pauser__IndexOutOfBounds.selector);
         pauser.removePausable(1);
+
+        vm.startPrank(bob);
+        vm.expectRevert("Sender requires permission");
+        pauser.pauseSingle(IPausable(address(liquifierInstance)));
     }
 }
