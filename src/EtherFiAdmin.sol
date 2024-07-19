@@ -48,6 +48,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     mapping(address => bool) public pausers;
 
     mapping(bytes32 => TaskStatus) public ValidatorApprovalTaskStatus;
+    uint16 approvalTaskBatchSize;
 
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
@@ -83,6 +84,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         withdrawRequestNft = IWithdrawRequestNFT(_withdrawRequestNft);
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
+    }
+
+    function setBatchSize(uint16 _batchSize) external onlyOwner {
+        approvalTaskBatchSize = _batchSize;
     }
 
     // pause {etherfi oracle, staking manager, auction manager, etherfi nodes manager, liquidity pool, membership manager}
@@ -152,29 +157,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return true;
     }
 
-    function executeTasks2(IEtherFiOracle.OracleReport calldata _report) external isAdmin() {
-        bytes32 reportHash = etherFiOracle.generateReportHash(_report);
-        uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
-        require(etherFiOracle.isConsensusReached(reportHash), "EtherFiAdmin: report didn't reach consensus");
-        require(slotForNextReportToProcess() == _report.refSlotFrom, "EtherFiAdmin: report has wrong `refSlotFrom`");
-        require(blockForNextReportToProcess() == _report.refBlockFrom, "EtherFiAdmin: report has wrong `refBlockFrom`");
-        require(current_slot >= postReportWaitTimeInSlots + etherFiOracle.getConsensusSlot(reportHash), "EtherFiAdmin: report is too fresh");
-
-        numValidatorsToSpinUp = _report.numValidatorsToSpinUp;
-
-        _handleAccruedRewards(_report);
-        _handleValidators(reportHash, _report);
-        _handleWithdrawals(_report);
-        _handleTargetFundsAllocations(_report);
-
-        lastHandledReportRefSlot = _report.refSlotTo;
-        lastHandledReportRefBlock = _report.refBlockTo;
-        lastAdminExecutionBlock = uint32(block.number);
-
-        emit AdminOperationsExecuted(msg.sender, reportHash);
-    }
-
-    function executeTasks(IEtherFiOracle.OracleReport calldata _report, bytes[] calldata _pubKey, bytes[] calldata _signature) external isAdmin() {
+    function executeTasks(IEtherFiOracle.OracleReport calldata _report) external isAdmin() {
         bytes32 reportHash = etherFiOracle.generateReportHash(_report);
         uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
         require(etherFiOracle.isConsensusReached(reportHash), "EtherFiAdmin: report didn't reach consensus");
@@ -205,7 +188,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit ValidatorApprovalTaskCompleted(_reportHash, _validatorsToApprove);
     }
 
-    function AdminTask_InvalidateValidatorTask(bytes32 _reportHash, uint256[] calldata validatorsToApprove) internal {
+    function AdminTask_InvalidateValidatorTask(bytes32 _reportHash, uint256[] calldata validatorsToApprove) external isAdmin() {
         require(ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, validatorsToApprove))].exists, "EtherFiAdmin: task doesn't exist");
         require(!ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, validatorsToApprove))].completed, "EtherFiAdmin: task already completed");
         ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, validatorsToApprove))].exists = false;
@@ -238,13 +221,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _enqueueTask_ApproveValidators(bytes32 _reportHash, uint256[] calldata _validatorsToApprove) internal {
-        /// @dev I had to hard-code the batchSize to 25 because of the stack too deep error
-        // uint256 batchSize = 25;
-
-        uint256 numBatches = (_validatorsToApprove.length + 25 - 1) / 25;
+        uint256 numBatches = (_validatorsToApprove.length + approvalTaskBatchSize - 1) / approvalTaskBatchSize;
         for (uint256 i = 0; i < numBatches; i++) {
-            uint256 start = i * 25;
-            uint256 end = (i + 1) * 25 > _validatorsToApprove.length ? _validatorsToApprove.length : (i + 1) * 25;
+            uint256 start = i * approvalTaskBatchSize;
+            uint256 end = (i + 1) * approvalTaskBatchSize > _validatorsToApprove.length ? _validatorsToApprove.length : (i + 1) * approvalTaskBatchSize;
 
             uint256[] memory validatorsToApproveBatch = new uint256[](end - start);
             for (uint256 j = start; j < end; j++) {
@@ -259,22 +239,21 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // validatorsToApprove
         if (_report.validatorsToApprove.length > 0) {
             _enqueueTask_ApproveValidators(_reportHash, _report.validatorsToApprove);
-            // liquidityPool.batchApproveRegistration(_report.validatorsToApprove, _pubKey, _signature);
         }
 
         // liquidityPoolValidatorsToExit
         if (_report.liquidityPoolValidatorsToExit.length > 0) {
-            // liquidityPool.sendExitRequests(_report.liquidityPoolValidatorsToExit);
+            liquidityPool.sendExitRequests(_report.liquidityPoolValidatorsToExit);
         }
 
         // exitedValidators
         if (_report.exitedValidators.length > 0) {
-            // etherFiNodesManager.processNodeExit(_report.exitedValidators, _report.exitedValidatorsExitTimestamps);
+            etherFiNodesManager.processNodeExit(_report.exitedValidators, _report.exitedValidatorsExitTimestamps);
         }
 
         // slashedValidators
         if (_report.slashedValidators.length > 0) {
-            // etherFiNodesManager.markBeingSlashed(_report.slashedValidators);
+            etherFiNodesManager.markBeingSlashed(_report.slashedValidators);
         }
     }
 

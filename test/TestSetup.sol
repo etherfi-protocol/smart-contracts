@@ -641,6 +641,7 @@ contract TestSetup is Test {
             10000,
             0
         );
+        etherFiAdminInstance.setBatchSize(20);
         etherFiAdminInstance.updateAdmin(alice, true);
 
         etherFiOracleInstance.setEtherFiAdmin(address(etherFiAdminInstance));
@@ -954,7 +955,7 @@ contract TestSetup is Test {
         }
 
         vm.prank(alice);
-        etherFiAdminInstance.executeTasks(_report, _pubKey, _pubKey);
+        etherFiAdminInstance.executeTasks(_report);
     }
 
     function _emptyOracleReport() internal view returns (IEtherFiOracle.OracleReport memory report) {
