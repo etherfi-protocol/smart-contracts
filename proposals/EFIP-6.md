@@ -17,7 +17,6 @@ We have functionality for pausing and unpaused scattered across our individual c
 Implement a contract to serve as the central access point for the pausing and unpausing of our contracts. The [SevenSeas pauser contract](https://github.com/Se7en-Seas/boring-governance/blob/main/src/base/Roles/Pauser.sol) will be used as a base. The contract will be modified to use our `RoleRegistry` for access to the functions. 
 
 The existing contracts with pausing functionality will inherit a simple pausing interface:
-
 ```
 interface IPausable {
     function pauseContract() external;
