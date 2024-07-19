@@ -705,12 +705,6 @@ contract TestSetup is Test {
         _initializeEtherFiAdmin();
 
         admin = alice;
-
-        // weETH Instance must be on eETH whitelist for `weETH.wrapWithPermit` to function as expected
-        vm.prank(owner);
-        address[] memory whitelist = new address[](1);
-        whitelist[0] = address(weEthInstance);
-        eETHInstance.setWhitelistedSpender(whitelist, true);
     }
 
     function _initOracleReportsforTesting() internal {
