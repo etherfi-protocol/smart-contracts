@@ -207,6 +207,7 @@ contract TestSetup is Test {
     address liquidityPool = vm.addr(9);
     address shonee = vm.addr(1200);
     address jess = vm.addr(1201);
+    address committeeMember = address(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
 
     address admin;
 

@@ -10,7 +10,11 @@ contract EtherFiAdminUpgradeTest is TestSetup {
     bytes[] signatures;
     IEtherFiOracle.OracleReport report;
     uint16 batchSize;
+    uint16 alternativeBatchSize;
     bytes32 reportHash;
+    uint256[] batchValidatorsToApprove;
+    bytes32 approvalHash;
+    uint256 accruedRewards; 
 
     function setUp() public {
         setUpTests();
@@ -19,12 +23,15 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         signatures = _getImperialSignature();
         report = _generateImperialReport();
         batchSize = 25;
+        alternativeBatchSize = 10;
+        accruedRewards = 8729224130452426342;
         reportHash = etherFiOracleInstance.generateReportHash(report);
+        batchValidatorsToApprove = _getValidatorToApprove(52835, batchSize); //52835 based on transaction
+        approvalHash = keccak256(abi.encode(reportHash, batchValidatorsToApprove));
 
         //upgrade the contact
         EtherFiAdmin v2Implementation = new EtherFiAdmin();
-        address adminOwner = 0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761;
-        vm.startPrank(adminOwner);
+        vm.startPrank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(address(v2Implementation));
         etherFiAdminInstance.setBatchSize(batchSize);
         vm.stopPrank();
@@ -37,7 +44,6 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         internal
         returns (IEtherFiOracle.OracleReport memory)
     {
-        //create report structure exactly the same to what submitted for that block
         IEtherFiOracle.OracleReport memory report = IEtherFiOracle.OracleReport(
             {
                 consensusVersion: 1,
@@ -133,82 +139,79 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         return _pubKey;
     }
 
-    function test_queueValidatorApproval() public {
-        uint256[] memory batchValidatorsToApprove = _getValidatorToApprove(52835, batchSize); //52835 based on transaction
-        bytes32 approvalHash = keccak256(abi.encode(reportHash, batchValidatorsToApprove));
-
-        //submit, execute report and approve validators
-        vm.startPrank(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
+    function test_executeTask() public {
+        vm.startPrank(committeeMember);
         etherFiOracleInstance.submitReport(report);
         skip(3600);
+        (bool preExecuteCompleted, bool preExecuteExists) = etherFiAdminInstance.validatorApprovalTaskStatus(approvalHash);
+        assertFalse(preExecuteCompleted);
+        assertFalse(preExecuteExists);
         etherFiAdminInstance.executeTasks(report);
-        (bool preCompleted, bool preExists) = etherFiAdminInstance.ValidatorApprovalTaskStatus(approvalHash);
-        assertTrue(preExists);
-        assertFalse(preCompleted);
-        etherFiAdminInstance.AdminTask_ApproveValidatorTask(reportHash, batchValidatorsToApprove, pubKeys, signatures);
-        (bool postCompleted, bool postExists) = etherFiAdminInstance.ValidatorApprovalTaskStatus(approvalHash);
-        assertTrue(postCompleted);
-        assertTrue(postExists);
+    }
+
+    function test_changingBatchSize() public {
+        vm.startPrank(alice);
+        vm.expectRevert();
+        etherFiAdminInstance.setBatchSize(alternativeBatchSize);
+        vm.stopPrank();
+        vm.startPrank(owner);
+        etherFiAdminInstance.setBatchSize(alternativeBatchSize);
         vm.stopPrank();
     }
 
-    //test invalidate
     function test_invalidateReport() public {
-        uint256[] memory batchValidatorsToApprove = _getValidatorToApprove(52835, batchSize); //52835 based on transaction
-        bytes32 approvalHash = keccak256(abi.encode(reportHash, batchValidatorsToApprove));
-        vm.startPrank(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
-        etherFiOracleInstance.submitReport(report);
-        skip(3600);
-        etherFiAdminInstance.executeTasks(report);
-        etherFiAdminInstance.AdminTask_InvalidateValidatorTask(reportHash, batchValidatorsToApprove);
-        (bool postCompleted, bool postExists) = etherFiAdminInstance.ValidatorApprovalTaskStatus(approvalHash);
+        test_executeTask();
+        etherFiAdminInstance.invalidateValidatorApprovalTask(reportHash, batchValidatorsToApprove);
+        (bool postCompleted, bool postExists) = etherFiAdminInstance.validatorApprovalTaskStatus(approvalHash);
         assertFalse(postCompleted);
         assertFalse(postExists);
         vm.expectRevert();
-        etherFiAdminInstance.AdminTask_ApproveValidatorTask(reportHash, batchValidatorsToApprove, pubKeys, signatures);
+        etherFiAdminInstance.executeValidatorApprovalTask(reportHash, batchValidatorsToApprove, pubKeys, signatures);
     }
 
-    //test changing batchSize
-    function test_changeBatchSize() public {
-        uint16 newBatchSize = 10;
-        bytes[] memory newPubKeys = new bytes[](newBatchSize);
-        bytes[] memory newSignatures = new bytes[](newBatchSize);
-        for (uint i = 0; i < newBatchSize; i++) {
-            newPubKeys[i] = pubKeys[i];
-            newSignatures[i] = signatures[i];
-        }
-
-        //check owner can only change size
-        vm.startPrank(alice);
-        vm.expectRevert();
-        etherFiAdminInstance.setBatchSize(newBatchSize);
-        vm.stopPrank();
-        vm.startPrank(owner);
-        etherFiAdminInstance.setBatchSize(newBatchSize);
-        vm.stopPrank();
-
-        //check if it works with new size
-        vm.startPrank(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
-        uint256[] memory batchValidatorsToApprove = _getValidatorToApprove(52835, newBatchSize); //52835 based on transaction
-        bytes32 approvalHash = keccak256(abi.encode(reportHash, batchValidatorsToApprove));
-        etherFiOracleInstance.submitReport(report);
-        skip(3600);
-        etherFiAdminInstance.executeTasks(report);
-        (bool preCompleted, bool preExists) = etherFiAdminInstance.ValidatorApprovalTaskStatus(approvalHash);
-        etherFiAdminInstance.AdminTask_ApproveValidatorTask(reportHash, batchValidatorsToApprove, newPubKeys, newSignatures);
-        (bool postCompleted, bool postExists) = etherFiAdminInstance.ValidatorApprovalTaskStatus(approvalHash);
+    function test_validatorApprovalTasks() public {
+        test_executeTask();
+        (bool preCompleted, bool preExists) = etherFiAdminInstance.validatorApprovalTaskStatus(approvalHash);
+        assertTrue(preExists);
+        assertFalse(preCompleted);
+        etherFiAdminInstance.executeValidatorApprovalTask(reportHash, batchValidatorsToApprove, pubKeys, signatures);
+        (bool postCompleted, bool postExists) = etherFiAdminInstance.validatorApprovalTaskStatus(approvalHash);
         assertTrue(postCompleted);
         assertTrue(postExists);
         vm.stopPrank();
     }
+
+    function test_anotherBatchSize() public {
+        bytes[] memory newPubKeys = new bytes[](alternativeBatchSize);
+        bytes[] memory newSignatures = new bytes[](alternativeBatchSize);
+        uint256[] memory alternativeBatchValidatorsToApprove = _getValidatorToApprove(52835, alternativeBatchSize);
+        bytes32 alternativeApprovalHash = keccak256(abi.encode(reportHash, alternativeBatchValidatorsToApprove));
+
+        for (uint i = 0; i < alternativeBatchSize; i++) {
+            newPubKeys[i] = pubKeys[i];
+            newSignatures[i] = signatures[i];
+        }
+        test_changingBatchSize(); //
+        test_executeTask();
+        (bool preCompleted, bool preExists) = etherFiAdminInstance.validatorApprovalTaskStatus(alternativeApprovalHash);
+        etherFiAdminInstance.executeValidatorApprovalTask(reportHash, alternativeBatchValidatorsToApprove, newPubKeys, newSignatures);
+        (bool postCompleted, bool postExists) = etherFiAdminInstance.validatorApprovalTaskStatus(alternativeApprovalHash);
+        assertTrue(postCompleted);
+        assertTrue(postExists);
+        vm.stopPrank();
+    }
+
+    function test_rebase() public {
+        vm.startPrank(committeeMember);
+        etherFiOracleInstance.submitReport(report);
+        skip(3600);
+        uint256 preTotalPooledEth = liquidityPoolInstance.getTotalPooledEther();
+        etherFiAdminInstance.executeTasks(report);
+        (bool preExecuteCompleted, bool preExecuteExists) = etherFiAdminInstance.validatorApprovalTaskStatus(approvalHash);
+        skip(1);
+        uint256 postTotalPooledEth = liquidityPoolInstance.getTotalPooledEther();
+        uint256 boost = membershipManagerV1Instance.fanBoostThresholdEthAmount();
+
+        assert(preTotalPooledEth + accruedRewards + boost == postTotalPooledEth);
+    }
 }
-
-
-//test multiple reports
-
-//things to fix:
-//remove executeTasks2 
-//make all the tests pass
-//create up the logic only allowing batch size of 25
-
-

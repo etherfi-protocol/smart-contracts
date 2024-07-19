@@ -47,14 +47,15 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     mapping(address => bool) public pausers;
 
-    mapping(bytes32 => TaskStatus) public ValidatorApprovalTaskStatus;
+    mapping(bytes32 => TaskStatus) public validatorApprovalTaskStatus;
     uint16 approvalTaskBatchSize;
 
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
-    event ValidatorApprovalTaskCreated(bytes32 indexed _reportHash, uint256[] _validatorsToApprove);
-    event ValidatorApprovalTaskCompleted(bytes32 indexed _reportHash, uint256[] _validatorsToApprove);
-    event ValidatorApprovalTaskInvalidated(bytes32 indexed _reportHash, uint256[] _validatorsToApprove);
+
+    event ValidatorApprovalTaskCreated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validatorsToApprove);
+    event ValidatorApprovalTaskCompleted(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validatorsToApprove);
+    event ValidatorApprovalTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validatorsToApprove);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -179,20 +180,23 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit AdminOperationsExecuted(msg.sender, reportHash);
     }
 
-    // Process `liquidityPool.batchApproveRegistration` for the last task in the pending queue
-    function AdminTask_ApproveValidatorTask(bytes32 _reportHash, uint256[] calldata _validatorsToApprove, bytes[] calldata _pubKey, bytes[] calldata _signature) external isAdmin() {
+    function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validatorsToApprove, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external isAdmin() {
         require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
-        require(ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, _validatorsToApprove))].exists, "EtherFiAdmin: task doesn't exist");
-        ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, _validatorsToApprove))].completed = true;
-        liquidityPool.batchApproveRegistration(_validatorsToApprove, _pubKey, _signature);
-        emit ValidatorApprovalTaskCompleted(_reportHash, _validatorsToApprove);
+        bytes32 taskHash = keccak256(abi.encode(_reportHash, _validatorsToApprove));
+        require(validatorApprovalTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
+        require(!validatorApprovalTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
+        
+        validatorApprovalTaskStatus[taskHash].completed = true;
+        liquidityPool.batchApproveRegistration(_validatorsToApprove, _pubKeys, _signatures);
+        emit ValidatorApprovalTaskCompleted(taskHash, _reportHash, _validatorsToApprove);
     }
 
-    function AdminTask_InvalidateValidatorTask(bytes32 _reportHash, uint256[] calldata validatorsToApprove) external isAdmin() {
-        require(ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, validatorsToApprove))].exists, "EtherFiAdmin: task doesn't exist");
-        require(!ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, validatorsToApprove))].completed, "EtherFiAdmin: task already completed");
-        ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, validatorsToApprove))].exists = false;
-        emit ValidatorApprovalTaskInvalidated(_reportHash, validatorsToApprove);
+    function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validatorsToApprove) external isAdmin() {
+        bytes32 taskHash = keccak256(abi.encode(_reportHash, _validatorsToApprove));
+        require(validatorApprovalTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
+        require(!validatorApprovalTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
+        validatorApprovalTaskStatus[taskHash].exists = false;
+        emit ValidatorApprovalTaskInvalidated(taskHash, _reportHash, _validatorsToApprove);
     }
 
     function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report) internal {
@@ -220,25 +224,27 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         membershipManager.rebase(_report.accruedRewards);
     }
 
-    function _enqueueTask_ApproveValidators(bytes32 _reportHash, uint256[] calldata _validatorsToApprove) internal {
+    function _enqueueValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validatorsToApprove) internal {
         uint256 numBatches = (_validatorsToApprove.length + approvalTaskBatchSize - 1) / approvalTaskBatchSize;
+
         for (uint256 i = 0; i < numBatches; i++) {
             uint256 start = i * approvalTaskBatchSize;
             uint256 end = (i + 1) * approvalTaskBatchSize > _validatorsToApprove.length ? _validatorsToApprove.length : (i + 1) * approvalTaskBatchSize;
-
             uint256[] memory validatorsToApproveBatch = new uint256[](end - start);
+
             for (uint256 j = start; j < end; j++) {
                 validatorsToApproveBatch[j - start] = _validatorsToApprove[j];
             }
-            ValidatorApprovalTaskStatus[keccak256(abi.encode(_reportHash, validatorsToApproveBatch))] = TaskStatus({completed: false, exists: true});
-            emit ValidatorApprovalTaskCreated(_reportHash, validatorsToApproveBatch);
+            bytes32 taskHash = keccak256(abi.encode(_reportHash, validatorsToApproveBatch));
+            validatorApprovalTaskStatus[taskHash] = TaskStatus({completed: false, exists: true});
+            emit ValidatorApprovalTaskCreated(taskHash, _reportHash, validatorsToApproveBatch);
         }
     }
 
     function _handleValidators(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report) internal {
         // validatorsToApprove
         if (_report.validatorsToApprove.length > 0) {
-            _enqueueTask_ApproveValidators(_reportHash, _report.validatorsToApprove);
+            _enqueueValidatorApprovalTask(_reportHash, _report.validatorsToApprove);
         }
 
         // liquidityPoolValidatorsToExit
