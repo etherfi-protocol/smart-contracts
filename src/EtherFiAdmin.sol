@@ -21,9 +21,17 @@ interface IEtherFiPausable {
 
 contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
+    enum TaskType {
+        ValidatorApproval,
+        SendExitRequests,
+        ProcessNodeExit,
+        MarkBeingSlashed
+    }
+
     struct TaskStatus {
         bool completed;
         bool exists;
+        TaskType taskType;
     }
 
     IEtherFiOracle public etherFiOracle;
@@ -47,16 +55,15 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     mapping(address => bool) public pausers;
 
-    mapping(bytes32 => TaskStatus) public validatorApprovalTaskStatus;
-    uint16 approvalTaskBatchSize;
+    mapping(bytes32 => TaskStatus) public validatorManagementTaskStatus;
+    uint16 validatorTaskBatchSize;
 
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
 
-    event ValidatorApprovalTaskCreated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validatorsToApprove);
-    event ValidatorApprovalTaskCompleted(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validatorsToApprove);
-    event ValidatorApprovalTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validatorsToApprove);
-
+    event ValidatorManagementTaskCreated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators, uint32[] _timestamps, TaskType _taskType);
+    event ValidatorManagementTaskCompleted(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators, uint32[] _timestamps, TaskType _taskType);
+    event ValidatorManagementTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators, uint32[] _timestamps,TaskType _taskType);
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -88,7 +95,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function setBatchSize(uint16 _batchSize) external onlyOwner {
-        approvalTaskBatchSize = _batchSize;
+        validatorTaskBatchSize = _batchSize;
     }
 
     // pause {etherfi oracle, staking manager, auction manager, etherfi nodes manager, liquidity pool, membership manager}
@@ -180,23 +187,33 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit AdminOperationsExecuted(msg.sender, reportHash);
     }
 
-    function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validatorsToApprove, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external isAdmin() {
+    //_timestamp will only be used for TaskType.ProcessNodeExit and pubkeys and signatures will only be used for TaskType.ValidatorApproval
+    function executeValidatorManagementTask(bytes32 _reportHash, uint256[] calldata _validators, uint32[] calldata _timestamps, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external isAdmin() {
         require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
-        bytes32 taskHash = keccak256(abi.encode(_reportHash, _validatorsToApprove));
-        require(validatorApprovalTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
-        require(!validatorApprovalTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
-        
-        validatorApprovalTaskStatus[taskHash].completed = true;
-        liquidityPool.batchApproveRegistration(_validatorsToApprove, _pubKeys, _signatures);
-        emit ValidatorApprovalTaskCompleted(taskHash, _reportHash, _validatorsToApprove);
+        bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators, _timestamps));
+        require(validatorManagementTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
+        require(!validatorManagementTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
+        TaskType taskType = validatorManagementTaskStatus[taskHash].taskType;
+
+        if (taskType == TaskType.ValidatorApproval) {
+        liquidityPool.batchApproveRegistration(_validators, _pubKeys, _signatures);
+        } else if (taskType == TaskType.SendExitRequests) {
+            liquidityPool.sendExitRequests(_validators);
+        } else if (taskType == TaskType.ProcessNodeExit) {
+            etherFiNodesManager.processNodeExit(_validators, _timestamps);
+        } else if (taskType == TaskType.MarkBeingSlashed) {
+            etherFiNodesManager.markBeingSlashed(_validators);
+        }
+        validatorManagementTaskStatus[taskHash].completed = true;
+        emit ValidatorManagementTaskCompleted(taskHash, _reportHash, _validators, _timestamps, taskType);
     }
 
-    function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validatorsToApprove) external isAdmin() {
-        bytes32 taskHash = keccak256(abi.encode(_reportHash, _validatorsToApprove));
-        require(validatorApprovalTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
-        require(!validatorApprovalTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
-        validatorApprovalTaskStatus[taskHash].exists = false;
-        emit ValidatorApprovalTaskInvalidated(taskHash, _reportHash, _validatorsToApprove);
+    function invalidateValidatorManagementTask(bytes32 _reportHash, uint256[] calldata _validators, uint32[] calldata _timestamps) external isAdmin() {
+        bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators, _timestamps));
+        require(validatorManagementTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
+        require(!validatorManagementTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
+        validatorManagementTaskStatus[taskHash].exists = false;
+        emit ValidatorManagementTaskInvalidated(taskHash, _reportHash, _validators, _timestamps, validatorManagementTaskStatus[taskHash].taskType);
     }
 
     function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report) internal {
@@ -224,43 +241,37 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         membershipManager.rebase(_report.accruedRewards);
     }
 
-    function _enqueueValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validatorsToApprove) internal {
-        uint256 numBatches = (_validatorsToApprove.length + approvalTaskBatchSize - 1) / approvalTaskBatchSize;
+    function _enqueueValidatorManagementTask(bytes32 _reportHash, uint256[] calldata _validators, uint32[] memory _timestamps, TaskType taskType) internal {
+        uint256 numBatches = (_validators.length + validatorTaskBatchSize - 1) / validatorTaskBatchSize;
 
+        if(_validators.length == 0) {
+            return;
+        }
         for (uint256 i = 0; i < numBatches; i++) {
-            uint256 start = i * approvalTaskBatchSize;
-            uint256 end = (i + 1) * approvalTaskBatchSize > _validatorsToApprove.length ? _validatorsToApprove.length : (i + 1) * approvalTaskBatchSize;
-            uint256[] memory validatorsToApproveBatch = new uint256[](end - start);
+            uint256 start = i * validatorTaskBatchSize;
+            uint256 end = (i + 1) * validatorTaskBatchSize > _validators.length ? _validators.length : (i + 1) * validatorTaskBatchSize;
+            uint256 timestampSize = taskType == TaskType.ProcessNodeExit ? end - start : 0;
+            uint256[] memory batchValidators = new uint256[](end - start);
+            uint32[] memory batchTimestamps = new uint32[](timestampSize);
 
             for (uint256 j = start; j < end; j++) {
-                validatorsToApproveBatch[j - start] = _validatorsToApprove[j];
+                batchValidators[j - start] = _validators[j];
+                if(taskType == TaskType.ProcessNodeExit) {
+                    batchTimestamps[j - start] = _timestamps[j];
+                }
             }
-            bytes32 taskHash = keccak256(abi.encode(_reportHash, validatorsToApproveBatch));
-            validatorApprovalTaskStatus[taskHash] = TaskStatus({completed: false, exists: true});
-            emit ValidatorApprovalTaskCreated(taskHash, _reportHash, validatorsToApproveBatch);
+            bytes32 taskHash = keccak256(abi.encode(_reportHash, batchValidators, batchTimestamps));
+            validatorManagementTaskStatus[taskHash] = TaskStatus({completed: false, exists: true, taskType: taskType});
+            emit ValidatorManagementTaskCreated(taskHash, _reportHash, batchValidators, batchTimestamps, taskType);
         }
     }
 
     function _handleValidators(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report) internal {
-        // validatorsToApprove
-        if (_report.validatorsToApprove.length > 0) {
-            _enqueueValidatorApprovalTask(_reportHash, _report.validatorsToApprove);
-        }
-
-        // liquidityPoolValidatorsToExit
-        if (_report.liquidityPoolValidatorsToExit.length > 0) {
-            liquidityPool.sendExitRequests(_report.liquidityPoolValidatorsToExit);
-        }
-
-        // exitedValidators
-        if (_report.exitedValidators.length > 0) {
-            etherFiNodesManager.processNodeExit(_report.exitedValidators, _report.exitedValidatorsExitTimestamps);
-        }
-
-        // slashedValidators
-        if (_report.slashedValidators.length > 0) {
-            etherFiNodesManager.markBeingSlashed(_report.slashedValidators);
-        }
+            uint32[] memory emptyTimestamps = new uint32[](0);
+            _enqueueValidatorManagementTask(_reportHash, _report.validatorsToApprove, emptyTimestamps,  TaskType.ValidatorApproval);
+            _enqueueValidatorManagementTask(_reportHash, _report.liquidityPoolValidatorsToExit, emptyTimestamps,  TaskType.SendExitRequests);
+            _enqueueValidatorManagementTask(_reportHash, _report.exitedValidators, _report.exitedValidatorsExitTimestamps, TaskType.ProcessNodeExit);
+            _enqueueValidatorManagementTask(_reportHash, _report.slashedValidators, emptyTimestamps, TaskType.MarkBeingSlashed);
     }
 
     function _handleWithdrawals(IEtherFiOracle.OracleReport calldata _report) internal {
