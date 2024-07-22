@@ -1,4 +1,4 @@
-# [EFIP-10] Whitelisted Delegate calls
+# [EFIP-10] Whitelisted Delegate calls for EtherFiNode/EigenPod
 
 
 **Author**: dave (dave@ether.fi), syko (seongyun@ether.fi)
@@ -18,11 +18,10 @@ Currently, we use the blacklisting to restrict blacklisted functions from being 
 The proposal introduces changes to the EtherFiNode and EtherFiNodesManager contracts to implement the whitelist mechanism:
 
 1. **Whitelist Management**:
-    - Addition of functions to manage the whitelist
+    - Addition of functions to manage the whitelist for `eigenPodCall` and `externalCall`
     - Implementation of checks to ensure only whitelisted operations ca be performed.
 
 2. **Call Forwarding Restrictions**:
-    - Modification of the `forwardCall` and `callEigenPod` functions to include the whitelist checks.
     - Ensuring that only the whitelisted operations can be performed.
 
 
