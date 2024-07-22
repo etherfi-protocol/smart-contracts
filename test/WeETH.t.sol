@@ -312,4 +312,38 @@ contract WeETHTest is TestSetup {
         assertEq(weEthInstance.balanceOf(owner), preTreasuryBal + preOwnerBal);
         vm.stopPrank(); 
     }
+
+    function test_PermitWhitelistWeETH() public {
+        // allocationg weETH to alice
+        test_WrapWorksCorrectly();
+
+        // alice approves bob to spend 1 ether of weETH
+        bytes32 permitHash = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                weEthInstance.DOMAIN_SEPARATOR(),
+                keccak256(abi.encode(
+                    keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
+                    alice,
+                    address(bob),
+                    1 ether,
+                    weEthInstance.nonces(alice),
+                    block.timestamp
+                ))
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, permitHash);
+
+        vm.expectRevert("weETH: spender not whitelisted");
+        weEthInstance.permit(alice, bob, 1 ether, block.timestamp, v, r, s);
+
+        address[] memory whitelist = new address[](1);
+        whitelist[0] = bob;
+        vm.startPrank(owner);
+        weEthInstance.setWhitelistedSpender(whitelist, true);
+
+        weEthInstance.permit(alice, bob, 1 ether, block.timestamp, v, r, s);
+        vm.startPrank(bob);
+        weEthInstance.transferFrom(alice, bob, 1 ether);
+    }
 }

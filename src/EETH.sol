@@ -15,12 +15,17 @@ import "./interfaces/ILiquidityPool.sol";
 
 contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20PermitUpgradeable, IeETH {
     using CountersUpgradeable for CountersUpgradeable.Counter;
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  STATE-VARIABLES  ----------------------------------
+    //--------------------------------------------------------------------------------------
+
     ILiquidityPool public liquidityPool;
 
     uint256 public totalShares;
     mapping (address => uint256) public shares;
     mapping (address => mapping (address => uint256)) public allowances;
     mapping (address => CountersUpgradeable.Counter) private _nonces;
+    mapping (address => bool) public whitelistedSpender;
 
     bytes32 private constant _PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
@@ -36,7 +41,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
 
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
 
-    // TODO: Figure our what `name` and `version` are for
+    //--------------------------------------------------------------------------------------
+    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+    //--------------------------------------------------------------------------------------
+
     constructor() { 
         bytes32 hashedName = keccak256("EETH");
         bytes32 hashedVersion = keccak256("1");
@@ -127,6 +135,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         bytes32 r,
         bytes32 s
     ) public virtual override(IeETH, IERC20PermitUpgradeable) {
+        require(whitelistedSpender[spender], "eETH: spender not whitelisted"); 
         require(block.timestamp <= deadline, "ERC20Permit: expired deadline");
 
         bytes32 structHash = keccak256(abi.encode(_PERMIT_TYPEHASH, owner, spender, value, _useNonce(owner), deadline));
@@ -139,7 +148,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         _approve(owner, spender, value);
     }
 
-    // [INTERNAL FUNCTIONS] 
+    //--------------------------------------------------------------------------------------
+    //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
+    //--------------------------------------------------------------------------------------
+
     function _transfer(address _sender, address _recipient, uint256 _amount) internal {
         uint256 _sharesToTransfer = liquidityPool.sharesForAmount(_amount);
         _transferShares(_sender, _recipient, _sharesToTransfer);
@@ -175,7 +187,19 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         nonce.increment();
     }
 
-    // [GETTERS]
+    //--------------------------------------------------------------------------------------
+    //------------------------------------  SETTERS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    function setWhitelistedSpender(address[] calldata _spenders, bool _isWhitelisted) external onlyOwner {
+        for (uint i = 0; i < _spenders.length; i++) {
+            whitelistedSpender[_spenders[i]] = _isWhitelisted;
+        }
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------------  GETTERS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
     function name() public pure returns (string memory) { return "ether.fi ETH"; }
     function symbol() public pure returns (string memory) { return "eETH"; }
     function decimals() public pure returns (uint8) { return 18; }
@@ -220,7 +244,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         return ECDSAUpgradeable.toTypedDataHash(_domainSeparatorV4(), structHash);
     }
 
-    // [MODIFIERS]
+    //--------------------------------------------------------------------------------------
+    //------------------------------------  MODIFIER  --------------------------------------
+    //--------------------------------------------------------------------------------------
+
     modifier onlyPoolContract() {
         require(msg.sender == address(liquidityPool), "Only pool contract function");
         _;

@@ -711,6 +711,12 @@ contract TestSetup is Test {
         _initializePeople();
         _initializeEtherFiAdmin();
 
+        // weETH and Liquidity Pool must be on eETH to function as expected
+        vm.prank(owner);
+        address[] memory whitelist = new address[](2);
+        whitelist[0] = address(weEthInstance);
+        whitelist[1] = address(liquidityPoolInstance);
+        eETHInstance.setWhitelistedSpender(whitelist, true);
     }
 
     function setupRoleRegistry() public {
