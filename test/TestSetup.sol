@@ -706,10 +706,11 @@ contract TestSetup is Test {
 
         admin = alice;
 
-        // weETH Instance must be on eETH whitelist for `weETH.wrapWithPermit` to function as expected
+        // weETH and Liquidity Pool must be on eETH to function as expected
         vm.prank(owner);
-        address[] memory whitelist = new address[](1);
+        address[] memory whitelist = new address[](2);
         whitelist[0] = address(weEthInstance);
+        whitelist[1] = address(liquidityPoolInstance);
         eETHInstance.setWhitelistedSpender(whitelist, true);
     }
 
