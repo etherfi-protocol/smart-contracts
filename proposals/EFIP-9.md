@@ -1,4 +1,4 @@
-# [EFIP-6] EL Rewards Directed to Spilter Contract
+# [EFIP-9] EL Rewards Directed to Spilter Contract
 
 **Author**: Vaibhav Valecha (vaibhav@ether.fi)
 
