@@ -207,6 +207,7 @@ contract TestSetup is Test {
     address liquidityPool = vm.addr(9);
     address shonee = vm.addr(1200);
     address jess = vm.addr(1201);
+    address committeeMember = address(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
 
     address admin;
 
@@ -297,13 +298,17 @@ contract TestSetup is Test {
         setUpTests();
     }
 
+    function initializeRealisticFork(uint8 forkEnum) public {
+        initializeRealisticForkWithBlock(forkEnum, block.number);
+    }
+
     // initialize a fork which inherits the exact contracts, addresses, and state of
     // the associated network. This allows you to realistically test new transactions against
     // testnet or mainnet.
-    function initializeRealisticFork(uint8 forkEnum) public {
+    function initializeRealisticForkWithBlock(uint8 forkEnum, uint256 blockNo) public {
 
         if (forkEnum == MAINNET_FORK) {
-            vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+            vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL"), blockNo));
             addressProviderInstance = AddressProvider(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
             owner = addressProviderInstance.getContractAddress("EtherFiTimelock");
             admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
@@ -373,6 +378,7 @@ contract TestSetup is Test {
         liquifierInstance = Liquifier(payable(addressProviderInstance.getContractAddress("Liquifier")));
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
+        etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
@@ -636,6 +642,7 @@ contract TestSetup is Test {
             10000,
             0
         );
+        etherFiAdminInstance.setBatchSize(20);
         etherFiAdminInstance.updateAdmin(alice, true);
 
         etherFiOracleInstance.setEtherFiAdmin(address(etherFiAdminInstance));
@@ -949,7 +956,7 @@ contract TestSetup is Test {
         }
 
         vm.prank(alice);
-        etherFiAdminInstance.executeTasks(_report, _pubKey, _pubKey);
+        etherFiAdminInstance.executeTasks(_report);
     }
 
     function _emptyOracleReport() internal view returns (IEtherFiOracle.OracleReport memory report) {
