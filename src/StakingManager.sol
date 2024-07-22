@@ -10,7 +10,6 @@ import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/INodeOperatorManager.sol";
 import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IPausable.sol";
 import "./TNFT.sol";
 import "./BNFT.sol";
 import "./EtherFiNode.sol";
@@ -30,7 +29,6 @@ contract StakingManager is
     Initializable,
     IStakingManager,
     IBeaconUpgradeable,
-    IPausable,
     OwnableUpgradeable,
     PausableUpgradeable,
     ReentrancyGuardUpgradeable,
@@ -319,8 +317,8 @@ contract StakingManager is
         isFullStakeEnabled = _status;
     }
 
-    function pauseContract() external onlyPauser { _pause(); }
-    function unPauseContract() external onlyPauser { _unpause(); }
+    function pauseContract() external onlyAdmin { _pause(); }
+    function unPauseContract() external onlyAdmin { _unpause(); }
 
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
