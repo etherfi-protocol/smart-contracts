@@ -339,11 +339,11 @@ contract WeETHTest is TestSetup {
 
         address[] memory whitelist = new address[](1);
         whitelist[0] = bob;
-        vm.startPrank(owner);
+        vm.prank(owner);
         weEthInstance.setWhitelistedSpender(whitelist, true);
 
         weEthInstance.permit(alice, bob, 1 ether, block.timestamp, v, r, s);
-        vm.startPrank(bob);
+        vm.prank(bob);
         weEthInstance.transferFrom(alice, bob, 1 ether);
     }
 }
