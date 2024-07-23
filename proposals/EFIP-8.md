@@ -1,4 +1,4 @@
-# [EFIP-8] Purpose and Guidelines
+# [EFIP-8] Withdraw weETH from Treasury contract
 
 **Author**: Vaibhav Valecha (vaibhav@ether.fi)
 
