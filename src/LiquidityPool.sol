@@ -464,8 +464,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
     }
 
-    function payProtocolFees(uint128 _protocolFees) public {
-        if (msg.sender != address(etherFiAdminContract) && msg.sender != address(this)) revert IncorrectCaller();
+    function payProtocolFees(uint128 _protocolFees) public onlyEtherFiAdmin {
         totalValueOutOfLp = totalValueOutOfLp + _protocolFees;
         uint256 treasuryShares = sharesForAmount(_protocolFees);
         eETH.mintShares(treasury, treasuryShares);
@@ -473,7 +472,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     //one time function to mint shares when we change split to 0
     //need to 
-    function mintShareOnChangeSplit(uint256[] memory _validatorIds, uint256[] memory _beaconBalances) external onlyAdmin { 
+    function mintShareOnChangeSplit(uint256[] memory _validatorIds, uint256[] memory _beaconBalances) external onlyOwner { 
             uint256 totalAccruedRewards = 0;
             for (uint256 i = 0; i < _validatorIds.length; i++) {
                 require(_beaconBalances[i] <= 33 ether, "Invalid Beacon Balance");
@@ -485,10 +484,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
                 }
                 totalAccruedRewards += treasury;
             }
+            console.log("totalAccruedRewards", totalAccruedRewards);
             payProtocolFees(uint128(totalAccruedRewards));
         } 
 
-    function setTreasury(address _treasury) external onlyAdmin {
+    function setTreasury(address _treasury) external onlyOwner {
         treasury = _treasury;
     }
 
@@ -645,6 +645,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     modifier onlyAdmin() {
         _requireAdmin();
+        _;
+    }
+
+    modifier onlyEtherFiAdmin() {
+        console.log("msg.sender", msg.sender);
+        require(msg.sender == address(etherFiAdminContract) || msg.sender == owner(), "Incorrect Caller");
         _;
     }
 
