@@ -157,8 +157,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     //--------------------------------------------------------------------------------------
 
     function _transfer(address _sender, address _recipient, uint256 _amount) internal {
-        require(!blacklistedRecipient[_sender] && !blacklistedRecipient[_recipient], "eETH: blacklisted address"); 
-        
         uint256 _sharesToTransfer = liquidityPool.sharesForAmount(_amount);
         _transferShares(_sender, _recipient, _sharesToTransfer);
         emit Transfer(_sender, _recipient, _amount);
