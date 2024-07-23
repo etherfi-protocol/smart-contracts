@@ -71,34 +71,6 @@ contract EtherFiNodeTest is TestSetup {
 
     }
 
-    function test_claimMixedSafeAndPodFunds() public {
-        initializeTestingFork(MAINNET_FORK);
-
-        uint256 bidId = depositAndRegisterValidator(true);
-        safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(bidId)));
-
-        // simulate 1 eth of already claimed staking rewards and 1 eth of unclaimed restaked rewards
-        _transferTo(address(safeInstance.eigenPod()), 1 ether);
-        _transferTo(address(safeInstance), 1 ether);
-
-        assertEq(address(safeInstance).balance, 1 ether);
-        assertEq(address(safeInstance.eigenPod()).balance, 1 ether);
-
-        // claim the restaked rewards
-        // safeInstance.queueRestakedWithdrawal();
-        uint256[] memory validatorIds = new uint256[](1);
-        validatorIds[0] = bidId;
-        vm.prank(alice); // alice is admin
-        managerInstance.batchQueueRestakedWithdrawal(validatorIds);
-
-        vm.roll(block.number + (50400) + 1);
-
-        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorIds[0]);
-
-        assertEq(address(safeInstance).balance, 2 ether);
-        assertEq(address(safeInstance.eigenPod()).balance, 0 ether);
-    }
-
     function test_splitBalanceInExecutionLayer() public {
 
         initializeTestingFork(MAINNET_FORK);
