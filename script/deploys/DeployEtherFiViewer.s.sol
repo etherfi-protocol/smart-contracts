@@ -33,7 +33,5 @@ contract DeployEtherFiViewer is Script {
         assert(etherFiNodeAddresses[1] == 0xC3D3662A44c0d80080D3AF0eea752369c504724e);
 
         viewer.EigenPod_mostRecentWithdrawalTimestamp(validatorIds);
-        viewer.EigenPod_hasRestaked(validatorIds);
-        
     }
 }
