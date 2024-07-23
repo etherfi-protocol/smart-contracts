@@ -59,7 +59,4 @@ interface IEtherFiOracle {
     function setOracleReportPeriod(uint32 _reportPeriodSlot) external;
     function setConsensusVersion(uint32 _consensusVersion) external;
     function setEtherFiAdmin(address _etherFiAdminAddress) external;
-
-    function pauseContract() external;
-    function unPauseContract() external;
 }

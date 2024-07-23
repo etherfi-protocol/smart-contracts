@@ -15,6 +15,7 @@ import "../src/interfaces/IStakingManager.sol";
 import "../src/interfaces/IEtherFiNode.sol";
 import "../src/interfaces/ILiquidityPool.sol";
 import "../src/interfaces/ILiquifier.sol";
+import "../src/interfaces/IPausable.sol";
 import "../src/EtherFiNodesManager.sol";
 import "../src/StakingManager.sol";
 import "../src/NodeOperatorManager.sol";
@@ -47,8 +48,8 @@ import "../src/archive/MembershipManagerV0.sol";
 import "../src/EtherFiOracle.sol";
 import "../src/EtherFiAdmin.sol";
 import "../src/EtherFiTimelock.sol";
-
 import "../src/BucketRateLimiter.sol";
+import "../src/Pauser.sol";
 
 contract TestSetup is Test {
 
@@ -184,6 +185,8 @@ contract TestSetup is Test {
 
     EtherFiTimelock public etherFiTimelockInstance;
     BucketRateLimiter public bucketRateLimiter;
+
+    Pauser public pauserInstance;
 
     bytes32 root;
     bytes32 rootMigration;
@@ -726,11 +729,25 @@ contract TestSetup is Test {
             bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
             roleRegistry = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
 
-            vm.prank(managerInstance.owner());
+            vm.startPrank(owner);
             managerInstance.initializeV2dot5(address(roleRegistry));
-            vm.prank(liquidityPoolInstance.owner());
             liquidityPoolInstance.initializeV2dot5(address(roleRegistry));
+            auctionInstance.initializeV2dot5(address(roleRegistry));
+            stakingManagerInstance.initializeV2dot5(address(roleRegistry));
+            nodeOperatorManagerInstance.initializeV2dot5(address(roleRegistry));
+            vm.stopPrank();
+            vm.startPrank(etherFiOracleInstance.owner());
+            etherFiOracleInstance.initializeV2dot5(address(roleRegistry));
         }
+
+        // TODO: along with the role registry, this should be uncoupled in the future
+        Pauser pauserImplementation = new Pauser();
+        IPausable[] memory initialPausables = new IPausable[](2);
+        initialPausables[0] = IPausable(address(liquidityPoolInstance));
+        initialPausables[1] = IPausable(address(etherFiOracleInstance));
+        bytes memory initializerData = abi.encodeWithSelector(Pauser.initialize.selector, initialPausables, address(roleRegistry));
+        pauserInstance = Pauser(address(new UUPSProxy(address(pauserImplementation), initializerData)));
+        console.log("Pauser role registry: ", address(pauserInstance.roleRegistry()));
 
         vm.startPrank(admin);
         roleRegistry.grantRole(managerInstance.NODE_ADMIN_ROLE(), admin);
@@ -745,8 +762,8 @@ contract TestSetup is Test {
         roleRegistry.grantRole(managerInstance.WHITELIST_UPDATER(), owner);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), owner);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), owner);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), address(pauserInstance));
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), address(pauserInstance));
         vm.stopPrank();
 
         vm.startPrank(owner);

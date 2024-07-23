@@ -487,6 +487,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     // Pauses the contract
     function pauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        if (paused) revert("Pausable: already paused");
+        
         paused = true;
         emit Paused(msg.sender);
     }
@@ -494,6 +496,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     // Unpauses the contract
     function unPauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        if (!paused) revert("Pausable: not paused");
+
         paused = false;
         emit Unpaused(msg.sender);
     }

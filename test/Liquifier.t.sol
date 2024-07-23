@@ -36,6 +36,7 @@ contract LiquifierTest is TestSetup {
     }
 
     function _setUp(uint8 forkEnum) internal {
+
         initializeTestingFork(forkEnum);
         setUpLiquifier(forkEnum);
 
@@ -642,18 +643,19 @@ contract LiquifierTest is TestSetup {
     function test_pauser() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
+        // Testing of pause functionality requires an instance of `roleRegistry` and `pauser`
+        setUpTests();
 
         owner = liquifierInstance.owner();
+        vm.prank(owner);
+        liquifierInstance.initializeV2dot5(address(roleRegistry));
 
         vm.startPrank(bob);
-        // vm.expectRevert();
-        // liquifierInstance.pauseContract();
+        vm.expectRevert();
+        liquifierInstance.pauseContract();
         vm.stopPrank();
 
-        vm.prank(owner);
-        // liquifierInstance.updatePauser(bob, true);
-
-        vm.startPrank(bob);
+        vm.startPrank(address(pauserInstance));
         liquifierInstance.pauseContract();
         vm.stopPrank();
 
@@ -662,9 +664,8 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.unPauseContract();
         vm.stopPrank();
 
-        vm.prank(owner);
+        vm.prank(address(pauserInstance));
         liquifierInstance.unPauseContract();
-
     }
 
     function test_getTotalPooledEther() public {
