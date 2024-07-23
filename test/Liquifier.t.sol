@@ -643,15 +643,14 @@ contract LiquifierTest is TestSetup {
     function test_pauser() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
-        // Testing of pause functionality requires an instance of `roleRegistry` and `pauser`
+        // testing the pause logic with the V2.5 upgrade
         setUpTests();
-
         owner = liquifierInstance.owner();
         vm.prank(owner);
         liquifierInstance.initializeV2dot5(address(roleRegistry));
 
         vm.startPrank(bob);
-        vm.expectRevert();
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
         liquifierInstance.pauseContract();
         vm.stopPrank();
 
@@ -660,7 +659,7 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
 
         vm.startPrank(bob);
-        vm.expectRevert();
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
         liquifierInstance.unPauseContract();
         vm.stopPrank();
 

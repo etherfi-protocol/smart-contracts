@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
+import "./TestSetup.sol";
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
 import "../src/BucketRateLimiter.sol";
 import "../src/UUPSProxy.sol";
 
-contract BucketRateLimiterTest is Test {
+contract BucketRateLimiterTest is TestSetup {
     BucketRateLimiter limiter;
 
     function setUp() public {
@@ -108,11 +109,11 @@ contract BucketRateLimiterTest is Test {
     function test_pauser() public {
         // Test pausing logic with V2.5 upgrade
         setUpTests();
-        vm.prank(owner);
+        vm.prank(limiter.owner());
         limiter.initializeV2dot5(address(roleRegistry));
 
         vm.prank(chad);
-        vm.expectRevert(limiter.IncorrectRole().selector);
+        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
         limiter.pauseContract();
 
         vm.prank(address(pauserInstance));
@@ -121,7 +122,7 @@ contract BucketRateLimiterTest is Test {
         assertTrue(limiter.paused());
 
         vm.prank(chad);
-        vm.expectRevert(limiter.IncorrectRole().selector);
+        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
         limiter.unPauseContract();
 
         vm.prank(address(pauserInstance));
@@ -129,5 +130,4 @@ contract BucketRateLimiterTest is Test {
 
         assertFalse(limiter.paused());
     }
-
 }
