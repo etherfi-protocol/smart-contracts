@@ -6,10 +6,12 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
+import "src/interfaces/IPausable.sol";
 import "src/interfaces/IRateLimiter.sol";
 import "lib/BucketLimiter.sol";
+import "./RoleRegistry.sol";
 
-contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
+contract BucketRateLimiter is IRateLimiter, IPausable, Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
 
     BucketLimiter.Limit public limit;
     address public consumer;
@@ -19,8 +21,12 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
 
     mapping(address => BucketLimiter.Limit) public limitsPerToken;
 
+    RoleRegistry public roleRegistry; 
+
     event UpdatedAdmin(address indexed admin, bool status);
     event UpdatedPauser(address indexed pauser, bool status);
+
+    error IncorrectRole();
 
     constructor() {
         _disableInitializers();
@@ -32,6 +38,12 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         __UUPSUpgradeable_init();
 
         limit = BucketLimiter.create(0, 0);
+    }
+
+    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+
+        roleRegistry = RoleRegistry(_roleRegistry);
     }
 
     function updateRateLimit(address sender, address tokenIn, uint256 amountIn, uint256 amountOut) external whenNotPaused {
@@ -89,18 +101,15 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         emit UpdatedAdmin(admin, status);
     }
 
-    function updatePauser(address pauser, bool status) external onlyOwner {
-        pausers[pauser] = status;
-        emit UpdatedPauser(pauser, status);
-    }
-
+    // Pauses the contract
     function pauseContract() external {
-        require(pausers[msg.sender] || admins[msg.sender] || msg.sender == owner(), "NOT_PAUSER");
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
+    // Unpauses the contract
     function unPauseContract() external {
-        require(admins[msg.sender] || msg.sender == owner(), "NOT_ADMIN");
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 

@@ -22,8 +22,8 @@ interface IEtherFiPausable {
 contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     IEtherFiOracle public etherFiOracle;
-    IStakingManager public stakingManager;
-    IAuctionManager public auctionManager;
+    IStakingManager public DEPRECATED_stakingManager;
+    IAuctionManager public DEPRECATED_auctionManager;
     IEtherFiNodesManager public etherFiNodesManager;
     ILiquidityPool public liquidityPool;
     IMembershipManager public membershipManager;
@@ -65,70 +65,14 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __UUPSUpgradeable_init();
 
         etherFiOracle = IEtherFiOracle(_etherFiOracle);
-        stakingManager = IStakingManager(_stakingManager);
-        auctionManager = IAuctionManager(_auctionManager);
+        DEPRECATED_stakingManager = IStakingManager(_stakingManager);
+        DEPRECATED_auctionManager = IAuctionManager(_auctionManager);
         etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
         liquidityPool = ILiquidityPool(_liquidityPool);
         membershipManager = IMembershipManager(_membershipManager);
         withdrawRequestNft = IWithdrawRequestNFT(_withdrawRequestNft);
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
-    }
-
-    // pause {etherfi oracle, staking manager, auction manager, etherfi nodes manager, liquidity pool, membership manager}
-    // based on the boolean flags
-    // if true, pause,
-    // else, unpuase
-    function pause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external isPauser() {
-        if (_etherFiOracle && !IEtherFiPausable(address(etherFiOracle)).paused()) {
-            etherFiOracle.pauseContract();
-        }
-
-        if (_stakingManager && !IEtherFiPausable(address(stakingManager)).paused()) {
-            stakingManager.pauseContract();
-        }
-
-        if (_auctionManager && !IEtherFiPausable(address(auctionManager)).paused()) {
-            auctionManager.pauseContract();
-        }
-
-        if (_etherFiNodesManager && !IEtherFiPausable(address(etherFiNodesManager)).paused()) {
-            etherFiNodesManager.pauseContract();
-        }
-
-        if (_liquidityPool && !IEtherFiPausable(address(liquidityPool)).paused()) {
-            liquidityPool.pauseContract();
-        }
-
-        if (_membershipManager && !IEtherFiPausable(address(membershipManager)).paused()) {
-            membershipManager.pauseContract();
-        }
-    }
-
-    function unPause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external onlyOwner {
-        if (_etherFiOracle && IEtherFiPausable(address(etherFiOracle)).paused()) {
-            etherFiOracle.unPauseContract();
-        }
-
-        if (_stakingManager && IEtherFiPausable(address(stakingManager)).paused()) {
-            stakingManager.unPauseContract();
-        }
-
-        if (_auctionManager && IEtherFiPausable(address(auctionManager)).paused()) {
-            auctionManager.unPauseContract();
-        }
-
-        if (_etherFiNodesManager && IEtherFiPausable(address(etherFiNodesManager)).paused()) {
-            etherFiNodesManager.unPauseContract();
-        }
-
-        if (_liquidityPool && IEtherFiPausable(address(liquidityPool)).paused()) {
-            liquidityPool.unPauseContract();
-        }
-
-        if (_membershipManager && IEtherFiPausable(address(membershipManager)).paused()) {
-            membershipManager.unPauseContract();
-        }
     }
 
     function canExecuteTasks(IEtherFiOracle.OracleReport calldata _report) external view returns (bool) {

@@ -22,9 +22,9 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IEtherFiAdmin.sol";
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/ILiquifier.sol";
-import "forge-std/console.sol";
+import "./interfaces/IPausable.sol";
 
-contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
+contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool, IPausable {
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -70,6 +70,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     bool private isLpBnftHolder;
 
+    RoleRegistry public roleRegistry;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -95,6 +97,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     error DataNotSet();
     error InsufficientLiquidity();
     error SendFail();
+    error IncorrectRole();
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -136,6 +139,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
         auctionManager = IAuctionManager(_auctionManager);
         liquifier = ILiquifier(_liquifier);
+    }
+
+    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+
+        // TODO: compile list of DEPRECATED values and set to 0
+        
+        roleRegistry = RoleRegistry(_roleRegistry);
     }
 
     // Used by eETH staking flow
@@ -473,14 +484,18 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         admins[_address] = _isAdmin;
     }
 
-    function pauseContract() external onlyAdmin {
+    // Pauses the contract
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         paused = true;
-        emit Paused(_msgSender());
+        emit Paused(msg.sender);
     }
 
-    function unPauseContract() external onlyAdmin {
+    // Unpauses the contract
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         paused = false;
-        emit Unpaused(_msgSender());
+        emit Unpaused(msg.sender);
     }
 
     // Deprecated, just existing not to touch EtherFiAdmin contract

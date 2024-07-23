@@ -728,6 +728,8 @@ contract TestSetup is Test {
 
             vm.prank(managerInstance.owner());
             managerInstance.initializeV2dot5(address(roleRegistry));
+            vm.prank(liquidityPoolInstance.owner());
+            liquidityPoolInstance.initializeV2dot5(address(roleRegistry));
         }
 
         vm.startPrank(admin);

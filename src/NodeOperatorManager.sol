@@ -3,14 +3,16 @@ pragma solidity ^0.8.13;
 
 import "../src/interfaces/INodeOperatorManager.sol";
 import "../src/interfaces/IAuctionManager.sol";
+import "../src/interfaces/IPausable.sol";
 import "../src/LiquidityPool.sol";
+import "../src/RoleRegistry.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 /// Contract which helps us control our node operators and their permissions in different aspects of the protocol
-contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgradeable, PausableUpgradeable, OwnableUpgradeable {
+contract NodeOperatorManager is INodeOperatorManager, IPausable, Initializable, UUPSUpgradeable, PausableUpgradeable, OwnableUpgradeable {
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -20,6 +22,8 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     event AddedToWhitelist(address userAddress);
     event RemovedFromWhitelist(address userAddress);
     event UpdatedOperatorApprovals(address operator, LiquidityPool.SourceOfFunds source, bool approved);
+    
+    error IncorrectRole();
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -34,6 +38,8 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     mapping(address => bool) public admins;
     mapping(address => mapping(ILiquidityPool.SourceOfFunds => bool)) public operatorApprovedTags;
+
+    RoleRegistry public roleRegistry;
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -80,6 +86,12 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
                 _ipfsHash[x]
             );
         }
+    }
+
+    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+
+        roleRegistry = RoleRegistry(_roleRegistry);
     }
 
     /// @notice Registers a user as a operator to allow them to bid
@@ -163,13 +175,15 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         emit RemovedFromWhitelist(_address);
     }
 
-    //Pauses the contract
-    function pauseContract() external onlyAdmin {
+    // Pauses the contract
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
-    //Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    // Unpauses the contract
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 

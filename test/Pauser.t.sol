@@ -23,13 +23,13 @@ contract PauserTest is TestSetup {
         // giving the pauser contract the permissions it needs to pause and unpause the contracts
         // TODO: refactor to integrate with `RoleRegistry` tests once the configuration plan is planned
         vm.startPrank(owner);
-        liquifierInstance.updatePauser(address(pauser), true);
-        liquifierInstance.transferOwnership(address(pauser));
         etherFiOracleInstance.updateAdmin(address(pauser), true);
         auctionInstance.updateAdmin(address(pauser), true);
 
         // setting contract roles
         vm.startPrank(admin);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), address(pauser));
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), address(pauser));
         roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), alice);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), alice);
         roleRegistry.grantRole(pauser.PAUSER_ADMIN(), alice);

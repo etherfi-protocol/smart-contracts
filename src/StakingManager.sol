@@ -10,6 +10,7 @@ import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/INodeOperatorManager.sol";
 import "./interfaces/ILiquidityPool.sol";
+import "./interfaces/IPausable.sol";
 import "./TNFT.sol";
 import "./BNFT.sol";
 import "./EtherFiNode.sol";
@@ -29,6 +30,7 @@ contract StakingManager is
     Initializable,
     IStakingManager,
     IBeaconUpgradeable,
+    IPausable,
     OwnableUpgradeable,
     PausableUpgradeable,
     ReentrancyGuardUpgradeable,
@@ -57,6 +59,8 @@ contract StakingManager is
     address public nodeOperatorManager;
     mapping(address => bool) public admins;
 
+    RoleRegistry public roleRegistry;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -66,6 +70,8 @@ contract StakingManager is
     event ValidatorRegistered(address indexed operator, address indexed bNftOwner, address indexed tNftOwner, 
                               uint256 validatorId, bytes validatorPubKey, string ipfsHashForEncryptedValidatorKey);
     event StakeSource(uint256 bidId, ILiquidityPool.SourceOfFunds source);
+
+    error IncorrectRole();
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -97,6 +103,12 @@ contract StakingManager is
         DEPRECATED_admin = address(0);
         nodeOperatorManager = _nodeOperatorManager;
         admins[_etherFiAdmin] = true;
+    }
+
+    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+
+        roleRegistry = RoleRegistry(_roleRegistry);
     }
     
     /// @notice Allows depositing multiple stakes at once
@@ -262,9 +274,17 @@ contract StakingManager is
         implementationContract = _newImplementation;
     }
 
-    function pauseContract() external onlyAdmin { _pause(); }
-    function unPauseContract() external onlyAdmin { _unpause(); }
+    // Pauses the contract
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        _pause();
+    }
 
+    // Unpauses the contract
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        _unpause();
+    }
     /// @notice Updates the address of the admin
     /// @param _address the new address to set as admin
     function updateAdmin(address _address, bool _isAdmin) external onlyOwner {

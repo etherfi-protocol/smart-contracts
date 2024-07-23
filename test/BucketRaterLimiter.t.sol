@@ -96,9 +96,6 @@ contract BucketRateLimiterTest is Test {
         limiter.updateAdmin(address(0), true);
 
         vm.expectRevert("Ownable: caller is not the owner");
-        limiter.updatePauser(address(0), true);
-
-        vm.expectRevert("Ownable: caller is not the owner");
         limiter.setCapacity(100 ether);
 
         vm.expectRevert("Ownable: caller is not the owner");
@@ -108,42 +105,42 @@ contract BucketRateLimiterTest is Test {
         limiter.updateConsumer(address(0));
     }
     
-    function test_pauser() public {
-        address alice = address(1);
-        address bob = address(2);
-        address chad = address(3);
+    // function test_pauser() public {
+    //     address alice = address(1);
+    //     address bob = address(2);
+    //     address chad = address(3);
 
-        vm.expectRevert("Ownable: caller is not the owner");
-        limiter.updatePauser(alice, true);
+    //     vm.expectRevert("Ownable: caller is not the owner");
+    //     limiter.updatePauser(alice, true);
 
-        vm.prank(alice);
-        vm.expectRevert("NOT_PAUSER");
-        limiter.pauseContract();
+    //     vm.prank(alice);
+    //     vm.expectRevert("NOT_PAUSER");
+    //     limiter.pauseContract();
 
-        assertEq(limiter.pausers(alice), false);
+    //     assertEq(limiter.pausers(alice), false);
 
-        vm.startPrank(limiter.owner());
-        limiter.updatePauser(alice, true);
-        vm.stopPrank();
+    //     vm.startPrank(limiter.owner());
+    //     limiter.updatePauser(alice, true);
+    //     vm.stopPrank();
 
-        assertEq(limiter.pausers(alice), true);
+    //     assertEq(limiter.pausers(alice), true);
 
-        vm.prank(chad);
-        vm.expectRevert("NOT_PAUSER");
-        limiter.pauseContract();
+    //     vm.prank(chad);
+    //     vm.expectRevert("NOT_PAUSER");
+    //     limiter.pauseContract();
 
-        vm.prank(alice);
-        limiter.pauseContract();
+    //     vm.prank(alice);
+    //     limiter.pauseContract();
 
-        vm.prank(alice);
-        vm.expectRevert("NOT_ADMIN");
-        limiter.unPauseContract();
+    //     vm.prank(alice);
+    //     vm.expectRevert("NOT_ADMIN");
+    //     limiter.unPauseContract();
 
-        vm.prank(limiter.owner());
-        limiter.updateAdmin(bob, true);
+    //     vm.prank(limiter.owner());
+    //     limiter.updateAdmin(bob, true);
 
-        vm.prank(bob);
-        limiter.unPauseContract();
-    }
+    //     vm.prank(bob);
+    //     limiter.unPauseContract();
+    // }
 
 }

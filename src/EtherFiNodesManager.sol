@@ -15,6 +15,7 @@ import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
+import "./interfaces/IPausable.sol";
 import "./TNFT.sol";
 import "./BNFT.sol";
 import "forge-std/console.sol";
@@ -23,6 +24,7 @@ import "forge-std/console.sol";
 contract EtherFiNodesManager is
     Initializable,
     IEtherFiNodesManager,
+    IPausable,
     OwnableUpgradeable,
     PausableUpgradeable,
     ReentrancyGuardUpgradeable,
