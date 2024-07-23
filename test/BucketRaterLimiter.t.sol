@@ -106,39 +106,28 @@ contract BucketRateLimiterTest is Test {
     }
     
     function test_pauser() public {
-        
-
-        vm.expectRevert("Ownable: caller is not the owner");
-        limiter.updatePauser(alice, true);
-
-        vm.prank(alice);
-        vm.expectRevert("NOT_PAUSER");
-        limiter.pauseContract();
-
-        assertEq(limiter.pausers(alice), false);
-
-        vm.startPrank(limiter.owner());
-        limiter.updatePauser(alice, true);
-        vm.stopPrank();
-
-        assertEq(limiter.pausers(alice), true);
+        // Test pausing logic with V2.5 upgrade
+        setUpTests();
+        vm.prank(owner);
+        limiter.initializeV2dot5(address(roleRegistry));
 
         vm.prank(chad);
-        vm.expectRevert("NOT_PAUSER");
+        vm.expectRevert(limiter.IncorrectRole().selector);
         limiter.pauseContract();
 
-        vm.prank(alice);
+        vm.prank(address(pauserInstance));
         limiter.pauseContract();
 
-        vm.prank(alice);
-        vm.expectRevert("NOT_ADMIN");
+        assertTrue(limiter.paused());
+
+        vm.prank(chad);
+        vm.expectRevert(limiter.IncorrectRole().selector);
         limiter.unPauseContract();
 
-        vm.prank(limiter.owner());
-        limiter.updateAdmin(bob, true);
-
-        vm.prank(bob);
+        vm.prank(address(pauserInstance));
         limiter.unPauseContract();
+
+        assertFalse(limiter.paused());
     }
 
 }
