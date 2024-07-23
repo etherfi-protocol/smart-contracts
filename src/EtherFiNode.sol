@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
-import "src/EtherFiNodesManager.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
@@ -768,7 +767,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     function isValidSignature(bytes32 _digestHash, bytes memory _signature) public view override returns (bytes4 magicValue) {
         bytes32 NODE_ADMIN_ROLE = keccak256("EFNM_NODE_ADMIN_ROLE");
         (address signer, ) = ECDSA.tryRecover(_digestHash, _signature);
-        bool isAdmin = EtherFiNodesManager(payable(etherFiNodesManager)).roleRegistry().hasRole(NODE_ADMIN_ROLE, signer);
+        bool isAdmin = IEtherFiNodesManager(etherFiNodesManager).roleRegistry().hasRole(NODE_ADMIN_ROLE, signer);
         return isAdmin ? this.isValidSignature.selector : bytes4(0xffffffff);
     }
 
