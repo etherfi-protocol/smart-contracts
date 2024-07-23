@@ -68,6 +68,7 @@ interface ILiquidityPool {
     function sendExitRequests(uint256[] calldata _validatorIds) external;
 
     function rebase(int128 _accruedRewards) external;
+    function payProtocolFees(uint128 _protocolFees) external;
     function addEthAmountLockedForWithdrawal(uint128 _amount) external;
     function reduceEthAmountLockedForWithdrawal(uint128 _amount) external;
     

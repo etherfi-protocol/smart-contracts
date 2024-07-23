@@ -463,15 +463,15 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function payProtocolFees(uint128 _protocolFees) public {
-        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
+        if (msg.sender != address(etherFiAdminContract) && msg.sender != address(this)) revert IncorrectCaller();
+        totalValueOutOfLp = totalValueOutOfLp + _protocolFees;
         uint256 treasuryShares = sharesForAmount(_protocolFees);
-        totalValueOutOfLp = uint128(int128(totalValueOutOfLp) + _protocolFees);
         eETH.mintShares(treasury, treasuryShares);
     }
 
     //one time function to mint shares when we change split to 0
     //need to 
-    function mintShareOnChangeSplit(uint256[] memory _validatorIds, uint256[] memory _beaconBalances) external onlyOwner { 
+    function mintShareOnChangeSplit(uint256[] memory _validatorIds, uint256[] memory _beaconBalances) external onlyAdmin { 
             uint256 totalAccruedRewards = 0;
             for (uint256 i = 0; i < _validatorIds.length; i++) {
                 require(_beaconBalances[i] <= 33 ether, "Invalid Beacon Balance");
@@ -483,11 +483,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
                 }
                 totalAccruedRewards += treasury;
             }
-            console.log("totalAccruedRewards", totalAccruedRewards);
             payProtocolFees(uint128(totalAccruedRewards));
         } 
 
-    function setTreasury(address _treasury) external onlyOwner {
+    function setTreasury(address _treasury) external onlyAdmin {
         treasury = _treasury;
     }
 
