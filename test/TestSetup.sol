@@ -746,6 +746,17 @@ contract TestSetup is Test {
         roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
         roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
         vm.stopPrank();
+
+        vm.startPrank(owner);
+        eETHImplementation = new EETH();
+        eETHInstance.upgradeTo(address(eETHImplementation));
+
+        // weETH and Liquidity Pool must be on eETH to function as expected
+        address[] memory whitelist = new address[](2);
+        whitelist[0] = address(weEthInstance);
+        whitelist[1] = address(liquidityPoolInstance);
+        eETHInstance.setWhitelistedSpender(whitelist, true);
+        vm.stopPrank();
     }
 
     function _initOracleReportsforTesting() internal {
