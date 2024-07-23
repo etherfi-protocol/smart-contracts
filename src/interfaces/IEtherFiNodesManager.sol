@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 
 import "./IEtherFiNode.sol";
+import "../RoleRegistry.sol";
 
 import "../eigenlayer-interfaces/IEigenPodManager.sol";
 import "../eigenlayer-interfaces/IDelegationManager.sol";
@@ -49,6 +50,8 @@ interface IEtherFiNodesManager {
 
     function allowedForwardedEigenpodCalls(bytes4 _selector) external view returns (bool);
     function allowedForwardedExternalCalls(bytes4 _selector, address _target) external view returns (bool);
+
+    function roleRegistry() external view returns (RoleRegistry);
 
     // Non-VIEW functions
     function updateEtherFiNode(uint256 _validatorId) external;

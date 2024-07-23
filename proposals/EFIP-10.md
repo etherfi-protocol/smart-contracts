@@ -1,25 +1,33 @@
-# [EFIP-10] Remove Transfer Blacklist
+# [EFIP-10] Whitelisted Delegate calls for EtherFiNode/EigenPod
 
-**Author**: Jacob Firek jacob@ether.fi
+
+**Author**: dave (dave@ether.fi), syko (seongyun@ether.fi)
 
 **Date**: 2024-07-22
 
 ## Summary
 
-A blacklist was introduced in EFIP-5 as a defense against phishing attacks. This EFIP outlines a proposal to remove this feature.
+This EFIP proposes the introduction of a whitelist mechanism on the delegate call into the EtherFiNode/EigenPod contracts. This change aims to enhance security by restricting call forwarding and function execution to a predefined list of delegates, ensuring that only authorized operations can be performed.
 
 ## Motivation
 
-Given that nothing can be added to smart contracts for free, every feature must be carefully considered before subjecting our users to additional gas costs.
+Currently, we use the blacklisting to restrict blacklisted functions from being executed. However, the blacklisting approach is not robust and can be bypassed by malicious actors by upgrade. Introducing the whitelisting will mitigate these risks by ensuring only allowed operations can be executed.
 
 ## Proposal
 
-We should remove the transfer blacklist for these reasons:
+The proposal introduces changes to the EtherFiNode and EtherFiNodesManager contracts to implement the whitelist mechanism:
 
-- The majority of phishing attacks on our users are via gasless permit signatures, which are covered by the introduction of the whitelist.
-- Hackers can easily circumvent the blacklist as the recipient by generating a new address.
-- The typical pattern for hackers involves the immediate transfer of funds to ETH.
-- The blacklist adds 5000 gas to all transfers.
+1. **Whitelist Management**:
+    - Addition of functions to manage the whitelist for `eigenPodCall` and `externalCall`
+    - Implementation of checks to ensure only whitelisted operations ca be performed.
+
+2. **Call Forwarding Restrictions**:
+    - Ensuring that only the whitelisted operations can be performed.
+
+
+## References
+
+- [Pull Request #100](https://github.com/etherfi-protocol/smart-contracts/pull/100)
 
 ## Copyright
 

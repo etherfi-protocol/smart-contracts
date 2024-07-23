@@ -81,7 +81,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         eETH.transfer(msg.sender, eETHAmount);
         return eETHAmount;
     }
-
     /// @notice Transfer weEth out of treasury to the owner
     function rescueTreasuryWeeth() public onlyOwner {
         address treasury = 0x6329004E903B7F420245E7aF3f355186f2432466;
@@ -113,6 +112,39 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {}
+
+
+    /// @notice Require the recipient to not be blacklisted before calling {ERC20Upgradeable-_transfer}
+    function _transfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal override {
+        require(!blacklistedRecipient[from] && !blacklistedRecipient[to], "weETH: blacklisted address");
+        super._transfer(from, to, amount);
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------------  SETTERS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @notice Sets the whitelisted status for a list of addresses
+    /// @param _spenders An array of spender addresses
+    /// @param _isWhitelisted Boolean value to set the whitelisted status
+    function setWhitelistedSpender(address[] calldata _spenders, bool _isWhitelisted) external onlyOwner {
+        for (uint i = 0; i < _spenders.length; i++) {
+            whitelistedSpender[_spenders[i]] = _isWhitelisted;
+        }
+    }
+
+    /// @notice Sets the blacklisted status for a list of addresses
+    /// @param _recipients An array of recipient addresses
+    /// @param _isBlacklisted Boolean value to set the blacklisted status
+    function setBlacklistedRecipient(address[] calldata _recipients, bool _isBlacklisted) external onlyOwner {
+        for (uint i = 0; i < _recipients.length; i++) {
+            blacklistedRecipient[_recipients[i]] = _isBlacklisted;
+        }
+    }
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  SETTERS  ---------------------------------------

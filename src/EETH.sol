@@ -18,7 +18,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
-
+    
     ILiquidityPool public liquidityPool;
 
     uint256 public totalShares;
@@ -38,6 +38,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     bytes32 private immutable _HASHED_NAME;
     bytes32 private immutable _HASHED_VERSION;
     bytes32 private immutable _TYPE_HASH;
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------------  EVENTS  ----------------------------------------
+    //--------------------------------------------------------------------------------------
 
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
 
@@ -153,6 +157,8 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     //--------------------------------------------------------------------------------------
 
     function _transfer(address _sender, address _recipient, uint256 _amount) internal {
+        require(!blacklistedRecipient[_sender] && !blacklistedRecipient[_recipient], "eETH: blacklisted address"); 
+        
         uint256 _sharesToTransfer = liquidityPool.sharesForAmount(_amount);
         _transferShares(_sender, _recipient, _sharesToTransfer);
         emit Transfer(_sender, _recipient, _amount);
@@ -200,6 +206,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------
+    
     function name() public pure returns (string memory) { return "ether.fi ETH"; }
     function symbol() public pure returns (string memory) { return "eETH"; }
     function decimals() public pure returns (uint8) { return 18; }

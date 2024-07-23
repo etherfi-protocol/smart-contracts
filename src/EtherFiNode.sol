@@ -6,12 +6,14 @@ import "./interfaces/IEtherFiNodesManager.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "./eigenlayer-interfaces/IEigenPodManager.sol";
 import "./eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
 import "forge-std/console.sol";
 
-contract EtherFiNode is IEtherFiNode {
+contract EtherFiNode is IEtherFiNode, IERC1271 {
     address public etherFiNodesManager;
 
     uint256 public DEPRECATED_localRevenueIndex;
@@ -752,6 +754,22 @@ contract EtherFiNode is IEtherFiNode {
     function _onlyEtherFiNodeManagerContract() internal view {
         require(msg.sender == etherFiNodesManager, "INCORRECT_CALLER");
     } 
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  Signatures-  --------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    /**
+     * @dev Should return whether the signature provided is valid for the provided data
+     * @param _digestHash   Hash of the data to be signed
+     * @param _signature Signature byte array associated with _data
+    */
+    function isValidSignature(bytes32 _digestHash, bytes memory _signature) public view override returns (bytes4 magicValue) {
+        bytes32 NODE_ADMIN_ROLE = keccak256("EFNM_NODE_ADMIN_ROLE");
+        (address signer, ) = ECDSA.tryRecover(_digestHash, _signature);
+        bool isAdmin = IEtherFiNodesManager(etherFiNodesManager).roleRegistry().hasRole(NODE_ADMIN_ROLE, signer);
+        return isAdmin ? this.isValidSignature.selector : bytes4(0xffffffff);
+    }
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------

@@ -1,4 +1,4 @@
-# [EFIP-8] Purpose and Guidelines
+# [EFIP-8] Withdraw weETH from Treasury contract
 
 **Author**: Vaibhav Valecha (vaibhav@ether.fi)
 
@@ -19,7 +19,6 @@ The benefit of this proposal is that it allows us to move the weETH into another
 ## Proposal
 
 To implement this proposal, we add a function in the weEth contract which calls transfers for the amount of weEth held by the treasury and sends its to the owner.
-
 
 ## Copyright
 

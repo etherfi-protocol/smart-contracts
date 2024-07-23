@@ -334,5 +334,4 @@ contract EETHTest is TestSetup {
         vm.prank(bob);
         eETHInstance.transferFrom(alice, bob, 1 ether);
     }
-
 }

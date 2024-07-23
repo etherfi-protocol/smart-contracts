@@ -42,6 +42,7 @@ contract WeETHTest is TestSetup {
         //Approve the wrapped eth contract to spend 100 eEth
         eETHInstance.approve(address(weEthInstance), 100 ether);
         weEthInstance.wrap(5 ether);
+        vm.stopPrank();
 
         assertEq(weEthInstance.balanceOf(alice), 5 ether);
         assertEq(eETHInstance.balanceOf(alice), 5 ether);
@@ -289,7 +290,6 @@ contract WeETHTest is TestSetup {
         weEthInstance.unwrap(1 ether);
         assertEq(eETHInstance.balanceOf(bob), 1.333333333333333332 ether);
     }
-
     function test_rescueTreasuryWeeth() public {
         uint256 treasuryBal = 31859761318927469119;
         address treasuryInstance = 0x6329004E903B7F420245E7aF3f355186f2432466;
