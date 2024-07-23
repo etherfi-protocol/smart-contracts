@@ -94,7 +94,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
 
-    function setBatchSize(uint16 _batchSize) external onlyOwner {
+    function setValidatorTaskBatchSize(uint16 _batchSize) external onlyOwner {
         validatorTaskBatchSize = _batchSize;
     }
 

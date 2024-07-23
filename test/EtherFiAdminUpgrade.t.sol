@@ -39,7 +39,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         EtherFiAdmin v2Implementation = new EtherFiAdmin();
         vm.startPrank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(address(v2Implementation));
-        etherFiAdminInstance.setBatchSize(batchSize);
+        etherFiAdminInstance.setValidatorTaskBatchSize(batchSize);
         vm.stopPrank();
     }
 
@@ -158,10 +158,10 @@ contract EtherFiAdminUpgradeTest is TestSetup {
     function test_changingBatchSize() public {
         vm.startPrank(alice);
         vm.expectRevert();
-        etherFiAdminInstance.setBatchSize(alternativeBatchSize);
+        etherFiAdminInstance.setValidatorTaskBatchSize(alternativeBatchSize);
         vm.stopPrank();
         vm.startPrank(owner);
-        etherFiAdminInstance.setBatchSize(alternativeBatchSize);
+        etherFiAdminInstance.setValidatorTaskBatchSize(alternativeBatchSize);
         vm.stopPrank();
     }
 

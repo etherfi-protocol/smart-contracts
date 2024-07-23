@@ -642,7 +642,7 @@ contract TestSetup is Test {
             10000,
             0
         );
-        etherFiAdminInstance.setBatchSize(20);
+        etherFiAdminInstance.setValidatorTaskBatchSize(20);
         etherFiAdminInstance.updateAdmin(alice, true);
 
         etherFiOracleInstance.setEtherFiAdmin(address(etherFiAdminInstance));
