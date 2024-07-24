@@ -27,7 +27,6 @@ contract eethPayoutUpgradeTest is TestSetup {
             beaconBalances[i] = 32 ether + rewards;
         }
         vm.startPrank(address(liquidityPoolInstance.owner()));
-        liquidityPoolInstance.mintShareOnChangeSplit(validatorIds, beaconBalances);
         vm.stopPrank();
     }
     
