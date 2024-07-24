@@ -41,7 +41,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     uint128 public totalValueOutOfLp;
     uint128 public totalValueInLp;
 
-    address public DEPRECATED_admin;
+    address public treasury;
 
     uint32 public numPendingDeposits; // number of validator deposits, which needs 'registerValidator'
 
@@ -467,9 +467,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @param _protocolFees The amount of protocol fees to pay in ether
     function payProtocolFees(uint128 _protocolFees) external {
         if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
-        totalValueOutOfLp = totalValueOutOfLp + _protocolFees;
-        uint256 treasuryShares = sharesForAmount(_protocolFees);
-        eETH.mintShares(treasury, treasuryShares);
+        _deposit(treasury, 0, _protocolFees);
 
         emit ProtocolFeePaid(_protocolFees);
     }
@@ -481,7 +479,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit UpdatedTreasury(_treasury);
     }
 
->>>>>>> abbac47 (added sanity check)
     /// @notice Whether or not nodes created via bNFT deposits should be restaked
     function setRestakeBnftDeposits(bool _restake) external onlyAdmin {
         restakeBnftDeposits = _restake;
