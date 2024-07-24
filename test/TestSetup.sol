@@ -306,7 +306,7 @@ contract TestSetup is Test {
     }
 
     function initializeRealisticFork(uint8 forkEnum) public {
-        initializeRealisticForkWithBlock(forkEnum, block.number);
+        initializeRealisticForkWithBlock(forkEnum, 0);
     }
 
     // initialize a fork which inherits the exact contracts, addresses, and state of
@@ -315,7 +315,11 @@ contract TestSetup is Test {
     function initializeRealisticForkWithBlock(uint8 forkEnum, uint256 blockNo) public {
 
         if (forkEnum == MAINNET_FORK) {
-            vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL"), blockNo));
+            if (blockNo == 0) {
+                vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+            } else {
+                vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL"), blockNo));
+            }
             addressProviderInstance = AddressProvider(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
             owner = addressProviderInstance.getContractAddress("EtherFiTimelock");
             admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
@@ -1383,6 +1387,24 @@ contract TestSetup is Test {
         address newImpl = address(new LiquidityPool());
         vm.prank(liquidityPoolInstance.owner());
         liquidityPoolInstance.upgradeTo(newImpl);
+    }
+
+    function _upgrade_auction_manager_contract() internal {
+        address newImpl = address(new AuctionManager());
+        vm.prank(auctionInstance.owner());
+        auctionInstance.upgradeTo(newImpl);
+    }
+
+    function _upgrade_node_oeprator_manager_contract() internal {
+        address newImpl = address(new NodeOperatorManager());
+        vm.prank(nodeOperatorManagerInstance.owner());
+        nodeOperatorManagerInstance.upgradeTo(newImpl);
+    }
+
+    function _upgrade_etherfi_oracle_contract() internal {
+        address newImpl = address(new EtherFiOracle());
+        vm.prank(etherFiOracleInstance.owner());
+        etherFiOracleInstance.upgradeTo(newImpl);
     }
 
     function _upgrade_liquifier() internal {
