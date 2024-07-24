@@ -143,8 +143,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     function initializeV2dot5(address _roleRegistry) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
-
-        // TODO: compile list of DEPRECATED values and set to 0
         
         roleRegistry = RoleRegistry(_roleRegistry);
     }

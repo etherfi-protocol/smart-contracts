@@ -740,14 +740,13 @@ contract TestSetup is Test {
             etherFiOracleInstance.initializeV2dot5(address(roleRegistry));
         }
 
-        // TODO: along with the role registry, this should be uncoupled in the future
+        // TODO: along with the role registry, the pauser should be uncoupled in the future
         Pauser pauserImplementation = new Pauser();
         IPausable[] memory initialPausables = new IPausable[](2);
         initialPausables[0] = IPausable(address(liquidityPoolInstance));
         initialPausables[1] = IPausable(address(etherFiOracleInstance));
         bytes memory initializerData = abi.encodeWithSelector(Pauser.initialize.selector, initialPausables, address(roleRegistry));
         pauserInstance = Pauser(address(new UUPSProxy(address(pauserImplementation), initializerData)));
-        console.log("Pauser role registry: ", address(pauserInstance.roleRegistry()));
 
         vm.startPrank(admin);
         roleRegistry.grantRole(managerInstance.NODE_ADMIN_ROLE(), admin);
