@@ -393,13 +393,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         uint256 outboundEthAmountFromLp = isLpBnftHolder ? 31 ether * _validatorIds.length : 30 ether * _validatorIds.length;
         _accountForEthSentOut(outboundEthAmountFromLp);
 
-        // If the LP is the B-nft holder, the 1 ether (for each validator) is taken from the LP
-        // otherwise, the 1 ether is taken from the B-nft holder's separate deposit
-        if (isLpBnftHolder) {
-            totalValueOutOfLp += uint128(1 ether * _validatorIds.length);
-            totalValueInLp -= uint128(1 ether * _validatorIds.length);
-        }
-
         stakingManager.batchApproveRegistration{value: 31 ether * _validatorIds.length}(_validatorIds, _pubKey, _signature, depositDataRootApproval);
     }
 
