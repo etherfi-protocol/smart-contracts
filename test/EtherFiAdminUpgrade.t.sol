@@ -226,24 +226,24 @@ contract EtherFiAdminUpgradeTest is TestSetup {
     //0xab30d861d075d595fdff4dc100568722047230ceea4916e4d7eceff3804c50c4 admin
     //0xd89636ce38de66a2b0bd42448d896fcb5e90688edc443b3145c402067650f6d7 oracle
     function test_exitValidators() public {
-        initializeRealisticForkWithBlock(MAINNET_FORK, 20157483);
+        initializeRealisticForkWithBlock(MAINNET_FORK, 20245813);
         upgradeContract();  
-        report.refSlotFrom =  9362464;
-        report.refSlotTo = 9362943;
-        report.refBlockFrom = 20156700;
-        report.refBlockTo = 20157172;
-        report.accruedRewards = 8729224130452426342;
+        report.refSlotFrom =  9448384;
+        report.refSlotTo = 9451743;
+        report.refBlockFrom = 20242141;
+        report.refBlockTo = 20245485;
+        report.accruedRewards = 62905531321344003821;
         report.validatorsToApprove = new uint256[](0);
         report.exitedValidators = new uint256[](20);
         report.exitedValidatorsExitTimestamps = new uint32[](20);
-        report.lastFinalizedWithdrawalRequestId = 21696;
-        report.finalizedWithdrawalAmount = 1137171105616126724;
-        uint256 startId = 819;
+        report.lastFinalizedWithdrawalRequestId = 23682;
+        report.finalizedWithdrawalAmount = 5695197386208801146906;
+        uint256 startId = 813;
         for (uint i = 0; i < 20; i++) {
-            report.exitedValidators[i] = 819 + i;
-            report.exitedValidatorsExitTimestamps[i] = 1713701975;
-            if(i > 9) {
+            report.exitedValidators[i] = startId + i;
             report.exitedValidatorsExitTimestamps[i] = 1713702359;
+            if(i < 8) {
+            report.exitedValidatorsExitTimestamps[i] = 1713701975;
             }
         }
         reportHash = etherFiOracleInstance.generateReportHash(report);
@@ -255,8 +255,9 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         bytes[] memory emptySignatures = new bytes[](0);
         bytes[] memory emptyPubKeys = new bytes[](0);
         etherFiAdminInstance.executeValidatorManagementTask(reportHash, report.exitedValidators, report.exitedValidatorsExitTimestamps, emptyPubKeys, emptySignatures);
-        assertTrue(postCompleted);
-        assertTrue(postExists);
+        (bool finalCompleted, bool finalExists, ) = etherFiAdminInstance.validatorManagementTaskStatus(approvalHash);
+        assertTrue(finalCompleted);
+        assertTrue(finalExists);
     }
 }
 
