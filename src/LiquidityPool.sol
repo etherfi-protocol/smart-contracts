@@ -462,6 +462,37 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
     }
 
+<<<<<<< HEAD
+=======
+    function payProtocolFees(uint128 _protocolFees) public onlyEtherFiAdmin {
+        totalValueOutOfLp = totalValueOutOfLp + _protocolFees;
+        uint256 treasuryShares = sharesForAmount(_protocolFees);
+        eETH.mintShares(treasury, treasuryShares);
+    }
+
+    //one time function to mint shares when we change split to 0
+    //need to 
+    function mintShareOnChangeSplit(uint256[] memory _validatorIds, uint256[] memory _beaconBalances) external onlyOwner { 
+            uint256 totalAccruedRewards = 0;
+            for (uint256 i = 0; i < _validatorIds.length; i++) {
+                require(_beaconBalances[i] <= 33 ether, "Invalid Beacon Balance");
+                (uint256 treasury, uint256 nodeOperator, uint256 tnft, uint256 bnft) = nodesManager.calculateTVL(_validatorIds[i], _beaconBalances[i]);
+                if(bnft >= 1 ether){
+                    totalAccruedRewards += bnft - 2 ether;
+                } else {
+                    totalAccruedRewards += bnft;
+                }
+                totalAccruedRewards += treasury;
+            }
+            console.log("totalAccruedRewards", totalAccruedRewards);
+            payProtocolFees(uint128(totalAccruedRewards));
+        } 
+
+    function setTreasury(address _treasury) external onlyOwner {
+        treasury = _treasury;
+    }
+
+>>>>>>> abbac47 (added sanity check)
     /// @notice Whether or not nodes created via bNFT deposits should be restaked
     function setRestakeBnftDeposits(bool _restake) external onlyAdmin {
         restakeBnftDeposits = _restake;
@@ -615,6 +646,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     modifier onlyAdmin() {
         _requireAdmin();
+        _;
+    }
+
+    modifier onlyEtherFiAdmin() {
+        console.log("msg.sender", msg.sender);
+        require(msg.sender == address(etherFiAdminContract) || msg.sender == owner(), "Incorrect Caller");
         _;
     }
 
