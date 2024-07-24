@@ -24,11 +24,6 @@ contract LiquidityPoolTest is TestSetup {
 
     function _initBid() internal {
         vm.deal(alice, 100 ether);
-
-        vm.startPrank(owner);
-        nodeOperatorManagerInstance.updateAdmin(alice, true);
-        liquidityPoolInstance.updateAdmin(alice, true);
-        vm.stopPrank();
     
         vm.startPrank(alice);
         _setUpNodeOperatorWhitelist();
@@ -1298,7 +1293,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         vm.prank(owner);
-        liquidityPoolInstance.updateAdmin(chad, true);
+        roleRegistry.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
 
         vm.prank(bob);
         vm.expectRevert("Not admin");

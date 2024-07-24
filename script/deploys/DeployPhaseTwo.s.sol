@@ -157,18 +157,21 @@ contract DeployPhaseTwoScript is Script {
             postReportWaitTimeInSlots
         );
 
-        etherFiAdminInstance.updateAdmin(oracleAdminAddress, true);
+        // DEPRECATED
+        // etherFiAdminInstance.updateAdmin(oracleAdminAddress, true);
 
         IEtherFiOracle(address(etherFiOracleAddress)).setEtherFiAdmin(address(etherFiAdminInstance));
-        IWithdrawRequestNFT(address(withdrawRequestNFTAddress)).updateAdmin(address(etherFiAdminInstance), true);
+        // DEPRECATED
+        // IWithdrawRequestNFT(address(withdrawRequestNFTAddress)).updateAdmin(address(etherFiAdminInstance), true);
 
         // Used only for development
         if (false) {
             address admin = address(etherFiAdminInstance);
-            IAuctionManager(address(auctionAddress)).updateAdmin(admin, true);
-            IStakingManager(address(stakingManagerAddress)).updateAdmin(admin, true);
-            ILiquidityPool(address(liquidityPoolAddress)).updateAdmin(admin, true);
-            IMembershipManager(address(membershipManagerAddress)).updateAdmin(admin, true);
+            // DEPRECATED
+            // IAuctionManager(address(auctionAddress)).updateAdmin(admin, true);
+            // IStakingManager(address(stakingManagerAddress)).updateAdmin(admin, true);
+            // ILiquidityPool(address(liquidityPoolAddress)).updateAdmin(admin, true);
+            // IMembershipManager(address(membershipManagerAddress)).updateAdmin(admin, true);
         }
 
         addressProvider.addContract(address(etherFiAdminProxy), "EtherFiAdmin");

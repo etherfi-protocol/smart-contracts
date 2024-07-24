@@ -54,7 +54,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     HoldersUpdate public DEPRECATED_holdersUpdate;
 
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
     mapping(SourceOfFunds => FundStatistics) public DEPRECATED_fundStatistics;
     mapping(uint256 => bytes32) public depositDataRootForApprovalDeposits;
     address public etherFiAdminContract;
@@ -71,6 +71,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     bool private isLpBnftHolder;
 
     RoleRegistry public roleRegistry;
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ROLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 public constant LIQUIDITY_POOL_ADMIN_ROLE = keccak256("LIQUIDITY_POOL_ADMIN_ROLE");
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -130,7 +136,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         ethAmountLockedForWithdrawal = 0;
         etherFiAdminContract = _etherFiAdminContract;
         withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
-        admins[_etherFiAdminContract] = true;
+        DEPRECATED_admins[_etherFiAdminContract] = true;
         isLpBnftHolder = false;
     }
 
@@ -144,6 +150,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function initializeV2dot5(address _roleRegistry) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
         
+        // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
     }
 
@@ -369,7 +376,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         uint256[] memory _validatorIds, 
         bytes[] calldata _pubKey,
         bytes[] calldata _signature
-    ) external onlyAdmin whenNotPaused {
+    ) external whenNotPaused {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         require(_validatorIds.length == _pubKey.length && _validatorIds.length == _signature.length, "lengths differ");
 
         bytes32[] memory depositDataRootApproval = new bytes32[](_validatorIds.length);
@@ -393,7 +401,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         _batchCancelDeposit(_validatorIds, msg.sender);
     }
 
-    function batchCancelDepositByAdmin(uint256[] calldata _validatorIds, address _bnftStaker) external whenNotPaused onlyAdmin {
+    function batchCancelDepositByAdmin(uint256[] calldata _validatorIds, address _bnftStaker) external whenNotPaused {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         _batchCancelDeposit(_validatorIds, _bnftStaker);
     }
 
@@ -418,7 +428,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     /// @notice The admin can register an address to become a BNFT holder
     /// @param _user The address of the BNFT player to register
-    function registerAsBnftHolder(address _user) public onlyAdmin {      
+    function registerAsBnftHolder(address _user) public {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         require(!bnftHoldersIndexes[_user].registered, "Already registered");  
 
         BnftHolder memory bnftHolder = BnftHolder({
@@ -442,7 +453,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function deRegisterBnftHolder(address _bNftHolder) external {
         require(bnftHoldersIndexes[_bNftHolder].registered, "Not registered");
         uint256 index = bnftHoldersIndexes[_bNftHolder].index;
-        require(admins[msg.sender] || msg.sender == bnftHolders[index].holder, "Incorrect Caller");
+        require(roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender) || msg.sender == bnftHolders[index].holder, "Incorrect Caller");
         
         uint256 endIndex = bnftHolders.length - 1;
         address endUser = bnftHolders[endIndex].holder;
@@ -459,7 +470,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     /// @notice Send the exit requests as the T-NFT holder of the LiquidityPool validators
-    function sendExitRequests(uint256[] calldata _validatorIds) external onlyAdmin {
+    function sendExitRequests(uint256[] calldata _validatorIds) external {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        
         nodesManager.batchSendExitRequest(_validatorIds);
     }
 
@@ -472,14 +485,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     /// @notice Whether or not nodes created via bNFT deposits should be restaked
-    function setRestakeBnftDeposits(bool _restake) external onlyAdmin {
-        restakeBnftDeposits = _restake;
-    }
+    function setRestakeBnftDeposits(bool _restake) external {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
-    /// @notice Updates the address of the admin
-    /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        admins[_address] = _isAdmin;
+        restakeBnftDeposits = _restake;
     }
 
     // Pauses the contract
@@ -500,11 +509,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit Unpaused(msg.sender);
     }
 
-    // Deprecated, just existing not to touch EtherFiAdmin contract
-    function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external onlyAdmin {
+    // DEPRECATED, just existing not to touch EtherFiAdmin contract
+    function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external {
     }
 
-    function updateWhitelistedAddresses(address[] calldata _users, bool _value) external onlyAdmin {
+    function updateWhitelistedAddresses(address[] calldata _users, bool _value) external {
         for (uint256 i = 0; i < _users.length; i++) {
             whitelisted[_users[i]] = _value;
 
@@ -512,13 +521,16 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         }
     }
 
-    function updateWhitelistStatus(bool _value) external onlyAdmin {
+    function updateWhitelistStatus(bool _value) external {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         whitelistEnabled = _value;
 
         emit WhitelistStatusUpdated(_value);
     }
 
-    function updateBnftMode(bool _isLpBnftHolder) external onlyAdmin {
+    function updateBnftMode(bool _isLpBnftHolder) external {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         // Never toggle it in the process of deposit-regiration
         isLpBnftHolder = _isLpBnftHolder;
     }
@@ -618,10 +630,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     function getImplementation() external view returns (address) {return _getImplementation();}
 
-    function _requireAdmin() internal view virtual {
-        require(admins[msg.sender], "Not admin");
-    }
-
     function _requireNotPaused() internal view virtual {
         require(!paused, "Pausable: paused");
     }
@@ -629,11 +637,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
-
-    modifier onlyAdmin() {
-        _requireAdmin();
-        _;
-    }
 
     modifier whenNotPaused() {
         _requireNotPaused();

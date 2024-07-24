@@ -81,10 +81,12 @@ contract DeployLiquifierScript is Script {
         //     depositCapRefreshInterval // deposit cap refresh interval in seconds
         // );
 
-        liquifierInstance.updateAdmin(admin, true);
+        // DEPRECATED
+        // liquifierInstance.updateAdmin(admin, true);
 
-        address oracleWallet = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F; 
-        liquifierInstance.updateAdmin(oracleWallet, true);
+        address oracleWallet = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
+        // DEPRCATED  
+        // liquifierInstance.updateAdmin(oracleWallet, true);
         
         liquifierInstance.registerToken(stEth, stEthStrategy, true, 0, 1, 10, false); // 1 ether timebound cap, 10 ether max cap
         liquifierInstance.registerToken(cbEth, cbEthStrategy, true, 0, 1, 10, false);

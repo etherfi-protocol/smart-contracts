@@ -126,11 +126,12 @@ contract DeployPhaseOnePointFiveScript is Script {
     }
 
     function setUpAdmins(address _admin) internal {
-        liquidityPool.updateAdmin(_admin, true);
-        regulationsManager.updateAdmin(_admin, true);
-        membershipManager.updateAdmin(_admin, true);
-        membershipNFT.updateAdmin(_admin, true);
-        nftExchange.updateAdmin(_admin);
+        // DEPRECATED
+        // liquidityPool.updateAdmin(_admin, true);
+        // regulationsManager.updateAdmin(_admin, true);
+        // membershipManager.updateAdmin(_admin, true);
+        // membershipNFT.updateAdmin(_admin, true);
+        // nftExchange.updateAdmin(_admin);
     }
 
     function initializeTiers() internal {

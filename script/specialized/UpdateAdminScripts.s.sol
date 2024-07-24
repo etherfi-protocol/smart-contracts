@@ -20,36 +20,38 @@ contract UpdateAdmins is Script {
     AddressProvider public addressProvider;
 
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
 
-        address addressProviderAddress = vm.envAddress("CONTRACT_REGISTRY");
-        addressProvider = AddressProvider(addressProviderAddress);
+        // TODO: update this script to use v2.5 role management
+        // uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
 
-        vm.startBroadcast(deployerPrivateKey);
+        // address addressProviderAddress = vm.envAddress("CONTRACT_REGISTRY");
+        // addressProvider = AddressProvider(addressProviderAddress);
 
-        address stakingManager = addressProvider.getContractAddress("StakingManager");
-        address etherFiNodesManager = addressProvider.getContractAddress("EtherFiNodesManager");
-        address protocolRevenueManager = addressProvider.getContractAddress("ProtocolRevenueManager");
-        address auctionManager = addressProvider.getContractAddress("AuctionManager");
-        address liquidityPool = addressProvider.getContractAddress("LiquidityPool");
-        address regulationsManager = addressProvider.getContractAddress("RegulationsManager");
-        address membershipNFT = addressProvider.getContractAddress("MembershipNFT");
-        address membershipManager = addressProvider.getContractAddress("MembershipManager");
-        address nftExchange = addressProvider.getContractAddress("NFTExchange");
-        address withdrawRequestNFTAddress = addressProvider.getContractAddress("WithdrawRequestNFT");
+        // vm.startBroadcast(deployerPrivateKey);
 
-        address admin = vm.envAddress("ADMIN");
+        // address stakingManager = addressProvider.getContractAddress("StakingManager");
+        // address etherFiNodesManager = addressProvider.getContractAddress("EtherFiNodesManager");
+        // address protocolRevenueManager = addressProvider.getContractAddress("ProtocolRevenueManager");
+        // address auctionManager = addressProvider.getContractAddress("AuctionManager");
+        // address liquidityPool = addressProvider.getContractAddress("LiquidityPool");
+        // address regulationsManager = addressProvider.getContractAddress("RegulationsManager");
+        // address membershipNFT = addressProvider.getContractAddress("MembershipNFT");
+        // address membershipManager = addressProvider.getContractAddress("MembershipManager");
+        // address nftExchange = addressProvider.getContractAddress("NFTExchange");
+        // address withdrawRequestNFTAddress = addressProvider.getContractAddress("WithdrawRequestNFT");
+
+        // address admin = vm.envAddress("ADMIN");
         
-        // ProtocolRevenueManager(payable(protocolRevenueManager)).updateAdmin(admin);  // DEPRECATED
-        AuctionManager(auctionManager).updateAdmin(admin, true); 
-        StakingManager(stakingManager).updateAdmin(admin, true); 
-        LiquidityPool(payable(liquidityPool)).updateAdmin(admin, true);
-        // RegulationsManager(regulationsManager).updateAdmin(admin, true);
-        MembershipManager(payable(membershipManager)).updateAdmin(admin, true);
-        MembershipNFT(membershipNFT).updateAdmin(admin, true);
-        // NFTExchange(nftExchange).updateAdmin(admin); // Not in the scope of Phase 2 upgrade
-        WithdrawRequestNFT(payable(withdrawRequestNFTAddress)).updateAdmin(admin, true);
+        // // ProtocolRevenueManager(payable(protocolRevenueManager)).updateAdmin(admin);  // DEPRECATED
+        // AuctionManager(auctionManager).updateAdmin(admin, true); 
+        // StakingManager(stakingManager).updateAdmin(admin, true); 
+        // LiquidityPool(payable(liquidityPool)).updateAdmin(admin, true);
+        // // RegulationsManager(regulationsManager).updateAdmin(admin, true);
+        // MembershipManager(payable(membershipManager)).updateAdmin(admin, true);
+        // MembershipNFT(membershipNFT).updateAdmin(admin, true);
+        // // NFTExchange(nftExchange).updateAdmin(admin); // Not in the scope of Phase 2 upgrade
+        // WithdrawRequestNFT(payable(withdrawRequestNFTAddress)).updateAdmin(admin, true);
 
-        vm.stopBroadcast();
+        // vm.stopBroadcast();
     }
 }

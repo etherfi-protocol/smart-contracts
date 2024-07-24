@@ -17,8 +17,7 @@ contract RoleRegistryTest is TestSetup {
 
     function test_initializeSuperAdmin() public {
 
-        RoleRegistry roleRegistryImplementation = new RoleRegistry();
-        RoleRegistry roleRegistry;
+        roleRegistryImplementation = new RoleRegistry();
 
         // foundry doesn't detect the emit for some reason, maybe because its part of a constructor,
         // but I see the expected values in the trace if I crank logging up
