@@ -334,25 +334,4 @@ contract EETHTest is TestSetup {
         vm.prank(bob);
         eETHInstance.transferFrom(alice, bob, 1 ether);
     }
-
-    function test_TransferBlacklistEETH() public {
-        startHoax(alice);
-        liquidityPoolInstance.deposit{value: 2 ether}();
-        
-        eETHInstance.transfer(bob, 1 ether);
-        vm.stopPrank();
-
-        vm.prank(owner);
-        address[] memory blacklist = new address[](1);
-        blacklist[0] = bob;
-        eETHInstance.setBlacklistedRecipient(blacklist, true);
-
-        vm.prank(alice);
-        vm.expectRevert("eETH: blacklisted address");
-        eETHInstance.transfer(bob, 1 ether);
-
-        vm.prank(bob);
-        vm.expectRevert("eETH: blacklisted address");
-        eETHInstance.transfer(alice, 1 ether);
-    }
 }

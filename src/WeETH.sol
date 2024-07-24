@@ -19,7 +19,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     ILiquidityPool public liquidityPool;
 
     mapping (address => bool) public whitelistedSpender;
-    mapping (address => bool) public blacklistedRecipient;
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -100,7 +99,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         bytes32 s
     ) public override {
         require(whitelistedSpender[spender], "weETH: spender not whitelisted"); 
-    
         super.permit(owner, spender, value, deadline, v, r, s);
     }
 
@@ -114,17 +112,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         address newImplementation
     ) internal override onlyOwner {}
 
-
-    /// @notice Require the recipient to not be blacklisted before calling {ERC20Upgradeable-_transfer}
-    function _transfer(
-        address from,
-        address to,
-        uint256 amount
-    ) internal override {
-        require(!blacklistedRecipient[from] && !blacklistedRecipient[to], "weETH: blacklisted address");
-        super._transfer(from, to, amount);
-    }
-
     //--------------------------------------------------------------------------------------
     //------------------------------------  SETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -135,15 +122,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     function setWhitelistedSpender(address[] calldata _spenders, bool _isWhitelisted) external onlyOwner {
         for (uint i = 0; i < _spenders.length; i++) {
             whitelistedSpender[_spenders[i]] = _isWhitelisted;
-        }
-    }
-
-    /// @notice Sets the blacklisted status for a list of addresses
-    /// @param _recipients An array of recipient addresses
-    /// @param _isBlacklisted Boolean value to set the blacklisted status
-    function setBlacklistedRecipient(address[] calldata _recipients, bool _isBlacklisted) external onlyOwner {
-        for (uint i = 0; i < _recipients.length; i++) {
-            blacklistedRecipient[_recipients[i]] = _isBlacklisted;
         }
     }
 
