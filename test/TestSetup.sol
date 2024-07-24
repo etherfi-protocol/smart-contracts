@@ -390,6 +390,8 @@ contract TestSetup is Test {
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
+
+        _deploy_RoleRegistry();
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
@@ -734,6 +736,22 @@ contract TestSetup is Test {
         eETHInstance.setWhitelistedSpender(whitelist, true);
     }
 
+    function _deploy_RoleRegistry() internal {
+        // deploy new versions of role registry
+        roleRegistryImplementation = new RoleRegistry();
+        bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
+        roleRegistry = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
+    }
+
+    function _deploy_Pauser() internal {
+        Pauser pauserImplementation = new Pauser();
+        IPausable[] memory initialPausables = new IPausable[](2);
+        initialPausables[0] = IPausable(address(liquidityPoolInstance));
+        initialPausables[1] = IPausable(address(etherFiOracleInstance));
+        bytes memory initializerData = abi.encodeWithSelector(Pauser.initialize.selector, initialPausables, address(roleRegistry));
+        pauserInstance = Pauser(address(new UUPSProxy(address(pauserImplementation), initializerData)));
+    }
+
     function setupRoleRegistry() public {
 
         // TODO: I don't love the coupling here but it was too easy to make tests
@@ -741,12 +759,8 @@ contract TestSetup is Test {
         // We should work toward a better system that for each contract, will deploy+initialize
         // proxy if it doesn't exist, or upgrade to the latest version otherwise
         if (address(managerInstance.roleRegistry()) == address(0x0)) {
-
-            // deploy new versions of role registry
-            roleRegistryImplementation = new RoleRegistry();
-            bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
-            roleRegistry = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
-
+            _deploy_RoleRegistry();
+            
             vm.startPrank(owner);
             managerInstance.initializeV2dot5(address(roleRegistry));
             liquidityPoolInstance.initializeV2dot5(address(roleRegistry));
@@ -759,12 +773,7 @@ contract TestSetup is Test {
         }
 
         // TODO: along with the role registry, the pauser should be uncoupled in the future
-        Pauser pauserImplementation = new Pauser();
-        IPausable[] memory initialPausables = new IPausable[](2);
-        initialPausables[0] = IPausable(address(liquidityPoolInstance));
-        initialPausables[1] = IPausable(address(etherFiOracleInstance));
-        bytes memory initializerData = abi.encodeWithSelector(Pauser.initialize.selector, initialPausables, address(roleRegistry));
-        pauserInstance = Pauser(address(new UUPSProxy(address(pauserImplementation), initializerData)));
+        _deploy_Pauser();
 
         vm.startPrank(admin);
         roleRegistry.grantRole(managerInstance.NODE_ADMIN_ROLE(), admin);
