@@ -170,9 +170,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(_report.protocolFees >= 0, "EtherFiAdmin: protocol fees can't be negative");
         //assume all bnfts are owned by the  ethfund determine if the percentage of protocol rewards and fees percentage still align properly
         int128 tnftAndBnftRewards = _report.protocolAccruedRewards * 32 / 29;
+        int128 n = tnftAndBnftRewards * 3 / 32 + tnftAndBnftRewards / 9;
         require(tnftAndBnftRewards * 3 / 32 + tnftAndBnftRewards / 9 >= _report.protocolFees, "EtherFiAdmin: protocol fees too high");
         //assume all bnfts are owned by liquidity pool
-        require(_report.protocolAccruedRewards / 9 <= _report.protocolFees, "EtherFiAdmin: protocol fees too high");
+        require(_report.protocolAccruedRewards / 9 <= _report.protocolFees, "EtherFiAdmin: protocol fees too low");
         liquidityPool.payProtocolFees(uint128(_report.protocolFees));
     }
 
@@ -274,7 +275,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
 
     modifier isAdmin() {
-        require(admins[msg.sender] || msg.sender == owner(), "EtherFiAdmin: not an admio");
+        require(admins[msg.sender] || msg.sender == owner(), "EtherFiAdmin: not an admin");
         _;
     }
 
