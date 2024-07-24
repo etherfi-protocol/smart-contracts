@@ -413,6 +413,8 @@ contract TestSetup is Test {
 
         vm.warp(block.timestamp + 1 days);
 
+        liquifierInstance.initializeV2dot5(address(roleRegistry), address(bucketRateLimiter));
+
         vm.stopPrank();
     }
 
