@@ -45,6 +45,7 @@ interface IEtherFiNodesManager {
     function maxEigenlayerWithdrawals() external view returns (uint8);
 
     function admins(address _address) external view returns (bool);
+    function eigenLayerOperatingAdmin(address _address) external view returns (bool);
 
     // Non-VIEW functions    
     function updateEtherFiNode(uint256 _validatorId) external;

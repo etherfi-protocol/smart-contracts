@@ -6,11 +6,13 @@ import "./interfaces/IEtherFiNodesManager.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/interfaces/IERC1271.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "./eigenlayer-interfaces/IEigenPodManager.sol";
 import "./eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "forge-std/console.sol";
 
-contract EtherFiNode is IEtherFiNode {
+contract EtherFiNode is IEtherFiNode, IERC1271 {
     address public etherFiNodesManager;
 
     uint256 public DEPRECATED_localRevenueIndex;
@@ -192,9 +194,70 @@ contract EtherFiNode is IEtherFiNode {
             // we need to mark a block from which we know all beaconchain eth has been moved to the eigenPod
             // so that we can properly calculate exit payouts and ensure queued withdrawals have been resolved
             // (eigenLayer withdrawals are tied to blocknumber instead of timestamp)
-            restakingObservedExitBlock = uint32(block.number);
-            queueRestakedWithdrawal();
+            restakingObservedExitBlocks[_validatorId] = uint32(block.number);
+
+            fullWithdrawalRoots = _queueEigenpodFullWithdrawal();
+            require(fullWithdrawalRoots.length == 1, "NO_FULLWITHDRAWAL_QUEUED");
         }
+    }
+
+    function processFullWithdraw(uint256 _validatorId) external onlyEtherFiNodeManagerContract ensureLatestVersion {
+        updateNumberOfAssociatedValidators(0, 1);
+
+        if (isRestakingEnabled) {
+            // TODO: revisit for the case of slashing
+            require(completedWithdrawalFromRestakingInGwei >= 32 ether / 1 gwei, "INSUFFICIENT_BALANCE");
+            completedWithdrawalFromRestakingInGwei -= uint64(32 ether / 1 gwei);
+        }
+    }
+
+    function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, uint256 middlewareTimesIndexes, bool _receiveAsTokens) external onlyEtherFiNodeManagerContract {
+        IDelegationManager.Withdrawal[] memory _withdrawals = new IDelegationManager.Withdrawal[](1);
+        _withdrawals[0] = withdrawals;
+        uint256[] memory _middlewareTimesIndexes = new uint256[](1);
+        _middlewareTimesIndexes[0] = middlewareTimesIndexes;
+        return _completeQueuedWithdrawals(_withdrawals, _middlewareTimesIndexes, _receiveAsTokens);
+    }
+
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] memory middlewareTimesIndexes, bool _receiveAsTokens) external onlyEtherFiNodeManagerContract {
+        return _completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, _receiveAsTokens);
+    }
+
+    // `DelegationManager.completeQueuedWithdrawals` is used to complete the withdrawals:
+    // (1) by `EtherFiNode._queueRestakedFullWithdrawal`. It is used to process the full withdraw
+    // (2) by `DelegationManager.undelegate`
+    // While `_receiveAsTokens == True` for (1), `_receiveAsTokens == False` for (2)
+    // (Note that this is a simplication based on the use cases)
+    function _completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] memory middlewareTimesIndexes, bool _receiveAsTokens) internal {
+        uint256 totalAmount = 0;
+
+        bool[] memory receiveAsTokens = new bool[](withdrawals.length);
+        IERC20[][] memory tokens = new IERC20[][](withdrawals.length);
+        for (uint256 i = 0; i < withdrawals.length; i++) {
+            require(withdrawals[i].withdrawer == address(this) && withdrawals[i].staker == address(this), "INVALID");
+
+            receiveAsTokens[i] = _receiveAsTokens;
+            tokens[i] = new IERC20[](withdrawals[i].strategies.length);
+            for (uint256 j = 0; j < withdrawals[i].shares.length; j++) {
+                totalAmount += withdrawals[i].shares[j];
+            }
+        }
+
+        if (_receiveAsTokens) {
+            // the queued withdrawal is for (1) full withdraw, so the pendingWithdrawalFromRestakingInGwei should be at least 32 ether
+            require(pendingWithdrawalFromRestakingInGwei >= uint64(totalAmount / 1 gwei), "NO_PENDING_WITHDRAWAL");
+            pendingWithdrawalFromRestakingInGwei -= uint64(totalAmount / 1 gwei);
+            completedWithdrawalFromRestakingInGwei += uint64(totalAmount / 1 gwei);
+        } else {
+            // the queued withdrawal is for (2) undelegate, we put a guard `pendingWithdrawalFromRestakingInGwei` == 0
+            // If it is non-zero, that means there is at least one validator of which delayed withdrawal is in the queue.
+            // Complete that first.
+            /// @dev this is not the most optimal way to handle these two use cases, but we ack that it's a temporary solution
+            require(pendingWithdrawalFromRestakingInGwei == 0, "PENDING_WITHDRAWAL_NOT_ZERO");
+        }
+
+        IDelegationManager mgr = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
+        mgr.completeQueuedWithdrawals(withdrawals, tokens, middlewareTimesIndexes, receiveAsTokens);
     }
 
     /// @dev transfer funds from the withdrawal safe to the 4 associated parties (bNFT, tNFT, treasury, nodeOperator)
@@ -648,6 +711,21 @@ contract EtherFiNode is IEtherFiNode {
     function _onlyEtherFiNodeManagerContract() internal view {
         require(msg.sender == etherFiNodesManager, "INCORRECT_CALLER");
     } 
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  Signatures-  --------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    /**
+     * @dev Should return whether the signature provided is valid for the provided data
+     * @param _digestHash   Hash of the data to be signed
+     * @param _signature Signature byte array associated with _data
+    */
+    function isValidSignature(bytes32 _digestHash, bytes memory _signature) public view override returns (bytes4 magicValue) {
+        (address signer, ) = ECDSA.tryRecover(_digestHash, _signature);
+        bool isAdmin = IEtherFiNodesManager(etherFiNodesManager).eigenLayerOperatingAdmin(signer);
+        return isAdmin ? this.isValidSignature.selector : bytes4(0xffffffff);
+    }
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------

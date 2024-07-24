@@ -47,6 +47,8 @@ import "../src/EtherFiOracle.sol";
 import "../src/EtherFiAdmin.sol";
 import "../src/EtherFiTimelock.sol";
 
+import "../src/BucketRateLimiter.sol";
+
 contract TestSetup is Test {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
@@ -393,7 +395,7 @@ contract TestSetup is Test {
 
         vm.warp(block.timestamp + 1 days);
 
-        liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
+        // liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
 
         vm.stopPrank();
     }
@@ -699,6 +701,13 @@ contract TestSetup is Test {
         _initializeEtherFiAdmin();
 
         admin = alice;
+
+        // weETH and Liquidity Pool must be on eETH to function as expected
+        vm.prank(owner);
+        address[] memory whitelist = new address[](2);
+        whitelist[0] = address(weEthInstance);
+        whitelist[1] = address(liquidityPoolInstance);
+        eETHInstance.setWhitelistedSpender(whitelist, true);
     }
 
     function _initOracleReportsforTesting() internal {
