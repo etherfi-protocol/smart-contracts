@@ -87,6 +87,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     event ValidatorApproved(uint256 indexed validatorId);
     event ValidatorRegistrationCanceled(uint256 indexed validatorId);
     event Rebase(uint256 totalEthLocked, uint256 totalEEthShares);
+    event ProtocolFeePaid(uint128 protocolFees);
     event WhitelistStatusUpdated(bool value);
 
     error IncorrectCaller();
@@ -461,31 +462,19 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
     }
-
-    function payProtocolFees(uint128 _protocolFees) public onlyEtherFiAdmin {
+    /// @notice pay protocol fees including 5% to treaury, 5% to node operator and ethfund bnft holders
+    /// @param _protocolFees The amount of protocol fees to pay in ether
+    function payProtocolFees(uint128 _protocolFees) external {
+        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
         totalValueOutOfLp = totalValueOutOfLp + _protocolFees;
         uint256 treasuryShares = sharesForAmount(_protocolFees);
         eETH.mintShares(treasury, treasuryShares);
+        
+        emit ProtocolFeePaid(_protocolFees);
     }
 
-    //one time function to mint shares when we change split to 0
-    //need to 
-    function mintShareOnChangeSplit(uint256[] memory _validatorIds, uint256[] memory _beaconBalances) external onlyOwner { 
-            uint256 totalAccruedRewards = 0;
-            for (uint256 i = 0; i < _validatorIds.length; i++) {
-                require(_beaconBalances[i] <= 33 ether, "Invalid Beacon Balance");
-                (uint256 treasury, uint256 nodeOperator, uint256 tnft, uint256 bnft) = nodesManager.calculateTVL(_validatorIds[i], _beaconBalances[i]);
-                if(bnft >= 1 ether){
-                    totalAccruedRewards += bnft - 2 ether;
-                } else {
-                    totalAccruedRewards += bnft;
-                }
-                totalAccruedRewards += treasury;
-            }
-            console.log("totalAccruedRewards", totalAccruedRewards);
-            payProtocolFees(uint128(totalAccruedRewards));
-        } 
-
+    /// @notice Set the treasury address
+    /// @param _treasury The address to set as the treasury
     function setTreasury(address _treasury) external onlyOwner {
         treasury = _treasury;
     }
@@ -644,12 +633,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     modifier onlyAdmin() {
         _requireAdmin();
-        _;
-    }
-
-    modifier onlyEtherFiAdmin() {
-        console.log("msg.sender", msg.sender);
-        require(msg.sender == address(etherFiAdminContract) || msg.sender == owner(), "Incorrect Caller");
         _;
     }
 
