@@ -9,9 +9,11 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "./interfaces/IEtherFiOracle.sol";
 import "./interfaces/IEtherFiAdmin.sol";
+import "./interfaces/IPausable.sol";
+import "./RoleRegistry.sol";
 
 
-contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle {
+contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle, IPausable {
 
     mapping(address => IEtherFiOracle.CommitteeMemberState) public committeeMemberStates; // committee member wallet address to its State
     mapping(bytes32 => IEtherFiOracle.ConsensusState) public consensusStates; // report's hash -> Consensus State
@@ -36,6 +38,8 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
     mapping(address => bool) public admins;
 
+    RoleRegistry public roleRegistry;
+
     event CommitteeMemberAdded(address indexed member);
     event CommitteeMemberRemoved(address indexed member);
     event CommitteeMemberUpdated(address indexed member, bool enabled);
@@ -47,6 +51,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     event ReportPublished(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash);
     event ReportSubmitted(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash, address indexed committeeMember);
 
+    error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -67,6 +72,12 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         SLOTS_PER_EPOCH = _slotsPerEpoch;
         SECONDS_PER_SLOT = _secondsPerSlot;
         BEACON_GENESIS_TIME = _genesisTime;
+    }
+
+    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+
+        roleRegistry = RoleRegistry(_roleRegistry);
     }
 
     function submitReport(OracleReport calldata _report) external whenNotPaused returns (bool) {
@@ -316,11 +327,15 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         admins[_address] = _isAdmin;
     }
 
-    function pauseContract() external isAdmin {
+    // Pauses the contract
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
-    function unPauseContract() external isAdmin {
+    // Unpauses the contract
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 

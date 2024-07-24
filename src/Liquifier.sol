@@ -11,9 +11,11 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/ILiquifier.sol";
 import "./interfaces/ILiquidityPool.sol";
+import "./interfaces/IPausable.sol";
 
 import "./eigenlayer-interfaces/IStrategyManager.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
+import "./RoleRegistry.sol";
 
 
 /// @title Router token swapping functionality
@@ -47,7 +49,7 @@ interface IERC20Burnable is IERC20 {
 }
 
 /// Go wild, spread eETH/weETH to the world
-contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, ILiquifier {
+contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, ILiquifier, IPausable {
     using SafeERC20 for IERC20;
 
     uint32 public DEPRECATED_eigenLayerWithdrawalClaimGasCost;
@@ -84,7 +86,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     IERC20[] public dummies;
     address public l1SyncPool;
 
-    mapping(address => bool) public pausers;
+    mapping(address => bool) public DEPRECATED_pausers;
+
+    RoleRegistry public roleRegistry;
 
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     event RegisteredQueuedWithdrawal(bytes32 _withdrawalRoot, IStrategyManager.DeprecatedStruct_QueuedWithdrawal _queuedWithdrawal);
@@ -101,6 +105,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error NotRegistered();
     error WrongOutput();
     error IncorrectCaller();
+    error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -139,6 +144,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
         pancakeRouter = IPancackeV3SwapRouter(_pancakeRouter);
         eigenLayerDelegationManager = IDelegationManager(_eigenLayerDelegationManager);
+    }
+
+    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+
+        roleRegistry = RoleRegistry(_roleRegistry);
     }
 
     function initializeL1SyncPool(address _l1SyncPool) external onlyOwner {
@@ -292,7 +303,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
     }
 
-    function pauseDeposits(address _token) external onlyPauser {
+    function pauseDeposits(address _token) external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         tokenInfos[_token].timeBoundCapInEther = 0;
         tokenInfos[_token].totalCapInEther = 0;
     }
@@ -301,17 +313,15 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         admins[_address] = _isAdmin;
     }
 
-    function updatePauser(address _address, bool _isPauser) external onlyAdmin {
-        pausers[_address] = _isPauser;
-    }
-
-    //Pauses the contract
-    function pauseContract() external onlyPauser {
+    // Pauses the contract
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
-    //Unpauses the contract
-    function unPauseContract() external onlyOwner {
+    // Unpauses the contract
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 
@@ -561,18 +571,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (!(admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
     }
 
-    function _requirePauser() internal view virtual {
-        if (!(pausers[msg.sender] || admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
-    }
-
     /* MODIFIER */
     modifier onlyAdmin() {
         _requireAdmin();
-        _;
-    }
-
-    modifier onlyPauser() {
-        _requirePauser();
         _;
     }
 }

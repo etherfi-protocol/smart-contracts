@@ -4,15 +4,18 @@ pragma solidity ^0.8.13;
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/INodeOperatorManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
+import "./interfaces/IPausable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "./RoleRegistry.sol";
 
 contract AuctionManager is
     Initializable,
     IAuctionManager,
+    IPausable,
     PausableUpgradeable,
     OwnableUpgradeable,
     ReentrancyGuardUpgradeable,
@@ -45,6 +48,8 @@ contract AuctionManager is
 
     mapping(address => bool) public admins;
 
+    RoleRegistry public roleRegistry;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -54,6 +59,8 @@ contract AuctionManager is
     event BidReEnteredAuction(uint256 indexed bidId);
     event WhitelistDisabled(bool whitelistStatus);
     event WhitelistEnabled(bool whitelistStatus);
+
+    error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -91,6 +98,12 @@ contract AuctionManager is
         accumulatedRevenue = 0;
         accumulatedRevenueThreshold = _accumulatedRevenueThreshold;
         admins[_etherFiAdminContractAddress] = true;
+    }
+
+    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+
+        roleRegistry = RoleRegistry(_roleRegistry);
     }
 
     /// @notice Creates bid(s) for the right to run a validator node when ETH is deposited
@@ -239,13 +252,15 @@ contract AuctionManager is
         emit WhitelistEnabled(whitelistEnabled);
     }
 
-    //Pauses the contract
-    function pauseContract() external onlyAdmin {
+    // Pauses the contract
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
-    //Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    // Unpauses the contract
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 

@@ -48,7 +48,7 @@ contract Pauser is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     // ========================================= ADMIN FUNCTIONS =========================================
 
-    function initialize(IPausable[] memory _pausables, uint256 _minUnpauseDelay, address _roleRegistry) public initializer {
+    function initialize(IPausable[] memory _pausables, address _roleRegistry) public initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
 

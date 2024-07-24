@@ -15,6 +15,7 @@ import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
+import "./interfaces/IPausable.sol";
 import "./TNFT.sol";
 import "./BNFT.sol";
 import "forge-std/console.sol";
@@ -23,6 +24,7 @@ import "forge-std/console.sol";
 contract EtherFiNodesManager is
     Initializable,
     IEtherFiNodesManager,
+    IPausable,
     OwnableUpgradeable,
     PausableUpgradeable,
     ReentrancyGuardUpgradeable,
@@ -88,6 +90,7 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
+    
     event FundsWithdrawn(uint256 indexed _validatorId, uint256 amount);
     event NodeExitRequested(uint256 _validatorId);
     event NodeExitRequestReverted(uint256 _validatorId);

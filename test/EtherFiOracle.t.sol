@@ -548,25 +548,6 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.executeTasks(reportAtPeriod2A);
     }
 
-    function test_all_pause() public {
-
-        vm.startPrank(alice);
-        etherFiAdminInstance.pause(true, true, true, false, false, false);
-        etherFiAdminInstance.pause(true, true, true, false, false, false);
-        etherFiAdminInstance.pause(true, true, true, true, true, true);
-        etherFiAdminInstance.pause(true, true, true, true, true, true);
-
-        vm.expectRevert("Ownable: caller is not the owner");
-        etherFiAdminInstance.unPause(false, false, false, false, false, false);
-        vm.stopPrank();
-
-        vm.startPrank(owner);
-        etherFiAdminInstance.unPause(false, false, false, true, true, true);
-        etherFiAdminInstance.unPause(true, true, true, true, true, true);
-        etherFiAdminInstance.unPause(true, true, true, true, true, true);
-        vm.stopPrank();
-    }
-
     function test_report_earlier_than_last_admin_execution_fails() public {
         vm.prank(owner);
         bytes[] memory emptyBytes = new bytes[](0);
