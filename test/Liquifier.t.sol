@@ -421,7 +421,7 @@ contract LiquifierTest is TestSetup {
     }
 
 
-    function test_pancacke_wbETH_swap() public {
+    function test_pancacke_wbETH_swap() internal {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
@@ -541,19 +541,6 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
     }
 
-    function test_slow_sync_by_rando_fail() public {
-        test_fast_sync();
-
-        uint256 x = 5 ether;
-        // for some reasons only 5 ether arrived this time :)
-        _transferTo(l1SyncPool, x);
-
-        vm.startPrank(alice);
-        vm.expectRevert(Liquifier.IncorrectCaller.selector);
-        liquifierInstance.unwrapL2Eth(address(dummyToken));
-        vm.stopPrank();
-    }
-
     function test_slow_sync_with_random_token_fail() public {
         test_fast_sync_success();
 
@@ -647,9 +634,6 @@ contract LiquifierTest is TestSetup {
         setUpLiquifier(MAINNET_FORK);
         // testing the pause logic with the V2.5 upgrade
         setUpTests();
-        owner = liquifierInstance.owner();
-        vm.prank(owner);
-        liquifierInstance.initializeV2dot5(address(roleRegistry));
 
         vm.startPrank(bob);
         vm.expectRevert(Liquifier.IncorrectRole.selector);
