@@ -75,15 +75,13 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         liquidityPoolInstance.setRestakeBnftDeposits(true);
         vm.stopPrank();
 
-        EtherFiNodesManager newManagerImpl = new EtherFiNodesManager();
-        EtherFiNode newNodeImpl = new EtherFiNode();
-
-        vm.startPrank(managerInstance.owner());
-        managerInstance.upgradeTo(address(newManagerImpl));
-        vm.stopPrank();
-        vm.startPrank(stakingManagerInstance.owner());
-        stakingManagerInstance.upgradeEtherFiNode(address(newNodeImpl));
-        vm.stopPrank();
+        _upgrade_etherfi_node_contract();   
+        _upgrade_etherfi_nodes_manager_contract(); 
+        _upgrade_staking_manager_contract();
+        _upgrade_liquidity_pool_contract();
+        _upgrade_auction_manager_contract();
+        _upgrade_node_oeprator_manager_contract();
+        _upgrade_etherfi_oracle_contract();
 
         setupRoleRegistry();
     }
@@ -102,14 +100,13 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         createdForks[forkURL] = vm.createFork(forkURL);
         vm.selectFork(createdForks[forkURL]);
 
-        // upgrade fork to latest version of code that doesn't exist from when forks were made
-        // We should come up with a long term solution for this kind of situation
-        address newManagerImpl = address(new EtherFiNodesManager());
-        address newNodeImpl = address(new EtherFiNode());
-        vm.prank(managerInstance.owner());
-        managerInstance.upgradeTo(newManagerImpl);
-        vm.prank(stakingManagerInstance.owner());
-        stakingManagerInstance.upgradeEtherFiNode(newNodeImpl);
+        _upgrade_etherfi_node_contract();   
+        _upgrade_etherfi_nodes_manager_contract(); 
+        _upgrade_staking_manager_contract();
+        _upgrade_liquidity_pool_contract();
+        _upgrade_auction_manager_contract();
+        _upgrade_node_oeprator_manager_contract();
+        _upgrade_etherfi_oracle_contract();
 
         setupRoleRegistry();
     }
