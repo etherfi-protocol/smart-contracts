@@ -633,7 +633,7 @@ contract LiquifierTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
         // testing the pause logic with the V2.5 upgrade
-        setUpTests();
+        // setUpTests();
 
         vm.startPrank(bob);
         vm.expectRevert(Liquifier.IncorrectRole.selector);
