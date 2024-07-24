@@ -81,6 +81,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     event Deposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
     event Withdraw(address indexed sender, address recipient, uint256 amount, SourceOfFunds source);
     event UpdatedWhitelist(address userAddress, bool value);
+    event UpdatedTreasury(address newTreasury);
     event BnftHolderDeregistered(address user, uint256 index);
     event BnftHolderRegistered(address user, uint256 index);
     event UpdatedSchedulingPeriod(uint128 newPeriodInSeconds);
@@ -470,7 +471,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         totalValueOutOfLp = totalValueOutOfLp + _protocolFees;
         uint256 treasuryShares = sharesForAmount(_protocolFees);
         eETH.mintShares(treasury, treasuryShares);
-        
+
         emit ProtocolFeePaid(_protocolFees);
     }
 
@@ -478,6 +479,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @param _treasury The address to set as the treasury
     function setTreasury(address _treasury) external onlyOwner {
         treasury = _treasury;
+        emit UpdatedTreasury(_treasury);
     }
 
     /// @notice Whether or not nodes created via bNFT deposits should be restaked
