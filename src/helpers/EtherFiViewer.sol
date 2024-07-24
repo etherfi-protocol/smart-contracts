@@ -42,20 +42,6 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return IEigenPod(_getEtherFiNode(_validatorId).eigenPod());
     }
 
-    function EigenPod_hasRestaked(uint256[] memory _validatorIds) external view returns (bool[] memory _hasRestaked) {
-        _hasRestaked = new bool[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _hasRestaked[i] = _getEigenPod(_validatorIds[i]).hasRestaked();
-        }
-    }
-
-    function EigenPod_withdrawableRestakedExecutionLayerGwei(uint256[] memory _validatorIds) external view returns (uint256[] memory _withdrawableRestakedExecutionLayerGwei) {
-        _withdrawableRestakedExecutionLayerGwei = new uint256[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _withdrawableRestakedExecutionLayerGwei[i] = _getEigenPod(_validatorIds[i]).withdrawableRestakedExecutionLayerGwei();
-        }
-    }
-
     function EigenPod_nonBeaconChainETHBalanceWei(uint256[] memory _validatorIds) external view returns (uint256[] memory _nonBeaconChainETHBalanceWei) {
         _nonBeaconChainETHBalanceWei = new uint256[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
