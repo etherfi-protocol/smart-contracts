@@ -25,6 +25,7 @@ import "./interfaces/ILiquifier.sol";
 import "./interfaces/IPausable.sol";
 
 
+
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool, IPausable {
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -605,6 +606,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function getImplementation() external view returns (address) {return _getImplementation();}
+
+    function _isStaker() internal view returns (bool) {
+        uint32 index = bnftHoldersIndexes[msg.sender].index;
+        return bnftHoldersIndexes[msg.sender].registered && bnftHolders[index].holder == msg.sender;
+    }
 
     function _isStaker() internal view returns (bool) {
         uint32 index = bnftHoldersIndexes[msg.sender].index;
