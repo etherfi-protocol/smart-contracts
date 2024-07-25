@@ -1,6 +1,4 @@
 import "./TestSetup.sol";
-import "forge-std/console2.sol";
-import "../src/LiquidityPool.sol";  
 
 contract eethPayoutUpgradeTest is TestSetup {
     address treasury;

@@ -9,7 +9,6 @@ import "@openzeppelin-upgradeable/contracts/token/ERC721/IERC721ReceiverUpgradea
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "forge-std/console.sol";
 
 import "./interfaces/IRegulationsManager.sol";
 import "./interfaces/IStakingManager.sol";
@@ -23,7 +22,6 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IEtherFiAdmin.sol";
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/ILiquifier.sol";
-import "forge-std/console.sol";
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
     //--------------------------------------------------------------------------------------
