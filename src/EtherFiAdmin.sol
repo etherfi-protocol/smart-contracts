@@ -13,8 +13,6 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 
-import "forge-std/console.sol";
-
 interface IEtherFiPausable {
     function paused() external view returns (bool);
 }
@@ -120,6 +118,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         numValidatorsToSpinUp = _report.numValidatorsToSpinUp;
 
         _handleAccruedRewards(_report);
+        _handleProtocolFees(_report);
         _handleValidators(reportHash, _report);
         _handleWithdrawals(_report);
         _handleTargetFundsAllocations(_report);
@@ -158,6 +157,15 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(!validatorManagementTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
         validatorManagementTaskStatus[taskHash].exists = false;
         emit ValidatorManagementTaskInvalidated(taskHash, _reportHash, _validators, _timestamps, validatorManagementTaskStatus[taskHash].taskType);
+    }
+
+    //protocol owns the eth that was distributed to NO and treasury in eigenpods and etherfinodes 
+    function _handleProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal { 
+        require(_report.protocolFees >= 0, "EtherFiAdmin: protocol fees can't be negative");
+        if(_report.protocolFees == 0) {
+            return;
+        }
+        liquidityPool.payProtocolFees(uint128(_report.protocolFees));
     }
 
     function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report) internal {
@@ -269,7 +277,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
 
     modifier isAdmin() {
-        require(admins[msg.sender] || msg.sender == owner(), "EtherFiAdmin: not an admio");
+        require(admins[msg.sender] || msg.sender == owner(), "EtherFiAdmin: not an admin");
         _;
     }
 
