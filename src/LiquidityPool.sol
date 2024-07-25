@@ -523,6 +523,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function updateWhitelistedAddresses(address[] calldata _users, bool _value) external {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         for (uint256 i = 0; i < _users.length; i++) {
             whitelisted[_users[i]] = _value;
 
