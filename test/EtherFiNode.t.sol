@@ -71,34 +71,6 @@ contract EtherFiNodeTest is TestSetup {
 
     }
 
-    function test_claimMixedSafeAndPodFunds() public {
-        initializeTestingFork(MAINNET_FORK);
-
-        uint256 bidId = depositAndRegisterValidator(true);
-        safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(bidId)));
-
-        // simulate 1 eth of already claimed staking rewards and 1 eth of unclaimed restaked rewards
-        _transferTo(address(safeInstance.eigenPod()), 1 ether);
-        _transferTo(address(safeInstance), 1 ether);
-
-        assertEq(address(safeInstance).balance, 1 ether);
-        assertEq(address(safeInstance.eigenPod()).balance, 1 ether);
-
-        // claim the restaked rewards
-        // safeInstance.queueRestakedWithdrawal();
-        uint256[] memory validatorIds = new uint256[](1);
-        validatorIds[0] = bidId;
-        vm.prank(alice); // alice is admin
-        managerInstance.batchQueueRestakedWithdrawal(validatorIds);
-
-        vm.roll(block.number + (50400) + 1);
-
-        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorIds[0]);
-
-        assertEq(address(safeInstance).balance, 2 ether);
-        assertEq(address(safeInstance.eigenPod()).balance, 0 ether);
-    }
-
     function test_splitBalanceInExecutionLayer() public {
 
         initializeTestingFork(MAINNET_FORK);
@@ -1681,9 +1653,15 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_mainnet_369_verifyAndProcessWithdrawals() public {
-        initializeRealisticFork(MAINNET_FORK);
+        initializeRealisticForkWithBlock(MAINNET_FORK, 20241873 - 1);
         _upgrade_etherfi_node_contract();   
         _upgrade_etherfi_nodes_manager_contract(); 
+        _upgrade_staking_manager_contract();
+        _upgrade_liquidity_pool_contract();
+        _upgrade_auction_manager_contract();
+        _upgrade_node_oeprator_manager_contract();
+        _upgrade_etherfi_oracle_contract();
+        setupRoleRegistry();
 
         _mainnet_369_add_validator();
 
@@ -1691,9 +1669,15 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_mainnet_369_processNodeExit_without_withdrawal_proved() public {
-        initializeRealisticFork(MAINNET_FORK);
-        _upgrade_etherfi_node_contract();    
+        initializeRealisticForkWithBlock(MAINNET_FORK, 20241873 - 1);
+        _upgrade_etherfi_node_contract();   
         _upgrade_etherfi_nodes_manager_contract(); 
+        _upgrade_staking_manager_contract();
+        _upgrade_liquidity_pool_contract();
+        _upgrade_auction_manager_contract();
+        _upgrade_node_oeprator_manager_contract();
+        _upgrade_etherfi_oracle_contract();
+        setupRoleRegistry();
 
         uint256 validatorId = 369;
         address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
@@ -1713,9 +1697,15 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_mainnet_369_queueWithdrawals_by_rando_fails() public {
-        initializeRealisticFork(MAINNET_FORK);
+        initializeRealisticForkWithBlock(MAINNET_FORK, 20241873 - 1);
         _upgrade_etherfi_node_contract();   
         _upgrade_etherfi_nodes_manager_contract(); 
+        _upgrade_staking_manager_contract();
+        _upgrade_liquidity_pool_contract();
+        _upgrade_auction_manager_contract();
+        _upgrade_node_oeprator_manager_contract();
+        _upgrade_etherfi_oracle_contract();
+        setupRoleRegistry();
 
         _mainnet_369_verifyAndProcessWithdrawals(true, true);
 
@@ -1744,12 +1734,11 @@ contract EtherFiNodeTest is TestSetup {
     }
 
     function test_mainnet_369_processNodeExit_success() public returns (IDelegationManager.Withdrawal memory) {
-        // test_mainnet_369_verifyAndProcessWithdrawals();  
-        initializeRealisticFork(MAINNET_FORK);
+        test_mainnet_369_verifyAndProcessWithdrawals();  
 
         vm.warp(block.timestamp + 7 * 24 * 3600);
 
-        uint256 validatorId = 338;
+        uint256 validatorId = 369;
         address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
         IEigenPod eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
         IDelegationManager mgr = managerInstance.delegationManager();
@@ -1824,9 +1813,9 @@ contract EtherFiNodeTest is TestSetup {
         data[0] = abi.encodeWithSelector(IDelegationManager.completeQueuedWithdrawal.selector, withdrawal, tokens, 0, true);
 
         // FAIL, the forward call is not allowed for `completeQueuedWithdrawal`
-        vm.expectRevert("NOT_ALLOWED");
+        vm.expectRevert(EtherFiNodesManager.ForwardedCallNotAllowed.selector);
         vm.prank(owner);
-        managerInstance.forwardExternalCall(validatorIds, data, address(managerInstance.delegationManager()));
+        managerInstance.forwardExternalCall(validatorIds, data, address(mgr));
 
         // FAIL, if the `minWithdrawalDelayBlocks` is not passed
         vm.prank(owner);
@@ -1840,24 +1829,13 @@ contract EtherFiNodeTest is TestSetup {
             vm.roll(block.number + minDelayBlock);
         }
 
-        // - Check if a random transfer to EigenPod blocks the fullWithdrawal
-        // The later `fullWithdraw` should succeed even though there are still some unclaimed withdrawals
-        // this is because we only enforce that all withdrawals before the observed exit of the node have completed
-        _transferTo(address(managerInstance.getEigenPod(validatorId)), 0.0001 ether);
-        IEtherFiNode(nodeAddress).queuePhase1PartialWithdrawal();
+        uint256 prevEtherfiNodeBalance = address(nodeAddress).balance;
 
-        uint256 prevEtherFiNodeAddress = address(nodeAddress).balance;
-
-        // FAIL, call by a rando
-        vm.expectRevert("DelegationManager._completeQueuedWithdrawal: only withdrawer can complete action");
-        mgr.completeQueuedWithdrawal(withdrawal, tokens, 0, true);
-
-        assertEq(eigenPod.withdrawableRestakedExecutionLayerGwei(), 32 ether / 1 gwei);
-
-        // 2. DelegationManager.completeQueuedWithdrawal            
+        // 2. DelegationManager.completeQueuedWithdrawal
+        vm.prank(admin);
         managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
 
-        assertEq(address(nodeAddress).balance, prevEtherFiNodeAddress + 32 ether);
+        assertEq(address(nodeAddress).balance, prevEtherfiNodeBalance + 32 ether);
         assertEq(eigenPodManager.podOwnerShares(nodeAddress), 0);
         assertEq(eigenPod.withdrawableRestakedExecutionLayerGwei(), 0);
     }

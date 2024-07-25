@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/ILiquifier.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IPausable.sol";
+import "./BucketRateLimiter.sol";
 
 import "./eigenlayer-interfaces/IStrategyManager.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
@@ -53,7 +54,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     using SafeERC20 for IERC20;
 
     uint32 public DEPRECATED_eigenLayerWithdrawalClaimGasCost;
-    uint32 public timeBoundCapRefreshInterval; // seconds
+    uint32 public DEPRECATED_timeBoundCapRefreshInterval; // seconds
 
     bool public DEPRECATED_quoteStEthWithCurve;
 
@@ -90,8 +91,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     RoleRegistry public roleRegistry;
 
-    bytes32 public constant LIQUIFIER_ADMIN_ROLE = keccak256("LIQUIFIER_ADMIN_ROLE");
+    BucketRateLimiter public rateLimiter;
 
+    bytes32 public constant LIQUIFIER_ADMIN_ROLE = keccak256("LIQUIFIER_ADMIN_ROLE");
+    
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     event RegisteredQueuedWithdrawal(bytes32 _withdrawalRoot, IStrategyManager.DeprecatedStruct_QueuedWithdrawal _queuedWithdrawal);
     event RegisteredQueuedWithdrawal_V2(bytes32 _withdrawalRoot, IDelegationManager.Withdrawal _queuedWithdrawal);
@@ -135,29 +138,17 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         wbEth_Eth_Pool = ICurvePool(_wbEth_Eth_Pool);
         stEth_Eth_Pool = ICurvePool(_stEth_Eth_Pool);
         
-        timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
+        DEPRECATED_timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
         DEPRECATED_eigenLayerWithdrawalClaimGasCost = 150_000;
     }
-
-    function initializeOnUpgrade(address _eigenLayerDelegationManager, address _pancakeRouter) external onlyOwner {
-        // Disable the deposits on {cbETH, wBETH}
-        updateDepositCap(address(cbEth), 0, 0);
-        updateDepositCap(address(wbEth), 0, 0);
-
-        pancakeRouter = IPancackeV3SwapRouter(_pancakeRouter);
-        eigenLayerDelegationManager = IDelegationManager(_eigenLayerDelegationManager);
-    }
-
-    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+    
+    function initializeV2dot5(address _roleRegistry, address _rateLimiter) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
+        if (address(rateLimiter) != address(0)) revert();
 
         // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
-    }
-
-    function initializeL1SyncPool(address _l1SyncPool) external onlyOwner {
-        if (l1SyncPool != address(0)) revert();
-        l1SyncPool = _l1SyncPool;
+        rateLimiter = BucketRateLimiter(_rateLimiter);
     }
 
     receive() external payable {}
@@ -178,6 +169,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         
         /// mint eETH to the user
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, amount, _referral);
+
+        _consumeRate(address(eigenLayerStrategyManager), amount, eEthShare);
 
         return eEthShare;
     }
@@ -200,9 +193,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
         // discount
         dx = (10000 - tokenInfos[_token].discountInBasisPoints) * dx / 10000;
-        require(!isDepositCapReached(_token, dx), "CAPPED");
 
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, dx, _referral);
+
+        _consumeRate(_token, _amount, eEthShare);
 
         emit Liquified(msg.sender, dx, _token, false);
 
@@ -293,12 +287,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token].isWhitelisted = _isWhitelisted;
     }
 
-    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyOwner {
-        tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
-        tokenInfos[_token].totalCapInEther = _totalCapInEther;
-    }
-    
-    function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyOwner {
+    function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, bool _isL2Eth) external onlyOwner {
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
             if (_token == address(0) || _target != address(0)) revert();
@@ -307,11 +296,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
             // _target = EigenLayer's Strategy contract
             if (_token != address(IStrategy(_target).underlyingToken())) revert NotSupportedToken();
         }
-        tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0, _isL2Eth);
-    }
-
-    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyOwner {
-        timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
+        tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), 0, 0, 0, 0, _isL2Eth);
     }
 
     function pauseDeposits(address _token) external {
@@ -391,22 +376,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         lido.approve(address(stEth_Eth_Pool), _amount);
         return stEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
     }
-
-    // https://etherscan.io/tx/0x4dde6b6d232f706466b18422b004e2584fd6c0d3c0afe40adfdc79c79031fe01
-    // This user deposited 625 wBETH and minted only 7.65 eETH due to the low liquidity in the curve pool that it used
-    // Rescue him!
-    // function CASE1() external onlyAdmin {
-    //     if (flags["CASE1"]) revert();
-    //     flags["CASE1"] = true;
-
-    //     // address recipient = 0xc0948cE48e87a55704EfEf8E4b8f92CA34D2087E;
-    //     // uint256 wbethAmount = 625601006520000000000;
-    //     // uint256 eEthAmount = 7650414487237129340;
-    //     // uint256 exchagneRate = 1032800000000000000; // "the price of wBETH to ETH should be 1.0328"
-    //     // uint256 diff = (wbethAmount * exchagneRate / 1e18) - eEthAmount;
-    //     // uint256 diff = 617.302086995462789012 ether;
-    //     liquidityPool.depositToRecipient(0xc0948cE48e87a55704EfEf8E4b8f92CA34D2087E, 617.302086995462789012 ether, address(0));
-    // }
 
     /* VIEW FUNCTIONS */
 
@@ -495,27 +464,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function getImplementation() external view returns (address) {
         return _getImplementation();
     }
-
-    function timeBoundCap(address _token) public view returns (uint256) {
-        return uint256(1 ether) * tokenInfos[_token].timeBoundCapInEther;
-    }
-
-    function totalCap(address _token) public view returns (uint256) {
-        return uint256(1 ether) * tokenInfos[_token].totalCapInEther;
-    }
-
+    
     function totalDeposited(address _token) public view returns (uint256) {
         return tokenInfos[_token].totalDeposited;
     }
 
     function isDepositCapReached(address _token, uint256 _amount) public view returns (bool) {
-        TokenInfo memory info = tokenInfos[_token];
-        uint96 totalDepositedThisPeriod_ = info.totalDepositedThisPeriod;
-        uint32 timeBoundCapClockStartTime_ = info.timeBoundCapClockStartTime;
-        if (block.timestamp >= timeBoundCapClockStartTime_ + timeBoundCapRefreshInterval) {
-            totalDepositedThisPeriod_ = 0;
-        }
-        return (totalDepositedThisPeriod_ + _amount > timeBoundCap(_token) || info.totalDeposited + _amount > totalCap(_token));
+        uint256 amountOut = quoteByMarketValue(_token, _amount);
+        return rateLimiter.canConsume(_token, _amount, amountOut);
     }
 
     /* INTERNAL FUNCTIONS */
@@ -563,12 +519,11 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     function _afterDeposit(address _token, uint256 _amount) internal {
         TokenInfo storage info = tokenInfos[_token];
-        if (block.timestamp >= info.timeBoundCapClockStartTime + timeBoundCapRefreshInterval) {
-            info.totalDepositedThisPeriod = 0;
-            info.timeBoundCapClockStartTime = uint32(block.timestamp);
-        }
-        info.totalDepositedThisPeriod += uint96(_amount);
         info.totalDeposited += uint96(_amount);
+    }
+
+    function _consumeRate(address _tokenIn, uint256 _tokenInAmount, uint256 _tokenOutAmount) internal {
+        rateLimiter.updateRateLimit(msg.sender, _tokenIn, _tokenInAmount, _tokenOutAmount);
     }
 
     function _L2SanityChecks(address _token) internal view {

@@ -358,6 +358,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         require(_validatorIds.length == _registerValidatorDepositData.length && _validatorIds.length == _depositDataRootApproval.length && _validatorIds.length == _signaturesForApprovalDeposit.length, "lengths differ");
         
         numPendingDeposits -= uint32(_validatorIds.length);
+
+        // If the LP is the B-nft holder, the 1 ether (for each validator) is taken from the LP
+        // otherwise, the 1 ether is taken from the B-nft holder's separate deposit. Thus, we don't need to update the accounting
+        uint256 outboundEthAmountFromLp = isLpBnftHolder ? 1 ether * _validatorIds.length : 0;
+        _accountForEthSentOut(outboundEthAmountFromLp);
+
         stakingManager.batchRegisterValidators{value: 1 ether * _validatorIds.length}(_depositRoot, _validatorIds, _bnftRecipient, address(this), _registerValidatorDepositData, msg.sender);
         
         for(uint256 i; i < _validatorIds.length; i++) {
@@ -388,8 +394,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
             emit ValidatorApproved(_validatorIds[i]);
         }
 
-        totalValueOutOfLp += uint128(30 ether * _validatorIds.length);
-        totalValueInLp -= uint128(30 ether * _validatorIds.length);
+        // As the LP is the T-NFT holder, the 30 ETH is taken from the LP for each validator
+        // 
+        // If the LP is the B-NT holder, the 1 ether for each validator is taken from the LP as well
+        // otherwise, the 1 ether is taken from the B-nft holder's separate deposit
+        uint256 outboundEthAmountFromLp = isLpBnftHolder ? 31 ether * _validatorIds.length : 30 ether * _validatorIds.length;
+        _accountForEthSentOut(outboundEthAmountFromLp);
 
         stakingManager.batchApproveRegistration{value: 31 ether * _validatorIds.length}(_validatorIds, _pubKey, _signature, depositDataRootApproval);
     }
@@ -413,7 +423,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             if(nodesManager.phase(_validatorIds[i]) == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) {
                 if (!isLpBnftHolder) returnAmount += 1 ether;
-                else totalValueInLp -= 1 ether;
                 emit ValidatorRegistrationCanceled(_validatorIds[i]);
             } else {
                 if (!isLpBnftHolder) returnAmount += 2 ether;
@@ -541,6 +550,17 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         ethAmountLockedForWithdrawal += _amount;
     }
 
+    // This function can't change the TVL
+    // but used only to correct the errors in tracking {totalValueOutOfLp} and {totalValueInLp}
+    function updateTvlSplits(int128 _diffTotalValueOutOfLp, int128 _diffTotalValueInLp) external onlyOwner {
+        uint256 tvl = getTotalPooledEther();
+
+        totalValueOutOfLp = uint128(int128(totalValueOutOfLp) + _diffTotalValueOutOfLp);
+        totalValueInLp = uint128(int128(totalValueInLp) + _diffTotalValueInLp);
+
+        if(tvl != getTotalPooledEther()) revert();
+    }
+
     function reduceEthAmountLockedForWithdrawal(uint128 _amount) external {
         if (msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
 
@@ -579,6 +599,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         uint256 balanace = address(this).balance;
         (bool sent, ) = _recipient.call{value: _amount}("");
         require(sent && address(this).balance == balanace - _amount, "SendFail");
+    }
+
+    function _accountForEthSentOut(uint256 _amount) internal {
+        totalValueOutOfLp += uint128(_amount);
+        totalValueInLp -= uint128(_amount);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

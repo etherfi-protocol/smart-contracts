@@ -88,9 +88,9 @@ contract DeployLiquifierScript is Script {
         // DEPRCATED  
         // liquifierInstance.updateAdmin(oracleWallet, true);
         
-        liquifierInstance.registerToken(stEth, stEthStrategy, true, 0, 1, 10, false); // 1 ether timebound cap, 10 ether max cap
-        liquifierInstance.registerToken(cbEth, cbEthStrategy, true, 0, 1, 10, false);
-        liquifierInstance.registerToken(wbEth, wbEthStrategy, true, 0, 1, 10, false);
+        liquifierInstance.registerToken(stEth, stEthStrategy, true, 0, false); // 1 ether timebound cap, 10 ether max cap
+        liquifierInstance.registerToken(cbEth, cbEthStrategy, true, 0, false);
+        liquifierInstance.registerToken(wbEth, wbEthStrategy, true, 0, false);
 
         addressProvider.addContract(address(liquifierInstance), "Liquifier");
 
