@@ -495,7 +495,7 @@ contract StakingManagerTest is TestSetup {
         assertEq(stakingManagerInstance.maxBatchDepositSize(), 12);
 
         vm.prank(owner);
-        vm.expectRevert("NOT_ADMIN");
+        vm.expectRevert(StakingManager.IncorrectRole.selector);
         stakingManagerInstance.setMaxBatchDepositSize(12);
     }
 

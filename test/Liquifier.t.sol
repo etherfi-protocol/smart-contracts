@@ -65,7 +65,8 @@ contract LiquifierTest is TestSetup {
     }
 
     function test_deposit_above_cap() public {
-        _setUp(MAINNET_FORK);
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
 
         vm.deal(alice, 1000000000 ether);
 
@@ -80,7 +81,8 @@ contract LiquifierTest is TestSetup {
     }
 
     function test_deposit_stEth() public {
-        _setUp(MAINNET_FORK);
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
 
         vm.deal(alice, 100 ether);
 
@@ -95,7 +97,6 @@ contract LiquifierTest is TestSetup {
 
     function test_deopsit_stEth_and_swap() internal {
         _setUp(MAINNET_FORK);
-
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
         vm.deal(alice, 100 ether);
         assertEq(eETHInstance.balanceOf(alice), 0);
@@ -115,7 +116,8 @@ contract LiquifierTest is TestSetup {
     }
 
     function test_deopsit_stEth_with_explicit_permit() public {
-        _setUp(MAINNET_FORK);
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
 
         vm.deal(alice, 100 ether);
 
@@ -239,7 +241,9 @@ contract LiquifierTest is TestSetup {
     }
 
     function test_erc20_queued_withdrawal_v2() public {
-        _setUp(MAINNET_FORK);
+        setUpTests();
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
        
         uint256 liquifierTVL = liquifierInstance.getTotalPooledEther();
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
@@ -300,10 +304,9 @@ contract LiquifierTest is TestSetup {
         bool[] memory receiveAsTokens = new bool[](1);
         receiveAsTokens[0] = true;
 
-        vm.startPrank(owner);
+        vm.startPrank(alice);
         liquifierInstance.completeQueuedWithdrawals(queuedWithdrawals, tokens, middlewareTimesIndexes);
         vm.stopPrank();
-
     }
 
     function _get_queued_withdrawal_of_restaked_LST_before_m2(IStrategy strategy) internal returns (IDelegationManager.Withdrawal memory) {
@@ -426,7 +429,8 @@ contract LiquifierTest is TestSetup {
 
 
     function test_pancacke_wbETH_swap() internal {
-        _setUp(MAINNET_FORK);
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
 
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
         uint256 lpBalance = address(liquidityPoolInstance).balance;
@@ -453,7 +457,8 @@ contract LiquifierTest is TestSetup {
     }
 
     function test_pancacke_cbETH_swap() internal {
-        _setUp(MAINNET_FORK);
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
 
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
         uint256 lpBalance = address(liquidityPoolInstance).balance;
@@ -480,7 +485,8 @@ contract LiquifierTest is TestSetup {
     }
 
     function _setup_L1SyncPool() internal {
-        _setUp(MAINNET_FORK);
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
 
         vm.startPrank(owner);
         dummyToken = new DummyERC20();
@@ -635,7 +641,8 @@ contract LiquifierTest is TestSetup {
     }
 
     function test_pauser() public {
-        _setUp(MAINNET_FORK);
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
         // testing the pause logic with the V2.5 upgrade
         setUpTests();
         owner = liquifierInstance.owner();
@@ -661,7 +668,8 @@ contract LiquifierTest is TestSetup {
     }
 
     function test_getTotalPooledEther() public {
-        _setUp(MAINNET_FORK);
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
 
         liquidityPoolInstance.getTotalPooledEther();
         liquifierInstance.getTotalPooledEther();

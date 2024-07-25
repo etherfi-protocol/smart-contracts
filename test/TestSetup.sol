@@ -218,6 +218,9 @@ contract TestSetup is Test {
 
     address admin;
 
+    // TODO: move uses of `DEFAULT_ADMIN_ROLE` to originate from `superAdmin` 
+    address superAdmin;
+
     address[] public actors;
     address[] public bnftHoldersArray;
     uint256[] public whitelistIndices;
@@ -306,7 +309,7 @@ contract TestSetup is Test {
     }
 
     function initializeRealisticFork(uint8 forkEnum) public {
-        initializeRealisticForkWithBlock(forkEnum, block.number);
+        initializeRealisticForkWithBlock(forkEnum, 0);
     }
 
     // initialize a fork which inherits the exact contracts, addresses, and state of
@@ -315,7 +318,12 @@ contract TestSetup is Test {
     function initializeRealisticForkWithBlock(uint8 forkEnum, uint256 blockNo) public {
 
         if (forkEnum == MAINNET_FORK) {
-            vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL"), blockNo));
+            if (blockNo == 0) {
+                vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+            }
+            else {
+                vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL"), blockNo));
+            }
             addressProviderInstance = AddressProvider(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
             owner = addressProviderInstance.getContractAddress("EtherFiTimelock");
             admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
@@ -733,6 +741,7 @@ contract TestSetup is Test {
             roleRegistryImplementation = new RoleRegistry();
             bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
             roleRegistry = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
+            superAdmin = admin;
 
             // upgrade our existing contracts to utilize `roleRegistry`
             vm.startPrank(owner);
@@ -782,7 +791,7 @@ contract TestSetup is Test {
         roleRegistry.grantRole(withdrawRequestNFTInstance.WITHDRAW_NFT_ADMIN_ROLE(), alice);
         roleRegistry.grantRole(etherFiOracleInstance.ORACLE_ADMIN_ROLE(), alice);
         roleRegistry.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), alice);
-
+        roleRegistry.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
         vm.stopPrank();
 
         vm.startPrank(owner);
@@ -947,6 +956,7 @@ contract TestSetup is Test {
         roleRegistry.grantRole(stakingManagerInstance.STAKING_MANAGER_ADMIN_ROLE(), address(etherFiAdminInstance));
         roleRegistry.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
         roleRegistry.grantRole(etherFiOracleInstance.ORACLE_ADMIN_ROLE(), address(etherFiAdminInstance));
+        roleRegistry.grantRole(withdrawRequestNFTInstance.WITHDRAW_NFT_ADMIN_ROLE(), address(etherFiAdminInstance));
 
         vm.stopPrank();
     }

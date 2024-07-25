@@ -146,6 +146,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
     }
 
     function test_executeTask() public {
+        setUpTests();
         vm.startPrank(committeeMember);
         etherFiOracleInstance.submitReport(report);
         skip(1800);
@@ -176,6 +177,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
     }
 
     function test_validatorApprovalTasks() public {
+        setUpTests();
         console.logBytes32(approvalHash);
         test_executeTask();
         (bool preCompleted, bool preExists, ) = etherFiAdminInstance.validatorManagementTaskStatus(approvalHash);
@@ -189,6 +191,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
     }
 
     function test_anotherBatchSize() public {
+        setUpTests();
         bytes[] memory newPubKeys = new bytes[](alternativeBatchSize);
         bytes[] memory newSignatures = new bytes[](alternativeBatchSize);
         uint32[] memory emptyTimestamps = new uint32[](0);   
@@ -210,6 +213,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
     }
 
     function test_rebase() public {
+        setUpTests();
         vm.startPrank(committeeMember);
         etherFiOracleInstance.submitReport(report);
         skip(3600);

@@ -58,6 +58,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     bytes32 public constant ETHERFI_ADMIN_ADMIN_ROLE = keccak256("ETHERFI_ADMIN_ADMIN_ROLE");
 
+    event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
 
     event ValidatorManagementTaskCreated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators, uint32[] _timestamps, TaskType _taskType);

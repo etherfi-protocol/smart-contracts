@@ -117,7 +117,7 @@ contract NodeOperatorManagerTest is TestSetup {
         assertEq(nodeOperatorManagerInstance.isWhitelisted(jess), false);
         vm.stopPrank();
 
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert(NodeOperatorManager.IncorrectRole.selector);
         vm.prank(owner);
         nodeOperatorManagerInstance.addToWhitelist(jess);
 
@@ -133,7 +133,7 @@ contract NodeOperatorManagerTest is TestSetup {
             uint64(10)
         );
 
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert(NodeOperatorManager.IncorrectRole.selector);
         vm.prank(owner);
         nodeOperatorManagerInstance.removeFromWhitelist(alice);
 
@@ -227,7 +227,7 @@ contract NodeOperatorManagerTest is TestSetup {
         approvals[0] = false;
 
         vm.prank(greg);
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert(NodeOperatorManager.IncorrectRole.selector);
         nodeOperatorManagerInstance.batchUpdateOperatorsApprovedTags(users, approvedTags, approvals);
 
         vm.startPrank(alice);
