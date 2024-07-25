@@ -131,20 +131,18 @@ contract StakingManager is
 
     /// @notice Creates validator object, mints NFTs, sets NB variables and deposits 1 ETH into beacon chain
     /// @dev Function gets called from the LP and is used in the BNFT staking flow
-    /// @param _depositRoot The fetched root of the Beacon Chain
     /// @param _validatorId Array of IDs of the validator to register
     /// @param _bNftRecipient Array of BNFT recipients
     /// @param _tNftRecipient Array of TNFT recipients
     /// @param _depositData Array of data structures to hold all data needed for depositing to the beacon chain
     /// @param _staker address of the BNFT holder who initiated the transaction
     function batchRegisterValidators(
-        bytes32 _depositRoot,
         uint256[] calldata _validatorId,
         address _bNftRecipient,
         address _tNftRecipient,
         DepositData[] calldata _depositData,
         address _staker
-    ) public payable whenNotPaused nonReentrant verifyDepositState(_depositRoot) {
+    ) public payable whenNotPaused nonReentrant {
         require(msg.sender == liquidityPoolContract, "INCORRECT_CALLER");
         require(_validatorId.length <= maxBatchDepositSize && _validatorId.length == _depositData.length, "WRONG_PARAMS");
         require(msg.value == _validatorId.length * 1 ether, "DEPOSIT_AMOUNT_MISMATCH");
@@ -469,14 +467,6 @@ contract StakingManager is
         require(admins[msg.sender], "NOT_ADMIN");
     }
 
-    function _verifyDepositState(bytes32 _depositRoot) internal view virtual {
-        // disable deposit root check if none provided
-        if (_depositRoot != 0x0000000000000000000000000000000000000000000000000000000000000000) {
-            bytes32 onchainDepositRoot = depositContractEth2.get_deposit_root();
-            require(_depositRoot == onchainDepositRoot, "DEPOSIT_ROOT_CHANGED");
-        }
-    }
-
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -505,11 +495,6 @@ contract StakingManager is
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
-
-    modifier verifyDepositState(bytes32 _depositRoot) {
-        _verifyDepositState(_depositRoot);
-        _;
-    }
 
     modifier onlyAdmin() {
         _requireAdmin();

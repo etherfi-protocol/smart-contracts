@@ -26,7 +26,7 @@ interface IStakingManager {
     function setLiquidityPoolAddress(address _liquidityPoolAddress) external;
     
     function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, address _staker, address _tnftHolder, address _bnftHolder, ILiquidityPool.SourceOfFunds source, bool _enableRestaking, uint256 _validatorIdToCoUseWithdrawalSafe) external returns (uint256[] memory);
-    function batchRegisterValidators(bytes32 _depositRoot, uint256[] calldata _validatorId, address _bNftRecipient, address _tNftRecipient, DepositData[] calldata _depositData, address _user) external payable;
+    function batchRegisterValidators(uint256[] calldata _validatorId, address _bNftRecipient, address _tNftRecipient, DepositData[] calldata _depositData, address _user) external payable;
     function batchApproveRegistration(uint256[] memory _validatorId, bytes[] calldata _pubKey, bytes[] calldata _signature, bytes32[] calldata _depositDataRootApproval) external payable;
     function batchCancelDepositAsBnftHolder(uint256[] calldata _validatorIds, address _caller) external;
 

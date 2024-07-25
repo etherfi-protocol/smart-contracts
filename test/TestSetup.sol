@@ -686,7 +686,6 @@ contract TestSetup is Test {
 
         vm.startPrank(alice);
         liquidityPoolInstance.unPauseContract();
-        liquidityPoolInstance.updateWhitelistStatus(false);
         liquidityPoolInstance.setRestakeBnftDeposits(restakingBnftDeposits);
         vm.stopPrank();
 
@@ -751,6 +750,7 @@ contract TestSetup is Test {
             auctionInstance.initializeV2dot5(address(roleRegistry));
             stakingManagerInstance.initializeV2dot5(address(roleRegistry));
             nodeOperatorManagerInstance.initializeV2dot5(address(roleRegistry));
+            liquifierInstance.initializeV2dot5(address(roleRegistry), address(bucketRateLimiter));
             vm.stopPrank();
             vm.startPrank(etherFiOracleInstance.owner());
             etherFiOracleInstance.initializeV2dot5(address(roleRegistry));
@@ -1137,7 +1137,7 @@ contract TestSetup is Test {
         (IStakingManager.DepositData[] memory depositDataArray,,,) = _prepareForValidatorRegistration(createdBids);
         vm.deal(address(liquidityPoolInstance), 1 ether);
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, createdBids, alice, alice, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(createdBids, alice, alice, depositDataArray, alice);
 
         return bidId;
     }
@@ -1221,9 +1221,9 @@ contract TestSetup is Test {
         vm.prank(_bnftStaker);
         uint256[] memory newValidators;
         if (_isLpBnftHolder) {
-            newValidators = liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(bidIds, _numValidators, _validatorIdToCoUseWithdrawalSafe);
+            newValidators = liquidityPoolInstance.batchDeposit(bidIds, _numValidators, _validatorIdToCoUseWithdrawalSafe);
         } else {
-            newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether * _numValidators}(bidIds, _numValidators, _validatorIdToCoUseWithdrawalSafe);
+            newValidators = liquidityPoolInstance.batchDeposit{value: 2 ether * _numValidators}(bidIds, _numValidators, _validatorIdToCoUseWithdrawalSafe);
         }
 
         IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](_numValidators);
@@ -1264,12 +1264,7 @@ contract TestSetup is Test {
         }
 
         vm.startPrank(_bnftStaker);
-        bytes32 depositRoot = zeroRoot;
-        if (_isLpBnftHolder) {
-            liquidityPoolInstance.batchRegisterWithLiquidityPoolAsBnftHolder(depositRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
-        } else {
-            liquidityPoolInstance.batchRegisterAsBnftHolder(depositRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
-        }
+        liquidityPoolInstance.batchRegister(newValidators, depositDataArray, depositDataRootsForApproval, sig);
         vm.stopPrank();
 
         vm.startPrank(admin);
