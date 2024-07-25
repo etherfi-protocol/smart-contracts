@@ -636,7 +636,7 @@ contract LiquifierTest is TestSetup {
         setUpTests();
         owner = liquifierInstance.owner();
         vm.prank(owner);
-        liquifierInstance.initializeV2dot5(address(roleRegistry));
+        //liquifierInstance.initializeV2dot5(address(roleRegistry));
 
         vm.startPrank(bob);
         vm.expectRevert(Liquifier.IncorrectRole.selector);

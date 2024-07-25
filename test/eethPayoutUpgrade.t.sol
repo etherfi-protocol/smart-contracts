@@ -1,3 +1,5 @@
+pragma solidity ^0.8.24;
+
 import "./TestSetup.sol";
 
 contract eethPayoutUpgradeTest is TestSetup {
@@ -24,7 +26,8 @@ contract eethPayoutUpgradeTest is TestSetup {
         liquidityPoolInstance.upgradeTo(address(newLiquidityImplementation));
         etherFiAdminInstance.upgradeTo(address(newEtherFiAdminImplementation));
         etherFiOracleInstance.upgradeTo(address(newEtherFiOracleImplementation));
-        liquidityPoolInstance.setTreasury(alice);  
+        liquidityPoolInstance.setTreasury(alice);
+        etherFiAdminInstance.setValidatorTaskBatchSize(10);
         vm.stopPrank();
     }
 
@@ -58,7 +61,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         vm.startPrank(oracleAdmin);
         etherFiOracleInstance.submitReport(report);
         skip(1000);
-        etherFiAdminInstance.executeTasks(report, new bytes[](0), new bytes[](0));
+        etherFiAdminInstance.executeTasks(report);
         uint256 balOfTreasury = eETHInstance.balanceOf(treasury);
         assertApproxEqAbs(balOfTreasury, _protocolFees, 10);
         vm.stopPrank(); 
@@ -83,7 +86,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         etherFiOracleInstance.submitReport(report);
         skip(1000);
         vm.expectRevert();
-        etherFiAdminInstance.executeTasks(report, new bytes[](0), new bytes[](0));
+        etherFiAdminInstance.executeTasks(report);
         vm.stopPrank();
     }
 

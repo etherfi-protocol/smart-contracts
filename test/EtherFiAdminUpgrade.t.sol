@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "./TestSetup.sol";
-import "forge-std/console2.sol";
+import "forge-std/console.sol";
 import "../src/EtherFiAdmin.sol";
 
 contract EtherFiAdminUpgradeTest is TestSetup {
@@ -26,19 +26,20 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         batchSize = 25;
         alternativeBatchSize = 10;
         accruedRewards = 8729224130452426342;
+        //upgrade the contact
+        upgradeContract();
         reportHash = etherFiOracleInstance.generateReportHash(report);
         batchValidatorsToApprove = _getValidatorToApprove(52835, batchSize); //52835 based on transaction
         emptyTimestamps = new uint32[](0);
         approvalHash = keccak256(abi.encode(reportHash, batchValidatorsToApprove, emptyTimestamps));
-
-        //upgrade the contact
-        upgradeContract();
     }
 
     function upgradeContract() public {
         EtherFiAdmin v2Implementation = new EtherFiAdmin();
+        EtherFiOracle v2ImplementationOracle = new EtherFiOracle();
         vm.startPrank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(address(v2Implementation));
+        etherFiOracleInstance.upgradeTo(address(v2ImplementationOracle));
         etherFiAdminInstance.setValidatorTaskBatchSize(batchSize);
         vm.stopPrank();
     }
@@ -58,6 +59,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
                 refBlockFrom: 20156700,
                 refBlockTo: 20157172,
                 accruedRewards: 8729224130452426342,
+                protocolFees: 0,
                 validatorsToApprove: new uint256[](100),
                 liquidityPoolValidatorsToExit: new uint256[](0),
                 exitedValidators: new uint256[](0),
