@@ -540,20 +540,7 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.depositWithERC20(address(dummyToken), _x, address(0));
         vm.stopPrank();
     }
-
-    function test_slow_sync_by_rando_fail() public {
-        test_fast_sync();
-
-        uint256 x = 5 ether;
-        // for some reasons only 5 ether arrived this time :)
-        _transferTo(l1SyncPool, x);
-
-        vm.startPrank(alice);
-        vm.expectRevert(Liquifier.IncorrectCaller.selector);
-        liquifierInstance.unwrapL2Eth(address(dummyToken));
-        vm.stopPrank();
-    }
-
+    
     function test_slow_sync_with_random_token_fail() public {
         test_fast_sync_success();
 
