@@ -612,11 +612,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         return bnftHoldersIndexes[msg.sender].registered && bnftHolders[index].holder == msg.sender;
     }
 
-    function _isStaker() internal view returns (bool) {
-        uint32 index = bnftHoldersIndexes[msg.sender].index;
-        return bnftHoldersIndexes[msg.sender].registered && bnftHolders[index].holder == msg.sender;
-    }
-
     function _requireNotPaused() internal view virtual {
         require(!paused, "Pausable: paused");
     }

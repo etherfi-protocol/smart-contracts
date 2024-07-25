@@ -749,6 +749,7 @@ contract TestSetup is Test {
             stakingManagerInstance.initializeV2dot5(address(roleRegistry));
             nodeOperatorManagerInstance.initializeV2dot5(address(roleRegistry));
             liquifierInstance.initializeV2dot5(address(roleRegistry), address(bucketRateLimiter));
+            withdrawRequestNFTInstance.initializeV2dot5(address(roleRegistry));
             vm.stopPrank();
             vm.prank(etherFiAdminInstance.owner());
             etherFiAdminInstance.initializeV2dot5(address(roleRegistry));
