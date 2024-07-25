@@ -7,6 +7,7 @@ import "forge-std/console2.sol";
 contract EtherFiOracleTest is TestSetup {
     function setUp() public {
         setUpTests();
+        _upgradeMembershipManagerFromV0ToV1();
 
         // Timestamp = 1, BlockNumber = 0
         vm.roll(0);
@@ -91,7 +92,7 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(reportAtPeriod2C);
 
        // Update the Consensus Version to 2
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiOracleInstance.setConsensusVersion(2);
 
         // alice submits the period 2 report
@@ -182,6 +183,8 @@ contract EtherFiOracleTest is TestSetup {
         // Now it's period 2!
         _moveClock(1024 + 2 * slotsPerEpoch);
 
+        console.log("0");
+
         // alice submits the period 2 report
         vm.prank(alice);
         bool consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod2A);
@@ -190,6 +193,8 @@ contract EtherFiOracleTest is TestSetup {
         vm.prank(bob);
         consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod2B);
         assertEq(consensusReached, false);
+
+        console.log("1");
 
         // Now it's period 3
         _moveClock(1024);
@@ -253,7 +258,7 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(slotTo, 2 * 1024 - 1);
         assertEq(blockFrom, 1024);
 
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiOracleInstance.setReportStartSlot(1 * 1024 + 512);
 
         _moveClock(1 * 1024 + 512);
@@ -290,7 +295,7 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(blockFrom, 0);
 
         console.log(etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp));
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiOracleInstance.setReportStartSlot(1 * 1024 + 512);
 
         (slotFrom, slotTo, blockFrom) = etherFiOracleInstance.blockStampForNextReport();
@@ -300,7 +305,7 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_report_start_slot() public {
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiOracleInstance.setReportStartSlot(2048);
 
         // note that the block timestamp starts from 1 (= slot 0) and the block number starts from 0
@@ -333,7 +338,7 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(reportAtSlot3071);
 
         // change startSlot to 3264
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiOracleInstance.setReportStartSlot(3264);
 
         // slot 3236
@@ -361,7 +366,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Oracle accidentally generated an wrong report
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
-        vm.prank(alice);
+        vm.startPrank(alice);
         bool consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod2A);
         assertEq(consensusReached, true);
 
@@ -369,10 +374,8 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), reportAtPeriod2A.refBlockTo);
 
         // Owner performs manual operations to undo the published report
-        vm.startPrank(owner);
         etherFiOracleInstance.unpublishReport(reportHash);
         etherFiOracleInstance.updateLastPublishedBlockStamps(lastPublishedReportRefSlot, lastPublishedReportRefBlock);
-        vm.stopPrank();
 
         assertEq(etherFiOracleInstance.lastPublishedReportRefSlot(), lastPublishedReportRefSlot);
         assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), lastPublishedReportRefBlock);
@@ -408,7 +411,7 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_set_oracle_report_period() public {
-        vm.startPrank(owner);
+        vm.startPrank(alice);
 
         vm.expectRevert("Report period cannot be zero");
         etherFiOracleInstance.setOracleReportPeriod(0);
@@ -533,7 +536,7 @@ contract EtherFiOracleTest is TestSetup {
         vm.prank(alice);
         assertEq(etherFiAdminInstance.canExecuteTasks(reportAtPeriod2A), true);
 
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiAdminInstance.updatePostReportWaitTimeInSlots(1);
         assertEq(etherFiAdminInstance.canExecuteTasks(reportAtPeriod2A), false);
 

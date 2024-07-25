@@ -62,7 +62,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     mapping(address => TokenInfo) public tokenInfos;
     mapping(bytes32 => bool) public isRegisteredQueuedWithdrawals;
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
 
     address public treasury;
     ILiquidityPool public liquidityPool;
@@ -93,6 +93,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     BucketRateLimiter public rateLimiter;
 
+    bytes32 public constant LIQUIFIER_ADMIN_ROLE = keccak256("LIQUIFIER_ADMIN_ROLE");
+    
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     event RegisteredQueuedWithdrawal(bytes32 _withdrawalRoot, IStrategyManager.DeprecatedStruct_QueuedWithdrawal _queuedWithdrawal);
     event RegisteredQueuedWithdrawal_V2(bytes32 _withdrawalRoot, IDelegationManager.Withdrawal _queuedWithdrawal);
@@ -144,6 +146,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         require(address(roleRegistry) == address(0x00), "already initialized");
         if (address(rateLimiter) != address(0)) revert();
 
+        // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
         rateLimiter = BucketRateLimiter(_rateLimiter);
     }
@@ -211,7 +214,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @param _tokens Array of tokens for each QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single array.
     /// @param _middlewareTimesIndexes One index to reference per QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single index.
     /// @dev middlewareTimesIndex should be calculated off chain before calling this function by finding the first index that satisfies `slasher.canWithdraw`
-    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata _queuedWithdrawals, IERC20[][] calldata _tokens, uint256[] calldata _middlewareTimesIndexes) external onlyAdmin {
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata _queuedWithdrawals, IERC20[][] calldata _tokens, uint256[] calldata _middlewareTimesIndexes) external {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         uint256 num = _queuedWithdrawals.length;
         bool[] memory receiveAsTokens = new bool[](num);
         for (uint256 i = 0; i < num; i++) {
@@ -226,12 +231,15 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     /// Initiate the process for redemption of stETH 
-    function stEthRequestWithdrawal() external onlyAdmin returns (uint256[] memory) {
+    function stEthRequestWithdrawal() external returns (uint256[] memory) {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         uint256 amount = lido.balanceOf(address(this));
         return stEthRequestWithdrawal(amount);
     }
 
-    function stEthRequestWithdrawal(uint256 _amount) public onlyAdmin returns (uint256[] memory) {
+    function stEthRequestWithdrawal(uint256 _amount) public returns (uint256[] memory) {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT() || _amount < lido.balanceOf(address(this))) revert NotEnoughBalance();
 
         tokenInfos[address(lido)].ethAmountPendingForWithdrawals += uint128(_amount);
@@ -253,7 +261,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @notice Claim a batch of withdrawal requests if they are finalized sending the ETH to the this contract back
     /// @param _requestIds array of request ids to claim
     /// @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
-    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyAdmin {
+    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         uint256 balance = address(this).balance;
         lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
         uint256 newBalance = address(this).balance;
@@ -266,7 +275,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
-    function withdrawEther() external onlyAdmin {
+    function withdrawEther() external {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         uint256 amountToLiquidityPool = address(this).balance;
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
         if (!sent) revert EthTransferFailed();
@@ -294,10 +305,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token].totalCapInEther = 0;
     }
 
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        admins[_address] = _isAdmin;
-    }
-
     // Pauses the contract
     function pauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
@@ -321,7 +328,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     // uint256 _amount, uint24 _fee, uint256 _minOutputAmount, uint256 _maxWaitingTime
-    function pancakeSwapForEth(address _token, uint256 _amount, uint24 _fee, uint256 _minOutputAmount, uint256 _maxWaitingTime) external onlyAdmin {
+    function pancakeSwapForEth(address _token, uint256 _amount, uint24 _fee, uint256 _minOutputAmount, uint256 _maxWaitingTime) external {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if (_amount > IERC20(_token).balanceOf(address(this))) revert NotEnoughBalance();
         uint256 beforeBalance = address(this).balance;
         
@@ -345,20 +353,26 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (currentBalance < _minOutputAmount + beforeBalance) revert WrongOutput();
     }
 
-    function swapCbEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin returns (uint256) {
+    function swapCbEthToEth(uint256 _amount, uint256 _minOutputAmount) external returns (uint256) {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if (_amount > cbEth.balanceOf(address(this))) revert NotEnoughBalance();
+
         cbEth.approve(address(cbEth_Eth_Pool), _amount);
         return cbEth_Eth_Pool.exchange_underlying(1, 0, _amount, _minOutputAmount);
     }
 
-    function swapWbEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin returns (uint256) {
+    function swapWbEthToEth(uint256 _amount, uint256 _minOutputAmount) external returns (uint256) {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if (_amount > wbEth.balanceOf(address(this))) revert NotEnoughBalance();
+
         wbEth.approve(address(wbEth_Eth_Pool), _amount);
         return wbEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
     }
 
-    function swapStEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin returns (uint256) {
+    function swapStEthToEth(uint256 _amount, uint256 _minOutputAmount) external returns (uint256) {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
+        
         lido.approve(address(stEth_Eth_Pool), _amount);
         return stEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
     }
@@ -521,14 +535,4 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
-    function _requireAdmin() internal view virtual {
-        if (!(admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
-    }
-
-    /* MODIFIER */
-    modifier onlyAdmin() {
-        _requireAdmin();
-        _;
-    }
 }

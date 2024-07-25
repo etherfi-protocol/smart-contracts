@@ -37,8 +37,6 @@ interface IAuctionManager {
     ) external;
 
     function setAccumulatedRevenueThreshold(uint128 _newThreshold) external;
-
-    function updateAdmin(address _address, bool _isAdmin) external;
     
     function transferAccumulatedRevenue() external;
 }

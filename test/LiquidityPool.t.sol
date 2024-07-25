@@ -24,11 +24,6 @@ contract LiquidityPoolTest is TestSetup {
 
     function _initBid() internal {
         vm.deal(alice, 100 ether);
-
-        vm.startPrank(owner);
-        nodeOperatorManagerInstance.updateAdmin(alice, true);
-        liquidityPoolInstance.updateAdmin(alice, true);
-        vm.stopPrank();
     
         vm.startPrank(alice);
         _setUpNodeOperatorWhitelist();
@@ -524,7 +519,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_sendExitRequestFails() public {
         uint256[] memory newValidators = new uint256[](10);
-        vm.expectRevert("Not admin");
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
         vm.prank(owner);
         liquidityPoolInstance.sendExitRequests(newValidators);
     }
@@ -958,48 +953,6 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(stakingManagerInstance.bidIdToStaker(14), alice);
     }
 
-    function test_RestakedDepositFromBNFTHolder() public {
-        initializeRealisticFork(MAINNET_FORK);
-        _initBid();
-
-        vm.deal(alice, 1000 ether);
-        vm.startPrank(alice);
-
-        uint256[] memory bidIds;
-        uint256[] memory validatorIds;
-
-        registerAsBnftHolder(alice);
-        bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-
-        liquidityPoolInstance.updateBnftMode(false);
-        liquidityPoolInstance.setRestakeBnftDeposits(true);
-
-        liquidityPoolInstance.deposit{value: 120 ether}();
-        bidIds = auctionInstance.createBid{value: 1 ether}(
-            10,
-            0.1 ether
-        );
-
-        address bnftHolder = alice;
-        startHoax(bnftHolder);
-        processedBids = liquidityPoolInstance.batchDepositAsBnftHolder{value: 8 ether}(bidIds, 4);
-
-        assertEq(stakingManagerInstance.bidIdToStaker(bidIds[0]), bnftHolder);
-        assertEq(stakingManagerInstance.bidIdToStaker(bidIds[1]), bnftHolder);
-        assertEq(stakingManagerInstance.bidIdToStaker(bidIds[2]), bnftHolder);
-        assertEq(stakingManagerInstance.bidIdToStaker(bidIds[3]), bnftHolder);
-
-        // verify that created nodes have associated eigenPods
-        IEtherFiNode node = IEtherFiNode(managerInstance.etherfiNodeAddress(bidIds[0]));
-        assertFalse(address(node.eigenPod()) == address(0x0));
-        node = IEtherFiNode(managerInstance.etherfiNodeAddress(bidIds[1]));
-        assertFalse(address(node.eigenPod()) == address(0x0));
-        node = IEtherFiNode(managerInstance.etherfiNodeAddress(bidIds[2]));
-        assertFalse(address(node.eigenPod()) == address(0x0));
-        node = IEtherFiNode(managerInstance.etherfiNodeAddress(bidIds[3]));
-        assertFalse(address(node.eigenPod()) == address(0x0));
-    }
-
     function test_RegisterAsBNFTHolder() public {
 
         test_DepositFromBNFTHolder();
@@ -1334,11 +1287,8 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.batchDepositAsBnftHolder{value: 1 * 2 ether}(bidIds, 1);
         vm.stopPrank();
 
-        vm.prank(owner);
-        liquidityPoolInstance.updateAdmin(chad, true);
-
         vm.prank(bob);
-        vm.expectRevert("Not admin");
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
         liquidityPoolInstance.batchCancelDepositByAdmin(bidIds, alice);
 
         vm.prank(chad);

@@ -46,9 +46,15 @@ contract AuctionManager is
     uint128 public accumulatedRevenue;
     uint128 public accumulatedRevenueThreshold;
 
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
 
     RoleRegistry public roleRegistry;
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ROLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 public constant AUCTION_ADMIN_ROLE = keccak256("AUCTION_ADMIN_ROLE");
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -97,12 +103,13 @@ contract AuctionManager is
         nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerAddress);
         accumulatedRevenue = 0;
         accumulatedRevenueThreshold = _accumulatedRevenueThreshold;
-        admins[_etherFiAdminContractAddress] = true;
+        DEPRECATED_admins[_etherFiAdminContractAddress] = true;
     }
 
     function initializeV2dot5(address _roleRegistry) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
 
+        // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
     }
 
@@ -231,7 +238,9 @@ contract AuctionManager is
         }
     }
 
-    function transferAccumulatedRevenue() external onlyAdmin {
+    function transferAccumulatedRevenue() external {
+        if (!roleRegistry.hasRole(AUCTION_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         uint256 transferAmount = accumulatedRevenue;
         accumulatedRevenue = 0;
         (bool sent, ) = membershipManagerContractAddress.call{value: transferAmount}("");
@@ -240,14 +249,18 @@ contract AuctionManager is
 
     /// @notice Disables the whitelisting phase of the bidding
     /// @dev Allows both regular users and whitelisted users to bid
-    function disableWhitelist() public onlyAdmin {
+    function disableWhitelist() public {
+        if (!roleRegistry.hasRole(AUCTION_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         whitelistEnabled = false;
         emit WhitelistDisabled(whitelistEnabled);
     }
 
     /// @notice Enables the whitelisting phase of the bidding
     /// @dev Only users who are on a whitelist can bid
-    function enableWhitelist() public onlyAdmin {
+    function enableWhitelist() public {
+        if (!roleRegistry.hasRole(AUCTION_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         whitelistEnabled = true;
         emit WhitelistEnabled(whitelistEnabled);
     }
@@ -326,7 +339,9 @@ contract AuctionManager is
 
     /// @notice Updates the minimum bid price for a non-whitelisted bidder
     /// @param _newMinBidAmount the new amount to set the minimum bid price as
-    function setMinBidPrice(uint64 _newMinBidAmount) external onlyAdmin {
+    function setMinBidPrice(uint64 _newMinBidAmount) external {
+        if (!roleRegistry.hasRole(AUCTION_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        
         require(_newMinBidAmount < maxBidAmount, "Min bid exceeds max bid");
         require(_newMinBidAmount >= whitelistBidAmount, "Min bid less than whitelist bid amount");
         minBidAmount = _newMinBidAmount;
@@ -334,14 +349,18 @@ contract AuctionManager is
 
     /// @notice Updates the maximum bid price for both whitelisted and non-whitelisted bidders
     /// @param _newMaxBidAmount the new amount to set the maximum bid price as
-    function setMaxBidPrice(uint64 _newMaxBidAmount) external onlyAdmin {
+    function setMaxBidPrice(uint64 _newMaxBidAmount) external {
+        if (!roleRegistry.hasRole(AUCTION_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         require(_newMaxBidAmount > minBidAmount, "Min bid exceeds max bid");
         maxBidAmount = _newMaxBidAmount;
     }
 
     /// @notice Updates the accumulated revenue threshold that will trigger a transfer to MembershipNFT contract
     /// @param _newThreshold the new threshold to set
-    function setAccumulatedRevenueThreshold(uint128 _newThreshold) external onlyAdmin {
+    function setAccumulatedRevenueThreshold(uint128 _newThreshold) external {
+        if (!roleRegistry.hasRole(AUCTION_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         accumulatedRevenueThreshold = _newThreshold;
     }
 
@@ -360,24 +379,12 @@ contract AuctionManager is
         );
     }
 
-    /// @notice Updates the address of the admin
-    /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        require(_address != address(0), "Cannot be address zero");
-        admins[_address] = _isAdmin;
-    }
-
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
 
     modifier onlyStakingManagerContract() {
         require(msg.sender == stakingManagerContractAddress, "Only staking manager contract function");
-        _;
-    }
-
-    modifier onlyAdmin() {
-        require(admins[msg.sender], "Caller is not the admin");
         _;
     }
 }

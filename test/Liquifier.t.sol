@@ -234,6 +234,7 @@ contract LiquifierTest is TestSetup {
     }
 
     function test_erc20_queued_withdrawal_v2() public {
+        setUpTests();
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
@@ -296,10 +297,9 @@ contract LiquifierTest is TestSetup {
         bool[] memory receiveAsTokens = new bool[](1);
         receiveAsTokens[0] = true;
 
-        vm.startPrank(owner);
+        vm.startPrank(alice);
         liquifierInstance.completeQueuedWithdrawals(queuedWithdrawals, tokens, middlewareTimesIndexes);
         vm.stopPrank();
-
     }
 
     function _get_queued_withdrawal_of_restaked_LST_before_m2(IStrategy strategy) internal returns (IDelegationManager.Withdrawal memory) {
@@ -632,12 +632,8 @@ contract LiquifierTest is TestSetup {
     function test_pauser() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
-        // testing the pause logic with the V2.5 upgrade
         setUpTests();
-        owner = liquifierInstance.owner();
-        vm.prank(owner);
-        //liquifierInstance.initializeV2dot5(address(roleRegistry));
-
+        
         vm.startPrank(bob);
         vm.expectRevert(Liquifier.IncorrectRole.selector);
         liquifierInstance.pauseContract();

@@ -40,6 +40,10 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         vm.startPrank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(address(v2Implementation));
         etherFiOracleInstance.upgradeTo(address(v2ImplementationOracle));
+        etherFiAdminInstance.initializeV2dot5(address(roleRegistry));
+        vm.startPrank(superAdmin);
+        roleRegistry.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), committeeMember);
+        vm.startPrank(etherFiAdminInstance.owner());
         etherFiAdminInstance.setValidatorTaskBatchSize(batchSize);
         vm.stopPrank();
     }
@@ -178,7 +182,6 @@ contract EtherFiAdminUpgradeTest is TestSetup {
     }
 
     function test_validatorApprovalTasks() public {
-        console.logBytes32(approvalHash);
         test_executeTask();
         (bool preCompleted, bool preExists, ) = etherFiAdminInstance.validatorManagementTaskStatus(approvalHash);
         assertTrue(preExists);
