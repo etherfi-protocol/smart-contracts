@@ -1272,7 +1272,7 @@ contract EtherFiNodeTest is TestSetup {
         // New Validator Deposit
         // 
         uint256[] memory newValidatorIds = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
-        liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(newValidatorIds, 1, 0);
+        liquidityPoolInstance.batchDeposit{value: 2 ether}(newValidatorIds, 1, 0);
 
         numBnftsHeldByLP = 1;
         numTnftsHeldByLP = 1;
@@ -1288,7 +1288,7 @@ contract EtherFiNodeTest is TestSetup {
         // New Validator Register
         // 
         (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(newValidatorIds);
-        liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, newValidatorIds, depositDataArray, depositDataRootsForApproval, sig);
+        liquidityPoolInstance.batchRegister(newValidatorIds, depositDataArray, depositDataRootsForApproval, sig);
 
         numBnftsHeldByLP = 1;
         numTnftsHeldByLP = 1;
@@ -1336,7 +1336,7 @@ contract EtherFiNodeTest is TestSetup {
         // New Validator Deposit
         // 
         newValidatorIds = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
-        liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(newValidatorIds, 1, 0);
+        liquidityPoolInstance.batchDeposit(newValidatorIds, 1, 0);
 
         numBnftsHeldByLP = 1;
         numTnftsHeldByLP = 2;
@@ -1352,7 +1352,7 @@ contract EtherFiNodeTest is TestSetup {
         // New Validator Register
         // 
         (depositDataArray, depositDataRootsForApproval, sig, pubKey) = _prepareForValidatorRegistration(newValidatorIds);
-        liquidityPoolInstance.batchRegisterWithLiquidityPoolAsBnftHolder(zeroRoot, newValidatorIds, depositDataArray, depositDataRootsForApproval, sig);
+        liquidityPoolInstance.batchRegister(newValidatorIds, depositDataArray, depositDataRootsForApproval, sig);
 
         numBnftsHeldByLP = 1;
         numTnftsHeldByLP = 2;
@@ -1420,7 +1420,7 @@ contract EtherFiNodeTest is TestSetup {
         // New Validator Deposit into the same safe
         // 
         uint256[] memory newValidatorIds = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
-        liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(newValidatorIds, 1, validatorId);
+        liquidityPoolInstance.batchDeposit{value: 2 ether}(newValidatorIds, 1, validatorId);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether + 30 ether);
 
         // Confirm that the num of associated validators still 1
@@ -1449,7 +1449,7 @@ contract EtherFiNodeTest is TestSetup {
         // New Validator Register into the same safe
         // 
         (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(newValidatorIds);
-        liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, newValidatorIds, depositDataArray, depositDataRootsForApproval, sig);
+        liquidityPoolInstance.batchRegister(newValidatorIds, depositDataArray, depositDataRootsForApproval, sig);
 
         // Confirm that the num of associated validators still 1
         assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
@@ -1899,9 +1899,9 @@ contract EtherFiNodeTest is TestSetup {
         uint256 lp_balance = address(liquidityPoolInstance).balance;
         vm.startPrank(bnftStaker);
         vm.deal(bnftStaker, 2 ether);
-        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(bidIds, 1, validatorIdToShareSafeWith);
+        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDeposit{value: 2 ether}(bidIds, 1, validatorIdToShareSafeWith);
         (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(newValidatorIds);
-        liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, newValidatorIds, depositDataArray, depositDataRootsForApproval, sig);
+        liquidityPoolInstance.batchRegister(newValidatorIds, depositDataArray, depositDataRootsForApproval, sig);
         vm.stopPrank();
 
         assertEq(uint8(managerInstance.phase(newValidatorIds[0])), uint8(IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL));
@@ -1999,7 +1999,7 @@ contract EtherFiNodeTest is TestSetup {
         address bnftStaker = 0x5836152812568244760ba356B5f3838Aa5B672e0;
         uint256 lp_balance = address(liquidityPoolInstance).balance;
         vm.startPrank(bnftStaker);
-        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(bidIds, 1, validatorId);
+        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDeposit(bidIds, 1, validatorId);
         vm.stopPrank();
         address newEtherFiNode = managerInstance.etherfiNodeAddress(newValidatorIds[0]);
 
@@ -2031,7 +2031,7 @@ contract EtherFiNodeTest is TestSetup {
         
         address bnftStaker = 0x5836152812568244760ba356B5f3838Aa5B672e0;
         vm.startPrank(bnftStaker);
-        uint256[] memory validatorIds = liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(bidIds, 1);
+        uint256[] memory validatorIds = liquidityPoolInstance.batchDeposit(bidIds, 1);
         vm.stopPrank();
 
         _upgrade_etherfi_nodes_manager_contract();
@@ -2189,7 +2189,7 @@ contract EtherFiNodeTest is TestSetup {
 
         // launch 1 more validators
         vm.expectRevert("WRONG_BNFT_OWNER");
-        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(bidIds, 1, validatorId);
+        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDeposit(bidIds, 1, validatorId);
     }
 
     function test_lp_as_bnft_holders_cant_mix_up_2() public {
@@ -2207,7 +2207,7 @@ contract EtherFiNodeTest is TestSetup {
 
         // launch 1 more validators
         vm.expectRevert("WRONG_BNFT_OWNER");
-        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(bidIds, 1, validatorId);
+        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDeposit{value: 2 ether}(bidIds, 1, validatorId);
     }
 
     function test_PartialWithdrawalOfPrincipalFails() public {
@@ -2331,7 +2331,7 @@ contract EtherFiNodeTest is TestSetup {
 
         uint256[] memory bidIds = auctionInstance.createBid{value: 0.2 ether}(2, 0.1 ether);
         liquidityPoolInstance.deposit{value: 60 ether}();
-        uint256[] memory newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 4 ether}(bidIds, 2);
+        uint256[] memory newValidators = liquidityPoolInstance.batchDeposit{value: 4 ether}(bidIds, 2);
 
         vm.expectRevert("INVALID_PHASE_TRANSITION");
         liquidityPoolInstance.batchCancelDeposit(validatorIds);
