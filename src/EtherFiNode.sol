@@ -666,8 +666,8 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
 
     /// @dev as of eigenlayer's PEPE upgrade the delayedWithdrawalRouter is deprecated.
     ///         once all outstanding funds have been claimed we can delete this functionality
-    function DEPRECATED_claimDelayedWithdrawalRouterWithdrawals(uint256 _validatorId) public returns (bool) {
-        if (!isRestakingEnabled) return false;
+    function DEPRECATED_claimDelayedWithdrawalRouterWithdrawals(uint256 _validatorId) public {
+        if (!isRestakingEnabled) return;
 
         uint256 maxWithdrawals = 10; // maximum number of withdrawals to process in 1 tx
 
