@@ -9,6 +9,7 @@ import "@openzeppelin-upgradeable/contracts/token/ERC721/IERC721ReceiverUpgradea
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import "forge-std/console.sol";
 
 import "./interfaces/IRegulationsManager.sol";
 import "./interfaces/IStakingManager.sol";
@@ -154,9 +155,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         return _deposit(msg.sender, msg.value, 0);
     }
 
-    // Used by eETH staking flow through Liquifier contract; deVamp
+    // Used by eETH staking flow through Liquifier contract; deVamp or to pay protocol fees
     function depositToRecipient(address _recipient, uint256 _amount, address _referral) public whenNotPaused returns (uint256) {
-        require(msg.sender == address(liquifier), "Incorrect Caller");
+        require(msg.sender == address(liquifier) || msg.sender == address(etherFiAdminContract), "Incorrect Caller");
 
         emit Deposit(_recipient, _amount, SourceOfFunds.EETH, _referral);
 
@@ -466,10 +467,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @notice pay protocol fees including 5% to treaury, 5% to node operator and ethfund bnft holders
     /// @param _protocolFees The amount of protocol fees to pay in ether
     function payProtocolFees(uint128 _protocolFees) external {
-        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
-        _deposit(treasury, 0, _protocolFees);
-
+        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();   
         emit ProtocolFeePaid(_protocolFees);
+        depositToRecipient(treasury, _protocolFees, address(0));
     }
 
     /// @notice Set the treasury address

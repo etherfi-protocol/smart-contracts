@@ -444,13 +444,13 @@ contract EtherFiOracleTest is TestSetup {
         _moveClock(1 days / 12);
 
         // Change in APR is below 100%
-        report.protocolAccruedRewards = int128(60 ether - 1 ether) / int128(365);
+        report.accruedRewards = int128(60 ether - 1 ether) / int128(365);
         _executeAdminTasks(report);
 
         _moveClock(1 days / 12);
 
         // Change in APR is above 100%, which reverts
-        report.protocolAccruedRewards = int128(60 ether + 1 ether) / int128(365);
+        report.accruedRewards = int128(60 ether + 1 ether) / int128(365);
         _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
     }
 
@@ -464,13 +464,13 @@ contract EtherFiOracleTest is TestSetup {
         _moveClock(1 days / 12);
 
         // Change in APR is below 100%
-        report.protocolAccruedRewards = int128(-59 ether) / int128(365);
+        report.accruedRewards = int128(-59 ether) / int128(365);
         _executeAdminTasks(report);
 
         _moveClock(1 days / 12);
 
         // Change in APR is above 100%, which reverts
-        report.protocolAccruedRewards = int128(-61 ether) / int128(365);
+        report.accruedRewards = int128(-61 ether) / int128(365);
         _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
     }
 
@@ -627,13 +627,13 @@ contract EtherFiOracleTest is TestSetup {
 
         // Alice submited the correct report 
         vm.prank(alice);
-        report.protocolAccruedRewards = 1 ether;
+        report.accruedRewards = 1 ether;
         bool consensusReached = etherFiOracleInstance.submitReport(report);
         assertFalse(consensusReached);
 
         // However, Bob submitted a wrong report
         vm.prank(chad);
-        report.protocolAccruedRewards = 2 ether;
+        report.accruedRewards = 2 ether;
         consensusReached = etherFiOracleInstance.submitReport(report);
         assertFalse(consensusReached);
 
@@ -648,12 +648,12 @@ contract EtherFiOracleTest is TestSetup {
         _initReportBlockStamp(report);
 
         vm.prank(alice);
-        report.protocolAccruedRewards = 1 ether;
+        report.accruedRewards = 1 ether;
         consensusReached = etherFiOracleInstance.submitReport(report);
         assertFalse(consensusReached);
 
         vm.prank(chad);
-        report.protocolAccruedRewards = 1 ether;
+        report.accruedRewards = 1 ether;
         consensusReached = etherFiOracleInstance.submitReport(report);
         assertTrue(consensusReached); // succeeded
     }
@@ -674,7 +674,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Alice submited the correct report 
         vm.prank(alice);
-        report.protocolAccruedRewards = 90 ether;
+        report.accruedRewards = 90 ether;
         report.protocolFees = 10 ether;
     }
 }

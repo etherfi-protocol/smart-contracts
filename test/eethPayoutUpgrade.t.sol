@@ -22,13 +22,11 @@ contract eethPayoutUpgradeTest is TestSetup {
         LiquidityPool newLiquidityImplementation = new LiquidityPool(); 
         EtherFiAdmin newEtherFiAdminImplementation = new EtherFiAdmin();
         EtherFiOracle newEtherFiOracleImplementation = new EtherFiOracle();
-
         vm.startPrank(liquidityPoolInstance.owner());
         liquidityPoolInstance.upgradeTo(address(newLiquidityImplementation));
         etherFiAdminInstance.upgradeTo(address(newEtherFiAdminImplementation));
         etherFiOracleInstance.upgradeTo(address(newEtherFiOracleImplementation));
         liquidityPoolInstance.setTreasury(alice);  
-        etherFiAdminInstance.updateIsSafe(true);
         vm.stopPrank();
     }
 
@@ -39,7 +37,7 @@ contract eethPayoutUpgradeTest is TestSetup {
             refSlotTo: 9577503,
             refBlockFrom: 20367245,
             refBlockTo: 20370590,
-            protocolAccruedRewards: 64625161825710190377,
+            accruedRewards: 64625161825710190377,
             protocolFees: 8 ether,
             validatorsToApprove: new uint256[](0),
             liquidityPoolValidatorsToExit: new uint256[](0),
@@ -56,47 +54,51 @@ contract eethPayoutUpgradeTest is TestSetup {
        return report;
     }
 
-    function test_submitReport(IEtherFiOracle.OracleReport memory _report) public {
-        vm.startPrank(oracleAdmin);
-        etherFiOracleInstance.submitReport(_report);
-        skip(1000);
-    }
-
-    function test_largeMint() public {
+    function helperSubmitReport(uint128 _protocolFees) public {
         IEtherFiOracle.OracleReport memory report = generateReport();
-        report.protocolFees = 1000 ether;
-        vm.startPrank(owner);
-        etherFiAdminInstance.updateIsSafe(false);
-        vm.stopPrank();
-        test_submitReport(report);
+        report.protocolFees = int128(_protocolFees);
+        vm.startPrank(oracleAdmin);
+        etherFiOracleInstance.submitReport(report);
+        skip(1000);
         etherFiAdminInstance.executeTasks(report, new bytes[](0), new bytes[](0));
+        uint256 balOfTreasury = eETHInstance.balanceOf(treasury);
+        assertApproxEqAbs(balOfTreasury, _protocolFees, 10);
         vm.stopPrank(); 
     }
 
-    function test_protocolFeeBalance() public {
-        IEtherFiOracle.OracleReport memory report = generateReport();
-        test_submitReport(report);  
-        etherFiAdminInstance.executeTasks(report, new bytes[](0), new bytes[](0));
-        uint256 balOfTreasury = eETHInstance.balanceOf(treasury);
-        assertApproxEqAbs(balOfTreasury, 8 ether, 10);
-        console.log("Balance of treasury: ", balOfTreasury);
+    function test_noProtocolFees() public {
+        helperSubmitReport(0);
     }
 
-    function test_tooHighRewards() public {
+    function test_lowProtocolFees() public {
+        helperSubmitReport(1 ether);
+    }
+
+    function test_highProtocolFees() public {
+        helperSubmitReport(1000 ether);
+    }
+
+    function test_negativeFees() public {
         IEtherFiOracle.OracleReport memory report = generateReport();
-        report.protocolFees = 100 ether;
-        test_submitReport(report);  
-        vm.expectRevert(bytes("EtherFiAdmin: protocol fees too high"));
+        report.protocolFees = int128(-1000);
+        vm.startPrank(oracleAdmin);
+        etherFiOracleInstance.submitReport(report);
+        skip(1000);
+        vm.expectRevert();
         etherFiAdminInstance.executeTasks(report, new bytes[](0), new bytes[](0));
         vm.stopPrank();
     }
-    
-    function test_tooLowRewards() public {
-        IEtherFiOracle.OracleReport memory report = generateReport();
-        report.protocolFees = 1 ether;
-        test_submitReport(report);  
-        vm.expectRevert(bytes("EtherFiAdmin: protocol fees too low"));
-        etherFiAdminInstance.executeTasks(report, new bytes[](0), new bytes[](0));
+
+    function test_permissionFordepositToRecipient() public {
+        vm.startPrank(address(etherFiAdminInstance));
+        liquidityPoolInstance.depositToRecipient(treasury, 10 ether, address(0));
+        vm.stopPrank();
+        vm.startPrank(address(liquifierInstance));
+        liquidityPoolInstance.depositToRecipient(treasury, 10 ether, address(0));
+        vm.stopPrank();
+        vm.startPrank(bob);
+        vm.expectRevert();
+        liquidityPoolInstance.depositToRecipient(treasury, 10 ether, address(0));
         vm.stopPrank();
     }
 }
