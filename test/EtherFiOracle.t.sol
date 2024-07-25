@@ -643,10 +643,13 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_execute_task_treasury_payout() public {
+        vm.startPrank(superAdmin);
+        roleRegistry.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), chad);
         vm.startPrank(owner);
         etherFiOracleInstance.addCommitteeMember(chad);
-        etherFiOracleInstance.setQuorumSize(2);
+        etherFiOracleInstance.setQuorumSize(1);
         liquidityPoolInstance.setTreasury(address(owner));
+        etherFiAdminInstance.setValidatorTaskBatchSize(10);
         vm.stopPrank();
 
         _moveClock(1024 + 2 * slotsPerEpoch);
@@ -654,11 +657,17 @@ contract EtherFiOracleTest is TestSetup {
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         _initReportBlockStamp(report);
 
-        // Assume that the accruedRewards must be 1 ether, all the time
-
-        // Alice submited the correct report 
-        vm.prank(alice);
+        deal(chad, 1000000 ether);
+        liquidityPoolInstance.deposit{value: 1000000 ether}();
         report.accruedRewards = 90 ether;
         report.protocolFees = 10 ether;
+
+        vm.startPrank(chad);
+        etherFiOracleInstance.submitReport(report);
+        skip(1000);
+        etherFiAdminInstance.executeTasks(report);
+        uint256 ownerBal = eETHInstance.balanceOf(address(owner));
+        assertApproxEqAbs(ownerBal, 10 ether, 1);
+        vm.stopPrank();
     }
 }
