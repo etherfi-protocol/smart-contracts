@@ -50,7 +50,7 @@ interface IEtherFiOracle {
     function isConsensusReached(bytes32 _hash) external view returns (bool);
     function getConsensusTimestamp(bytes32 _hash) external view returns (uint32);
     function getConsensusSlot(bytes32 _hash) external view returns (uint32);
-    function generateReportHash(OracleReport calldata _report) external view returns (bytes32);
+    function generateReportHash(OracleReport calldata _report) external pure returns (bytes32);
     function computeSlotAtTimestamp(uint256 timestamp) external view returns (uint32);
 
     function addCommitteeMember(address _address) external;
