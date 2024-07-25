@@ -28,6 +28,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         etherFiAdminInstance.upgradeTo(address(newEtherFiAdminImplementation));
         etherFiOracleInstance.upgradeTo(address(newEtherFiOracleImplementation));
         liquidityPoolInstance.setTreasury(alice);  
+        etherFiAdminInstance.updateIsSafe(true);
         vm.stopPrank();
     }
 
@@ -59,6 +60,17 @@ contract eethPayoutUpgradeTest is TestSetup {
         vm.startPrank(oracleAdmin);
         etherFiOracleInstance.submitReport(_report);
         skip(1000);
+    }
+
+    function test_largeMint() public {
+        IEtherFiOracle.OracleReport memory report = generateReport();
+        report.protocolFees = 1000 ether;
+        vm.startPrank(owner);
+        etherFiAdminInstance.updateIsSafe(false);
+        vm.stopPrank();
+        test_submitReport(report);
+        etherFiAdminInstance.executeTasks(report, new bytes[](0), new bytes[](0));
+        vm.stopPrank(); 
     }
 
     function test_protocolFeeBalance() public {

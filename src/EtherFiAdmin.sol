@@ -39,6 +39,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     uint16 public postReportWaitTimeInSlots;
     uint32 public lastAdminExecutionBlock;
+    bool public isSafe;
 
     mapping(address => bool) public pausers;
 
@@ -169,11 +170,12 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function _handleProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal { 
         require(_report.protocolFees >= 0, "EtherFiAdmin: protocol fees can't be negative");
         //assume all bnfts are owned by the  ethfund determine if the percentage of protocol rewards and fees percentage still align properly
-        int128 tnftAndBnftRewards = _report.protocolAccruedRewards * 32 / 29;
-        int128 n = tnftAndBnftRewards * 3 / 32 + tnftAndBnftRewards / 9;
-        require(tnftAndBnftRewards * 3 / 32 + tnftAndBnftRewards / 9 >= _report.protocolFees, "EtherFiAdmin: protocol fees too high");
-        //assume all bnfts are owned by liquidity pool
-        require(_report.protocolAccruedRewards / 9 <= _report.protocolFees, "EtherFiAdmin: protocol fees too low");
+        if(isSafe) {
+            int128 tnftAndBnftRewards = _report.protocolAccruedRewards * 32 / 29;
+            require(tnftAndBnftRewards * 3 / 32 + tnftAndBnftRewards / 9 >= _report.protocolFees, "EtherFiAdmin: protocol fees too high");
+            //assume all bnfts are owned by liquidity pool
+            require(_report.protocolAccruedRewards / 9 <= _report.protocolFees, "EtherFiAdmin: protocol fees too low");
+        }
         liquidityPool.payProtocolFees(uint128(_report.protocolFees));
     }
 
@@ -253,6 +255,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         admins[_address] = _isAdmin;
 
         emit AdminUpdated(_address, _isAdmin);
+    }
+
+    function updateIsSafe(bool _isSafe) external onlyOwner {
+        isSafe = _isSafe;
     }
 
     function updatePauser(address _address, bool _isPauser) external onlyOwner {
