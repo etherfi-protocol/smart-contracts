@@ -5,6 +5,8 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
+import "./RoleRegistry.sol";
+
 import "./interfaces/IEtherFiOracle.sol";
 import "./interfaces/IStakingManager.sol";
 import "./interfaces/IAuctionManager.sol";
@@ -12,12 +14,6 @@ import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
-
-import "forge-std/console.sol";
-
-interface IEtherFiPausable {
-    function paused() external view returns (bool);
-}
 
 contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
@@ -42,7 +38,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     IMembershipManager public membershipManager;
     IWithdrawRequestNFT public withdrawRequestNft;
 
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
 
     uint32 public lastHandledReportRefSlot;
     uint32 public lastHandledReportRefBlock;
@@ -53,10 +49,14 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint16 public postReportWaitTimeInSlots;
     uint32 public lastAdminExecutionBlock;
 
-    mapping(address => bool) public pausers;
+    mapping(address => bool) public DEPRECATED_pausers;
 
     mapping(bytes32 => TaskStatus) public validatorManagementTaskStatus;
     uint16 validatorTaskBatchSize;
+
+    RoleRegistry public roleRegistry;
+
+    bytes32 public constant ETHERFI_ADMIN_ADMIN_ROLE = keccak256("ETHERFI_ADMIN_ADMIN_ROLE");
 
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
@@ -64,6 +64,9 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event ValidatorManagementTaskCreated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators, uint32[] _timestamps, TaskType _taskType);
     event ValidatorManagementTaskCompleted(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators, uint32[] _timestamps, TaskType _taskType);
     event ValidatorManagementTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators, uint32[] _timestamps,TaskType _taskType);
+
+    error IncorrectRole();
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -94,6 +97,15 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
 
+    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+
+        // TODO: compile list of values in DEPRECATED_pausers to clear out
+        // TODO: compile list of values in DEPRECATED_admins to clear out
+        roleRegistry = RoleRegistry(_roleRegistry);
+    }
+
+
     function setValidatorTaskBatchSize(uint16 _batchSize) external onlyOwner {
         validatorTaskBatchSize = _batchSize;
     }
@@ -109,7 +121,9 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return true;
     }
 
-    function executeTasks(IEtherFiOracle.OracleReport calldata _report) external isAdmin() {
+    function executeTasks(IEtherFiOracle.OracleReport calldata _report) external {
+        if (!roleRegistry.hasRole(ETHERFI_ADMIN_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         bytes32 reportHash = etherFiOracle.generateReportHash(_report);
         uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
         require(etherFiOracle.isConsensusReached(reportHash), "EtherFiAdmin: report didn't reach consensus");
@@ -132,7 +146,9 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     //_timestamp will only be used for TaskType.ProcessNodeExit and pubkeys and signatures will only be used for TaskType.ValidatorApproval
-    function executeValidatorManagementTask(bytes32 _reportHash, uint256[] calldata _validators, uint32[] calldata _timestamps, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external isAdmin() {
+    function executeValidatorManagementTask(bytes32 _reportHash, uint256[] calldata _validators, uint32[] calldata _timestamps, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external {
+        if (!roleRegistry.hasRole(ETHERFI_ADMIN_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators, _timestamps));
         require(validatorManagementTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
@@ -152,7 +168,9 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit ValidatorManagementTaskCompleted(taskHash, _reportHash, _validators, _timestamps, taskType);
     }
 
-    function invalidateValidatorManagementTask(bytes32 _reportHash, uint256[] calldata _validators, uint32[] calldata _timestamps) external isAdmin() {
+    function invalidateValidatorManagementTask(bytes32 _reportHash, uint256[] calldata _validators, uint32[] calldata _timestamps) external {
+        if (!roleRegistry.hasRole(ETHERFI_ADMIN_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators, _timestamps));
         require(validatorManagementTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
         require(!validatorManagementTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
@@ -243,21 +261,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return (lastHandledReportRefBlock == 0) ? 0 : lastHandledReportRefBlock + 1;
     }
 
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        admins[_address] = _isAdmin;
-
-        emit AdminUpdated(_address, _isAdmin);
-    }
-
-    function updatePauser(address _address, bool _isPauser) external onlyOwner {
-        pausers[_address] = _isPauser;
-    }
-
     function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external onlyOwner {
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
     }
 
-    function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external isAdmin {
+    function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external {
+        if (!roleRegistry.hasRole(ETHERFI_ADMIN_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
 
@@ -266,15 +276,4 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
-
-    modifier isAdmin() {
-        require(admins[msg.sender] || msg.sender == owner(), "EtherFiAdmin: not an admio");
-        _;
-    }
-
-    modifier isPauser() {
-        require(pausers[msg.sender] || msg.sender == owner(), "EtherFiAdmin: not a pauser");
-        _;
-    }
 }

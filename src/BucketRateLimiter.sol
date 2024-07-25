@@ -16,8 +16,8 @@ contract BucketRateLimiter is IRateLimiter, IPausable, Initializable, PausableUp
     BucketLimiter.Limit public limit;
     address public consumer;
 
-    mapping(address => bool) public admins;
-    mapping(address => bool) public pausers;
+    mapping(address => bool) public DEPRECATED_admins;
+    mapping(address => bool) public DEPRECATED_pausers;
 
     mapping(address => BucketLimiter.Limit) public limitsPerToken;
 
@@ -43,6 +43,8 @@ contract BucketRateLimiter is IRateLimiter, IPausable, Initializable, PausableUp
     function initializeV2dot5(address _roleRegistry) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
 
+        // TODO: compile list of values in DEPRECATED_pausers to clear out
+        // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
     }
 
@@ -94,11 +96,6 @@ contract BucketRateLimiter is IRateLimiter, IPausable, Initializable, PausableUp
 
     function updateConsumer(address _consumer) external onlyOwner {
         consumer = _consumer;
-    }
-
-    function updateAdmin(address admin, bool status) external onlyOwner {
-        admins[admin] = status;
-        emit UpdatedAdmin(admin, status);
     }
 
     // Pauses the contract

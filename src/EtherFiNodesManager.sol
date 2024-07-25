@@ -283,7 +283,7 @@ contract EtherFiNodesManager is
     //  4. wait for 'minWithdrawalDelayBlocks' (= 7 days) delay to be passed
     //  5. perform `EtherFiNodesManager.completeQueuedWithdrawals` which calls `DelegationManager.completeQueuedWithdrawal`
     //  6. Finally, perform `EtherFiNodesManager.fullWithdraw`
-    function fullWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused{
+    function fullWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
         require (!IEtherFiNode(etherfiNode).claimDelayedWithdrawalRouterWithdrawals(maxEigenlayerWithdrawals, true, _validatorId), "PENDING_WITHDRAWALS");

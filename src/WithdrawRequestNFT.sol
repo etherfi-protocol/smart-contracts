@@ -9,6 +9,7 @@ import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IMembershipManager.sol";
+import "./RoleRegistry.sol";
 
 
 contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IWithdrawRequestNFT {
@@ -18,17 +19,23 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     IMembershipManager public membershipManager;
 
     mapping(uint256 => IWithdrawRequestNFT.WithdrawRequest) private _requests;
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
 
     uint32 public nextRequestId;
     uint32 public lastFinalizedRequestId;
     uint96 public accumulatedDustEEthShares; // to be burned or used to cover the validator churn cost
+
+    RoleRegistry public roleRegistry;
+
+    bytes32 public constant WITHDRAW_NFT_ADMIN_ROLE = keccak256("WITHDRAW_NFT_ADMIN_ROLE");
 
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
     event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
     event WithdrawRequestInvalidated(uint32 indexed requestId);
     event WithdrawRequestValidated(uint32 indexed requestId);
     event WithdrawRequestSeized(uint32 indexed requestId);
+
+    error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -46,6 +53,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         eETH = IeETH(_eEthAddress);
         membershipManager = IMembershipManager(_membershipManagerAddress);
         nextRequestId = 1;
+    }
+
+    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+
+        // TODO: compile list of values in DEPRECATED_admins to clear out
+        roleRegistry = RoleRegistry(_roleRegistry);
     }
 
     /// @notice creates a withdraw request and issues an associated NFT to the recipient
@@ -121,7 +135,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     // a function to transfer accumulated shares to admin
-    function burnAccumulatedDustEEthShares() external onlyAdmin {
+    function burnAccumulatedDustEEthShares() external {
+        if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         require(eETH.totalShares() > accumulatedDustEEthShares, "Inappropriate burn");
         uint256 amount = accumulatedDustEEthShares;
         accumulatedDustEEthShares = 0;
@@ -167,11 +182,15 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return _requests[requestId].isValid;
     }
 
-    function finalizeRequests(uint256 requestId) external onlyAdmin {
+    function finalizeRequests(uint256 requestId) external {
+        if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         lastFinalizedRequestId = uint32(requestId);
     }
 
-    function invalidateRequest(uint256 requestId) external onlyAdmin {
+    function invalidateRequest(uint256 requestId) external {
+        if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         require(isValid(requestId), "Request is not valid");
 
         if (isFinalized(requestId)) {
@@ -184,16 +203,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestInvalidated(uint32(requestId));
     }
 
-    function validateRequest(uint256 requestId) external onlyAdmin {
+    function validateRequest(uint256 requestId) external {
+        if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         require(!_requests[requestId].isValid, "Request is valid");
         _requests[requestId].isValid = true;
 
         emit WithdrawRequestValidated(uint32(requestId));
-    }
-
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        require(_address != address(0), "Cannot be address zero");
-        admins[_address] = _isAdmin;
     }
 
     // invalid NFTs is non-transferable except for the case they are being burnt by the owner via `seizeInvalidRequest`
@@ -208,11 +224,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
-    }
-
-    modifier onlyAdmin() {
-        require(admins[msg.sender], "Caller is not the admin");
-        _;
     }
 
     modifier onlyLiquidtyPool() {

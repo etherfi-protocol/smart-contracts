@@ -94,9 +94,6 @@ contract BucketRateLimiterTest is TestSetup {
     
     function test_access_control() public {
         vm.expectRevert("Ownable: caller is not the owner");
-        limiter.updateAdmin(address(0), true);
-
-        vm.expectRevert("Ownable: caller is not the owner");
         limiter.setCapacity(100 ether);
 
         vm.expectRevert("Ownable: caller is not the owner");

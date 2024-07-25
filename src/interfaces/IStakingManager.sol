@@ -31,6 +31,4 @@ interface IStakingManager {
     function batchCancelDepositAsBnftHolder(uint256[] calldata _validatorIds, address _caller) external;
 
     function instantiateEtherFiNode(bool _createEigenPod) external returns (address);
-
-    function updateAdmin(address _address, bool _isAdmin) external;
 }

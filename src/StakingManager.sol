@@ -57,9 +57,15 @@ contract StakingManager is
 
     address public DEPRECATED_admin;
     address public nodeOperatorManager;
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
 
     RoleRegistry public roleRegistry;
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ROLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 public constant STAKING_MANAGER_ADMIN_ROLE = keccak256("STAKING_MANAGER_ADMIN_ROLE");
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -102,12 +108,13 @@ contract StakingManager is
     function initializeOnUpgrade(address _nodeOperatorManager, address _etherFiAdmin) external onlyOwner {
         DEPRECATED_admin = address(0);
         nodeOperatorManager = _nodeOperatorManager;
-        admins[_etherFiAdmin] = true;
+        DEPRECATED_admins[_etherFiAdmin] = true;
     }
 
     function initializeV2dot5(address _roleRegistry) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
 
+        // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
     }
     
@@ -237,7 +244,9 @@ contract StakingManager is
 
     /// @notice Sets the max number of deposits allowed at a time
     /// @param _newMaxBatchDepositSize the max number of deposits allowed
-    function setMaxBatchDepositSize(uint128 _newMaxBatchDepositSize) public onlyAdmin {
+    function setMaxBatchDepositSize(uint128 _newMaxBatchDepositSize) public {
+        if (!roleRegistry.hasRole(STAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         maxBatchDepositSize = _newMaxBatchDepositSize;
     }
 
@@ -285,15 +294,11 @@ contract StakingManager is
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
-    /// @notice Updates the address of the admin
-    /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        require(_address != address(0), "ZERO_ADDRESS");
-        admins[_address] = _isAdmin;
-    }
     
-    function setNodeOperatorManager(address _nodeOperateManager) external onlyAdmin {
+    function setNodeOperatorManager(address _nodeOperateManager) external {
+        if (!roleRegistry.hasRole(STAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         require(_nodeOperateManager != address(0), "ZERO_ADDRESS");
+
         nodeOperatorManager = _nodeOperateManager;
     }
 
@@ -465,10 +470,6 @@ contract StakingManager is
         }
     }
 
-    function _requireAdmin() internal view virtual {
-        require(admins[msg.sender], "NOT_ADMIN");
-    }
-
     function _verifyDepositState(bytes32 _depositRoot) internal view virtual {
         // disable deposit root check if none provided
         if (_depositRoot != 0x0000000000000000000000000000000000000000000000000000000000000000) {
@@ -508,11 +509,6 @@ contract StakingManager is
 
     modifier verifyDepositState(bytes32 _depositRoot) {
         _verifyDepositState(_depositRoot);
-        _;
-    }
-
-    modifier onlyAdmin() {
-        _requireAdmin();
         _;
     }
 }
