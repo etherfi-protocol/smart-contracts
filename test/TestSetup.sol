@@ -398,12 +398,6 @@ contract TestSetup is Test {
     function setUpLiquifier(uint8 forkEnum) internal {
         // intialize `pauser` and `roleRegistry` for testing against V2.5
         vm.startPrank(owner);
-            
-
-        if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
-            liquifierInstance.upgradeTo(address(new Liquifier()));
-            liquifierInstance.initializeV2dot5(address(roleRegistry));
-        }
 
         address impl = address(new BucketRateLimiter());
         bucketRateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
@@ -412,6 +406,11 @@ contract TestSetup is Test {
 
         bucketRateLimiter.setCapacity(40 ether);
         bucketRateLimiter.setRefillRatePerSecond(1 ether);
+
+        if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
+            liquifierInstance.upgradeTo(address(new Liquifier()));
+            liquifierInstance.initializeV2dot5(address(roleRegistry), address(pauserInstance));
+        }
 
         vm.warp(block.timestamp + 1 days);
 
