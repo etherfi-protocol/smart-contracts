@@ -785,7 +785,7 @@ contract TestSetup is Test {
         roleRegistry.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
         roleRegistry.grantRole(auctionInstance.AUCTION_ADMIN_ROLE(), alice);
         roleRegistry.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
-        roleRegistry.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_ADMIN_ROLE(), alice);
+        roleRegistry.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), alice);
         roleRegistry.grantRole(stakingManagerInstance.STAKING_MANAGER_ADMIN_ROLE(), alice);
         roleRegistry.grantRole(withdrawRequestNFTInstance.WITHDRAW_NFT_ADMIN_ROLE(), alice);
         roleRegistry.grantRole(etherFiOracleInstance.ORACLE_ADMIN_ROLE(), alice);

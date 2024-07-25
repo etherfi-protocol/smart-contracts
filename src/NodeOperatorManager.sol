@@ -45,7 +45,7 @@ contract NodeOperatorManager is INodeOperatorManager, IPausable, Initializable, 
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
-    bytes32 public constant NODE_OPERATOR_ADMIN_ROLE = keccak256("NODE_OPERATOR_ADMIN_ROLE");
+    bytes32 public constant NODE_OPERATOR_MANAGER_ADMIN_ROLE = keccak256("NODE_OPERATOR_MANAGER_ADMIN_ROLE");
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -158,7 +158,7 @@ contract NodeOperatorManager is INodeOperatorManager, IPausable, Initializable, 
         LiquidityPool.SourceOfFunds[] memory _approvedTags, 
         bool[] memory _approvals
     ) external {
-        if (!roleRegistry.hasRole(NODE_OPERATOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(NODE_OPERATOR_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         require(_users.length == _approvedTags.length && _users.length == _approvals.length, "Invalid array lengths");
 
         for(uint256 x; x < _approvedTags.length; x++) {
@@ -170,7 +170,7 @@ contract NodeOperatorManager is INodeOperatorManager, IPausable, Initializable, 
     /// @notice Adds an address to the whitelist
     /// @param _address Address of the user to add
     function addToWhitelist(address _address) external {
-        if (!roleRegistry.hasRole(NODE_OPERATOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(NODE_OPERATOR_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         whitelistedAddresses[_address] = true;
 
         emit AddedToWhitelist(_address);
@@ -179,7 +179,7 @@ contract NodeOperatorManager is INodeOperatorManager, IPausable, Initializable, 
     /// @notice Removed an address from the whitelist
     /// @param _address Address of the user to remove
     function removeFromWhitelist(address _address) external {
-        if (!roleRegistry.hasRole(NODE_OPERATOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(NODE_OPERATOR_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         whitelistedAddresses[_address] = false;
 
         emit RemovedFromWhitelist(_address);
