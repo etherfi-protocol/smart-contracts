@@ -136,6 +136,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     // a function to transfer accumulated shares to admin
     function burnAccumulatedDustEEthShares() external {
+        if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         require(eETH.totalShares() > accumulatedDustEEthShares, "Inappropriate burn");
         uint256 amount = accumulatedDustEEthShares;
         accumulatedDustEEthShares = 0;
