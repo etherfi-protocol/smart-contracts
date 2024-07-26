@@ -35,7 +35,7 @@ The proposal introduces a RoleRegistry contract that will serve as the source of
 
 ## References
 
-- [Pull Request #100](https://github.com/etherfi-protocol/smart-contracts/pull/100)
+- [Pull Request #84](https://github.com/etherfi-protocol/smart-contracts/pull/84)
 
 ## Copyright
 
