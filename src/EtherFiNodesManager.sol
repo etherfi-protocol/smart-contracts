@@ -420,6 +420,15 @@ contract EtherFiNodesManager is
         }
     }
 
+    // the etherfi node contract can interact with the external contracts. This feature is strictly controlled by the operating admin
+    // note that the `forwardCall.forwardCall` does not allow to put any value.
+    function callExternal(address to, uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
+        returnData = new bytes[](_validatorIds.length);
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
+        }
+    }
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  SETTER   --------------------------------------
     //--------------------------------------------------------------------------------------
