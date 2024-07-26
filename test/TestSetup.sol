@@ -1044,7 +1044,7 @@ contract TestSetup is Test {
     }
 
     function registerAsBnftHolder(address _user) internal {
-        (bool registered) = liquidityPoolInstance.bnftHoldersIndexes(_user);
+        (bool registered) = liquidityPoolInstance.validatorSpawner(_user);
         if (!registered) liquidityPoolInstance.registerAsBnftHolder(_user);
     }
 
@@ -1070,10 +1070,10 @@ contract TestSetup is Test {
         vm.deal(henry, 100000 ether);
         vm.deal(chad, 100000 ether);
 
-        (bool registered) = liquidityPoolInstance.bnftHoldersIndexes(alice);
+        (bool registered) = liquidityPoolInstance.validatorSpawner(alice);
         assertEq(registered, true);
 
-        (registered) = liquidityPoolInstance.bnftHoldersIndexes(henry);
+        (registered) = liquidityPoolInstance.validatorSpawner(henry);
         assertEq(registered, true);
     }
 

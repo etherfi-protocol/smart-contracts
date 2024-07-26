@@ -753,7 +753,7 @@ contract LiquidityPoolTest is TestSetup {
         registerAsBnftHolder(alice);
         vm.stopPrank();
 
-        (bool registered) = liquidityPoolInstance.bnftHoldersIndexes(alice);
+        (bool registered) = liquidityPoolInstance.validatorSpawner(alice);
         assertEq(registered, true);
     }
     
@@ -829,7 +829,7 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.prank(alice);
         liquidityPoolInstance.deRegisterBnftHolder(owner);
-        (bool registered) = liquidityPoolInstance.bnftHoldersIndexes(owner);
+        (bool registered) = liquidityPoolInstance.validatorSpawner(owner);
         assertEq(registered, false);
     }
 

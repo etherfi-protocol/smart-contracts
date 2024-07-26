@@ -62,7 +62,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     address public etherFiAdminContract;
     bool public DEPRECATED_whitelistEnabled;
     mapping(address => bool) public DEPRECATED_whitelisted;
-    mapping(address => BnftHoldersIndex) public bnftHoldersIndexes;
+    mapping(address => BnftHoldersIndex) public validatorSpawner;
 
     bool public restakeBnftDeposits;
     uint128 public ethAmountLockedForWithdrawal;
@@ -285,10 +285,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function batchDeposit(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, uint256 _validatorIdToShareSafeWith) public payable whenNotPaused returns (uint256[] memory) {
         address tnftHolder = address(this);
         address bnftHolder = isLpBnftHolder ? address(this) : msg.sender;
-        uint256 _stakerDepositAmountPerValidator = isLpBnftHolder ? 0 : 2 ether;
+        uint256 spawnerDepositAmountPerValidator = isLpBnftHolder ? 0 : 2 ether;
 
-        require(bnftHoldersIndexes[msg.sender].registered, "Incorrect Caller");        
-        require(msg.value == _numberOfValidators * _stakerDepositAmountPerValidator, "Not Enough Deposit");
+        require(validatorSpawner[msg.sender].registered, "Incorrect Caller");        
+        require(msg.value == _numberOfValidators * spawnerDepositAmountPerValidator, "Not Enough Deposit");
         require(totalValueInLp + msg.value >= 32 ether * _numberOfValidators, "Not enough balance");
 
         uint256[] memory newValidators = stakingManager.batchDepositWithBidIds(_candidateBidIds, _numberOfValidators, msg.sender, tnftHolder, bnftHolder, restakeBnftDeposits, _validatorIdToShareSafeWith);
@@ -296,7 +296,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         
         // In the case when some bids are already taken, we refund 2 ETH for each
         if (_numberOfValidators > newValidators.length) {
-            uint256 returnAmount = _stakerDepositAmountPerValidator * (_numberOfValidators - newValidators.length);
+            uint256 returnAmount = spawnerDepositAmountPerValidator * (_numberOfValidators - newValidators.length);
             _sendFund(msg.sender, returnAmount);
         }
 
@@ -395,9 +395,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @param _user The address of the BNFT player to register
     function registerAsBnftHolder(address _user) public {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        require(!bnftHoldersIndexes[_user].registered, "Already registered");  
+        require(!validatorSpawner[_user].registered, "Already registered");  
 
-        bnftHoldersIndexes[_user] = BnftHoldersIndex({registered: true});
+        validatorSpawner[_user] = BnftHoldersIndex({registered: true});
 
         emit BnftHolderRegistered(_user, 0);
     }
@@ -405,10 +405,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @notice Removes a BNFT player from the bnftHolders array
     /// @param _bNftHolder Address of the BNFT player to remove
     function deRegisterBnftHolder(address _bNftHolder) external {
-        require(bnftHoldersIndexes[_bNftHolder].registered, "Not registered");
+        require(validatorSpawner[_bNftHolder].registered, "Not registered");
         require(roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender), "Incorrect Caller");
         
-        delete bnftHoldersIndexes[_bNftHolder];
+        delete validatorSpawner[_bNftHolder];
 
         emit BnftHolderDeregistered(_bNftHolder, 0);
     }

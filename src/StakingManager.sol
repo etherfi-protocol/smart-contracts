@@ -120,18 +120,18 @@ contract StakingManager is
     /// @notice Allows depositing multiple stakes at once
     /// @dev Function gets called from the liquidity pool as part of the BNFT staker flow
     /// @param _candidateBidIds IDs of the bids to be matched with each stake
-    /// @param _staker the address of the BNFT player who originated the call to the LP
+    /// @param _validatorSpawner the address of the validator spawner
     /// @param _enableRestaking Eigen layer integration check to identify if restaking is possible
     /// @param _validatorIdToShareWithdrawalSafe the validator ID to use for the withdrawal safe
     /// @return Array of the bid IDs that were processed and assigned
-    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, address _staker, address _tnftHolder, address _bnftHolder, bool _enableRestaking, uint256 _validatorIdToShareWithdrawalSafe)
+    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, address _validatorSpawner, address _tnftHolder, address _bnftHolder, bool _enableRestaking, uint256 _validatorIdToShareWithdrawalSafe)
         public whenNotPaused nonReentrant returns (uint256[] memory)
     {
         require(msg.sender == liquidityPoolContract, "Incorrect Caller");
         require(_candidateBidIds.length >= _numberOfValidators && _numberOfValidators <= maxBatchDepositSize, "WRONG_PARAMS");
         require(auctionManager.numberOfActiveBids() >= _numberOfValidators, "NOT_ENOUGH_BIDS");
 
-        return _processDeposits(_candidateBidIds, _numberOfValidators, _staker, _tnftHolder, _bnftHolder, _enableRestaking, _validatorIdToShareWithdrawalSafe);
+        return _processDeposits(_candidateBidIds, _numberOfValidators, _validatorSpawner, _tnftHolder, _bnftHolder, _enableRestaking, _validatorIdToShareWithdrawalSafe);
     }
 
     /// @notice Creates validator object, mints NFTs, sets NB variables and deposits 1 ETH into beacon chain
@@ -140,20 +140,20 @@ contract StakingManager is
     /// @param _bNftRecipient Array of BNFT recipients
     /// @param _tNftRecipient Array of TNFT recipients
     /// @param _depositData Array of data structures to hold all data needed for depositing to the beacon chain
-    /// @param _staker address of the BNFT holder who initiated the transaction
+    /// @param _validatorSpawner the address of the validator spawner
     function batchRegisterValidators(
         uint256[] calldata _validatorId,
         address _bNftRecipient,
         address _tNftRecipient,
         DepositData[] calldata _depositData,
-        address _staker
+        address _validatorSpawner
     ) public payable whenNotPaused nonReentrant {
         require(msg.sender == liquidityPoolContract, "INCORRECT_CALLER");
         require(_validatorId.length <= maxBatchDepositSize && _validatorId.length == _depositData.length, "WRONG_PARAMS");
         require(msg.value == _validatorId.length * 1 ether, "DEPOSIT_AMOUNT_MISMATCH");
 
         for (uint256 x; x < _validatorId.length; ++x) {
-            _registerValidator(_validatorId[x], _bNftRecipient, _tNftRecipient, _depositData[x], _staker, 1 ether);
+            _registerValidator(_validatorId[x], _bNftRecipient, _tNftRecipient, _depositData[x], _validatorSpawner, 1 ether);
         }
     }
 
@@ -300,7 +300,7 @@ contract StakingManager is
     function _processDeposits(
         uint256[] calldata _candidateBidIds, 
         uint256 _numberOfDeposits,
-        address _staker,
+        address _validatorSpawner,
         address _tnftHolder,
         address _bnftHolder,
         bool _enableRestaking,
@@ -321,7 +321,7 @@ contract StakingManager is
                 auctionManager.updateSelectedBidInformation(bidId);
                 processedBidIds[processedBidIdsCount] = bidId;
                 processedBidIdsCount++;
-                _processDeposit(bidId, _staker, _tnftHolder, _bnftHolder, _enableRestaking, _validatorIdToShareWithdrawalSafe);
+                _processDeposit(bidId, _validatorSpawner, _tnftHolder, _bnftHolder, _enableRestaking, _validatorIdToShareWithdrawalSafe);
             }
         }
 
@@ -338,7 +338,7 @@ contract StakingManager is
     /// @param _bNftRecipient The address to receive the minted B-NFT
     /// @param _tNftRecipient The address to receive the minted T-NFT
     /// @param _depositData Data structure to hold all data needed for depositing to the beacon chain
-    /// @param _staker User who has begun the registration chain of transactions
+    /// @param _validatorSpawner User who has begun the registration chain of transactions
     /// however, instead of the validator key, it will include the IPFS hash
     /// containing the validator key encrypted by the corresponding node operator's public key
     function _registerValidator(
@@ -346,15 +346,15 @@ contract StakingManager is
         address _bNftRecipient, 
         address _tNftRecipient, 
         DepositData calldata _depositData, 
-        address _staker,
+        address _validatorSpawner,
         uint256 _depositAmount
     ) internal {
-        require(bidIdToStakerInfo[_validatorId].staker == _staker, "INCORRECT_CALLER");
+        require(bidIdToStakerInfo[_validatorId].staker == _validatorSpawner, "INCORRECT_CALLER");
         bytes memory withdrawalCredentials = nodesManager.getWithdrawalCredentials(_validatorId);
         bytes32 depositDataRoot = depositRootGenerator.generateDepositRoot(_depositData.publicKey, _depositData.signature, withdrawalCredentials, _depositAmount);
         require(depositDataRoot == _depositData.depositDataRoot, "WRONG_ROOT");
 
-        bytes32 fullHash = keccak256(abi.encode(_validatorId, _staker, _tNftRecipient, _bNftRecipient));
+        bytes32 fullHash = keccak256(abi.encode(_validatorId, _validatorSpawner, _tNftRecipient, _bNftRecipient));
         bytes10 truncatedHash = bytes10(fullHash);
         require(truncatedHash == bidIdToStakerInfo[_validatorId].hash, "INCORRECT_HASH");
 
@@ -389,12 +389,12 @@ contract StakingManager is
 
     /// @notice Update the state of the contract now that a deposit has been made
     /// @param _bidId The bid that won the right to the deposit
-    function _processDeposit(uint256 _bidId, address _staker, address _tnftHolder, address _bnftHolder, bool _enableRestaking, uint256 _validatorIdToShareWithdrawalSafe) internal {
+    function _processDeposit(uint256 _bidId, address _validatorSpawner, address _tnftHolder, address _bnftHolder, bool _enableRestaking, uint256 _validatorIdToShareWithdrawalSafe) internal {
         // Compute the keccak256 hash of the input data
-        bytes32 fullHash = keccak256(abi.encode(_bidId, _staker, _tnftHolder, _bnftHolder));
+        bytes32 fullHash = keccak256(abi.encode(_bidId, _validatorSpawner, _tnftHolder, _bnftHolder));
         bytes10 truncatedHash = bytes10(fullHash);
         
-        bidIdToStakerInfo[_bidId] = StakerInfo(_staker, 0, truncatedHash);
+        bidIdToStakerInfo[_bidId] = StakerInfo(_validatorSpawner, 0, truncatedHash);
         uint256 validatorId = _bidId;
 
         // register a withdrawalSafe for this bid/validator, creating a new one if necessary
@@ -410,7 +410,7 @@ contract StakingManager is
         }
         nodesManager.registerValidator(validatorId, _enableRestaking, etherfiNode);
 
-        emit StakeDeposit(_staker, _bidId, etherfiNode, _enableRestaking);
+        emit StakeDeposit(_validatorSpawner, _bidId, etherfiNode, _enableRestaking);
     }
 
     /// @notice Cancels a users stake
