@@ -272,16 +272,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// Step 1. [Deposit]
     /// @param _candidateBidIds validator IDs that have been matched with the BNFT holder on the FE
     /// @param _numberOfValidators how many validators the user wants to spin up. This can be less than the candidateBidIds length. 
-    ///         we may have more Ids sent in than needed to spin up incase some ids fail.
     function batchDeposit(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators) external payable whenNotPaused returns (uint256[] memory) {
         return batchDeposit(_candidateBidIds, _numberOfValidators, 0);
     }
 
-    /// @param _candidateBidIds validator IDs that have been matched with the BNFT holder on the FE
-    /// @param _numberOfValidators how many validators the user wants to spin up. This can be less than the candidateBidIds length. 
-    ///         we may have more Ids sent in than needed to spin up incase some ids fail.
-    /// @param _validatorIdToShareSafeWith The validator ID of the validator that the user wants to shafe the withdrawal safe with
-    /// @return Array of bids that were successfully processed.
+    /// @param _candidateBidIds the bid IDs of the node operators that the spawner wants to spin up validators for
+    /// @param _numberOfValidators how many validators the user wants to spin up; `len(_candidateBidIds)` must be >= `_numberOfValidators`
+    /// @param _validatorIdToShareSafeWith the validator ID of the validator that the spawner wants to shafe the withdrawal safe with
+    /// @return Array of bid IDs that were successfully processed.
     function batchDeposit(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, uint256 _validatorIdToShareSafeWith) public payable whenNotPaused returns (uint256[] memory) {
         address tnftHolder = address(this);
         address bnftHolder = isLpBnftHolder ? address(this) : msg.sender;
@@ -304,14 +302,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     /// Step 3. [Register]
-    /// @notice register validators they have deposited. This triggers a 1 ETH transaction to the beacon chain.
-    /// @param _validatorIds The ids of the validators to register
-    /// @param _registerValidatorDepositData As in the solo staking flow, the BNFT player must send in a deposit data object (see ILiquidityPool for struct data)
-    ///         to register the validators. However, the signature and deposit data root must be for a 1 ETH deposit
-    /// @param _depositDataRootApproval The deposit data roots for each validator for the 31 ETH transaction which will happen in the approval
-    ///         step. See the Staking Manager for details.
-    /// @param _signaturesForApprovalDeposit Much like the deposit data root. This is the signature for each validator for the 31 ETH 
-    ///         transaction which will happen in the approval step.
+    /// @notice register validators' keys and trigger a 1 ETH transaction to the beacon chain.
+    /// @param _validatorIds the ids of the validators to register
+    /// @param _registerValidatorDepositData the signature and deposit data root for a 1 ETH deposit
+    /// @param _depositDataRootApproval the root hash of the deposit data for the 31 ETH deposit which will happen in the approval step
+    /// @param _signaturesForApprovalDeposit the signature for the 31 ETH deposit which will happen in the approval step.
     function batchRegister(
         uint256[] calldata _validatorIds,
         IStakingManager.DepositData[] calldata _registerValidatorDepositData,
@@ -337,12 +332,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     //. Step 4. [Approve]
-    /// @notice Approves validators and triggers the 31 ETH transaction to the beacon chain (rest of the stake).
-    /// @dev This gets called by the Oracle and only when it has confirmed the withdraw credentials of the 1 ETH deposit in the registration
+    /// @notice Approves validators and triggers the 31 ETH deposit to the beacon chain
+    /// @dev This gets called by the Oracle only when it has confirmed the withdraw credentials of the 1 ETH deposit in the registration
     ///         phase match the withdraw credentials stored on the beacon chain. This prevents a front-running attack.
-    /// @param _validatorIds The IDs of the validators to be approved
-    /// @param _pubKey The pubKey for each validator being spun up.
-    /// @param _signature The signatures for each validator for the 31 ETH transaction that were emitted in the register phase
+    /// @param _validatorIds the IDs of the validators to be approved
+    /// @param _pubKey the pubKey for each validator being spun up.
+    /// @param _signature the signatures for each validator for the 31 ETH deposit that were emitted in the register phase
     function batchApproveRegistration(
         uint256[] memory _validatorIds, 
         bytes[] calldata _pubKey,
@@ -369,9 +364,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         stakingManager.batchApproveRegistration{value: 31 ether * _validatorIds.length}(_validatorIds, _pubKey, _signature, depositDataRootApproval);
     }
 
-    /// @notice Cancels a BNFT players deposits (whether validator is registered or deposited. Just not live on beacon chain)
-    /// @dev This is called only in the BNFT player flow
-    /// @param _validatorIds The IDs to be cancelled
+    /// @notice Cancels the process
+    /// @param _validatorIds the IDs to be cancelled
+    /// Note that if the spawner cancels the flow after the registration (where the 1 ETH deposit is made), the 1 ETH refund must be made manually
     function batchCancelDeposit(uint256[] calldata _validatorIds) external whenNotPaused {
         address bnftHolder = isLpBnftHolder ? address(this) : msg.sender;
         uint256 returnAmount = 0;
