@@ -20,6 +20,12 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     mapping (address => bool) public whitelistedSpender;
 
     //--------------------------------------------------------------------------------------
+    //------------------------------------  EVENTS  ----------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    event WhitelistStatusChange(address indexed account, bool isWhitelisted);
+
+    //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
 
@@ -114,8 +120,10 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     /// @param _spenders An array of spender addresses
     /// @param _isWhitelisted Boolean value to set the whitelisted status
     function setWhitelistedSpender(address[] calldata _spenders, bool _isWhitelisted) external onlyOwner {
-        for (uint i = 0; i < _spenders.length; i++) {
+        uint256 length = _spenders.length;
+        for (uint i = 0; i < length; i++) {
             whitelistedSpender[_spenders[i]] = _isWhitelisted;
+            emit WhitelistStatusChange(_spenders[i], _isWhitelisted);
         }
     }
 
