@@ -500,53 +500,21 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         return (payouts[0], payouts[1], payouts[2], payouts[3]);
     }
 
+    //--------------------------------------------------------------------------------------
+    //-------------------------------- CALL FORWARDING  ------------------------------------
+    //--------------------------------------------------------------------------------------
 
-    function callEigenPod(bytes memory data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
-        _verifyEigenPodCall(data);
-        return Address.functionCall(eigenPod, data);
+    function callEigenPod(bytes calldata _data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
+        return Address.functionCall(eigenPod, _data);
     }
 
-    // As an optimization, it skips the call to 'etherFiNodesManager' back again to retrieve the target address
-    function forwardCall(address to, bytes memory data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
-        _verifyForwardCall(to, data);
-        return Address.functionCall(to, data);
+    function forwardCall(address _to, bytes calldata _data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
+        return Address.functionCall(_to, _data);
     }
     
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
-
-    function _verifyEigenPodCall(bytes memory data) internal view {
-        bytes4 selector;
-        assembly {
-            selector := mload(add(data, 0x20))
-        }
-
-        // withdrawNonBeaconChainETHBalanceWei
-        if (selector == IEigenPod.withdrawNonBeaconChainETHBalanceWei.selector) {
-            require(data.length >= 36, "INVALID_DATA_LENGTH");
-            address recipient;
-            assembly {
-                recipient := mload(add(data, 0x24))
-            }
-            // No withdrawal to any other address than the safe
-            require (recipient == address(this), "INCORRECT_RECIPIENT");
-        }
-
-        // recoverTokens(IERC20[], uint256[], address)
-        if (selector == IEigenPod.recoverTokens.selector) {
-            revert("NOT_ALLOWED");
-        }
-    }
-
-    function _verifyForwardCall(address to, bytes memory data) internal view {
-        bytes4 selector;
-        assembly {
-            selector := mload(add(data, 0x20))
-        }
-        bool allowed = (selector != IDelegationManager.completeQueuedWithdrawal.selector && selector != IDelegationManager.completeQueuedWithdrawals.selector);
-        require (allowed, "NOT_ALLOWED");
-    }
 
     function _applyNonExitPenalty(
         IEtherFiNodesManager.ValidatorInfo memory _info, 
@@ -795,7 +763,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     */
     function isValidSignature(bytes32 _digestHash, bytes memory _signature) public view override returns (bytes4 magicValue) {
         (address signer, ) = ECDSA.tryRecover(_digestHash, _signature);
-        bool isAdmin = IEtherFiNodesManager(etherFiNodesManager).eigenLayerOperatingAdmin(signer);
+        bool isAdmin = IEtherFiNodesManager(etherFiNodesManager).operatingAdmin(signer);
         return isAdmin ? this.isValidSignature.selector : bytes4(0xffffffff);
     }
 
