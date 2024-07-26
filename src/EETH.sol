@@ -43,8 +43,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     //------------------------------------  EVENTS  ----------------------------------------
     //--------------------------------------------------------------------------------------
 
-    event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
-
+    event TransferShares(address indexed from, address indexed to, uint256 sharesValue);
+    
+    event WhitelistStatusChange(address indexed account, bool isWhitelisted);
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
@@ -196,8 +197,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     //--------------------------------------------------------------------------------------
 
     function setWhitelistedSpender(address[] calldata _spenders, bool _isWhitelisted) external onlyOwner {
-        for (uint i = 0; i < _spenders.length; i++) {
+        uint256 length = _spenders.length;
+        for (uint i = 0; i < length; i++) {
             whitelistedSpender[_spenders[i]] = _isWhitelisted;
+            emit WhitelistStatusChange(_spenders[i], _isWhitelisted);
         }
     }
 
