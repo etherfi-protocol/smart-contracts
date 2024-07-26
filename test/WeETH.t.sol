@@ -118,6 +118,20 @@ contract WeETHTest is TestSetup {
         assertEq(eETHInstance.balanceOf(bob), 10 ether);
     }
 
+    function test_WrapWithPermitGriefingAttack() public {
+        // alice sends a `wrapWithPermit` transaction to mempool with the following inputs
+        uint256 aliceNonce = eETHInstance.nonces(alice);
+        ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(weEthInstance), 5 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
+
+        // bob sees alice's `wrapWithPermit` in the mempool and frontruns her transaction with copied inputs 
+        vm.prank(bob);
+        eETHInstance.permit(alice, address(weEthInstance), 5 ether, 2**256 - 1, permitInput.v, permitInput.r, permitInput.s);
+
+        startHoax(alice);
+        // alices transaction still succeeds as the try catch swallows the error
+        weEthInstance.wrapWithPermit(5 ether, permitInput);
+    }
+
     function test_UnWrapEETHFailsIfZeroAmount() public {
         vm.expectRevert("Cannot unwrap a zero amount");
         weEthInstance.unwrap(0);

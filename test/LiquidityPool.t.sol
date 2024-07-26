@@ -190,6 +190,25 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
     }
 
+    function test_WithdrawLiquidityPoolGriefing() public {
+        vm.deal(alice, 3 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 2 ether}();
+        assertEq(eETHInstance.balanceOf(alice), 2 ether);
+
+        // alice sends a `requestWithdrawWithPermit` transaction to mempool with the following inputs
+        uint256 aliceNonce = eETHInstance.nonces(alice);
+        ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(liquidityPoolInstance), 2 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
+
+        // bob sees alice's `requestWithdrawWithPermit` in the mempool and frontruns her transaction with copied inputs 
+        vm.prank(bob);
+        eETHInstance.permit(alice, address(liquidityPoolInstance), 2 ether, 2**256 - 1, permitInput.v, permitInput.r, permitInput.s);
+
+        vm.prank(alice);
+        // alices transaction still succeeds as the try catch swallows the error
+        liquidityPoolInstance.requestWithdrawWithPermit(alice, 2 ether, permitInput);
+    }
+
     function test_WithdrawLiquidityPoolFails() public {
         vm.deal(bob, 100 ether);
         vm.startPrank(bob);
