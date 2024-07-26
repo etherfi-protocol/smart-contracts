@@ -44,7 +44,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     //--------------------------------------------------------------------------------------
 
     event TransferShares(address indexed from, address indexed to, uint256 sharesValue);
-    
     event WhitelistStatusChange(address indexed account, bool isWhitelisted);
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
