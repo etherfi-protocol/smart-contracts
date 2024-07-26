@@ -687,7 +687,6 @@ contract TestSetup is Test {
 
         // Setup dependencies
         vm.startPrank(alice);
-        _approveNodeOperators();
         _setUpNodeOperatorWhitelist();
         vm.stopPrank();
 
@@ -960,42 +959,6 @@ contract TestSetup is Test {
         vm.stopPrank();
     }
 
-    function _approveNodeOperators() internal {
-        address[] memory users = new address[](5);
-        users[0] = address(alice);
-        users[1] = address(bob);
-        users[2] = address(bob);
-        users[3] = address(owner);
-        users[4] = address(elvis);
-
-        ILiquidityPool.SourceOfFunds[] memory approvedTags = new ILiquidityPool.SourceOfFunds[](5);
-        approvedTags[0] = ILiquidityPool.SourceOfFunds.EETH;
-        approvedTags[1] = ILiquidityPool.SourceOfFunds.ETHER_FAN;
-        approvedTags[2] = ILiquidityPool.SourceOfFunds.EETH;
-        approvedTags[3] = ILiquidityPool.SourceOfFunds.EETH;
-        approvedTags[4] = ILiquidityPool.SourceOfFunds.EETH;
-
-        bool[] memory approvals = new bool[](5);
-        approvals[0] = true;
-        approvals[1] = true;
-        approvals[2] = true;
-        approvals[3] = true;
-        approvals[4] = true;
-
-        nodeOperatorManagerInstance.batchUpdateOperatorsApprovedTags(users, approvedTags, approvals);
-
-        address[] memory aliceUser = new address[](1);
-        aliceUser[0] = address(alice);
-
-        ILiquidityPool.SourceOfFunds[] memory aliceApprovedTags = new ILiquidityPool.SourceOfFunds[](1);
-        aliceApprovedTags[0] = ILiquidityPool.SourceOfFunds.ETHER_FAN;
-
-        bool[] memory aliceApprovals = new bool[](1);
-        aliceApprovals[0] = true;
-        nodeOperatorManagerInstance.batchUpdateOperatorsApprovedTags(aliceUser, aliceApprovedTags, aliceApprovals);
-
-    }
-
     function _initReportBlockStamp(IEtherFiOracle.OracleReport memory _report) internal view {
         (uint32 slotFrom, uint32 slotTo, uint32 blockFrom) = etherFiOracleInstance.blockStampForNextReport();
         _report.refSlotFrom = slotFrom;
@@ -1081,7 +1044,7 @@ contract TestSetup is Test {
     }
 
     function registerAsBnftHolder(address _user) internal {
-        (bool registered, uint32 index) = liquidityPoolInstance.bnftHoldersIndexes(_user);
+        (bool registered) = liquidityPoolInstance.bnftHoldersIndexes(_user);
         if (!registered) liquidityPoolInstance.registerAsBnftHolder(_user);
     }
 
@@ -1107,13 +1070,11 @@ contract TestSetup is Test {
         vm.deal(henry, 100000 ether);
         vm.deal(chad, 100000 ether);
 
-        (bool registered, uint32 index) = liquidityPoolInstance.bnftHoldersIndexes(alice);
+        (bool registered) = liquidityPoolInstance.bnftHoldersIndexes(alice);
         assertEq(registered, true);
-        assertEq(index, 0);
 
-        (registered, index) = liquidityPoolInstance.bnftHoldersIndexes(henry);
+        (registered) = liquidityPoolInstance.bnftHoldersIndexes(henry);
         assertEq(registered, true);
-        assertEq(index, 7);
     }
 
     function depositAndRegisterValidator(bool restaked) public returns (uint256) {
@@ -1138,7 +1099,7 @@ contract TestSetup is Test {
 
         // deposit against that bid with restaking enabled
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchDepositWithBidIds(createdBids, 1, alice, alice, alice, ILiquidityPool.SourceOfFunds.EETH, restaked, 0);
+        stakingManagerInstance.batchDepositWithBidIds(createdBids, 1, alice, alice, alice, restaked, 0);
 
         (IStakingManager.DepositData[] memory depositDataArray,,,) = _prepareForValidatorRegistration(createdBids);
         vm.deal(address(liquidityPoolInstance), 1 ether);
@@ -1194,21 +1155,6 @@ contract TestSetup is Test {
                 _ipfsHash,
                 10000
             );
-        }
-        vm.stopPrank();
-
-        vm.startPrank(admin);
-        {
-            address[] memory users = new address[](2);
-            ILiquidityPool.SourceOfFunds[] memory approvedTags = new ILiquidityPool.SourceOfFunds[](2);
-            bool[] memory approvals = new bool[](2);
-            users[0] = _nodeOperator;
-            users[1] = _nodeOperator;
-            approvedTags[0] = ILiquidityPool.SourceOfFunds.EETH;
-            approvedTags[1] = ILiquidityPool.SourceOfFunds.ETHER_FAN;
-            approvals[0] = true;
-            approvals[1] = true;
-            nodeOperatorManagerInstance.batchUpdateOperatorsApprovedTags(users, approvedTags, approvals);
         }
         vm.stopPrank();
 

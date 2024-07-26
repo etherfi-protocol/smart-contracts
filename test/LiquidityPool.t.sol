@@ -27,7 +27,6 @@ contract LiquidityPoolTest is TestSetup {
     
         vm.startPrank(alice);
         _setUpNodeOperatorWhitelist();
-        _approveNodeOperators();
 
         nodeOperatorManagerInstance.registerNodeOperator(
             _ipfsHash,
@@ -276,7 +275,7 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(eETHInstance.balanceOf(bob), 3 ether);
     }
 
-    function test_batchCancelDepositAsBnftHolder1() public {
+    function test_batchCancelDeposit1() public {
         vm.deal(owner, 100 ether);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
@@ -314,10 +313,10 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0 ether);
         assertEq(liquidityPoolInstance.totalValueInLp(), 60 ether);
 
-        // SD-1 "Anyone can call StakingManager.batchCancelDepositAsBnftHolder to cancel a deposit"
+        // SD-1 "Anyone can call StakingManager.batchCancelDeposit to cancel a deposit"
         vm.prank(bob);
         vm.expectRevert("INCORRECT_CALLER");
-        stakingManagerInstance.batchCancelDepositAsBnftHolder(newValidators, alice);
+        stakingManagerInstance.batchCancelDeposit(newValidators, alice);
 
         vm.prank(alice);
         liquidityPoolInstance.batchCancelDeposit(newValidators);
@@ -330,7 +329,7 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(address(liquidityPoolInstance).balance, 60 ether);
     }
 
-    function test_batchCancelDepositAsBnftHolderAfterRegistration() public {
+    function test_batchCancelDepositAfterRegistration() public {
         vm.deal(owner, 100 ether);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
@@ -402,7 +401,7 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.batchRegister(newValidators, depositDataArray, depositDataRootsForApproval, sig);
     }
     
-    function test_batchCancelDepositAsBnftHolderWithDifferentValidatorStages() public {
+    function test_batchCancelDepositWithDifferentValidatorStages() public {
         vm.deal(owner, 100 ether);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
@@ -754,11 +753,8 @@ contract LiquidityPoolTest is TestSetup {
         registerAsBnftHolder(alice);
         vm.stopPrank();
 
-        (bool registered, uint32 index) = liquidityPoolInstance.bnftHoldersIndexes(alice);
-        (address bnftHolder, ) = liquidityPoolInstance.bnftHolders(index);
+        (bool registered) = liquidityPoolInstance.bnftHoldersIndexes(alice);
         assertEq(registered, true);
-        assertEq(index, 0);
-        assertEq(bnftHolder, alice);
     }
     
     function test_DepositAsBnftHolderSimple() public {
@@ -831,29 +827,10 @@ contract LiquidityPoolTest is TestSetup {
     function test_DeRegisterBnftHolder() public {
         setUpBnftHolders();
 
-        (address ownerIndexAddress, ) = liquidityPoolInstance.bnftHolders(3);
-        (address henryIndexAddress, ) = liquidityPoolInstance.bnftHolders(7);
-        (address bobIndexAddress, ) = liquidityPoolInstance.bnftHolders(2);
-
-        assertEq(ownerIndexAddress, owner);
-        assertEq(henryIndexAddress, henry);
-        assertEq(bobIndexAddress, bob);
-
         vm.prank(alice);
         liquidityPoolInstance.deRegisterBnftHolder(owner);
-        (bool registered, ) = liquidityPoolInstance.bnftHoldersIndexes(owner);
+        (bool registered) = liquidityPoolInstance.bnftHoldersIndexes(owner);
         assertEq(registered, false);
-
-        (henryIndexAddress, ) = liquidityPoolInstance.bnftHolders(3);
-        assertEq(henryIndexAddress, henry);
-
-        vm.prank(bob);
-        liquidityPoolInstance.deRegisterBnftHolder(bob);
-        (registered, ) = liquidityPoolInstance.bnftHoldersIndexes(bob);
-        assertEq(registered, false);
-
-        (address elvisIndexAddress, ) = liquidityPoolInstance.bnftHolders(2);
-        assertEq(elvisIndexAddress, elvis);
     }
 
     function test_DeRegisterBnftHolderIfIncorrectCaller() public {

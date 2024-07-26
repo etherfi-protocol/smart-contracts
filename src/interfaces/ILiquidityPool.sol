@@ -34,12 +34,10 @@ interface ILiquidityPool {
 
     struct BnftHolder {
         address holder;
-        uint32 timestamp;
     }
 
     struct BnftHoldersIndex {
         bool registered;
-        uint32 index;
     }
 
     function numPendingDeposits() external view returns (uint32);
@@ -69,7 +67,5 @@ interface ILiquidityPool {
 
     function rebase(int128 _accruedRewards) external;
     function addEthAmountLockedForWithdrawal(uint128 _amount) external;
-    function reduceEthAmountLockedForWithdrawal(uint128 _amount) external;
-    
-    function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external;
+    function reduceEthAmountLockedForWithdrawal(uint128 _amount) external;    
 }
