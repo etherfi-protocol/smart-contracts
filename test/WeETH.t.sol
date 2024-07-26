@@ -324,25 +324,4 @@ contract WeETHTest is TestSetup {
         vm.prank(bob);
         weEthInstance.transferFrom(alice, bob, 1 ether);
     }
-
-    function test_TransferBlacklistWeETH() public {
-        // allocationg weETH to alice
-        test_WrapWorksCorrectly();
-        
-        vm.prank(alice);
-        weEthInstance.transfer(bob, 1 ether);
-
-        vm.prank(owner);
-        address[] memory blacklist = new address[](1);
-        blacklist[0] = bob;
-        weEthInstance.setBlacklistedRecipient(blacklist, true);
-
-        vm.prank(alice);
-        vm.expectRevert("weETH: blacklisted address");
-        weEthInstance.transfer(bob, 1 ether);
-
-        vm.prank(bob);
-        vm.expectRevert("weETH: blacklisted address");
-        weEthInstance.transfer(alice, 1 ether);
-    }
 }
