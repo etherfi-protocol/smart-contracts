@@ -40,11 +40,11 @@ contract StakingManager is
     uint128 public maxBatchDepositSize;
     uint128 public stakeAmount;
 
-    address public implementationContract;
+    address public etherFiNodeImplementation;
     address public liquidityPoolContract;
 
     bool public DEPRECATED_isFullStakeEnabled;
-    bytes32 public merkleRoot;
+    bytes32 public DEPRECATED_merkleRoot;
 
     ITNFT public TNFTInterfaceInstance;
     IBNFT public BNFTInterfaceInstance;
@@ -249,11 +249,11 @@ contract StakingManager is
     }
 
     function registerEtherFiNodeImplementationContract(address _etherFiNodeImplementationContract) public onlyOwner {
-        if (address(upgradableBeacon) != address(0) || address(implementationContract) != address(0)) revert ALREADY_SET();
+        if (address(upgradableBeacon) != address(0) || address(etherFiNodeImplementation) != address(0)) revert ALREADY_SET();
         require(_etherFiNodeImplementationContract != address(0), "ZERO_ADDRESS");
 
-        implementationContract = _etherFiNodeImplementationContract;
-        upgradableBeacon = new UpgradeableBeacon(implementationContract);      
+        etherFiNodeImplementation = _etherFiNodeImplementationContract;
+        upgradableBeacon = new UpgradeableBeacon(etherFiNodeImplementation);      
     }
 
     /// @notice Instantiates the TNFT interface
@@ -278,7 +278,7 @@ contract StakingManager is
         require(_newImplementation != address(0), "ZERO_ADDRESS");
         
         upgradableBeacon.upgradeTo(_newImplementation);
-        implementationContract = _newImplementation;
+        etherFiNodeImplementation = _newImplementation;
     }
 
     // Pauses the contract
