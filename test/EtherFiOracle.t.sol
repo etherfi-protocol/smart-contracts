@@ -3,8 +3,10 @@ pragma solidity ^0.8.13;
 
 import "./TestSetup.sol";
 import "forge-std/console2.sol";
+import "forge-std/console.sol";
 
 contract EtherFiOracleTest is TestSetup {
+    address treasury;
     function setUp() public {
         setUpTests();
         _upgradeMembershipManagerFromV0ToV1();
@@ -240,11 +242,11 @@ contract EtherFiOracleTest is TestSetup {
 
         (uint32 slotFrom, uint32 slotTo, uint32 blockFrom) = etherFiOracleInstance.blockStampForNextReport();
         assertEq(slotFrom, 0);
-        assertEq(slotTo, 1024-1);
+        assertEq(slotTo, 1024 - 1);
         assertEq(blockFrom, 0);
 
         report.refSlotFrom = 0;
-        report.refSlotTo = 1024-1;
+        report.refSlotTo = 1024 - 1;
         report.refBlockFrom = 0;
         report.refBlockTo = 1024-1;
 
@@ -642,16 +644,23 @@ contract EtherFiOracleTest is TestSetup {
         assertTrue(consensusReached); // succeeded
     }
 
-    function test_execute_task_treasury_payout() public {
+    function helper_execute_task() public {
         vm.startPrank(superAdmin);
-        roleRegistry.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), chad);
+        roleRegistry.grantRole(
+            etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(),
+            chad
+        );
         vm.startPrank(owner);
         etherFiOracleInstance.addCommitteeMember(chad);
         etherFiOracleInstance.setQuorumSize(1);
         liquidityPoolInstance.setTreasury(address(owner));
         etherFiAdminInstance.setValidatorTaskBatchSize(10);
+        treasury = address(owner);
         vm.stopPrank();
+    }
 
+    function test_execute_task_treasury_payout() public {
+        helper_execute_task();
         _moveClock(1024 + 2 * slotsPerEpoch);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
@@ -669,5 +678,106 @@ contract EtherFiOracleTest is TestSetup {
         uint256 ownerBal = eETHInstance.balanceOf(address(owner));
         assertApproxEqAbs(ownerBal, 10 ether, 1);
         vm.stopPrank();
+    }
+
+    function helper_realistic_execute_task_treasury_payout(uint128[10] memory _validatorRewards, bool[10] memory _isEthFundValidator, uint256 _count, uint128 _totalValidatorRewards) public {
+        helper_execute_task();
+        uint128 totalBnftRewards = 0; // ethfund validator bnft rewards
+        uint128 etherFiRewards = 0; // 10% of total rewards
+        uint128 protocolRewards = 0; // users rewards for staking
+
+        uint128 sumOfValRewards = 0;
+        _moveClock(1024 + 2 * slotsPerEpoch);
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        _initReportBlockStamp(report);
+
+        //Required for oracle report
+        vm.startPrank(chad);
+        deal(chad, 1000000 ether);
+        liquidityPoolInstance.deposit{value: 1000000 ether}();
+        vm.stopPrank();
+
+        //verify the sum is what is intended
+        for (uint i = 0; i < 10; i++) {
+            sumOfValRewards += _validatorRewards[i];
+        }
+        assert(sumOfValRewards == _totalValidatorRewards);
+
+        for (uint i = 0; i < _count; i++) {
+            if (_isEthFundValidator[i]) {
+                totalBnftRewards +=
+                    (((_validatorRewards[i] * 3) / 32) * 9) /
+                    10;
+                protocolRewards +=
+                    (((_validatorRewards[i] * 29) / 32) * 9) /
+                    10;
+            } else {
+                protocolRewards += (_validatorRewards[i] * 9) / 10;
+            }
+            etherFiRewards += _validatorRewards[i] / 10;
+        }
+        uint128 protocolFees = totalBnftRewards + etherFiRewards; // total rewards not going to users
+        report.accruedRewards = int128(protocolRewards);
+        report.protocolFees = int128(protocolFees);
+        vm.startPrank(chad);
+        etherFiOracleInstance.submitReport(report);
+        skip(1000);
+        etherFiAdminInstance.executeTasks(report);
+        uint256 treasuryBal = eETHInstance.balanceOf(treasury);
+        uint256 chadBal = eETHInstance.balanceOf(address(chad));
+        assertApproxEqAbs(treasuryBal, uint256(protocolFees), 1);
+        assertApproxEqAbs(uint256(1000000 ether) + uint256(protocolRewards), chadBal, 1);
+        vm.stopPrank();
+    }
+
+    function test_realistic_execute_task_treasury_payout() public {
+        uint128[10] memory validatorRewards = [
+            uint128(2 ether),
+            uint128(1 ether / 2),
+            uint128(5 ether),
+            uint128(1 ether / 2),
+            uint128(1 ether / 4),
+            uint128(1 ether / 4),
+            uint128(7 ether),
+            uint128(3 ether),
+            uint128(1 ether / 2),
+            uint128(1 ether)
+        ];
+        bool[10] memory isEthFundValidators = [true, false, true, false, false, false, true, true, false, true];
+        helper_realistic_execute_task_treasury_payout(validatorRewards, isEthFundValidators, 10, 20 ether);
+    }
+
+    function test_all_ethfund_vals_execute_task_treasury_payout() public {
+        uint128[10] memory validatorRewards = [
+            uint128(2 ether),
+            uint128(1 ether / 2),
+            uint128(5 ether),
+            uint128(1 ether / 2),
+            uint128(1 ether / 4),
+            uint128(1 ether / 4),
+            uint128(7 ether),
+            uint128(3 ether),
+            uint128(1 ether / 2),
+            uint128(1 ether)
+        ];
+        bool[10] memory isEthFundValidators = [true, true, true, true, true, true, true, true, true, true];
+        helper_realistic_execute_task_treasury_payout(validatorRewards, isEthFundValidators, 10, 20 ether);
+    }
+
+    function test_no_ethfund_vals_execute_task_treasury_payout() public {
+        uint128[10] memory validatorRewards = [
+            uint128(2 ether),
+            uint128(1 ether / 2),
+            uint128(5 ether),
+            uint128(1 ether / 2),
+            uint128(1 ether / 4),
+            uint128(1 ether / 4),
+            uint128(7 ether),
+            uint128(3 ether),
+            uint128(1 ether / 2),
+            uint128(1 ether)
+        ];
+        bool[10] memory isEthFundValidators = [false, false, false, false, false, false, false, false, false, false];
+        helper_realistic_execute_task_treasury_payout(validatorRewards, isEthFundValidators, 10, 20 ether);
     }
 }
