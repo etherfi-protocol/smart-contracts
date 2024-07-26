@@ -412,7 +412,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         // Chad becomes an admin
         vm.prank(owner);
         managerInstance.updateEigenLayerOperatingAdmin(chad, true);
-        assertTrue(managerInstance.eigenLayerOperatingAdmin(chad));
+        assertTrue(managerInstance.operatingAdmin(chad));
 
         // it works now
         {

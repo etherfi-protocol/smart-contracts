@@ -66,7 +66,12 @@ contract EtherFiNodesManager is
 
     IDelegationManager public delegationManager;
 
-    mapping(address => bool) public eigenLayerOperatingAdmin;
+    mapping(address => bool) public operatingAdmin;
+
+    // function -> allowed
+    mapping(bytes4 => bool) public allowedForwardedEigenpodCalls;
+    // function -> target_address -> allowed
+    mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -82,6 +87,9 @@ contract EtherFiNodesManager is
     event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
 
+    event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
+    event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
+
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
@@ -95,6 +103,8 @@ contract EtherFiNodesManager is
 
     error InvalidParams();
     error NonZeroAddress();
+    error ForwardedCallNotAllowed();
+    error InvalidForwardedCall();
 
     /// @dev Sets the revenue splits on deployment
     /// @dev AuctionManager, treasury and deposit contracts must be deployed first
@@ -189,7 +199,7 @@ contract EtherFiNodesManager is
         }
     }
 
-    function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes, bool _receiveAsTokens) external onlyEigenLayerOperatingAdmin {
+    function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes, bool _receiveAsTokens) external onlyOperatingAdmin {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address etherfiNode = etherfiNodeAddress[_validatorIds[i]];
             IEtherFiNode(etherfiNode).completeQueuedWithdrawal(withdrawals[i], middlewareTimesIndexes[i], _receiveAsTokens);
@@ -367,57 +377,62 @@ contract EtherFiNodesManager is
         _unRegisterValidator(_validatorId);
     }
 
-    // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/pods/EigenPod.sol
-    /// @notice Call the eigenPod contract
-    /// @param data to call eigenPod contract
-    // - withdrawBeforeRestaking
-    // - activateRestaking
-    // - verifyWithdrawalCredentials
-    // - recoverTokens
-    // - withdrawNonBeaconChainETHBalanceWei
-    // - 
-    // - verifyBalanceUpdates
-    // - verifyAndProcessWithdrawals
-    function callEigenPod(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
+    //--------------------------------------------------------------------------------------
+    //-------------------------------- CALL FORWARDING  ------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @notice Update the whitelist for external calls that can be executed by an EtherfiNode
+    /// @param _selector method selector
+    /// @param _target call target for forwarded call
+    /// @param _allowed enable or disable the call
+    function updateAllowedForwardedExternalCalls(bytes4 _selector, address _target, bool _allowed) external onlyAdmin {
+        allowedForwardedExternalCalls[_selector][_target] = _allowed;
+        emit AllowedForwardedExternalCallsUpdated(_selector, _target, _allowed);
+    }
+
+    /// @notice Update the whitelist for external calls that can be executed against the corresponding eigenpod
+    /// @param _selector method selector
+    /// @param _allowed enable or disable the call
+    function updateAllowedForwardedEigenpodCalls(bytes4 _selector, bool _allowed) external onlyAdmin {
+        allowedForwardedEigenpodCalls[_selector] = _allowed;
+        emit AllowedForwardedEigenpodCallsUpdated(_selector, _allowed);
+    }
+
+    function forwardEigenpodCall(uint256[] calldata _validatorIds, bytes[] calldata _data) external nonReentrant whenNotPaused onlyOperatingAdmin returns (bytes[] memory returnData) {
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(data[i]);
+            _verifyForwardedEigenpodCall(_data[i], _validatorIds[i]);
+            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(_data[i]);
         }
     }
 
-    // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/core/DelegationManager.sol
-    /// @notice Call the Eigenlayer delegation Manager contract
-    /// @param data to call eigenPod contract
-    // - delegateTo(address operator, SignatureWithExpiry memory approverSignatureAndExpiry, bytes32 approverSalt)
-    // - undelegate(address staker)
-    // - completeQueuedWithdrawal
-    // - queueWithdrawals
-    function callDelegationManager(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
-        address to = address(delegationManager);
+    function forwardExternalCall(uint256[] calldata _validatorIds, bytes[] calldata _data, address _target) external nonReentrant whenNotPaused onlyOperatingAdmin returns (bytes[] memory returnData) {
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
+            _verifyForwardedExternalCall(_target, _data[i], _validatorIds[i]);
+            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(_target, _data[i]);
         }
     }
 
-    // https://github.com/Layr-Labs/eigenlayer-contracts/blob/dev/src/contracts/pods/EigenPodManager.sol
-    /// @notice Call the Eigenlayer EigenPod Manager contract
-    /// @param data to call contract
-    // - recordBeaconChainETHBalanceUpdate
-    function callEigenPodManager(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
-        address to = address(eigenPodManager);
-        returnData = new bytes[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
+    function _verifyForwardedEigenpodCall(bytes calldata _data, uint256 _validatorId) internal view {
+        if (_data.length < 4) revert InvalidForwardedCall();
+        bytes4 selector = bytes4(_data[:4]);
+        if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
+
+        // withdrawNonBeaconChainETHBalanceWei
+        if (selector == IEigenPod.withdrawNonBeaconChainETHBalanceWei.selector) {
+            require(_data.length == 68, "INVALID_DATA_LENGTH");
+            address recipient = address(bytes20(_data[16:36]));
+
+            // No withdrawal to any other address than the safe
+            require (recipient == etherfiNodeAddress[_validatorId], "INCORRECT_RECIPIENT");
         }
     }
 
-    function callDelayedWithdrawalRouter(uint256[] calldata _validatorIds, bytes[] calldata data) external nonReentrant whenNotPaused onlyEigenLayerOperatingAdmin returns (bytes[] memory returnData) {
-        address to = address(delayedWithdrawalRouter);
-        returnData = new bytes[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(to, data[i]);
-        }
+    function _verifyForwardedExternalCall(address _to, bytes calldata _data, uint256 _validatorId) internal view {
+        if (_data.length < 4) revert InvalidForwardedCall();
+        bytes4 selector = bytes4(_data[:4]);
+        if (!allowedForwardedExternalCalls[selector][_to]) revert ForwardedCallNotAllowed();
     }
 
     //--------------------------------------------------------------------------------------
@@ -478,7 +493,7 @@ contract EtherFiNodesManager is
     }
 
     function updateEigenLayerOperatingAdmin(address _address, bool _isAdmin) external onlyOwner {
-        eigenLayerOperatingAdmin[_address] = _isAdmin;
+        operatingAdmin[_address] = _isAdmin;
     }
 
     // Pauses the contract
@@ -733,8 +748,8 @@ contract EtherFiNodesManager is
         if (msg.sender != stakingManagerContract) revert NotStakingManager();
     }
 
-    function _eigenLayerOperatingAdmin() internal view virtual {
-        if (!eigenLayerOperatingAdmin[msg.sender] && !admins[msg.sender] && msg.sender != owner()) revert NotAdmin();
+    function _operatingAdmin() internal view virtual {
+        if (!operatingAdmin[msg.sender] && !admins[msg.sender] && msg.sender != owner()) revert NotAdmin();
     }
 
     //--------------------------------------------------------------------------------------
@@ -751,8 +766,8 @@ contract EtherFiNodesManager is
         _;
     }
 
-    modifier onlyEigenLayerOperatingAdmin() {
-        _eigenLayerOperatingAdmin();
+    modifier onlyOperatingAdmin() {
+        _operatingAdmin();
         _;
     }
 }
