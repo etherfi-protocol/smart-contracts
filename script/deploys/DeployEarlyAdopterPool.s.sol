@@ -3,8 +3,8 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
-import "../../src/EarlyAdopterPool.sol";
-import "../../test/TestERC20.sol";
+import "src/archive/EarlyAdopterPool.sol";
+import "test/TestERC20.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract DeployEarlyAdopterPoolScript is Script {
