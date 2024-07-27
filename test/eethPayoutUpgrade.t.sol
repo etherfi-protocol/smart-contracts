@@ -15,6 +15,11 @@ contract eethPayoutUpgradeTest is TestSetup {
         upgradeContract();
         vm.startPrank(managerInstance.owner());
         managerInstance.setStakingRewardsSplit(0, 0, 1000000, 0);
+        etherFiAdminInstance.initializeV2dot5(address(roleRegistry));
+        vm.stopPrank();
+        vm.startPrank(superAdmin);
+        roleRegistry.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(),oracleAdmin);
+        vm.startPrank(owner);
         vm.stopPrank();
     }
 
@@ -57,7 +62,7 @@ contract eethPayoutUpgradeTest is TestSetup {
 
     function helperSubmitReport(uint128 _protocolFees) public {
         IEtherFiOracle.OracleReport memory report = generateReport();
-        report.protocolFees = int128(_protocolFees);
+        report.protocolFees = _protocolFees;
         vm.startPrank(oracleAdmin);
         etherFiOracleInstance.submitReport(report);
         skip(1000);
@@ -79,17 +84,6 @@ contract eethPayoutUpgradeTest is TestSetup {
         helperSubmitReport(1000 ether);
     }
 
-    function test_negativeFees() public {
-        IEtherFiOracle.OracleReport memory report = generateReport();
-        report.protocolFees = int128(-1000);
-        vm.startPrank(oracleAdmin);
-        etherFiOracleInstance.submitReport(report);
-        skip(1000);
-        vm.expectRevert();
-        etherFiAdminInstance.executeTasks(report);
-        vm.stopPrank();
-    }
-
     function test_permissionFordepositToRecipient() public {
         vm.startPrank(address(etherFiAdminInstance));
         liquidityPoolInstance.depositToRecipient(treasury, 10 ether, address(0));
@@ -98,7 +92,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         liquidityPoolInstance.depositToRecipient(treasury, 10 ether, address(0));
         vm.stopPrank();
         vm.startPrank(bob);
-        vm.expectRevert();
+        vm.expectRevert("Incorrect Caller");
         liquidityPoolInstance.depositToRecipient(treasury, 10 ether, address(0));
         vm.stopPrank();
     }

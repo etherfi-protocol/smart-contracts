@@ -680,6 +680,9 @@ contract EtherFiOracleTest is TestSetup {
         vm.stopPrank();
     }
 
+    /// @dev Helper function to test the realistic scenario of the treasury payout and performing offchain operation
+    /// @param _validatorRewards The rewards accrued by the validators in the current period
+    /// @param _isEthFundValidator The boolean array indicating whether the validator is an EthFund validator or not
     function helper_realistic_execute_task_treasury_payout(uint128[10] memory _validatorRewards, bool[10] memory _isEthFundValidator, uint256 _count, uint128 _totalValidatorRewards) public {
         helper_execute_task();
         uint128 totalBnftRewards = 0; // ethfund validator bnft rewards
@@ -705,12 +708,8 @@ contract EtherFiOracleTest is TestSetup {
 
         for (uint i = 0; i < _count; i++) {
             if (_isEthFundValidator[i]) {
-                totalBnftRewards +=
-                    (((_validatorRewards[i] * 3) / 32) * 9) /
-                    10;
-                protocolRewards +=
-                    (((_validatorRewards[i] * 29) / 32) * 9) /
-                    10;
+                totalBnftRewards +=(((_validatorRewards[i] * 3) / 32) * 9) /10;
+                protocolRewards +=(((_validatorRewards[i] * 29) / 32) * 9) /10;
             } else {
                 protocolRewards += (_validatorRewards[i] * 9) / 10;
             }
@@ -718,7 +717,7 @@ contract EtherFiOracleTest is TestSetup {
         }
         uint128 protocolFees = totalBnftRewards + etherFiRewards; // total rewards not going to users
         report.accruedRewards = int128(protocolRewards);
-        report.protocolFees = int128(protocolFees);
+        report.protocolFees = protocolFees;
         vm.startPrank(chad);
         etherFiOracleInstance.submitReport(report);
         skip(1000);
