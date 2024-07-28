@@ -181,11 +181,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     //protocol owns the eth that was distributed to NO and treasury in eigenpods and etherfinodes 
     function _handleProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal { 
-        require(_report.protocolFees >= 0, "EtherFiAdmin: protocol fees can't be negative");
         if(_report.protocolFees == 0) {
             return;
         }
-        liquidityPool.payProtocolFees(uint128(_report.protocolFees));
+        liquidityPool.payProtocolFees(_report.protocolFees);
     }
 
     function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report) internal {
