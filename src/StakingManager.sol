@@ -40,11 +40,11 @@ contract StakingManager is
     uint128 public maxBatchDepositSize;
     uint128 public stakeAmount;
 
-    address public implementationContract;
+    address public etherFiNodeImplementation;
     address public liquidityPoolContract;
 
     bool public DEPRECATED_isFullStakeEnabled;
-    bytes32 public merkleRoot;
+    bytes32 public DEPRECATED_merkleRoot;
 
     ITNFT public TNFTInterfaceInstance;
     IBNFT public BNFTInterfaceInstance;
@@ -138,20 +138,18 @@ contract StakingManager is
 
     /// @notice Creates validator object, mints NFTs, sets NB variables and deposits 1 ETH into beacon chain
     /// @dev Function gets called from the LP and is used in the BNFT staking flow
-    /// @param _depositRoot The fetched root of the Beacon Chain
     /// @param _validatorId Array of IDs of the validator to register
     /// @param _bNftRecipient Array of BNFT recipients
     /// @param _tNftRecipient Array of TNFT recipients
     /// @param _depositData Array of data structures to hold all data needed for depositing to the beacon chain
     /// @param _staker address of the BNFT holder who initiated the transaction
     function batchRegisterValidators(
-        bytes32 _depositRoot,
         uint256[] calldata _validatorId,
         address _bNftRecipient,
         address _tNftRecipient,
         DepositData[] calldata _depositData,
         address _staker
-    ) public payable whenNotPaused nonReentrant verifyDepositState(_depositRoot) {
+    ) public payable whenNotPaused nonReentrant {
         require(msg.sender == liquidityPoolContract, "INCORRECT_CALLER");
         require(_validatorId.length <= maxBatchDepositSize && _validatorId.length == _depositData.length, "WRONG_PARAMS");
         require(msg.value == _validatorId.length * 1 ether, "DEPOSIT_AMOUNT_MISMATCH");
@@ -251,11 +249,11 @@ contract StakingManager is
     }
 
     function registerEtherFiNodeImplementationContract(address _etherFiNodeImplementationContract) public onlyOwner {
-        if (address(upgradableBeacon) != address(0) || address(implementationContract) != address(0)) revert ALREADY_SET();
+        if (address(upgradableBeacon) != address(0) || address(etherFiNodeImplementation) != address(0)) revert ALREADY_SET();
         require(_etherFiNodeImplementationContract != address(0), "ZERO_ADDRESS");
 
-        implementationContract = _etherFiNodeImplementationContract;
-        upgradableBeacon = new UpgradeableBeacon(implementationContract);      
+        etherFiNodeImplementation = _etherFiNodeImplementationContract;
+        upgradableBeacon = new UpgradeableBeacon(etherFiNodeImplementation);      
     }
 
     /// @notice Instantiates the TNFT interface
@@ -280,7 +278,7 @@ contract StakingManager is
         require(_newImplementation != address(0), "ZERO_ADDRESS");
         
         upgradableBeacon.upgradeTo(_newImplementation);
-        implementationContract = _newImplementation;
+        etherFiNodeImplementation = _newImplementation;
     }
 
     // Pauses the contract
@@ -470,14 +468,6 @@ contract StakingManager is
         }
     }
 
-    function _verifyDepositState(bytes32 _depositRoot) internal view virtual {
-        // disable deposit root check if none provided
-        if (_depositRoot != 0x0000000000000000000000000000000000000000000000000000000000000000) {
-            bytes32 onchainDepositRoot = depositContractEth2.get_deposit_root();
-            require(_depositRoot == onchainDepositRoot, "DEPOSIT_ROOT_CHANGED");
-        }
-    }
-
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -506,9 +496,4 @@ contract StakingManager is
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
-
-    modifier verifyDepositState(bytes32 _depositRoot) {
-        _verifyDepositState(_depositRoot);
-        _;
-    }
 }

@@ -10,7 +10,7 @@ import "../../src/LiquidityPool.sol";
 import "../../src/MembershipManager.sol";
 import "../../src/MembershipNFT.sol";
 import "../../src/StakingManager.sol";
-import "../../src/NFTExchange.sol";
+import "src/archive/NFTExchange.sol";
 import "../../src/archive/RegulationsManager.sol";
 import "../../src/helpers/AddressProvider.sol";
 import "../../src/WithdrawRequestNFT.sol";

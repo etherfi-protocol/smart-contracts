@@ -6,7 +6,7 @@ import "../../src/MembershipManager.sol";
 import "../../src/MembershipNFT.sol";
 import "../../src/WeETH.sol";
 import "../../src/EETH.sol";
-import "../../src/NFTExchange.sol";
+import "src/archive/NFTExchange.sol";
 import "../../src/LiquidityPool.sol";
 import "../../src/helpers/AddressProvider.sol";
 import "../../src/archive/RegulationsManager.sol";

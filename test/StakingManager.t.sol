@@ -87,7 +87,7 @@ contract StakingManagerTest is TestSetup {
         vm.stopPrank();
         
         startHoax(alice);
-        processedBids = liquidityPoolInstance.batchDepositAsBnftHolder{value: 8 ether}(bidIds, 4);
+        processedBids = liquidityPoolInstance.batchDeposit{value: 8 ether}(bidIds, 4);
 
         IStakingManager.DepositData[]
             memory depositDataArray = new IStakingManager.DepositData[](1);
@@ -126,7 +126,7 @@ contract StakingManagerTest is TestSetup {
         sig = new bytes[](1);
         sig[0] = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
 
-        liquidityPoolInstance.batchRegisterAsBnftHolder(_getDepositRoot(), validatorArray, depositDataArray, depositDataRootsForApproval, sig);
+        liquidityPoolInstance.batchRegister(validatorArray, depositDataArray, depositDataRootsForApproval, sig);
         vm.stopPrank();
 
         bytes[] memory pubKey = new bytes[](1);
@@ -199,35 +199,35 @@ contract StakingManagerTest is TestSetup {
 
         vm.expectRevert("DEPOSIT_AMOUNT_MISMATCH");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators(zeroRoot, validatorId, alice, bob, depositDataArray, henry);
+        stakingManagerInstance.batchRegisterValidators(validatorId, alice, bob, depositDataArray, henry);
 
         vm.deal(address(liquidityPoolInstance), 100 ether);
 
         vm.expectRevert("INCORRECT_CALLER");
         vm.prank(alice);
-        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, henry, bob, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(validatorId, henry, bob, depositDataArray, alice);
 
         address randomAddress = vm.addr(121232);
         vm.expectRevert("INCORRECT_HASH");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, randomAddress, bob, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(validatorId, randomAddress, bob, depositDataArray, alice);
 
         vm.expectRevert("INCORRECT_HASH");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, henry, randomAddress, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(validatorId, henry, randomAddress, depositDataArray, alice);
 
         vm.expectRevert("INCORRECT_CALLER");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, henry, bob, depositDataArray, randomAddress);
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(validatorId, henry, bob, depositDataArray, randomAddress);
 
         vm.expectEmit(true, true, true, true);
         emit ValidatorRegistered(alice, henry, bob, validatorId[0], hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c", "test_ipfs");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, henry, bob, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(validatorId, henry, bob, depositDataArray, alice);
     
         vm.expectRevert("INVALID_PHASE_TRANSITION");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, henry, bob, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(validatorId, henry, bob, depositDataArray, alice);
     }
 
     function test_BatchDepositWithBidIdsFailsIfNotEnoughActiveBids() public {
@@ -312,7 +312,7 @@ contract StakingManagerTest is TestSetup {
 
         vm.expectRevert("Pausable: paused");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, henry, bob, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(validatorId, henry, bob, depositDataArray, alice);
     }
 
     function test_BatchRegisterValidatorWorksCorrectly() public {
@@ -338,7 +338,7 @@ contract StakingManagerTest is TestSetup {
         (IStakingManager.DepositData[] memory depositDataArray,,,) = _prepareForValidatorRegistration(validatorIds);
         vm.deal(address(liquidityPoolInstance), 100 ether);
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 4 ether}(zeroRoot, validatorIds, henry, bob, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 4 ether}(validatorIds, henry, bob, depositDataArray, alice);
 
         assertEq(managerInstance.numberOfValidators(), 4);
         assertEq(auctionInstance.accumulatedRevenue(), 0.4 ether, "Auction accumulated revenue should be 0.4");
@@ -369,7 +369,7 @@ contract StakingManagerTest is TestSetup {
 
         vm.expectRevert("WRONG_PARAMS");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 4 ether}(zeroRoot, newWrongValidatorIds, henry, bob, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 4 ether}(newWrongValidatorIds, henry, bob, depositDataArray, alice);
     }
 
     function test_BatchFailsIfMoreThanMax() public {
@@ -398,12 +398,12 @@ contract StakingManagerTest is TestSetup {
 
         vm.expectRevert("WRONG_PARAMS");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 1 ether * validatorIds.length}(zeroRoot, validatorIds, henry, bob, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether * validatorIds.length}(validatorIds, henry, bob, depositDataArray, alice);
 
 
         (depositDataArray,,,) = _prepareForValidatorRegistration(tmp);
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 1 ether * tmp.length}(zeroRoot, tmp, henry, bob, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether * tmp.length}(tmp, henry, bob, depositDataArray, alice);
     }
 
     function test_cancelDeposit() public {
@@ -432,7 +432,7 @@ contract StakingManagerTest is TestSetup {
         (IStakingManager.DepositData[] memory depositDataArray,,,) = _prepareForValidatorRegistration(validatorId);
         vm.deal(address(liquidityPoolInstance), 100 ether);
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(zeroRoot, validatorId, henry, bob, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(validatorId, henry, bob, depositDataArray, alice);
 
         vm.prank(address(liquidityPoolInstance));
         vm.expectRevert("INVALID_PHASE_TRANSITION");

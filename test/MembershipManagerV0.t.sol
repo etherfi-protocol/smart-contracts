@@ -480,25 +480,6 @@ contract MembershipManagerV0Test is TestSetup {
         assertEq(membershipNftInstance.valueOf(token2), 2 ether);   
     }
 
-    function test_WrapEthFailsIfNotCorrectlyEligible() public {
-        //NOTE: Test that wrappingETH fails in both scenarios listed below:
-            // 1. User is not whitelisted
-            // 2. User is whitelisted but not registered
-
-        //Giving 12 Ether to alice and henry
-        vm.deal(henry, 12 ether);
-        vm.deal(alice, 12 ether);
-
-        vm.prank(alice);
-        liquidityPoolInstance.updateWhitelistStatus(true);
-
-        vm.prank(henry);
-
-        // Henry tries to mint but fails because he is not whitelisted.
-        vm.expectRevert("Invalid User");
-        membershipManagerInstance.wrapEth{value: 10 ether}(10 ether, 0);
-    }
-
     function test_UpdatingPointsGrowthRate() public {
         vm.deal(alice, 1 ether);
 
