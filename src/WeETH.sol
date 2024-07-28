@@ -72,7 +72,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         external
         returns (uint256)
     {
-        eETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s);
+        try eETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return wrap(_eETHAmount);
     }
 
