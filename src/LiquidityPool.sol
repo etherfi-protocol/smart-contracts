@@ -43,7 +43,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     uint128 public totalValueOutOfLp;
     uint128 public totalValueInLp;
 
-    address public DEPRECATED_admin;
+    address public treasury;
 
     uint32 public numPendingDeposits; // number of validator deposits, which needs 'registerValidator'
 
@@ -90,6 +90,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     event Deposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
     event Withdraw(address indexed sender, address recipient, uint256 amount, SourceOfFunds source);
     event UpdatedWhitelist(address userAddress, bool value);
+    event UpdatedTreasury(address newTreasury);
     event BnftHolderDeregistered(address user, uint256 index);
     event BnftHolderRegistered(address user, uint256 index);
     event UpdatedSchedulingPeriod(uint128 newPeriodInSeconds);
@@ -97,6 +98,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     event ValidatorApproved(uint256 indexed validatorId);
     event ValidatorRegistrationCanceled(uint256 indexed validatorId);
     event Rebase(uint256 totalEthLocked, uint256 totalEEthShares);
+    event ProtocolFeePaid(uint128 protocolFees);
     event WhitelistStatusUpdated(bool value);
 
     error IncorrectCaller();
@@ -167,9 +169,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         return _deposit(msg.sender, msg.value, 0);
     }
 
-    // Used by eETH staking flow through Liquifier contract; deVamp
+    // Used by eETH staking flow through Liquifier contract; deVamp or to pay protocol fees
     function depositToRecipient(address _recipient, uint256 _amount, address _referral) public whenNotPaused returns (uint256) {
-        require(msg.sender == address(liquifier), "Incorrect Caller");
+        require(msg.sender == address(liquifier) || msg.sender == address(etherFiAdminContract), "Incorrect Caller");
 
         emit Deposit(_recipient, _amount, SourceOfFunds.EETH, _referral);
 
@@ -462,6 +464,20 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         totalValueOutOfLp = uint128(int128(totalValueOutOfLp) + _accruedRewards);
 
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
+    }
+    /// @notice pay protocol fees including 5% to treaury, 5% to node operator and ethfund bnft holders
+    /// @param _protocolFees The amount of protocol fees to pay in ether
+    function payProtocolFees(uint128 _protocolFees) external {
+        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();   
+        emit ProtocolFeePaid(_protocolFees);
+        depositToRecipient(treasury, _protocolFees, address(0));
+    }
+
+    /// @notice Set the treasury address
+    /// @param _treasury The address to set as the treasury
+    function setTreasury(address _treasury) external onlyOwner {
+        treasury = _treasury;
+        emit UpdatedTreasury(_treasury);
     }
 
     /// @notice Whether or not nodes created via bNFT deposits should be restaked

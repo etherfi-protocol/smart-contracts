@@ -9,6 +9,7 @@ interface IEtherFiOracle {
         uint32 refBlockFrom;
         uint32 refBlockTo;
         int128 accruedRewards;
+        uint128 protocolFees;
         uint256[] validatorsToApprove;
         uint256[] liquidityPoolValidatorsToExit;
         uint256[] exitedValidators;
