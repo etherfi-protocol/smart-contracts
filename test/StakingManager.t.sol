@@ -27,9 +27,6 @@ contract StakingManagerTest is TestSetup {
 
     function setUp() public {
         setUpTests();
-
-        vm.prank(alice);
-        liquidityPoolInstance.setStakingTargetWeights(50, 50);
     }
 
      function test_DisableInitializer() public {
@@ -187,7 +184,7 @@ contract StakingManagerTest is TestSetup {
         uint256[] memory bidId = test_CreateOneBid();
 
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchDepositWithBidIds(bidId, 1, alice, bob, henry, ILiquidityPool.SourceOfFunds.EETH, false, 0);
+        stakingManagerInstance.batchDepositWithBidIds(bidId, 1, alice, bob, henry, false, 0);
     
         return bidId;
     }
@@ -239,7 +236,7 @@ contract StakingManagerTest is TestSetup {
  
         vm.expectRevert("NOT_ENOUGH_BIDS");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchDepositWithBidIds(bidIdArray, 2, alice, bob, henry, ILiquidityPool.SourceOfFunds.EETH, false, 0);
+        stakingManagerInstance.batchDepositWithBidIds(bidIdArray, 2, alice, bob, henry, false, 0);
     }
 
     function test_BatchDepositWithBidIdsFailsIfNoIdsProvided() public {
@@ -249,7 +246,7 @@ contract StakingManagerTest is TestSetup {
         uint256[] memory bidIdArray = new uint256[](0);
         vm.expectRevert("WRONG_PARAMS");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchDepositWithBidIds(bidIdArray, 1, alice, bob, henry, ILiquidityPool.SourceOfFunds.EETH, false, 0);
+        stakingManagerInstance.batchDepositWithBidIds(bidIdArray, 1, alice, bob, henry, false, 0);
     }
 
     function test_BatchDepositWithBidIdsFailsIfPaused() public {
@@ -260,7 +257,7 @@ contract StakingManagerTest is TestSetup {
 
         vm.expectRevert("Pausable: paused");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchDepositWithBidIds(bidId, 1, alice, bob, henry, ILiquidityPool.SourceOfFunds.EETH, false, 0);
+        stakingManagerInstance.batchDepositWithBidIds(bidId, 1, alice, bob, henry, false, 0);
     }
 
     function test_BatchDepositWithIdsSimpleWorksCorrectly() public {
@@ -279,7 +276,7 @@ contract StakingManagerTest is TestSetup {
         bidIdArray[9] = 20;
 
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchDepositWithBidIds(bidIdArray, 1, alice, bob, henry, ILiquidityPool.SourceOfFunds.EETH, false, 0);
+        stakingManagerInstance.batchDepositWithBidIds(bidIdArray, 1, alice, bob, henry, false, 0);
 
         assertEq(auctionInstance.numberOfActiveBids(), 19);
 
@@ -331,7 +328,7 @@ contract StakingManagerTest is TestSetup {
         bidIdArray[9] = 20;
 
         vm.prank(address(liquidityPoolInstance));
-        uint256[] memory validatorIds = stakingManagerInstance.batchDepositWithBidIds(bidIdArray, 4, alice, bob, henry, ILiquidityPool.SourceOfFunds.EETH, false, 0);
+        uint256[] memory validatorIds = stakingManagerInstance.batchDepositWithBidIds(bidIdArray, 4, alice, bob, henry, false, 0);
 
         assertEq(address(auctionInstance).balance, 3 ether, "Auction balance should be 3");
 
@@ -360,7 +357,7 @@ contract StakingManagerTest is TestSetup {
         bidIdArray[2] = 6;
 
         vm.prank(address(liquidityPoolInstance));
-        uint256[] memory validatorIds = stakingManagerInstance.batchDepositWithBidIds(bidIdArray, 3, alice, bob, henry, ILiquidityPool.SourceOfFunds.EETH, false, 0);
+        uint256[] memory validatorIds = stakingManagerInstance.batchDepositWithBidIds(bidIdArray, 3, alice, bob, henry, false, 0);
 
         (IStakingManager.DepositData[] memory depositDataArray,,,) = _prepareForValidatorRegistration(validatorIds);
         vm.deal(address(liquidityPoolInstance), 100 ether);
@@ -380,17 +377,17 @@ contract StakingManagerTest is TestSetup {
 
         vm.expectRevert("WRONG_PARAMS");
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchDepositWithBidIds(bidIds, 2, alice, bob, henry, ILiquidityPool.SourceOfFunds.EETH, false, 0);
+        stakingManagerInstance.batchDepositWithBidIds(bidIds, 2, alice, bob, henry, false, 0);
 
         uint256[] memory validatorIds = new uint256[](2);
 
         // '1' works though
         vm.prank(address(liquidityPoolInstance));
-        uint256[] memory tmp = stakingManagerInstance.batchDepositWithBidIds(bidIds, 1, alice, bob, henry, ILiquidityPool.SourceOfFunds.EETH, false, 0);
+        uint256[] memory tmp = stakingManagerInstance.batchDepositWithBidIds(bidIds, 1, alice, bob, henry, false, 0);
         validatorIds[0] = tmp[0];
 
         vm.prank(address(liquidityPoolInstance));
-        tmp = stakingManagerInstance.batchDepositWithBidIds(bidIds, 1, alice, bob, henry, ILiquidityPool.SourceOfFunds.EETH, false, 0);
+        tmp = stakingManagerInstance.batchDepositWithBidIds(bidIds, 1, alice, bob, henry, false, 0);
         validatorIds[1] = tmp[0];
 
         (IStakingManager.DepositData[] memory depositDataArray,,,) = _prepareForValidatorRegistration(validatorIds);
@@ -407,23 +404,23 @@ contract StakingManagerTest is TestSetup {
     }
 
     function test_cancelDeposit() public {
-        //  stakingManagerInstance.batchDepositWithBidIds(bidId, 1, alice, bob, henry, ILiquidityPool.SourceOfFunds.EETH, false, 0);
+        //  stakingManagerInstance.batchDepositWithBidIds(bidId, 1, alice, bob, henry, false, 0);
         uint256[] memory validatorId = test_DepositOneWorksCorrectly();
 
         vm.prank(address(liquidityPoolInstance));
         vm.expectRevert("INCORRECT_CALLER");
-        stakingManagerInstance.batchCancelDepositAsBnftHolder(validatorId, bob);
+        stakingManagerInstance.batchCancelDeposit(validatorId, bob);
 
         vm.prank(address(liquidityPoolInstance));
         vm.expectRevert("INCORRECT_CALLER");
-        stakingManagerInstance.batchCancelDepositAsBnftHolder(validatorId, henry);
+        stakingManagerInstance.batchCancelDeposit(validatorId, henry);
 
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchCancelDepositAsBnftHolder(validatorId, alice);
+        stakingManagerInstance.batchCancelDeposit(validatorId, alice);
 
         vm.prank(address(liquidityPoolInstance));
         vm.expectRevert("NO_DEPOSIT_EXIST");
-        stakingManagerInstance.batchCancelDepositAsBnftHolder(validatorId, alice);
+        stakingManagerInstance.batchCancelDeposit(validatorId, alice);
     }
 
     function test_cancelDepositFailsIfIncorrectPhase() public {
@@ -436,7 +433,7 @@ contract StakingManagerTest is TestSetup {
 
         vm.prank(address(liquidityPoolInstance));
         vm.expectRevert("INVALID_PHASE_TRANSITION");
-        stakingManagerInstance.batchCancelDepositAsBnftHolder(validatorId, alice);
+        stakingManagerInstance.batchCancelDeposit(validatorId, alice);
     }
 
     function test_cancelDepositFailsIfContractPaused() public {
@@ -447,7 +444,7 @@ contract StakingManagerTest is TestSetup {
 
         vm.prank(address(liquidityPoolInstance));
         vm.expectRevert("Pausable: paused");
-        stakingManagerInstance.batchCancelDepositAsBnftHolder(validatorId, alice);
+        stakingManagerInstance.batchCancelDeposit(validatorId, alice);
     }
 
     function test_cancelDepositWorksCorrectly() public {
@@ -473,7 +470,7 @@ contract StakingManagerTest is TestSetup {
         vm.expectEmit(true, false, false, true);
         emit DepositCancelled(validatorId[0]);
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchCancelDepositAsBnftHolder(validatorId, alice);
+        stakingManagerInstance.batchCancelDeposit(validatorId, alice);
 
         assertEq(managerInstance.etherfiNodeAddress(validatorId[0]), address(0));
         assertEq(stakingManagerInstance.bidIdToStaker(validatorId[0]), address(0));

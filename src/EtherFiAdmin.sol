@@ -137,7 +137,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         _handleProtocolFees(_report);
         _handleValidators(reportHash, _report);
         _handleWithdrawals(_report);
-        _handleTargetFundsAllocations(_report);
 
         lastHandledReportRefSlot = _report.refSlotTo;
         lastHandledReportRefBlock = _report.refBlockTo;
@@ -252,14 +251,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         withdrawRequestNft.finalizeRequests(_report.lastFinalizedWithdrawalRequestId);
 
         liquidityPool.addEthAmountLockedForWithdrawal(_report.finalizedWithdrawalAmount);
-    }
-
-    function _handleTargetFundsAllocations(IEtherFiOracle.OracleReport calldata _report) internal {
-        // To handle the case when we want to avoid updating the params too often (to save gas fee)
-        if (_report.eEthTargetAllocationWeight == 0 && _report.etherFanTargetAllocationWeight == 0) {
-            return;
-        }
-        liquidityPool.setStakingTargetWeights(_report.eEthTargetAllocationWeight, _report.etherFanTargetAllocationWeight);
     }
 
     function slotForNextReportToProcess() public view returns (uint32) {
