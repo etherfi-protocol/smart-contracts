@@ -54,7 +54,7 @@ contract EigenPodMock is IEigenPod, Test {
 
     function verifyWithdrawalCredentials(
         uint64 oracleTimestamp,
-        BeaconChainProofs.StateRootProof calldata stateRootProof,
+        LegacyBeaconChainProofs.StateRootProof calldata stateRootProof,
         uint40[] calldata validatorIndices,
         bytes[] calldata withdrawalCredentialProofs,
         bytes32[][] calldata validatorFields
@@ -64,15 +64,15 @@ contract EigenPodMock is IEigenPod, Test {
     function verifyBalanceUpdates(
         uint64 oracleTimestamp,
         uint40[] calldata validatorIndices,
-        BeaconChainProofs.StateRootProof calldata stateRootProof,
+        LegacyBeaconChainProofs.StateRootProof calldata stateRootProof,
         bytes[] calldata validatorFieldsProofs,
         bytes32[][] calldata validatorFields
     ) external {}
 
     function verifyAndProcessWithdrawals(
         uint64 oracleTimestamp,
-        BeaconChainProofs.StateRootProof calldata stateRootProof,
-        BeaconChainProofs.WithdrawalProof[] calldata withdrawalProofs,
+        LegacyBeaconChainProofs.StateRootProof calldata stateRootProof,
+        LegacyBeaconChainProofs.WithdrawalProof[] calldata withdrawalProofs,
         bytes[] calldata validatorFieldsProofs,
         bytes32[][] calldata validatorFields,
         bytes32[][] calldata withdrawalFields
@@ -92,4 +92,17 @@ contract EigenPodMock is IEigenPod, Test {
 
     function validatorStatus(bytes calldata pubkey) external view returns (VALIDATOR_STATUS){}
     function validatorPubkeyToInfo(bytes calldata validatorPubkey) external view returns (ValidatorInfo memory){}
+
+    function currentCheckpoint() external view returns (Checkpoint memory) {}
+    function currentCheckpointTimestamp() external view returns (uint64) {}
+    function lastCheckpointTimestamp() external view returns (uint64) {}
+
+    function startCheckpoint(bool revertIfNoBalance) external {}
+    function verifyCheckpointProofs(
+        BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof,
+        BeaconChainProofs.BalanceProof[] calldata proofs
+    ) external {}
+
+
+
 }

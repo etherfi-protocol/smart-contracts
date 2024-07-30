@@ -28,7 +28,6 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     address public eigenPod;
 
     /// @dev Is this withdrawal safe is configured for restaking within the etherfi protocol.
-    ///      Independent of whether the associated eigenpod has toggled its hasRestaked flag.
     bool public isRestakingEnabled;
 
     uint16 public version;
@@ -615,13 +614,6 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         emit EigenPodCreated(address(this), eigenPod);
     }
 
-    function queuePhase1PartialWithdrawal() public {
-        if (!isRestakingEnabled || IEigenPod(eigenPod).hasRestaked()) return;
-
-        // EigenPod has never been truly re-staked.
-        IEigenPod(eigenPod).withdrawBeforeRestaking();
-    }
-
     // returns the withdrawal roots for the queued full-withdrawals
     // the {NonBeaconChainEthWithdrawal, partial withdraw}'s queued withdrawals can be retrieved (indexed) on DelayedWithdrawalRouter
     function queueEigenpodFullWithdrawal() public onlyEtherFiNodeManagerContract returns (bytes32[] memory fullWithdrawalRoots) {
@@ -631,33 +623,9 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     function _queueEigenpodFullWithdrawal() private returns (bytes32[] memory fullWithdrawalRoots) {
         if (!isRestakingEnabled) return fullWithdrawalRoots;
 
-        if (!IEigenPod(eigenPod).hasRestaked()) {
-            // EigenPod has never re-staked. Then, just withdraw the funds to the withdrawal safe
-            IEigenPod(eigenPod).withdrawBeforeRestaking();
-        } else {
-            // There are three flows of withdrawals from EL: {NonBeaconChainEthWithdrawal, partial withdraw, full withdrawal}
-            // All flows are subject to the DelayedWithdrawal put by the EL's DelayedWithdrawalRouter
-            // - In the NonBeaconChainEthWithdrawal, the verification is not required and the withdrawal is queued upon the call to `withdrawNonBeaconChainETHBalanceWei`
-            // - In the partial withdrawal, the verified withdrawal is immeidately queued 
-            // https://github.com/Layr-Labs/eigenlayer-contracts/tree/90a0f6aee79b4a38e1b63b32f9627f21b1162fbb/src/contracts/pods/EigenPod.sol#L717
-            // - In the full withdrawal, the verified withdrawal amount is kept in the EigenPod until we call `DelegationManager.queueWithdrawals`
-            // https://github.com/Layr-Labs/eigenlayer-contracts/tree/90a0f6aee79b4a38e1b63b32f9627f21b1162fbb/src/contracts/pods/EigenPod.sol#L685
-            // 
-            // Therefore, here we only need to queue {NonBeaconChainEthWithdrawal, full withdrawal}
-            _queueNonBeaconChainEthWithdrawal();
-            fullWithdrawalRoots = _queueRestakedFullWithdrawal();
-        }
-
-    }
-
-    function _queueNonBeaconChainEthWithdrawal() internal {
-        uint256 amountToWithdraw = IEigenPod(eigenPod).nonBeaconChainETHBalanceWei();
-        if (amountToWithdraw > 0) IEigenPod(eigenPod).withdrawNonBeaconChainETHBalanceWei(address(this), amountToWithdraw);
-    }
-
-    // Once the `EigenPod.activeValidatorCount()` is available. We can make it permission-less
-    function _queueRestakedFullWithdrawal() internal returns (bytes32[] memory fullWithdrawalRoots) {
-        if (!IEigenPod(eigenPod).hasRestaked()) return fullWithdrawalRoots;
+        // Withdrawals from Eigenlayer are queued through either the DelayedWithdrawalRouter (DEPRECATED) or the DelegationManager.
+        // pre-PEPE update, nonBeaconChainEth and partial withdrawals are queued through the DelayedWithdrawalRouter.
+        // post-PEPE update, all withdrawals are queued through the DelegationManager
 
         // calculate the pending amount. The withdrawal proof verification will update the EigenPod's `withdrawableRestakedExecutionLayerGwei` value
         uint256 unclaimedFullWithdrawalAmountInGwei = IEigenPod(eigenPod).withdrawableRestakedExecutionLayerGwei() - pendingWithdrawalFromRestakingInGwei;
@@ -674,14 +642,14 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         // That is why we use two variables for accounting
         pendingWithdrawalFromRestakingInGwei += uint64(32 ether / 1 gwei);
 
-        IDelegationManager mgr = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
+        IDelegationManager delegationManager = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
 
         // Queue the withdrawal for whatever amount is available
         IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
         IStrategy[] memory strategies = new IStrategy[](1);
         uint256[] memory shares = new uint256[](1);
 
-        strategies[0] = mgr.beaconChainETHStrategy();
+        strategies[0] = delegationManager.beaconChainETHStrategy();
         shares[0] = 32 ether;
         params[0] = IDelegationManager.QueuedWithdrawalParams({
             strategies: strategies,
@@ -689,8 +657,10 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
             withdrawer: address(this)
         });
 
-        fullWithdrawalRoots = mgr.queueWithdrawals(params);
+        // each withdrawal root is hash of the withdrawal object, "keccak256(abi.encode(withdrawal))"
+        return delegationManager.queueWithdrawals(params);
     }
+
 
 
     /// @notice claim queued withdrawals (eigenlayer phase1 + phase2 partial withdrawals) from the EigenPod to this withdrawal safe.

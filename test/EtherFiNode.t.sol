@@ -2000,21 +2000,8 @@ contract EtherFiNodeTest is TestSetup {
             vm.roll(block.number + minDelayBlock);
         }
 
-        // - Check if a random transfer to EigenPod blocks the fullWithdrawal
-        // The later `fullWithdraw` should succeed even though there are still some unclaimed withdrawals
-        // this is because we only enforce that all withdrawals before the observed exit of the node have completed
-        _transferTo(address(managerInstance.getEigenPod(validatorId)), 0.0001 ether);
-        IEtherFiNode(nodeAddress).queuePhase1PartialWithdrawal();
-
+        // 2. DelegationManager.completeQueuedWithdrawal
         uint256 prevEtherFiNodeAddress = address(nodeAddress).balance;
-
-        // FAIL, call by a rando
-        vm.expectRevert("DelegationManager._completeQueuedWithdrawal: only withdrawer can complete action");
-        mgr.completeQueuedWithdrawal(withdrawal, tokens, 0, true);
-
-        assertEq(eigenPod.withdrawableRestakedExecutionLayerGwei(), 32 ether / 1 gwei);
-
-        // 2. DelegationManager.completeQueuedWithdrawal            
         managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
 
         assertEq(address(nodeAddress).balance, prevEtherFiNodeAddress + 32 ether);

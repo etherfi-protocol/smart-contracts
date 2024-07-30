@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
+import "src/eigenlayer-libraries/LegacyBeaconChainProofs.sol";
 import "src/eigenlayer-libraries/BeaconChainProofs.sol";
 import "./IEigenPodManager.sol";
 import "./IBeaconChainOracle.sol";
@@ -163,7 +164,7 @@ interface IEigenPod {
      */
     function verifyWithdrawalCredentials(
         uint64 oracleTimestamp,
-        BeaconChainProofs.StateRootProof calldata stateRootProof,
+        LegacyBeaconChainProofs.StateRootProof calldata stateRootProof,
         uint40[] calldata validatorIndices,
         bytes[] calldata withdrawalCredentialProofs,
         bytes32[][] calldata validatorFields
@@ -183,7 +184,7 @@ interface IEigenPod {
     function verifyBalanceUpdates(
         uint64 oracleTimestamp,
         uint40[] calldata validatorIndices,
-        BeaconChainProofs.StateRootProof calldata stateRootProof,
+        LegacyBeaconChainProofs.StateRootProof calldata stateRootProof,
         bytes[] calldata validatorFieldsProofs,
         bytes32[][] calldata validatorFields
     ) external;
@@ -198,8 +199,8 @@ interface IEigenPod {
      */
     function verifyAndProcessWithdrawals(
         uint64 oracleTimestamp,
-        BeaconChainProofs.StateRootProof calldata stateRootProof,
-        BeaconChainProofs.WithdrawalProof[] calldata withdrawalProofs,
+        LegacyBeaconChainProofs.StateRootProof calldata stateRootProof,
+        LegacyBeaconChainProofs.WithdrawalProof[] calldata withdrawalProofs,
         bytes[] calldata validatorFieldsProofs,
         bytes32[][] calldata validatorFields,
         bytes32[][] calldata withdrawalFields
@@ -220,4 +221,46 @@ interface IEigenPod {
 
     /// @notice called by owner of a pod to remove any ERC20s deposited in the pod
     function recoverTokens(IERC20[] memory tokenList, uint256[] memory amountsToWithdraw, address recipient) external;
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  PEPE UPDATES   ------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    // TODO(Dave): Once we are no longer in between the 2 updates, we can fully replace this file with
+    // the new version
+
+    /// State-changing methods
+
+    function startCheckpoint(bool revertIfNoBalance) external;
+    function verifyCheckpointProofs(
+        BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof,
+        BeaconChainProofs.BalanceProof[] calldata proofs
+    ) external;
+
+    /// Events
+
+    /// @notice Emitted when a checkpoint is created
+    event CheckpointCreated(uint64 indexed checkpointTimestamp, bytes32 indexed beaconBlockRoot);
+    /// @notice Emitted when a checkpoint is finalized
+    event CheckpointFinalized(uint64 indexed checkpointTimestamp, int256 totalShareDeltaWei);
+    /// @notice Emitted when a validator is proven for a given checkpoint
+    event ValidatorCheckpointed(uint64 indexed checkpointTimestamp, uint40 indexed validatorIndex);
+    /// @notice Emitted when a validaor is proven to have 0 balance at a given checkpoint
+    event ValidatorWithdrawn(uint64 indexed checkpointTimestamp, uint40 indexed validatorIndex);
+
+    /// Structs
+
+    struct Checkpoint {
+      bytes32 beaconBlockRoot;
+      uint24 proofsRemaining;
+      uint64 podBalanceGwei;
+      int128 balanceDeltasGwei;
+    }
+
+    /// View methods
+
+    function activeValidatorCount() external view returns (uint256); // note - this variable already exists in M2; this change just makes it public!
+    function lastCheckpointTimestamp() external view returns (uint64);
+    function currentCheckpointTimestamp() external view returns (uint64);
+    function currentCheckpoint() external view returns (Checkpoint memory);
 }
