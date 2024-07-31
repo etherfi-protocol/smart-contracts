@@ -163,6 +163,24 @@ contract EtherFiNodesManager is
         }
     }
 
+    /// @notice Start a PEPE pod checkpoint balance proof. A new proof cannot be started until
+    ///         the previous proof is completed
+    /// @dev Eigenlayer's PEPE proof system operates on pod-level and will require checkpoint proofs for
+    ///      every single validator associated with the pod. For efficiency you will want to try to only
+    ///      do checkpoints whene you wish to update most of the validators in the associated pod at once
+    function startCheckpoint(uint256 _validatorId, bool _revertIfNoBalance) external onlyAdmin {
+        address etherfiNode = etherfiNodeAddress[_validatorId];
+        IEtherFiNode(etherfiNode).startCheckpoint(_revertIfNoBalance);
+    }
+
+    // @notice you can delegate 1 additional wallet that is allowed to call startCheckpoint() and
+    //         verifyWithdrawalCredentials() on behalf of this pod
+    /// @dev this will affect all validators in the pod, not just the provided validator
+    function setProofSubmitter(uint256 _validatorId, address _newProofSubmitter) external onlyAdmin {
+        address etherfiNode = etherfiNodeAddress[_validatorId];
+        IEtherFiNode(etherfiNode).setProofSubmitter(_newProofSubmitter);
+    }
+
     /// @notice Once the node's exit & funds withdrawal from Beacon is observed, the protocol calls this function to process their exits.
     /// @param _validatorIds The list of validators which exited
     /// @param _exitTimestamps The list of exit timestamps of the validators

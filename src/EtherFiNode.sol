@@ -602,6 +602,18 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     //-----------------------------------  RESTAKING  --------------------------------------
     //--------------------------------------------------------------------------------------
 
+    /// @notice Start a PEPE pod checkpoint balance proof. A new proof cannot be started until
+    ///         the previous proof is completed
+    function startCheckpoint(bool _revertIfNoBalance) external onlyEtherFiNodeManagerContract {
+        IEigenPod(eigenPod).startCheckpoint(_revertIfNoBalance);
+    }
+
+    // @notice you can delegate 1 additional wallet that is allowed to call startCheckpoint() and
+    //         verifyWithdrawalCredentials() on behalf of this pod
+    function setProofSubmitter(address _newProofSubmitter) external onlyEtherFiNodeManagerContract {
+        IEigenPod(eigenPod).setProofSubmitter(_newProofSubmitter);
+    }
+
     /// @notice create a new eigenPod associated with this withdrawal safe
     /// @dev to take advantage of restaking via eigenlayer the validator associated with this
     ///      withdrawal safe must set their withdrawalCredentials to point to this eigenPod

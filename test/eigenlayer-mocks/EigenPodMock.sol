@@ -102,6 +102,7 @@ contract EigenPodMock is IEigenPod, Test {
         BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof,
         BeaconChainProofs.BalanceProof[] calldata proofs
     ) external {}
+    function setProofSubmitter(address newProofSubmitter) external {}
 
 
 
