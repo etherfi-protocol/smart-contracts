@@ -673,6 +673,19 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         return delegationManager.queueWithdrawals(params);
     }
 
+    /// @dev as of eigenlayer's PEPE upgrade the delayedWithdrawalRouter is deprecated.
+    ///         once all outstanding funds have been claimed we can delete this functionality
+    function DEPRECATED_claimDelayedWithdrawalRouterWithdrawals() public {
+        if (!isRestakingEnabled) return;
+
+        uint256 maxWithdrawals = 10; // maximum number of withdrawals to process in 1 tx
+
+        // only claim if we have active unclaimed withdrawals
+        IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
+        if (delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this)).length > 0) {
+            delayedWithdrawalRouter.claimDelayedWithdrawals(address(this), maxWithdrawals);
+        }
+    }
 
 
     /// @notice claim queued withdrawals (eigenlayer phase1 + phase2 partial withdrawals) from the EigenPod to this withdrawal safe.
