@@ -152,7 +152,7 @@ contract EtherFiNodeTest is TestSetup {
 
         vm.roll(block.number + (50400) + 1);
 
-        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorIds[0]);
+        safeInstance.DEPRECATED_claimDelayedWithdrawalRouterWithdrawals();
 
         assertEq(address(safeInstance).balance, 2 ether);
         assertEq(address(safeInstance.eigenPod()).balance, 0 ether);
@@ -321,7 +321,7 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 1 ether);
 
         // claim that withdrawal
-        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorId);
+        safeInstance.DEPRECATED_claimDelayedWithdrawalRouterWithdrawals();
         assertEq(safeInstance.totalBalanceInExecutionLayer(), 2 ether);
         assertEq(address(safeInstance).balance, 1 ether);
         assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 1 ether);
