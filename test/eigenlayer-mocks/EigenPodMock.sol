@@ -60,23 +60,6 @@ contract EigenPodMock is IEigenPod, Test {
         bytes32[][] calldata validatorFields
     ) external {}
 
-    
-    function verifyBalanceUpdates(
-        uint64 oracleTimestamp,
-        uint40[] calldata validatorIndices,
-        BeaconChainProofs.StateRootProof calldata stateRootProof,
-        bytes[] calldata validatorFieldsProofs,
-        bytes32[][] calldata validatorFields
-    ) external {}
-
-    function verifyAndProcessWithdrawals(
-        uint64 oracleTimestamp,
-        BeaconChainProofs.StateRootProof calldata stateRootProof,
-        BeaconChainProofs.WithdrawalProof[] calldata withdrawalProofs,
-        bytes[] calldata validatorFieldsProofs,
-        bytes32[][] calldata validatorFields,
-        bytes32[][] calldata withdrawalFields
-    ) external {}
 
     /// @notice Called by the pod owner to withdraw the balance of the pod when `hasRestaked` is set to false
     function activateRestaking() external {}
@@ -92,4 +75,25 @@ contract EigenPodMock is IEigenPod, Test {
 
     function validatorStatus(bytes calldata pubkey) external view returns (VALIDATOR_STATUS){}
     function validatorPubkeyToInfo(bytes calldata validatorPubkey) external view returns (ValidatorInfo memory){}
+
+    function checkpointBalanceExitedGwei(uint64) external view returns (uint64) {}
+    function currentCheckpoint() external view returns (Checkpoint memory) {}
+    function currentCheckpointTimestamp() external view returns (uint64) {}
+    function getParentBlockRoot(uint64 timestamp) external view returns (bytes32) {}
+    function lastCheckpointTimestamp() external view returns (uint64) {}
+    function proofSubmitter() external view returns (address) {}
+    function setProofSubmitter(address newProofSubmitter) external {}
+    function startCheckpoint(bool revertIfNoBalance) external {}
+
+    function verifyCheckpointProofs(
+        BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof,
+        BeaconChainProofs.BalanceProof[] calldata proofs
+    ) external {}
+
+    function verifyStaleBalance(
+        uint64 beaconTimestamp,
+        BeaconChainProofs.StateRootProof calldata stateRootProof,
+        BeaconChainProofs.ValidatorProof calldata proof
+    ) external {}
+
 }

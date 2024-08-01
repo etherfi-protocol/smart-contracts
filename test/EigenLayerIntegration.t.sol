@@ -292,10 +292,9 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
         IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-        assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
+       assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
         assertEq(validatorInfo.validatorIndex, 0);
         assertEq(validatorInfo.restakedBalanceGwei, 0);
-        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, 0);
 
         _beacon_process_32ETH_deposit();
         console2.log("initialShares:", initialShares);
@@ -319,7 +318,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.ACTIVE, "Validator status should be ACTIVE");
         assertEq(validatorInfo.validatorIndex, validatorIndices[0], "Validator index should be set");
         assertEq(validatorInfo.restakedBalanceGwei, 32 ether / 1e9, "Restaked balance should be 32 eth");
-        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
     }
 
     function test_verifyBalanceUpdates_FAIL_1() public {
@@ -350,7 +348,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     function test_createDelayedWithdrawal() public {
         test_verifyWithdrawalCredentials_32ETH();
-        address delayedWithdrawalRouter = address(managerInstance.delayedWithdrawalRouter());
+        address delayedWithdrawalRouter = address(managerInstance.DEPRECATED_delayedWithdrawalRouter());
 
         bytes4 selector = bytes4(keccak256("createDelayedWithdrawal(address,address)"));
         bytes[] memory data = new bytes[](1);
@@ -411,7 +409,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         address operator = etherfi_avs_operator_1;
         address mainnet_earningsReceiver = 0x88C3c0AeAC97287E71D78bb97138727A60b2623b;
         address delegationManager = address(managerInstance.delegationManager());
-        address delayedWithdrawalRouter = address(managerInstance.delayedWithdrawalRouter());
+        address delayedWithdrawalRouter = address(managerInstance.DEPRECATED_delayedWithdrawalRouter());
 
 
         test_registerAsOperator();
@@ -608,7 +606,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         address eigenPodManager = address(managerInstance.eigenPodManager());
         address delegationManager = address(managerInstance.delegationManager());
-        address delayedWithdrawalRouter = address(managerInstance.delayedWithdrawalRouter());
+        address delayedWithdrawalRouter = address(managerInstance.DEPRECATED_delayedWithdrawalRouter());
 
         // FAIL
         vm.startPrank(chad);

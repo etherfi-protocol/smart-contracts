@@ -84,6 +84,8 @@ interface IEtherFiNode {
     function updateNumExitRequests(uint16 _up, uint16 _down) external;
     function migrateVersion(uint256 _validatorId, IEtherFiNodesManager.ValidatorInfo memory _info) external;
 
+    function startCheckpoint(bool _revertIfNoBalance) external;
+    function setProofSubmitter(address _newProofSubmitter) external;
     function callEigenPod(bytes memory data) external returns (bytes memory);
     function forwardCall(address to, bytes memory data) external returns (bytes memory);
 

@@ -37,9 +37,8 @@ contract TimelockTest is TestSetup {
         vm.expectRevert("Ownable: caller is not the owner");
         managerInstance.renounceOwnership();
 
-        // encoded data for EtherFiNodesManager.setMaxEigenlayerWithdrawals(1)
-        uint8 maxWithdrawals = 1;
-        bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.setMaxEigenLayerWithdrawals.selector, maxWithdrawals);
+        // encoded data for EtherFiNodesManager.setStakingRewardsSplit()
+        bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.setStakingRewardsSplit.selector, 1, 0, 0, 0);
 
         // attempt to directly execute with timelock. Not allowed to do tx before queuing it
         vm.prank(owner);
@@ -130,12 +129,13 @@ contract TimelockTest is TestSetup {
         );
 
         // values should be updated
-        assertEq(managerInstance.maxEigenlayerWithdrawals(), maxWithdrawals);
+
+        (uint64 treasurySplit,,,) = managerInstance.stakingRewardsSplit();
+        assertEq(treasurySplit, 1);
 
 
         // queue and execute a tx to undo that change
-        maxWithdrawals = 5;
-        bytes memory undoData = abi.encodeWithSelector(EtherFiNodesManager.setMaxEigenLayerWithdrawals.selector, maxWithdrawals);
+        bytes memory undoData = abi.encodeWithSelector(EtherFiNodesManager.setStakingRewardsSplit.selector, 5, 0, 0, 0);
         vm.prank(admin);
         tl.schedule(
             address(managerInstance), // target
@@ -154,7 +154,8 @@ contract TimelockTest is TestSetup {
             0,                        // optional predecessor
             0                         // optional salt
         );
-        assertEq(managerInstance.maxEigenlayerWithdrawals(), maxWithdrawals);
+        (treasurySplit,,,) = managerInstance.stakingRewardsSplit();
+        assertEq(treasurySplit, 5);
 
         // non-proposer should not be able to schedule tx
         address rando = vm.addr(0x987654321);
