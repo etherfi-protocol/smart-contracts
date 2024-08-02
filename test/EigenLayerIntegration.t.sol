@@ -244,13 +244,8 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         bytes4 selector = bytes4(keccak256("withdrawNonBeaconChainETHBalanceWei(address,uint256)"));
         bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, alice, 1 ether);
-
-        vm.prank(owner);
-        vm.expectRevert("INCORRECT_RECIPIENT");
-        managerInstance.forwardEigenpodCall(validatorIds, data);
-
         data[0] = abi.encodeWithSelector(selector, podOwner, 1 ether);
+
         vm.prank(owner);
         managerInstance.forwardEigenpodCall(validatorIds, data);
 
@@ -544,26 +539,5 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         data[0] = abi.encodeWithSelector(selector4);
         managerInstance.forwardExternalCall(validatorIds, data, delayedWithdrawalRouter);
     }
-
-    /*
-    function test_29027_verifyWithdrawalCredentials() public {
-        setJSON("./test/eigenlayer-utils/test-data/mainnet_withdrawal_credential_proof_1285801.json");
-        
-        _setWithdrawalCredentialParams();
-        _setOracleBlockRoot();
-
-        uint256[] memory validatorIds = new uint256[](1);
-        validatorIds[0] = 29027;
-
-        oracleTimestamp = 1712703383;
-        validatorIndices[0] = 1285801;
-
-        bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
-        vm.prank(owner);
-        managerInstance.forwardEigenpodCall(validatorIds, data);
-    }
-    */
 
 }

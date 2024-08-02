@@ -301,20 +301,6 @@ contract EtherFiNodesManager is
         }
     }
 
-    /// @dev instantiate EtherFiNode and EigenPod proxy instances
-    /// @param _count How many instances to create
-    /// @param _enableRestaking Whether or not to instantiate an associated eigenPod. (This can still be done later)
-    function createUnusedWithdrawalSafe(uint256 _count, bool _enableRestaking) external returns (address[] memory) {
-        address[] memory createdSafes = new address[](_count);
-        for (uint256 i = 0; i < _count; i++) {
-            address newNode = IStakingManager(stakingManagerContract).instantiateEtherFiNode(_enableRestaking);
-            unusedWithdrawalSafes.push(newNode);
-
-            createdSafes[i] = address(newNode);
-        }
-        return createdSafes;
-    }
-
     error AlreadyInstalled();
     error NotInstalled();
     error InvalidEtherFiNodeVersion();
@@ -401,35 +387,42 @@ contract EtherFiNodesManager is
     function forwardEigenpodCall(uint256[] calldata _validatorIds, bytes[] calldata _data) external nonReentrant whenNotPaused onlyOperatingAdmin returns (bytes[] memory returnData) {
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _verifyForwardedEigenpodCall(_data[i], _validatorIds[i]);
+            _verifyForwardedEigenpodCall(_data[i]);
             returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).callEigenPod(_data[i]);
+        }
+    }
+
+    function forwardEigenpodCall(address[] calldata _etherfiNodes, bytes[] calldata _data) external nonReentrant whenNotPaused onlyOperatingAdmin returns (bytes[] memory returnData) {
+        returnData = new bytes[](_etherfiNodes.length);
+        for (uint256 i = 0; i < _etherfiNodes.length; i++) {
+            _verifyForwardedEigenpodCall(_data[i]);
+            returnData[i] = IEtherFiNode(_etherfiNodes[i]).callEigenPod(_data[i]);
         }
     }
 
     function forwardExternalCall(uint256[] calldata _validatorIds, bytes[] calldata _data, address _target) external nonReentrant whenNotPaused onlyOperatingAdmin returns (bytes[] memory returnData) {
         returnData = new bytes[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _verifyForwardedExternalCall(_target, _data[i], _validatorIds[i]);
+            _verifyForwardedExternalCall(_target, _data[i]);
             returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(_target, _data[i]);
         }
     }
 
-    function _verifyForwardedEigenpodCall(bytes calldata _data, uint256 _validatorId) internal view {
-        if (_data.length < 4) revert InvalidForwardedCall();
-        bytes4 selector = bytes4(_data[:4]);
-        if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
-
-        // withdrawNonBeaconChainETHBalanceWei
-        if (selector == IEigenPod.withdrawNonBeaconChainETHBalanceWei.selector) {
-            require(_data.length == 68, "INVALID_DATA_LENGTH");
-            address recipient = address(bytes20(_data[16:36]));
-
-            // No withdrawal to any other address than the safe
-            require (recipient == etherfiNodeAddress[_validatorId], "INCORRECT_RECIPIENT");
+    function forwardExternalCall(address[] calldata _etherfiNodes, bytes[] calldata _data, address _target) external nonReentrant whenNotPaused onlyOperatingAdmin returns (bytes[] memory returnData) {
+        returnData = new bytes[](_etherfiNodes.length);
+        for (uint256 i = 0; i < _etherfiNodes.length; i++) {
+            _verifyForwardedExternalCall(_target, _data[i]);
+            returnData[i] = IEtherFiNode(_etherfiNodes[i]).forwardCall(_target, _data[i]);
         }
     }
 
-    function _verifyForwardedExternalCall(address _to, bytes calldata _data, uint256 _validatorId) internal view {
+    function _verifyForwardedEigenpodCall(bytes calldata _data) internal view {
+        if (_data.length < 4) revert InvalidForwardedCall();
+        bytes4 selector = bytes4(_data[:4]);
+        if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
+    }
+
+    function _verifyForwardedExternalCall(address _to, bytes calldata _data) internal view {
         if (_data.length < 4) revert InvalidForwardedCall();
         bytes4 selector = bytes4(_data[:4]);
         if (!allowedForwardedExternalCalls[selector][_to]) revert ForwardedCallNotAllowed();
