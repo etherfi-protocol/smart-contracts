@@ -6,9 +6,11 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 contract EtherFiExecutionLayerRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     address public liquidityPoolAddress;
 
-    event TransferToLiquidityPool(address indexed from, address indexed to, uint256 value);
+    event SendETH(address indexed from, address indexed to, uint256 value);
 
-    constructor() {}
+    constructor() {
+        _disableInitializers();
+    }
 
     function initialize(address _liquidityPoolAddress) public initializer {
         __Ownable_init();
@@ -17,17 +19,13 @@ contract EtherFiExecutionLayerRewardsRouter is OwnableUpgradeable, UUPSUpgradeab
         liquidityPoolAddress = _liquidityPoolAddress;
     }
 
-    function transferToLiquidityPool() public {
+    function transferToLiquidityPool() external {
         uint256 balance = address(this).balance;
         require(balance > 0, "Contract balance is zero");
         (bool success, ) = liquidityPoolAddress.call{value: balance}("");
-        if(success) {
-        emit TransferToLiquidityPool(address(this), liquidityPoolAddress, balance);
-        }
-    }
-
-    function setLiquidityPoolAddress(address _liquidityPoolAddress) public onlyOwner {
-        liquidityPoolAddress = _liquidityPoolAddress;
+        require(success, "TRANSFER_FAILED");
+        
+        emit SendETH(address(this), liquidityPoolAddress, balance);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
