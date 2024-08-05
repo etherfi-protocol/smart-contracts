@@ -657,4 +657,24 @@ contract EtherFiOracleTest is TestSetup {
         consensusReached = etherFiOracleInstance.submitReport(report);
         assertTrue(consensusReached); // succeeded
     }
+
+    function test_execute_task_treasury_payout() public {
+        vm.startPrank(owner);
+        etherFiOracleInstance.addCommitteeMember(chad);
+        etherFiOracleInstance.setQuorumSize(2);
+        liquidityPoolInstance.setTreasury(address(owner));
+        vm.stopPrank();
+
+        _moveClock(1024 + 2 * slotsPerEpoch);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        _initReportBlockStamp(report);
+
+        // Assume that the accruedRewards must be 1 ether, all the time
+
+        // Alice submited the correct report 
+        vm.prank(alice);
+        report.accruedRewards = 90 ether;
+        report.protocolFees = 10 ether;
+    }
 }

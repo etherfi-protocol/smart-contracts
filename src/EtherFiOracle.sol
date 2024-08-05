@@ -203,7 +203,8 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
                 _report.refSlotTo,
                 _report.refBlockFrom,
                 _report.refBlockTo,
-                _report.accruedRewards
+                _report.accruedRewards,
+                _report.protocolFees
             )
         );
 
