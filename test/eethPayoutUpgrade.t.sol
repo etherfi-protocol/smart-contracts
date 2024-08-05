@@ -16,14 +16,18 @@ contract eethPayoutUpgradeTest is TestSetup {
         vm.startPrank(managerInstance.owner());
         managerInstance.setStakingRewardsSplit(0, 0, 1000000, 0);
         etherFiAdminInstance.initializeV2dot5(address(roleRegistry));
+        withdrawRequestNFTInstance.initializeV2dot5(address(roleRegistry));
         vm.stopPrank();
         vm.startPrank(superAdmin);
-        roleRegistry.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(),oracleAdmin);
+        roleRegistry.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), oracleAdmin);
+        roleRegistry.grantRole(withdrawRequestNFTInstance.WITHDRAW_NFT_ADMIN_ROLE(), address(etherFiAdminInstance));
         vm.startPrank(owner);
         vm.stopPrank();
     }
 
     function upgradeContract() public {
+        _upgrade_withdraw_request_nft();
+
         LiquidityPool newLiquidityImplementation = new LiquidityPool(); 
         EtherFiAdmin newEtherFiAdminImplementation = new EtherFiAdmin();
         EtherFiOracle newEtherFiOracleImplementation = new EtherFiOracle();

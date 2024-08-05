@@ -182,10 +182,26 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return _requests[requestId].isValid;
     }
 
-    function finalizeRequests(uint256 requestId) external {
+    function finalizeRequests(uint256 lastRequestId) external {
         if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
-        lastFinalizedRequestId = uint32(requestId);
+        lastFinalizedRequestId = uint32(lastRequestId);
+
+        uint128 totalAmount = 0;
+        for (uint256 i = lastFinalizedRequestId + 1; i <= lastRequestId; i++) {
+            if (isValid(i)) {
+                totalAmount += uint128(getClaimableAmount(i));
+            }
+        }
+        
+        liquidityPool.addEthAmountLockedForWithdrawal(totalAmount);
+    }
+
+    function finalizeRequests(uint256 lastRequestId, uint128 totalAmount) external {
+        if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
+        lastFinalizedRequestId = uint32(lastRequestId);
+        liquidityPool.addEthAmountLockedForWithdrawal(totalAmount);
     }
 
     function invalidateRequest(uint256 requestId) external {

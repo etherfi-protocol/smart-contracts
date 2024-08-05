@@ -26,8 +26,10 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         batchSize = 25;
         alternativeBatchSize = 10;
         accruedRewards = 8729224130452426342;
+
         //upgrade the contact
         upgradeContract();
+
         reportHash = etherFiOracleInstance.generateReportHash(report);
         batchValidatorsToApprove = _getValidatorToApprove(52835, batchSize); //52835 based on transaction
         emptyTimestamps = new uint32[](0);
@@ -35,14 +37,29 @@ contract EtherFiAdminUpgradeTest is TestSetup {
     }
 
     function upgradeContract() public {
+        _upgrade_withdraw_request_nft();
+        _upgrade_liquidity_pool_contract();
+        _upgrade_staking_manager_contract();
+
         EtherFiAdmin v2Implementation = new EtherFiAdmin();
         EtherFiOracle v2ImplementationOracle = new EtherFiOracle();
         vm.startPrank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(address(v2Implementation));
         etherFiOracleInstance.upgradeTo(address(v2ImplementationOracle));
         etherFiAdminInstance.initializeV2dot5(address(roleRegistry));
+        withdrawRequestNFTInstance.initializeV2dot5(address(roleRegistry));
+        liquidityPoolInstance.initializeV2dot5(address(roleRegistry));
+
+        
         vm.startPrank(superAdmin);
+        roleRegistry.grantRole(stakingManagerInstance.STAKING_MANAGER_ADMIN_ROLE(), address(etherFiAdminInstance));
+        roleRegistry.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
+        roleRegistry.grantRole(etherFiOracleInstance.ORACLE_ADMIN_ROLE(), address(etherFiAdminInstance));
+        roleRegistry.grantRole(withdrawRequestNFTInstance.WITHDRAW_NFT_ADMIN_ROLE(), address(etherFiAdminInstance));
+        roleRegistry.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), address(etherFiOracleInstance));
+
         roleRegistry.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), committeeMember);
+
         vm.startPrank(etherFiAdminInstance.owner());
         etherFiAdminInstance.setValidatorTaskBatchSize(batchSize);
         vm.stopPrank();
