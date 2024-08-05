@@ -217,6 +217,16 @@ contract LiquifierTest is TestSetup {
 
     }
 
+    function test_stEthRequestWithdrawal() public {
+        test_deposit_stEth();
+
+        vm.startPrank(alice);        
+        liquifierInstance.stEthRequestWithdrawal(1 ether);
+        liquifierInstance.stEthRequestWithdrawal(5 ether);
+        liquifierInstance.stEthRequestWithdrawal();
+        vm.stopPrank();
+    }
+
     function test_withdrawal_of_restaked_wBETH_succeeds() internal {
         _setUp(MAINNET_FORK);
 

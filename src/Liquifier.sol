@@ -97,6 +97,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error NotSupportedToken();
     error EthTransferFailed();
     error NotEnoughBalance();
+    error IncorrectAmount();
     error AlreadyRegistered();
     error NotRegistered();
     error WrongOutput();
@@ -227,7 +228,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function stEthRequestWithdrawal(uint256 _amount) public onlyAdmin returns (uint256[] memory) {
-        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT() || _amount < lido.balanceOf(address(this))) revert NotEnoughBalance();
+        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT() || _amount > lido.balanceOf(address(this))) revert IncorrectAmount();
 
         tokenInfos[address(lido)].ethAmountPendingForWithdrawals += uint128(_amount);
 
