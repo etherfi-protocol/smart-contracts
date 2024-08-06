@@ -229,43 +229,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         managerInstance.forwardEigenpodCall(validatorIds, data);
     }
 
-    function test_withdrawNonBeaconChainETHBalanceWei() public {
-
-        // 1.
-        (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
-
-        _transferTo(address(eigenPod), 1 ether);
-
-        // 2.
-        (uint256 new_withdrawalSafe, uint256 new_eigenPod, uint256 new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
-        assertEq(_withdrawalSafe, new_withdrawalSafe);
-        assertEq(_eigenPod + 1 ether, new_eigenPod);
-        assertEq(_delayedWithdrawalRouter, new_delayedWithdrawalRouter);
-
-        bytes4 selector = bytes4(keccak256("withdrawNonBeaconChainETHBalanceWei(address,uint256)"));
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, podOwner, 1 ether);
-
-        vm.prank(owner);
-        managerInstance.forwardEigenpodCall(validatorIds, data);
-
-        // 3.
-        (new_withdrawalSafe, new_eigenPod, new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
-        assertEq(_withdrawalSafe, new_withdrawalSafe);
-        assertEq(_eigenPod, new_eigenPod);
-        assertEq(_delayedWithdrawalRouter + 1 ether, new_delayedWithdrawalRouter);
-
-        vm.roll(block.number + (50400) + 1);
-
-        ws.claimDelayedWithdrawalRouterWithdrawals(5, false, validatorId);
-
-        // 4.
-        (uint256 new_new_withdrawalSafe, uint256 new_new_eigenPod, uint256 new_new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
-        assertEq(_withdrawalSafe + 1 ether + _delayedWithdrawalRouter, new_new_withdrawalSafe);
-        assertEq(_eigenPod, new_new_eigenPod);
-        assertEq(0, new_new_delayedWithdrawalRouter);
-    }
-
     function _registerAsOperator(address avs_operator) internal {
         assertEq(eigenLayerDelegationManager.isOperator(avs_operator), false);
 

@@ -28,7 +28,6 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     address public eigenPod;
 
     /// @dev Is this withdrawal safe is configured for restaking within the etherfi protocol.
-    ///      Independent of whether the associated eigenpod has toggled its hasRestaked flag.
     bool public isRestakingEnabled;
 
     uint16 public version;
@@ -47,7 +46,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     // we need to mark a block from which we know all beaconchain eth has been moved to the eigenPod
     // so that we can properly calculate exit payouts and ensure queued withdrawals have been resolved
     // (eigenLayer withdrawals are tied to blocknumber instead of timestamp)
-    mapping(uint256 => uint32) restakingObservedExitBlocks;
+    mapping(uint256 => uint32) DEPRECATED_restakingObservedExitBlocks;
 
     error CallFailed(bytes data);
 
@@ -177,7 +176,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         if (associatedValidatorIds.length == 0) {
             require(numAssociatedValidators() == 0, "INVALID_STATE");
 
-            restakingObservedExitBlocks[_validatorId] = 0;
+            DEPRECATED_restakingObservedExitBlocks[_validatorId] = 0;
             isRestakingEnabled = false;
             return true;
         }
@@ -207,12 +206,6 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     // TODO: make it permission-less call
     function processNodeExit(uint256 _validatorId) external onlyEtherFiNodeManagerContract ensureLatestVersion returns (bytes32[] memory fullWithdrawalRoots) {
         if (isRestakingEnabled) {
-            // eigenLayer bookeeping
-            // we need to mark a block from which we know all beaconchain eth has been moved to the eigenPod
-            // so that we can properly calculate exit payouts and ensure queued withdrawals have been resolved
-            // (eigenLayer withdrawals are tied to blocknumber instead of timestamp)
-            restakingObservedExitBlocks[_validatorId] = uint32(block.number);
-
             fullWithdrawalRoots = _queueEigenpodFullWithdrawal();
             require(fullWithdrawalRoots.length == 1, "NO_FULLWITHDRAWAL_QUEUED");
         }
@@ -603,6 +596,18 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     //-----------------------------------  RESTAKING  --------------------------------------
     //--------------------------------------------------------------------------------------
 
+    /// @notice Start a PEPE pod checkpoint balance proof. A new proof cannot be started until
+    ///         the previous proof is completed
+    function startCheckpoint(bool _revertIfNoBalance) external onlyEtherFiNodeManagerContract {
+        IEigenPod(eigenPod).startCheckpoint(_revertIfNoBalance);
+    }
+
+    // @notice you can delegate 1 additional wallet that is allowed to call startCheckpoint() and
+    //         verifyWithdrawalCredentials() on behalf of this pod
+    function setProofSubmitter(address _newProofSubmitter) external onlyEtherFiNodeManagerContract {
+        IEigenPod(eigenPod).setProofSubmitter(_newProofSubmitter);
+    }
+
     /// @notice create a new eigenPod associated with this withdrawal safe
     /// @dev to take advantage of restaking via eigenlayer the validator associated with this
     ///      withdrawal safe must set their withdrawalCredentials to point to this eigenPod
@@ -615,13 +620,6 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         emit EigenPodCreated(address(this), eigenPod);
     }
 
-    function queuePhase1PartialWithdrawal() public {
-        if (!isRestakingEnabled || IEigenPod(eigenPod).hasRestaked()) return;
-
-        // EigenPod has never been truly re-staked.
-        IEigenPod(eigenPod).withdrawBeforeRestaking();
-    }
-
     // returns the withdrawal roots for the queued full-withdrawals
     // the {NonBeaconChainEthWithdrawal, partial withdraw}'s queued withdrawals can be retrieved (indexed) on DelayedWithdrawalRouter
     function queueEigenpodFullWithdrawal() public onlyEtherFiNodeManagerContract returns (bytes32[] memory fullWithdrawalRoots) {
@@ -631,33 +629,9 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     function _queueEigenpodFullWithdrawal() private returns (bytes32[] memory fullWithdrawalRoots) {
         if (!isRestakingEnabled) return fullWithdrawalRoots;
 
-        if (!IEigenPod(eigenPod).hasRestaked()) {
-            // EigenPod has never re-staked. Then, just withdraw the funds to the withdrawal safe
-            IEigenPod(eigenPod).withdrawBeforeRestaking();
-        } else {
-            // There are three flows of withdrawals from EL: {NonBeaconChainEthWithdrawal, partial withdraw, full withdrawal}
-            // All flows are subject to the DelayedWithdrawal put by the EL's DelayedWithdrawalRouter
-            // - In the NonBeaconChainEthWithdrawal, the verification is not required and the withdrawal is queued upon the call to `withdrawNonBeaconChainETHBalanceWei`
-            // - In the partial withdrawal, the verified withdrawal is immeidately queued 
-            // https://github.com/Layr-Labs/eigenlayer-contracts/tree/90a0f6aee79b4a38e1b63b32f9627f21b1162fbb/src/contracts/pods/EigenPod.sol#L717
-            // - In the full withdrawal, the verified withdrawal amount is kept in the EigenPod until we call `DelegationManager.queueWithdrawals`
-            // https://github.com/Layr-Labs/eigenlayer-contracts/tree/90a0f6aee79b4a38e1b63b32f9627f21b1162fbb/src/contracts/pods/EigenPod.sol#L685
-            // 
-            // Therefore, here we only need to queue {NonBeaconChainEthWithdrawal, full withdrawal}
-            _queueNonBeaconChainEthWithdrawal();
-            fullWithdrawalRoots = _queueRestakedFullWithdrawal();
-        }
-
-    }
-
-    function _queueNonBeaconChainEthWithdrawal() internal {
-        uint256 amountToWithdraw = IEigenPod(eigenPod).nonBeaconChainETHBalanceWei();
-        if (amountToWithdraw > 0) IEigenPod(eigenPod).withdrawNonBeaconChainETHBalanceWei(address(this), amountToWithdraw);
-    }
-
-    // Once the `EigenPod.activeValidatorCount()` is available. We can make it permission-less
-    function _queueRestakedFullWithdrawal() internal returns (bytes32[] memory fullWithdrawalRoots) {
-        if (!IEigenPod(eigenPod).hasRestaked()) return fullWithdrawalRoots;
+        // Withdrawals from Eigenlayer are queued through either the DelayedWithdrawalRouter (DEPRECATED) or the DelegationManager.
+        // pre-PEPE update, nonBeaconChainEth and partial withdrawals are queued through the DelayedWithdrawalRouter.
+        // post-PEPE update, all withdrawals are queued through the DelegationManager
 
         // calculate the pending amount. The withdrawal proof verification will update the EigenPod's `withdrawableRestakedExecutionLayerGwei` value
         uint256 unclaimedFullWithdrawalAmountInGwei = IEigenPod(eigenPod).withdrawableRestakedExecutionLayerGwei() - pendingWithdrawalFromRestakingInGwei;
@@ -674,14 +648,14 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         // That is why we use two variables for accounting
         pendingWithdrawalFromRestakingInGwei += uint64(32 ether / 1 gwei);
 
-        IDelegationManager mgr = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
+        IDelegationManager delegationManager = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
 
         // Queue the withdrawal for whatever amount is available
         IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
         IStrategy[] memory strategies = new IStrategy[](1);
         uint256[] memory shares = new uint256[](1);
 
-        strategies[0] = mgr.beaconChainETHStrategy();
+        strategies[0] = delegationManager.beaconChainETHStrategy();
         shares[0] = 32 ether;
         params[0] = IDelegationManager.QueuedWithdrawalParams({
             strategies: strategies,
@@ -689,39 +663,22 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
             withdrawer: address(this)
         });
 
-        fullWithdrawalRoots = mgr.queueWithdrawals(params);
+        // each withdrawal root is hash of the withdrawal object, "keccak256(abi.encode(withdrawal))"
+        return delegationManager.queueWithdrawals(params);
     }
 
+    /// @dev as of eigenlayer's PEPE upgrade the delayedWithdrawalRouter is deprecated.
+    ///         once all outstanding funds have been claimed we can delete this functionality
+    function DEPRECATED_claimDelayedWithdrawalRouterWithdrawals() public {
+        if (!isRestakingEnabled) return;
 
-    /// @notice claim queued withdrawals (eigenlayer phase1 + phase2 partial withdrawals) from the EigenPod to this withdrawal safe.
-    /// @param maxNumWithdrawals maximum number of queued withdrawals to claim in this tx.
-    /// @dev usually you will want to call with "maxNumWithdrawals == unclaimedWithdrawals.length
-    ///      but if this queue grows too large to process in your target tx you can pass less
-    function claimDelayedWithdrawalRouterWithdrawals(uint256 maxNumWithdrawals, bool _checkIfHasOutstandingEigenLayerWithdrawals, uint256 _validatorId) public returns (bool) {
-        if (!isRestakingEnabled) return false;
+        uint256 maxWithdrawals = 10; // maximum number of withdrawals to process in 1 tx
 
         // only claim if we have active unclaimed withdrawals
         IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
         if (delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this)).length > 0) {
-            delayedWithdrawalRouter.claimDelayedWithdrawals(address(this), maxNumWithdrawals);
+            delayedWithdrawalRouter.claimDelayedWithdrawals(address(this), maxWithdrawals);
         }
-
-
-        if (_checkIfHasOutstandingEigenLayerWithdrawals) {
-
-            if (!isRestakingEnabled) return false;
-            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
-            IDelayedWithdrawalRouter.DelayedWithdrawal[] memory unclaimedWithdrawals = delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this));
-            for (uint256 i = 0; i < unclaimedWithdrawals.length; i++) {
-
-                if (unclaimedWithdrawals[i].blockCreated < restakingObservedExitBlocks[_validatorId]) {
-                    // unclaimed withdrawal from before oracle observed exit
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     function validatePhaseTransition(VALIDATOR_PHASE _currentPhase, VALIDATOR_PHASE _newPhase) public pure returns (bool) {
