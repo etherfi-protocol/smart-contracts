@@ -215,43 +215,19 @@ contract EtherFiNodesManagerTest is TestSetup {
         assertEq(managerInstance.etherfiNodeAddress(bidId[0]), address(0));
         assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 0);
 
-        // premake a safe
-        address[] memory premadeSafe = managerInstance.createUnusedWithdrawalSafe(1, false);
-        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 1);
-        assertEq(managerInstance.unusedWithdrawalSafes(0), premadeSafe[0]);
-
         // deposit
         hoax(alice);
         uint256[] memory processedBids = stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidId, false);
-
-        // assigned safe should be the premade one
         address node = managerInstance.etherfiNodeAddress(processedBids[0]);
-        assert(node != address(0));
-        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 0);
 
-        // push another safe to the stack
-        address[] memory safe2 = managerInstance.createUnusedWithdrawalSafe(1, false);
-        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 1);
-
-        // recycle the first safe
+        // recycle the safe
         vm.prank(alice);
         stakingManagerInstance.batchCancelDeposit(processedBids);
-        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 2);
+        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 1);
 
         // original premade safe should be on top of the stack after being recycled
-        assertEq(managerInstance.unusedWithdrawalSafes(1), premadeSafe[0]);
-        assertEq(managerInstance.unusedWithdrawalSafes(0), safe2[0]);
+        assertEq(managerInstance.unusedWithdrawalSafes(0), node);
     }
-
-    function test_createMultipleUnusedWithdrawalSafes() public {
-
-        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 0);
-        address[] memory safes = managerInstance.createUnusedWithdrawalSafe(10, false);
-        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 10);
-        safes = managerInstance.createUnusedWithdrawalSafe(5, false);
-        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 15);
-    }
-
 
     // TODO(Dave): Remaining withdrawal-safe-pool Tests
     // 1. add restaking to previously non-restaking node
@@ -422,4 +398,5 @@ contract EtherFiNodesManagerTest is TestSetup {
         }
 
     }
+
 }

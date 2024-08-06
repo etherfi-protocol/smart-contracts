@@ -1993,7 +1993,6 @@ contract EtherFiNodeTest is TestSetup {
         _upgrade_etherfi_node_contract();   
         _upgrade_etherfi_nodes_manager_contract(); 
 
-        managerInstance.createUnusedWithdrawalSafe(1, true);
         address etherFiNode = managerInstance.unusedWithdrawalSafes(managerInstance.getUnusedWithdrawalSafesLength() - 1);
 
         assertEq(IEtherFiNode(etherFiNode).version(), 1);
@@ -2011,8 +2010,6 @@ contract EtherFiNodeTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         _upgrade_etherfi_node_contract();   
         _upgrade_etherfi_nodes_manager_contract(); 
-
-        managerInstance.createUnusedWithdrawalSafe(1, true);
 
         uint256 validatorId = 2285;
         address etherFiNode = managerInstance.etherfiNodeAddress(validatorId);
