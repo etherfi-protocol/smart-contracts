@@ -445,6 +445,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         for (uint256 i = 0; i < dummies.length; i++) {
             total += getTotalPooledEther(address(dummies[i]));
         }
+        total += liquidityPool.eETH().balanceOf(address(this));
     }
 
     /// deposited (restaked) ETH can have 3 states:
