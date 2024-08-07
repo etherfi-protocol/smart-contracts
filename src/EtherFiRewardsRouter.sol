@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-contract EtherFiExecutionLayerRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
+contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     address public liquidityPoolAddress;
 
     event EthReceived(address indexed from, uint256 value);
