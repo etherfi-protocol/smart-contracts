@@ -4,24 +4,23 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
-    address public liquidityPoolAddress;
+    address public immutable liquidityPoolAddress;
 
     event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
 
-    constructor() {
+    constructor(address _liquidityPoolAddress) {
         _disableInitializers();
+        liquidityPoolAddress = _liquidityPoolAddress;
     }
 
     receive() external payable {
         emit EthReceived(msg.sender, msg.value);
     }
 
-    function initialize(address _liquidityPoolAddress) public initializer {
+    function initialize() public initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
-
-        liquidityPoolAddress = _liquidityPoolAddress;
     }
 
     function transferToLiquidityPool() external {
