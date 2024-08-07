@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: MIT
 // Adapted from OpenZeppelin Contracts (last updated v4.8.0) (utils/cryptography/MerkleProof.sol)
 
 pragma solidity ^0.8.0;
@@ -40,6 +40,7 @@ library EigenlayerMerkle {
      * from `leaf` using `proof`. A `proof` is valid if and only if the rebuilt
      * hash matches the root of the tree. The tree is built assuming `leaf` is
      * the 0 indexed `index`'th leaf from the bottom left of the tree.
+     * @dev If the proof length is 0 then the leaf hash is returned.
      *
      * _Available since v4.4._
      *
@@ -51,8 +52,8 @@ library EigenlayerMerkle {
         uint256 index
     ) internal pure returns (bytes32) {
         require(
-            proof.length != 0 && proof.length % 32 == 0,
-            "Merkle.processInclusionProofKeccak: proof length should be a non-zero multiple of 32"
+            proof.length % 32 == 0,
+            "Merkle.processInclusionProofKeccak: proof length should be a multiple of 32"
         );
         bytes32 computedHash = leaf;
         for (uint256 i = 32; i <= proof.length; i += 32) {

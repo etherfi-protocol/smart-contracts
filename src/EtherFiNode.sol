@@ -361,7 +361,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         if (isRestakingEnabled) {
             _eigenPod = eigenPod.balance;
 
-            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
+            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).DEPRECATED_delayedWithdrawalRouter());
             IDelayedWithdrawalRouter.DelayedWithdrawal[] memory delayedWithdrawals = delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this));
             for (uint256 x = 0; x < delayedWithdrawals.length; x++) {
                 _delayedWithdrawalRouter += delayedWithdrawals[x].amount;
@@ -384,7 +384,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         uint256 safeBalance = address(this).balance;
         uint256 claimableBalance = 0;
         if (isRestakingEnabled) {
-            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
+            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).DEPRECATED_delayedWithdrawalRouter());
             IDelayedWithdrawalRouter.DelayedWithdrawal[] memory claimableWithdrawals = delayedWithdrawalRouter.getClaimableUserDelayedWithdrawals(address(this));
             for (uint256 x = 0; x < claimableWithdrawals.length; x++) {
                 claimableBalance += claimableWithdrawals[x].amount;
@@ -605,6 +605,18 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     //-----------------------------------  RESTAKING  --------------------------------------
     //--------------------------------------------------------------------------------------
 
+    /// @notice Start a PEPE pod checkpoint balance proof. A new proof cannot be started until
+    ///         the previous proof is completed
+    function startCheckpoint(bool _revertIfNoBalance) external onlyEtherFiNodeManagerContract {
+        IEigenPod(eigenPod).startCheckpoint(_revertIfNoBalance);
+    }
+
+    // @notice you can delegate 1 additional wallet that is allowed to call startCheckpoint() and
+    //         verifyWithdrawalCredentials() on behalf of this pod
+    function setProofSubmitter(address _newProofSubmitter) external onlyEtherFiNodeManagerContract {
+        IEigenPod(eigenPod).setProofSubmitter(_newProofSubmitter);
+    }
+
     /// @notice create a new eigenPod associated with this withdrawal safe
     /// @dev to take advantage of restaking via eigenlayer the validator associated with this
     ///      withdrawal safe must set their withdrawalCredentials to point to this eigenPod
@@ -664,35 +676,18 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         return delegationManager.queueWithdrawals(params);
     }
 
-    /// @notice claim queued withdrawals (eigenlayer phase1 + phase2 partial withdrawals) from the EigenPod to this withdrawal safe.
-    /// @param maxNumWithdrawals maximum number of queued withdrawals to claim in this tx.
-    /// @dev usually you will want to call with "maxNumWithdrawals == unclaimedWithdrawals.length
-    ///      but if this queue grows too large to process in your target tx you can pass less
-    function claimDelayedWithdrawalRouterWithdrawals(uint256 maxNumWithdrawals, bool _checkIfHasOutstandingEigenLayerWithdrawals, uint256 _validatorId) public returns (bool) {
-        if (!isRestakingEnabled) return false;
+    /// @dev as of eigenlayer's PEPE upgrade the delayedWithdrawalRouter is deprecated.
+    ///         once all outstanding funds have been claimed we can delete this functionality
+    function DEPRECATED_claimDelayedWithdrawalRouterWithdrawals(uint256 _validatorId) public {
+        if (!isRestakingEnabled) return;
+
+        uint256 maxWithdrawals = 10; // maximum number of withdrawals to process in 1 tx
 
         // only claim if we have active unclaimed withdrawals
-        IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
+        IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).DEPRECATED_delayedWithdrawalRouter());
         if (delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this)).length > 0) {
-            delayedWithdrawalRouter.claimDelayedWithdrawals(address(this), maxNumWithdrawals);
+            delayedWithdrawalRouter.claimDelayedWithdrawals(address(this), maxWithdrawals);
         }
-
-
-        if (_checkIfHasOutstandingEigenLayerWithdrawals) {
-
-            if (!isRestakingEnabled) return false;
-            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
-            IDelayedWithdrawalRouter.DelayedWithdrawal[] memory unclaimedWithdrawals = delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this));
-            for (uint256 i = 0; i < unclaimedWithdrawals.length; i++) {
-
-                if (unclaimedWithdrawals[i].blockCreated < restakingObservedExitBlocks[_validatorId]) {
-                    // unclaimed withdrawal from before oracle observed exit
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     function validatePhaseTransition(VALIDATOR_PHASE _currentPhase, VALIDATOR_PHASE _newPhase) public pure returns (bool) {

@@ -27,7 +27,7 @@ interface IEtherFiNodesManager {
     }
 
     // VIEW functions
-    function delayedWithdrawalRouter() external view returns (IDelayedWithdrawalRouter);
+    function DEPRECATED_delayedWithdrawalRouter() external view returns (IDelayedWithdrawalRouter);
     function eigenPodManager() external view returns (IEigenPodManager);
     function delegationManager() external view returns (IDelegationManager);
     function treasuryContract() external view returns (address);
@@ -46,7 +46,6 @@ interface IEtherFiNodesManager {
     function nonExitPenaltyDailyRate() external view returns (uint64);
     function nonExitPenaltyPrincipal() external view returns (uint64);
     function numberOfValidators() external view returns (uint64);
-    function maxEigenlayerWithdrawals() external view returns (uint8);
 
     function allowedForwardedEigenpodCalls(bytes4 _selector) external view returns (bool);
     function allowedForwardedExternalCalls(bytes4 _selector, address _target) external view returns (bool);

@@ -633,7 +633,7 @@ contract LiquifierTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
         setUpTests();
-        
+
         vm.startPrank(bob);
         vm.expectRevert(Liquifier.IncorrectRole.selector);
         liquifierInstance.pauseContract();

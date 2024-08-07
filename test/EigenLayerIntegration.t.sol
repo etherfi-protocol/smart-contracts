@@ -292,10 +292,9 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
         IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-        assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
+       assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
         assertEq(validatorInfo.validatorIndex, 0);
         assertEq(validatorInfo.restakedBalanceGwei, 0);
-        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, 0);
 
         _beacon_process_32ETH_deposit();
         console2.log("initialShares:", initialShares);
@@ -319,7 +318,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.ACTIVE, "Validator status should be ACTIVE");
         assertEq(validatorInfo.validatorIndex, validatorIndices[0], "Validator index should be set");
         assertEq(validatorInfo.restakedBalanceGwei, 32 ether / 1e9, "Restaked balance should be 32 eth");
-        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
     }
 
     function test_verifyBalanceUpdates_FAIL_1() public {
@@ -350,7 +348,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     function test_createDelayedWithdrawal() public {
         test_verifyWithdrawalCredentials_32ETH();
-        address delayedWithdrawalRouter = address(managerInstance.delayedWithdrawalRouter());
+        address delayedWithdrawalRouter = address(managerInstance.DEPRECATED_delayedWithdrawalRouter());
 
         bytes4 selector = bytes4(keccak256("createDelayedWithdrawal(address,address)"));
         bytes[] memory data = new bytes[](1);
@@ -377,52 +375,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.prank(owner);
         vm.expectRevert(EtherFiNode.ForwardedCallNotAllowed.selector);
         managerInstance.forwardEigenpodCall(validatorIds, data);
-    }
-
-    function test_withdrawNonBeaconChainETHBalanceWei() public {
-
-        // 1.
-        (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
-
-        _transferTo(address(eigenPod), 1 ether);
-
-        // 2.
-        (uint256 new_withdrawalSafe, uint256 new_eigenPod, uint256 new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
-        assertEq(_withdrawalSafe, new_withdrawalSafe);
-        assertEq(_eigenPod + 1 ether, new_eigenPod);
-        assertEq(_delayedWithdrawalRouter, new_delayedWithdrawalRouter);
-
-        bytes4 selector = bytes4(keccak256("withdrawNonBeaconChainETHBalanceWei(address,uint256)"));
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, alice, 1 ether);
-
-        // whitelist this external call
-        vm.prank(managerInstance.owner());
-        managerInstance.updateAllowedForwardedEigenpodCalls(selector, true);
-
-        vm.prank(owner);
-        vm.expectRevert("INCORRECT_RECIPIENT");
-        managerInstance.forwardEigenpodCall(validatorIds, data);
-
-        data[0] = abi.encodeWithSelector(selector, podOwner, 1 ether);
-        vm.prank(owner);
-        managerInstance.forwardEigenpodCall(validatorIds, data);
-
-        // 3.
-        (new_withdrawalSafe, new_eigenPod, new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
-        assertEq(_withdrawalSafe, new_withdrawalSafe);
-        assertEq(_eigenPod, new_eigenPod);
-        assertEq(_delayedWithdrawalRouter + 1 ether, new_delayedWithdrawalRouter);
-
-        vm.roll(block.number + (50400) + 1);
-
-        ws.claimDelayedWithdrawalRouterWithdrawals(5, false, validatorId);
-
-        // 4.
-        (uint256 new_new_withdrawalSafe, uint256 new_new_eigenPod, uint256 new_new_delayedWithdrawalRouter) = ws.splitBalanceInExecutionLayer();
-        assertEq(_withdrawalSafe + 1 ether + _delayedWithdrawalRouter, new_new_withdrawalSafe);
-        assertEq(_eigenPod, new_new_eigenPod);
-        assertEq(0, new_new_delayedWithdrawalRouter);
     }
 
     function _registerAsOperator(address avs_operator) internal {
@@ -457,7 +409,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         address operator = etherfi_avs_operator_1;
         address mainnet_earningsReceiver = 0x88C3c0AeAC97287E71D78bb97138727A60b2623b;
         address delegationManager = address(managerInstance.delegationManager());
-        address delayedWithdrawalRouter = address(managerInstance.delayedWithdrawalRouter());
+        address delayedWithdrawalRouter = address(managerInstance.DEPRECATED_delayedWithdrawalRouter());
 
 
         test_registerAsOperator();
@@ -654,7 +606,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         address eigenPodManager = address(managerInstance.eigenPodManager());
         address delegationManager = address(managerInstance.delegationManager());
-        address delayedWithdrawalRouter = address(managerInstance.delayedWithdrawalRouter());
+        address delayedWithdrawalRouter = address(managerInstance.DEPRECATED_delayedWithdrawalRouter());
 
         // FAIL
         vm.startPrank(chad);
