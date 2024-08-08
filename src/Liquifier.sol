@@ -86,6 +86,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     mapping(address => bool) public pausers;
 
+
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     event RegisteredQueuedWithdrawal(bytes32 _withdrawalRoot, IStrategyManager.DeprecatedStruct_QueuedWithdrawal _queuedWithdrawal);
     event RegisteredQueuedWithdrawal_V2(bytes32 _withdrawalRoot, IDelegationManager.Withdrawal _queuedWithdrawal);
@@ -202,6 +203,15 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return depositWithERC20(_token, _amount, _referral);
     }
 
+    // Swap user's eETH for Liquifier's stETH
+    function swapEEthForStEth(uint256 _amount) external whenNotPaused nonReentrant {
+        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
+        if (_amount > liquidityPool.eETH().balanceOf(msg.sender)) revert NotEnoughBalance();
+        
+        IERC20(address(liquidityPool.eETH())).safeTransferFrom(msg.sender, address(this), _amount);
+        IERC20(address(lido)).safeTransfer(msg.sender, _amount);
+    }
+
     /// @notice Used to complete the specified `queuedWithdrawals`. The function caller must match `queuedWithdrawals[...].withdrawer`
     /// @param _queuedWithdrawals The QueuedWithdrawals to complete.
     /// @param _tokens Array of tokens for each QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single array.
@@ -263,9 +273,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
     function withdrawEther() external onlyAdmin {
-        uint256 amountToLiquidityPool = address(this).balance;
-        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
-        if (!sent) revert EthTransferFailed();
+        _withdrawEther();
+    }
+
+    // Swap Liquifier's eETH for ETH from the liquidity pool and send it back to the liquidity pool
+    function withdrawEEth(uint256 amount) external onlyAdmin {
+        liquidityPool.withdraw(address(this), amount);
+        _withdrawEther();
     }
 
     function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOwner {
@@ -369,22 +383,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return stEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
     }
 
-    // https://etherscan.io/tx/0x4dde6b6d232f706466b18422b004e2584fd6c0d3c0afe40adfdc79c79031fe01
-    // This user deposited 625 wBETH and minted only 7.65 eETH due to the low liquidity in the curve pool that it used
-    // Rescue him!
-    // function CASE1() external onlyAdmin {
-    //     if (flags["CASE1"]) revert();
-    //     flags["CASE1"] = true;
-
-    //     // address recipient = 0xc0948cE48e87a55704EfEf8E4b8f92CA34D2087E;
-    //     // uint256 wbethAmount = 625601006520000000000;
-    //     // uint256 eEthAmount = 7650414487237129340;
-    //     // uint256 exchagneRate = 1032800000000000000; // "the price of wBETH to ETH should be 1.0328"
-    //     // uint256 diff = (wbethAmount * exchagneRate / 1e18) - eEthAmount;
-    //     // uint256 diff = 617.302086995462789012 ether;
-    //     liquidityPool.depositToRecipient(0xc0948cE48e87a55704EfEf8E4b8f92CA34D2087E, 617.302086995462789012 ether, address(0));
-    // }
-
     /* VIEW FUNCTIONS */
 
     // Given the `_amount` of `_token` token, returns the equivalent amount of ETH 
@@ -447,6 +445,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         for (uint256 i = 0; i < dummies.length; i++) {
             total += getTotalPooledEther(address(dummies[i]));
         }
+        total += liquidityPool.eETH().balanceOf(address(this));
     }
 
     /// deposited (restaked) ETH can have 3 states:
@@ -546,6 +545,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         }
         info.totalDepositedThisPeriod += uint96(_amount);
         info.totalDeposited += uint96(_amount);
+    }
+
+    function _withdrawEther() internal {
+        uint256 amountToLiquidityPool = address(this).balance;
+        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
+        if (!sent) revert EthTransferFailed();
     }
 
     function _L2SanityChecks(address _token) internal view {
