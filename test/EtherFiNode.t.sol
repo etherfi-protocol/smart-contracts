@@ -931,8 +931,13 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(nonExitPenalty, 0 ether);
     }
 
-    function test_ImplementationContract() public {
-        assertEq(safeInstance.implementation(), address(node));
+    function test_upgradeEtherFiNode() public {
+        EtherFiNode etherFiNode = new EtherFiNode();
+        address newImpl = address(etherFiNode);
+        vm.prank(stakingManagerInstance.owner());
+        stakingManagerInstance.upgradeEtherFiNode(newImpl);
+
+        assertEq(safeInstance.implementation(), address(newImpl));
     }
 
     function test_trackingTVL() public {

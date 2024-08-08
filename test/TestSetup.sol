@@ -393,6 +393,8 @@ contract TestSetup is Test {
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
+
+        // _upgrade_contracts();
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
@@ -592,6 +594,19 @@ contract TestSetup is Test {
             address(eigenLayerDelayedWithdrawalRouter),
             address(eigenLayerDelegationManager)
         );
+
+        nodeOperatorManagerInstance.setAuctionContractAddress(address(auctionInstance));
+
+        auctionInstance.setStakingManagerContractAddress(address(stakingManagerInstance));
+
+        protocolRevenueManagerInstance.setAuctionManagerAddress(address(auctionInstance));
+        protocolRevenueManagerInstance.setEtherFiNodesManagerAddress(address(managerInstance));
+
+        stakingManagerInstance.setEtherFiNodesManagerAddress(address(managerInstance));
+        stakingManagerInstance.setLiquidityPoolAddress(address(liquidityPoolInstance));
+        stakingManagerInstance.registerEtherFiNodeImplementationContract(address(node));
+        stakingManagerInstance.registerTNFTContract(address(TNFTInstance));
+        stakingManagerInstance.registerBNFTContract(address(BNFTInstance));
         vm.stopPrank();
 
         // configure starting roles
@@ -624,7 +639,7 @@ contract TestSetup is Test {
 
         vm.stopPrank();
 
-        vm.startPrank(alice);
+        vm.startPrank(admin);
         managerInstance.setStakingRewardsSplit(50_000, 50_000, 815_625, 84_375);
         managerInstance.setNonExitPenalty(300, 1 ether);
         membershipManagerInstance.setTopUpCooltimePeriod(28 days);
@@ -691,20 +706,6 @@ contract TestSetup is Test {
         vm.stopPrank();
 
         vm.startPrank(owner);
-        nodeOperatorManagerInstance.setAuctionContractAddress(address(auctionInstance));
-
-        auctionInstance.setStakingManagerContractAddress(address(stakingManagerInstance));
-
-        protocolRevenueManagerInstance.setAuctionManagerAddress(address(auctionInstance));
-        protocolRevenueManagerInstance.setEtherFiNodesManagerAddress(address(managerInstance));
-
-        stakingManagerInstance.setEtherFiNodesManagerAddress(address(managerInstance));
-        stakingManagerInstance.setLiquidityPoolAddress(address(liquidityPoolInstance));
-        stakingManagerInstance.registerEtherFiNodeImplementationContract(address(node));
-        stakingManagerInstance.registerTNFTContract(address(TNFTInstance));
-        stakingManagerInstance.registerBNFTContract(address(BNFTInstance));
-
-
         depGen = new DepositDataGeneration();
 
         attacker = new Attacker(address(liquidityPoolInstance));
@@ -1102,12 +1103,12 @@ contract TestSetup is Test {
 
         // deposit against that bid with restaking enabled
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchDepositWithBidIds(createdBids, 1, alice, alice, alice, restaked, 0);
+        stakingManagerInstance.batchDepositWithBidIds(createdBids, 1, alice, alice, restaked, 0);
 
         (IStakingManager.DepositData[] memory depositDataArray,,,) = _prepareForValidatorRegistration(createdBids);
         vm.deal(address(liquidityPoolInstance), 1 ether);
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(createdBids, alice, alice, depositDataArray, alice);
+        stakingManagerInstance.batchRegisterValidators{value: 1 ether}(createdBids, alice, alice, depositDataArray);
 
         return bidId;
     }

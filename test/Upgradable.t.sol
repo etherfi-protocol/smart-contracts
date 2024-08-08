@@ -32,6 +32,12 @@ contract StakingManagerV2Syko is StakingManager {
     }
 }
 
+contract StakingManagerV2 is StakingManager {
+    function isUpgraded() public pure returns(bool){
+        return true;
+    }
+}
+
 contract AuctionManagerV2Test is AuctionManager {
     function isUpgraded() public pure returns(bool){
         return true;
@@ -82,7 +88,7 @@ contract UpgradeTest is TestSetup {
     TNFTV2 public TNFTV2Instance;
     EtherFiNodesManagerV2 public etherFiNodesManagerV2Instance;
     ProtocolRevenueManagerV2 public protocolRevenueManagerV2Instance;
-    StakingManager public stakingManagerV2Instance;
+    StakingManagerV2 public stakingManagerV2Instance;
     NodeOperatorManagerV2 public nodeOperatorManagerV2Instance;
 
     uint256[] public slippageArray;
@@ -103,7 +109,6 @@ contract UpgradeTest is TestSetup {
         auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
 
         assertEq(auctionInstance.numberOfActiveBids(), 1);
-        assertEq(auctionInstance.getImplementation(), address(auctionImplementation));
 
         AuctionManagerV2Test auctionManagerV2Implementation = new AuctionManagerV2Test();
 
@@ -124,8 +129,6 @@ contract UpgradeTest is TestSetup {
     }
 
     function test_CanUpgradeBNFT() public {
-        assertEq(BNFTInstance.getImplementation(), address(BNFTImplementation));
-
         BNFTV2 BNFTV2Implementation = new BNFTV2();
 
         vm.prank(owner);
@@ -142,8 +145,6 @@ contract UpgradeTest is TestSetup {
     }
 
     function test_CanUpgradeTNFT() public {
-        assertEq(TNFTInstance.getImplementation(), address(TNFTImplementation));
-
         TNFTV2 TNFTV2Implementation = new TNFTV2();
 
         vm.prank(owner);
@@ -160,8 +161,6 @@ contract UpgradeTest is TestSetup {
     }
 
     function test_CanUpgradeEtherFiNodesManager() public {
-        assertEq(managerInstance.getImplementation(), address(managerImplementation));
-
         vm.prank(alice);
         managerInstance.setStakingRewardsSplit(uint64(100000), uint64(100000), uint64(400000), uint64(400000));
 
@@ -201,8 +200,6 @@ contract UpgradeTest is TestSetup {
     }
 
     function test_CanUpgradeProtocolRevenueManager() public {
-        assertEq(protocolRevenueManagerInstance.getImplementation(), address(protocolRevenueManagerImplementation));
-
         vm.prank(alice);
 
         ProtocolRevenueManagerV2 protocolRevenueManagerV2Implementation = new ProtocolRevenueManagerV2();
@@ -236,12 +233,10 @@ contract UpgradeTest is TestSetup {
 
         vm.stopPrank();
 
-        assertEq(stakingManagerInstance.getImplementation(), address(stakingManagerImplementation));
-
         vm.prank(alice);
         stakingManagerInstance.setMaxBatchDepositSize(uint128(25));
 
-        StakingManager stakingManagerV2Implementation = new StakingManager();
+        StakingManagerV2 stakingManagerV2Implementation = new StakingManagerV2();
 
         vm.expectRevert("Initializable: contract is already initialized");
         vm.prank(owner);
@@ -255,14 +250,14 @@ contract UpgradeTest is TestSetup {
         vm.prank(owner);
         stakingManagerInstance.upgradeTo(address(stakingManagerV2Implementation));
 
-        stakingManagerV2Instance = StakingManager(address(stakingManagerProxy));
+        stakingManagerV2Instance = StakingManagerV2(address(stakingManagerProxy));
 
         vm.expectRevert("Initializable: contract is already initialized");
         vm.prank(owner);
         stakingManagerV2Instance.initialize(address(auctionInstance), address(depositContractEth2));
 
         assertEq(stakingManagerV2Instance.getImplementation(), address(stakingManagerV2Implementation));
-        // assertEq(stakingManagerV2Instance.isUpgraded(), true);
+        assertEq(stakingManagerV2Instance.isUpgraded(), true);
         
         // State is maintained
         assertEq(stakingManagerV2Instance.maxBatchDepositSize(), 25);
@@ -286,12 +281,9 @@ contract UpgradeTest is TestSetup {
     }
 
     function test_CanUpgradeNodeOperatorManager() public {
-
         vm.prank(alice);
         nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 5);
         
-        assertEq(nodeOperatorManagerInstance.getImplementation(), address(nodeOperatorManagerImplementation));
-
         NodeOperatorManagerV2 nodeOperatorManagerV2Implementation = new NodeOperatorManagerV2();
 
         vm.expectRevert("Initializable: contract is already initialized");

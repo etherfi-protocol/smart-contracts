@@ -38,7 +38,7 @@ contract TimelockTest is TestSetup {
         managerInstance.renounceOwnership();
 
         // encoded data for EtherFiNodesManager.setStakingRewardsSplit()
-        bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.setStakingRewardsSplit.selector, 1, 0, 0, 0);
+        bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.setStakingRewardsSplit.selector, 1_000_000, 0, 0, 0);
 
         // attempt to directly execute with timelock. Not allowed to do tx before queuing it
         vm.prank(owner);
@@ -131,11 +131,11 @@ contract TimelockTest is TestSetup {
         // values should be updated
 
         (uint64 treasurySplit,,,) = managerInstance.stakingRewardsSplit();
-        assertEq(treasurySplit, 1);
+        assertEq(treasurySplit, 1_000_000);
 
 
         // queue and execute a tx to undo that change
-        bytes memory undoData = abi.encodeWithSelector(EtherFiNodesManager.setStakingRewardsSplit.selector, 5, 0, 0, 0);
+        bytes memory undoData = abi.encodeWithSelector(EtherFiNodesManager.setStakingRewardsSplit.selector, 0, 1_000_000, 0, 0);
         vm.prank(admin);
         tl.schedule(
             address(managerInstance), // target
@@ -155,7 +155,7 @@ contract TimelockTest is TestSetup {
             0                         // optional salt
         );
         (treasurySplit,,,) = managerInstance.stakingRewardsSplit();
-        assertEq(treasurySplit, 5);
+        assertEq(treasurySplit, 0);
 
         // non-proposer should not be able to schedule tx
         address rando = vm.addr(0x987654321);

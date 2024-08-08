@@ -136,7 +136,7 @@ contract EtherFiNodesManagerTest is TestSetup {
 
         // deposit
         vm.prank(address(liquidityPoolInstance));
-        uint256[] memory processedBids = stakingManagerInstance.batchDepositWithBidIds(bidId, 1, alice, bob, henry, false, 0);
+        uint256[] memory processedBids = stakingManagerInstance.batchDepositWithBidIds(bidId, 1, bob, henry, false, 0);
 
         // assigned safe should be the premade one
         address node = managerInstance.etherfiNodeAddress(processedBids[0]);
@@ -149,7 +149,7 @@ contract EtherFiNodesManagerTest is TestSetup {
 
         // recycle the first safe
         vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.batchCancelDeposit(processedBids, alice);
+        stakingManagerInstance.batchCancelDeposit(processedBids, henry);
         assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 2);
 
         // original premade safe should be on top of the stack after being recycled

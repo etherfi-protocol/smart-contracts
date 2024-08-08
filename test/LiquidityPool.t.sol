@@ -885,7 +885,7 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.batchDeposit{value: 8 ether}(bidIds, 4);
         vm.stopPrank();
 
-        vm.startPrank(owner);
+        vm.startPrank(alice);
         //Owner de registers themselves
         liquidityPoolInstance.deRegisterBnftHolder(owner);
         vm.stopPrank();
@@ -928,7 +928,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_RestakedDepositFromBNFTHolder() public {
         initializeRealisticFork(MAINNET_FORK);
-        _upgrade_liquidity_pool_contract();
+        setupRoleRegistry();
 
         _initBid();
 
