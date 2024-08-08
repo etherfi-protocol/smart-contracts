@@ -448,6 +448,7 @@ contract StakingManager is
         return address(upgradableBeacon);
     }
 
+    // staker == BNFT holder for the validator of id = 'id'
     function bidIdToStaker(uint256 id) external view returns (address) {
         return bidIdToStakerInfo[id].staker;
     }
