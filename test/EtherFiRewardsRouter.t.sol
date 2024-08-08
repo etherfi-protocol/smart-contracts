@@ -17,17 +17,23 @@ contract EtherFiRewardsRouterTest is TestSetup {
         etherfiRewardsRouterImplementation = new EtherFiRewardsRouter(address(liquidityPoolInstance));
         etherfiRewardsRouterProxy = new UUPSProxy(address(etherfiRewardsRouterImplementation), "");
         etherfiRewardsRouterInstance = EtherFiRewardsRouter(payable(address(etherfiRewardsRouterProxy)));
-        etherfiRewardsRouterInstance.initialize();
+        etherfiRewardsRouterInstance.initialize(address(roleRegistry));
+        vm.startPrank(superAdmin);
+        roleRegistry.grantRole(etherfiRewardsRouterInstance.ETHERFI_ROUTER_ADMIN(), admin);
+        vm.stopPrank();
+
         liquidityPoolAddress = address(liquidityPoolInstance);
         vm.deal(address(etherfiRewardsRouterInstance), 10 ether);
         vm.stopPrank(); 
     }
 
     function test_transferToLiquidityPool() public {
+        vm.startPrank(admin);
         uint256 lpBalanceBefore = address(liquidityPoolAddress).balance;
         etherfiRewardsRouterInstance.transferToLiquidityPool();
         uint256 lpBalanceAfter = address(liquidityPoolAddress).balance;
         assertEq(lpBalanceAfter, lpBalanceBefore + 10 ether);
+        vm.stopPrank();
     }
 
     function test_elRouterUpgrade() public {
@@ -43,7 +49,7 @@ contract EtherFiRewardsRouterTest is TestSetup {
     } 
 
     function test_checkEventEmitted() public {
-        vm.startPrank(owner);
+        vm.startPrank(admin);
         vm.expectEmit(true, true, false, true);
         emit EtherFiRewardsRouter.EthSent(address(etherfiRewardsRouterInstance), liquidityPoolAddress, 10 ether);
         etherfiRewardsRouterInstance.transferToLiquidityPool();
