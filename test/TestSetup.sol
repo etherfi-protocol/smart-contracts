@@ -1232,11 +1232,6 @@ contract TestSetup is Test {
         withdrawRequestNFTInstance.finalizeRequests(_requestId);
         uint128 amount = withdrawRequestNFTInstance.getRequest(_requestId).amountOfEEth;
         vm.stopPrank();
-
-        if (withdrawRequestNFTInstance.isValid(_requestId)) {
-            vm.prank(address(etherFiAdminInstance));
-            liquidityPoolInstance.addEthAmountLockedForWithdrawal(amount);
-        }
     }
 
     function _upgrade_multiple_validators_per_safe() internal {
