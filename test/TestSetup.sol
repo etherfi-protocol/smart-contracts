@@ -727,7 +727,6 @@ contract TestSetup is Test {
     }
 
     function setupRoleRegistry() public {
-
         // TODO: I don't love the coupling here but it was too easy to make tests
         // where the roleRegistry global var diverged from the one set in the manager instance.
         // We should work toward a better system that for each contract, will deploy+initialize
@@ -956,6 +955,7 @@ contract TestSetup is Test {
         roleRegistry.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
         roleRegistry.grantRole(etherFiOracleInstance.ORACLE_ADMIN_ROLE(), address(etherFiAdminInstance));
         roleRegistry.grantRole(withdrawRequestNFTInstance.WITHDRAW_NFT_ADMIN_ROLE(), address(etherFiAdminInstance));
+        roleRegistry.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), address(etherFiOracleInstance));
 
         vm.stopPrank();
     }
@@ -1232,11 +1232,6 @@ contract TestSetup is Test {
         withdrawRequestNFTInstance.finalizeRequests(_requestId);
         uint128 amount = withdrawRequestNFTInstance.getRequest(_requestId).amountOfEEth;
         vm.stopPrank();
-
-        if (withdrawRequestNFTInstance.isValid(_requestId)) {
-            vm.prank(address(etherFiAdminInstance));
-            liquidityPoolInstance.addEthAmountLockedForWithdrawal(amount);
-        }
     }
 
     function _upgrade_multiple_validators_per_safe() internal {
@@ -1358,6 +1353,12 @@ contract TestSetup is Test {
         address newImpl = address(new Liquifier());
         vm.prank(liquifierInstance.owner());
         liquifierInstance.upgradeTo(newImpl);
+    }
+
+    function _upgrade_withdraw_request_nft() internal {
+        address newImpl = address(new WithdrawRequestNFT());
+        vm.prank(withdrawRequestNFTInstance.owner());
+        withdrawRequestNFTInstance.upgradeTo(newImpl);
     }
 
     function _to_uint256_array(uint256 _value) internal pure returns (uint256[] memory) {
