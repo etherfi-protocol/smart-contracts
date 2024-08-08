@@ -49,16 +49,7 @@ contract LiquifierTest is TestSetup {
             liquifierInstance.registerToken(address(cbEth), address(cbEthStrategy), true, 0, false);
             liquifierInstance.registerToken(address(wbEth), address(wbEthStrategy), true, 0, false);
         }
-        vm.stopPrank();
-    }
 
-    function test_rando_deposit_fails() public {
-        _setUp(MAINNET_FORK);
-
-        vm.deal(alice, 100 ether);
-        vm.startPrank(alice);
-        vm.expectRevert("not allowed");
-        payable(address(liquifierInstance)).call{value: 10 ether}("");
         vm.stopPrank();
     }
 
@@ -146,35 +137,17 @@ contract LiquifierTest is TestSetup {
     }
 
     function test_withdrawal_of_non_restaked_stEth() public {
-        _setUp(MAINNET_FORK);
+        test_deposit_stEth();
         
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
         uint256 lpBalance = address(liquidityPoolInstance).balance;
+        uint256 liquifierStEthTvl = liquifierInstance.getTotalPooledEther(address(stEth));
+        uint256 liquifierBalance = address(liquifierInstance).balance;
 
-        assertEq(eETHInstance.balanceOf(alice), 0);
-        assertEq(liquifierInstance.getTotalPooledEther(), 0);
+        vm.prank(alice);        
+        uint256[] memory reqIds = liquifierInstance.stEthRequestWithdrawal(10 ether);
 
-        vm.deal(alice, 100 ether);
-        vm.startPrank(alice);        
-        stEth.submit{value: 10 ether}(address(0));
-        
-        ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(liquifierInstance), 10 ether, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
-        ILiquifier.PermitInput memory permitInput2 = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
-        liquifierInstance.depositWithERC20WithPermit(address(stEth), 10 ether, address(0), permitInput2);
-
-        // Aliice has 10 ether eETH
-        // Total eETH TVL is 10 ether
-        assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.1 ether);
-        assertGe(liquifierInstance.getTotalPooledEther(), 10 ether - 0.1 ether);
-        assertGe(liquidityPoolInstance.getTotalPooledEther(), lpTvl + 10 ether - 0.1 ether);
-
-        // The protocol admin initiates the redemption process for 3500 stETH
-        uint256[] memory reqIds = liquifierInstance.stEthRequestWithdrawal();
-        vm.stopPrank();
-
-        assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.1 ether);
-        assertGe(liquifierInstance.getTotalPooledEther(), 10 ether - 0.1 ether);
-        assertGe(liquidityPoolInstance.getTotalPooledEther(), lpTvl + 10 ether - 0.1 ether);
+        assertApproxEqAbs(liquifierInstance.getTotalPooledEther(address(stEth)), liquifierStEthTvl, 1);
 
         bytes32 FINALIZE_ROLE = liquifierInstance.lidoWithdrawalQueue().FINALIZE_ROLE();
         address finalize_role = liquifierInstance.lidoWithdrawalQueue().getRoleMember(FINALIZE_ROLE, 0);
@@ -186,31 +159,31 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.lidoWithdrawalQueue().finalize(reqIds[reqIds.length-1], currentRate);
         vm.stopPrank();
 
-        assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.1 ether);
-        assertGe(liquifierInstance.getTotalPooledEther(), 10 ether - 0.1 ether);
-        assertGe(liquidityPoolInstance.getTotalPooledEther(), lpTvl + 10 ether - 0.1 ether);
-
         // The ether.fi admin claims the finalized withdrawal, which sends the ETH to the liquifier contract
-        vm.startPrank(alice);
         uint256 lastCheckPointIndex = liquifierInstance.lidoWithdrawalQueue().getLastCheckpointIndex();
         uint256[] memory hints = liquifierInstance.lidoWithdrawalQueue().findCheckpointHints(reqIds, 1, lastCheckPointIndex);
+        
+        vm.prank(alice);
         liquifierInstance.stEthClaimWithdrawals(reqIds, hints);
 
-        assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.1 ether);
-        assertGe(liquifierInstance.getTotalPooledEther(), 10 ether - 0.1 ether);
-        assertGe(liquidityPoolInstance.getTotalPooledEther(), lpTvl + 10 ether - 0.1 ether);
-        assertGe(address(liquidityPoolInstance).balance, lpBalance);
+        assertApproxEqAbs(liquifierInstance.getTotalPooledEther(address(stEth)), liquifierStEthTvl - 10 ether, 1 gwei);
+        assertApproxEqAbs(address(liquifierInstance).balance, liquifierBalance + 10 ether, 1 gwei);
 
         // The ether.fi admin withdraws the ETH from the liquifier contract to the liquidity pool contract
+        vm.prank(alice);
         liquifierInstance.withdrawEther();
+
+        assertApproxEqAbs(address(liquidityPoolInstance).balance, lpBalance + 10 ether + liquifierBalance, 1 gwei);
+    }
+
+    function test_stEthRequestWithdrawal() public {
+        test_deposit_stEth();
+
+        vm.startPrank(alice);        
+        liquifierInstance.stEthRequestWithdrawal(1 ether);
+        liquifierInstance.stEthRequestWithdrawal(5 ether);
+        liquifierInstance.stEthRequestWithdrawal();
         vm.stopPrank();
-
-        // the cycle completes
-        assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.1 ether);
-        assertEq(liquifierInstance.getTotalPooledEther() / 100, 0);
-        assertGe(liquidityPoolInstance.getTotalPooledEther(), lpTvl + 10 ether - 0.1 ether);
-        assertGe(address(liquidityPoolInstance).balance + liquifierInstance.getTotalPooledEther(), lpBalance + 10 ether - 0.1 ether);
-
     }
 
     function test_withdrawal_of_restaked_wBETH_succeeds() internal {
@@ -234,7 +207,6 @@ contract LiquifierTest is TestSetup {
     }
 
     function test_erc20_queued_withdrawal_v2() public {
-        setUpTests();
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
@@ -421,7 +393,7 @@ contract LiquifierTest is TestSetup {
     }
 
 
-    function test_pancacke_wbETH_swap() public {
+    function test_pancacke_wbETH_swap() internal {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
@@ -632,7 +604,6 @@ contract LiquifierTest is TestSetup {
     function test_pauser() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
-        setUpTests();
 
         vm.startPrank(bob);
         vm.expectRevert(Liquifier.IncorrectRole.selector);

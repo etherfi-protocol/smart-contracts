@@ -2,6 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "./IStakingManager.sol";
+import "./IeETH.sol";
 
 interface ILiquidityPool {
 
@@ -48,6 +49,7 @@ interface ILiquidityPool {
     function sharesForAmount(uint256 _amount) external view returns (uint256);
     function sharesForWithdrawalAmount(uint256 _amount) external view returns (uint256);
     function amountForShare(uint256 _share) external view returns (uint256);
+    function eETH() external view returns (IeETH);
 
     function deposit() external payable returns (uint256);
     function deposit(address _referral) external payable returns (uint256);

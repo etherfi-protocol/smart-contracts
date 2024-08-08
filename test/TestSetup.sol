@@ -399,6 +399,10 @@ contract TestSetup is Test {
         // intialize `pauser` and `roleRegistry` for testing against V2.5
         vm.startPrank(owner);
 
+        if (liquifierInstance.paused()) {
+            liquifierInstance.unPauseContract();
+        }
+
         address impl = address(new BucketRateLimiter());
         bucketRateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
         bucketRateLimiter.initialize();
@@ -406,15 +410,11 @@ contract TestSetup is Test {
 
         bucketRateLimiter.setCapacity(40 ether);
         bucketRateLimiter.setRefillRatePerSecond(1 ether);
+        vm.stopPrank();
 
-        if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
-            liquifierInstance.upgradeTo(address(new Liquifier()));
-            liquifierInstance.initializeV2dot5(address(roleRegistry), address(pauserInstance));
-        }
+        setupRoleRegistry();
 
         vm.warp(block.timestamp + 1 days);
-
-        vm.stopPrank();
     }
 
 
@@ -731,6 +731,8 @@ contract TestSetup is Test {
         // where the roleRegistry global var diverged from the one set in the manager instance.
         // We should work toward a better system that for each contract, will deploy+initialize
         // proxy if it doesn't exist, or upgrade to the latest version otherwise
+        _upgrade_contracts();
+
         if (address(managerInstance.roleRegistry()) == address(0x0)) {
 
             // deploy new versions of role registry
@@ -1306,6 +1308,26 @@ contract TestSetup is Test {
         vm.stopPrank();
     }
 
+    function _upgrade_contracts() internal {
+        _upgrade_auction_manager_contract();
+        _upgrade_staking_manager_contract();
+        _upgrade_node_oeprator_manager_contract();
+        _upgrade_etherfi_node_contract();
+        _upgrade_etherfi_nodes_manager_contract();
+        _upgrade_tnft_contract();
+        _upgrade_bnft_contract();
+
+        _upgrade_liquidity_pool_contract();
+        _upgrade_eEth_contract();
+        _upgrade_weEth_contract();
+        _upgrade_withdraw_request_nft();
+
+        _upgrade_etherfi_oracle_contract();
+        _upgrade_etherfi_admin_contract();
+
+        _upgrade_liquifier();
+    }
+
     function _upgrade_etherfi_node_contract() internal {
         EtherFiNode etherFiNode = new EtherFiNode();
         address newImpl = address(etherFiNode);
@@ -1349,6 +1371,12 @@ contract TestSetup is Test {
         etherFiOracleInstance.upgradeTo(newImpl);
     }
 
+    function _upgrade_etherfi_admin_contract() internal {
+        address newImpl = address(new EtherFiAdmin());
+        vm.prank(etherFiAdminInstance.owner());
+        etherFiAdminInstance.upgradeTo(newImpl);
+    }
+
     function _upgrade_liquifier() internal {
         address newImpl = address(new Liquifier());
         vm.prank(liquifierInstance.owner());
@@ -1359,6 +1387,30 @@ contract TestSetup is Test {
         address newImpl = address(new WithdrawRequestNFT());
         vm.prank(withdrawRequestNFTInstance.owner());
         withdrawRequestNFTInstance.upgradeTo(newImpl);
+    }
+
+    function _upgrade_eEth_contract() internal {
+        address newImpl = address(new EETH());
+        vm.prank(eETHInstance.owner());
+        eETHInstance.upgradeTo(newImpl);
+    }
+
+    function _upgrade_weEth_contract() internal {
+        address newImpl = address(new WeETH());
+        vm.prank(weEthInstance.owner());
+        weEthInstance.upgradeTo(newImpl);
+    }
+
+    function _upgrade_tnft_contract() internal {
+        address newImpl = address(new TNFT());
+        vm.prank(TNFTInstance.owner());
+        TNFTInstance.upgradeTo(newImpl);
+    }
+
+    function _upgrade_bnft_contract() internal {
+        address newImpl = address(new BNFT());
+        vm.prank(BNFTInstance.owner());
+        BNFTInstance.upgradeTo(newImpl);
     }
 
     function _to_uint256_array(uint256 _value) internal pure returns (uint256[] memory) {
