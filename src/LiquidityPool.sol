@@ -205,7 +205,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
         eETH.burnShares(msg.sender, share);
 
-        _sendFund(_recipient, _amount);
+        if (_recipient != address(this)) {
+            _sendFund(_recipient, _amount);
+        }
 
         return share;
     }

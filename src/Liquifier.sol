@@ -250,7 +250,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     function stEthRequestWithdrawal(uint256 _amount) public returns (uint256[] memory) {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT() || _amount > lido.balanceOf(address(this))) revert IncorrectAmount();
+        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) revert IncorrectAmount();
+        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
 
         tokenInfos[address(lido)].ethAmountPendingForWithdrawals += uint128(_amount);
 
@@ -293,8 +294,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     // Swap Liquifier's eETH for ETH from the liquidity pool and send it back to the liquidity pool
     function withdrawEEth(uint256 amount) external {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        liquidityPool.withdraw(address(this), amount);
-        _withdrawEther();
+        liquidityPool.withdraw(address(liquidityPool), amount);
     }
 
     function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOwner {

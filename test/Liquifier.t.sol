@@ -630,4 +630,44 @@ contract LiquifierTest is TestSetup {
         liquidityPoolInstance.getTotalPooledEther();
         liquifierInstance.getTotalPooledEther();
     }
+
+    function test_swapEEthForStEth_mainnet() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
+        eETHInstance.approve(address(liquifierInstance), 50 ether);
+
+        uint256 beforeTVL = liquidityPoolInstance.getTotalPooledEther();
+        uint256 beforeLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
+
+        liquifierInstance.swapEEthForStEth(50 ether);
+        vm.stopPrank();
+
+        uint256 afterTVL = liquidityPoolInstance.getTotalPooledEther();
+        uint256 afterLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
+
+        assertApproxEqAbs(afterTVL, beforeTVL, 1);
+        assertApproxEqAbs(beforeLiquifierTotalPooledEther, afterLiquifierTotalPooledEther, 1);
+    }
+
+    function test_withdrawEEth() public {
+        test_swapEEthForStEth_mainnet();
+
+        _upgrade_liquidity_pool_contract();
+
+        uint256 beforeTVL = liquidityPoolInstance.getTotalPooledEther();
+        uint256 beforeLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
+
+        vm.prank(alice);
+        liquifierInstance.withdrawEEth(10 ether);
+
+        uint256 afterTVL = liquidityPoolInstance.getTotalPooledEther();
+        uint256 afterLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
+
+        assertApproxEqAbs(int256(afterTVL) - int256(beforeTVL), int256(afterLiquifierTotalPooledEther) - int256(beforeLiquifierTotalPooledEther), 1);
+    }
 }
