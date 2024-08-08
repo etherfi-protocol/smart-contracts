@@ -7,7 +7,7 @@ import "./RoleRegistry.sol";
 
 contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     address public immutable liquidityPoolAddress;
-    RoleRegistry public roleRegistry;
+    RoleRegistry public immutable roleRegistry;
 
     bytes32 public constant ETHERFI_ROUTER_ADMIN = keccak256("ETHERFI_ROUTER_ADMIN");
 
@@ -16,19 +16,19 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
 
     error IncorrectRole();
 
-    constructor(address _liquidityPoolAddress) {
+    constructor(address _liquidityPoolAddress, address _roleRegistry) {
         _disableInitializers();
         liquidityPoolAddress = _liquidityPoolAddress;
+        roleRegistry = RoleRegistry(_roleRegistry);
     }
 
     receive() external payable {
         emit EthReceived(msg.sender, msg.value);
     }
 
-    function initialize(address _roleRegistry) public initializer {
+    function initialize() public initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
-        roleRegistry = RoleRegistry(_roleRegistry);
     }
 
     function transferToLiquidityPool() external {
