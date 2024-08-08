@@ -106,6 +106,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error NotSupportedToken();
     error EthTransferFailed();
     error NotEnoughBalance();
+    error IncorrectAmount();
     error AlreadyRegistered();
     error NotRegistered();
     error WrongOutput();
@@ -204,6 +205,15 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return eEthShare;
     }
 
+    // Swap user's eETH for Liquifier's stETH
+    function swapEEthForStEth(uint256 _amount) external whenNotPaused nonReentrant {
+        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
+        if (_amount > liquidityPool.eETH().balanceOf(msg.sender)) revert NotEnoughBalance();
+
+        IERC20(address(liquidityPool.eETH())).safeTransferFrom(msg.sender, address(this), _amount);
+        IERC20(address(lido)).safeTransfer(msg.sender, _amount);
+    }
+
     function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused returns (uint256) {
         try IERC20Permit(_token).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return depositWithERC20(_token, _amount, _referral);
@@ -240,7 +250,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     function stEthRequestWithdrawal(uint256 _amount) public returns (uint256[] memory) {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT() || _amount < lido.balanceOf(address(this))) revert NotEnoughBalance();
+        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) revert IncorrectAmount();
+        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
 
         tokenInfos[address(lido)].ethAmountPendingForWithdrawals += uint128(_amount);
 
@@ -277,10 +288,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
     function withdrawEther() external {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _withdrawEther();
+    }
 
-        uint256 amountToLiquidityPool = address(this).balance;
-        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
-        if (!sent) revert EthTransferFailed();
+    // Swap Liquifier's eETH for ETH from the liquidity pool and send it back to the liquidity pool
+    function withdrawEEth(uint256 amount) external {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        liquidityPool.withdraw(address(liquidityPool), amount);
     }
 
     function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOwner {
@@ -439,6 +453,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         for (uint256 i = 0; i < dummies.length; i++) {
             total += getTotalPooledEther(address(dummies[i]));
         }
+        total += liquidityPool.eETH().balanceOf(address(this));
     }
 
     /// deposited (restaked) ETH can have 3 states:
@@ -530,8 +545,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (IERC20(_token).totalSupply() != IERC20(_token).balanceOf(address(this))) revert();
     }
 
-     function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
+    function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
         return (_a > _b) ? _b : _a;
+    }
+
+    function _withdrawEther() internal {
+        uint256 amountToLiquidityPool = address(this).balance;
+        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
+        if (!sent) revert EthTransferFailed();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
