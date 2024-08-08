@@ -79,6 +79,8 @@ contract MembershipManagerTest is TestSetup {
 
 
     function test_batchClaimWithdraw() public {
+        assertEq(withdrawRequestNFTInstance.accumulatedDustEEthShares(), 0, "Accumulated dust should be 0");
+
         vm.prank(alice);
         membershipManagerV1Instance.setFeeAmounts(0 ether, 0.5 ether, 0 ether, 30);
         
@@ -104,7 +106,10 @@ contract MembershipManagerTest is TestSetup {
 
         assertEq(address(membershipManagerV1Instance).balance, 2 * 0.5 ether);
         assertEq(address(bob).balance, 100 ether - 2 * 0.5 ether);
+
+        assertEq(withdrawRequestNFTInstance.accumulatedDustEEthShares(), 0, "Accumulated dust should be 0");
     }
+
 
 
     // Note that 1 ether membership points earns 1 kwei (10 ** 6) points a day
