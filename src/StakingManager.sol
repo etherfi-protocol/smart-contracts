@@ -124,9 +124,8 @@ contract StakingManager is
     /// @param _validatorIdToShareWithdrawalSafe the validator ID to use for the withdrawal safe
     /// @return Array of the bid IDs that were processed and assigned
     function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, address _tnftHolder, address _bnftHolder, bool _enableRestaking, uint256 _validatorIdToShareWithdrawalSafe)
-        public whenNotPaused nonReentrant returns (uint256[] memory)
+        public whenNotPaused nonReentrant onlyLiquidityPool returns (uint256[] memory)
     {
-        require(msg.sender == liquidityPoolContract, "Incorrect Caller");
         require(_candidateBidIds.length >= _numberOfValidators && _numberOfValidators <= maxBatchDepositSize, "WRONG_PARAMS");
         require(auctionManager.numberOfActiveBids() >= _numberOfValidators, "NOT_ENOUGH_BIDS");
 
@@ -144,8 +143,7 @@ contract StakingManager is
         address _bNftRecipient,
         address _tNftRecipient,
         DepositData[] calldata _depositData
-    ) public payable whenNotPaused nonReentrant {
-        require(msg.sender == liquidityPoolContract, "INCORRECT_CALLER");
+    ) public payable whenNotPaused nonReentrant onlyLiquidityPool {
         require(_validatorId.length <= maxBatchDepositSize && _validatorId.length == _depositData.length, "WRONG_PARAMS");
         require(msg.value == _validatorId.length * 1 ether, "DEPOSIT_AMOUNT_MISMATCH");
 
@@ -166,9 +164,7 @@ contract StakingManager is
         bytes[] calldata _pubKey,
         bytes[] calldata _signature,
         bytes32[] calldata _depositDataRootApproval
-    ) external payable {
-        require(msg.sender == liquidityPoolContract, "INCORRECT_CALLER");
-
+    ) external payable onlyLiquidityPool {
         for (uint256 x; x < _validatorId.length; ++x) {
             nodesManager.setValidatorPhase(_validatorId[x], IEtherFiNode.VALIDATOR_PHASE.LIVE);
             // Deposit to the Beacon Chain
@@ -186,9 +182,7 @@ contract StakingManager is
     ///         cancelling late. We need to update the number of validators each source has spun up to keep the target weight calculation correct.
     /// @param _validatorIds validators to cancel
     /// @param _bnftHolder address of the bNFT holder who initiated the transaction. Used for verification
-    function batchCancelDeposit(uint256[] calldata _validatorIds, address _bnftHolder) public whenNotPaused nonReentrant {
-        require(msg.sender == liquidityPoolContract, "INCORRECT_CALLER");
-
+    function batchCancelDeposit(uint256[] calldata _validatorIds, address _bnftHolder) public whenNotPaused nonReentrant onlyLiquidityPool {
         for (uint256 x; x < _validatorIds.length; ++x) { 
             if(nodesManager.phase(_validatorIds[x]) == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) {
                 uint256 nftTokenId = _validatorIds[x];
@@ -201,9 +195,7 @@ contract StakingManager is
 
     /// @dev create a new proxy instance of the etherFiNode withdrawal safe contract.
     /// @param _createEigenPod whether or not to create an associated eigenPod contract.
-    function instantiateEtherFiNode(bool _createEigenPod) external returns (address) {
-        require(msg.sender == address(nodesManager), "INCORRECT_CALLER");
-
+    function instantiateEtherFiNode(bool _createEigenPod) external onlyEtherFiNodesManager returns (address) {
         BeaconProxy proxy = new BeaconProxy(address(upgradableBeacon), "");
         address node = address(proxy);
         IEtherFiNode(node).initialize(address(nodesManager));
@@ -437,6 +429,14 @@ contract StakingManager is
         require(sent && address(this).balance == balanace - _amount, "SendFail");
     }
 
+    function _onlyLiquidtyPool() internal view {
+        require(msg.sender == liquidityPoolContract, "INCORRECT_CALLER");
+    }
+
+    function _onlyEtherFiNodesManager() internal view {
+        require(msg.sender == address(nodesManager), "INCORRECT_CALLER");
+    }
+
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     //--------------------------------------------------------------------------------------
@@ -468,4 +468,14 @@ contract StakingManager is
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
+
+    modifier onlyLiquidityPool() {
+        _onlyLiquidtyPool();
+        _;
+    }
+
+    modifier onlyEtherFiNodesManager() {
+        _onlyEtherFiNodesManager();
+        _;
+    }
 }
