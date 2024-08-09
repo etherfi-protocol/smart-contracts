@@ -27,10 +27,10 @@ contract EtherFiRewardsRouterTest is TestSetup {
         vm.stopPrank(); 
     }
 
-    function test_transferToLiquidityPool() public {
+    function test_withdrawToLiquidityPool() public {
         vm.startPrank(admin);
         uint256 lpBalanceBefore = address(liquidityPoolAddress).balance;
-        etherfiRewardsRouterInstance.transferToLiquidityPool();
+        etherfiRewardsRouterInstance.withdrawToLiquidityPool();
         uint256 lpBalanceAfter = address(liquidityPoolAddress).balance;
         assertEq(lpBalanceAfter, lpBalanceBefore + 10 ether);
         vm.stopPrank();
@@ -44,7 +44,7 @@ contract EtherFiRewardsRouterTest is TestSetup {
         address newImplementation = etherfiRewardsRouterInstance.getImplementation();
         assert(newImplementation != oldImplementation);
         assert(newImplementation == address(newEtherfiRewardsRouterImplementation));
-        test_transferToLiquidityPool();
+        test_withdrawToLiquidityPool();
         vm.stopPrank();
     } 
 
@@ -52,7 +52,7 @@ contract EtherFiRewardsRouterTest is TestSetup {
         vm.startPrank(admin);
         vm.expectEmit(true, true, false, true);
         emit EtherFiRewardsRouter.EthSent(address(etherfiRewardsRouterInstance), liquidityPoolAddress, 10 ether);
-        etherfiRewardsRouterInstance.transferToLiquidityPool();
+        etherfiRewardsRouterInstance.withdrawToLiquidityPool();
         vm.stopPrank();
     }  
 }
