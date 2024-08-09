@@ -785,6 +785,7 @@ contract TestSetup is Test {
 
         // Grant contract specific admin roles replacement for `updateAdmin(alice, true);` from protocol V2
         roleRegistry.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
+        roleRegistry.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
         roleRegistry.grantRole(auctionInstance.AUCTION_ADMIN_ROLE(), alice);
         roleRegistry.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
         roleRegistry.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), alice);
