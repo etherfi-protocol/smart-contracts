@@ -25,10 +25,10 @@ interface IStakingManager {
     function setEtherFiNodesManagerAddress(address _managerAddress) external;
     function setLiquidityPoolAddress(address _liquidityPoolAddress) external;
     
-    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, address _staker, address _tnftHolder, address _bnftHolder, bool _enableRestaking, uint256 _validatorIdToCoUseWithdrawalSafe) external returns (uint256[] memory);
-    function batchRegisterValidators(uint256[] calldata _validatorId, address _bNftRecipient, address _tNftRecipient, DepositData[] calldata _depositData, address _user) external payable;
+    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, address _tnftHolder, address _bnftHolder, bool _enableRestaking, uint256 _validatorIdToCoUseWithdrawalSafe) external returns (uint256[] memory);
+    function batchRegisterValidators(uint256[] calldata _validatorId, address _bNftRecipient, address _tNftRecipient, DepositData[] calldata _depositData) external payable;
     function batchApproveRegistration(uint256[] memory _validatorId, bytes[] calldata _pubKey, bytes[] calldata _signature, bytes32[] calldata _depositDataRootApproval) external payable;
-    function batchCancelDeposit(uint256[] calldata _validatorIds, address _caller) external;
+    function batchCancelDeposit(uint256[] calldata _validatorIds, address _bnftHolder) external;
 
     function instantiateEtherFiNode(bool _createEigenPod) external returns (address);
 }
