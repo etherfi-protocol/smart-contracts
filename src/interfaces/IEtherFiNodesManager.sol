@@ -30,6 +30,7 @@ interface IEtherFiNodesManager {
     function eigenPodManager() external view returns (IEigenPodManager);
     function delegationManager() external view returns (IDelegationManager);
     function treasuryContract() external view returns (address);
+    function unusedWithdrawalSafes(uint256 _index) external view returns (address);
 
     function etherfiNodeAddress(uint256 _validatorId) external view returns (address);
     function calculateTVL(uint256 _validatorId, uint256 _beaconBalance) external view returns (uint256, uint256, uint256, uint256);
