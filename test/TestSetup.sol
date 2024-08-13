@@ -1327,10 +1327,6 @@ contract TestSetup is Test {
         _upgrade_etherfi_oracle_contract();
         _upgrade_etherfi_admin_contract();
         _upgrade_liquifier();
-
-        // deploy a 2.5 roleRegistry contract
-
-
     }
 
     function _upgrade_etherfi_node_contract() internal {
