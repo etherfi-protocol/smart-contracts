@@ -27,7 +27,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         alternativeBatchSize = 10;
         accruedRewards = 8729224130452426342;
 
-        //upgrade the contact
+        // upgrade the contact
         upgradeContract();
 
         reportHash = etherFiOracleInstance.generateReportHash(report);
@@ -37,19 +37,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
     }
 
     function upgradeContract() public {
-        _upgrade_withdraw_request_nft();
-        _upgrade_liquidity_pool_contract();
-        _upgrade_staking_manager_contract();
-
-        EtherFiAdmin v2Implementation = new EtherFiAdmin();
-        EtherFiOracle v2ImplementationOracle = new EtherFiOracle();
-        vm.startPrank(etherFiAdminInstance.owner());
-        etherFiAdminInstance.upgradeTo(address(v2Implementation));
-        etherFiOracleInstance.upgradeTo(address(v2ImplementationOracle));
-        etherFiAdminInstance.initializeV2dot5(address(roleRegistry));
-        withdrawRequestNFTInstance.initializeV2dot5(address(roleRegistry));
-        liquidityPoolInstance.initializeV2dot5(address(roleRegistry));
-
+        setupRoleRegistry();
         
         vm.startPrank(superAdmin);
         roleRegistry.grantRole(stakingManagerInstance.STAKING_MANAGER_ADMIN_ROLE(), address(etherFiAdminInstance));
@@ -57,8 +45,8 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         roleRegistry.grantRole(etherFiOracleInstance.ORACLE_ADMIN_ROLE(), address(etherFiAdminInstance));
         roleRegistry.grantRole(withdrawRequestNFTInstance.WITHDRAW_NFT_ADMIN_ROLE(), address(etherFiAdminInstance));
         roleRegistry.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), address(etherFiOracleInstance));
-
         roleRegistry.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), committeeMember);
+        roleRegistry.grantRole(managerInstance.NODE_ADMIN_ROLE(), address(etherFiAdminInstance));
 
         vm.startPrank(etherFiAdminInstance.owner());
         etherFiAdminInstance.setValidatorTaskBatchSize(batchSize);

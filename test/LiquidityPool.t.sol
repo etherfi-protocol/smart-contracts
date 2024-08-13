@@ -518,7 +518,7 @@ contract LiquidityPoolTest is TestSetup {
     function test_sendExitRequestFails() public {
         uint256[] memory newValidators = new uint256[](10);
         vm.expectRevert(LiquidityPool.IncorrectRole.selector);
-        vm.prank(owner);
+        vm.prank(bob);
         liquidityPoolInstance.sendExitRequests(newValidators);
     }
 

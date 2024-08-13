@@ -394,7 +394,6 @@ contract TestSetup is Test {
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
 
-        // _upgrade_contracts();
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
@@ -771,6 +770,8 @@ contract TestSetup is Test {
         roleRegistry.grantRole(managerInstance.NODE_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(managerInstance.EIGENPOD_CALLER_ROLE(), admin);
         roleRegistry.grantRole(managerInstance.EXTERNAL_CALLER_ROLE(), admin);
+        roleRegistry.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(auctionInstance.AUCTION_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(managerInstance.WHITELIST_UPDATER(), admin);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), admin);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), admin);
@@ -1310,6 +1311,7 @@ contract TestSetup is Test {
         vm.stopPrank();
     }
 
+    // In mainnet fork test environments, this function is used to upgrade the contracts to V2.5
     function _upgrade_contracts() internal {
         _upgrade_auction_manager_contract();
         _upgrade_staking_manager_contract();
@@ -1318,16 +1320,17 @@ contract TestSetup is Test {
         _upgrade_etherfi_nodes_manager_contract();
         _upgrade_tnft_contract();
         _upgrade_bnft_contract();
-
         _upgrade_liquidity_pool_contract();
         _upgrade_eEth_contract();
         _upgrade_weEth_contract();
         _upgrade_withdraw_request_nft();
-
         _upgrade_etherfi_oracle_contract();
         _upgrade_etherfi_admin_contract();
-
         _upgrade_liquifier();
+
+        // deploy a 2.5 roleRegistry contract
+
+
     }
 
     function _upgrade_etherfi_node_contract() internal {
