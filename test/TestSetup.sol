@@ -364,7 +364,6 @@ contract TestSetup is Test {
             eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
             eigenLayerDelegationManager = IDelegationManager(0xA44151489861Fe9e3055d95adC98FbD462B948e7);
             eigenLayerTimelock = ITimelock(0xcF19CE0561052a7A7Ff21156730285997B350A7D);
-
         } else {
             revert("Unimplemented fork");
         }
