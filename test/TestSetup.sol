@@ -364,7 +364,6 @@ contract TestSetup is Test {
             eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
             eigenLayerDelegationManager = IDelegationManager(0xA44151489861Fe9e3055d95adC98FbD462B948e7);
             eigenLayerTimelock = ITimelock(0xcF19CE0561052a7A7Ff21156730285997B350A7D);
-
         } else {
             revert("Unimplemented fork");
         }
@@ -394,7 +393,6 @@ contract TestSetup is Test {
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
 
-        // _upgrade_contracts();
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
@@ -771,6 +769,8 @@ contract TestSetup is Test {
         roleRegistry.grantRole(managerInstance.NODE_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(managerInstance.EIGENPOD_CALLER_ROLE(), admin);
         roleRegistry.grantRole(managerInstance.EXTERNAL_CALLER_ROLE(), admin);
+        roleRegistry.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(auctionInstance.AUCTION_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(managerInstance.WHITELIST_UPDATER(), admin);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), admin);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), admin);
@@ -1310,6 +1310,7 @@ contract TestSetup is Test {
         vm.stopPrank();
     }
 
+    // In mainnet fork test environments, this function is used to upgrade the contracts to V2.5
     function _upgrade_contracts() internal {
         _upgrade_auction_manager_contract();
         _upgrade_staking_manager_contract();
@@ -1318,15 +1319,12 @@ contract TestSetup is Test {
         _upgrade_etherfi_nodes_manager_contract();
         _upgrade_tnft_contract();
         _upgrade_bnft_contract();
-
         _upgrade_liquidity_pool_contract();
         _upgrade_eEth_contract();
         _upgrade_weEth_contract();
         _upgrade_withdraw_request_nft();
-
         _upgrade_etherfi_oracle_contract();
         _upgrade_etherfi_admin_contract();
-
         _upgrade_liquifier();
     }
 
