@@ -2,10 +2,6 @@ name: Run Forge Tests
 
 on:
   pull_request:
-    branches:
-      - staging-2.5
-      - jtdev/fix-tests
-    # TODO (Add master branch and branch protection)
 
 jobs:
   check:
