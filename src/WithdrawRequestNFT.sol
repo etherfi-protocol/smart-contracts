@@ -34,6 +34,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     event WithdrawRequestInvalidated(uint32 indexed requestId);
     event WithdrawRequestValidated(uint32 indexed requestId);
     event WithdrawRequestSeized(uint32 indexed requestId);
+    event UpdateFinalizedRequestId(uint32 indexed requestId);
 
     error IncorrectRole();
 
@@ -252,6 +253,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     function _finalizeRequests(uint256 lastRequestId, uint128 totalAmount) internal {
+        emit UpdateFinalizedRequestId(uint32(lastRequestId));
         lastFinalizedRequestId = uint32(lastRequestId);
         liquidityPool.addEthAmountLockedForWithdrawal(totalAmount);
     }
