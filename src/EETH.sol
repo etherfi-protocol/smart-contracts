@@ -26,6 +26,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     mapping (address => mapping (address => uint256)) public allowances;
     mapping (address => CountersUpgradeable.Counter) private _nonces;
     mapping (address => bool) public whitelistedSpender;
+    mapping (address => uint256) public nonces;
 
     bytes32 private constant _PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
