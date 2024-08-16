@@ -19,6 +19,16 @@ contract Attacker {
 }
 
 
+contract RevertAttacker {
+
+    error REVERT();
+    receive() external payable {
+        revert REVERT();
+    }
+
+    constructor() {
+    }
+}
 
 
 contract RevertAttacker {
