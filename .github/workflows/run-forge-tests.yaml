@@ -2,6 +2,9 @@ name: Run Forge Tests
 
 on:
   pull_request:
+    branches:
+      - staging-2.5
+      # add master and branch protection
 
 jobs:
   check:
