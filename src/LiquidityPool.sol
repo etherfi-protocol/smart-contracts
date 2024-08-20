@@ -74,6 +74,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     RoleRegistry public roleRegistry;
 
+    address public syncPool;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -100,6 +102,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     event Rebase(uint256 totalEthLocked, uint256 totalEEthShares);
     event ProtocolFeePaid(uint128 protocolFees);
     event WhitelistStatusUpdated(bool value);
+    event unbackedDeposit(uint256 unbackedTokens);
 
     error IncorrectCaller();
     error InvalidAmount();
@@ -150,11 +153,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         liquifier = ILiquifier(_liquifier);
     }
 
-    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+    function initializeV2dot5(address _roleRegistry, address _syncPool) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
         
         // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
+        syncPool = _syncPool;
     }
 
     // Used by eETH staking flow
@@ -176,6 +180,15 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit Deposit(_recipient, _amount, SourceOfFunds.EETH, _referral);
 
         return _deposit(_recipient, 0, _amount);
+    }
+
+    // Used by the native minting flow to subsidize L2 native minting losses
+    function depositToSyncPool(uint256 _amount) public whenNotPaused returns (uint256) {
+        require(msg.sender == syncPool, "Incorrect Caller");
+
+        emit unbackedDeposit(_amount);
+
+        return _deposit(syncPool, 0, _amount);
     }
 
     // Used by ether.fan staking flow

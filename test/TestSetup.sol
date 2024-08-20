@@ -743,7 +743,7 @@ contract TestSetup is Test {
             // upgrade our existing contracts to utilize `roleRegistry`
             vm.startPrank(owner);
             managerInstance.initializeV2dot5(address(roleRegistry));
-            liquidityPoolInstance.initializeV2dot5(address(roleRegistry));
+            liquidityPoolInstance.initializeV2dot5(address(roleRegistry), address(0));
             auctionInstance.initializeV2dot5(address(roleRegistry));
             stakingManagerInstance.initializeV2dot5(address(roleRegistry));
             nodeOperatorManagerInstance.initializeV2dot5(address(roleRegistry));
