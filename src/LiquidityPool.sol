@@ -186,9 +186,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function depositToSyncPool(uint256 _amount) public whenNotPaused returns (uint256) {
         require(msg.sender == syncPool, "Incorrect Caller");
 
+        uint256 share = _sharesForDepositAmount(_amount);
+        eETH.mintShares(_recipient, share);
+
         emit unbackedDeposit(_amount);
 
-        return _deposit(syncPool, 0, _amount);
+        return share;
     }
 
     // Used by ether.fan staking flow
