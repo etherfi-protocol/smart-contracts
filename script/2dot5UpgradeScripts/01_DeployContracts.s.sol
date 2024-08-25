@@ -25,7 +25,6 @@ contract Deploy2Dot5Contracts is Script {
         RoleRegistry roleRegistryImplementation = new RoleRegistry();
         bytes memory initializerData = abi.encodeWithSelector(RoleRegistry.initialize.selector, superAdmin);
 
-
         console.log("Deploying Protocol Pauser...");
         Pauser pauserImplementation = new Pauser();
         initialPausables.push(IPausable(addressProvider.getContractAddress("AuctionManager")));
