@@ -190,7 +190,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @notice withdraw from pool
     /// @dev Burns user share from msg.senders account & Sends equivalent amount of ETH back to the recipient
     /// @param _recipient the recipient who will receives the ETH
-    /// @param _amount the amount to withdraw from contract
+    /// @param _amount the amount of ETH to withdraw from contract
     /// it returns the amount of shares burned
     function withdraw(address _recipient, uint256 _amount) external whenNotPaused returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);

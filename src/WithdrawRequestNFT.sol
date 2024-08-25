@@ -25,12 +25,14 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint32 public lastFinalizedRequestId;
     uint96 public accumulatedDustEEthShares; // to be burned or used to cover the validator churn cost
 
+    uint256 public cachedSharePrice;
+
     RoleRegistry public roleRegistry;
 
     bytes32 public constant WITHDRAW_NFT_ADMIN_ROLE = keccak256("WITHDRAW_NFT_ADMIN_ROLE");
 
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
-    event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
+    event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 DEPRECATED_burntShareOfEEth, address owner, uint256 fee);
     event WithdrawRequestInvalidated(uint32 indexed requestId);
     event WithdrawRequestValidated(uint32 indexed requestId);
     event WithdrawRequestSeized(uint32 indexed requestId);
@@ -71,7 +73,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @param fee fee to be subtracted from amount when recipient calls claimWithdraw
     /// @return uint256 id of the withdraw request
     function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external payable onlyLiquidtyPool returns (uint256) {
-        uint256 requestId = nextRequestId++;
+        uint256 requestId = nextRequestId++; 
         uint32 feeGwei = uint32(fee / 1 gwei);
 
         _requests[requestId] = IWithdrawRequestNFT.WithdrawRequest(amountOfEEth, shareOfEEth, true, feeGwei);
@@ -88,8 +90,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
 
-        // send the lesser value of the originally requested amount of eEth or the current eEth value of the shares
-        uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
+        // send the lesser ether ETH value of the originally requested amount of eEth or the eEth value at the last `cachedSharePrice` update
+        uint256 amountForShares = request.shareOfEEth * cachedSharePrice;
         uint256 amountToTransfer = (request.amountOfEEth < amountForShares) ? request.amountOfEEth : amountForShares;
         uint256 fee = uint256(request.feeGwei) * 1 gwei;
 
@@ -118,16 +120,17 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         uint256 amountBurnedShare = 0;
         if (fee > 0) {
             // send fee to membership manager
-            amountBurnedShare += liquidityPool.withdraw(address(membershipManager), fee);
+            _sendFund(address(membershipManager), fee);
         }
-        amountBurnedShare += liquidityPool.withdraw(recipient, amountToWithdraw);
+        _sendFund(recipient, amountToWithdraw)
 
-        uint256 amountUnBurnedShare = request.shareOfEEth - amountBurnedShare;
-        if (amountUnBurnedShare > 0) {
-            accumulatedDustEEthShares += uint96(amountUnBurnedShare);
-        }
+        // There are no dust eEth shares in the new version as all shares are burned upon finalization of a batch
+        // uint256 amountUnBurnedShare = request.shareOfEEth - amountBurnedShare;
+        // if (amountUnBurnedShare > 0) {
+        //     accumulatedDustEEthShares += uint96(amountUnBurnedShare);
+        // }
 
-        emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw + fee, amountBurnedShare, recipient, fee);
+        emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw + fee, 0, recipient, fee);
     }
 
     function batchClaimWithdraw(uint256[] calldata tokenIds) external {
@@ -255,11 +258,26 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function _finalizeRequests(uint256 lastRequestId, uint128 totalAmount) internal {
         emit UpdateFinalizedRequestId(uint32(lastRequestId), totalAmount);
         lastFinalizedRequestId = uint32(lastRequestId);
-        liquidityPool.addEthAmountLockedForWithdrawal(totalAmount);
+
+        // get cached share price
+        uint256 share = sharesForWithdrawalAmount(totalAmount);
+        uint256 amountForShares = liquidityPool.amountForShare(share);
+        cachedSharePrice = amountForShares;
+
+        liquidityPool.withdraw(address(this), totalAmount);
+
+        // not sure if we need this in new version
+        // liquidityPool.addEthAmountLockedForWithdrawal(totalAmount);
     }
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    function _sendFund(address _recipient, uint256 _amount) internal {
+        uint256 balanace = address(this).balance;
+        (bool sent, ) = _recipient.call{value: _amount}("");
+        require(sent && address(this).balance == balanace - _amount, "SendFail");
     }
 
     modifier onlyLiquidtyPool() {
