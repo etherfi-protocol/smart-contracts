@@ -69,6 +69,4 @@ interface ILiquidityPool {
 
     function rebase(int128 _accruedRewards) external;
     function payProtocolFees(uint128 _protocolFees) external;
-    function addEthAmountLockedForWithdrawal(uint128 _amount) external;
-    function reduceEthAmountLockedForWithdrawal(uint128 _amount) external;    
 }

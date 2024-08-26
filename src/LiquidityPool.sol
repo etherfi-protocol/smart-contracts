@@ -65,7 +65,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     mapping(address => BnftHoldersIndex) public validatorSpawner;
 
     bool public restakeBnftDeposits;
-    uint128 public ethAmountLockedForWithdrawal;
+    uint128 public DEPRECATED_ethAmountLockedForWithdrawal;
     bool public paused;
     IAuctionManager public auctionManager;
     ILiquifier public liquifier;
@@ -136,7 +136,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         tNft = ITNFT(_tNftAddress);
         paused = true;
         restakeBnftDeposits = false;
-        ethAmountLockedForWithdrawal = 0;
+        DEPRECATED_ethAmountLockedForWithdrawal = 0;
         etherFiAdminContract = _etherFiAdminContract;
         withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
         DEPRECATED_admins[_etherFiAdminContract] = true;
@@ -155,6 +155,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         
         // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
+
+        DEPRECATED_ethAmountLockedForWithdrawal = 0;
     }
 
     // Used by eETH staking flow
@@ -195,13 +197,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function withdraw(address _recipient, uint256 _amount) external whenNotPaused returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);
         require(msg.sender == address(withdrawRequestNFT) || msg.sender == address(membershipManager) || msg.sender == address(liquifier), "Incorrect Caller");
-        if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
+        if (totalValueInLp < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
 
         totalValueInLp -= uint128(_amount);
-        if (msg.sender == address(withdrawRequestNFT)) {
-            ethAmountLockedForWithdrawal -= uint128(_amount);
-        }
 
         eETH.burnShares(msg.sender, share);
 
@@ -473,12 +472,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         isLpBnftHolder = _isLpBnftHolder;
     }
 
-    function addEthAmountLockedForWithdrawal(uint128 _amount) external {
-        if (msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
-
-        ethAmountLockedForWithdrawal += _amount;
-    }
-
     // This function can't change the TVL
     // but used only to correct the errors in tracking {totalValueOutOfLp} and {totalValueInLp}
     function updateTvlSplits(int128 _diffTotalValueOutOfLp, int128 _diffTotalValueInLp) external onlyOwner {
@@ -488,12 +481,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         totalValueInLp = uint128(int128(totalValueInLp) + _diffTotalValueInLp);
 
         if(tvl != getTotalPooledEther()) revert();
-    }
-
-    function reduceEthAmountLockedForWithdrawal(uint128 _amount) external {
-        if (msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
-
-        ethAmountLockedForWithdrawal -= _amount;
     }
 
     //--------------------------------------------------------------------------------------

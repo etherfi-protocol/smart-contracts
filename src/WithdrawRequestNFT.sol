@@ -25,6 +25,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint32 public lastFinalizedRequestId;
     uint96 public accumulatedDustEEthShares; // to be burned or used to cover the validator churn cost
 
+    // The cached share price of 1 share
     uint256 public cachedSharePrice;
 
     RoleRegistry public roleRegistry;
@@ -91,8 +92,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
 
         // send the lesser ether ETH value of the originally requested amount of eEth or the eEth value at the last `cachedSharePrice` update
-        uint256 amountForShares = request.shareOfEEth * cachedSharePrice;
-        uint256 amountToTransfer = (request.amountOfEEth < amountForShares) ? request.amountOfEEth : amountForShares;
+        uint256 amountForSharesCached = request.shareOfEEth * cachedSharePrice / 1 ether;
+        uint256 amountToTransfer = _min(request.amountOfEEth, amountForSharesCached);
+        
         uint256 fee = uint256(request.feeGwei) * 1 gwei;
 
         return amountToTransfer - fee;
@@ -117,18 +119,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         _burn(tokenId);
         delete _requests[tokenId];
 
-        uint256 amountBurnedShare = 0;
         if (fee > 0) {
             // send fee to membership manager
             _sendFund(address(membershipManager), fee);
         }
-        _sendFund(recipient, amountToWithdraw)
-
-        // There are no dust eEth shares in the new version as all shares are burned upon finalization of a batch
-        // uint256 amountUnBurnedShare = request.shareOfEEth - amountBurnedShare;
-        // if (amountUnBurnedShare > 0) {
-        //     accumulatedDustEEthShares += uint96(amountUnBurnedShare);
-        // }
+        _sendFund(recipient, amountToWithdraw);
 
         emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw + fee, 0, recipient, fee);
     }
@@ -168,12 +163,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         // Undo its invalidation to claim
         _requests[requestId].isValid = true;
 
-        // its ETH amount is not locked
-        // - if it was finalized when being invalidated, we revoked it via `reduceEthAmountLockedForWithdrawal`
-        // - if it was not finalized when being invalidated, it was not locked
-        uint256 ethAmount = getClaimableAmount(requestId);
-        liquidityPool.addEthAmountLockedForWithdrawal(uint128(ethAmount));
-
         // withdraw the ETH to the recipient
         _claimWithdraw(requestId, recipient);
 
@@ -196,11 +185,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function calculateTotalPendingAmount(uint256 lastRequestId) public view returns (uint256) {
         uint256 totalAmount = 0;
         for (uint256 i = lastFinalizedRequestId + 1; i <= lastRequestId; i++) {
-            if (!isValid(i)) continue;
 
             IWithdrawRequestNFT.WithdrawRequest memory request = _requests[i];
             uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
-            uint256 amount = (request.amountOfEEth < amountForShares) ? request.amountOfEEth : amountForShares;
+
+            uint256 amount = _min(request.amountOfEEth, amountForShares);
 
             totalAmount += amount;
         }
@@ -225,11 +214,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
         require(isValid(requestId), "Request is not valid");
-
-        if (isFinalized(requestId)) {
-            uint256 ethAmount = getClaimableAmount(requestId);
-            liquidityPool.reduceEthAmountLockedForWithdrawal(uint128(ethAmount));
-        }
 
         _requests[requestId].isValid = false;
 
@@ -259,15 +243,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit UpdateFinalizedRequestId(uint32(lastRequestId), totalAmount);
         lastFinalizedRequestId = uint32(lastRequestId);
 
-        // get cached share price
-        uint256 share = sharesForWithdrawalAmount(totalAmount);
-        uint256 amountForShares = liquidityPool.amountForShare(share);
-        cachedSharePrice = amountForShares;
+        // Cache the current share price
+        cachedSharePrice = liquidityPool.amountForShare(1 ether);
 
         liquidityPool.withdraw(address(this), totalAmount);
-
-        // not sure if we need this in new version
-        // liquidityPool.addEthAmountLockedForWithdrawal(totalAmount);
     }
 
     function getImplementation() external view returns (address) {
@@ -279,6 +258,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         (bool sent, ) = _recipient.call{value: _amount}("");
         require(sent && address(this).balance == balanace - _amount, "SendFail");
     }
+
+    function _min(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a < b ? a : b;
+    }
+
+    // This contract only accepts ETH sent from the liquidity pool
+    receive() external payable onlyLiquidtyPool() { }
 
     modifier onlyLiquidtyPool() {
         require(msg.sender == address(liquidityPool), "Caller is not the liquidity pool");

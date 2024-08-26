@@ -195,6 +195,9 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         _finalizeWithdrawalRequest(requestId);
 
+        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 1 ether, "eETH balance should be 1 ether after finalization");
+        assertEq(address(withdrawRequestNFTInstance).balance, 1 ether, "Contract balance should be 1 ether after finalization");
+
         vm.prank(bob);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
 
@@ -202,48 +205,50 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         assertEq(bobsEndingBalance, bobsStartingBalance + 1 ether, "Bobs balance should be 1 ether higher");
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 1 ether, "eETH balance should be 1 ether");
-        assertEq(liquidityPoolInstance.amountForShare(withdrawRequestNFTInstance.accumulatedDustEEthShares()), 1 ether);
-
-        vm.prank(alice);
-        withdrawRequestNFTInstance.withdrawAccumulatedDustEEthShares(bob);
-        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 0 ether, "eETH balance should be 0 ether");
-        assertEq(eETHInstance.balanceOf(bob), 18 ether + 1 ether); // 1 ether eETH in `withdrawRequestNFT` contract is sent to Bob
     }
 
     function test_ValidClaimWithdrawWithNegativeRebase() public {
         launch_validator();
 
         startHoax(bob);
-        liquidityPoolInstance.deposit{value: 10 ether}();
+        liquidityPoolInstance.deposit{value: 11 ether}();
         vm.stopPrank();
 
         uint256 bobsStartingBalance = address(bob).balance;
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 10 ether + 60 ether);
+        // 71 eth in the protocol, but 1 will be removed by the finalization before the rebase
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 11 ether + 60 ether);
 
         // Case 2.
-        // After the rebase with negative rewards (loss of 35 eth among 70 eth),
-        // the withdrawal amount is reduced from 1 ether to 0.5 ether
-        vm.prank(bob);
-        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        // After the rebase with negative rewards
+        // - withdrawal finalized before the rebase should be processed as usual 
+        // - withdrawal finalized after the rebase is reduced from 1 ether to 0.5 ether (loss of 35 eth among 70 eth)
+        vm.startPrank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 2 ether);
+        uint256 requestId1 = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        uint256 requestId2 = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        vm.stopPrank();
 
-        vm.prank(bob);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        _finalizeWithdrawalRequest(requestId1);
 
         vm.prank(address(membershipManagerInstance));
         liquidityPoolInstance.rebase(-35 ether);
 
-        assertEq(withdrawRequestNFTInstance.balanceOf(bob), 1, "Bobs balance should be 1");
-        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), bob, "Bobs should own the NFT");
-
-        _finalizeWithdrawalRequest(requestId);
+        assertEq(withdrawRequestNFTInstance.balanceOf(bob), 2, "Bobs balance should be 1");
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId2), bob, "Bobs should own the NFT");
 
         vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        withdrawRequestNFTInstance.claimWithdraw(requestId1);
+        uint256 bobBalanceAfterFirstWithdraw = address(bob).balance;
+        assertEq(bobBalanceAfterFirstWithdraw, bobsStartingBalance + 1 ether, "Bobs balance should be 1 ether higher");
+        
+        _finalizeWithdrawalRequest(requestId2);
 
-        uint256 bobsEndingBalance = address(bob).balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId2);
+        uint256 bobBalanceAfterSecondWithdraw = address(bob).balance;
 
-        assertEq(bobsEndingBalance, bobsStartingBalance + 0.5 ether, "Bobs balance should be 1 ether higher");
+        assertEq(bobBalanceAfterSecondWithdraw, bobBalanceAfterFirstWithdraw + 0.5 ether, "Bobs balance should be 0.5 ether higher");
     }
 
     function test_withdraw_with_zero_liquidity() public {
@@ -403,7 +408,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(owner);
         withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad);
 
-        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
+        // assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
         assertEq(address(chad).balance, chadBalance + claimableAmount, "Chad should receive the claimable amount");
     }
 
@@ -415,7 +420,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(owner);
         withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad);
 
-        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
+        // assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
         assertEq(address(chad).balance, chadBalance + claimableAmount, "Chad should receive the claimable amount");
     }
 }
