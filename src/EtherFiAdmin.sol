@@ -248,7 +248,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         for (uint256 i = 0; i < _report.withdrawalRequestsToInvalidate.length; i++) {
             withdrawRequestNft.invalidateRequest(_report.withdrawalRequestsToInvalidate[i]);
         }
-        withdrawRequestNft.finalizeRequests(_report.lastFinalizedWithdrawalRequestId, _report.finalizedWithdrawalAmount);
+        // Only necessary to finalize request if new request have been finalized since the last oracle report
+        if (withdrawRequestNft.lastFinalizedRequestId() < _report.lastFinalizedWithdrawalRequestId) {
+            withdrawRequestNft.finalizeRequests(_report.lastFinalizedWithdrawalRequestId, _report.finalizedWithdrawalAmount);
+        }
    }
 
     function slotForNextReportToProcess() public view returns (uint32) {
