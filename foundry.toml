@@ -13,8 +13,6 @@ solc-version = '0.8.24'
 mainnet = "${MAINNET_RPC_URL}"
 goerli = "${GOERLI_RPC_URL}"
 
-
-
 [etherscan]
 mainnet = { key = "${ETHERSCAN_API_KEY}" }
 goerli =  { key = "${ETHERSCAN_API_KEY}" }

@@ -24,6 +24,7 @@ contract Deploy2Dot5Contracts is Script {
 
     IPausable[] initialPausables;
     RoleRegistry roleRegistry;
+    AddressProvider addressProvider;
 
     string scheduleUpgradeGnosisTx;
     string executeUpgradeGnosisTx;
@@ -35,7 +36,7 @@ contract Deploy2Dot5Contracts is Script {
 
         console.log("Configuring Mainnet Addresses...");
 
-        AddressProvider addressProvider = AddressProvider(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
+        addressProvider = AddressProvider(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
         address superAdmin = address(0x0);
 
         console.log("Deploying RoleRegistry...");
@@ -57,6 +58,10 @@ contract Deploy2Dot5Contracts is Script {
         Pauser pauser = Pauser(address(new UUPSProxy(address(pauserImplementation), initializerData)));
 
         console.log("Deploying new impls and generating timelock transactions to upgrade...");
+
+        scheduleUpgradeGnosisTx = _getGnosisHeader("1");
+        executeUpgradeGnosisTx = _getGnosisHeader("1");
+
         address newAuctionManagerImpl = address(new AuctionManager());
         _generateTimelockUpgradeTransactions(newAuctionManagerImpl);
         address newBucketRateLimiterImpl = address(new BucketRateLimiter());
@@ -76,27 +81,42 @@ contract Deploy2Dot5Contracts is Script {
         address newStakingManagerImpl = address(new StakingManager());
         _generateTimelockUpgradeTransactions(newStakingManagerImpl);
         address newWithdrawRequestNFTImpl = address(new WithdrawRequestNFT());
-        _generateTimelockUpgradeTransactions(newWithdrawRequestNFTImpl);
+        _generateTimelockUpgradeTransactions(newWithdrawRequestNFTImpl, true);
 
-
+        vm.writeJson(scheduleUpgradeGnosisTx, "./release/scheduleUpgrade.json");
+        vm.writeJson(executeUpgradeGnosisTx, "./release/executeUpgrade.json");
     }
 
-    function _generateTimelockUpgradeTransactions(address contractToUpgrade) internal {
+
+    function _generateTimelockUpgradeTransactions(address contractToUpgrade, bool isLastTransaction) internal {
+        // constant values for all timelock transcations
+        string memory timelockAddress = iToHex(abi.encode(addressProvider.getContractAddress("EtherFiTimelock")));
         uint256 value = 0;
         bytes32 predecessor = 0x0000000000000000000000000000000000000000000000000000000000000000;
         bytes32 salt = 0x0000000000000000000000000000000000000000000000000000000000000000;
         uint256 delay = 259200;
 
-        // Generate the transaction to schedule and execute the upgrade to the new implementation
+        // data objects for the upgrade and `initializeV2dot5` calls
         bytes memory upgradeContractData = abi.encodeWithSignature("upgradeTo(address)", contractToUpgrade);
-        string memory scheduleUpgradeData = iToHex(abi.encodeWithSignature("schedule(address,uint256,bytes,bytes32,bytes32,uint256)", contractToUpgrade, value, upgradeContractData, predecessor, salt, delay));
-        string memory executeUpgradeData = iToHex(abi.encodeWithSignature("execute(address,uint256,bytes,bytes32,bytes32)", contractToUpgrade, value, upgradeContractData, predecessor, salt));
-
-        // Generate the transactions to schedule and execute the call to `initializeV2dot5` on the newly upgraded contracts
         bytes memory initializeV2dot5Data = abi.encodeWithSignature("initializeV2dot5(address)", roleRegistry);
+
+        // Generate the gnosis transactions to schedule the calls
+        string memory scheduleUpgradeData = iToHex(abi.encodeWithSignature("schedule(address,uint256,bytes,bytes32,bytes32,uint256)", contractToUpgrade, value, upgradeContractData, predecessor, salt, delay));
         string memory scheduleInitializeV2dot5Data = iToHex(abi.encodeWithSignature("schedule(address,uint256,bytes,bytes32,bytes32,uint256)", contractToUpgrade, value, initializeV2dot5Data, predecessor, salt, delay));
+
+        scheduleUpgradeGnosisTx = string.concat(scheduleUpgradeGnosisTx, _getGnosisTransaction(timelockAddress, scheduleUpgradeData, false));
+        scheduleUpgradeGnosisTx = string.concat(scheduleUpgradeGnosisTx, _getGnosisTransaction(timelockAddress, scheduleInitializeV2dot5Data, isLastTransaction));
+
+        // Generate the gnosis transactions to execute the calls 
+        string memory executeUpgradeData = iToHex(abi.encodeWithSignature("execute(address,uint256,bytes,bytes32,bytes32)", contractToUpgrade, value, upgradeContractData, predecessor, salt));
         string memory executeInitializeV2dot5Data = iToHex(abi.encodeWithSignature("execute(address,uint256,bytes,bytes32,bytes32)", contractToUpgrade, value, initializeV2dot5Data, predecessor, salt));
-        
+
+        executeUpgradeGnosisTx = string.concat(executeUpgradeGnosisTx, _getGnosisTransaction(timelockAddress, executeUpgradeData, false));
+        executeUpgradeGnosisTx = string.concat(executeUpgradeGnosisTx, _getGnosisTransaction(timelockAddress, executeInitializeV2dot5Data, isLastTransaction));
+    }
+
+    function _generateTimelockUpgradeTransactions(address contractToUpgrade) internal {
+        _generateTimelockUpgradeTransactions(contractToUpgrade, false);
     }
 
     // functions that can be used together to create a gnosis transaction
