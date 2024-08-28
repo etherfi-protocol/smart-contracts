@@ -25,6 +25,7 @@ contract Deploy2Dot5Contracts is Script {
     IPausable[] initialPausables;
     RoleRegistry roleRegistry;
     AddressProvider addressProvider;
+    address bucketRateLimiterAddress;
 
     string scheduleUpgradeGnosisTx;
     string executeUpgradeGnosisTx;
@@ -42,6 +43,11 @@ contract Deploy2Dot5Contracts is Script {
         RoleRegistry roleRegistryImplementation = new RoleRegistry();
         bytes memory initializerData = abi.encodeWithSelector(RoleRegistry.initialize.selector, superAdmin);
         roleRegistry = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
+
+        console.log("Deploying BucketRateLimiter...");
+        BucketRateLimiter bucketRateLimiterImplementation = new BucketRateLimiter();
+        initializerData = abi.encodeWithSelector(BucketRateLimiter.initialize.selector, address(roleRegistry));
+        bucketRateLimiterAddress = address(new UUPSProxy(address(roleRegistryImplementation), initializerData));
 
         console.log("Deploying Protocol Pauser...");
         Pauser pauserImplementation = new Pauser();
@@ -63,8 +69,6 @@ contract Deploy2Dot5Contracts is Script {
 
         address newAuctionManagerImpl = address(new AuctionManager());
         _generateTimelockUpgradeTransactions(newAuctionManagerImpl);
-        address newBucketRateLimiterImpl = address(new BucketRateLimiter());
-        _generateTimelockUpgradeTransactions(newBucketRateLimiterImpl);
         address newEtherFiAdminImpl = address(new EtherFiAdmin());
         _generateTimelockUpgradeTransactions(newEtherFiAdminImpl);
         address newEtherFiNodesManagerImpl = address(new EtherFiNodesManager());
@@ -96,7 +100,13 @@ contract Deploy2Dot5Contracts is Script {
 
         // data objects for the upgrade and `initializeV2dot5` calls
         bytes memory upgradeContractData = abi.encodeWithSignature("upgradeTo(address)", contractToUpgrade);
-        bytes memory initializeV2dot5Data = abi.encodeWithSignature("initializeV2dot5(address)", roleRegistry);
+        bytes memory initializeV2dot5Data;
+        if (contractToUpgrade == addressProvider.getContractAddress("Liquifier")) {
+            // Liquifier has an additional initialization param
+            initializeV2dot5Data = abi.encodeWithSignature("initializeV2dot5(address,address)", roleRegistry, bucketRateLimiterAddress);
+        } else {
+            initializeV2dot5Data = abi.encodeWithSignature("initializeV2dot5(address)", roleRegistry);
+        }
 
         // Generate the gnosis transactions to schedule the calls
         string memory scheduleUpgradeData = iToHex(abi.encodeWithSignature("schedule(address,uint256,bytes,bytes32,bytes32,uint256)", contractToUpgrade, value, upgradeContractData, predecessor, salt, delay));
