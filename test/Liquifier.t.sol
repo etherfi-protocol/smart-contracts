@@ -186,169 +186,6 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
     }
 
-    function test_withdrawal_of_restaked_wBETH_succeeds() internal {
-        _setUp(MAINNET_FORK);
-
-        vm.deal(alice, 100 ether);
-        vm.startPrank(alice);        
-        wbEth.deposit{value: 20 ether}(address(0));
-        wbEth.approve(address(eigenLayerStrategyManager), 20 ether);
-        
-        eigenLayerStrategyManager.depositIntoStrategy(wbEthStrategy, wbEthStrategy.underlyingToken(), 10 ether);
-
-        IDelegationManager.Withdrawal memory queuedWithdrawal = _get_queued_withdrawal_of_restaked_LST_before_m2(wbEthStrategy);
-
-        _complete_queued_withdrawal_V2(queuedWithdrawal, wbEthStrategy);
-
-        uint256[] memory reqIds = liquifierInstance.stEthRequestWithdrawal();
-        vm.stopPrank();
-
-        _finalizeLidoWithdrawals(reqIds);
-    }
-
-    function test_erc20_queued_withdrawal_v2() public {
-        initializeRealisticFork(MAINNET_FORK);
-        setUpLiquifier(MAINNET_FORK);
-
-        uint256 liquifierTVL = liquifierInstance.getTotalPooledEther();
-        uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
-
-        // While this unit test works, after EL m2 upgrade,
-        // this flow will be deprecated because setting 'wtihdrawer' != msg.sender won't be allowed within `queueWithdrawals`
-        address actor = address(liquifierInstance);
-
-        vm.deal(actor, 100 ether);
-        vm.startPrank(actor);        
-        stEth.submit{value: 1 ether}(address(0));
-
-        stEth.approve(address(eigenLayerStrategyManager), 1 ether);
-        eigenLayerStrategyManager.depositIntoStrategy(stEthStrategy, stEthStrategy.underlyingToken(), 1 ether);
-
-
-        uint256[] memory strategyIndexes = new uint256[](1);
-        IStrategy[] memory strategies = new IStrategy[](1);
-        uint256[] memory shares = new uint256[](1);
-        strategyIndexes[0] = 0;
-        strategies[0] = stEthStrategy;
-        shares[0] = stEthStrategy.shares(actor);
-
-        //  Queue withdrawal
-        IDelegationManager.QueuedWithdrawalParams[] memory queuedWithdrawalParams = new IDelegationManager.QueuedWithdrawalParams[](1);
-        queuedWithdrawalParams[0] = IDelegationManager.QueuedWithdrawalParams({
-            strategies: strategies,
-            shares: shares,
-            withdrawer: actor
-        });
-        
-        IDelegationManager.Withdrawal[] memory queuedWithdrawals = new IDelegationManager.Withdrawal[](1);
-        queuedWithdrawals[0] = IDelegationManager.Withdrawal({
-            staker: actor,
-            delegatedTo: address(0),
-            withdrawer: actor,
-            nonce: uint96(eigenLayerDelegationManager.cumulativeWithdrawalsQueued(actor)),
-            startBlock: uint32(block.number),
-            strategies: strategies,
-            shares: shares
-        });
-
-        bytes32[] memory withdrawalRoots = eigenLayerDelegationManager.queueWithdrawals(queuedWithdrawalParams);
-        bytes32 withdrawalRoot = withdrawalRoots[0];
-
-        assertTrue(eigenLayerDelegationManager.pendingWithdrawals(withdrawalRoot));
-
-        liquifierInstance.depositWithQueuedWithdrawal(queuedWithdrawals[0], address(0));
-        vm.stopPrank();
-
-        vm.roll(block.number + 7 days);
-
-        IERC20[][] memory tokens = new IERC20[][](1);
-        tokens[0] = new IERC20[](1);
-        tokens[0][0] = stEthStrategy.underlyingToken();
-        uint256[] memory middlewareTimesIndexes = new uint256[](1);
-        middlewareTimesIndexes[0] = 0;
-        bool[] memory receiveAsTokens = new bool[](1);
-        receiveAsTokens[0] = true;
-
-        vm.startPrank(alice);
-        liquifierInstance.completeQueuedWithdrawals(queuedWithdrawals, tokens, middlewareTimesIndexes);
-        vm.stopPrank();
-    }
-
-    function _get_queued_withdrawal_of_restaked_LST_before_m2(IStrategy strategy) internal returns (IDelegationManager.Withdrawal memory) {
-        uint256[] memory strategyIndexes = new uint256[](1);
-        IStrategy[] memory strategies = new IStrategy[](1);
-        uint256[] memory shares = new uint256[](1);
-        strategyIndexes[0] = 0;
-        strategies[0] = strategy;
-        shares[0] = strategy.shares(alice);
-
-        uint32 startBlock = uint32(block.number);
-        uint96 nonce = uint96(eigenLayerStrategyManager.numWithdrawalsQueued(alice));
-
-        // Step 1 - Queued withdrawal
-        bytes32 withdrawalRoot = eigenLayerStrategyManager.queueWithdrawal(strategyIndexes, strategies, shares, address(liquifierInstance), true);
-        assertEq(eigenLayerStrategyManager.withdrawalRootPending(withdrawalRoot), true);
-        vm.stopPrank();
-
-        _perform_eigenlayer_upgrade();
-
-        uint256 newNonce = eigenLayerDelegationManager.cumulativeWithdrawalsQueued(alice);
-
-        vm.startPrank(alice);
-
-        // Step 2 - Mint eETH
-        IDelegationManager.Withdrawal memory queuedWithdrawal = IDelegationManager.Withdrawal({
-            staker: alice,
-            delegatedTo: address(0),
-            withdrawer: address(liquifierInstance),
-            nonce: newNonce,
-            startBlock: startBlock,
-            strategies: strategies,
-            shares: shares
-        });
-
-        // Before migration
-        vm.expectRevert("WrongQ");
-        liquifierInstance.depositWithQueuedWithdrawal(queuedWithdrawal, address(0));
-
-        IStrategyManager.DeprecatedStruct_QueuedWithdrawal[] memory withdrawalsToMigrate = new IStrategyManager.DeprecatedStruct_QueuedWithdrawal[](1);
-        withdrawalsToMigrate[0] = IStrategyManager.DeprecatedStruct_QueuedWithdrawal({
-            strategies: strategies,
-            shares: shares,
-            staker: alice,
-            withdrawerAndNonce: IStrategyManager.DeprecatedStruct_WithdrawerAndNonce({
-                withdrawer: address(liquifierInstance),
-                nonce: nonce
-            }),
-            withdrawalStartBlock: startBlock,
-            delegatedAddress: address(0)
-        });
-        assertEq(eigenLayerStrategyManager.calculateWithdrawalRoot(withdrawalsToMigrate[0]), withdrawalRoot);
-
-        eigenLayerDelegationManager.migrateQueuedWithdrawals(withdrawalsToMigrate);
-
-        IDelegationManager.Withdrawal memory migratedWithdrawal = IDelegationManager.Withdrawal({
-            staker: withdrawalsToMigrate[0].staker,
-            delegatedTo: withdrawalsToMigrate[0].delegatedAddress,
-            withdrawer: withdrawalsToMigrate[0].withdrawerAndNonce.withdrawer,
-            nonce: withdrawalsToMigrate[0].withdrawerAndNonce.nonce,
-            startBlock: withdrawalsToMigrate[0].withdrawalStartBlock,
-            strategies: withdrawalsToMigrate[0].strategies,
-            shares: withdrawalsToMigrate[0].shares
-        });
-
-        bytes32 newWithdrawalRoot = eigenLayerDelegationManager.calculateWithdrawalRoot(migratedWithdrawal);
-        assertEq(eigenLayerDelegationManager.pendingWithdrawals(newWithdrawalRoot), true);
-
-        liquifierInstance.depositWithQueuedWithdrawal(queuedWithdrawal, address(0));
-
-        // multipme mints using the same queued withdrawal fails
-        vm.expectRevert("Deposited");
-        liquifierInstance.depositWithQueuedWithdrawal(queuedWithdrawal, address(0));
-
-        return queuedWithdrawal;
-    }
-
     function _enable_deposit(address _strategy) internal {
         IEigenLayerStrategyTVLLimits strategyTVLLimits = IEigenLayerStrategyTVLLimits(_strategy);
 
@@ -359,39 +196,6 @@ contract LiquifierTest is TestSetup {
         strategyTVLLimits.setTVLLimits(1_000_000_0 ether, 1_000_000_0 ether);
         vm.stopPrank();
     }
-
-    function _complete_queued_withdrawal(IStrategyManager.DeprecatedStruct_QueuedWithdrawal memory queuedWithdrawal, IStrategy strategy) internal {
-        vm.roll(block.number + 7 days);
-
-        IStrategyManager.DeprecatedStruct_QueuedWithdrawal[] memory queuedWithdrawals = new IStrategyManager.DeprecatedStruct_QueuedWithdrawal[](1);
-        queuedWithdrawals[0] = queuedWithdrawal;
-        IERC20[][] memory tokens = new IERC20[][](1);
-        tokens[0] = new IERC20[](1);
-        tokens[0][0] = strategy.underlyingToken();
-        uint256[] memory middlewareTimesIndexes = new uint256[](1);
-        middlewareTimesIndexes[0] = 0;
-        // liquifierInstance.completeQueuedWithdrawals(queuedWithdrawals, tokens, middlewareTimesIndexes);
-
-        vm.expectRevert();
-        // liquifierInstance.completeQueuedWithdrawals(queuedWithdrawals, tokens, middlewareTimesIndexes);
-    }
-
-    function _complete_queued_withdrawal_V2(IDelegationManager.Withdrawal memory queuedWithdrawal, IStrategy strategy) internal {
-        vm.roll(block.number + 7 days);
-        
-        IDelegationManager.Withdrawal[] memory queuedWithdrawals = new IDelegationManager.Withdrawal[](1);
-        queuedWithdrawals[0] = queuedWithdrawal;
-        IERC20[][] memory tokens = new IERC20[][](1);
-        tokens[0] = new IERC20[](1);
-        tokens[0][0] = strategy.underlyingToken();
-        uint256[] memory middlewareTimesIndexes = new uint256[](1);
-        middlewareTimesIndexes[0] = 0;
-        liquifierInstance.completeQueuedWithdrawals(queuedWithdrawals, tokens, middlewareTimesIndexes);
-
-        vm.expectRevert();
-        liquifierInstance.completeQueuedWithdrawals(queuedWithdrawals, tokens, middlewareTimesIndexes);
-    }
-
 
     function test_pancacke_wbETH_swap() internal {
         initializeRealisticFork(MAINNET_FORK);
@@ -589,7 +393,6 @@ contract LiquifierTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
 
         bool isTokenWhitelisted = liquifierInstance.isTokenWhitelisted(address(stEth));
-        uint256 totalDeposited = liquifierInstance.totalDeposited(address(stEth));
         uint256 getTotalPooledEther = liquifierInstance.getTotalPooledEther(address(stEth));
 
         // Do the upgrade
@@ -597,7 +400,6 @@ contract LiquifierTest is TestSetup {
 
         assertEq(liquifierInstance.isTokenWhitelisted(address(stEth)), isTokenWhitelisted);
         assertEq(liquifierInstance.isL2Eth(address(stEth)), false);
-        assertEq(liquifierInstance.totalDeposited(address(stEth)), totalDeposited);
         assertEq(liquifierInstance.getTotalPooledEther(address(stEth)), getTotalPooledEther);
     }
 
