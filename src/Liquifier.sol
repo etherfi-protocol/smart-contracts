@@ -386,7 +386,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         total += liquidityPool.eETH().balanceOf(address(this));
     }
 
-    /// deposited (restaked) ETH can have 2 states:
+    /// deposited ETH can have 2 states:
     /// - held by this contract
     /// - not held by this contract & pending for withdrawals
     function getTotalPooledEtherSplits(address _token) public view returns (uint256 holding, uint256 pendingForWithdrawals) {
