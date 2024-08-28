@@ -405,7 +405,7 @@ contract TestSetup is Test {
 
         address impl = address(new BucketRateLimiter());
         bucketRateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
-        bucketRateLimiter.initialize();
+        bucketRateLimiter.initialize(address(roleRegistry));
         bucketRateLimiter.updateConsumer(address(liquifierInstance));
 
         bucketRateLimiter.setCapacity(40 ether);

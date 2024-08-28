@@ -16,9 +16,6 @@ contract BucketRateLimiter is IRateLimiter, IPausable, Initializable, PausableUp
     BucketLimiter.Limit public limit;
     address public consumer;
 
-    mapping(address => bool) public DEPRECATED_admins;
-    mapping(address => bool) public DEPRECATED_pausers;
-
     mapping(address => BucketLimiter.Limit) public limitsPerToken;
 
     RoleRegistry public roleRegistry; 
@@ -32,19 +29,12 @@ contract BucketRateLimiter is IRateLimiter, IPausable, Initializable, PausableUp
         _disableInitializers();
     }
 
-    function initialize() external initializer {
+    function initialize(address _roleRegistry) external initializer {
         __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
 
         limit = BucketLimiter.create(0, 0);
-    }
-
-    function initializeV2dot5(address _roleRegistry) external onlyOwner {
-        require(address(roleRegistry) == address(0x00), "already initialized");
-
-        // TODO: compile list of values in DEPRECATED_pausers to clear out
-        // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
     }
 
