@@ -256,10 +256,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (_isL2Eth) {
             if (_token == address(0) || _target != address(0)) revert();
             dummies.push(IERC20(_token));
-        } else {
-            // _target = EigenLayer's Strategy contract
-            if (_token != address(IStrategy(_target).underlyingToken())) revert NotSupportedToken();
-        }
+        } 
+        
         tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), 0, 0, 0, 0, _isL2Eth);
     }
 
@@ -317,6 +315,22 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (currentBalance < _minOutputAmount + beforeBalance) revert WrongOutput();
     }
 
+    function swapCbEthToEth(uint256 _amount, uint256 _minOutputAmount) external returns (uint256) {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (_amount > cbEth.balanceOf(address(this))) revert NotEnoughBalance();
+
+        cbEth.approve(address(cbEth_Eth_Pool), _amount);
+        return cbEth_Eth_Pool.exchange_underlying(1, 0, _amount, _minOutputAmount);
+    }
+
+    function swapWbEthToEth(uint256 _amount, uint256 _minOutputAmount) external returns (uint256) {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (_amount > wbEth.balanceOf(address(this))) revert NotEnoughBalance();
+
+        wbEth.approve(address(wbEth_Eth_Pool), _amount);
+        return wbEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
+    }
+
     function swapStEthToEth(uint256 _amount, uint256 _minOutputAmount) external returns (uint256) {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
@@ -337,11 +351,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         else if (tokenInfos[_token].isL2Eth) return _amount * 1; /// 1:1 from l2Eth to eETH
 
         revert NotSupportedToken();
-    }
-
-    function quoteStrategyShareForDeposit(address _token, IStrategy _strategy, uint256 _share) public view returns (uint256) {
-        uint256 tokenAmount = _strategy.sharesToUnderlyingView(_share);
-        return quoteByMarketValue(_token, tokenAmount);
     }
 
     function quoteByMarketValue(address _token, uint256 _amount) public view returns (uint256) {
@@ -377,24 +386,21 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         total += liquidityPool.eETH().balanceOf(address(this));
     }
 
-    /// deposited (restaked) ETH can have 3 states:
-    /// - restaked in EigenLayer & pending for withdrawals
-    /// - non-restaked & held by this contract
-    /// - non-restaked & not held by this contract & pending for withdrawals
-    function getTotalPooledEtherSplits(address _token) public view returns (uint256 restaked, uint256 holding, uint256 pendingForWithdrawals) {
+    /// deposited (restaked) ETH can have 2 states:
+    /// - held by this contract
+    /// - not held by this contract & pending for withdrawals
+    function getTotalPooledEtherSplits(address _token) public view returns (uint256 holding, uint256 pendingForWithdrawals) {
         TokenInfo memory info = tokenInfos[_token];
-        if (!isTokenWhitelisted(_token)) return (0, 0, 0);
+        if (!isTokenWhitelisted(_token)) return (0, 0);
 
-        if (info.strategy != IStrategy(address(0))) {
-            restaked = quoteByFairValue(_token, info.strategy.sharesToUnderlyingView(info.strategyShare)); /// restaked & pending for withdrawals
-        }
         holding = quoteByFairValue(_token, IERC20(_token).balanceOf(address(this))); /// eth value for erc20 holdings
         pendingForWithdrawals = info.ethAmountPendingForWithdrawals; /// eth pending for withdrawals
     }
 
     function getTotalPooledEther(address _token) public view returns (uint256) {
-        (uint256 restaked, uint256 holding, uint256 pendingForWithdrawals) = getTotalPooledEtherSplits(_token);
-        return restaked + holding + pendingForWithdrawals;
+        (uint256 holding, uint256 pendingForWithdrawals) = getTotalPooledEtherSplits(_token);
+
+        return holding + pendingForWithdrawals;
     }
 
     function getImplementation() external view returns (address) {

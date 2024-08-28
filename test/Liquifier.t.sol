@@ -398,9 +398,14 @@ contract LiquifierTest is TestSetup {
         // Do the upgrade
         setUpLiquifier(MAINNET_FORK);
 
+        uint256 dustELWithdrawAmount = 0; 
+        (uint128 strategyShare,,IStrategy strategy,,,,,,,,) = liquifierInstance.tokenInfos(address(stEth));
+        dustELWithdrawAmount = liquifierInstance.quoteByFairValue(address(stEth), strategy.sharesToUnderlyingView(strategyShare));
+
         assertEq(liquifierInstance.isTokenWhitelisted(address(stEth)), isTokenWhitelisted);
         assertEq(liquifierInstance.isL2Eth(address(stEth)), false);
-        assertEq(liquifierInstance.getTotalPooledEther(address(stEth)), getTotalPooledEther);
+        // Accounting error resulted in `strategyShare` for stETH still having a value even though the withdrawal queue has been cleared
+        assertEq(liquifierInstance.getTotalPooledEther(address(stEth)), getTotalPooledEther - dustELWithdrawAmount);
     }
 
     function test_pauser() public {
