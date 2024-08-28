@@ -6,14 +6,13 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./RoleRegistry.sol";
 
 contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     using SafeERC20 for IERC20;
 
     address public immutable treasury;
     address public immutable liquidityPool;
-    RoleRegistry public immutable roleRegistry;
+    address public admin;
 
     bytes32 public constant ETHERFI_ROUTER_ADMIN = keccak256("ETHERFI_ROUTER_ADMIN");
 
@@ -24,10 +23,10 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
 
     error IncorrectRole();
 
-    constructor(address _liquidityPool, address _roleRegistry) {
+    constructor(address _liquidityPool, address _admin) {
         _disableInitializers();
         liquidityPool = _liquidityPool;
-        roleRegistry = RoleRegistry(_roleRegistry);
+        admin = _admin;
     }
 
     receive() external payable {
@@ -40,7 +39,7 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     }
 
     function withdrawToLiquidityPool() external {
-        if (!roleRegistry.hasRole(ETHERFI_ROUTER_ADMIN, msg.sender)) revert IncorrectRole();
+        if (msg.sender != admin) revert IncorrectRole();
 
         uint256 balance = address(this).balance;
         require(balance > 0, "Contract balance is zero");
@@ -51,7 +50,7 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     }
 
     function recoverERC20(address _token, uint256 _amount) external {
-        if (!roleRegistry.hasRole(ETHERFI_ROUTER_ADMIN, msg.sender)) revert IncorrectRole();
+        if (msg.sender != admin) revert IncorrectRole();
 
         IERC20(_token).safeTransfer(treasury, _amount);
 
@@ -59,7 +58,7 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     }
 
     function recoverERC721(address _token, uint256 _tokenId) external {
-        if (!roleRegistry.hasRole(ETHERFI_ROUTER_ADMIN, msg.sender)) revert IncorrectRole();
+        if (msg.sender != admin) revert IncorrectRole();
 
         IERC721(_token).transferFrom(address(this), treasury, _tokenId);
 
@@ -69,4 +68,9 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     function getImplementation() external view returns (address) {return _getImplementation();}
+
+    function setAdmin(address _admin) external onlyOwner {
+        admin = _admin;
+    }
+
 }
