@@ -29,7 +29,6 @@ contract Deploy2Dot5Contracts is Script {
     string scheduleUpgradeGnosisTx;
     string executeUpgradeGnosisTx;
 
-
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
@@ -87,10 +86,9 @@ contract Deploy2Dot5Contracts is Script {
         vm.writeJson(executeUpgradeGnosisTx, "./release/executeUpgrade.json");
     }
 
-
     function _generateTimelockUpgradeTransactions(address contractToUpgrade, bool isLastTransaction) internal {
         // constant values for all timelock transcations
-        string memory timelockAddress = iToHex(abi.encode(addressProvider.getContractAddress("EtherFiTimelock")));
+        string memory timelockAddress = iToHex(abi.encodePacked((addressProvider.getContractAddress("EtherFiTimelock"))));
         uint256 value = 0;
         bytes32 predecessor = 0x0000000000000000000000000000000000000000000000000000000000000000;
         bytes32 salt = 0x0000000000000000000000000000000000000000000000000000000000000000;
