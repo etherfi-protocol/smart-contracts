@@ -17,7 +17,7 @@ contract BucketRateLimiterTest is TestSetup {
         BucketRateLimiter impl = new BucketRateLimiter();
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         limiter = BucketRateLimiter(address(proxy));
-        limiter.initialize();
+        limiter.initialize(address(roleRegistry));
 
         limiter.updateConsumer(owner);
         limiter.setCapacity(200 ether);
@@ -106,8 +106,11 @@ contract BucketRateLimiterTest is TestSetup {
     function test_pauser() public {
         // Test pausing logic with V2.5 upgrade
         setUpTests();
-        vm.prank(limiter.owner());
-        limiter.initializeV2dot5(address(roleRegistry));
+        // deploy a new bucket rate limiter to initialize against the role registry
+        BucketRateLimiter impl = new BucketRateLimiter();
+        UUPSProxy proxy = new UUPSProxy(address(impl), "");
+        limiter = BucketRateLimiter(address(proxy));
+        limiter.initialize(address(roleRegistry));
 
         vm.prank(chad);
         vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
