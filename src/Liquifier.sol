@@ -61,12 +61,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     uint128 public DEPRECATED_accumulatedFee;
 
     mapping(address => TokenInfo) public tokenInfos;
-    mapping(bytes32 => bool) public isRegisteredQueuedWithdrawals;
+    mapping(bytes32 => bool) public DEPRECATED_isRegisteredQueuedWithdrawals;
     mapping(address => bool) public DEPRECATED_admins;
 
     address public treasury;
     ILiquidityPool public liquidityPool;
-    IStrategyManager public eigenLayerStrategyManager;
+    IStrategyManager public DEPRECATED_eigenLayerStrategyManager;
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
 
     ICurvePool public cbEth_Eth_Pool;
@@ -77,7 +77,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     IwBETH public wbEth;
     ILido public lido;
 
-    IDelegationManager public eigenLayerDelegationManager;
+    IDelegationManager public DEPRECATED_eigenLayerDelegationManager;
 
     IPancackeV3SwapRouter pancakeRouter;
 
@@ -96,19 +96,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     bytes32 public constant LIQUIFIER_ADMIN_ROLE = keccak256("LIQUIFIER_ADMIN_ROLE");
     
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
-    event RegisteredQueuedWithdrawal(bytes32 _withdrawalRoot, IStrategyManager.DeprecatedStruct_QueuedWithdrawal _queuedWithdrawal);
-    event RegisteredQueuedWithdrawal_V2(bytes32 _withdrawalRoot, IDelegationManager.Withdrawal _queuedWithdrawal);
-    event CompletedQueuedWithdrawal(bytes32 _withdrawalRoot);
     event QueuedStEthWithdrawals(uint256[] _reqIds);
     event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
 
-    error StrategyShareNotEnough();
     error NotSupportedToken();
     error EthTransferFailed();
     error NotEnoughBalance();
     error IncorrectAmount();
     error AlreadyRegistered();
-    error NotRegistered();
     error WrongOutput();
     error IncorrectCaller();
     error IncorrectRole();
@@ -130,7 +125,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         treasury = _treasury;
         liquidityPool = ILiquidityPool(_liquidityPool);
         lidoWithdrawalQueue = ILidoWithdrawalQueue(_lidoWithdrawalQueue);
-        eigenLayerStrategyManager = IEigenLayerStrategyManager(_eigenLayerStrategyManager);
+        DEPRECATED_eigenLayerStrategyManager = IEigenLayerStrategyManager(_eigenLayerStrategyManager);
 
         lido = ILido(_stEth);
         cbEth = IcbETH(_cbEth);
@@ -150,30 +145,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
         rateLimiter = BucketRateLimiter(_rateLimiter);
-    }
-
-    receive() external payable {}
-
-    /// the users mint eETH given the queued withdrawal for their LRT with withdrawer == address(this)
-    /// @param _queuedWithdrawal The QueuedWithdrawal to be used for the deposit. This is the proof that the user has the re-staked ETH and requested the withdrawals setting the Liquifier contract as the withdrawer.
-    /// @param _referral The referral address
-    /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
-    function depositWithQueuedWithdrawal(IDelegationManager.Withdrawal calldata _queuedWithdrawal, address _referral) external whenNotPaused nonReentrant returns (uint256) {
-        bytes32 withdrawalRoot = verifyQueuedWithdrawal(msg.sender, _queuedWithdrawal);
-
-        /// register it to prevent duplicate deposits with the same queued withdrawal
-        isRegisteredQueuedWithdrawals[withdrawalRoot] = true;
-        emit RegisteredQueuedWithdrawal_V2(withdrawalRoot, _queuedWithdrawal);
-
-        /// queue the strategy share for withdrawal
-        uint256 amount = _enqueueForWithdrawal(_queuedWithdrawal.strategies, _queuedWithdrawal.shares);
-        
-        /// mint eETH to the user
-        uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, amount, _referral);
-
-        _consumeRate(address(eigenLayerStrategyManager), amount, eEthShare);
-
-        return eEthShare;
     }
 
     /// Deposit Liquid Staking Token such as stETH and Mint eETH
@@ -217,27 +188,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused returns (uint256) {
         try IERC20Permit(_token).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return depositWithERC20(_token, _amount, _referral);
-    }
-
-    /// @notice Used to complete the specified `queuedWithdrawals`. The function caller must match `queuedWithdrawals[...].withdrawer`
-    /// @param _queuedWithdrawals The QueuedWithdrawals to complete.
-    /// @param _tokens Array of tokens for each QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single array.
-    /// @param _middlewareTimesIndexes One index to reference per QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single index.
-    /// @dev middlewareTimesIndex should be calculated off chain before calling this function by finding the first index that satisfies `slasher.canWithdraw`
-    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata _queuedWithdrawals, IERC20[][] calldata _tokens, uint256[] calldata _middlewareTimesIndexes) external {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-
-        uint256 num = _queuedWithdrawals.length;
-        bool[] memory receiveAsTokens = new bool[](num);
-        for (uint256 i = 0; i < num; i++) {
-            _completeWithdrawals(_queuedWithdrawals[i]);
-
-            /// so that the shares withdrawn from the specified strategies are sent to the caller
-            receiveAsTokens[i] = true;
-        }
-
-        /// it will update the erc20 balances of this contract
-        eigenLayerDelegationManager.completeQueuedWithdrawals(_queuedWithdrawals, _tokens, _middlewareTimesIndexes, receiveAsTokens);
     }
 
     /// Initiate the process for redemption of stETH 
@@ -306,10 +256,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (_isL2Eth) {
             if (_token == address(0) || _target != address(0)) revert();
             dummies.push(IERC20(_token));
-        } else {
-            // _target = EigenLayer's Strategy contract
-            if (_token != address(IStrategy(_target).underlyingToken())) revert NotSupportedToken();
-        }
+        } 
+        
         tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), 0, 0, 0, 0, _isL2Eth);
     }
 
@@ -405,11 +353,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         revert NotSupportedToken();
     }
 
-    function quoteStrategyShareForDeposit(address _token, IStrategy _strategy, uint256 _share) public view returns (uint256) {
-        uint256 tokenAmount = _strategy.sharesToUnderlyingView(_share);
-        return quoteByMarketValue(_token, tokenAmount);
-    }
-
     function quoteByMarketValue(address _token, uint256 _amount) public view returns (uint256) {
         if (!isTokenWhitelisted(_token)) revert NotSupportedToken();
 
@@ -425,19 +368,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         }
 
         revert NotSupportedToken();
-    }
-
-    function verifyQueuedWithdrawal(address _user, IDelegationManager.Withdrawal calldata _queuedWithdrawal) public view returns (bytes32) {
-        require(_queuedWithdrawal.staker == _user && _queuedWithdrawal.withdrawer == address(this), "wrong depositor/withdrawer");
-        for (uint256 i = 0; i < _queuedWithdrawal.strategies.length; i++) {
-            address token = address(_queuedWithdrawal.strategies[i].underlyingToken());
-            require(tokenInfos[token].isWhitelisted && tokenInfos[token].strategy == _queuedWithdrawal.strategies[i], "NotWhitelisted");
-        }
-        bytes32 withdrawalRoot = eigenLayerDelegationManager.calculateWithdrawalRoot(_queuedWithdrawal);
-        require(eigenLayerDelegationManager.pendingWithdrawals(withdrawalRoot), "WrongQ");
-        require(!isRegisteredQueuedWithdrawals[withdrawalRoot], "Deposited");
-
-        return withdrawalRoot;
     }
 
     function isTokenWhitelisted(address _token) public view returns (bool) {
@@ -456,32 +386,25 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         total += liquidityPool.eETH().balanceOf(address(this));
     }
 
-    /// deposited (restaked) ETH can have 3 states:
-    /// - restaked in EigenLayer & pending for withdrawals
-    /// - non-restaked & held by this contract
-    /// - non-restaked & not held by this contract & pending for withdrawals
-    function getTotalPooledEtherSplits(address _token) public view returns (uint256 restaked, uint256 holding, uint256 pendingForWithdrawals) {
+    /// deposited ETH can have 2 states:
+    /// - held by this contract
+    /// - not held by this contract & pending for withdrawals
+    function getTotalPooledEtherSplits(address _token) public view returns (uint256 holding, uint256 pendingForWithdrawals) {
         TokenInfo memory info = tokenInfos[_token];
-        if (!isTokenWhitelisted(_token)) return (0, 0, 0);
+        if (!isTokenWhitelisted(_token)) return (0, 0);
 
-        if (info.strategy != IStrategy(address(0))) {
-            restaked = quoteByFairValue(_token, info.strategy.sharesToUnderlyingView(info.strategyShare)); /// restaked & pending for withdrawals
-        }
         holding = quoteByFairValue(_token, IERC20(_token).balanceOf(address(this))); /// eth value for erc20 holdings
         pendingForWithdrawals = info.ethAmountPendingForWithdrawals; /// eth pending for withdrawals
     }
 
     function getTotalPooledEther(address _token) public view returns (uint256) {
-        (uint256 restaked, uint256 holding, uint256 pendingForWithdrawals) = getTotalPooledEtherSplits(_token);
-        return restaked + holding + pendingForWithdrawals;
+        (uint256 holding, uint256 pendingForWithdrawals) = getTotalPooledEtherSplits(_token);
+
+        return holding + pendingForWithdrawals;
     }
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
-    }
-    
-    function totalDeposited(address _token) public view returns (uint256) {
-        return tokenInfos[_token].totalDeposited;
     }
 
     function isDepositCapReached(address _token, uint256 _amount) public view returns (bool) {
@@ -490,51 +413,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     /* INTERNAL FUNCTIONS */
-    function _enqueueForWithdrawal(IStrategy[] memory _strategies, uint256[] memory _shares) internal returns (uint256) {
-        uint256 numStrategies = _strategies.length;
-        uint256 amount = 0;
-        for (uint256 i = 0; i < numStrategies; i++) {
-            IStrategy strategy = _strategies[i];
-            uint256 share = _shares[i];
-            address token = address(strategy.underlyingToken());
-            uint256 dx = quoteStrategyShareForDeposit(token, strategy, share);
-
-            // discount
-            dx = (10000 - tokenInfos[token].discountInBasisPoints) * dx / 10000;
-
-            // Disable it because the deposit through EL queued withdrawal will be deprecated by EigenLayer anyway
-            // But, we need to still support '_enqueueForWithdrawal' as the backward compatibility for the already queued ones
-            // require(!isDepositCapReached(token, dx), "CAPPED");
-
-            amount += dx;
-            tokenInfos[token].strategyShare += uint128(share);
-
-            _afterDeposit(token, amount);
-
-            emit Liquified(msg.sender, dx, token, true);
-        }
-        return amount;
-    }
-    
-    function _completeWithdrawals(IDelegationManager.Withdrawal memory _queuedWithdrawal) internal {
-        bytes32 withdrawalRoot = eigenLayerDelegationManager.calculateWithdrawalRoot(_queuedWithdrawal);
-        if (!isRegisteredQueuedWithdrawals[withdrawalRoot]) revert NotRegistered();
-
-        uint256 numStrategies = _queuedWithdrawal.strategies.length;
-        for (uint256 i = 0; i < numStrategies; i++) {
-            address token = address(_queuedWithdrawal.strategies[i].underlyingToken());
-            uint128 share = uint128(_queuedWithdrawal.shares[i]);
-
-            if (tokenInfos[token].strategyShare < share) revert StrategyShareNotEnough();
-            tokenInfos[token].strategyShare -= share;
-        }
-
-        emit CompletedQueuedWithdrawal(withdrawalRoot);
-    }
 
     function _afterDeposit(address _token, uint256 _amount) internal {
         TokenInfo storage info = tokenInfos[_token];
-        info.totalDeposited += uint96(_amount);
     }
 
     function _consumeRate(address _tokenIn, uint256 _tokenInAmount, uint256 _tokenOutAmount) internal {
@@ -554,6 +435,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
         if (!sent) revert EthTransferFailed();
     }
+
+    receive() external payable {}
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 }
