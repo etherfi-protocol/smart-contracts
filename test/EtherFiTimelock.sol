@@ -259,6 +259,22 @@ contract TimelockTest is TestSetup {
         //     _execute_timelock(target, data, false);
         // }
     }
+
+    function test_upgrade_for_pepe() public {
+        initializeRealisticFork(MAINNET_FORK);
+        {
+            address target = address(managerInstance);
+            bytes memory data = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0x20f2A7a3C941e13083b36f2b765213dec9EE9073);
+            _execute_timelock(target, data, true, true, true, true);
+        }
+
+        {
+            address target = address(stakingManagerInstance);
+            bytes memory data = abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, 0x942CEddafE32395608F99DEa7b6ea8801A8F4748);
+            _execute_timelock(target, data, true, true, true, true);
+        }
+
+    }
 }
 
 // {"version":"1.0","chainId":"1
