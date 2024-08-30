@@ -39,8 +39,6 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     }
 
     function withdrawToLiquidityPool() external {
-        if (msg.sender != admin) revert IncorrectRole();
-
         uint256 balance = address(this).balance;
         require(balance > 0, "Contract balance is zero");
         (bool success, ) = liquidityPool.call{value: balance}("");
