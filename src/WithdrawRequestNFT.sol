@@ -25,8 +25,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint32 public lastFinalizedRequestId;
     uint96 public accumulatedDustEEthShares; // to be burned or used to cover the validator churn cost
 
-    // The cached share price of 1 share
-    uint256 public cachedSharePrice;
+    FinalizationCheckpoint[] public finalizationCheckpoints;
 
     RoleRegistry public roleRegistry;
 
@@ -84,7 +83,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return requestId;
     }
 
-    function getClaimableAmount(uint256 tokenId) public view returns (uint256) {
+    function getClaimableAmount(uint256 tokenId, uint256 checkpointIndex) public view returns (uint256) {
+        FinalizationCheckpoint memory lowerBoundCheckpoint = finalizationCheckpoints[checkpointIndex - 1];
+        FinalizationCheckpoint memory checkpoint = finalizationCheckpoints[checkpointIndex];
+        require(lowerBoundCheckpoint.lastFinalizedRequestId < tokenId <= checkpoint.lastFinalizedRequestId, "Invalid checkpoint");
+
         require(tokenId < nextRequestId, "Request does not exist");
         require(tokenId <= lastFinalizedRequestId, "Request is not finalized");
         require(ownerOf(tokenId) != address(0), "Already Claimed");
@@ -92,6 +95,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
 
         // send the lesser ether ETH value of the originally requested amount of eEth or the eEth value at the last `cachedSharePrice` update
+        uint256 cachedSharePrice = checkpoint.cachedShareValue;
         uint256 amountForSharesCached = request.shareOfEEth * cachedSharePrice / 1 ether;
         uint256 amountToTransfer = _min(request.amountOfEEth, amountForSharesCached);
         
@@ -103,11 +107,12 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @notice called by the NFT owner to claim their ETH
     /// @dev burns the NFT and transfers ETH from the liquidity pool to the owner minus any fee, withdraw request must be valid and finalized
     /// @param tokenId the id of the withdraw request and associated NFT
-    function claimWithdraw(uint256 tokenId) external {
-        return _claimWithdraw(tokenId, ownerOf(tokenId));
+    function claimWithdrawal(uint256 tokenId, uint256 checkpointIndex) external {
+        return _claimWithdraw(tokenId, ownerOf(tokenId), checkpointIndex);
     }
     
-    function _claimWithdraw(uint256 tokenId, address recipient) internal {
+    function _claimWithdraw(uint256 tokenId, address recipient, uint256 checkpointIndex) internal {
+
         require(ownerOf(tokenId) == msg.sender, "Not the owner of the NFT");
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
         require(request.isValid, "Request is not valid");
@@ -128,9 +133,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw + fee, 0, recipient, fee);
     }
 
-    function batchClaimWithdraw(uint256[] calldata tokenIds) external {
+    function batchClaimWithdraw(uint256[] calldata tokenIds, uint256[] calldata checkpointIndices) external {
         for (uint256 i = 0; i < tokenIds.length; i++) {
-            _claimWithdraw(tokenIds[i], ownerOf(tokenIds[i]));
+            _claimWithdraw(tokenIds[i], ownerOf(tokenIds[i]), checkpointIndices[i]);
         }
     }
 
@@ -200,14 +205,23 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
         uint128 totalAmount = uint128(calculateTotalPendingAmount(lastRequestId));
-        _finalizeRequests(lastRequestId, totalAmount);
+        uint256 cachedSharePrice = liquidityPool.amountForShare(1 ether);
+
+        finalizationCheckpoints.push(FinalizationCheckpoint(uint32(lastRequestId), cachedSharePrice));
+        
+        // TODO: We can probably deprecate this variable and use the last element of the finalizationCheckpoints array
+        lastFinalizedRequestId = uint32(lastRequestId);
+
+        liquidityPool.withdraw(address(this), totalAmount);
+        emit UpdateFinalizedRequestId(uint32(lastRequestId), totalAmount);
     }
 
+    // Maybe deprecated ? I should try to fix any accounting errors and delete this function
     // It can be used to correct the total amount of pending withdrawals. There are some accounting erros as of now
     function finalizeRequests(uint256 lastRequestId, uint128 totalAmount) external {
         if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
-        _finalizeRequests(lastRequestId, totalAmount);
+        return;
     }
 
     function invalidateRequest(uint256 requestId) external {
@@ -239,16 +253,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    function _finalizeRequests(uint256 lastRequestId, uint128 totalAmount) internal {
-        emit UpdateFinalizedRequestId(uint32(lastRequestId), totalAmount);
-        lastFinalizedRequestId = uint32(lastRequestId);
-
-        // Cache the current share price
-        cachedSharePrice = liquidityPool.amountForShare(1 ether);
-
-        liquidityPool.withdraw(address(this), totalAmount);
-    }
-
     function getImplementation() external view returns (address) {
         return _getImplementation();
     }
@@ -269,5 +273,37 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     modifier onlyLiquidtyPool() {
         require(msg.sender == address(liquidityPool), "Caller is not the liquidity pool");
         _;
+    }
+
+
+    function getFinalizationCheckpoint(uint256 checkpointId) external view returns (FinalizationCheckpoint memory) {
+        return finalizationCheckpoints[checkpointId];
+    }
+
+    /// @dev View function to find a checkpoint hint to use in `claimWithdrawal()` 
+    ///  Search will be performed in the range of `[_firstIndex, _lastIndex]`
+    ///
+    /// @param _requestId request id to search the checkpoint for
+    /// @param _start index of the left boundary of the search range, should be greater than 0
+    /// @param _end index of the right boundary of the search range, should be less than or equal
+    ///  to queue.lastCheckpointId
+    ///
+    /// @return hint for later use in other methods or 0 if hint not found in the range
+    function findCheckpointHint(uint256 _requestId, uint256 _start, uint256 _end) public view returns (uint256) {
+
+        // Binary search
+        uint256 min = _start;
+        uint256 max = _end - 1;
+
+        while (max > min) {
+            uint256 mid = (max + min + 1) / 2;
+            if (finalizationCheckpoints[mid].lastFinalizedRequestId <= _requestId) {
+
+                min = mid;
+            } else {
+                max = mid - 1;
+            }
+        }
+        return min;
     }
 }

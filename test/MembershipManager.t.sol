@@ -71,7 +71,8 @@ contract MembershipManagerTest is TestSetup {
         _finalizeWithdrawalRequest(bobTokenId);
 
         vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(bobTokenId);
+        uint256 bobCheckpointId = withdrawRequestNFTInstance.findCheckpointHint(bobReqId, 0, 2);
+        withdrawRequestNFTInstance.claimWithdrawal(bobTokenId, bobCheckpointId);
 
         assertEq(bob.balance, 100 ether, "Bob should have 100 ether");
         assertEq(membershipNftInstance.balanceOf(bob, bobToken), 0);
