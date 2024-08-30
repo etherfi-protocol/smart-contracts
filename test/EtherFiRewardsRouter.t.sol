@@ -14,12 +14,11 @@ contract EtherFiRewardsRouterTest is TestSetup {
         setUpTests();
         initializeRealisticFork(MAINNET_FORK);
         vm.startPrank(owner);
-        etherfiRewardsRouterImplementation = new EtherFiRewardsRouter(address(liquidityPoolInstance), address(roleRegistry));
+        etherfiRewardsRouterImplementation = new EtherFiRewardsRouter(address(liquidityPoolInstance), admin);
         etherfiRewardsRouterProxy = new UUPSProxy(address(etherfiRewardsRouterImplementation), "");
         etherfiRewardsRouterInstance = EtherFiRewardsRouter(payable(address(etherfiRewardsRouterProxy)));
         etherfiRewardsRouterInstance.initialize();
         vm.startPrank(superAdmin);
-        roleRegistry.grantRole(etherfiRewardsRouterInstance.ETHERFI_ROUTER_ADMIN(), admin);
         vm.stopPrank();
 
         liquidityPoolAddress = address(liquidityPoolInstance);
@@ -38,7 +37,7 @@ contract EtherFiRewardsRouterTest is TestSetup {
 
     function test_elRouterUpgrade() public {
         vm.startPrank(owner);
-        EtherFiRewardsRouter newEtherfiRewardsRouterImplementation = new EtherFiRewardsRouter(address(liquidityPoolInstance), address(roleRegistry));
+        EtherFiRewardsRouter newEtherfiRewardsRouterImplementation = new EtherFiRewardsRouter(address(liquidityPoolInstance), admin);
         address oldImplementation = etherfiRewardsRouterInstance.getImplementation();
         etherfiRewardsRouterInstance.upgradeTo(address(newEtherfiRewardsRouterImplementation));
         address newImplementation = etherfiRewardsRouterInstance.getImplementation();
