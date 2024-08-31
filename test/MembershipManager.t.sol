@@ -71,7 +71,7 @@ contract MembershipManagerTest is TestSetup {
         _finalizeWithdrawalRequest(bobTokenId);
 
         vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(bobTokenId);
+        withdrawRequestNFTInstance.claimWithdraw(bobTokenId, 1);
 
         assertEq(bob.balance, 100 ether, "Bob should have 100 ether");
         assertEq(membershipNftInstance.balanceOf(bob, bobToken), 0);
@@ -101,7 +101,10 @@ contract MembershipManagerTest is TestSetup {
         uint256[] memory requestIds = new uint256[](2);
         requestIds[0] = requestId1;
         requestIds[1] = requestId2;
-        withdrawRequestNFTInstance.batchClaimWithdraw(requestIds);
+        uint256[] memory requestIdCheckpoints = new uint256[](2);
+        requestIdCheckpoints[0] = 1;
+        requestIdCheckpoints[1] = 2;
+        withdrawRequestNFTInstance.batchClaimWithdraw(requestIds, requestIdCheckpoints);
         vm.stopPrank();
 
         assertEq(address(membershipManagerV1Instance).balance, 2 * 0.5 ether);
@@ -140,7 +143,7 @@ contract MembershipManagerTest is TestSetup {
         _finalizeWithdrawalRequest(aliceRequestId1);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId1);
+        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId1, 1);
         assertEq(membershipNftInstance.loyaltyPointsOf(tokenId), 2 * kwei);
         assertEq(membershipNftInstance.tierPointsOf(tokenId), 0);
         assertEq(membershipNftInstance.valueOf(tokenId), 1 ether);
@@ -162,7 +165,7 @@ contract MembershipManagerTest is TestSetup {
         _finalizeWithdrawalRequest(aliceRequestId2);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId2);
+        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId2, 1);
         assertEq(membershipNftInstance.balanceOf(alice, tokenId), 0); 
         assertEq(alice.balance, 2 ether);
         vm.stopPrank();
@@ -533,7 +536,7 @@ contract MembershipManagerTest is TestSetup {
         _finalizeWithdrawalRequest(requestId);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        withdrawRequestNFTInstance.claimWithdraw(requestId, 1);
         assertEq(eETHInstance.balanceOf(alice), 0 ether);
         assertEq(membershipNftInstance.valueOf(aliceToken), 1 ether);
         assertEq(alice.balance, 1 ether);
@@ -1019,7 +1022,7 @@ contract MembershipManagerTest is TestSetup {
                     _finalizeWithdrawalRequest(requestId);
 
                     vm.startPrank(actor);
-                    withdrawRequestNFTInstance.claimWithdraw(requestId);
+                    withdrawRequestNFTInstance.claimWithdraw(requestId, 1);
                     counts[3]++;
                 }
 
@@ -1041,7 +1044,7 @@ contract MembershipManagerTest is TestSetup {
             _finalizeWithdrawalRequest(requestId);
             
             vm.prank(actor);
-            withdrawRequestNFTInstance.claimWithdraw(requestId);
+            withdrawRequestNFTInstance.claimWithdraw(requestId, 1);
 
             assertLe(address(actor).balance, expectedBalanceAfterWithdrawal);
             assertGe(address(actor).balance, expectedBalanceAfterWithdrawal - 3); // rounding errors
