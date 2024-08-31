@@ -81,7 +81,7 @@ contract MembershipManagerV0Test is TestSetup {
         _finalizeWithdrawalRequest(bobTokenId);
 
         vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(bobTokenId);
+        withdrawRequestNFTInstance.claimWithdraw(bobTokenId, 0);
 
         assertEq(bob.balance, 100 ether, "Bob should have 100 ether");
         assertEq(membershipNftInstance.balanceOf(bob, bobToken), 0);
@@ -117,7 +117,7 @@ contract MembershipManagerV0Test is TestSetup {
         _finalizeWithdrawalRequest(aliceRequestId1);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId1);
+        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId1, 0);
         assertEq(membershipNftInstance.loyaltyPointsOf(tokenId), 2 * kwei);
         assertEq(membershipNftInstance.tierPointsOf(tokenId), 0);
         assertEq(membershipNftInstance.valueOf(tokenId), 1 ether);
@@ -139,7 +139,7 @@ contract MembershipManagerV0Test is TestSetup {
         _finalizeWithdrawalRequest(aliceRequestId2);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId2);
+        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId2, 0);
         assertEq(membershipNftInstance.balanceOf(alice, tokenId), 0); 
         assertEq(alice.balance, 2 ether);
         vm.stopPrank();
@@ -928,7 +928,7 @@ contract MembershipManagerV0Test is TestSetup {
         _finalizeWithdrawalRequest(reqId);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        withdrawRequestNFTInstance.claimWithdraw(reqId, 0);
         assertEq(address(alice).balance, 10 ether);
 
         reqId = membershipManagerV1Instance.requestWithdrawAndBurn(aliceToken1);
@@ -938,7 +938,7 @@ contract MembershipManagerV0Test is TestSetup {
         _finalizeWithdrawalRequest(reqId);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        withdrawRequestNFTInstance.claimWithdraw(reqId, 0);
         assertEq(address(alice).balance, 200 ether);
 
         reqId = membershipManagerV1Instance.requestWithdrawAndBurn(aliceToken2);
@@ -948,7 +948,7 @@ contract MembershipManagerV0Test is TestSetup {
         _finalizeWithdrawalRequest(reqId);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        withdrawRequestNFTInstance.claimWithdraw(reqId, 0);
         assertEq(address(alice).balance, 400 ether);
 
         vm.stopPrank();

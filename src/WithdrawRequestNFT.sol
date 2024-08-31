@@ -63,6 +63,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
+
+        // to avoid having to deal with the finalizationCheckpoints[index - 1] edgecase where the index is 0, we add a dummy checkpoint
+        finalizationCheckpoints.push(FinalizationCheckpoint(0, 0));
     }
 
     /// @notice creates a withdraw request and issues an associated NFT to the recipient
@@ -84,14 +87,22 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function getClaimableAmount(uint256 tokenId, uint256 checkpointIndex) public view returns (uint256) {
-        FinalizationCheckpoint memory lowerBoundCheckpoint = finalizationCheckpoints[checkpointIndex - 1];
-        FinalizationCheckpoint memory checkpoint = finalizationCheckpoints[checkpointIndex];
-        require(lowerBoundCheckpoint.lastFinalizedRequestId < tokenId <= checkpoint.lastFinalizedRequestId, "Invalid checkpoint");
-
-        require(tokenId < nextRequestId, "Request does not exist");
         require(tokenId <= lastFinalizedRequestId, "Request is not finalized");
+        require(tokenId < nextRequestId, "Request does not exist");
         require(ownerOf(tokenId) != address(0), "Already Claimed");
 
+        require(
+            checkpointIndex != 0 &&
+            checkpointIndex < finalizationCheckpoints.length, 
+            "Invalid checkpoint index"
+        );
+        FinalizationCheckpoint memory lowerBoundCheckpoint = finalizationCheckpoints[checkpointIndex - 1];
+        FinalizationCheckpoint memory checkpoint = finalizationCheckpoints[checkpointIndex];
+        require(
+            lowerBoundCheckpoint.lastFinalizedRequestId < tokenId && 
+            tokenId <= checkpoint.lastFinalizedRequestId, 
+            "Invalid checkpoint"
+        );
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
 
         // send the lesser ether ETH value of the originally requested amount of eEth or the eEth value at the last `cachedSharePrice` update
@@ -107,7 +118,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @notice called by the NFT owner to claim their ETH
     /// @dev burns the NFT and transfers ETH from the liquidity pool to the owner minus any fee, withdraw request must be valid and finalized
     /// @param tokenId the id of the withdraw request and associated NFT
-    function claimWithdrawal(uint256 tokenId, uint256 checkpointIndex) external {
+    function claimWithdraw(uint256 tokenId, uint256 checkpointIndex) external {
         return _claimWithdraw(tokenId, ownerOf(tokenId), checkpointIndex);
     }
     
@@ -118,7 +129,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         require(request.isValid, "Request is not valid");
 
         uint256 fee = uint256(request.feeGwei) * 1 gwei;
-        uint256 amountToWithdraw = getClaimableAmount(tokenId);
+        uint256 amountToWithdraw = getClaimableAmount(tokenId, checkpointIndex);
 
         // transfer eth to recipient
         _burn(tokenId);
@@ -158,7 +169,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     // Given an invalidated withdrawal request NFT of ID `requestId`:,
     // - burn the NFT
     // - withdraw its ETH to the `recipient`
-    function seizeInvalidRequest(uint256 requestId, address recipient) external onlyOwner {
+    function seizeInvalidRequest(uint256 requestId, address recipient, uint256 checkpointIndex) external onlyOwner {
         require(!_requests[requestId].isValid, "Request is valid");
         require(ownerOf(requestId) != address(0), "Already Claimed");
 
@@ -169,7 +180,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         _requests[requestId].isValid = true;
 
         // withdraw the ETH to the recipient
-        _claimWithdraw(requestId, recipient);
+        // TODO: fix this
+        _claimWithdraw(requestId, recipient, checkpointIndex);
 
         emit WithdrawRequestSeized(uint32(requestId));
     }
@@ -280,30 +292,48 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return finalizationCheckpoints[checkpointId];
     }
 
-    /// @dev View function to find a checkpoint hint to use in `claimWithdrawal()` 
-    ///  Search will be performed in the range of `[_firstIndex, _lastIndex]`
+    /// @dev View function to find a finalization checkpoint to use in `claimWithdraw()` 
+    ///  Search will be performed in the range of `[_start, _end]` over the `finalizationCheckpoints` array
     ///
     /// @param _requestId request id to search the checkpoint for
-    /// @param _start index of the left boundary of the search range, should be greater than 0
-    /// @param _end index of the right boundary of the search range, should be less than or equal
-    ///  to queue.lastCheckpointId
+    /// @param _start index of the left boundary of the search range
+    /// @param _end index of the right boundary of the search range, should be less than or equal to `finalizationCheckpoints.length`
     ///
-    /// @return hint for later use in other methods or 0 if hint not found in the range
-    function findCheckpointHint(uint256 _requestId, uint256 _start, uint256 _end) public view returns (uint256) {
+    /// @return index into `finalizationCheckpoints` that the `_requestId` belongs to. 
+    function findCheckpointIndex(uint256 _requestId, uint256 _start, uint256 _end) public view returns (uint256) {
+        require(_requestId <= lastFinalizedRequestId, "Request is not finalized");
+        require(_start <= _end, "Invalid range");
+        require(_end < finalizationCheckpoints.length, "End index out of bounds of finalizationCheckpoints");
 
         // Binary search
         uint256 min = _start;
-        uint256 max = _end - 1;
+        uint256 max = _end;
 
         while (max > min) {
             uint256 mid = (max + min + 1) / 2;
-            if (finalizationCheckpoints[mid].lastFinalizedRequestId <= _requestId) {
+            if (finalizationCheckpoints[mid].lastFinalizedRequestId < _requestId) {
+
+                // if mid index in the array is less than the request id, we need to move up the array, as the index we are looking for has 
+                // a `finalizationCheckpoints[mid].lastFinalizedRequestId` greater than the request id
+
 
                 min = mid;
             } else {
-                max = mid - 1;
+                // by getting here, we have a `finalizationCheckpoints[mid].lastFinalizedRequestId` greater than the request id
+                // to know we have found the right index, finalizationCheckpoints[mid - 1].lastFinalizedRequestId` must be less than the request id
+
+                if (finalizationCheckpoints[mid - 1].lastFinalizedRequestId < _requestId) {
+                    return mid;
+                }
+
+                max = mid - 1; // there are values to the left of mid that are greater than the request id
             }
         }
-        return min;
     }
+
+    // Add a getter function for the length of the array
+    function getFinalizationCheckpointsLength() public view returns (uint256) {
+        return finalizationCheckpoints.length;
+    }
+
 }

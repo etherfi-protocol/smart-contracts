@@ -144,8 +144,8 @@ contract LiquidityPoolTest is TestSetup {
         _finalizeWithdrawalRequest(aliceReqId);
         
         vm.startPrank(alice);
-        uint256 aliceCheckpointId = withdrawRequestNFTInstance.findCheckpointHint(aliceReqId, 0, 2);
-        withdrawRequestNFTInstance.claimWithdrawal(aliceReqId, aliceCheckpointId);
+        uint256 aliceCheckpointId = withdrawRequestNFTInstance.findCheckpointIndex(aliceReqId, 0, 2);
+        withdrawRequestNFTInstance.claimWithdraw(aliceReqId, aliceCheckpointId);
         assertEq(eETHInstance.balanceOf(alice), 1 ether);
         assertEq(alice.balance, 2 ether);
         vm.stopPrank();
@@ -160,8 +160,8 @@ contract LiquidityPoolTest is TestSetup {
         _finalizeWithdrawalRequest(bobReqId);
 
         vm.startPrank(bob);
-        uint256 bobCheckpointId = withdrawRequestNFTInstance.findCheckpointHint(bobReqId, 0, 2);
-        withdrawRequestNFTInstance.claimWithdrawal(bobReqId, bobCheckpointId);
+        uint256 bobCheckpointId = withdrawRequestNFTInstance.findCheckpointIndex(bobReqId, 0, 2);
+        withdrawRequestNFTInstance.claimWithdraw(bobReqId, bobCheckpointId);
         assertEq(eETHInstance.balanceOf(bob), 0);
         assertEq(bob.balance, 3 ether);
         vm.stopPrank();
@@ -760,7 +760,7 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.prank(bob);
         uint256 bobRequestId2 = liquidityPoolInstance.requestWithdraw(bob, eEthTVL);
-        withdrawRequestNFTInstance.claimWithdrawal(bobRequestId, bobRequestId2);
+        withdrawRequestNFTInstance.claimWithdraw(bobRequestId, bobRequestId2);
 
         assertEq(address(liquidityPoolInstance).balance, 0);
         assertEq(eETHInstance.totalSupply(), 0);

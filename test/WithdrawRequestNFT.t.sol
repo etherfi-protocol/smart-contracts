@@ -137,7 +137,11 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         vm.expectRevert("Request is not finalized");
         vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        uint256 checkpointId = withdrawRequestNFTInstance.findCheckpointIndex(requestId, 0, 2);
+
+        vm.expectRevert("Request is not finalized");
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId, 0);
     }
 
     function test_ClaimWithdrawOfOthers() public {
@@ -157,7 +161,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         vm.expectRevert("Not the owner of the NFT");
         vm.prank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        withdrawRequestNFTInstance.claimWithdraw(requestId, 0);
     }
 
     function test_ValidClaimWithdraw1() public {
@@ -198,8 +202,9 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 1 ether, "eETH balance should be 1 ether after finalization");
         assertEq(address(withdrawRequestNFTInstance).balance, 1 ether, "Contract balance should be 1 ether after finalization");
 
+        uint256 bobsRequestIdCheckpoint = withdrawRequestNFTInstance.findCheckpointIndex(requestId, 0, 1);
         vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        withdrawRequestNFTInstance.claimWithdraw(requestId, bobsRequestIdCheckpoint);
 
         uint256 bobsEndingBalance = address(bob).balance;
 
@@ -237,15 +242,17 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(withdrawRequestNFTInstance.balanceOf(bob), 2, "Bobs balance should be 1");
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId2), bob, "Bobs should own the NFT");
 
+        uint256 requestId1Checkpoint = withdrawRequestNFTInstance.findCheckpointIndex(requestId1, 0, withdrawRequestNFTInstance.getFinalizationCheckpointsLength() - 1);
         vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(requestId1);
+        withdrawRequestNFTInstance.claimWithdraw(requestId1, requestId1Checkpoint);
         uint256 bobBalanceAfterFirstWithdraw = address(bob).balance;
         assertEq(bobBalanceAfterFirstWithdraw, bobsStartingBalance + 1 ether, "Bobs balance should be 1 ether higher");
         
         _finalizeWithdrawalRequest(requestId2);
 
+        uint256 requestId2Checkpoint = withdrawRequestNFTInstance.findCheckpointIndex(requestId2, 0, withdrawRequestNFTInstance.getFinalizationCheckpointsLength() - 1);
         vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(requestId2);
+        withdrawRequestNFTInstance.claimWithdraw(requestId2, requestId2Checkpoint);
         uint256 bobBalanceAfterSecondWithdraw = address(bob).balance;
 
         assertEq(bobBalanceAfterSecondWithdraw, bobBalanceAfterFirstWithdraw + 0.5 ether, "Bobs balance should be 0.5 ether higher");
@@ -273,7 +280,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 bobsStartingBalance = address(bob).balance;
 
         vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        withdrawRequestNFTInstance.claimWithdraw(requestId, 1);
 
         uint256 bobsEndingBalance = address(bob).balance;
 
@@ -300,17 +307,17 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         // Withdraw request for 9 wei eETH amount (= 8.82 wei eETH share)
         // 8 wei eETH share is transfered to `withdrawRequestNFT` contract
+        
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 9);
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 8);
         // Within `LP.requestWithdraw`
         // - `share` is calculated by `sharesForAmount` as (9 * 98) / 100 = 8.82 ---> (rounded down to) 8
 
-
         _finalizeWithdrawalRequest(requestId);
 
-
+        uint256 checkpointId = withdrawRequestNFTInstance.findCheckpointIndex(requestId, 0, withdrawRequestNFTInstance.getFinalizationCheckpointsLength() - 1);
         vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        withdrawRequestNFTInstance.claimWithdraw(requestId, checkpointId);
         // Within `claimWithdraw`,
         // - `request.amountOfEEth` is 9
         // - `amountForShares` is (8 * 100) / 98 = 8.16 ---> (rounded down to) 8
@@ -397,7 +404,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         // REVERT if not owner
         vm.prank(alice);
         vm.expectRevert("Ownable: caller is not the owner");
-        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad);
+        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad, 1);
     }
 
     function test_InvalidatedRequestNft_seizeInvalidAndMintNew_1() public {
@@ -406,7 +413,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 chadBalance = address(chad).balance;
 
         vm.prank(owner);
-        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad);
+        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad, 1);
 
         // assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
         assertEq(address(chad).balance, chadBalance + claimableAmount, "Chad should receive the claimable amount");
@@ -418,7 +425,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 chadBalance = address(chad).balance;
 
         vm.prank(owner);
-        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad);
+        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad, 1);
 
         // assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
         assertEq(address(chad).balance, chadBalance + claimableAmount, "Chad should receive the claimable amount");

@@ -18,7 +18,7 @@ interface IWithdrawRequestNFT {
 
     function initialize(address _liquidityPoolAddress, address _eEthAddress, address _membershipManager) external;
     function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address requester, uint256 fee) external payable returns (uint256);
-    function claimWithdrawal(uint256 requestId, uint256 checkpointId) external;
+    function claimWithdraw(uint256 requestId, uint256 checkpointId) external;
 
     function getRequest(uint256 requestId) external view returns (WithdrawRequest memory);
     function isFinalized(uint256 requestId) external view returns (bool);
