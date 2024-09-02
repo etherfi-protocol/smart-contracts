@@ -562,13 +562,6 @@ contract LiquidityPoolTest is TestSetup {
 
         liquidityPoolInstance.batchApproveRegistration(validatorIds, pubKey, sig);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
-
-        address etherfiNode = managerInstance.etherfiNodeAddress(validatorIds[0]);
-        vm.deal(address(etherfiNode), 1 ether);
-        managerInstance.batchPartialWithdraw(validatorIds);
-
-        // The liquidity pool receives the rewards as B-NFT holder and T-NFT holder
-        assertEq((address(liquidityPoolInstance).balance), 1 * 0.9 ether);
     }
 
     function test_batchPartialWithdrawOptimized() internal {

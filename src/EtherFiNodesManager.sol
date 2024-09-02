@@ -83,7 +83,6 @@ contract EtherFiNodesManager is
     event NodeEvicted(uint256 _validatorId);
     event PhaseChanged(uint256 indexed _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
 
-    event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
     event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
 
@@ -224,36 +223,6 @@ contract EtherFiNodesManager is
         }
     }
 
-    /// @dev With Eigenlayer's PEPE model, shares are at the pod level, not validator level
-    ///      so uncareful use of this function will result in distributing rewards from
-    ///      mulitiple validators, not just the rewards of the provided ID. We fundamentally should
-    ///      rework this mechanism as it no longer makes much sense as implemented.
-    /// @notice Process the rewards skimming from the safe of the validator
-    ///         when the safe is being shared by the multiple validatators, it batch process all of their rewards skimming in one shot
-    /// @param _validatorId The validator Id
-    /// Full Flow of the partial withdrawal for a validator
-    //  1. validator is exited & fund is withdrawn from the beacon chain
-    //  2. perform `EigenPod.startCheckpoint()`
-    //  3. perform `EigenPod.verifyCheckpointProofs()`
-    //  4. wait for 'withdrawalDelayBlocks' (= 7 days) delay to be passed
-    //  5. Finally, perform `EtherFiNodesManager.partialWithdraw` for the validator
-    function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused onlyAdmin {
-
-        address etherfiNode = etherfiNodeAddress[_validatorId];
-        _updateEtherFiNode(_validatorId);
-
-        // distribute the rewards payouts. It reverts if the safe's balance >= 16 ether
-        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
-        _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
-
-        emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
-    }
-
-    function batchPartialWithdraw(uint256[] calldata _validatorIds) external whenNotPaused{
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            partialWithdraw( _validatorIds[i]);
-        }
-    }
 
     /// @notice process the full withdrawal
     /// @dev This fullWithdrawal is allowed only after it's marked as EXITED.

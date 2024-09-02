@@ -51,6 +51,8 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     error CallFailed(bytes data);
 
     event EigenPodCreated(address indexed nodeAddress, address indexed podAddress);
+    event QueuedEigenlayerPartialWithdrawal(address indexed etherfiNode, address indexed eigenPod, bytes32 indexed withdrawalRoot, uint256 amount);
+    event CompletedEigenlayerPartialWithdrawal(address indexed ethirfiNode, address indexed eigenpod, uint256 amount);
 
     //--------------------------------------------------------------------------------------
     //----------------------------------  CONSTRUCTOR   ------------------------------------
@@ -233,6 +235,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         return _completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, _receiveAsTokens);
     }
 
+
     // `DelegationManager.completeQueuedWithdrawals` is used to complete the withdrawals:
     // (1) by `EtherFiNode._queueRestakedFullWithdrawal`. It is used to process the full withdraw
     // (2) by `DelegationManager.undelegate`
@@ -297,6 +300,64 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
             (sent, ) = _treasury.call{value: _treasuryAmount, gas: 2300}("");
             require(sent, "ETH_SEND_FAILED");
         }
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------  PARTIAL WITHDRAWALS  ---------------------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @dev queues a partial withdrawal from the eigenpod. Only withdrawing beacon eth
+    ///      is supported at this time
+    ///
+    /// Full Flow of the partial withdrawal for an eigenpod
+    //  1. perform `EigenPod.startCheckpoint()`
+    //  2. perform `EigenPod.verifyCheckpointProofs()`
+    //  3. perform `queueEigenlayerPartialWithdrawal()`
+    //  4. wait for 'withdrawalDelayBlocks' (= 7 days) delay to be passed
+    //  5. perform `completeEigenlayerPartialWithdrawal()`
+    function queueEigenlayerPartialWithdrawal(uint256 _amount) external returns (bytes32){
+        // TODO: replace with role-registry permissions with v2.5 upgrade
+        require(IEtherFiNodesManager(etherFiNodesManager).admins(msg.sender), "not admin");
+
+        IDelegationManager delegationManager = IDelegationManager(IEtherFiNodesManager(etherFiNodesManager).delegationManager());
+        IEigenPod eigenPod = IEigenPod(eigenPod);
+
+        // conservative limit. only allow withdrawing funds that are guaranteed to be
+        // in excess of the staking principal. In the case of an extreme slashing scenario,
+        // you will need to complete the exits of the slashed validators before claiming more
+        // partial withdrawals
+        uint256 maxPartialWithdrawal = (eigenPod.withdrawableRestakedExecutionLayerGwei() * 1e9) - (32 ether * eigenPod.activeValidatorCount());
+        require(_amount <= maxPartialWithdrawal, "exceeded max partial withdrawal");
+
+        // construct and queue withdrawal
+        IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
+        IStrategy[] memory strategies = new IStrategy[](1);
+        uint256[] memory shares = new uint256[](1);
+        strategies[0] = delegationManager.beaconChainETHStrategy();
+        shares[0] = _amount;
+        params[0] = IDelegationManager.QueuedWithdrawalParams({
+            strategies: strategies,
+            shares: shares,
+            withdrawer: address(this)
+        });
+        bytes32[] memory roots = delegationManager.queueWithdrawals(params);
+
+        emit QueuedEigenlayerPartialWithdrawal(address(this), address(eigenPod), roots[0], _amount);
+        return roots[0];
+    }
+
+    /// @dev completes a previously queued partial withdrawal from the eigenpod. Only withdrawing beacon eth
+    ///      is supported at this time
+    function completeEigenlayerPartialWithdrawal(IDelegationManager.Withdrawal memory _withdrawal, uint256 _middlewareTimesIndex) external {
+        // TODO: replace with role-registry permissions with v2.5 upgrade
+        require(IEtherFiNodesManager(etherFiNodesManager).admins(msg.sender), "not admin");
+
+        IDelegationManager delegationManager = IDelegationManager(IEtherFiNodesManager(etherFiNodesManager).delegationManager());
+        IERC20[] memory tokens = new IERC20[](_withdrawal.strategies.length); // tokens array is ignored for withdrawing beacon eth
+        bool receiveAsTokens = true;
+
+        delegationManager.completeQueuedWithdrawal(_withdrawal, tokens, _middlewareTimesIndex, receiveAsTokens);
+        emit CompletedEigenlayerPartialWithdrawal(address(this), eigenPod, _withdrawal.shares[0]);
     }
 
     //--------------------------------------------------------------------------------------
