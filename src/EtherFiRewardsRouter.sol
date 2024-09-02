@@ -11,7 +11,7 @@ import "./RoleRegistry.sol";
 contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     using SafeERC20 for IERC20;
 
-    address public immutable treasury;
+    address public treasury;
     address public immutable liquidityPool;
     RoleRegistry public immutable roleRegistry;
 
@@ -19,6 +19,7 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
 
     event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
+    event UpdatedTreasury(address indexed treasury);
     event Erc20Sent(address indexed caller, address indexed token, uint256 amount);
     event Erc721Sent(address indexed caller, address indexed token, uint256 tokenId);
 
@@ -65,6 +66,11 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
 
         emit Erc721Sent(msg.sender, _token, _tokenId);
     }
+
+    function setTreasury(address _treasury) external onlyOwner {
+        treasury = _treasury;
+        emit UpdatedTreasury(_treasury);
+    }   
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 

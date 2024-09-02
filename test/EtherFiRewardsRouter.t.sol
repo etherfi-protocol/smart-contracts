@@ -1,6 +1,7 @@
 import "./TestSetup.sol";
 import "../src/EtherFiRewardsRouter.sol";
 import "../src/LiquidityPool.sol";
+import "forge-std/console2.sol";
 
 contract EtherFiRewardsRouterTest is TestSetup {
 
@@ -9,17 +10,27 @@ contract EtherFiRewardsRouterTest is TestSetup {
     UUPSProxy etherfiRewardsRouterProxy;
     EtherFiRewardsRouter etherfiRewardsRouterInstance;
 
+    function get_eeth() public {
+        vm.startPrank(address(etherfiRewardsRouterInstance));
+        vm.deal(address(etherfiRewardsRouterInstance), 10 ether);
+        liquidityPoolInstance.deposit{value: 2 ether}();
+        vm.stopPrank();
+    } 
 
     function setUp() public {
         setUpTests();
         initializeRealisticFork(MAINNET_FORK);
-        vm.startPrank(owner);
+        vm.startPrank(superAdmin);
         etherfiRewardsRouterImplementation = new EtherFiRewardsRouter(address(liquidityPoolInstance), address(roleRegistry));
         etherfiRewardsRouterProxy = new UUPSProxy(address(etherfiRewardsRouterImplementation), "");
         etherfiRewardsRouterInstance = EtherFiRewardsRouter(payable(address(etherfiRewardsRouterProxy)));
         etherfiRewardsRouterInstance.initialize();
         vm.startPrank(superAdmin);
         roleRegistry.grantRole(etherfiRewardsRouterInstance.ETHERFI_ROUTER_ADMIN(), admin);
+        etherfiRewardsRouterInstance.transferOwnership(owner);
+        vm.stopPrank();
+        vm.startPrank(owner);
+        etherfiRewardsRouterInstance.setTreasury(address(treasuryInstance));
         vm.stopPrank();
 
         liquidityPoolAddress = address(liquidityPoolInstance);
@@ -54,5 +65,28 @@ contract EtherFiRewardsRouterTest is TestSetup {
         emit EtherFiRewardsRouter.EthSent(address(etherfiRewardsRouterInstance), liquidityPoolAddress, 10 ether);
         etherfiRewardsRouterInstance.withdrawToLiquidityPool();
         vm.stopPrank();
-    }  
+    }
+
+    function test_recoverERC20() public {
+        get_eeth();
+        vm.startPrank(admin);
+        uint256 balanceBefore = eETHInstance.balanceOf(address(treasuryInstance));
+        etherfiRewardsRouterInstance.recoverERC20(address(eETHInstance), 1 ether);
+        uint256 balanceAfter = eETHInstance.balanceOf(address(treasuryInstance));
+        console.log("balanceBefore: ", balanceBefore);
+        console.log("balanceAfter: ", balanceAfter);
+        assertApproxEqAbs(balanceAfter, balanceBefore + 1 ether, 1);
+    }
+
+    function test_setTreasury() public {
+        vm.startPrank(owner);
+        etherfiRewardsRouterInstance.setTreasury(alice);
+        assertEq(etherfiRewardsRouterInstance.treasury(), alice);
+    } 
+
+    function test_setTreasuryFailure() public {
+        vm.startPrank(bob);
+        vm.expectRevert("Ownable: caller is not the owner");
+        etherfiRewardsRouterInstance.setTreasury(alice);
+    } 
 }
