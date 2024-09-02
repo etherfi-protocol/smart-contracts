@@ -23,7 +23,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     uint32 public nextRequestId;
     uint32 public lastFinalizedRequestId;
-    uint96 public accumulatedDustEEthShares; // to be burned or used to cover the validator churn cost
+    uint96 public DEPRECATED_accumulatedDustEEthShares; // to be burned or used to cover the validator churn cost
 
     FinalizationCheckpoint[] public finalizationCheckpoints;
 
@@ -31,8 +31,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     bytes32 public constant WITHDRAW_NFT_ADMIN_ROLE = keccak256("WITHDRAW_NFT_ADMIN_ROLE");
 
-    event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
-    event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 DEPRECATED_burntShareOfEEth, address owner, uint256 fee);
+    event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner);
+    event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 DEPRECATED_burntShareOfEEth, address owner);
     event WithdrawRequestInvalidated(uint32 indexed requestId);
     event WithdrawRequestValidated(uint32 indexed requestId);
     event WithdrawRequestSeized(uint32 indexed requestId);
@@ -66,6 +66,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         // to avoid having to deal with the finalizationCheckpoints[index - 1] edgecase where the index is 0, we add a dummy checkpoint
         finalizationCheckpoints.push(FinalizationCheckpoint(0, 0));
+
+        DEPRECATED_accumulatedDustEEthShares = 0;
     }
 
     /// @notice creates a withdraw request and issues an associated NFT to the recipient
@@ -73,19 +75,25 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @param amountOfEEth amount of eETH requested for withdrawal
     /// @param shareOfEEth share of eETH requested for withdrawal
     /// @param recipient address to recieve with WithdrawRequestNFT
-    /// @param fee fee to be subtracted from amount when recipient calls claimWithdraw
     /// @return uint256 id of the withdraw request
-    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external payable onlyLiquidtyPool returns (uint256) {
+    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient) external payable onlyLiquidtyPool returns (uint256) {
         uint256 requestId = nextRequestId++; 
-        uint32 feeGwei = uint32(fee / 1 gwei);
 
-        _requests[requestId] = IWithdrawRequestNFT.WithdrawRequest(amountOfEEth, shareOfEEth, true, feeGwei);
+        _requests[requestId] = IWithdrawRequestNFT.WithdrawRequest(amountOfEEth, shareOfEEth, true, 0);
         _safeMint(recipient, requestId);
 
-        emit WithdrawRequestCreated(uint32(requestId), amountOfEEth, shareOfEEth, recipient, fee);
+        emit WithdrawRequestCreated(uint32(requestId), amountOfEEth, shareOfEEth, recipient);
         return requestId;
     }
 
+    /// @notice returns the value of a request after finalization. The value of a request can be:
+    ///  - nominal (when the amount of eth locked for this request are equal to the request's eETH)
+    ///  - discounted (when the amount of eth will be lower, because the protocol share rate dropped
+    ///   before request is finalized, so it will be equal to `request's shares` * `protocol share rate`)
+    /// @param tokenId the id of the withdraw request NFT
+    /// @param checkpointIndex the index of the `finalizationCheckpoints` that the request belongs to.
+    /// `checkpointIndex` can be found using `findCheckpointIndex` function
+    /// @return uint256 the amount of ETH that can be claimed by the owner of the NFT
     function getClaimableAmount(uint256 tokenId, uint256 checkpointIndex) public view returns (uint256) {
         require(tokenId <= lastFinalizedRequestId, "Request is not finalized");
         require(tokenId < nextRequestId, "Request does not exist");
@@ -105,14 +113,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         );
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
 
-        // send the lesser ether ETH value of the originally requested amount of eEth or the eEth value at the last `cachedSharePrice` update
-        uint256 cachedSharePrice = checkpoint.cachedShareValue;
-        uint256 amountForSharesCached = request.shareOfEEth * cachedSharePrice / 1 ether;
+        uint256 amountForSharesCached = request.shareOfEEth * checkpoint.cachedShareValue / 1 ether;
         uint256 amountToTransfer = _min(request.amountOfEEth, amountForSharesCached);
-        
-        uint256 fee = uint256(request.feeGwei) * 1 gwei;
 
-        return amountToTransfer - fee;
+        return amountToTransfer;
     }
 
     /// @notice called by the NFT owner to claim their ETH
@@ -128,42 +132,21 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
         require(request.isValid, "Request is not valid");
 
-        uint256 fee = uint256(request.feeGwei) * 1 gwei;
         uint256 amountToWithdraw = getClaimableAmount(tokenId, checkpointIndex);
 
         // transfer eth to recipient
         _burn(tokenId);
         delete _requests[tokenId];
 
-        if (fee > 0) {
-            // send fee to membership manager
-            _sendFund(address(membershipManager), fee);
-        }
         _sendFund(recipient, amountToWithdraw);
 
-        emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw + fee, 0, recipient, fee);
+        emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw, 0, recipient);
     }
 
     function batchClaimWithdraw(uint256[] calldata tokenIds, uint256[] calldata checkpointIndices) external {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             _claimWithdraw(tokenIds[i], ownerOf(tokenIds[i]), checkpointIndices[i]);
         }
-    }
-
-    // Reduce the accumulated dust eEth shares by the given amount
-    // This is to fix the accounting error that was over-accumulating dust eEth shares due to the fee
-    function updateAccumulatedDustEEthShares(uint96 amount) external onlyOwner {
-        accumulatedDustEEthShares -= amount;
-    }
-
-    // a function to transfer accumulated shares to admin
-    function withdrawAccumulatedDustEEthShares(address _recipient) external {
-        if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        uint256 shares = accumulatedDustEEthShares;
-        accumulatedDustEEthShares = 0;
-
-        uint256 amountForShares = liquidityPool.amountForShare(shares);
-        eETH.transfer(_recipient, amountForShares);
     }
 
     // Given an invalidated withdrawal request NFT of ID `requestId`:,
@@ -336,4 +319,20 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return finalizationCheckpoints.length;
     }
 
+    function getAccumulatedDustEEthAmount() public view returns (uint256) {
+        uint256 amountRequestedWithdraw = calculateTotalPendingAmount(nextRequestId - 1);
+
+        uint256 contractEEthBalance = eETH.balanceOf(address(this));
+
+        return contractEEthBalance - amountRequestedWithdraw;
+    }
+
+    function withdrawAccumulatedDustEEth(address _recipient) external {
+        if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
+        uint256 dust = getAccumulatedDustEEthAmount();
+
+        // the dust amount is monotonically increasing, so we can just transfer the whole amount
+        eETH.transfer(_recipient, dust);
+    }
 }

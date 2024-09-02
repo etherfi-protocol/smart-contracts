@@ -159,7 +159,7 @@ contract LiquidityPoolTest is TestSetup {
         _finalizeWithdrawalRequest(bobReqId);
 
         vm.startPrank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(bobReqId, 1);
+        withdrawRequestNFTInstance.claimWithdraw(bobReqId, 2);
         assertEq(eETHInstance.balanceOf(bob), 0);
         assertEq(bob.balance, 3 ether);
         vm.stopPrank();

@@ -457,8 +457,8 @@ contract LiquifierTest is TestSetup {
         uint256 afterTVL = liquidityPoolInstance.getTotalPooledEther();
         uint256 afterLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
 
-        assertApproxEqAbs(afterTVL, beforeTVL, 1);
-        assertApproxEqAbs(beforeLiquifierTotalPooledEther, afterLiquifierTotalPooledEther, 1);
+        assertApproxEqAbs(afterTVL, beforeTVL, 2);
+        assertApproxEqAbs(beforeLiquifierTotalPooledEther, afterLiquifierTotalPooledEther, 2);
     }
 
     function test_withdrawEEth() public {

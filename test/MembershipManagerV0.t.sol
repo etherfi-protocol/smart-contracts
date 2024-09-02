@@ -139,7 +139,7 @@ contract MembershipManagerV0Test is TestSetup {
         _finalizeWithdrawalRequest(aliceRequestId2);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId2, 1);
+        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId2, 2);
         assertEq(membershipNftInstance.balanceOf(alice, tokenId), 0); 
         assertEq(alice.balance, 2 ether);
         vm.stopPrank();
@@ -861,7 +861,7 @@ contract MembershipManagerV0Test is TestSetup {
         assertEq(membershipNftInstance.valueOf(tokens[4]), 1 ether + 1 ether * uint256(30) / uint256(100));
     }
 
-    function test_token_vault_migratino() public {
+    function test_token_vault_migration() public {
         vm.deal(alice, 100 ether);
 
         // Alice mints two NFTs with 50 ETH for each
@@ -938,7 +938,7 @@ contract MembershipManagerV0Test is TestSetup {
         _finalizeWithdrawalRequest(reqId);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(reqId, 1);
+        withdrawRequestNFTInstance.claimWithdraw(reqId, 2);
         assertEq(address(alice).balance, 200 ether);
 
         reqId = membershipManagerV1Instance.requestWithdrawAndBurn(aliceToken2);
@@ -948,7 +948,7 @@ contract MembershipManagerV0Test is TestSetup {
         _finalizeWithdrawalRequest(reqId);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(reqId, 1);
+        withdrawRequestNFTInstance.claimWithdraw(reqId, 3);
         assertEq(address(alice).balance, 400 ether);
 
         vm.stopPrank();

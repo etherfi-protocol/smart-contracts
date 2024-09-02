@@ -179,7 +179,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
-        assertEq(withdrawRequestNFTInstance.accumulatedDustEEthShares(), 0, "Accumulated dust should be 0");
+        assertEq(withdrawRequestNFTInstance.getAccumulatedDustEEthAmount(), 0, "Accumulated dust should be 0");
         assertEq(eETHInstance.balanceOf(bob), 9 ether);
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 1 ether, "eETH balance should be 1 ether");
 
@@ -202,10 +202,10 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         assertEq(bobsEndingBalance, bobsStartingBalance + 1 ether, "Bobs balance should be 1 ether higher");
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 1 ether, "eETH balance should be 1 ether");
-        assertEq(liquidityPoolInstance.amountForShare(withdrawRequestNFTInstance.accumulatedDustEEthShares()), 1 ether);
+        assertEq(withdrawRequestNFTInstance.getAccumulatedDustEEthAmount(), 1 ether);
 
         vm.prank(alice);
-        withdrawRequestNFTInstance.withdrawAccumulatedDustEEthShares(bob);
+        withdrawRequestNFTInstance.withdrawAccumulatedDustEEth(bob);
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 0 ether, "eETH balance should be 0 ether");
         assertEq(eETHInstance.balanceOf(bob), 18 ether + 1 ether); // 1 ether eETH in `withdrawRequestNFT` contract is sent to Bob
     }

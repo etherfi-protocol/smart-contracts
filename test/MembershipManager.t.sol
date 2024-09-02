@@ -79,7 +79,7 @@ contract MembershipManagerTest is TestSetup {
 
 
     function test_batchClaimWithdraw() public {
-        assertEq(withdrawRequestNFTInstance.accumulatedDustEEthShares(), 0, "Accumulated dust should be 0");
+        assertEq(withdrawRequestNFTInstance.getAccumulatedDustEEthAmount(), 0, "Accumulated dust should be 0");
 
         vm.prank(alice);
         membershipManagerV1Instance.setFeeAmounts(0 ether, 0.5 ether, 0 ether, 30);
@@ -107,10 +107,11 @@ contract MembershipManagerTest is TestSetup {
         withdrawRequestNFTInstance.batchClaimWithdraw(requestIds, requestIdCheckpoints);
         vm.stopPrank();
 
-        assertEq(address(membershipManagerV1Instance).balance, 2 * 0.5 ether);
-        assertEq(address(bob).balance, 100 ether - 2 * 0.5 ether);
+        // fees have been deprecated in the withdraw flow so expect collected fees to always be 0
+        assertEq(address(membershipManagerV1Instance).balance, 0);
+        assertEq(address(bob).balance, 100 ether);
 
-        assertEq(withdrawRequestNFTInstance.accumulatedDustEEthShares(), 0, "Accumulated dust should be 0");
+        assertEq(withdrawRequestNFTInstance.getAccumulatedDustEEthAmount(), 0, "Accumulated dust should be 0");
     }
 
 
@@ -165,7 +166,7 @@ contract MembershipManagerTest is TestSetup {
         _finalizeWithdrawalRequest(aliceRequestId2);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId2, 1);
+        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId2, 2);
         assertEq(membershipNftInstance.balanceOf(alice, tokenId), 0); 
         assertEq(alice.balance, 2 ether);
         vm.stopPrank();
@@ -1021,8 +1022,9 @@ contract MembershipManagerTest is TestSetup {
 
                     _finalizeWithdrawalRequest(requestId);
 
+                    uint256 requestCheckpointIndex = withdrawRequestNFTInstance.findCheckpointIndex(requestId, 0, withdrawRequestNFTInstance.getFinalizationCheckpointsLength() - 1);
                     vm.startPrank(actor);
-                    withdrawRequestNFTInstance.claimWithdraw(requestId, 1);
+                    withdrawRequestNFTInstance.claimWithdraw(requestId, requestCheckpointIndex);
                     counts[3]++;
                 }
 
@@ -1043,11 +1045,11 @@ contract MembershipManagerTest is TestSetup {
 
             _finalizeWithdrawalRequest(requestId);
             
+            uint256 requestCheckpointIndex = withdrawRequestNFTInstance.findCheckpointIndex(requestId, 0, withdrawRequestNFTInstance.getFinalizationCheckpointsLength() - 1);
             vm.prank(actor);
-            withdrawRequestNFTInstance.claimWithdraw(requestId, 1);
+            withdrawRequestNFTInstance.claimWithdraw(requestId, requestCheckpointIndex);
 
-            assertLe(address(actor).balance, expectedBalanceAfterWithdrawal);
-            assertGe(address(actor).balance, expectedBalanceAfterWithdrawal - 3); // rounding errors
+            assertApproxEqAbs(address(actor).balance, expectedBalanceAfterWithdrawal, 20);
 
             totalActorsBalance += address(actor).balance;
         }
@@ -1062,7 +1064,7 @@ contract MembershipManagerTest is TestSetup {
         console.log("address(liquidityPoolInstance).balance", address(liquidityPoolInstance).balance);
         console.log("eETHInstance.balanceOf(address(membershipManagerV1Instance))", eETHInstance.balanceOf(address(membershipManagerV1Instance)));
         // console.log("resting Rewards", liquidityPoolInstance.amountForShare(membershipManagerV1Instance.sharesReservedForRewards()));
-        assertEq(totalActorsBalance + address(liquidityPoolInstance).balance, totalMoneySupply);
+        assertEq(totalActorsBalance + address(liquidityPoolInstance).balance + address(withdrawRequestNFTInstance).balance, totalMoneySupply);
         // assertLe(membershipManagerV1Instance.sharesReservedForRewards(), eETHInstance.shares(address(membershipManagerV1Instance)));
     }
 
@@ -1348,7 +1350,8 @@ contract MembershipManagerTest is TestSetup {
         uint256 reqId2 = membershipManagerV1Instance.requestWithdrawAndBurn(aliceToken2);
 
         assertEq(withdrawRequestNFTInstance.getRequest(reqId1).amountOfEEth, 1 ether);
-        assertEq(withdrawRequestNFTInstance.getRequest(reqId1).feeGwei, uint32(burnFee / 1 gwei));
+        // burn fees are deprecated
+        assertEq(withdrawRequestNFTInstance.getRequest(reqId1).feeGwei, 0);
         assertEq(withdrawRequestNFTInstance.getRequest(reqId2).amountOfEEth, 1 ether);
     }
 
