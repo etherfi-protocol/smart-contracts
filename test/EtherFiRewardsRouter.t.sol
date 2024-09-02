@@ -4,7 +4,6 @@ import "../src/LiquidityPool.sol";
 import "forge-std/console2.sol";
 
 contract EtherFiRewardsRouterTest is TestSetup {
-
     address liquidityPoolAddress;
     EtherFiRewardsRouter etherfiRewardsRouterImplementation;
     UUPSProxy etherfiRewardsRouterProxy;
@@ -15,7 +14,7 @@ contract EtherFiRewardsRouterTest is TestSetup {
         vm.deal(address(etherfiRewardsRouterInstance), 10 ether);
         liquidityPoolInstance.deposit{value: 2 ether}();
         vm.stopPrank();
-    } 
+    }
 
     function setUp() public {
         setUpTests();
@@ -35,7 +34,7 @@ contract EtherFiRewardsRouterTest is TestSetup {
 
         liquidityPoolAddress = address(liquidityPoolInstance);
         vm.deal(address(etherfiRewardsRouterInstance), 10 ether);
-        vm.stopPrank(); 
+        vm.stopPrank();
     }
 
     function test_withdrawToLiquidityPool() public {
@@ -57,7 +56,7 @@ contract EtherFiRewardsRouterTest is TestSetup {
         assert(newImplementation == address(newEtherfiRewardsRouterImplementation));
         test_withdrawToLiquidityPool();
         vm.stopPrank();
-    } 
+    }
 
     function test_checkEventEmitted() public {
         vm.startPrank(admin);
@@ -73,8 +72,6 @@ contract EtherFiRewardsRouterTest is TestSetup {
         uint256 balanceBefore = eETHInstance.balanceOf(address(treasuryInstance));
         etherfiRewardsRouterInstance.recoverERC20(address(eETHInstance), 1 ether);
         uint256 balanceAfter = eETHInstance.balanceOf(address(treasuryInstance));
-        console.log("balanceBefore: ", balanceBefore);
-        console.log("balanceAfter: ", balanceAfter);
         assertApproxEqAbs(balanceAfter, balanceBefore + 1 ether, 1);
     }
 
@@ -82,11 +79,11 @@ contract EtherFiRewardsRouterTest is TestSetup {
         vm.startPrank(owner);
         etherfiRewardsRouterInstance.setTreasury(alice);
         assertEq(etherfiRewardsRouterInstance.treasury(), alice);
-    } 
+    }
 
     function test_setTreasuryFailure() public {
         vm.startPrank(bob);
         vm.expectRevert("Ownable: caller is not the owner");
         etherfiRewardsRouterInstance.setTreasury(alice);
-    } 
+    }
 }
