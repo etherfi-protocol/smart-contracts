@@ -579,25 +579,6 @@ contract EtherFiNodeTest is TestSetup {
         assertTrue(managerInstance.phase(bidId[0]) == IEtherFiNode.VALIDATOR_PHASE.BEING_SLASHED);
     }
 
-    /*
-    function test_partialWithdrawAfterExitRequest() public {
-        address nodeOperator = 0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931;
-        address staker = 0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf;
-        address etherfiNode = managerInstance.etherfiNodeAddress(bidId[0]);
-
-        // Simulate the rewards distribution from the beacon chain
-        vm.deal(etherfiNode, address(etherfiNode).balance + 1 ether);
-
-        // Send Exit Request
-        hoax(TNFTInstance.ownerOf(bidId[0]));
-        managerInstance.batchSendExitRequest(_to_uint256_array(bidId[0]));
-
-        vm.prank(managerInstance.owner());
-        vm.expectRevert("PENDING_EXIT_REQUEST");
-        managerInstance.partialWithdraw(bidId[0]);
-    }
-    */
-
     function test_getFullWithdrawalPayoutsFails() public {
 
         uint256[] memory validatorIds = new uint256[](1);
@@ -724,36 +705,6 @@ contract EtherFiNodeTest is TestSetup {
         (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance
             .getFullWithdrawalPayouts(validatorIds[0]);
     }
-
-    /*
-    function test_partialWithdrawAfterExitFails() public {
-        address nodeOperator = 0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931;
-        address staker = 0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf;
-
-        uint256[] memory validatorIds = new uint256[](1);
-        validatorIds[0] = bidId[0];
-        uint32[] memory exitTimestamps = new uint32[](1);
-        exitTimestamps[0] = 1;
-        address etherfiNode = managerInstance.etherfiNodeAddress(validatorIds[0]);
-
-        // 8. balance < 4 ether
-        vm.deal(etherfiNode, 4 ether);
-
-        startHoax(alice);
-        assertEq(managerInstance.numberOfValidators(), 1);
-        managerInstance.processNodeExit(validatorIds, exitTimestamps);
-        assertEq(managerInstance.numberOfValidators(), 0);
-        vm.stopPrank();
-
-        // Transfer the T-NFT to 'dan'
-        hoax(staker);
-        TNFTInstance.transferFrom(staker, dan, validatorIds[0]);
-
-        hoax(owner);
-        vm.expectRevert("NOT_LIVE");
-        managerInstance.partialWithdraw(validatorIds[0]);
-    }
-    */
 
     function test_getFullWithdrawalPayoutsAuditFix3() public {
         uint256[] memory validatorIds = new uint256[](1);
@@ -2091,39 +2042,6 @@ contract EtherFiNodeTest is TestSetup {
         uint256[] memory newValidatorIds = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(bidIds, 1, validatorId);
     }
 
-    /*
-    function test_PartialWithdrawalOfPrincipalFails() public {
-        uint256[] memory validatorIds = launch_validator(1, 0, false);
-        uint256 validatorId = validatorIds[0];
-        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
-
-        assertTrue(managerInstance.phase(validatorIds[0]) == IEtherFiNode.VALIDATOR_PHASE.LIVE);
-        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
-
-        // launch 3 more validators
-        uint256[] memory newValidatorIds = launch_validator(3, validatorId, false);
-        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 4);
-
-        uint256[] memory validatorIdsToExit = new uint256[](1);
-        uint32[] memory exitTimestamps = new uint32[](1);
-        exitTimestamps[0] = uint32(block.timestamp);
-
-        // Exit 1 among 4
-        validatorIdsToExit[0] = newValidatorIds[0];
-        _transferTo(etherfiNode, 16 ether);
-
-        // Someone triggers paritalWithrdaw
-        // Before the Oracle marks it as EXITED
-        vm.prank(managerInstance.owner());
-        vm.expectRevert("MUST_EXIT");
-        managerInstance.partialWithdraw(validatorId);
-
-        hoax(managerInstance.owner());
-        managerInstance.processNodeExit(validatorIdsToExit, exitTimestamps);
-
-        managerInstance.fullWithdraw(validatorIdsToExit[0]);
-    }
-    */
 
     function test_TnftTransferFailsWithMultipleValidators_Fails() public {
         uint256[] memory validatorIds = launch_validator(1, 0, false);
