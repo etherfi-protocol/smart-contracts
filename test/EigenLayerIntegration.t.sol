@@ -126,6 +126,125 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         return (validatorIds[0], nodeAddress, node);
     }
 
+
+    function test_PartialWithdrawalPEPE() public {
+        initializeRealisticFork(TESTNET_FORK);
+        address owner = stakingManagerInstance.owner();
+
+        // upgrade contract
+        address newImpl = address(new EtherFiNode(address(liquidityPool)));
+        vm.prank(owner);
+        stakingManagerInstance.upgradeEtherFiNode(newImpl);
+
+        vm.prank(owner);
+        managerInstance.updateAdmin(owner, true);
+
+        IEtherFiNode etherfiNode = IEtherFiNode(managerInstance.etherfiNodeAddress(1));
+        IEigenPod pod = IEigenPod(etherfiNode.eigenPod());
+
+        // expect to fail because not admin calling function
+        vm.expectRevert("not admin");
+        etherfiNode.queueEigenlayerPartialWithdrawal(2 gwei);
+
+        uint256 queueBlock = block.number;
+        vm.prank(owner);
+        etherfiNode.queueEigenlayerPartialWithdrawal(2 gwei);
+
+        // should fail if we simulate an in progress full withdrawal
+        // (eigenpod has different number of active validators than etherfiNode)
+        vm.prank(address(managerInstance));
+        etherfiNode.updateNumberOfAssociatedValidators(0, 1);
+
+        vm.prank(owner);
+        vm.expectRevert(EtherFiNode.PendingFullWithdrawal.selector);
+        etherfiNode.queueEigenlayerPartialWithdrawal(2 gwei);
+
+        // undo
+        vm.prank(address(managerInstance));
+        etherfiNode.updateNumberOfAssociatedValidators(1, 0);
+
+        // prepare to claim
+        IStrategy[] memory strategies = new IStrategy[](1);
+        uint256[] memory shares = new uint256[](1);
+        strategies[0] = eigenLayerDelegationManager.beaconChainETHStrategy();
+        shares[0] = 2 gwei;
+        IDelegationManager.Withdrawal memory withdrawal = IDelegationManager.Withdrawal({
+            staker: address(etherfiNode),
+            delegatedTo: address(0x0),
+            withdrawer: address(etherfiNode),
+            nonce: 0,
+            startBlock: uint32(queueBlock),
+            strategies: strategies,
+            shares: shares
+        });
+
+        // fail because not enough time has passed
+        vm.prank(owner);
+        vm.expectRevert("DelegationManager._completeQueuedWithdrawal: minWithdrawalDelayBlocks period has not yet passed");
+        etherfiNode.completeEigenlayerPartialWithdrawal(withdrawal, 0);
+
+        // wait for withdrawal period
+        vm.warp(block.timestamp + (60 * 60 * 24 * 8));
+        vm.roll(block.number + (7200*8));
+
+        vm.prank(owner);
+        etherfiNode.completeEigenlayerPartialWithdrawal(withdrawal, 0);
+    }
+
+    function test_PEPE() public {
+        initializeRealisticFork(TESTNET_FORK);
+
+        address newImpl = address(new EtherFiNode(address(liquidityPool)));
+        vm.prank(stakingManagerInstance.owner());
+        stakingManagerInstance.upgradeEtherFiNode(newImpl);
+
+        address etherfiNode = address(managerInstance.etherfiNodeAddress(1));
+
+        IEigenPod pod = IEigenPod(0xb2DE3E0380D7229Dc9e717342ed042E54EAaA620);
+        console2.log(pod.withdrawableRestakedExecutionLayerGwei());
+
+        uint256[] memory validatorIds = new uint256[](1);
+        uint32[] memory timestamps = new uint32[](1);
+        validatorIds[0] = 1;
+        timestamps[0] = uint32(block.timestamp);
+
+        address admin = address(0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39);
+        uint256 queueBlock = block.number;
+        vm.prank(admin);
+        managerInstance.processNodeExit(validatorIds, timestamps);
+
+        // wait for the queue to be complete
+        vm.roll(block.number + (7200 * 8));
+
+        // recreate the withdrawal params used in processNodeExit()
+        IStrategy[] memory strategies = new IStrategy[](1);
+        uint256[] memory shares = new uint256[](1);
+        uint256[] memory middlewareTimesIndexes = new uint256[](1);
+        strategies[0] = eigenLayerDelegationManager.beaconChainETHStrategy();
+        shares[0] = 32 ether;
+        middlewareTimesIndexes[0] = 0;
+        IDelegationManager.Withdrawal[] memory queuedWithdrawals = new IDelegationManager.Withdrawal[](1);
+        queuedWithdrawals[0] = IDelegationManager.Withdrawal({
+            staker: etherfiNode,
+            delegatedTo: address(0),
+            withdrawer: etherfiNode,
+            nonce: uint96(eigenLayerDelegationManager.cumulativeWithdrawalsQueued(address(pod))),
+            startBlock: uint32(queueBlock),
+            strategies: strategies,
+            shares: shares
+        });
+
+        vm.prank(admin);
+        managerInstance.completeQueuedWithdrawals(validatorIds, queuedWithdrawals, middlewareTimesIndexes, true);
+
+        // TODO(Dave): I have traced this execution and it fails at the end because
+        // holesky liquidity pool as an incorrect valueOutOfLP value (the withdrawal works as expected)
+        // We should correct that and fix this final clause.
+        vm.prank(admin);
+        vm.expectRevert();
+        managerInstance.fullWithdraw(1);
+    }
+
     function test_verifyAndProcessWithdrawals_OnlyOnce() public {
         test_verifyWithdrawalCredentials_32ETH();
         

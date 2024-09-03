@@ -544,7 +544,7 @@ contract EtherFiNodeTest is TestSetup {
         managerInstance.markBeingSlashed(validatorIds);
         info = managerInstance.getValidatorInfo(validatorIds[0]);
         assertTrue(info.phase == IEtherFiNode.VALIDATOR_PHASE.BEING_SLASHED);
-        
+
         hoax(alice);
         managerInstance.processNodeExit(validatorIds, exitTimestamps);
         info = managerInstance.getValidatorInfo(validatorIds[0]);
@@ -552,68 +552,6 @@ contract EtherFiNodeTest is TestSetup {
         assertTrue(info.exitTimestamp > 0);
     }
 
-    /*
-    function test_partialWithdrawRewardsDistribution() public {
-        address nodeOperator = 0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931;
-        address staker = 0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf;
-        address etherfiNode = managerInstance.etherfiNodeAddress(bidId[0]);
-
-        // Transfer the T-NFT to 'dan'
-        hoax(staker);
-        TNFTInstance.transferFrom(staker, dan, bidId[0]);
-
-        uint256 nodeOperatorBalance = address(nodeOperator).balance;
-        uint256 treasuryBalance = address(treasuryInstance).balance;
-        uint256 danBalance = address(dan).balance;
-        uint256 bnftStakerBalance = address(staker).balance;
-
-        // Simulate the rewards distribution from the beacon chain
-        vm.deal(etherfiNode, address(etherfiNode).balance + 1 ether);
-
-        // Withdraw the {staking, protocol} rewards
-        // - bid amount = 0 ether (Auction revenue no longer distributed to nodes)
-        //   - 50 % ether is vested for the stakers
-        //   - 50 % ether is shared across all validators
-        //     - 25 % to treasury, 25% to node operator, the rest to the stakers
-        // - staking rewards amount = 1 ether
-        hoax(owner);
-        managerInstance.partialWithdraw(bidId[0]);
-        assertEq(
-            address(nodeOperator).balance,
-            nodeOperatorBalance + (1 ether * 5) / 100
-        );
-        assertEq(
-            address(treasuryInstance).balance,
-            treasuryBalance + (1 ether * 5 ) / 100
-        );
-        assertEq(address(dan).balance, danBalance + 0.815625000000000000 ether);
-        assertEq(address(staker).balance, bnftStakerBalance + 0.084375000000000000 ether);
-
-        vm.deal(etherfiNode, 16.0 ether);
-        vm.expectRevert("MUST_EXIT");
-        vm.prank(owner);
-        managerInstance.partialWithdraw(bidId[0]);
-    }
-    */
-
-    /*
-    function test_partialWithdrawFails() public {
-        address etherfiNode = managerInstance.etherfiNodeAddress(bidId[0]);
-
-        vm.deal(etherfiNode, 4 ether);
-
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
-        vm.prank(bob);
-        managerInstance.markBeingSlashed(bidId);
-
-        hoax(alice);
-        managerInstance.markBeingSlashed(bidId);
-
-        vm.prank(managerInstance.owner());
-        vm.expectRevert("NOT_LIVE");
-        managerInstance.partialWithdraw(bidId[0]);
-    }
-    */
 
     function test_markBeingSlashedFails() public {
         uint256[] memory validatorIds = new uint256[](1);

@@ -486,7 +486,6 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
             uint256 principal = (withdrawableBalanceInExecutionLayer() >= 32 ether) ? 32 ether : withdrawableBalanceInExecutionLayer();
             (payouts[2], payouts[1]) = _calculatePrincipals(principal);
             (payouts[0], payouts[1], payouts[2], payouts[3]) = _applyNonExitPenalty(_info, payouts[0], payouts[1], payouts[2], payouts[3]);
-
             return (payouts[0], payouts[1], payouts[2], payouts[3]);
         } else {
             require(false, "WRONG_VERSION");
