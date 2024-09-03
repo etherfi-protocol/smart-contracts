@@ -20,7 +20,7 @@ contract EtherFiRewardsRouterTest is TestSetup {
         setUpTests();
         initializeRealisticFork(MAINNET_FORK);
         vm.startPrank(superAdmin);
-        etherfiRewardsRouterImplementation = new EtherFiRewardsRouter(address(liquidityPoolInstance), address(roleRegistry));
+        etherfiRewardsRouterImplementation = new EtherFiRewardsRouter(address(liquidityPoolInstance), address(treasuryInstance), address(roleRegistry));
         etherfiRewardsRouterProxy = new UUPSProxy(address(etherfiRewardsRouterImplementation), "");
         etherfiRewardsRouterInstance = EtherFiRewardsRouter(payable(address(etherfiRewardsRouterProxy)));
         etherfiRewardsRouterInstance.initialize();
@@ -28,10 +28,6 @@ contract EtherFiRewardsRouterTest is TestSetup {
         roleRegistry.grantRole(etherfiRewardsRouterInstance.ETHERFI_ROUTER_ADMIN(), admin);
         etherfiRewardsRouterInstance.transferOwnership(owner);
         vm.stopPrank();
-        vm.startPrank(owner);
-        etherfiRewardsRouterInstance.setTreasury(address(treasuryInstance));
-        vm.stopPrank();
-
         liquidityPoolAddress = address(liquidityPoolInstance);
         vm.deal(address(etherfiRewardsRouterInstance), 10 ether);
         vm.stopPrank();
@@ -48,7 +44,7 @@ contract EtherFiRewardsRouterTest is TestSetup {
 
     function test_elRouterUpgrade() public {
         vm.startPrank(owner);
-        EtherFiRewardsRouter newEtherfiRewardsRouterImplementation = new EtherFiRewardsRouter(address(liquidityPoolInstance), address(roleRegistry));
+        EtherFiRewardsRouter newEtherfiRewardsRouterImplementation = new EtherFiRewardsRouter(address(liquidityPoolInstance), address(treasuryInstance), address(roleRegistry));
         address oldImplementation = etherfiRewardsRouterInstance.getImplementation();
         etherfiRewardsRouterInstance.upgradeTo(address(newEtherfiRewardsRouterImplementation));
         address newImplementation = etherfiRewardsRouterInstance.getImplementation();
@@ -73,17 +69,5 @@ contract EtherFiRewardsRouterTest is TestSetup {
         etherfiRewardsRouterInstance.recoverERC20(address(eETHInstance), 1 ether);
         uint256 balanceAfter = eETHInstance.balanceOf(address(treasuryInstance));
         assertApproxEqAbs(balanceAfter, balanceBefore + 1 ether, 1);
-    }
-
-    function test_setTreasury() public {
-        vm.startPrank(owner);
-        etherfiRewardsRouterInstance.setTreasury(alice);
-        assertEq(etherfiRewardsRouterInstance.treasury(), alice);
-    }
-
-    function test_setTreasuryFailure() public {
-        vm.startPrank(bob);
-        vm.expectRevert("Ownable: caller is not the owner");
-        etherfiRewardsRouterInstance.setTreasury(alice);
     }
 }

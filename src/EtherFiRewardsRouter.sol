@@ -11,7 +11,7 @@ import "./RoleRegistry.sol";
 contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     using SafeERC20 for IERC20;
 
-    address public treasury;
+    address public immutable treasury;
     address public immutable liquidityPool;
     RoleRegistry public immutable roleRegistry;
 
@@ -25,9 +25,10 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
 
     error IncorrectRole();
 
-    constructor(address _liquidityPool, address _roleRegistry) {
+    constructor(address _liquidityPool, address _treasury, address _roleRegistry) {
         _disableInitializers();
         liquidityPool = _liquidityPool;
+        treasury = _treasury;
         roleRegistry = RoleRegistry(_roleRegistry);
     }
 
@@ -66,11 +67,6 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
 
         emit Erc721Sent(msg.sender, _token, _tokenId);
     }
-
-    function setTreasury(address _treasury) external onlyOwner {
-        treasury = _treasury;
-        emit UpdatedTreasury(_treasury);
-    }   
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
