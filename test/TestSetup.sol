@@ -461,7 +461,7 @@ contract TestSetup is Test {
         regulationsManagerInstance.initialize();
         regulationsManagerInstance.updateAdmin(alice, true);
 
-        node = new EtherFiNode();
+        node = new EtherFiNode(address(liquidityPool));
 
         rETH = new TestERC20("Rocket Pool ETH", "rETH");
         rETH.mint(alice, 10e18);
@@ -1287,7 +1287,7 @@ contract TestSetup is Test {
     }
 
     function _upgrade_etherfi_node_contract() internal {
-        EtherFiNode etherFiNode = new EtherFiNode();
+        EtherFiNode etherFiNode = new EtherFiNode(address(liquidityPool));
         address newImpl = address(etherFiNode);
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(newImpl);

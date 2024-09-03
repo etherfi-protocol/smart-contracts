@@ -83,6 +83,8 @@ interface IEtherFiNode {
     function withdrawableBalanceInExecutionLayer() external view returns (uint256);
     function updateNumExitRequests(uint16 _up, uint16 _down) external;
     function migrateVersion(uint256 _validatorId, IEtherFiNodesManager.ValidatorInfo memory _info) external;
+    function queueEigenlayerPartialWithdrawal(uint256 _amount) external returns (bytes32);
+    function completeEigenlayerPartialWithdrawal(IDelegationManager.Withdrawal memory _withdrawal, uint256 _middlewareTimesIndex) external;
 
     function startCheckpoint(bool _revertIfNoBalance) external;
     function setProofSubmitter(address _newProofSubmitter) external;

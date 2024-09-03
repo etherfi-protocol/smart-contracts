@@ -71,7 +71,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.stopPrank();
 
         EtherFiNodesManager newManagerImpl = new EtherFiNodesManager();
-        EtherFiNode newNodeImpl = new EtherFiNode();
+        EtherFiNode newNodeImpl = new EtherFiNode(address(liquidityPool));
 
         vm.startPrank(managerInstance.owner());
         managerInstance.upgradeTo(address(newManagerImpl));

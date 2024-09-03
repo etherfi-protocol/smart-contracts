@@ -44,6 +44,8 @@ contract DeployPhaseOne is Script {
     EtherFiNodesManager public etherFiNodesManagerImplementation;
     EtherFiNodesManager public etherFiNodesManager;
 
+    address liquidityPool;
+
     struct suiteAddresses {
         address treasury;
         address nodeOperatorManager;
@@ -115,7 +117,8 @@ contract DeployPhaseOne is Script {
             address(0)
         );
 
-        EtherFiNode etherFiNode = new EtherFiNode();
+        require(liquidityPool != address(0x0), "must set liquidityPool");
+        EtherFiNode etherFiNode = new EtherFiNode(liquidityPool);
 
         // Setup dependencies
         nodeOperatorManager.setAuctionContractAddress(address(auctionManager));

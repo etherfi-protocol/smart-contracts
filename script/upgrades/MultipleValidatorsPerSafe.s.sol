@@ -56,7 +56,7 @@ contract MultipleValidatorsPerSafe is Script {
         StakingManager StakingManagerNewImpl = new StakingManager();
         TNFT TNFTNewImpl = new TNFT();
         EtherFiNodesManager EtherFiNodesManagerNewImpl = new EtherFiNodesManager();
-        EtherFiNode EtherFiNodeNewImpl = new EtherFiNode();
+        EtherFiNode EtherFiNodeNewImpl = new EtherFiNode(address(liquidityPool));
 
         address el_delegationManager;
         if (block.chainid == 1) {

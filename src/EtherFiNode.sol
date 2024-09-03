@@ -11,7 +11,6 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "./eigenlayer-interfaces/IEigenPodManager.sol";
 import "./eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
-import "forge-std/console.sol";
 
 contract EtherFiNode is IEtherFiNode, IERC1271 {
     address public etherFiNodesManager;
@@ -48,6 +47,8 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     // (eigenLayer withdrawals are tied to blocknumber instead of timestamp)
     mapping(uint256 => uint32) DEPRECATED_restakingObservedExitBlocks;
 
+    address public immutable liquidityPool;
+
     error CallFailed(bytes data);
 
     event EigenPodCreated(address indexed nodeAddress, address indexed podAddress);
@@ -59,8 +60,9 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _liquidityPoolAddress) {
         etherFiNodesManager = address(0x000000000000000000000000000000000000dEaD); // prevent initialization of the proxy implementation
+        liquidityPool = _liquidityPoolAddress;
     }
 
     /// @notice Based on the sources where they come from, the staking rewards are split into
@@ -306,6 +308,9 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     //------------------------------  PARTIAL WITHDRAWALS  ---------------------------------
     //--------------------------------------------------------------------------------------
 
+    error PendingFullWithdrawal();
+    error EthTransferFailed();
+
     /// @dev queues a partial withdrawal from the eigenpod. Only withdrawing beacon eth
     ///      is supported at this time
     ///
@@ -322,12 +327,8 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         IDelegationManager delegationManager = IDelegationManager(IEtherFiNodesManager(etherFiNodesManager).delegationManager());
         IEigenPod eigenPod = IEigenPod(eigenPod);
 
-        // conservative limit. only allow withdrawing funds that are guaranteed to be
-        // in excess of the staking principal. In the case of an extreme slashing scenario,
-        // you will need to complete the exits of the slashed validators before claiming more
-        // partial withdrawals
-        uint256 maxPartialWithdrawal = (eigenPod.withdrawableRestakedExecutionLayerGwei() * 1e9) - (32 ether * eigenPod.activeValidatorCount());
-        require(_amount <= maxPartialWithdrawal, "exceeded max partial withdrawal");
+        // don't allow partial withdrawals if any in-progress full withdrawals
+        if (isFullWithdrawalInProgress()) revert PendingFullWithdrawal();
 
         // construct and queue withdrawal
         IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
@@ -352,12 +353,28 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         // TODO: replace with role-registry permissions with v2.5 upgrade
         require(IEtherFiNodesManager(etherFiNodesManager).admins(msg.sender), "not admin");
 
+        // don't allow partial withdrawals if any in-progress full withdrawals
+        if (isFullWithdrawalInProgress()) revert PendingFullWithdrawal();
+
         IDelegationManager delegationManager = IDelegationManager(IEtherFiNodesManager(etherFiNodesManager).delegationManager());
         IERC20[] memory tokens = new IERC20[](_withdrawal.strategies.length); // tokens array is ignored for withdrawing beacon eth
         bool receiveAsTokens = true;
 
         delegationManager.completeQueuedWithdrawal(_withdrawal, tokens, _middlewareTimesIndex, receiveAsTokens);
         emit CompletedEigenlayerPartialWithdrawal(address(this), eigenPod, _withdrawal.shares[0]);
+
+        // partial withdrawals go directly to the liquidity pool and oracle will adjust rebase to associated parties
+        (bool sent, ) = payable(liquidityPool).call{value: _withdrawal.shares[0], gas: 12000}("");
+        if (!sent) revert EthTransferFailed();
+    }
+
+    /// @dev returns true if any full withdrawals have been initiated but not completed.
+    function isFullWithdrawalInProgress() public returns (bool) {
+        // potential that this is an over-approximation but should prevent all dangerous cases
+        uint256 eigenlayerActiveValidators = IEigenPod(eigenPod).activeValidatorCount();
+        return eigenlayerActiveValidators != _numAssociatedValidators ||
+            pendingWithdrawalFromRestakingInGwei != 0 ||
+            numExitedValidators != 0;
     }
 
     //--------------------------------------------------------------------------------------
