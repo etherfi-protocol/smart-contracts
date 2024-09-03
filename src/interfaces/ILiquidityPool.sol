@@ -56,8 +56,8 @@ interface ILiquidityPool {
     function deposit(address _user, address _referral) external payable returns (uint256);
     function depositToRecipient(address _recipient, uint256 _amount, address _referral) external returns (uint256);
     function withdraw(address _recipient, uint256 _amount) external returns (uint256);
-    function requestWithdraw(address recipient, uint256 amount) external returns (uint256);
-    function requestWithdrawWithPermit(address _owner, uint256 _amount, PermitInput calldata _permit) external returns (uint256);
+    function requestWithdraw(address recipient, uint256 amount) external returns (uint32);
+    function requestWithdrawWithPermit(address _owner, uint256 _amount, PermitInput calldata _permit) external returns (uint32);
     function requestMembershipNFTWithdraw(address recipient, uint256 amount, uint256 fee) external returns (uint256);
 
     function batchDeposit(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators) external payable returns (uint256[] memory);
@@ -69,6 +69,4 @@ interface ILiquidityPool {
 
     function rebase(int128 _accruedRewards) external;
     function payProtocolFees(uint128 _protocolFees) external;
-    function addEthAmountLockedForWithdrawal(uint128 _amount) external;
-    function reduceEthAmountLockedForWithdrawal(uint128 _amount) external;    
 }

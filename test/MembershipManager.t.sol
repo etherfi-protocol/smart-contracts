@@ -65,10 +65,10 @@ contract MembershipManagerTest is TestSetup {
         membershipManagerV1Instance.requestWithdrawAndBurn(aliceToken);
 
         // Bob burns the NFT extracting remaining value
-        uint256 bobTokenId = membershipManagerV1Instance.requestWithdrawAndBurn(bobToken);
+        uint32 bobTokenId = uint32(membershipManagerV1Instance.requestWithdrawAndBurn(bobToken));
         vm.stopPrank();
 
-        _finalizeWithdrawalRequest(bobTokenId);
+        _finalizeWithdrawalRequest(uint32(bobTokenId));
 
         vm.prank(bob);
         withdrawRequestNFTInstance.claimWithdraw(bobTokenId, 1);
@@ -90,18 +90,18 @@ contract MembershipManagerTest is TestSetup {
         uint256 bobToken1 = membershipManagerV1Instance.wrapEth{value: 10 ether}(10 ether, 0);
         uint256 bobToken2 = membershipManagerV1Instance.wrapEth{value: 10 ether}(10 ether, 0);
 
-        uint256 requestId1 = membershipManagerV1Instance.requestWithdrawAndBurn(bobToken1);
-        uint256 requestId2 = membershipManagerV1Instance.requestWithdrawAndBurn(bobToken2);
+        uint32 requestId1 = uint32(membershipManagerV1Instance.requestWithdrawAndBurn(bobToken1));
+        uint32 requestId2 = uint32(membershipManagerV1Instance.requestWithdrawAndBurn(bobToken2));
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(requestId1);
         _finalizeWithdrawalRequest(requestId2);
 
         vm.startPrank(bob);
-        uint256[] memory requestIds = new uint256[](2);
+        uint32[] memory requestIds = new uint32[](2);
         requestIds[0] = requestId1;
         requestIds[1] = requestId2;
-        uint256[] memory requestIdCheckpoints = new uint256[](2);
+        uint32[] memory requestIdCheckpoints = new uint32[](2);
         requestIdCheckpoints[0] = 1;
         requestIdCheckpoints[1] = 2;
         withdrawRequestNFTInstance.batchClaimWithdraw(requestIds, requestIdCheckpoints);
@@ -138,7 +138,7 @@ contract MembershipManagerTest is TestSetup {
         assertEq(membershipNftInstance.tierPointsOf(tokenId), 24);
 
         // Alice's NFT unwraps 1 membership points to 1 ETH
-        uint256 aliceRequestId1 = membershipManagerV1Instance.requestWithdraw(tokenId, 1 ether);
+        uint32 aliceRequestId1 = uint32(membershipManagerV1Instance.requestWithdraw(tokenId, 1 ether));
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(aliceRequestId1);
@@ -160,7 +160,7 @@ contract MembershipManagerTest is TestSetup {
         assertEq(membershipNftInstance.tierPointsOf(tokenId), 24 * 2);
 
         // Alice's NFT unwraps all her remaining membership points, burning the NFT
-        uint256 aliceRequestId2 = membershipManagerV1Instance.requestWithdrawAndBurn(tokenId);
+        uint32 aliceRequestId2 = uint32(membershipManagerV1Instance.requestWithdrawAndBurn(tokenId));
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(aliceRequestId2);
@@ -531,7 +531,7 @@ contract MembershipManagerTest is TestSetup {
         assertEq(membershipNftInstance.valueOf(aliceToken), 2 ether);
 
         // Alice burns membership points directly for ETH
-        uint256 requestId = membershipManagerV1Instance.requestWithdraw(aliceToken, 1 ether);
+        uint32 requestId = uint32(membershipManagerV1Instance.requestWithdraw(aliceToken, 1 ether));
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(requestId);
@@ -1017,12 +1017,12 @@ contract MembershipManagerTest is TestSetup {
                     counts[2]++;
                 }
                 if (random % 3 == 0 && i % 4 != 0) {
-                    uint256 requestId = membershipManagerV1Instance.requestWithdraw(token, withdrawalAmount);
+                    uint32 requestId = uint32(membershipManagerV1Instance.requestWithdraw(token, withdrawalAmount));
                     vm.stopPrank();
 
                     _finalizeWithdrawalRequest(requestId);
 
-                    uint256 requestCheckpointIndex = withdrawRequestNFTInstance.findCheckpointIndex(requestId, 0, withdrawRequestNFTInstance.getFinalizationCheckpointsLength() - 1);
+                    uint32 requestCheckpointIndex = withdrawRequestNFTInstance.findCheckpointIndex(requestId, 0, withdrawRequestNFTInstance.getFinalizationCheckpointsLength() - 1);
                     vm.startPrank(actor);
                     withdrawRequestNFTInstance.claimWithdraw(requestId, requestCheckpointIndex);
                     counts[3]++;
@@ -1041,11 +1041,11 @@ contract MembershipManagerTest is TestSetup {
             uint256 expectedBalanceAfterWithdrawal = address(actor).balance + tokenValue;
 
             vm.prank(actor);
-            uint256 requestId = membershipManagerV1Instance.requestWithdrawAndBurn(token);
+            uint32 requestId = uint32(membershipManagerV1Instance.requestWithdrawAndBurn(token));
 
             _finalizeWithdrawalRequest(requestId);
             
-            uint256 requestCheckpointIndex = withdrawRequestNFTInstance.findCheckpointIndex(requestId, 0, withdrawRequestNFTInstance.getFinalizationCheckpointsLength() - 1);
+            uint32 requestCheckpointIndex = withdrawRequestNFTInstance.findCheckpointIndex(requestId, 0, withdrawRequestNFTInstance.getFinalizationCheckpointsLength() - 1);
             vm.prank(actor);
             withdrawRequestNFTInstance.claimWithdraw(requestId, requestCheckpointIndex);
 
@@ -1340,14 +1340,14 @@ contract MembershipManagerTest is TestSetup {
 
         // Alice burns one NFT paying for the burn fee
         assertEq(membershipManagerV1Instance.hasMetBurnFeeWaiverPeriod(aliceToken1), false);
-        uint256 reqId1 = membershipManagerV1Instance.requestWithdrawAndBurn(aliceToken1);
+        uint32 reqId1 = uint32(membershipManagerV1Instance.requestWithdrawAndBurn(aliceToken1));
 
         // 16 days passed
         vm.warp(block.timestamp + uint256(16 * 24 * 60 * 60));
 
         // Alice burns the other NFT not paying for the burn fee since the stkaing period passed 30 days
         assertEq(membershipManagerV1Instance.hasMetBurnFeeWaiverPeriod(aliceToken2), true);
-        uint256 reqId2 = membershipManagerV1Instance.requestWithdrawAndBurn(aliceToken2);
+        uint32 reqId2 = uint32(membershipManagerV1Instance.requestWithdrawAndBurn(aliceToken2));
 
         assertEq(withdrawRequestNFTInstance.getRequest(reqId1).amountOfEEth, 1 ether);
         // burn fees are deprecated
@@ -1368,7 +1368,7 @@ contract MembershipManagerTest is TestSetup {
         assertEq(eETHInstance.balanceOf(alice), 0 ether);
 
         // Alice mints an NFT with 1 ETH
-        uint256 aliceToken = membershipManagerV1Instance.wrapEth{value: 1 ether}(1 ether, 0 ether);
+        uint32 aliceToken = uint32(membershipManagerV1Instance.wrapEth{value: 1 ether}(1 ether, 0 ether));
 
         assertEq(alice.balance, 0 ether);
         assertEq(address(liquidityPoolInstance).balance, 1 ether);

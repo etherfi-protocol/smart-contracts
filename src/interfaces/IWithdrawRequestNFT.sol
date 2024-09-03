@@ -15,13 +15,12 @@ interface IWithdrawRequestNFT {
     }
 
     function initialize(address _liquidityPoolAddress, address _eEthAddress, address _membershipManager) external;
-    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address requester) external payable returns (uint256);
-    function claimWithdraw(uint256 requestId, uint256 checkpointIndex) external;
+    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address requester) external payable returns (uint32);
+    function claimWithdraw(uint32 requestId, uint32 checkpointIndex) external;
 
-    function getRequest(uint256 requestId) external view returns (WithdrawRequest memory);
-    function isFinalized(uint256 requestId) external view returns (bool);
+    function getRequest(uint32 requestId) external view returns (WithdrawRequest memory);
+    function isFinalized(uint32 requestId) external view returns (bool);
 
-    function invalidateRequest(uint256 requestId) external;
-    function finalizeRequests(uint256 upperBound) external;
-    function finalizeRequests(uint256 lastRequestId, uint128 totalAmount) external;
+    function invalidateRequest(uint32 requestId) external;
+    function finalizeRequests(uint32 lastRequestId) external;
 }

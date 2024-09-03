@@ -31,7 +31,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         eETHInstance.approve(address(liquidityPoolInstance), amountOfEEth);
 
         vm.prank(bob);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
+        uint32 requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
 
         WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
 
@@ -53,7 +53,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         eETHInstance.approve(address(liquidityPoolInstance), amountOfEEth);
 
         vm.prank(bob);
-        uint256 requestId1 = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
+        uint32 requestId1 = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
 
         assertEq(requestId1, 1, "Request id should be 1");
 
@@ -61,7 +61,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         eETHInstance.approve(address(liquidityPoolInstance), amountOfEEth);
 
         vm.prank(bob);
-        uint256 requestId2 = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
+        uint32 requestId2 = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
 
         assertEq(requestId2, 2, "Request id should be 2");
     }
@@ -79,7 +79,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         eETHInstance.approve(address(liquidityPoolInstance), amountOfEEth);
 
         vm.prank(bob);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
+        uint32 requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
 
         bool earlyRequestIsFinalized = withdrawRequestNFTInstance.isFinalized(requestId);
         assertFalse(earlyRequestIsFinalized, "Request should not be Finalized");
@@ -106,7 +106,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         eETHInstance.approve(address(liquidityPoolInstance), amountOfEEth);
 
         vm.prank(bob);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
+        uint32 requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
 
         bool requestIsFinalized = withdrawRequestNFTInstance.isFinalized(requestId);
         assertFalse(requestIsFinalized, "Request should not be finalized");
@@ -130,7 +130,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         eETHInstance.approve(address(liquidityPoolInstance), amountOfEEth);
 
         vm.prank(bob);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
+        uint32 requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
 
         bool requestIsFinalized = withdrawRequestNFTInstance.isFinalized(requestId);
         assertFalse(requestIsFinalized, "Request should not be finalized");
@@ -153,7 +153,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         eETHInstance.approve(address(liquidityPoolInstance), amountOfEEth);
 
         vm.prank(bob);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
+        uint32 requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
 
         vm.expectRevert("Not the owner of the NFT");
         vm.prank(alice);
@@ -177,7 +177,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
 
         vm.prank(bob);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        uint32 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
         assertEq(withdrawRequestNFTInstance.getAccumulatedDustEEthAmount(), 0, "Accumulated dust should be 0");
         assertEq(eETHInstance.balanceOf(bob), 9 ether);
@@ -228,7 +228,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
 
         vm.prank(bob);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        uint32 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
         vm.prank(address(membershipManagerInstance));
         liquidityPoolInstance.rebase(-35 ether);
@@ -255,7 +255,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // bob requests withdrawal
         vm.prank(bob);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 60 ether);
+        uint32 requestId = liquidityPoolInstance.requestWithdraw(bob, 60 ether);
 
         // Somehow, LP gets some ETH
         // For example, alice deposits 100 ETH :D
@@ -295,7 +295,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         // Withdraw request for 9 wei eETH amount (= 8.82 wei eETH share)
         // 8 wei eETH share is transfered to `withdrawRequestNFT` contract
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 9);
+        uint32 requestId = liquidityPoolInstance.requestWithdraw(bob, 9);
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 8);
         // Within `LP.requestWithdraw`
         // - `share` is calculated by `sharesForAmount` as (9 * 98) / 100 = 8.82 ---> (rounded down to) 8
@@ -327,7 +327,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
     // It depicts the scenario where bob's WithdrawalRequest NFT is stolen by alice.
     // The owner invalidates the request 
-    function test_InvalidatedRequestNft_after_finalization() public returns (uint256 requestId) {
+    function test_InvalidatedRequestNft_after_finalization() public returns (uint32 requestId) {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         vm.stopPrank();
@@ -353,7 +353,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.invalidateRequest(requestId);
     }
 
-    function test_InvalidatedRequestNft_before_finalization() public returns (uint256 requestId) {
+    function test_InvalidatedRequestNft_before_finalization() public returns (uint32 requestId) {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         vm.stopPrank();
@@ -378,7 +378,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     }
 
     function test_InvalidatedRequestNft_NonTransferrable() public {
-        uint256 requestId = test_InvalidatedRequestNft_after_finalization();
+        uint32 requestId = test_InvalidatedRequestNft_after_finalization();
 
         vm.prank(alice);
         vm.expectRevert("INVALID_REQUEST");
@@ -386,7 +386,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     }
 
     function test_seizeInvalidAndMintNew_revert_if_not_owner() public {
-        uint256 requestId = test_InvalidatedRequestNft_after_finalization();
+        uint32 requestId = test_InvalidatedRequestNft_after_finalization();
         uint256 claimableAmount = withdrawRequestNFTInstance.getRequest(requestId).amountOfEEth;
 
         // REVERT if not owner
@@ -396,26 +396,24 @@ contract WithdrawRequestNFTTest is TestSetup {
     }
 
     function test_InvalidatedRequestNft_seizeInvalidAndMintNew_1() public {
-        uint256 requestId = test_InvalidatedRequestNft_after_finalization();
+        uint32 requestId = test_InvalidatedRequestNft_after_finalization();
         uint256 claimableAmount = withdrawRequestNFTInstance.getRequest(requestId).amountOfEEth;
         uint256 chadBalance = address(chad).balance;
 
         vm.prank(owner);
         withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad, 1);
 
-        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
         assertEq(address(chad).balance, chadBalance + claimableAmount, "Chad should receive the claimable amount");
     }
 
     function test_InvalidatedRequestNft_seizeInvalidAndMintNew_2() public {
-        uint256 requestId = test_InvalidatedRequestNft_before_finalization();
+        uint32 requestId = test_InvalidatedRequestNft_before_finalization();
         uint256 claimableAmount = withdrawRequestNFTInstance.getRequest(requestId).amountOfEEth;
         uint256 chadBalance = address(chad).balance;
 
         vm.prank(owner);
         withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad, 1);
 
-        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
         assertEq(address(chad).balance, chadBalance + claimableAmount, "Chad should receive the claimable amount");
     }
 }
