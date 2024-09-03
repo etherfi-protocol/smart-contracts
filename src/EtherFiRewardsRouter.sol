@@ -19,14 +19,16 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
 
     event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
+    event UpdatedTreasury(address indexed treasury);
     event Erc20Sent(address indexed caller, address indexed token, uint256 amount);
     event Erc721Sent(address indexed caller, address indexed token, uint256 tokenId);
 
     error IncorrectRole();
 
-    constructor(address _liquidityPool, address _roleRegistry) {
+    constructor(address _liquidityPool, address _treasury, address _roleRegistry) {
         _disableInitializers();
         liquidityPool = _liquidityPool;
+        treasury = _treasury;
         roleRegistry = RoleRegistry(_roleRegistry);
     }
 
