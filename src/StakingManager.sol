@@ -411,11 +411,6 @@ contract StakingManager is
         // Call function in auction contract to re-initiate the bid that won
         auctionManager.reEnterAuction(_validatorId);
 
-        bool isFullStake = (msg.sender != liquidityPoolContract);
-        if (isFullStake) {
-            _refundDeposit(msg.sender, stakeAmount);
-        }
-
         emit DepositCancelled(_validatorId);
     }
 
