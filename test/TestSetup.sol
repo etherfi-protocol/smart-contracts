@@ -258,7 +258,6 @@ contract TestSetup is Test {
         uint256 delay;
     }
 
-
     // initialize a fork in which fresh contracts are deployed
     // and initialized to the same state as the unit tests.
     function initializeTestingFork(uint8 forkEnum) public {

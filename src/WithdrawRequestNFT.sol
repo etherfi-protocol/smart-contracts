@@ -11,6 +11,7 @@ import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./RoleRegistry.sol";
 
+import "forge-std/console.sol";
 
 contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IWithdrawRequestNFT {
     //--------------------------------------------------------------------------------------
@@ -28,7 +29,15 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint32 public lastFinalizedRequestId;
     uint96 public DEPRECATED_accumulatedDustEEthShares; // to be burned or used to cover the validator churn cost
 
+    /// Stores the cached share price at the time of finalization for each batch
+    /// For a checkpoint index i, this batch includes requests:
+    /// `finalizationCheckpoints[i-1].lastFinalizedRequestId < requestId <= finalizationCheckpoints[i].lastFinalizedRequestId`
     FinalizationCheckpoint[] public finalizationCheckpoints;
+
+    /// precision base for cached share value
+    uint256 internal constant E27_PRECISION_BASE = 1e27;
+
+    uint32 internal constant NOT_FOUND = 0;
 
     RoleRegistry public roleRegistry;
 
@@ -76,8 +85,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function initializeV2dot5(address _roleRegistry) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
 
-        // TODO: compile list of values in DEPRECATED_admins to clear out
         DEPRECATED_accumulatedDustEEthShares = 0;
+        // TODO: compile list of values in DEPRECATED_admins to clear out
 
         roleRegistry = RoleRegistry(_roleRegistry);
         finalizationCheckpoints.push(FinalizationCheckpoint(0, 0));
@@ -100,14 +109,14 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     /// @notice called by the NFT owner of a finalized request to claim their ETH
-    /// @dev `checkpointIndex` can be found using `findCheckpointIndex` function
     /// @param requestId the id of the withdraw request and associated NFT
-    /// @param checkpointIndex the index of the `finalizationCheckpoints` that the request belongs to.
+    /// @param checkpointIndex the index of the `finalizationCheckpoints` that the request belongs to. 
+    /// can be found with `findCheckpointIndex(_requestIds, 1, getLastCheckpointIndex())`
     function claimWithdraw(uint32 requestId, uint32 checkpointIndex) external {
         return _claimWithdraw(requestId, ownerOf(requestId), checkpointIndex);
     }
 
-    /// @notice Batch version of `claimWithdraw`
+    /// @notice Batch version of `claimWithdraw()`
     function batchClaimWithdraw(uint32[] calldata requestIds, uint32[] calldata checkpointIndices) external {
         for (uint32 i = 0; i < requestIds.length; i++) {
             _claimWithdraw(requestIds[i], ownerOf(requestIds[i]), checkpointIndices[i]);
@@ -143,7 +152,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
         uint256 totalAmount = uint256(calculateTotalPendingAmount(lastRequestId));
-        uint256 cachedSharePrice = liquidityPool.amountForShare(1 ether);
+        uint256 cachedSharePrice = liquidityPool.amountForShare(E27_PRECISION_BASE);
 
         finalizationCheckpoints.push(FinalizationCheckpoint(uint32(lastRequestId), cachedSharePrice));
         
@@ -180,11 +189,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     /// @notice returns the value of a request after finalization. The value of a request can be:
     ///  - nominal (when the amount of eth locked for this request are equal to the request's eETH)
-    ///  - discounted (when the amount of eth will be lower, because the protocol share rate dropped
-    ///   before request is finalized, so it will be equal to `request's shares` * `protocol share rate`)
+    ///  - discounted (when the amount of eth will be lower, because the protocol share rate dropped before the
+    ///    request is finalized, so it will be equal to `request's shares` * `protocol share rate at finalization`)
     /// @param requestId the id of the withdraw request NFT
     /// @param checkpointIndex the index of the `finalizationCheckpoints` that the request belongs to.
-    /// `checkpointIndex` can be found using `findCheckpointIndex` function
+    /// `checkpointIndex` can be found using `findCheckpointIndex()` function
     /// @return uint256 the amount of ETH that can be claimed by the owner of the NFT
     function getClaimableAmount(uint32 requestId, uint32 checkpointIndex) public view returns (uint256) {
         require(requestId <= lastFinalizedRequestId, "Request is not finalized");
@@ -205,7 +214,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         );
 
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[requestId];
-        uint256 amountForSharesCached = request.shareOfEEth * checkpoint.cachedShareValue / 1 ether;
+        uint256 amountForSharesCached = request.shareOfEEth * checkpoint.cachedShareValue / E27_PRECISION_BASE;
         uint256 amountToTransfer = _min(request.amountOfEEth, amountForSharesCached);
 
         return amountToTransfer;
@@ -213,39 +222,48 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     /// @dev View function to find a finalization checkpoint to use in `claimWithdraw()` 
     ///  Search will be performed in the range of `[_start, _end]` over the `finalizationCheckpoints` array
+    ///  Usage: findCheckpointIndex(_requestIds, 1, getLastCheckpointIndex())
     ///
     /// @param _requestId request id to search the checkpoint for
-    /// @param _start index of the left boundary of the search range
-    /// @param _end index of the right boundary of the search range, should be less than or equal to `finalizationCheckpoints.length`
+    /// @param _start index of the left boundary of the search range, should be greater than 0, because list is 1-based array
+    /// @param _end index of the right boundary of the search range, should be less than or equal to `getLastCheckpointIndex`
     ///
-    /// @return index into `finalizationCheckpoints` that the `_requestId` belongs to. 
+    /// @return index into `finalizationCheckpoints` that the `_requestId` belongs to or 0 if not found
     function findCheckpointIndex(uint32 _requestId, uint32 _start, uint32 _end) public view returns (uint32) {
         require(_requestId <= lastFinalizedRequestId, "Request is not finalized");
         require(_start <= _end, "Invalid range");
-        require(_end < finalizationCheckpoints.length, "End index out of bounds of finalizationCheckpoints");
+        require (_start != 0 && _end <= getLastCheckpointIndex(), "Range is out of bounds");
 
-        // Binary search
-        uint32 min = _start;
-        uint32 max = _end;
-
-        while (max > min) {
-            uint32 mid = (max + min + 1) / 2;
-            if (finalizationCheckpoints[mid].lastFinalizedRequestId < _requestId) {
-
-                // if mid index in the array is less than the request id, we need to move up the array, as the index we are looking for has 
-                // a `finalizationCheckpoints[mid].lastFinalizedRequestId` greater than the request id
-                min = mid;
+        // Left boundary
+        if (_requestId <= finalizationCheckpoints[_start].lastFinalizedRequestId) {
+            // either fits in at the left boundary or is out of this range
+            if (_requestId > finalizationCheckpoints[_start - 1].lastFinalizedRequestId) {
+                return _start;
             } else {
-                // by getting here, we have a `finalizationCheckpoints[mid].lastFinalizedRequestId` greater than the request id
-                // to know we have found the right index, finalizationCheckpoints[mid - 1].lastFinalizedRequestId` must be less than the request id
-
-                if (finalizationCheckpoints[mid - 1].lastFinalizedRequestId < _requestId) {
-                    return mid;
-                }
-
-                max = mid - 1; // there are values to the left of mid that are greater than the request id
+                return NOT_FOUND;
             }
         }
+
+        // Right boundary
+        if (_requestId > finalizationCheckpoints[_end].lastFinalizedRequestId) {
+            return NOT_FOUND;
+        }
+
+        // Binary search
+        uint256 min = _start + 1;
+        uint256 max = _end;
+
+        while (min < max) {
+            uint256 mid = (max + min) / 2;
+            if (_requestId > finalizationCheckpoints[mid].lastFinalizedRequestId) {
+                // Request was finalized after the batch at mid
+                min = mid + 1;
+            } else {
+                // Request was finalized in or before the batch at mid
+                max = mid;
+            }
+        }
+        return uint32(max);
     }
 
     /// @notice The excess eETH balance of this contract beyond what is needed to fulfill withdrawal requests.
@@ -276,13 +294,14 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return totalAmount;
     }
 
+    function getLastCheckpointIndex() public view returns (uint32) {
+        return uint32(finalizationCheckpoints.length) - 1;
+    }
+
     function getFinalizationCheckpoint(uint32 checkpointId) external view returns (FinalizationCheckpoint memory) {
         return finalizationCheckpoints[checkpointId];
     }
 
-    function getFinalizationCheckpointsLength() public view returns (uint32) {
-        return uint32(finalizationCheckpoints.length);
-    }
 
     function getRequest(uint32 requestId) external view returns (IWithdrawRequestNFT.WithdrawRequest memory) {
         return _requests[requestId];

@@ -1022,7 +1022,7 @@ contract MembershipManagerTest is TestSetup {
 
                     _finalizeWithdrawalRequest(requestId);
 
-                    uint32 requestCheckpointIndex = withdrawRequestNFTInstance.findCheckpointIndex(requestId, 0, withdrawRequestNFTInstance.getFinalizationCheckpointsLength() - 1);
+                    uint32 requestCheckpointIndex = withdrawRequestNFTInstance.findCheckpointIndex(requestId, 1, withdrawRequestNFTInstance.getLastCheckpointIndex());
                     vm.startPrank(actor);
                     withdrawRequestNFTInstance.claimWithdraw(requestId, requestCheckpointIndex);
                     counts[3]++;
@@ -1045,7 +1045,7 @@ contract MembershipManagerTest is TestSetup {
 
             _finalizeWithdrawalRequest(requestId);
             
-            uint32 requestCheckpointIndex = withdrawRequestNFTInstance.findCheckpointIndex(requestId, 0, withdrawRequestNFTInstance.getFinalizationCheckpointsLength() - 1);
+            uint32 requestCheckpointIndex = withdrawRequestNFTInstance.findCheckpointIndex(requestId, 1, withdrawRequestNFTInstance.getLastCheckpointIndex());
             vm.prank(actor);
             withdrawRequestNFTInstance.claimWithdraw(requestId, requestCheckpointIndex);
 
