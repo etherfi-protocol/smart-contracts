@@ -153,7 +153,7 @@ contract DeployEtherFiSuiteScript is Script {
         regulationsManagerInstance = RegulationsManager(address(regulationsManagerProxy));
         regulationsManagerInstance.initialize();
 
-        EtherFiNode etherFiNode = new EtherFiNode();
+        EtherFiNode etherFiNode = new EtherFiNode(address(liquidityPoolProxy));
 
         // Mainnet Addresses
         // address private immutable rETH = 0xae78736Cd615f374D3085123A210448E74Fc6393;

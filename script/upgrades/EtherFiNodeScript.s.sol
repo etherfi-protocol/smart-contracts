@@ -9,12 +9,14 @@ import "../../src/helpers/AddressProvider.sol";
 contract EtherFiNodeUpgrade is Script {
 
     AddressProvider public addressProvider;
+    address liquidityPool;
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
 
         address addressProviderAddress = vm.envAddress("CONTRACT_REGISTRY");
         addressProvider = AddressProvider(addressProviderAddress);
+        require(liquidityPool != address(0x0), "must set liquidityPool");
 
         address stakingManagerProxyAddress = addressProvider.getContractAddress("StakingManager");
 
@@ -22,7 +24,8 @@ contract EtherFiNodeUpgrade is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        EtherFiNode etherFiNode = new EtherFiNode();
+        EtherFiNode etherFiNode = new EtherFiNode(liquidityPool);
+
         stakingManager.upgradeEtherFiNode(address(etherFiNode));
 
         vm.stopBroadcast();

@@ -21,10 +21,12 @@ contract UpgradeForEigenLayerM2 is Script {
     AddressProvider public addressProvider;
 
     address addressProviderAddress;
+    address liquidityPool;
 
     StakingManager stakingManager;
     EtherFiNodesManager nodesManager;
     Liquifier liquifier;
+    
 
     EtherFiTimelock timelock;
 
@@ -46,13 +48,15 @@ contract UpgradeForEigenLayerM2 is Script {
         addressProviderAddress = vm.envAddress("CONTRACT_REGISTRY");
         addressProvider = AddressProvider(addressProviderAddress);
 
+        require(liquidityPool != address(0x0), "must set liquidityPool");
+
         retrieve_contract_addresses();
-        
+
         vm.startBroadcast(deployerPrivateKey);
 
         // Liquifier LiquifierNewImpl = new Liquifier();
         EtherFiNodesManager EtherFiNodesManagerNewImpl = new EtherFiNodesManager();
-        EtherFiNode EtherFiNodeNewImpl = new EtherFiNode();
+        EtherFiNode EtherFiNodeNewImpl = new EtherFiNode(liquidityPool);
 
         address el_delegationManager;
         address pancakeRouter;

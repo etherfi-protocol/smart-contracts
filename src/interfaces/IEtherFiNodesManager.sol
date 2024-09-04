@@ -56,12 +56,10 @@ interface IEtherFiNodesManager {
     function batchQueueRestakedWithdrawal(uint256[] calldata _validatorIds) external;
     function batchSendExitRequest(uint256[] calldata _validatorIds) external;
     function batchFullWithdraw(uint256[] calldata _validatorIds) external;
-    function batchPartialWithdraw(uint256[] calldata _validatorIds) external;
     function fullWithdraw(uint256 _validatorId) external;
     function getUnusedWithdrawalSafesLength() external view returns (uint256);
     function incrementNumberOfValidators(uint64 _count) external;
     function markBeingSlashed(uint256[] calldata _validatorIds) external;
-    function partialWithdraw(uint256 _validatorId) external;
     function processNodeExit(uint256[] calldata _validatorIds, uint32[] calldata _exitTimestamp) external;
     function allocateEtherFiNode(bool _enableRestaking) external returns (address);
     function registerValidator(uint256 _validatorId, bool _enableRestaking, address _withdrawalSafeAddress) external;

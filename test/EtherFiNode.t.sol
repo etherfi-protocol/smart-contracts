@@ -544,7 +544,7 @@ contract EtherFiNodeTest is TestSetup {
         managerInstance.markBeingSlashed(validatorIds);
         info = managerInstance.getValidatorInfo(validatorIds[0]);
         assertTrue(info.phase == IEtherFiNode.VALIDATOR_PHASE.BEING_SLASHED);
-        
+
         hoax(alice);
         managerInstance.processNodeExit(validatorIds, exitTimestamps);
         info = managerInstance.getValidatorInfo(validatorIds[0]);
@@ -552,64 +552,6 @@ contract EtherFiNodeTest is TestSetup {
         assertTrue(info.exitTimestamp > 0);
     }
 
-    function test_partialWithdrawRewardsDistribution() public {
-        address nodeOperator = 0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931;
-        address staker = 0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf;
-        address etherfiNode = managerInstance.etherfiNodeAddress(bidId[0]);
-
-        // Transfer the T-NFT to 'dan'
-        hoax(staker);
-        TNFTInstance.transferFrom(staker, dan, bidId[0]);
-
-        uint256 nodeOperatorBalance = address(nodeOperator).balance;
-        uint256 treasuryBalance = address(treasuryInstance).balance;
-        uint256 danBalance = address(dan).balance;
-        uint256 bnftStakerBalance = address(staker).balance;
-
-        // Simulate the rewards distribution from the beacon chain
-        vm.deal(etherfiNode, address(etherfiNode).balance + 1 ether);
-
-        // Withdraw the {staking, protocol} rewards
-        // - bid amount = 0 ether (Auction revenue no longer distributed to nodes)
-        //   - 50 % ether is vested for the stakers
-        //   - 50 % ether is shared across all validators
-        //     - 25 % to treasury, 25% to node operator, the rest to the stakers
-        // - staking rewards amount = 1 ether
-        hoax(owner);
-        managerInstance.partialWithdraw(bidId[0]);
-        assertEq(
-            address(nodeOperator).balance,
-            nodeOperatorBalance + (1 ether * 5) / 100
-        );
-        assertEq(
-            address(treasuryInstance).balance,
-            treasuryBalance + (1 ether * 5 ) / 100
-        );
-        assertEq(address(dan).balance, danBalance + 0.815625000000000000 ether);
-        assertEq(address(staker).balance, bnftStakerBalance + 0.084375000000000000 ether);
-
-        vm.deal(etherfiNode, 16.0 ether);
-        vm.expectRevert("MUST_EXIT");
-        vm.prank(owner);
-        managerInstance.partialWithdraw(bidId[0]);
-    }
-
-    function test_partialWithdrawFails() public {
-        address etherfiNode = managerInstance.etherfiNodeAddress(bidId[0]);
-
-        vm.deal(etherfiNode, 4 ether);
-
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
-        vm.prank(bob);
-        managerInstance.markBeingSlashed(bidId);
-
-        hoax(alice);
-        managerInstance.markBeingSlashed(bidId);
-
-        vm.prank(managerInstance.owner());
-        vm.expectRevert("NOT_LIVE");
-        managerInstance.partialWithdraw(bidId[0]);
-    }
 
     function test_markBeingSlashedFails() public {
         uint256[] memory validatorIds = new uint256[](1);
@@ -635,23 +577,6 @@ contract EtherFiNodeTest is TestSetup {
         hoax(alice);
         managerInstance.markBeingSlashed(bidId);
         assertTrue(managerInstance.phase(bidId[0]) == IEtherFiNode.VALIDATOR_PHASE.BEING_SLASHED);
-    }
-
-    function test_partialWithdrawAfterExitRequest() public {
-        address nodeOperator = 0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931;
-        address staker = 0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf;
-        address etherfiNode = managerInstance.etherfiNodeAddress(bidId[0]);
-
-        // Simulate the rewards distribution from the beacon chain
-        vm.deal(etherfiNode, address(etherfiNode).balance + 1 ether);
-
-        // Send Exit Request
-        hoax(TNFTInstance.ownerOf(bidId[0]));
-        managerInstance.batchSendExitRequest(_to_uint256_array(bidId[0]));
-
-        vm.prank(managerInstance.owner());
-        vm.expectRevert("PENDING_EXIT_REQUEST");
-        managerInstance.partialWithdraw(bidId[0]);
     }
 
     function test_getFullWithdrawalPayoutsFails() public {
@@ -779,34 +704,6 @@ contract EtherFiNodeTest is TestSetup {
         vm.expectRevert();
         (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance
             .getFullWithdrawalPayouts(validatorIds[0]);
-    }
-
-    function test_partialWithdrawAfterExitFails() public {
-        address nodeOperator = 0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931;
-        address staker = 0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf;
-
-        uint256[] memory validatorIds = new uint256[](1);
-        validatorIds[0] = bidId[0];
-        uint32[] memory exitTimestamps = new uint32[](1);
-        exitTimestamps[0] = 1;
-        address etherfiNode = managerInstance.etherfiNodeAddress(validatorIds[0]);
-
-        // 8. balance < 4 ether
-        vm.deal(etherfiNode, 4 ether);
-
-        startHoax(alice);
-        assertEq(managerInstance.numberOfValidators(), 1);
-        managerInstance.processNodeExit(validatorIds, exitTimestamps);
-        assertEq(managerInstance.numberOfValidators(), 0);
-        vm.stopPrank();
-
-        // Transfer the T-NFT to 'dan'
-        hoax(staker);
-        TNFTInstance.transferFrom(staker, dan, validatorIds[0]);
-
-        hoax(owner);
-        vm.expectRevert("NOT_LIVE");
-        managerInstance.partialWithdraw(validatorIds[0]);
     }
 
     function test_getFullWithdrawalPayoutsAuditFix3() public {
@@ -1955,39 +1852,6 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(uint8(managerInstance.phase(newValidatorIds[0])), uint8(IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL));
     }
 
-    function test_mainnet_partialWithdraw_after_upgrade() public {
-        initializeRealisticFork(MAINNET_FORK);
-        _upgrade_etherfi_node_contract();   
-        _upgrade_etherfi_nodes_manager_contract(); 
-
-        uint256 validatorId = 2285;
-        uint256[] memory validatorIds = new uint256[](1);
-        validatorIds[0] = validatorId;
-        address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
-
-        _transferTo(nodeAddress, 1 ether);
-
-        vm.prank(owner);
-        managerInstance.batchQueueRestakedWithdrawal(validatorIds);
-        _moveClock(7 * 7200);
-
-        // Success
-        vm.prank(managerInstance.owner());
-        managerInstance.partialWithdraw(validatorId);
-
-        _transferTo(nodeAddress, 1 ether);
-        vm.prank(owner); // alice is admin
-        managerInstance.batchQueueRestakedWithdrawal(validatorIds);
-
-        hoax(TNFTInstance.ownerOf(validatorId));
-        managerInstance.batchSendExitRequest(validatorIds);
-
-        // `partialWithdraw` Fail, if there is any pending exit request
-        vm.prank(managerInstance.owner());
-        vm.expectRevert("PENDING_EXIT_REQUEST");
-        managerInstance.partialWithdraw(validatorId);
-    }
-
     function test_mainnet_launch_validator_with_reserved_version1_safe() public {
         initializeRealisticFork(MAINNET_FORK);
         _upgrade_etherfi_node_contract();   
@@ -2142,28 +2006,6 @@ contract EtherFiNodeTest is TestSetup {
         }
     }
 
-    function test_ForcedPartialWithdrawal_succeeds() public {
-        uint256[] memory validatorIds = launch_validator(1, 0, false);
-        uint256 validatorId = validatorIds[0];
-        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
-
-        assertTrue(managerInstance.phase(validatorIds[0]) == IEtherFiNode.VALIDATOR_PHASE.LIVE);
-        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
-
-        // launch 3 more validators
-        uint256[] memory newValidatorIds = launch_validator(3, validatorId, false);
-        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 4);
-
-        // Earned >= 16 ether
-        _transferTo(etherfiNode, 16 ether);
-
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
-        managerInstance.partialWithdraw(validatorId);
-
-        vm.prank(alice);
-        managerInstance.partialWithdraw(validatorId);
-    }
-
     function test_lp_as_bnft_holders_cant_mix_up_1() public {
         uint256[] memory validatorIds = launch_validator(1, 0, false);
         uint256 validatorId = validatorIds[0];
@@ -2200,37 +2042,6 @@ contract EtherFiNodeTest is TestSetup {
         uint256[] memory newValidatorIds = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(bidIds, 1, validatorId);
     }
 
-    function test_PartialWithdrawalOfPrincipalFails() public {
-        uint256[] memory validatorIds = launch_validator(1, 0, false);
-        uint256 validatorId = validatorIds[0];
-        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
-
-        assertTrue(managerInstance.phase(validatorIds[0]) == IEtherFiNode.VALIDATOR_PHASE.LIVE);
-        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
-
-        // launch 3 more validators
-        uint256[] memory newValidatorIds = launch_validator(3, validatorId, false);
-        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 4);
-
-        uint256[] memory validatorIdsToExit = new uint256[](1);
-        uint32[] memory exitTimestamps = new uint32[](1);
-        exitTimestamps[0] = uint32(block.timestamp);
-
-        // Exit 1 among 4
-        validatorIdsToExit[0] = newValidatorIds[0];
-        _transferTo(etherfiNode, 16 ether);
-
-        // Someone triggers paritalWithrdaw
-        // Before the Oracle marks it as EXITED
-        vm.prank(managerInstance.owner());
-        vm.expectRevert("MUST_EXIT");
-        managerInstance.partialWithdraw(validatorId);
-
-        hoax(managerInstance.owner());
-        managerInstance.processNodeExit(validatorIdsToExit, exitTimestamps);
-
-        managerInstance.fullWithdraw(validatorIdsToExit[0]);
-    }
 
     function test_TnftTransferFailsWithMultipleValidators_Fails() public {
         uint256[] memory validatorIds = launch_validator(1, 0, false);

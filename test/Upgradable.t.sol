@@ -66,6 +66,7 @@ contract EtherFiNodeV2 is EtherFiNode {
     function isUpgraded() public pure returns(bool){
         return true;
     }
+    constructor() EtherFiNode(address(0x0)) {}
 }
 
 contract NodeOperatorManagerV2 is NodeOperatorManager {
