@@ -66,13 +66,12 @@ interface IEtherFiNode {
 
     // Non-VIEW functions
     function initialize(address _etherFiNodesManager) external;
-    function claimDelayedWithdrawalRouterWithdrawals(uint256 maxNumWithdrawals, bool _checkIfHasOutstandingEigenLayerWithdrawals, uint256 _validatorId) external returns (bool);
+    function DEPRECATED_claimDelayedWithdrawalRouterWithdrawals() external;
     function createEigenPod() external;
     function isRestakingEnabled() external view returns (bool);
     function processNodeExit(uint256 _validatorId) external returns (bytes32[] memory withdrawalRoots);
     function processFullWithdraw(uint256 _validatorId) external;
     function queueEigenpodFullWithdrawal() external returns (bytes32[] memory withdrawalRoots);
-    function queuePhase1PartialWithdrawal() external;
     function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes, bool _receiveAsTokens) external;
     function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, uint256 middlewareTimesIndexes, bool _receiveAsTokens) external;
     function updateNumberOfAssociatedValidators(uint16 _up, uint16 _down) external;
@@ -85,6 +84,8 @@ interface IEtherFiNode {
     function updateNumExitRequests(uint16 _up, uint16 _down) external;
     function migrateVersion(uint256 _validatorId, IEtherFiNodesManager.ValidatorInfo memory _info) external;
 
+    function startCheckpoint(bool _revertIfNoBalance) external;
+    function setProofSubmitter(address _newProofSubmitter) external;
     function callEigenPod(bytes memory data) external returns (bytes memory);
     function forwardCall(address to, bytes memory data) external returns (bytes memory);
 

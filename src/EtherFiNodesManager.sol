@@ -163,6 +163,24 @@ contract EtherFiNodesManager is
         }
     }
 
+    /// @notice Start a PEPE pod checkpoint balance proof. A new proof cannot be started until
+    ///         the previous proof is completed
+    /// @dev Eigenlayer's PEPE proof system operates on pod-level and will require checkpoint proofs for
+    ///      every single validator associated with the pod. For efficiency you will want to try to only
+    ///      do checkpoints whene you wish to update most of the validators in the associated pod at once
+    function startCheckpoint(uint256 _validatorId, bool _revertIfNoBalance) external onlyAdmin {
+        address etherfiNode = etherfiNodeAddress[_validatorId];
+        IEtherFiNode(etherfiNode).startCheckpoint(_revertIfNoBalance);
+    }
+
+    // @notice you can delegate 1 additional wallet that is allowed to call startCheckpoint() and
+    //         verifyWithdrawalCredentials() on behalf of this pod
+    /// @dev this will affect all validators in the pod, not just the provided validator
+    function setProofSubmitter(uint256 _validatorId, address _newProofSubmitter) external onlyAdmin {
+        address etherfiNode = etherfiNodeAddress[_validatorId];
+        IEtherFiNode(etherfiNode).setProofSubmitter(_newProofSubmitter);
+    }
+
     /// @notice Once the node's exit & funds withdrawal from Beacon is observed, the protocol calls this function to process their exits.
     /// @param _validatorIds The list of validators which exited
     /// @param _exitTimestamps The list of exit timestamps of the validators
@@ -206,20 +224,23 @@ contract EtherFiNodesManager is
         }
     }
 
+    /// @dev With Eigenlayer's PEPE model, shares are at the pod level, not validator level
+    ///      so uncareful use of this function will result in distributing rewards from
+    ///      mulitiple validators, not just the rewards of the provided ID. We fundamentally should
+    ///      rework this mechanism as it no longer makes much sense as implemented.
     /// @notice Process the rewards skimming from the safe of the validator
     ///         when the safe is being shared by the multiple validatators, it batch process all of their rewards skimming in one shot
     /// @param _validatorId The validator Id
     /// Full Flow of the partial withdrawal for a validator
     //  1. validator is exited & fund is withdrawn from the beacon chain
-    //  2. perform `EigenPod.verifyAndProcessWithdrawals` for the partial withdrawals. It triggers `DelayedWithdrawalRouter.createDelayedWithdrawal`
-    //  3. wait for 'withdrawalDelayBlocks' (= 7 days) delay to be passed
-    //  4. Finally, perform `EtherFiNodesManager.partialWithdraw` for the validator
-    function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused {
+    //  2. perform `EigenPod.startCheckpoint()`
+    //  3. perform `EigenPod.verifyCheckpointProofs()`
+    //  4. wait for 'withdrawalDelayBlocks' (= 7 days) delay to be passed
+    //  5. Finally, perform `EtherFiNodesManager.partialWithdraw` for the validator
+    function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused onlyAdmin {
+
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
-
-        // sweep rewards from eigenPod if any queued withdrawals are ready to be claimed
-        IEtherFiNode(etherfiNode).claimDelayedWithdrawalRouterWithdrawals(maxEigenlayerWithdrawals, false, _validatorId);
 
         // distribute the rewards payouts. It reverts if the safe's balance >= 16 ether
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
@@ -241,17 +262,17 @@ contract EtherFiNodesManager is
     /// @param _validatorId the validator Id to withdraw from
     /// Full Flow of the full withdrawal for a validator
     //  1. validator is exited & fund is withdrawn from the beacon chain
-    //  2. perform `EigenPod.verifyAndProcessWithdrawals` for the full withdrawal
-    //  3. perform `EtherFiNodesManager.processNodeExit` which calls `DelegationManager.queueWithdrawals`
-    //  4. wait for 'minWithdrawalDelayBlocks' (= 7 days) delay to be passed
-    //  5. perform `EtherFiNodesManager.completeQueuedWithdrawals` which calls `DelegationManager.completeQueuedWithdrawal`
-    //  6. Finally, perform `EtherFiNodesManager.fullWithdraw`
+    //  2. perform `EigenPod.startCheckpoint()`
+    //  3. perform `EigenPod.verifyCheckpointProofs()`
+    //  4. perform `EtherFiNodesManager.processNodeExit` which calls `DelegationManager.queueWithdrawals`
+    //  5. wait for 'minWithdrawalDelayBlocks' (= 7 days) delay to be passed
+    //  6. perform `EtherFiNodesManager.completeQueuedWithdrawals` which calls `DelegationManager.completeQueuedWithdrawal`
+    //  7. Finally, perform `EtherFiNodesManager.fullWithdraw`
     function fullWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused{
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
-        require (!IEtherFiNode(etherfiNode).claimDelayedWithdrawalRouterWithdrawals(maxEigenlayerWithdrawals, true, _validatorId), "PENDING_WITHDRAWALS");
         require(phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.EXITED, "NOT_EXITED");
-        
+
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = getFullWithdrawalPayouts(_validatorId);
         _setValidatorPhase(etherfiNode, _validatorId, IEtherFiNode.VALIDATOR_PHASE.FULLY_WITHDRAWN); // EXITED -> FULLY_WITHDRAWN
         _unRegisterValidator(_validatorId);
@@ -269,24 +290,6 @@ contract EtherFiNodesManager is
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             fullWithdraw(_validatorIds[i]);
         }
-    }
-
-    // While ether.fi will trigger the partial withdrawal from all safe contracts before their balance hits 16 ether
-    // For the missed executions, this function will handle them:
-    //  - the safe's balance goes above 16 ETH 
-    //  - the Oracle confirms that none of the validators has exited & are pending for exits
-    function forcePartialWithdraw(uint256 _validatorId) external nonReentrant onlyAdmin {
-        address etherfiNode = etherfiNodeAddress[_validatorId];
-        _updateEtherFiNode(_validatorId);
-
-        // sweep rewards from eigenPod if any queued withdrawals are ready to be claimed
-        IEtherFiNode(etherfiNode).claimDelayedWithdrawalRouterWithdrawals(maxEigenlayerWithdrawals, false, _validatorId);
-
-        // distribute the rewards payouts. It does not revert even if the safe's balance >= 16 ether
-        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, false);
-        _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
-
-        emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
     }
 
     /// @notice Once the Oracle observes that the validator is being slashed, it marks the validator as being slashed

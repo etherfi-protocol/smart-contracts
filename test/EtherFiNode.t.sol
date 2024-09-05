@@ -118,15 +118,15 @@ contract EtherFiNodeTest is TestSetup {
         vm.prank(alice); // alice is admin
         managerInstance.batchQueueRestakedWithdrawal(validatorIds);
 
-        // both safes should have funds queued for withdrawal
+        // as of PEPE queing withdrawal does not automatically process partial withdrawals
         (_withdrawalSafe, _eigenPod, _delayedWithdrawalRouter) = safe1.splitBalanceInExecutionLayer();
         assertEq(_withdrawalSafe, 0 ether);
-        assertEq(_eigenPod, 0 ether);
-        assertEq(_delayedWithdrawalRouter, 1 ether);
+        assertEq(_eigenPod, 1 ether);
+        assertEq(_delayedWithdrawalRouter, 0 ether);
         (_withdrawalSafe, _eigenPod, _delayedWithdrawalRouter) = safe2.splitBalanceInExecutionLayer();
         assertEq(_withdrawalSafe, 0 ether);
-        assertEq(_eigenPod, 0 ether);
-        assertEq(_delayedWithdrawalRouter, 2 ether);
+        assertEq(_eigenPod, 2 ether);
+        assertEq(_delayedWithdrawalRouter, 0 ether);
 
     }
 
@@ -152,7 +152,7 @@ contract EtherFiNodeTest is TestSetup {
 
         vm.roll(block.number + (50400) + 1);
 
-        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorIds[0]);
+        safeInstance.DEPRECATED_claimDelayedWithdrawalRouterWithdrawals();
 
         assertEq(address(safeInstance).balance, 2 ether);
         assertEq(address(safeInstance.eigenPod()).balance, 0 ether);
@@ -218,75 +218,6 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(toTreasury, 3 ether * 5 / 100);
         assertEq(toTnft, 30 ether + (3 ether * 90 * 29) / (100 * 32));
         assertEq(toBnft, 2 ether + (3 ether * 90 * 3) / (100 * 32));
-
-        // wait and claim the first queued withdrawal
-        vm.roll(block.number + (50400) + 1);
-        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorId);
-        (_withdrawalSafe, _eigenPod, _delayedWithdrawalRouter) = safeInstance.splitBalanceInExecutionLayer();
-        assertEq(_withdrawalSafe, 1 ether);
-        assertEq(_eigenPod, 2 ether);
-        assertEq(_delayedWithdrawalRouter, 0 ether);
-
-        (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, beaconBalance);
-        assertEq(toNodeOperator, 3 ether * 5 / 100);
-        assertEq(toTreasury, 3 ether * 5 / 100);
-        assertEq(toTnft, 30 ether + (3 ether * 90 * 29) / (100 * 32));
-        assertEq(toBnft, 2 ether + (3 ether * 90 * 3) / (100 * 32));
-    }
-
-    function test_claimNonBeaconChainBalance() public {
-        initializeTestingFork(MAINNET_FORK);
-
-        uint256 validatorId = depositAndRegisterValidator(true);
-        safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
-
-        // simulate 1 eth of staking rewards sent to the eigen pod
-        _transferTo(address(safeInstance.eigenPod()), 1 ether);
-        assertEq(address(safeInstance).balance, 0 ether);
-        assertEq(address(safeInstance.eigenPod()).balance, 1 ether);
-
-        // queue the withdrawal of the rewards. Funds have been sent to the DelayedWithdrawalRouter
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-        assertEq(address(safeInstance).balance, 0 ether);
-        assertEq(address(safeInstance.eigenPod()).balance, 0 ether);
-
-        // simulate some more staking rewards but dont queue the withdrawal
-        _transferTo(address(safeInstance.eigenPod()), 0.5 ether);
-
-        // attempt to claim queued withdrawals but not enough time has passed (no funds moved to safe)
-        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorId);
-        assertEq(address(safeInstance).balance, 0 ether);
-        assertEq(address(safeInstance.eigenPod()).balance, 0.5 ether);
-
-        // wait and claim
-        vm.roll(block.number + (50400) + 1);
-        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorId);
-        assertEq(address(safeInstance).balance, 1 ether);
-        assertEq(address(safeInstance.eigenPod()).balance, 0.5 ether);
-
-        // now queue up multiple different rewards (0.5 ether remain in pod from previous step)
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-        _transferTo(address(safeInstance.eigenPod()), 0.5 ether);
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-        _transferTo(address(safeInstance.eigenPod()), 0.5 ether);
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-
-        assertEq(address(safeInstance.eigenPod()).balance, 0 ether);
-
-        IDelayedWithdrawalRouter.DelayedWithdrawal[] memory unclaimedWithdrawals = managerInstance.delayedWithdrawalRouter().getUserDelayedWithdrawals(address(safeInstance));
-        assertEq(unclaimedWithdrawals.length, 3);
-
-        // wait but only claim 2 of the 3 queued withdrawals
-        // The ability to claim a subset of outstanding withdrawals is to avoid a denial of service
-        // attack in which the attacker creates too many withdrawals for us to process in 1 tx
-        vm.roll(block.number + (50400) + 1);
-        safeInstance.claimDelayedWithdrawalRouterWithdrawals(2, false, validatorId);
-
-
-        unclaimedWithdrawals = managerInstance.delayedWithdrawalRouter().getUserDelayedWithdrawals(address(safeInstance));
-        assertEq(unclaimedWithdrawals.length, 1);
-        assertEq(address(safeInstance.eigenPod()).balance, 0 ether);
-        assertEq(address(safeInstance).balance, 2 ether);
     }
 
     function test_FullWithdrawWhenBalanceBelow16EthFails() public {
@@ -390,7 +321,7 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 1 ether);
 
         // claim that withdrawal
-        safeInstance.claimDelayedWithdrawalRouterWithdrawals(1, false, validatorId);
+        safeInstance.DEPRECATED_claimDelayedWithdrawalRouterWithdrawals();
         assertEq(safeInstance.totalBalanceInExecutionLayer(), 2 ether);
         assertEq(address(safeInstance).balance, 1 ether);
         assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 1 ether);
@@ -419,58 +350,6 @@ contract EtherFiNodeTest is TestSetup {
 
         vm.prank(owner);
         managerInstance.forwardEigenpodCall(validatorIds, data);
-    }
-
-    function test_restakedAttackerCantBlockWithdraw() public {
-        initializeTestingFork(MAINNET_FORK);
-
-        uint256 validatorId = depositAndRegisterValidator(true);
-        safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
-
-        uint256[] memory validatorIds = new uint256[](1);
-        uint32[] memory exitRequestTimestamps = new uint32[](1);
-        validatorIds[0] = validatorId;
-        exitRequestTimestamps[0] = uint32(block.timestamp);
-
-        _transferTo(safeInstance.eigenPod(), 1 ether);
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-
-        IDelayedWithdrawalRouter.DelayedWithdrawal[] memory unclaimedWithdrawals = managerInstance.delayedWithdrawalRouter().getUserDelayedWithdrawals(address(safeInstance));
-        assertEq(unclaimedWithdrawals.length, 1);
-        assertEq(unclaimedWithdrawals[0].amount, uint224(1 ether));
-
-        // attacker now sends funds and queues claims
-        _transferTo(safeInstance.eigenPod(), 1 ether);
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-        _transferTo(safeInstance.eigenPod(), 1 ether);
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-        _transferTo(safeInstance.eigenPod(), 1 ether);
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-        _transferTo(safeInstance.eigenPod(), 1 ether);
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-        _transferTo(safeInstance.eigenPod(), 1 ether);
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-
-        unclaimedWithdrawals = managerInstance.delayedWithdrawalRouter().getUserDelayedWithdrawals(address(safeInstance));
-        assertEq(unclaimedWithdrawals.length, 6);
-
-        // the call succeeds, but it withdrawas nothing since their delay period has not passed
-        managerInstance.partialWithdraw(validatorIds[0]);
-
-        // wait some time so claims are claimable
-        vm.roll(block.number + (50400) + 1);
-
-        vm.expectRevert(); // due to the limit on `maxNumWithdrawals`
-        managerInstance.partialWithdraw(validatorIds[0]);
-
-        // attacker sends more eth to pod that will not be able to be able to be withdrawn immediately
-        _transferTo(safeInstance.eigenPod(), 1 ether);
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-        _transferTo(safeInstance.eigenPod(), 1 ether);
-
-        vm.prank(alice);
-        managerInstance.setMaxEigenLayerWithdrawals(10);
-        managerInstance.partialWithdraw(validatorIds[0]);
     }
 
     function testFullWithdrawBurnsTNFT() public {
@@ -710,9 +589,8 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(address(staker).balance, bnftStakerBalance + 0.084375000000000000 ether);
 
         vm.deal(etherfiNode, 16.0 ether);
-        vm.expectRevert(
-            "MUST_EXIT"
-        );
+        vm.expectRevert("MUST_EXIT");
+        vm.prank(owner);
         managerInstance.partialWithdraw(bidId[0]);
     }
 
@@ -727,9 +605,9 @@ contract EtherFiNodeTest is TestSetup {
 
         hoax(alice);
         managerInstance.markBeingSlashed(bidId);
-        vm.expectRevert(
-            "NOT_LIVE"
-        );
+
+        vm.prank(managerInstance.owner());
+        vm.expectRevert("NOT_LIVE");
         managerInstance.partialWithdraw(bidId[0]);
     }
 
@@ -771,6 +649,7 @@ contract EtherFiNodeTest is TestSetup {
         hoax(TNFTInstance.ownerOf(bidId[0]));
         managerInstance.batchSendExitRequest(_to_uint256_array(bidId[0]));
 
+        vm.prank(managerInstance.owner());
         vm.expectRevert("PENDING_EXIT_REQUEST");
         managerInstance.partialWithdraw(bidId[0]);
     }
@@ -2000,21 +1879,8 @@ contract EtherFiNodeTest is TestSetup {
             vm.roll(block.number + minDelayBlock);
         }
 
-        // - Check if a random transfer to EigenPod blocks the fullWithdrawal
-        // The later `fullWithdraw` should succeed even though there are still some unclaimed withdrawals
-        // this is because we only enforce that all withdrawals before the observed exit of the node have completed
-        _transferTo(address(managerInstance.getEigenPod(validatorId)), 0.0001 ether);
-        IEtherFiNode(nodeAddress).queuePhase1PartialWithdrawal();
-
+        // 2. DelegationManager.completeQueuedWithdrawal
         uint256 prevEtherFiNodeAddress = address(nodeAddress).balance;
-
-        // FAIL, call by a rando
-        vm.expectRevert("DelegationManager._completeQueuedWithdrawal: only withdrawer can complete action");
-        mgr.completeQueuedWithdrawal(withdrawal, tokens, 0, true);
-
-        assertEq(eigenPod.withdrawableRestakedExecutionLayerGwei(), 32 ether / 1 gwei);
-
-        // 2. DelegationManager.completeQueuedWithdrawal            
         managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
 
         assertEq(address(nodeAddress).balance, prevEtherFiNodeAddress + 32 ether);
@@ -2106,6 +1972,7 @@ contract EtherFiNodeTest is TestSetup {
         _moveClock(7 * 7200);
 
         // Success
+        vm.prank(managerInstance.owner());
         managerInstance.partialWithdraw(validatorId);
 
         _transferTo(nodeAddress, 1 ether);
@@ -2116,6 +1983,7 @@ contract EtherFiNodeTest is TestSetup {
         managerInstance.batchSendExitRequest(validatorIds);
 
         // `partialWithdraw` Fail, if there is any pending exit request
+        vm.prank(managerInstance.owner());
         vm.expectRevert("PENDING_EXIT_REQUEST");
         managerInstance.partialWithdraw(validatorId);
     }
@@ -2274,63 +2142,6 @@ contract EtherFiNodeTest is TestSetup {
         }
     }
 
-    function test_ForcePartialWithdraw_claimDelayedWithdrawalRouterWithdrawals_succeeds() public {
-        initializeTestingFork(MAINNET_FORK);
-        uint256 validatorId = depositAndRegisterValidator(true);
-        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
-        address eigenPod = IEtherFiNode(etherfiNode).eigenPod();
-
-        // simulate 1 eth of already claimed staking rewards and 1 eth of unclaimed restaked rewards
-        _transferTo(eigenPod, 1 ether);
-        _transferTo(etherfiNode, 1 ether);
-
-        assertEq(address(etherfiNode).balance, 1 ether);
-        assertEq(address(eigenPod).balance, 1 ether);
-
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-
-        // 7 days passed
-        vm.roll(block.number + (50400) + 1);
-
-        vm.prank(admin);
-        managerInstance.forcePartialWithdraw(validatorId);
-
-        assertEq(address(eigenPod).balance, 0 ether);
-        assertEq(address(etherfiNode).balance, 0 ether);
-    }
-
-    function test_ForcedPartialWithdrawalWithExitedValidator_fails() public {
-        uint256[] memory validatorIds = launch_validator(1, 0, false);
-        uint256 validatorId = validatorIds[0];
-        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
-        address eigenPod = IEtherFiNode(etherfiNode).eigenPod();
-
-        assertTrue(managerInstance.phase(validatorIds[0]) == IEtherFiNode.VALIDATOR_PHASE.LIVE);
-        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
-
-        // launch 3 more validators
-        uint256[] memory newValidatorIds = launch_validator(3, validatorId, false);
-        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 4);
-
-        // One validator is exited
-        vm.deal(eigenPod, 32 ether);
-
-        uint256[] memory validatorIdsToExit = new uint256[](1);
-        uint32[] memory exitTimestamps = new uint32[](1);
-        validatorIdsToExit[0] = newValidatorIds[0];
-        exitTimestamps[0] = uint32(block.timestamp);
-    
-        hoax(managerInstance.owner());
-        managerInstance.processNodeExit(validatorIdsToExit, exitTimestamps);
-
-        // 7 days passed
-        vm.roll(block.number + (50400) + 1);
-
-        vm.expectRevert("NEED_FULL_WITHDRAWAL");
-        vm.prank(alice);
-        managerInstance.forcePartialWithdraw(validatorId);
-    }
-
     function test_ForcedPartialWithdrawal_succeeds() public {
         uint256[] memory validatorIds = launch_validator(1, 0, false);
         uint256 validatorId = validatorIds[0];
@@ -2347,10 +2158,10 @@ contract EtherFiNodeTest is TestSetup {
         _transferTo(etherfiNode, 16 ether);
 
         vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
-        managerInstance.forcePartialWithdraw(validatorId);
+        managerInstance.partialWithdraw(validatorId);
 
         vm.prank(alice);
-        managerInstance.forcePartialWithdraw(validatorId);
+        managerInstance.partialWithdraw(validatorId);
     }
 
     function test_lp_as_bnft_holders_cant_mix_up_1() public {
@@ -2411,6 +2222,7 @@ contract EtherFiNodeTest is TestSetup {
 
         // Someone triggers paritalWithrdaw
         // Before the Oracle marks it as EXITED
+        vm.prank(managerInstance.owner());
         vm.expectRevert("MUST_EXIT");
         managerInstance.partialWithdraw(validatorId);
 
@@ -2584,5 +2396,44 @@ contract EtherFiNodeTest is TestSetup {
         vm.stopPrank();
     }
 
+    function _perform_pepe_upgrade() internal {
+        address eigenlayerAdmin = address(0xBE1685C81aA44FF9FB319dD389addd9374383e90);
+        ITimelock eigenlayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
 
+
+        // wait until timelock is finished and perform upgrade
+        vm.warp(block.timestamp + (60 * 60 * 24 * 8));
+        vm.roll(block.number + (7200*8));
+
+        address target = 0x369e6F597e22EaB55fFb173C6d9cD234BD699111;
+        uint256 value = 0;
+        string memory signature = "";
+        bytes memory data = hex"6A76120200000000000000000000000040A2ACCBD92BCA938B02010E17A5B8929B49130D0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002E000000000000000000000000000000000000000000000000000000000000001648D80FF0A00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000112005A2A4F2F3C18F09179B6703E63D9EDD165909073000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000243659CFE60000000000000000000000006D225E974FA404D25FFB84ED6E242FFA18EF6430008B9566ADA63B64D1E1DCF1418B43FD1433B724440000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004499A88EC400000000000000000000000091E677B07F7AF907EC9A428AAFA9FC14A0D3A338000000000000000000000000731A0AD160E407393FF662231ADD6DD145AD3FEA0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000A6DB1A8C5A981D1536266D2A393C5F8DDB210EAF00000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000";
+        uint256 eta = 1725458400;
+
+        vm.prank(eigenlayerAdmin);
+        eigenlayerTimelock.executeTransaction(target, value, signature, data, eta);
+    }
+
+    function test_mainnet_pepe_calculateTVL() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        uint256 validatorId = 66992;
+        address etherFiNode = managerInstance.etherfiNodeAddress(validatorId);
+        address eigenPod = managerInstance.getEigenPod(validatorId);
+
+        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = managerInstance.calculateTVL(validatorId, 32 ether);
+
+        _perform_pepe_upgrade();
+        _upgrade_etherfi_node_contract();   
+        _upgrade_etherfi_nodes_manager_contract();
+
+        managerInstance.numAssociatedValidators(validatorId);
+        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 32 ether);
+
+        // TODO: this is broken and the Oracle handles these calculations separately
+        // This needs to be fixed 
+        // _transferTo(eigenPod, 32 ether);
+        // (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 0 ether);
+    }
 }
