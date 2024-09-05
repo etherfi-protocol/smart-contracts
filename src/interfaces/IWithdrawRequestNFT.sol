@@ -23,4 +23,5 @@ interface IWithdrawRequestNFT {
 
     function invalidateRequest(uint32 requestId) external;
     function finalizeRequests(uint32 lastRequestId) external;
+    function finalizeRequests(uint256 lastRequestId, uint256 totalAmount) external;
 }

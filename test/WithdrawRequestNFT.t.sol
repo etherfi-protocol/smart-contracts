@@ -429,15 +429,11 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(address(chad).balance, chadBalance + claimableAmount, "Chad should receive the claimable amount");
     }
 
-    function test_updated_checkpoint_logic() public payable {
-        for (uint256 i = 0; i < 100; i++) {
+    function test_updated_checkpoint_logic() public {
+        for (uint256 i = 0; i < 50; i++) {
             address user = vm.addr(i + 1);
             users.push(user);
             vm.deal(user, 15 ether);
-        }
-
-        // first 50 users deposit
-        for (uint256 i = 0; i < 50; i++) {
             vm.prank(users[i]);
             liquidityPoolInstance.deposit{value: 1 ether}();
         }
