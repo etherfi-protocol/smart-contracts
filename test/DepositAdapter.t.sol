@@ -1,35 +1,39 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "forge-std/Test.sol";
 import "../src/DepositAdapter.sol";
-import "../src/WeETH.sol";
+import "./TestSetup.sol";
 
 
-contract DepositAdapterTest is Test {
+contract DepositAdapterTest is TestSetup {
+
+    event Deposit(address indexed sender, uint256 amount, uint8 source, address referral);
 
     DepositAdapter depositAdapterInstance;
-    WeETH weETHInstance;
-    address alice;
-    function setUp() public {
-        vm.createSelectFork(vm.envString("MAINNET_RPC_URL"));
 
-        weETHInstance = WeETH(0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee);
-        depositAdapterInstance = new DepositAdapter(0x308861A430be4cce5502d0A12724771Fc6DaF216, 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee, 0x35fA164735182de50811E8e2E824cFb9B6118ac2);
-        alice = vm.addr(1);
+    function setUp() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        address depositAdapterImpl = address(new DepositAdapter(address(liquidityPoolInstance), address(weEthInstance), address(eETHInstance)));
+        address depositAdapterProxy = address(new UUPSProxy(depositAdapterImpl, ""));
+        depositAdapterInstance = DepositAdapter(depositAdapterProxy);
+        depositAdapterInstance.initialize();
     }
 
     function test_DepositWeETH() public {
         startHoax(alice);
 
-        uint256 expectedWeETH = weETHInstance.getWeETHByeETH(1 ether);
+        vm.expectRevert(LiquidityPool.InvalidAmount.selector);
+        depositAdapterInstance.depositETHForWeETH{value: 0 ether}();
+        
         depositAdapterInstance.depositETHForWeETH{value: 1 ether}();
+        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(1 ether), 1);
 
-        // The famous 1 wei rounding error rears its ugly head
-        assertApproxEqAbs(weETHInstance.balanceOf(address(alice)), expectedWeETH, 1);
+        depositAdapterInstance.depositETHForWeETH{value: 1000 ether}();
+        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(1001 ether), 2);
+
+        vm.expectEmit(true, false, false, true);
+        emit Deposit(alice,  1 ether, 1, bob);
+        depositAdapterInstance.depositETHForWeETH{value: 1 ether}(bob);
     }
-
-    
-    
-
 }
