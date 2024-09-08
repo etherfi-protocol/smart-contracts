@@ -233,7 +233,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_StakingManagerFailsNotInitializedToken() public {
-        LiquidityPool liquidityPoolNoToken = new LiquidityPool(address(0));
+        LiquidityPool liquidityPoolNoToken = new LiquidityPool();
 
         vm.startPrank(alice);
         vm.deal(alice, 3 ether);

@@ -38,13 +38,7 @@ contract DepositAdapterTest is TestSetup {
         depositAdapterInstance = DepositAdapter(payable(depositAdapterProxy));
         depositAdapterInstance.initialize();
 
-        // upgrading the liquidityPool and liquidier to support the deposit adapter
-        address liquidityPoolImpl = address(new LiquidityPool(depositAdapterProxy));
-        address liquifierImpl = address(new Liquifier());
-
         vm.startPrank(owner);
-        liquidityPoolInstance.upgradeTo(liquidityPoolImpl);
-        liquifierInstance.upgradeTo(liquifierImpl);
 
         // Caps are hit on mainnet
         liquifierInstance.updateDepositCap(address(stEth), 6000, 400000);
@@ -56,8 +50,6 @@ contract DepositAdapterTest is TestSetup {
         vm.expectRevert(LiquidityPool.InvalidAmount.selector);
         depositAdapterInstance.depositETHForWeETH{value: 0 ether}(address(0));
         
-        vm.expectEmit(true, false, false, true);
-        emit Deposit(alice,  1 ether, 1, address(0));
         uint256 weEthAmount = depositAdapterInstance.depositETHForWeETH{value: 1 ether}(address(0));
         assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(1 ether), 1);
         assertApproxEqAbs(weEthAmount, weEthInstance.getWeETHByeETH(1 ether), 1);
@@ -66,8 +58,6 @@ contract DepositAdapterTest is TestSetup {
         depositAdapterInstance.depositETHForWeETH{value: 1000 ether}(address(0));
         assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(1000 ether) + balanceBeforeDeposit, 1);
 
-        vm.expectEmit(true, false, false, true);
-        emit Deposit(alice,  1 ether, 1, bob);
         depositAdapterInstance.depositETHForWeETH{value: 1 ether}(bob);
     }
 
@@ -77,8 +67,6 @@ contract DepositAdapterTest is TestSetup {
         // valid wETH deposit
         uint256 liquidityPoolBalanceBeforeDeposit = address(liquidityPoolInstance).balance;
         wETH.approve(address(depositAdapterInstance), 1 ether);
-        vm.expectEmit(true, false, false, true);
-        emit Deposit(alice,  1 ether, 1, bob);
         depositAdapterInstance.depositWETHForWeETH(1 ether, bob);
 
         assertEq(address(liquidityPoolInstance).balance, liquidityPoolBalanceBeforeDeposit + 1 ether);
@@ -110,8 +98,6 @@ contract DepositAdapterTest is TestSetup {
         permitInput = createPermitInput(2, address(depositAdapterInstance), 1 ether, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         liquifierPermitInput = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
 
-        vm.expectEmit(true, false, false, true);
-        emit Deposit(alice,  1 ether, 1, bob);
         depositAdapterInstance.depositStETHForWeETHWithPermit(1 ether, bob, liquifierPermitInput);
 
         assertApproxEqAbs(stEth.balanceOf(address(alice)), stEthBalanceBeforeDeposit - 1 ether, 1);
@@ -132,8 +118,6 @@ contract DepositAdapterTest is TestSetup {
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(depositAdapterInstance), wstETHAmount, wstETHmainnet.nonces(alice), 2**256 - 1, wstETHmainnet.DOMAIN_SEPARATOR());
         ILiquifier.PermitInput memory liquifierPermitInput = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
 
-        vm.expectEmit(true, false, false, true);
-        emit Deposit(alice,  5 ether - 1, 1, bob);
         depositAdapterInstance.depositWstETHForWeETHWithPermit(wstETHAmount, bob, liquifierPermitInput);
 
         assertEq(wstETHmainnet.balanceOf(address(alice)), 0);

@@ -74,7 +74,7 @@ contract LiquifierTest is TestSetup {
         stEth.approve(address(liquifierInstance), 100000 ether);
 
         vm.expectRevert("CAPPED");
-        liquifierInstance.depositWithERC20( address(stEth), 100000 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 100000 ether, address(0));
 
         vm.stopPrank();
     }
@@ -88,7 +88,7 @@ contract LiquifierTest is TestSetup {
         vm.startPrank(alice);
         stEth.submit{value: 10 ether}(address(0));
         stEth.approve(address(liquifierInstance), 10 ether);
-        liquifierInstance.depositWithERC20( address(stEth), 10 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 10 ether, address(0));
         vm.stopPrank();
 
         assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.1 ether);
@@ -104,7 +104,7 @@ contract LiquifierTest is TestSetup {
         vm.startPrank(alice);
         stEth.submit{value: 20 ether}(address(0));
         stEth.approve(address(liquifierInstance), 2 ether);
-        liquifierInstance.depositWithERC20( address(stEth), 2 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 2 ether, address(0));
 
         assertGe(eETHInstance.balanceOf(alice), 2 ether - 0.1 ether);
         assertGe(liquifierInstance.getTotalPooledEther(), 2 ether - 0.1 ether);
@@ -133,16 +133,16 @@ contract LiquifierTest is TestSetup {
         // Deposit 1 stETH after approvals
         stEth.approve(address(liquifierInstance), 1 ether - 1);
         vm.expectRevert("ALLOWANCE_EXCEEDED");
-        liquifierInstance.depositWithERC20( address(stEth), 1 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
 
         stEth.approve(address(liquifierInstance), 1 ether);
-        liquifierInstance.depositWithERC20( address(stEth), 1 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
 
         // Deposit 1 stETH with the approval signature
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(liquifierInstance), 1 ether - 1, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         ILiquifier.PermitInput memory permitInput2 = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         vm.expectRevert("ALLOWANCE_EXCEEDED");
-        liquifierInstance.depositWithERC20WithPermit( address(stEth), 1 ether, address(0), permitInput2);
+        liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, address(0), permitInput2);
 
         permitInput = createPermitInput(2, address(liquifierInstance), 1 ether, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         permitInput2 = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
@@ -505,7 +505,7 @@ contract LiquifierTest is TestSetup {
 
         vm.startPrank(l1SyncPool);
         DummyERC20(_token).approve(address(liquifierInstance), _x);
-        liquifierInstance.depositWithERC20( _token, _x, address(0));
+        liquifierInstance.depositWithERC20(_token, _x, address(0));
         vm.stopPrank();
     }
 
@@ -528,7 +528,7 @@ contract LiquifierTest is TestSetup {
         vm.startPrank(l1SyncPool);
         dummyToken.approve(address(liquifierInstance), _x);
         vm.expectRevert("NOT_ALLOWED");
-        liquifierInstance.depositWithERC20( address(randomToken), _x, address(0));
+        liquifierInstance.depositWithERC20(address(randomToken), _x, address(0));
         vm.stopPrank();
     }
 
@@ -543,7 +543,7 @@ contract LiquifierTest is TestSetup {
         vm.startPrank(alice);
         dummyToken.approve(address(liquifierInstance), _x);
         vm.expectRevert("NOT_ALLOWED");
-        liquifierInstance.depositWithERC20( address(dummyToken), _x, address(0));
+        liquifierInstance.depositWithERC20(address(dummyToken), _x, address(0));
         vm.stopPrank();
     }
 

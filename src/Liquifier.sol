@@ -201,29 +201,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return depositWithERC20(_token, _amount, _referral);
     }
 
-    // used by weETH atomic staking flow through the Liquifier contract
-     function depositWithAdapter(address _recipient, address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {        
-        require(isTokenWhitelisted(_token), "NOT_ALLOWED");
-
-        IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
-
-        // The L1SyncPool's `_anticipatedDeposit` should be the only place to mint the `token` and always send its entirety to the Liquifier contract
-        if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
-
-        uint256 dx = quoteByMarketValue(_token, _amount);
-
-        // discount
-        dx = (10000 - tokenInfos[_token].discountInBasisPoints) * dx / 10000;
-        require(!isDepositCapReached(_token, dx), "CAPPED");
-
-        uint256 eEthShare = liquidityPool.depositWithAdapter(_recipient, dx, _referral);
-
-        emit Liquified(_recipient, dx, _token, false);
-
-        _afterDeposit(_token, dx);
-        return eEthShare;
-    }
-
     /// @notice Used to complete the specified `queuedWithdrawals`. The function caller must match `queuedWithdrawals[...].withdrawer`
     /// @param _queuedWithdrawals The QueuedWithdrawals to complete.
     /// @param _tokens Array of tokens for each QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single array.

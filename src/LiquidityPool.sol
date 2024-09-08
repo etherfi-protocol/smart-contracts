@@ -70,8 +70,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     bool private isLpBnftHolder;
 
-    address immutable depositAdapter;
-
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -103,8 +101,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _depositAdapter) {
-        depositAdapter = _depositAdapter;
+    constructor() {
         _disableInitializers();
     }
 
@@ -153,19 +150,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit Deposit(msg.sender, msg.value, SourceOfFunds.EETH, _referral);
 
         return _deposit(msg.sender, msg.value, 0);
-    }
-
-    // Used by the atomic weETH staking flow through the Liquifier and DepositAdapter contracts
-    function depositWithAdapter(address _recipient, uint256 _amount, address _referral) public payable whenNotPaused returns (uint256) {
-        require(msg.sender == address(liquifier) || msg.sender == address(depositAdapter), "Incorrect Caller");
-
-        emit Deposit(_recipient, _amount, SourceOfFunds.EETH, _referral);
-
-        if (msg.sender == address(liquifier)) {
-            return _deposit(depositAdapter, 0, _amount);
-        } else {
-            return _deposit(depositAdapter, msg.value, 0);
-        }
     }
 
     // Used by eETH staking flow through Liquifier contract; deVamp

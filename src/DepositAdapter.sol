@@ -23,6 +23,15 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     IERC20Upgradeable public immutable stETH;
     IwstETH public immutable wstETH;
 
+     enum SourceOfFunds {
+        ETH,
+        WETH,
+        STETH,
+        WSTETH
+    }
+
+    event AdapterDeposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
+
     constructor(address _liquidityPool, address _liquifier, address _weETH, address _eETH, address _wETH, address _stETH, address _wstETH) {
         liquidityPool = ILiquidityPool(_liquidityPool);
         liquifier = ILiquifier(_liquifier);
@@ -40,17 +49,17 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         __UUPSUpgradeable_init();
     }
 
-
-    /// @notice Deposits ETH for weETH
+    /// @notice Deposit ETH for weETH
     /// @param _referral Address to credit rewards
     /// @return weEthAmount weETH received by the depositer
     function depositETHForWeETH(address _referral) external payable returns (uint256) {
-        uint256 eETHShares = liquidityPool.depositWithAdapter{value: msg.value}(msg.sender, msg.value, _referral);
+        uint256 eETHShares = liquidityPool.deposit{value: msg.value}(_referral);
         
+        emit AdapterDeposit(msg.sender, msg.value, SourceOfFunds.ETH, _referral);
         return _wrapAndReturn(eETHShares);
     }
 
-    /// @notice Deposits WETH for weETH
+    /// @notice Deposit WETH for weETH
     /// @dev WETH doesn't support permit, so this function requires an explicit approval before use
     /// @param _amount Amount of WETH to deposit 
     /// @param _referral Address to credit referral
@@ -62,13 +71,14 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         wETH.transferFrom(msg.sender, address(this), _amount);
         wETH.withdraw(_amount);
 
-        uint256 eETHShares = liquidityPool.depositWithAdapter{value: _amount}(msg.sender, _amount, _referral);
+        uint256 eETHShares = liquidityPool.deposit{value: _amount}(_referral);
         
+        emit AdapterDeposit(msg.sender, _amount, SourceOfFunds.WETH, _referral);
         return _wrapAndReturn(eETHShares);
     }
 
     /// @notice Deposit stETH to liquifier for weETH
-    /// @dev permit must be created to this contract 
+    /// @dev Permit must be created to this contract 
     /// @param _amount Amount of stETH to deposit
     /// @param _referral Address to credit referral
     /// @param _permit Permit signature
@@ -78,13 +88,14 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
 
         stETH.transferFrom(msg.sender, address(this), _amount);
         stETH.approve(address(liquifier), _amount);
-        uint256 eETHShares = liquifier.depositWithAdapter(msg.sender, address(stETH), _amount, _referral);
+        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), _amount, _referral);
         
+        emit AdapterDeposit(msg.sender, _amount, SourceOfFunds.STETH, _referral);
         return _wrapAndReturn(eETHShares);
     }
 
-    /// @notice Deposit wstETH and returns weETH
-    /// @dev permit for wsETH must be created to this contract. funds are unwrapped to stETH and deposited to liquifier
+    /// @notice Deposit wstETH for weETH
+    /// @dev Permit for wsETH must be created to this contract. funds are unwrapped to stETH and deposited to liquifier
     /// @param _amount Amount of wstETH to deposit
     /// @param _referral Address to credit referral
     /// @param _permit Permit signature
@@ -96,8 +107,9 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         uint256 stETHAmount = wstETH.unwrap(_amount);
 
         stETH.approve(address(liquifier), stETHAmount);
-        uint256 eETHShares = liquifier.depositWithAdapter(msg.sender, address(stETH), stETHAmount, _referral);
+        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), stETHAmount, _referral);
         
+        emit AdapterDeposit(msg.sender, stETHAmount, SourceOfFunds.WSTETH, _referral);
         return _wrapAndReturn(eETHShares);
     }
 

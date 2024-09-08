@@ -107,5 +107,5 @@ interface ILiquifier {
         bool isL2Eth;
     }
 
-    function depositWithAdapter(address _recipient, address _token, uint256 _amount, address _referral) external returns (uint256);        
+    function depositWithERC20(address _token, uint256 _amount, address _referral) external returns (uint256);
 }

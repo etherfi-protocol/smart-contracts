@@ -52,7 +52,7 @@ contract MultipleValidatorsPerSafe is Script {
         
         vm.startBroadcast(deployerPrivateKey);
 
-        LiquidityPool LiquidityPoolNewImpl = new LiquidityPool(address(0));
+        LiquidityPool LiquidityPoolNewImpl = new LiquidityPool();
         StakingManager StakingManagerNewImpl = new StakingManager();
         TNFT TNFTNewImpl = new TNFT();
         EtherFiNodesManager EtherFiNodesManagerNewImpl = new EtherFiNodesManager();

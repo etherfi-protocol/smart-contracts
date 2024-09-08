@@ -165,7 +165,7 @@ contract DeployEtherFiSuiteScript is Script {
         wstETH = new TestERC20("Coinbase ETH", "cbEth");
         sfrxEth = new TestERC20("Frax ETH", "sfrxEth");
 
-        liquidityPoolImplementation = new LiquidityPool(address(0));
+        liquidityPoolImplementation = new LiquidityPool();
         liquidityPoolProxy = new UUPSProxy(
             address(liquidityPoolImplementation),
             ""

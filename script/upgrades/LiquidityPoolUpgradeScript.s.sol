@@ -39,7 +39,7 @@ contract LiquidityPoolUpgrade is Script {
         totalValueOutOfLp = LiquidityPoolInstance.totalValueOutOfLp();
         totalValueInLp = LiquidityPoolInstance.totalValueInLp();
 
-        LiquidityPool LiquidityPoolV2Implementation = new LiquidityPool(address(0));
+        LiquidityPool LiquidityPoolV2Implementation = new LiquidityPool();
 
         require(LiquidityPoolInstance.numPendingDeposits() == 0, "numPendingDeposits should be 0");
 

@@ -82,7 +82,7 @@ contract DeployImplementationContractsScript is Script {
         etherFiNodesManager = new EtherFiNodesManager();
         // etherFiNode = new EtherFiNode();
         // regulationsManager = new RegulationsManager();
-        // liquidityPool = new LiquidityPool(address(0));
+        // liquidityPool = new LiquidityPool();
         // eETH = new EETH();
         // weEth = new WeETH();
         // membershipManager = new MembershipManager();
