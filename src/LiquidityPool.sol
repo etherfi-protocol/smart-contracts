@@ -155,7 +155,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         return _deposit(msg.sender, msg.value, 0);
     }
 
-    // Used by the atomic weETH staing flow through the Liquifier and the DepositAdapter contracts
+    // Used by the atomic weETH staking flow through the Liquifier and DepositAdapter contracts
     function depositWithAdapter(address _recipient, uint256 _amount, address _referral) public payable whenNotPaused returns (uint256) {
         require(msg.sender == address(liquifier) || msg.sender == address(depositAdapter), "Incorrect Caller");
 
