@@ -485,7 +485,7 @@ contract TestSetup is Test {
 
         addressProviderInstance = new AddressProvider(address(owner));
 
-        liquidityPoolImplementation = new LiquidityPool();
+        liquidityPoolImplementation = new LiquidityPool(address(0));
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImplementation),"");
         liquidityPoolInstance = LiquidityPool(payable(address(liquidityPoolProxy)));
 
@@ -1308,7 +1308,7 @@ contract TestSetup is Test {
     }
 
     function _upgrade_liquidity_pool_contract() internal {
-        address newImpl = address(new LiquidityPool());
+        address newImpl = address(new LiquidityPool(address(0)));
         vm.prank(liquidityPoolInstance.owner());
         liquidityPoolInstance.upgradeTo(newImpl);
     }

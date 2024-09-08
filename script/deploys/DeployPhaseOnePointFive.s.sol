@@ -74,7 +74,7 @@ contract DeployPhaseOnePointFiveScript is Script {
         regulationsManager.initialize();
         addressProvider.addContract(address(regulationsManagerProxy), "RegulationsManager");
 
-        liquidityPoolImplementation = new LiquidityPool();
+        liquidityPoolImplementation = new LiquidityPool(address(0));
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImplementation),"");
         liquidityPool = LiquidityPool(payable(address(liquidityPoolProxy)));
         addressProvider.addContract(address(liquidityPoolProxy), "LiquidityPool");

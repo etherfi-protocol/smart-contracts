@@ -106,4 +106,6 @@ interface ILiquifier {
         uint96 totalDeposited;
         bool isL2Eth;
     }
+
+    function depositWithAdapter(address _recipient, address _token, uint256 _amount, address _referral) external returns (uint256);        
 }
