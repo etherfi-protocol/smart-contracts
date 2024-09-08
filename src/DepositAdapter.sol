@@ -40,12 +40,21 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         __UUPSUpgradeable_init();
     }
 
+
+    /// @notice Deposits ETH for weETH
+    /// @param _referral Address to credit rewards
+    /// @return weEthAmount weETH received by the depositer
     function depositETHForWeETH(address _referral) external payable returns (uint256) {
         uint256 eETHShares = liquidityPool.depositWithAdapter{value: msg.value}(msg.sender, msg.value, _referral);
         
         return _wrapAndReturn(eETHShares);
     }
 
+    /// @notice Deposits WETH for weETH
+    /// @dev WETH doesn't support permit, so this function requires an explicit approval before use
+    /// @param _amount Amount of WETH to deposit 
+    /// @param _referral Address to credit referral
+    /// @return weEthAmount weETH received by the depositer
     function depositWETHForWeETH(uint256 _amount, address _referral) external returns (uint256) {
         require(wETH.allowance(msg.sender, address(this)) >= _amount, "ALLOWANCE_EXCEEDED");
         require(wETH.balanceOf(msg.sender) >= _amount, "INSUFFICIENT_BALANCE");
@@ -58,6 +67,12 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         return _wrapAndReturn(eETHShares);
     }
 
+    /// @notice Deposit stETH to liquifier for weETH
+    /// @dev permit must be created to this contract 
+    /// @param _amount Amount of stETH to deposit
+    /// @param _referral Address to credit referral
+    /// @param _permit Permit signature
+    /// @return weEthAmount weETH received by the depositer
     function depositStETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external returns (uint256) {
         try IERC20PermitUpgradeable(address(stETH)).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
 
@@ -68,6 +83,12 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         return _wrapAndReturn(eETHShares);
     }
 
+    /// @notice Deposit wstETH and returns weETH
+    /// @dev permit for wsETH must be created to this contract. funds are unwrapped to stETH and deposited to liquifier
+    /// @param _amount Amount of wstETH to deposit
+    /// @param _referral Address to credit referral
+    /// @param _permit Permit signature
+    /// @return weEthAmount weETH received by the depositer
     function depositWstETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external returns (uint256) {
         try wstETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
 
