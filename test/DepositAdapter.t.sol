@@ -118,7 +118,7 @@ contract DepositAdapterTest is TestSetup {
         liquifierPermitInput = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         depositAdapterInstance.depositStETHForWeETHWithPermit(5000 ether, bob, liquifierPermitInput);
 
-        assertApproxEqAbs(stEth.balanceOf(address(liquifierInstance)), protocolStETHBeforeDeposit + 5000 ether, 1);
+        assertEq(stEth.balanceOf(address(liquifierInstance)), protocolStETHBeforeDeposit + 5000 ether);
     }
 
     function test_DepositWstETH() public {
