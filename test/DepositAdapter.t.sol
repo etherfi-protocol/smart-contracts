@@ -87,7 +87,6 @@ contract DepositAdapterTest is TestSetup {
         vm.expectRevert("ALLOWANCE_EXCEEDED");
         depositAdapterInstance.depositStETHForWeETHWithPermit(1 ether, address(0), liquifierPermitInput);
 
-
         // empty request
         permitInput = createPermitInput(2, address(depositAdapterInstance), 0, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         liquifierPermitInput = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
@@ -95,14 +94,15 @@ contract DepositAdapterTest is TestSetup {
         depositAdapterInstance.depositStETHForWeETHWithPermit(0, address(0), liquifierPermitInput);
 
         // valid input
+        uint256 protocolStETHBeforeDeposit = stEth.balanceOf(address(liquifierInstance));
         uint256 stEthBalanceBeforeDeposit = stEth.balanceOf(address(alice));
         permitInput = createPermitInput(2, address(depositAdapterInstance), 1 ether, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         liquifierPermitInput = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
-
         depositAdapterInstance.depositStETHForWeETHWithPermit(1 ether, bob, liquifierPermitInput);
 
         assertApproxEqAbs(stEth.balanceOf(address(alice)), stEthBalanceBeforeDeposit - 1 ether, 1);
         assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(1 ether), 1);
+        assertApproxEqAbs(stEth.balanceOf(address(liquifierInstance)), protocolStETHBeforeDeposit + 1 ether, 1);
 
         // reusing the same permit
         vm.expectRevert("ALLOWANCE_EXCEEDED");
@@ -112,8 +112,7 @@ contract DepositAdapterTest is TestSetup {
         // much larger deposit
         stEth.submit{value: 5000 ether}(address(0));
 
-        uint256 protocolStETHBeforeDeposit = stEth.balanceOf(address(liquifierInstance));
-
+        protocolStETHBeforeDeposit = stEth.balanceOf(address(liquifierInstance));
         permitInput = createPermitInput(2, address(depositAdapterInstance), 5000 ether, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         liquifierPermitInput = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         depositAdapterInstance.depositStETHForWeETHWithPermit(5000 ether, bob, liquifierPermitInput);
