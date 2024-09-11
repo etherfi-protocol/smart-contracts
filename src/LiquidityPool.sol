@@ -429,7 +429,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @notice pay protocol fees including 5% to treaury, 5% to node operator and ethfund bnft holders
     /// @param _protocolFees The amount of protocol fees to pay in ether
     function payProtocolFees(uint128 _protocolFees) external {
-        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();   
+        if (msg.sender != address(etherFiAdminContract) && msg.sender != owner()) revert IncorrectCaller();   
         emit ProtocolFeePaid(_protocolFees);
         depositToRecipient(treasury, _protocolFees, address(0));
     }
