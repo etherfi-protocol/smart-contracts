@@ -89,7 +89,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     mapping(address => bool) public DEPRECATED_pausers;
 
-    uint256 public feeAccumulated;
+    uint256 public feeAccumulated; // fees accumulated from swapping eETH to stETH in stETH
 
     RoleRegistry public roleRegistry;
 
@@ -194,7 +194,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         feeAccumulated += fees;
         if (_amount + feeAccumulated > lido.balanceOf(address(this))) revert NotEnoughBalance();
         if (_amount + fees > liquidityPool.eETH().balanceOf(msg.sender)) revert NotEnoughBalance();
-        IERC20(address(liquidityPool.eETH())).safeTransferFrom(msg.sender, address(this), _amount);
+        IERC20(address(liquidityPool.eETH())).safeTransferFrom(msg.sender, address(this), _amount + fees);
         IERC20(address(lido)).safeTransfer(msg.sender, _amount);
     }
 
