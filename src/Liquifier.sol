@@ -193,7 +193,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         _amount -= fees;
         if (_amount + fees + feeAccumulated > lido.balanceOf(address(this))) revert NotEnoughBalance();
         if (_amount + fees > liquidityPool.eETH().balanceOf(msg.sender)) revert NotEnoughBalance();
-
+        feeAccumulated += fees;
         IERC20(address(liquidityPool.eETH())).safeTransferFrom(msg.sender, address(this), _amount);
         IERC20(address(lido)).safeTransfer(msg.sender, _amount);
     }
