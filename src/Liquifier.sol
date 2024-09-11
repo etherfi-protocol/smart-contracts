@@ -58,7 +58,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     bool public DEPRECATED_quoteStEthWithCurve;
 
-    uint128 public DEPRECATED_accumulatedFee;
+    uint128 public feeSwappingEETHToSTETH; // swappingFees / 10**18 
 
     mapping(address => TokenInfo) public tokenInfos;
     mapping(bytes32 => bool) public DEPRECATED_isRegisteredQueuedWithdrawals;
@@ -89,11 +89,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     mapping(address => bool) public DEPRECATED_pausers;
 
+    uint256 public feeAccumulated;
+
     RoleRegistry public roleRegistry;
 
     BucketRateLimiter public rateLimiter;
 
     bytes32 public constant LIQUIFIER_ADMIN_ROLE = keccak256("LIQUIFIER_ADMIN_ROLE");
+    bytes32 public constant EETH_STETH_SWAPPER = keccak256("EETH_STETH_SWAPPER");
     
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     event QueuedStEthWithdrawals(uint256[] _reqIds);
@@ -176,10 +179,20 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return eEthShare;
     }
 
+    function setFeeSwappingEETHToSTETH(uint128 _fee) external onlyOwner {
+        require(_fee <= 10**18, "INVALID_FEE");
+        feeSwappingEETHToSTETH = _fee;
+    }
     // Swap user's eETH for Liquifier's stETH
     function swapEEthForStEth(uint256 _amount) external whenNotPaused nonReentrant {
-        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
-        if (_amount > liquidityPool.eETH().balanceOf(msg.sender)) revert NotEnoughBalance();
+        bool isWhitelistedSwapper = roleRegistry.hasRole(EETH_STETH_SWAPPER, msg.sender);
+        uint256 fees = 0;
+        if (!isWhitelistedSwapper) {
+            fees = _amount * feeSwappingEETHToSTETH / 10**18;
+        }
+        _amount -= fees;
+        if (_amount + fees + feeAccumulated > lido.balanceOf(address(this))) revert NotEnoughBalance();
+        if (_amount + fees > liquidityPool.eETH().balanceOf(msg.sender)) revert NotEnoughBalance();
 
         IERC20(address(liquidityPool.eETH())).safeTransferFrom(msg.sender, address(this), _amount);
         IERC20(address(lido)).safeTransfer(msg.sender, _amount);
@@ -245,6 +258,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function withdrawEEth(uint256 amount) external {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         liquidityPool.withdraw(address(liquidityPool), amount);
+    }
+
+    function transferSTEthToTreasury(uint256 _amount) external {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        require(_amount <= feeAccumulated, "Fees accumulated");
+        IERC20(address(lido)).safeTransfer(msg.sender, _amount);
     }
 
     function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOwner {
