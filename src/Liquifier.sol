@@ -196,6 +196,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (_amount + fees > liquidityPool.eETH().balanceOf(msg.sender)) revert NotEnoughBalance();
         IERC20(address(liquidityPool.eETH())).safeTransferFrom(msg.sender, address(this), _amount + fees);
         IERC20(address(lido)).safeTransfer(msg.sender, _amount);
+        withdrawEEth(_amount + fees - 1);
     }
 
     function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused returns (uint256) {
@@ -255,7 +256,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     // Swap Liquifier's eETH for ETH from the liquidity pool and send it back to the liquidity pool
-    function withdrawEEth(uint256 amount) external {
+    function withdrawEEth(uint256 amount) public {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         liquidityPool.withdraw(address(liquidityPool), amount);
     }
@@ -403,6 +404,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
             total += getTotalPooledEther(address(dummies[i]));
         }
         total += liquidityPool.eETH().balanceOf(address(this));
+        total -= feeAccumulated;
     }
 
     /// deposited ETH can have 2 states:
