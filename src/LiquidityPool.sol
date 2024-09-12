@@ -171,7 +171,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     // Used by eETH staking flow through Liquifier contract; deVamp or to pay protocol fees
     function depositToRecipient(address _recipient, uint256 _amount, address _referral) public whenNotPaused returns (uint256) {
-        require(msg.sender == address(liquifier) || msg.sender == address(etherFiAdminContract), "Incorrect Caller");
+        require(msg.sender == address(liquifier) || msg.sender == address(etherFiAdminContract) || msg.sender == owner(), "Incorrect Caller");
 
         emit Deposit(_recipient, _amount, SourceOfFunds.EETH, _referral);
 
@@ -429,7 +429,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @notice pay protocol fees including 5% to treaury, 5% to node operator and ethfund bnft holders
     /// @param _protocolFees The amount of protocol fees to pay in ether
     function payProtocolFees(uint128 _protocolFees) external {
-        if (msg.sender != address(etherFiAdminContract) && msg.sender != owner()) revert IncorrectCaller();   
+        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();   
         emit ProtocolFeePaid(_protocolFees);
         depositToRecipient(treasury, _protocolFees, address(0));
     }

@@ -88,6 +88,15 @@ contract eethPayoutUpgradeTest is TestSetup {
         helperSubmitReport(1000 ether);
     }
 
+    function test_timelockMintTreasuryShares() public {
+        vm.startPrank(owner);
+        uint256 beforeMint = eETHInstance.balanceOf(treasury);
+        liquidityPoolInstance.depositToRecipient(treasury, 100 ether, address(0));
+        uint256 afterMint = eETHInstance.balanceOf(treasury);
+        vm.stopPrank();
+        assertApproxEqAbs(afterMint, beforeMint + 100 ether, 1);
+    }
+
     function test_permissionFordepositToRecipient() public {
         vm.startPrank(address(etherFiAdminInstance));
         liquidityPoolInstance.depositToRecipient(treasury, 10 ether, address(0));
