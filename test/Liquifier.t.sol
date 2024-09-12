@@ -438,7 +438,7 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.getTotalPooledEther();
     }
 
-    function _set_stethToEethFees(uint128 _fee) internal {
+    function _set_steth_to_eeth_fees(uint128 _fee) internal {
         vm.startPrank(owner);
         liquifierInstance.setFeeSwappingEETHToSTETH(_fee);
         vm.stopPrank();
@@ -469,10 +469,10 @@ contract LiquifierTest is TestSetup {
         assertApproxEqAbs(afterLiquifierTotalPooledEther + 50 ether, beforeLiquifierTotalPooledEther, 1);
     }
     
-    function test_changingSwapFees() public {
+    function test_changing_swap_fees() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
-        _set_stethToEethFees(1 ether / 10 ); 
+        _set_steth_to_eeth_fees(1 ether / 10 ); 
 
         vm.deal(alice, 100 ether);
         vm.startPrank(alice);
@@ -487,7 +487,6 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.swapEEthForStEth(50 ether);
         uint256 stEthBalanceAfter = IERC20(liquifierInstance.lido()).balanceOf(address(liquifierInstance));
         uint256 balanceOfLiquidityPoolAfter = address(liquidityPoolInstance).balance;
-        vm.stopPrank();
 
         uint256 afterTVL = liquidityPoolInstance.getTotalPooledEther();
         uint256 afterLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
@@ -500,20 +499,30 @@ contract LiquifierTest is TestSetup {
         assertApproxEqAbs(liquifierInstance.feeAccumulated(), 5 ether, 2);
     }
 
+    function test_transfer_fees_to_treasury() public {
+        test_changing_swap_fees();
+        vm.startPrank(alice);
+        uint256 treasuryStethBalBefore = IERC20(liquifierInstance.lido()).balanceOf(liquifierInstance.treasury());
+        liquifierInstance.transferSTEthToTreasury(5 ether);
+        uint256 treasuryStethBalAfter = IERC20(liquifierInstance.lido()).balanceOf(liquifierInstance.treasury());
+        assertApproxEqAbs(treasuryStethBalAfter - treasuryStethBalBefore, 5 ether, 2);
+        vm.stopPrank(); 
+    }
+
     //same as no fees for whitelisted user
     function test_whitelisted_fee() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
         vm.startPrank(superAdmin);
         roleRegistry.grantRole(liquifierInstance.EETH_STETH_SWAPPER(), alice);
-        _set_stethToEethFees(1 ether / 10);
+        _set_steth_to_eeth_fees(1 ether / 10);
         test_swapEEthForStEth_mainnet();
     }
 
     function test_setting_fees() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
-        _set_stethToEethFees(2 ether / 10);
+        _set_steth_to_eeth_fees(2 ether / 10);
         console.log(liquifierInstance.feeSwappingEETHToSTETH());
         assert(liquifierInstance.feeSwappingEETHToSTETH() == 2 ether / 10);
     }

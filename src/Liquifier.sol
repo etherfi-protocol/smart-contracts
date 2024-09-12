@@ -264,7 +264,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function transferSTEthToTreasury(uint256 _amount) external {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         require(_amount <= feeAccumulated, "Fees accumulated");
-        IERC20(address(lido)).safeTransfer(msg.sender, _amount);
+        IERC20(address(lido)).safeTransfer(treasury, _amount);
     }
 
     function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOwner {
