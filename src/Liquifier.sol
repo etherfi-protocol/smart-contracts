@@ -183,17 +183,17 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         require(_fee <= 10**18, "INVALID_FEE");
         feeSwappingEETHToSTETH = _fee;
     }
+
     // Swap user's eETH for Liquifier's stETH
     function swapEEthForStEth(uint256 _amount) external whenNotPaused nonReentrant {
-        bool isWhitelistedSwapper = roleRegistry.hasRole(EETH_STETH_SWAPPER, msg.sender);
+        if (_amount + feeAccumulated > lido.balanceOf(address(this))) revert NotEnoughBalance();
+        if (_amount > liquidityPool.eETH().balanceOf(msg.sender)) revert NotEnoughBalance();
         uint256 fees = 0;
-        if (!isWhitelistedSwapper) {
+        if (!roleRegistry.hasRole(EETH_STETH_SWAPPER, msg.sender)) {
             fees = _amount * feeSwappingEETHToSTETH / 10**18;
         }
         _amount -= fees;
         feeAccumulated += fees;
-        if (_amount + feeAccumulated > lido.balanceOf(address(this))) revert NotEnoughBalance();
-        if (_amount + fees > liquidityPool.eETH().balanceOf(msg.sender)) revert NotEnoughBalance();
         IERC20(address(liquidityPool.eETH())).safeTransferFrom(msg.sender, address(this), _amount + fees);
         IERC20(address(lido)).safeTransfer(msg.sender, _amount);
         withdrawEEth(_amount + fees - 1);
