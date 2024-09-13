@@ -415,9 +415,6 @@ contract TestSetup is Test {
         setupRoleRegistry();
 
         vm.warp(block.timestamp + 1 days);
-        vm.startPrank(owner);
-        liquifierInstance.setFeeSwappingEETHToSTETH(0);
-        vm.stopPrank();
     }
 
 

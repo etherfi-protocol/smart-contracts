@@ -438,18 +438,10 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.getTotalPooledEther();
     }
 
-    function _set_steth_to_eeth_fees(uint128 _fee) internal {
-        vm.startPrank(owner);
-        liquifierInstance.setFeeSwappingEETHToSTETH(_fee);
-        vm.stopPrank();
-    }
 
-    function test_swapEEthForStEth_mainnet() public {
-        initializeRealisticFork(MAINNET_FORK);
-        setUpLiquifier(MAINNET_FORK);
-
-        vm.deal(alice, 100 ether);
-        vm.startPrank(alice);
+    function _swapEEthForStEth_mainnet() public {
+        vm.deal(bob, 100 ether);
+        vm.startPrank(bob);
         liquidityPoolInstance.deposit{value: 100 ether}();
 
         eETHInstance.approve(address(liquifierInstance), 50 ether);
@@ -457,10 +449,10 @@ contract LiquifierTest is TestSetup {
         uint256 beforeTVL = liquidityPoolInstance.getTotalPooledEther();
         uint256 beforeLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
         uint256 balanceOfLiquidityPoolBefore = address(liquidityPoolInstance).balance;
+        console.log(liquidityPoolInstance.ethAmountLockedForWithdrawal());
         liquifierInstance.swapEEthForStEth(50 ether);
         uint256 balanceOfLiquidityPoolAfter = address(liquidityPoolInstance).balance;
         vm.stopPrank();
-
         uint256 afterTVL = liquidityPoolInstance.getTotalPooledEther();
         uint256 afterLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
         // LP eth balance remains same, eeth supply decreases, liquifier total pooled ether should decrease
@@ -468,62 +460,14 @@ contract LiquifierTest is TestSetup {
         assertApproxEqAbs(afterTVL + 50 ether, beforeTVL, 1);
         assertApproxEqAbs(afterLiquifierTotalPooledEther + 50 ether, beforeLiquifierTotalPooledEther, 1);
     }
-    
-    function test_changing_swap_fees() public {
-        initializeRealisticFork(MAINNET_FORK);
-        setUpLiquifier(MAINNET_FORK);
-        _set_steth_to_eeth_fees(1 ether / 10 ); 
-
-        vm.deal(alice, 100 ether);
-        vm.startPrank(alice);
-        liquidityPoolInstance.deposit{value: 100 ether}();
-
-        eETHInstance.approve(address(liquifierInstance), 50 ether);
-
-        uint256 beforeTVL = liquidityPoolInstance.getTotalPooledEther();
-        uint256 beforeLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
-        uint256 balanceOfLiquidityPoolBefore = address(liquidityPoolInstance).balance;
-        uint256 stEthBalanceBefore = IERC20(liquifierInstance.lido()).balanceOf(address(liquifierInstance));
-        liquifierInstance.swapEEthForStEth(50 ether);
-        uint256 stEthBalanceAfter = IERC20(liquifierInstance.lido()).balanceOf(address(liquifierInstance));
-        uint256 balanceOfLiquidityPoolAfter = address(liquidityPoolInstance).balance;
-
-        uint256 afterTVL = liquidityPoolInstance.getTotalPooledEther();
-        uint256 afterLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
-        // LP eth balance remains same, eeth supply decreases, liquifier total pooled ether should decrease
-        assertApproxEqAbs(balanceOfLiquidityPoolBefore, balanceOfLiquidityPoolAfter, 2); 
-        assertApproxEqAbs(afterTVL + 50 ether, beforeTVL, 2);
-        assertApproxEqAbs(afterLiquifierTotalPooledEther + 50 ether, beforeLiquifierTotalPooledEther,21);
-        assertApproxEqAbs(IERC20(liquifierInstance.lido()).balanceOf(alice), 45 ether, 2);
-        assertApproxEqAbs(stEthBalanceBefore - stEthBalanceAfter, 45 ether, 2);
-        assertApproxEqAbs(liquifierInstance.feeAccumulated(), 5 ether, 2);
-    }
-
-    function test_transfer_fees_to_treasury() public {
-        test_changing_swap_fees();
-        vm.startPrank(alice);
-        uint256 treasuryStethBalBefore = IERC20(liquifierInstance.lido()).balanceOf(liquifierInstance.treasury());
-        liquifierInstance.transferSTEthToTreasury(5 ether);
-        uint256 treasuryStethBalAfter = IERC20(liquifierInstance.lido()).balanceOf(liquifierInstance.treasury());
-        assertApproxEqAbs(treasuryStethBalAfter - treasuryStethBalBefore, 5 ether, 2);
-        vm.stopPrank(); 
-    }
 
     //same as no fees for whitelisted user
     function test_whitelisted_fee() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
         vm.startPrank(superAdmin);
-        roleRegistry.grantRole(liquifierInstance.EETH_STETH_SWAPPER(), alice);
-        _set_steth_to_eeth_fees(1 ether / 10);
-        test_swapEEthForStEth_mainnet();
-    }
-
-    function test_setting_fees() public {
-        initializeRealisticFork(MAINNET_FORK);
-        setUpLiquifier(MAINNET_FORK);
-        _set_steth_to_eeth_fees(2 ether / 10);
-        console.log(liquifierInstance.feeSwappingEETHToSTETH());
-        assert(liquifierInstance.feeSwappingEETHToSTETH() == 2 ether / 10);
+        roleRegistry.grantRole(liquifierInstance.EETH_STETH_SWAPPER(), bob);
+        vm.stopPrank();
+        _swapEEthForStEth_mainnet();
     }
 }
