@@ -448,21 +448,24 @@ contract LiquifierTest is TestSetup {
 
         uint256 beforeTVL = liquidityPoolInstance.getTotalPooledEther();
         uint256 beforeLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
-        uint256 balanceOfLiquidityPoolBefore = address(liquidityPoolInstance).balance;
-        console.log(liquidityPoolInstance.ethAmountLockedForWithdrawal());
+        uint256 totalValueOutOfLpBefore = liquidityPoolInstance.totalValueOutOfLp(); 
+        uint256 totalValueInLpBefore = liquidityPoolInstance.totalValueInLp(); 
         liquifierInstance.swapEEthForStEth(50 ether);
-        uint256 balanceOfLiquidityPoolAfter = address(liquidityPoolInstance).balance;
-        vm.stopPrank();
         uint256 afterTVL = liquidityPoolInstance.getTotalPooledEther();
         uint256 afterLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
-        // LP eth balance remains same, eeth supply decreases, liquifier total pooled ether should decrease
-        assertApproxEqAbs(balanceOfLiquidityPoolBefore, balanceOfLiquidityPoolAfter, 1); 
+        uint256 totalValueOutOfLpAfter = liquidityPoolInstance.totalValueOutOfLp();
+        uint256 totalValueInLpAfter = liquidityPoolInstance.totalValueInLp();  
+        vm.stopPrank();
+        // Check LP eth balance remains same, eeth supply decreases, liquifier total pooled ether should decrease
         assertApproxEqAbs(afterTVL + 50 ether, beforeTVL, 1);
         assertApproxEqAbs(afterLiquifierTotalPooledEther + 50 ether, beforeLiquifierTotalPooledEther, 1);
+        assertApproxEqAbs(totalValueOutOfLpAfter + 50 ether, totalValueOutOfLpBefore, 1);
+        assertApproxEqAbs(totalValueInLpAfter, totalValueInLpBefore, 1);
+
     }
 
     //same as no fees for whitelisted user
-    function test_whitelisted_fee() public {
+    function test_whitelisted() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
         vm.startPrank(superAdmin);
