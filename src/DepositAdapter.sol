@@ -108,12 +108,16 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         try wstETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
 
         wstETH.transferFrom(msg.sender, address(this), _amount);
-        uint256 stETHAmount = wstETH.unwrap(_amount);
 
-        stETH.approve(address(liquifier), stETHAmount);
-        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), stETHAmount, _referral);
+        // Accounting for the 1-2 wei corner case
+        uint256 initialBalance = stETH.balanceOf(address(this));
+        uint256 stETHAmount = wstETH.unwrap(_amount);
+        uint256 actualTransferredAmount = stETH.balanceOf(address(this)) - initialBalance;
+
+        stETH.approve(address(liquifier), actualTransferredAmount);
+        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), actualTransferredAmount, _referral);
         
-        emit AdapterDeposit(msg.sender, stETHAmount, SourceOfFunds.WSTETH, _referral);
+        emit AdapterDeposit(msg.sender, actualTransferredAmount, SourceOfFunds.WSTETH, _referral);
         return _wrapAndReturn(eETHShares);
     }
 
