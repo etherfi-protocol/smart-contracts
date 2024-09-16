@@ -86,11 +86,15 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     function depositStETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external returns (uint256) {
         try IERC20PermitUpgradeable(address(stETH)).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
 
+        // Accounting for the 1-2 wei corner case
+        uint256 initialBalance = stETH.balanceOf(address(this));
         stETH.transferFrom(msg.sender, address(this), _amount);
-        stETH.approve(address(liquifier), _amount);
-        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), _amount, _referral);
+        uint256 actualTransferredAmount = stETH.balanceOf(address(this)) - initialBalance;
+
+        stETH.approve(address(liquifier), actualTransferredAmount);
+        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), actualTransferredAmount, _referral);
         
-        emit AdapterDeposit(msg.sender, _amount, SourceOfFunds.STETH, _referral);
+        emit AdapterDeposit(msg.sender, actualTransferredAmount, SourceOfFunds.STETH, _referral);
         return _wrapAndReturn(eETHShares);
     }
 
