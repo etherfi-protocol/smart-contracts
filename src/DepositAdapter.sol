@@ -121,7 +121,11 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         return _wrapAndReturn(eETHShares);
     }
 
-    receive() external payable {}
+    receive() external payable {
+        if (msg.sender != address(wETH)) {
+            revert("ETH_TRANSFERS_NOT_ACCEPTED");
+        }
+    }
 
     function _wrapAndReturn(uint256 _eEthShares) internal returns (uint256) {
         uint256 eEthAmount = liquidityPool.amountForShare(_eEthShares);

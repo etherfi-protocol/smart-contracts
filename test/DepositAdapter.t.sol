@@ -142,4 +142,14 @@ contract DepositAdapterTest is TestSetup {
         vm.expectRevert("ERC20: transfer amount exceeds balance");
         depositAdapterInstance.depositWstETHForWeETHWithPermit(1 ether, bob, liquifierPermitInput);
     }
+
+    function test_Receive() public {
+        vm.expectRevert("ETH_TRANSFERS_NOT_ACCEPTED");
+        address(depositAdapterInstance).call{value: 1 ether}("");
+
+        address payable depositAdapterPayable = payable(address(depositAdapterInstance));
+       
+        vm.expectRevert("ETH_TRANSFERS_NOT_ACCEPTED");
+        bool success = depositAdapterPayable.send(1 ether);
+    }
 }
