@@ -143,6 +143,50 @@ contract DepositAdapterTest is TestSetup {
         depositAdapterInstance.depositWstETHForWeETHWithPermit(1 ether, bob, liquifierPermitInput);
     }
 
+    function test_DepositPermitExpired() public {
+        stEth.submit{value: 2 ether}(address(0));
+
+        // valid input
+        uint256 protocolStETHBeforeDeposit = stEth.balanceOf(address(liquifierInstance));
+        uint256 stEthBalanceBeforeDeposit = stEth.balanceOf(address(alice));
+        
+        ILiquidityPool.PermitInput memory permitInput = createPermitInput(
+            2,
+            address(depositAdapterInstance),
+            2 ether,
+            stEth.nonces(alice),
+            2 ** 32 - 1,
+            stEth.DOMAIN_SEPARATOR()
+        );
+        
+        ILiquifier.PermitInput memory liquifierPermitInput = ILiquifier.PermitInput({
+            value: permitInput.value,
+            deadline: permitInput.deadline,
+            v: permitInput.v,
+            r: permitInput.r,
+            s: permitInput.s
+        });
+        
+        //record timestamp and deadline before warp
+        uint blockTimestampBefore = block.timestamp;
+        uint permitDeadline = permitInput.deadline;
+        console.log("Block Timestamp Before:", blockTimestampBefore);
+        console.log("Permit Deadline:", permitDeadline);
+        depositAdapterInstance.depositStETHForWeETHWithPermit(1 ether, bob, liquifierPermitInput);
+
+        assertApproxEqAbs(stEth.balanceOf(address(alice)), stEthBalanceBeforeDeposit - 1 ether, 3);
+        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(1 ether), 3);
+        assertApproxEqAbs(stEth.balanceOf(address(liquifierInstance)), protocolStETHBeforeDeposit + 1 ether, 3);
+
+        vm.warp(block.timestamp + permitDeadline + 1 days);
+        
+        //record timestamp and deadline after warp
+        uint blockTimestampAfter = block.timestamp;
+        console.log("Block Timestamp After:", blockTimestampAfter);
+        console.log("Permit Deadline:", permitDeadline);
+        vm.expectRevert("PERMIT_EXPIRED");
+        depositAdapterInstance.depositStETHForWeETHWithPermit(1 ether, bob, liquifierPermitInput);
+        
     function test_Receive() public {
         vm.expectRevert("ETH_TRANSFERS_NOT_ACCEPTED");
         address(depositAdapterInstance).call{value: 1 ether}("");
