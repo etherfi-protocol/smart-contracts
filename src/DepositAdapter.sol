@@ -86,7 +86,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     function depositStETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external returns (uint256) {
         try IERC20PermitUpgradeable(address(stETH)).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} 
         catch {
-            if (_permit.deadline < block.timestamp) { revert("PERMIT_EXPIRED") }
+            if (_permit.deadline < block.timestamp) revert("PERMIT_EXPIRED");
         }
 
         stETH.transferFrom(msg.sender, address(this), _amount);
@@ -106,7 +106,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     function depositWstETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external returns (uint256) {
         try wstETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} 
         catch {
-            if (_permit.deadline < block.timestamp) { revert("PERMIT_EXPIRED") }
+            if (_permit.deadline < block.timestamp) revert("PERMIT_EXPIRED");
         }
 
         wstETH.transferFrom(msg.sender, address(this), _amount);
