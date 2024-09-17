@@ -89,11 +89,15 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
             if (_permit.deadline < block.timestamp) revert("PERMIT_EXPIRED");
         }
 
+        // Accounting for the 1-2 wei corner case
+        uint256 initialBalance = stETH.balanceOf(address(this));
         stETH.transferFrom(msg.sender, address(this), _amount);
-        stETH.approve(address(liquifier), _amount);
-        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), _amount, _referral);
+        uint256 actualTransferredAmount = stETH.balanceOf(address(this)) - initialBalance;
+
+        stETH.approve(address(liquifier), actualTransferredAmount);
+        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), actualTransferredAmount, _referral);
         
-        emit AdapterDeposit(msg.sender, _amount, SourceOfFunds.STETH, _referral);
+        emit AdapterDeposit(msg.sender, actualTransferredAmount, SourceOfFunds.STETH, _referral);
         return _wrapAndReturn(eETHShares);
     }
 
@@ -110,16 +114,24 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         }
 
         wstETH.transferFrom(msg.sender, address(this), _amount);
-        uint256 stETHAmount = wstETH.unwrap(_amount);
 
-        stETH.approve(address(liquifier), stETHAmount);
-        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), stETHAmount, _referral);
+        // Accounting for the 1-2 wei corner case
+        uint256 initialBalance = stETH.balanceOf(address(this));
+        uint256 stETHAmount = wstETH.unwrap(_amount);
+        uint256 actualTransferredAmount = stETH.balanceOf(address(this)) - initialBalance;
+
+        stETH.approve(address(liquifier), actualTransferredAmount);
+        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), actualTransferredAmount, _referral);
         
-        emit AdapterDeposit(msg.sender, stETHAmount, SourceOfFunds.WSTETH, _referral);
+        emit AdapterDeposit(msg.sender, actualTransferredAmount, SourceOfFunds.WSTETH, _referral);
         return _wrapAndReturn(eETHShares);
     }
 
-    receive() external payable {}
+    receive() external payable {
+        if (msg.sender != address(wETH)) {
+            revert("ETH_TRANSFERS_NOT_ACCEPTED");
+        }
+    }
 
     function _wrapAndReturn(uint256 _eEthShares) internal returns (uint256) {
         uint256 eEthAmount = liquidityPool.amountForShare(_eEthShares);
