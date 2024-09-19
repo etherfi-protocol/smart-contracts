@@ -299,7 +299,7 @@ contract AuctionManager is
     function setMinBidPrice(uint64 _newMinBidAmount) external {
         if (!roleRegistry.hasRole(AUCTION_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         
-        require(_newMinBidAmount < maxBidAmount, "Min bid exceeds max bid");
+        require(_newMinBidAmount <= maxBidAmount, "Min bid exceeds max bid");
         minBidAmount = _newMinBidAmount;
     }
 
@@ -308,7 +308,7 @@ contract AuctionManager is
     function setMaxBidPrice(uint64 _newMaxBidAmount) external {
         if (!roleRegistry.hasRole(AUCTION_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
-        require(_newMaxBidAmount > minBidAmount, "Min bid exceeds max bid");
+        require(_newMaxBidAmount >= minBidAmount, "Min bid exceeds max bid");
         maxBidAmount = _newMaxBidAmount;
     }
 
