@@ -360,7 +360,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
         // As the LP is the T-NFT holder, the 30 ETH is taken from the LP for each validator
         // 
-        // If the LP is the B-NT holder, the 1 ether for each validator is taken from the LP as well
+        // If the LP is the B-NFT holder, the 1 ether for each validator is taken from the LP as well
         // otherwise, the 1 ether is taken from the B-nft holder's separate deposit
         uint256 outboundEthAmountFromLp = isLpBnftHolder ? 31 ether * _validatorIds.length : 30 ether * _validatorIds.length;
         _accountForEthSentOut(outboundEthAmountFromLp);
@@ -521,9 +521,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function _sendFund(address _recipient, uint256 _amount) internal {
-        uint256 balanace = address(this).balance;
+        uint256 balance = address(this).balance;
         (bool sent, ) = _recipient.call{value: _amount}("");
-        require(sent && address(this).balance == balanace - _amount, "SendFail");
+        require(sent && address(this).balance == balance - _amount, "SendFail");
     }
 
     function _accountForEthSentOut(uint256 _amount) internal {

@@ -69,7 +69,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     ///  To receive the rewards from the execution layer, it should have 'receive()' function.
     receive() external payable {}
 
-    /// @dev called once immediately after creating a new instance of a EtheriNode beacon proxy
+    /// @dev called once immediately after creating a new instance of a EtherFiNode beacon proxy
     function initialize(address _etherFiNodesManager) external {
         require(DEPRECATED_phase == VALIDATOR_PHASE.NOT_INITIALIZED, "ALREADY_INITIALIZED");
         require(etherFiNodesManager == address(0), "ALREADY_INITIALIZED");
