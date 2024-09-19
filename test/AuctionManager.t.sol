@@ -564,7 +564,7 @@ contract AuctionManagerTest is TestSetup {
     function test_SetMinBidAmount() public {
         vm.prank(alice);
         vm.expectRevert("Min bid exceeds max bid");
-        auctionInstance.setMinBidPrice(5 ether);
+        auctionInstance.setMinBidPrice(5.001 ether);
 
         vm.prank(owner);
         vm.expectRevert(AuctionManager.IncorrectRole.selector);
