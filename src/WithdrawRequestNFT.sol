@@ -199,7 +199,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// `checkpointIndex` can be found using `findCheckpointIndex()` function
     /// @return uint256 the amount of ETH that can be claimed by the owner of the NFT
     function getClaimableAmount(uint32 requestId, uint32 checkpointIndex) public view returns (uint256) {
-        require(requestId <= lastFinalizedRequestId, "Request is not finalized");
+        require(isFinalized(tokenId), "Request is not finalized");
         require(requestId < nextRequestId, "Request does not exist");
         require(ownerOf(requestId) != address(0), "Already claimed");
 
