@@ -1151,9 +1151,6 @@ contract TestSetup is Test {
         liquidityPoolInstance.updateBnftMode(_isLpBnftHolder);
         vm.stopPrank();
 
-        vm.prank(admin);
-        auctionInstance.disableWhitelist();
-
         vm.startPrank(_nodeOperator);
         if (!nodeOperatorManagerInstance.registered(_nodeOperator)) {
             nodeOperatorManagerInstance.registerNodeOperator(

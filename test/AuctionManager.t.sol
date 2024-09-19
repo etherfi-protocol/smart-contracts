@@ -31,12 +31,9 @@ contract AuctionManagerTest is TestSetup {
             auctionInstance.stakingManagerContractAddress(),
             address(stakingManagerInstance)
         );
-        assertEq(auctionInstance.whitelistBidAmount(), 0.001 ether);
         assertEq(auctionInstance.minBidAmount(), 0.01 ether);
-        assertEq(auctionInstance.whitelistBidAmount(), 0.001 ether);
         assertEq(auctionInstance.maxBidAmount(), 5 ether);
         assertEq(auctionInstance.numberOfActiveBids(), 0);
-        assertTrue(auctionInstance.whitelistEnabled());
     }
 
     function test_ReEnterAuctionManagerFailsIfBidAlreadyActive() public {
@@ -54,37 +51,6 @@ contract AuctionManagerTest is TestSetup {
         vm.prank(owner);
         vm.expectRevert("Only staking manager contract function");
         auctionInstance.reEnterAuction(bidId1[0]);
-    }
-
-    function test_DisableWhitelist() public {
-        assertTrue(auctionInstance.whitelistEnabled());
-
-        vm.expectRevert(AuctionManager.IncorrectRole.selector);
-        vm.prank(owner);
-        auctionInstance.disableWhitelist();
-
-        vm.prank(alice);
-        auctionInstance.disableWhitelist();
-
-        assertFalse(auctionInstance.whitelistEnabled());
-    }
-
-    function test_EnableWhitelist() public {
-        assertTrue(auctionInstance.whitelistEnabled());
-
-        vm.prank(alice);
-        auctionInstance.disableWhitelist();
-
-        assertFalse(auctionInstance.whitelistEnabled());
-
-        vm.expectRevert(AuctionManager.IncorrectRole.selector);
-        vm.prank(owner);
-        auctionInstance.enableWhitelist();
-
-        vm.prank(alice);
-        auctionInstance.enableWhitelist();
-
-        assertTrue(auctionInstance.whitelistEnabled());
     }
 
     function test_createBidWorks() public {
@@ -106,34 +72,36 @@ contract AuctionManagerTest is TestSetup {
             5
         );
 
-        assertFalse(nodeOperatorManagerInstance.isWhitelisted(jess));
-        assertTrue(nodeOperatorManagerInstance.isWhitelisted(alice));
-
         hoax(alice);
-        uint256[] memory bid1Id = auctionInstance.createBid{value: 0.001 ether}(
+        vm.expectRevert("Incorrect bid value");
+        auctionInstance.createBid{value: 0.001 ether}(
             1,
             0.001 ether
         );
 
-        assertEq(auctionInstance.numberOfActiveBids(), 1);
+        assertEq(auctionInstance.numberOfActiveBids(), 0);
 
-        (
+        startHoax(alice);
+        uint256[] memory bid1Id = auctionInstance.createBid{value: 0.04 ether}(4, 0.01 ether);
+
+         (
             uint256 amount,
             uint64 ipfsIndex,
             address bidderAddress,
             bool isActive
         ) = auctionInstance.bids(bid1Id[0]);
 
-        assertEq(amount, 0.001 ether);
+        assertEq(amount, 0.01 ether);
         assertEq(ipfsIndex, 0);
         assertEq(bidderAddress, alice);
         assertTrue(isActive);
 
-        startHoax(alice);
-        auctionInstance.createBid{value: 0.004 ether}(4, 0.001 ether);
-
         vm.expectRevert("Bid size is too small");
-        auctionInstance.createBid{value: 0.004 ether}(0, 0.001 ether);
+        auctionInstance.createBid{value: 0.04 ether}(0, 0.01 ether);
+        vm.stopPrank();
+
+        startHoax(alice);
+        auctionInstance.createBid{value: 1 ether}(1, 1 ether);
         vm.stopPrank();
 
         vm.expectRevert("Insufficient public keys");
@@ -141,40 +109,24 @@ contract AuctionManagerTest is TestSetup {
         auctionInstance.createBid{value: 1 ether}(1, 1 ether);
         vm.stopPrank();
 
-        assertTrue(auctionInstance.whitelistEnabled());
-
-        vm.expectRevert("Only whitelisted addresses");
-        hoax(jess);
-        auctionInstance.createBid{value: 0.01 ether}(1, 0.01 ether);
-
         assertEq(auctionInstance.numberOfActiveBids(), 5);
 
-        // Owner disables whitelist
-        vm.prank(alice);
-        auctionInstance.disableWhitelist();
-
-        // Bob can still bid below min bid amount because he was whitelisted
         hoax(bob);
-        uint256[] memory bobBidIds = auctionInstance.createBid{
-            value: 0.001 ether
-        }(1, 0.001 ether);
+        uint256[] memory bobBidIds = auctionInstance.createBid{value: 0.01 ether}(1, 0.01 ether);
 
         (amount, ipfsIndex, bidderAddress, isActive) = auctionInstance.bids(
             bobBidIds[0]
         );
-        assertEq(amount, 0.001 ether);
+        assertEq(amount, 0.01 ether);
         assertEq(ipfsIndex, 0);
         assertEq(bidderAddress, bob);
         assertTrue(isActive);
 
         assertEq(auctionInstance.numberOfActiveBids(), 6);
 
-        // jess cannot bid below the min bid amount because he was not whitelisted
         vm.expectRevert("Incorrect bid value");
         hoax(jess);
-        uint256[] memory henryBidIds = auctionInstance.createBid{
-            value: 0.001 ether
-        }(1, 0.001 ether);
+        uint256[] memory henryBidIds = auctionInstance.createBid{value: 0.001 ether}(1, 0.001 ether);
 
         hoax(henry);
         henryBidIds = auctionInstance.createBid{value: 0.01 ether}(
@@ -187,28 +139,6 @@ contract AuctionManagerTest is TestSetup {
         assertEq(amount, 0.01 ether);
         assertEq(ipfsIndex, 0);
         assertEq(bidderAddress, henry);
-        assertTrue(isActive);
-
-        // Owner enables whitelist
-        vm.prank(alice);
-        auctionInstance.enableWhitelist();
-
-        vm.expectRevert("Only whitelisted addresses");
-        hoax(jess);
-        auctionInstance.createBid{value: 0.01 ether}(1, 0.01 ether);
-
-        hoax(bob);
-        bobBidIds = auctionInstance.createBid{value: 0.001 ether}(
-            1,
-            0.001 ether
-        );
-
-        (amount, ipfsIndex, bidderAddress, isActive) = auctionInstance.bids(
-            bobBidIds[0]
-        );
-        assertEq(amount, 0.001 ether);
-        assertEq(ipfsIndex, 1);
-        assertEq(bidderAddress, bob);
         assertTrue(isActive);
     }
 
@@ -233,8 +163,8 @@ contract AuctionManagerTest is TestSetup {
         hoax(alice);
         auctionInstance.createBid{value: 5.1 ether}(1, 5.1 ether);
 
-        vm.prank(alice);
-        auctionInstance.disableWhitelist();
+        // vm.prank(alice);
+        // auctionInstance.disableWhitelist();
 
         vm.expectRevert("Incorrect bid value");
         hoax(alice);
@@ -644,25 +574,6 @@ contract AuctionManagerTest is TestSetup {
         vm.prank(alice);
         auctionInstance.setMinBidPrice(1 ether);
         assertEq(auctionInstance.minBidAmount(), 1 ether);
-    }
-
-    function test_SetWhitelistBidAmount() public {
-        vm.prank(alice);
-        vm.expectRevert("Ownable: caller is not the owner");
-        auctionInstance.updateWhitelistMinBidAmount(0.005 ether);
-
-        vm.prank(owner);
-        vm.expectRevert("Invalid Amount");
-        auctionInstance.updateWhitelistMinBidAmount(0);
-
-        vm.prank(owner);
-        vm.expectRevert("Invalid Amount");
-        auctionInstance.updateWhitelistMinBidAmount(0.2 ether);
-
-        assertEq(auctionInstance.whitelistBidAmount(), 0.001 ether);
-        vm.prank(owner);
-        auctionInstance.updateWhitelistMinBidAmount(0.002 ether);
-        assertEq(auctionInstance.whitelistBidAmount(), 0.002 ether);
     }
 
     function test_EventBidPlaced() public {
