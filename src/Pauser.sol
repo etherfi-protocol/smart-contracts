@@ -62,6 +62,11 @@ contract Pauser is Initializable, UUPSUpgradeable, OwnableUpgradeable {
      * @notice Adds a contract to the list of pausables.
      */
     function addPausable(IPausable _pausable) external onlyRole(PAUSER_ADMIN) {
+        for (uint256 i = 0; i < pausables.length; ++i) {
+            if (address(pausables[i]) == address(_pausable)) {
+                revert("Contract already in pausables");
+            }
+        }
         pausables.push(_pausable);
         emit PausableAdded(address(_pausable));
     }
