@@ -231,36 +231,25 @@ contract TimelockTest is TestSetup {
     function test_updateDepositCap() internal {
         initializeRealisticFork(MAINNET_FORK);
         address target = address(liquifierInstance);
-        // {
-        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 4_000, 20_000);
-        //     _execute_timelock(target, data, false, false, true, true);
-        // }
-        // {
-        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 4_000, 20_000);
-        //     _execute_timelock(target, data, false, false, true, true);
-        // }
-        // {
-        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 1_000, 100_000);
-        //     _execute_timelock(target, data, true, true, true, false);
-        // }
-        // {
-        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 1_000, 100_000);
-        //     _execute_timelock(target, data, true, true, true, false);
-        // }
-
-        // {
-        //     // LINEA
-        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf, 2_000, 10_000);
-        //     _execute_timelock(target, data, false);
-        // }
-        // {
-        //     // BASE
-        //     bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 2_000, 10_000);
-        //     _execute_timelock(target, data, false);
-        // }
+        {
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 4_000, 20_000);
+            _execute_timelock(target, data, false, false, true, true);
+        }
+        {
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 4_000, 20_000);
+            _execute_timelock(target, data, false, false, true, true);
+        }
+        {
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 1_000, 100_000);
+            _execute_timelock(target, data, true, true, true, false);
+        }
+        {
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 1_000, 100_000);
+            _execute_timelock(target, data, true, true, true, false);
+        }
     }
 
-    function test_upgrade_for_pepe() public {
+    function test_upgrade_for_pepe() internal {
         initializeRealisticFork(MAINNET_FORK);
         {
             address target = address(managerInstance);
@@ -273,7 +262,30 @@ contract TimelockTest is TestSetup {
             bytes memory data = abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, 0x942CEddafE32395608F99DEa7b6ea8801A8F4748);
             _execute_timelock(target, data, true, true, true, true);
         }
+    }
 
+    function test_EIGEN_transfer() internal {
+        initializeRealisticFork(MAINNET_FORK);
+        address target = address(managerInstance);
+        bytes4 selector = bytes4(keccak256("transfer(address,uint256)"));
+
+        bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector, selector, 0xec53bF9167f50cDEB3Ae105f56099aaaB9061F83, true);
+        _execute_timelock(target, data, true, true, true, true);
+        
+        address[] memory nodes = new address[](1);
+        bytes[] memory datas = new bytes[](1);
+        nodes[0] = 0xe8e39aA7E08F13f1Ccd5F38706F9e1D60C661825;
+        datas[0] = abi.encodeWithSelector(selector, 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, 1 ether);
+        
+        vm.prank(0x7835fB36A8143a014A2c381363cD1A4DeE586d2A);
+        managerInstance.forwardExternalCall(nodes, datas, 0xec53bF9167f50cDEB3Ae105f56099aaaB9061F83);
+    }
+
+    function test_add_updateEigenLayerOperatingAdmin() internal {
+        initializeRealisticFork(MAINNET_FORK);
+        address target = address(managerInstance);
+        bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateEigenLayerOperatingAdmin.selector, 0x44358b1cc2C296fFc7419835438D1BD97Ec1FB78, true);
+        _execute_timelock(target, data, true, true, true, true);
     }
 }
 
