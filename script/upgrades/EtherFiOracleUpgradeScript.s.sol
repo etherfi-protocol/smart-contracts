@@ -22,7 +22,7 @@ contract EtherFiOracleUpgrade is Script {
         EtherFiOracle oracleInstance = EtherFiOracle(proxyAddress);
         EtherFiOracle v2Implementation = new EtherFiOracle();
 
-        oracleInstance.upgradeTo(address(v2Implementation));
+        //oracleInstance.upgradeTo(address(v2Implementation));
 
         vm.stopBroadcast();
     }
