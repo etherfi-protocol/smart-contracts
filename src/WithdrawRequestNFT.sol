@@ -11,8 +11,6 @@ import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./RoleRegistry.sol";
 
-import "forge-std/console.sol";
-
 contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IWithdrawRequestNFT {
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -113,7 +111,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     /// @notice called by the NFT owner of a finalized request to claim their ETH
     /// @param requestId the id of the withdraw request and associated NFT
-    /// @param checkpointIndex the index of the `finalizationCheckpoints` that the request belongs to. 
+    /// @param checkpointIndex the index of the `finalizationCheckpoints` that the request belongs to
     /// can be found with `findCheckpointIndex(_requestIds, 1, getLastCheckpointIndex())`
     function claimWithdraw(uint32 requestId, uint32 checkpointIndex) external {
         return _claimWithdraw(requestId, ownerOf(requestId), checkpointIndex);
@@ -153,8 +151,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     /// @notice finalizes a batch of requests and locks the corresponding ETH to be withdrawn
     /// @dev called by the `EtherFiAdmin` contract to finalize a batch of requests based on the last oracle report 
+    /// @param lastRequestId the id of the last request to finalize in this batch, will update `lastFinalizedRequestId` value
     function finalizeRequests(uint32 lastRequestId) external {
         if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        require(lastRequestId >= lastFinalizedRequestId, "Invalid lastRequestId submitted");
+
+        // No new requests have been finalized since the last oracle report
+        if (lastRequestId == lastFinalizedRequestId) { return; }
 
         uint256 totalAmount = uint256(calculateTotalPendingAmount(lastRequestId));
         _finalizeRequests(lastRequestId, totalAmount);
@@ -162,8 +165,14 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     /// @notice `finalizeRequests` with the ability to specify the total amount of ETH to be locked
     /// @dev The oracle calculates the amount of ETH that is needed to fulfill the pending withdrawal off-chain
+    /// @param lastRequestId the id of the last request to finalize in this batch, will update `lastFinalizedRequestId` value
+    /// @param totalAmount the total amount of ETH to be locked for the requests in this batch
     function finalizeRequests(uint256 lastRequestId, uint256 totalAmount) external {
         if (!roleRegistry.hasRole(WITHDRAW_NFT_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        require(lastRequestId >= lastFinalizedRequestId, "Invalid lastRequestId submitted");
+
+        // No new requests have been finalized since the last oracle report
+        if (lastRequestId == lastFinalizedRequestId) { return; }
 
         _finalizeRequests(lastRequestId, totalAmount);
     }
@@ -199,7 +208,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// `checkpointIndex` can be found using `findCheckpointIndex()` function
     /// @return uint256 the amount of ETH that can be claimed by the owner of the NFT
     function getClaimableAmount(uint32 requestId, uint32 checkpointIndex) public view returns (uint256) {
-        require(isFinalized(tokenId), "Request is not finalized");
+        require(isFinalized(requestId), "Request is not finalized");
         require(requestId < nextRequestId, "Request does not exist");
         require(ownerOf(requestId) != address(0), "Already claimed");
 
@@ -235,7 +244,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function findCheckpointIndex(uint32 _requestId, uint32 _start, uint32 _end) public view returns (uint32) {
         require(_requestId <= lastFinalizedRequestId, "Request is not finalized");
         require(_start <= _end, "Invalid range");
-        require (_start != 0 && _end <= getLastCheckpointIndex(), "Range is out of bounds");
+        require(_start != 0 && _end <= getLastCheckpointIndex(), "Range is out of bounds");
 
         // Left boundary
         if (_requestId <= finalizationCheckpoints[_start].lastFinalizedRequestId) {
@@ -269,9 +278,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return uint32(max);
     }
 
-    /// @notice The excess eETH balance of this contract beyond what is needed to fulfill withdrawal requests.
+    /// @notice The excess eETH balance of this contract beyond what is needed to fulfill withdrawal requests
     /// This excess accumulates due to:
-    /// - eETH requested for withdrawal accruing staking rewards until the withdrawal is finalized. 
+    /// - eETH requested for withdrawal accruing staking rewards until the withdrawal is finalized
     ///   Any remaining positive rebase rewards stay in the contract after finalization
     /// - eETH balance calculation includes integer division, and there is a common case when the whole eETH 
     /// balance can't be transferred from the account while leaving the last 1-2 wei on the sender's account
@@ -286,10 +295,14 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @notice The amount of eETH that needed to fulfill the pending withdrawal requests up to and including `lastRequestId`
     function calculateTotalPendingAmount(uint32 lastRequestId) public view returns (uint256) {
         uint256 totalAmount = 0;
+        uint256 preciseSharePrice = liquidityPool.amountForShare(E27_PRECISION_BASE);
+
         for (uint32 i = lastFinalizedRequestId + 1; i <= lastRequestId; i++) {
 
             IWithdrawRequestNFT.WithdrawRequest memory request = _requests[i];
-            uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
+
+            // Use the precise share price calculation to maintain conistency with how amount is calculated in `getClaimableAmount`
+            uint256 amountForShares = request.shareOfEEth * preciseSharePrice / E27_PRECISION_BASE;
             uint256 amount = _min(request.amountOfEEth, amountForShares);
 
             totalAmount += amount;
@@ -350,18 +363,19 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         
         lastFinalizedRequestId = uint32(lastRequestId);
 
-        if (totalAmount > 0) {
-            liquidityPool.withdraw(address(this), totalAmount);
-        }
+        liquidityPool.withdraw(address(this), totalAmount);
 
         emit UpdateFinalizedRequestId(uint32(lastRequestId), totalAmount);
     }
 
     // invalid NFTs is non-transferable except for the case they are being burnt by the owner via `seizeInvalidRequest`
     function _beforeTokenTransfer(address /*from*/, address /*to*/, uint256 firstTokenId, uint256 batchSize) internal view override {
-        for (uint256 i = 0; i < batchSize; i++) {
-            uint256 tokenId = firstTokenId + i;
-            require(_requests[tokenId].isValid || msg.sender == owner(), "INVALID_REQUEST");
+        if (msg.sender != owner()) {
+            // if not called by the contract owner, only allow transfers of valid NFTs
+            for (uint256 i = 0; i < batchSize; i++) {
+                uint256 tokenId = firstTokenId + i;
+                require(_requests[tokenId].isValid, "INVALID_REQUEST");
+            }
         }
     }
 

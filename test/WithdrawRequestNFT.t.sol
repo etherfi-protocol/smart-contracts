@@ -311,13 +311,15 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 8);
         // Within `LP.requestWithdraw`
         // - `share` is calculated by `sharesForAmount` as (9 * 98) / 100 = 8.82 ---> (rounded down to) 8
-
+        
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(2);
 
         _finalizeWithdrawalRequest(requestId);
 
-
         vm.prank(bob);
         withdrawRequestNFTInstance.claimWithdraw(requestId, 1);
+
         // Within `claimWithdraw`,
         // - `request.amountOfEEth` is 9
         // - `amountForShares` is (8 * 100) / 98 = 8.16 ---> (rounded down to) 8
@@ -452,8 +454,22 @@ contract WithdrawRequestNFTTest is TestSetup {
         liquidityPoolInstance.rebase(50 ether);
 
         // finalize the requests in multiple batches
+
         _finalizeWithdrawalRequest(5);
+
+        uint256 dustShares1 = withdrawRequestNFTInstance.getAccumulatedDustEEthAmount();
+        
+        // no new NFTs where finalized during this period
+        _finalizeWithdrawalRequest(5);
+        // dust should remain the same amount 
+        assertEq(dustShares1, withdrawRequestNFTInstance.getAccumulatedDustEEthAmount());
+        
+        vm.expectRevert("Invalid lastRequestId submitted");
+        _finalizeWithdrawalRequest(4);
+
         _finalizeWithdrawalRequest(11);
+        _finalizeWithdrawalRequest(12);
+        _finalizeWithdrawalRequest(13);
         _finalizeWithdrawalRequest(17);
         _finalizeWithdrawalRequest(23);
         _finalizeWithdrawalRequest(withdrawRequestNFTInstance.nextRequestId() - 1);
