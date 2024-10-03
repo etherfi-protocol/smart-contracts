@@ -4,7 +4,7 @@ on:
   pull_request:
     branches:
       - staging-2.5
-      # add master and branch protection
+      - master
   workflow_dispatch:
   
 

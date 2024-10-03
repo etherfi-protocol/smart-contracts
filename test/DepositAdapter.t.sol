@@ -186,6 +186,7 @@ contract DepositAdapterTest is TestSetup {
         console.log("Permit Deadline:", permitDeadline);
         vm.expectRevert("PERMIT_EXPIRED");
         depositAdapterInstance.depositStETHForWeETHWithPermit(1 ether, bob, liquifierPermitInput);
+    }
         
     function test_Receive() public {
         vm.expectRevert("ETH_TRANSFERS_NOT_ACCEPTED");
