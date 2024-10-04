@@ -10,8 +10,9 @@ The purpose of this EFIP is to optimize reward skimming when paying out the node
 
 To address this issue, we will now mint 100% of staking rewards from validators and distribute them as follows: 5% to node operators, 5% to the treasury, and the remaining 90% to stakers, as usual.
 
-## Large Mint
-The first mint under this new system will result in a one-time large mint, as staking rewards have been accumulating for over 50,000 validators. These rewards, owed to node operators and the treasury, have not yet been claimed. Consequently, 2,650 eETH will be minted to account for 2,650 ETH in accrued staking rewards for the Eigenpods and EtherFiNodes, which will be distributed to node operators and the EtherFi treasury.
+## First Deposit of Protocol Fees for EETH
+
+The 10% staking rewards have been accumulating and unclaimed for over 50,000 validator for the past 10 months. EtherFi will deposit all the unclaimed protocol rewards, owned by EtherFi, node operators, and bNFTs to mint eETH. As a result, 2,700 eETH will be minted for the 2,700 ETH in accrued staking rewards across Eigenpods and EtherFi Nodes, which will be distributed to the node operators and the EtherFi treasury. Thereafter, EtherFi will be depositing their 10% staking rewards and bnft rewards for eeth on a daily basis. 
 
 ## Motivation
 
