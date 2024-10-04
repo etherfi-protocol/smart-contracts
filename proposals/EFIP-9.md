@@ -26,7 +26,7 @@ Below is a high-level description of the migration process. Please see the pull 
    The sendMigrationMessage function will trigger a series of messages to be sent to the Ethereum mainnet to transfer the weETH tokens from the old OFTAdapter to the new UpgradeableOFTAdapter. The destination is hardcoded to ensure that the assets are securely transferred.
 
 3. **L2 Synchronization**:
-   After the asset migration is complete, the Layer 2 OFTs will be updated to designate the new UpgradeableOFTAdapter as the peer contract. This ensures that the new adapter can communicate with the Layer 2 instances and maintain cross-chain functionality.
+   After the asset migration is complete, the Layer 2 OFTs will be reconfigured to designate the new UpgradeableOFTAdapter as the peer contract. This ensures that the new adapter can communicate with the Layer 2 instances and maintain cross-chain functionality.
 
 ## References
 
