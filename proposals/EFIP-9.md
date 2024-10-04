@@ -2,7 +2,7 @@
 
 **Author**: Jacob Firek (jacob@ether.fi)
 
-**Date**: 2023-10-3
+**Date**: 2023-10-03
 
 ## Summary
 
