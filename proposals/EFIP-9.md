@@ -20,7 +20,7 @@ LayerZero provides a generic base layer for the bridging of any token via OFT. T
 Below is a high-level description of the migration process. Please see the pull request and audit linked below for more details.
 
 1. **Custom Migration Contract**:
-   A custom migrationOFT contract will be deployed on Arbitrum to facilitate the migration process. This contract will allow us to send migration messages to mainnet with a hardcoded destination of the Upgradeable OFT Adapter.
+   A custom migrationOFT contract will be deployed on Arbitrum to facilitate the migration process. This contract will allow us to send migration messages to mainnet with a hardcoded destination of the UpgradeableOFTAdapter.
 
 2. **Asset Transfer**:
    The sendMigrationMessage function will trigger a series of messages to be sent to the Ethereum mainnet to transfer the weETH tokens from the old OFTAdapter to the new UpgradeableOFTAdapter. The destination is hardcoded to ensure that the assets are securely transferred.
