@@ -218,6 +218,7 @@ contract AuctionManager is
 
         bid.isActive = true;
         numberOfActiveBids++;
+        accumulatedRevenue -= bid.amount;
         emit BidReEnteredAuction(_bidId);
     }
 
