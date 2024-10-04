@@ -10,7 +10,7 @@ Our current [OFT Adapter](https://etherscan.io/address/0xFE7fe01F8B9A76803aF3750
 
 ## Motivation
 
-LayerZero provides a generic base layer for the bridging of any token via OFT. Their contracts are minimal and lack security features. Moving to an upgradeable version of the OFTAdapter will allow the protocol to add these features and ensure future flexibility to introduce improvements:
+LayerZero provides a generic base layer for the bridging of any token via OFT. Their contracts are minimal and lack security features. Moving to an upgradeable version of the OFTAdapter will allow the protocol to add these features listed below and maintain flexibility for future improvements:
  - rate limiting 
  - pausing of the contract 
  - queuing of large transfers
