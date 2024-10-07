@@ -287,6 +287,32 @@ contract TimelockTest is TestSetup {
         bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateEigenLayerOperatingAdmin.selector, 0x44358b1cc2C296fFc7419835438D1BD97Ec1FB78, true);
         _execute_timelock(target, data, true, true, true, true);
     }
+
+    function test_efip4() public {
+        initializeRealisticFork(MAINNET_FORK);
+        {
+            address target = address(liquidityPoolInstance);
+            bytes memory data = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0xa8A8Be862BA6301E5949ABDE93b1D892C14FfB1F);
+            _execute_timelock(target, data, true, true, true, true);
+        }
+        {
+            address target = address(liquidityPoolInstance);
+            bytes memory data = abi.encodeWithSelector(LiquidityPool.setTreasury.selector, 0xf40bcc0845528873784F36e5C105E62a93ff7021);
+            _execute_timelock(target, data, true, true, true, true);
+        }
+
+        {
+            address target = address(etherFiOracleInstance);
+            bytes memory data = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0x99BE559FAdf311D2CEdeA6265F4d36dfa4377B70);
+            _execute_timelock(target, data, true, true, true, true);
+        }
+
+        {
+            address target = address(etherFiAdminInstance);
+            bytes memory data = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0x92c27bA54A62fcd41d3df9Fd2dC5C8dfacbd3C4C);
+            _execute_timelock(target, data, true, true, true, true);
+        }
+    }
 }
 
 // {"version":"1.0","chainId":"1
