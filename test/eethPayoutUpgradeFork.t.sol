@@ -99,8 +99,8 @@ contract eethPayoutUpgradeTest is TestSetup {
         console2.log("theoretical_totalValueOutOfLp: ", theoretical_totalValueOutOfLp);
 
         
-        assertApproxEqAbs(theoretical_totalValueOutOfLp, int128(totalValueOutOfLpAfter), 10);
-        assertApproxEqAbs(balOfTreasury, _protocolFees, 10);
+        assertApproxEqAbs(theoretical_totalValueOutOfLp, int128(totalValueOutOfLpAfter), 1);
+        assertApproxEqAbs(balOfTreasury, _protocolFees, 1);
         assert(newRate > oldRate);
         vm.stopPrank(); 
     }
