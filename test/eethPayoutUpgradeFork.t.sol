@@ -73,6 +73,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         vm.startPrank(committeeMember);
 
         //todo: adjust value
+        skip(100);
         etherFiOracleInstance.submitReport(report);
         vm.stopPrank();
         vm.startPrank(oracleAdmin);
