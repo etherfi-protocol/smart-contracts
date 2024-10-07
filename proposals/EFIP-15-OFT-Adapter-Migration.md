@@ -1,4 +1,4 @@
-# [EFIP-14] OFT Adapter Migration
+# [EFIP-15] OFT Adapter Migration
 
 **Author**: Jacob Firek (jacob@ether.fi)
 
