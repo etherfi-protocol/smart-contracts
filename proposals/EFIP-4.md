@@ -30,9 +30,9 @@ To implement this proposal, we need to report the rewards accrued to the treasur
 4. Call setStakingRewardsSplit to set the treasury's allocation to 0 and reallocate it to the TNFT.
 
 ## Audits
--[Nethermind Audit Report](https://file.notion.so/f/f/a2eb6f5b-6767-43e2-890d-4acb71d6176b/3dde22f1-3267-4997-98cc-e4417ec0f94b/EFIP-4_Processing_staking_to_Treasury_Node_Operators_in_eETH_-_HackMD.pdf?table=block&id=10db0952-7c43-800d-a80f-eed35f1269cb&spaceId=a2eb6f5b-6767-43e2-890d-4acb71d6176b&expirationTimestamp=1727827200000&signature=DvOO3EtEMg6ul4REzVIPWaIWjnFfP5boNDorqxCCMc0&downloadName=%5BEFIP-4%5D+Processing+staking+to+%7BTreasury%2C+Node+Operators%7D+in+eETH+-+HackMD.pdf)
+- [Nethermind Audit Report](./references/efip-4-nethermind-review.md)
 
--[Certora Draft Report](https://file.notion.so/f/f/a2eb6f5b-6767-43e2-890d-4acb71d6176b/52e43580-5be3-484e-8009-7c5d3ae500dd/EtherFi_draft_report.pdf?table=block&id=10db0952-7c43-80bd-9f43-e55ea5974de5&spaceId=a2eb6f5b-6767-43e2-890d-4acb71d6176b&expirationTimestamp=1727827200000&signature=rPkxoNUsLz2beenBpqbu987QBbw1zX5Y0wz6fq5CBUA&downloadName=EtherFi+draft+report.pdf)
+- [Certora Draft Report](../audits/2024.10.08%20-%20Certora%20-%20EtherFi%20draft.pdf)
 
 ## Copyright
 
