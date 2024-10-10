@@ -99,6 +99,4 @@ interface IEtherFiNode {
         address _bnftHolder,
         uint256 _bnftAmount
     ) external;
-
-    function moveFundsToManager(uint256 _amount) external;
 }
