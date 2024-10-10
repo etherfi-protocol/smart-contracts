@@ -393,11 +393,6 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         return safeBalance + claimableBalance;
     }
 
-    function moveFundsToManager(uint256 _amount) external onlyEtherFiNodeManagerContract {
-        (bool sent, ) = etherFiNodesManager.call{value: _amount, gas: 6000}("");
-        require(sent, "ETH_SEND_FAILED");
-    }
-
     function getFullWithdrawalPayouts(
         IEtherFiNodesManager.ValidatorInfo memory _info,
         IEtherFiNodesManager.RewardsSplit memory _SRsplits
