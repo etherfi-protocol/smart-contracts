@@ -20,6 +20,9 @@ contract MembershipManagerTest is TestSetup {
 
 
         _upgradeMembershipManagerFromV0ToV1();
+
+        vm.prank(membershipManagerV1Instance.owner());
+        membershipManagerV1Instance.initializeV2dot5();
     }
 
     function test_withdrawalPenalty() public {
@@ -1039,7 +1042,7 @@ contract MembershipManagerTest is TestSetup {
             uint256 requestId = membershipManagerV1Instance.requestWithdrawAndBurn(token);
 
             _finalizeWithdrawalRequest(requestId);
-            
+
             vm.prank(actor);
             withdrawRequestNFTInstance.claimWithdraw(requestId);
 
@@ -1061,6 +1064,10 @@ contract MembershipManagerTest is TestSetup {
         // console.log("resting Rewards", liquidityPoolInstance.amountForShare(membershipManagerV1Instance.sharesReservedForRewards()));
         assertEq(totalActorsBalance + address(liquidityPoolInstance).balance, totalMoneySupply);
         // assertLe(membershipManagerV1Instance.sharesReservedForRewards(), eETHInstance.shares(address(membershipManagerV1Instance)));
+
+        // ensure after all operations that shares should be very close to zero minus rounding and slippage
+        uint256 roundingThreshold = 1 gwei;
+        assert(roundingThreshold - membershipManagerV1Instance.membershipShares() > 0);
     }
 
     function test_eap_migration() public {
