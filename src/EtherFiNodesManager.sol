@@ -440,7 +440,7 @@ contract EtherFiNodesManager is
     /// @param _selector method selector
     /// @param _target call target for forwarded call
     /// @param _allowed enable or disable the call
-    function updateAllowedForwardedExternalCalls(bytes4 _selector, address _target, bool _allowed) external onlyOwner {
+    function updateAllowedForwardedExternalCalls(bytes4 _selector, address _target, bool _allowed) external {
         if (!roleRegistry.hasRole(WHITELIST_UPDATER, msg.sender)) revert IncorrectRole();
 
         allowedForwardedExternalCalls[_selector][_target] = _allowed;
