@@ -74,7 +74,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
                 exitedValidators: new uint256[](0),
                 exitedValidatorsExitTimestamps: new uint32[](0),
                 slashedValidators: new uint256[](0),
-                withdrawalRequestsToInvalidate: new uint256[](0),
+                withdrawalRequestsToInvalidate: new uint32[](0),
                 lastFinalizedWithdrawalRequestId: 21696,
                 eEthTargetAllocationWeight: 0,
                 etherFanTargetAllocationWeight: 0,
@@ -230,7 +230,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         uint256 postTotalPooledEth = liquidityPoolInstance.getTotalPooledEther();
         uint256 boost = membershipManagerV1Instance.fanBoostThresholdEthAmount();
 
-        assert(preTotalPooledEth + accruedRewards + boost == postTotalPooledEth);
+        assertEq(preTotalPooledEth + accruedRewards + boost, postTotalPooledEth + report.finalizedWithdrawalAmount);
     }
 
     //0xab30d861d075d595fdff4dc100568722047230ceea4916e4d7eceff3804c50c4 admin

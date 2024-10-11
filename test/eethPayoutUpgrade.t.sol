@@ -54,7 +54,7 @@ contract eethPayoutUpgradeTest is TestSetup {
             exitedValidators: new uint256[](0),
             exitedValidatorsExitTimestamps: new uint32[](0),
             slashedValidators: new uint256[](0),
-            withdrawalRequestsToInvalidate: new uint256[](0),
+            withdrawalRequestsToInvalidate: new uint32[](0),
             lastFinalizedWithdrawalRequestId: 30403,
             eEthTargetAllocationWeight: 0,
             etherFanTargetAllocationWeight: 0,
