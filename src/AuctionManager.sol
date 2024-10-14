@@ -25,7 +25,7 @@ contract AuctionManager is
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    uint128 public whitelistBidAmount;
+    uint128 public DEPRECATED_whitelistBidAmount;
     uint64 public minBidAmount;
     uint64 public maxBidAmount;
     uint256 public numberOfBids;
@@ -35,7 +35,7 @@ contract AuctionManager is
     IProtocolRevenueManager public DEPRECATED_protocolRevenueManager;
 
     address public stakingManagerContractAddress;
-    bool public whitelistEnabled;
+    bool public DEPRECATED_whitelistEnabled;
 
     mapping(uint256 => Bid) public bids;
 
@@ -63,8 +63,6 @@ contract AuctionManager is
     event BidCreated(address indexed bidder, uint256 amountPerBid, uint256[] bidIdArray, uint64[] ipfsIndexArray);
     event BidCancelled(uint256 indexed bidId);
     event BidReEnteredAuction(uint256 indexed bidId);
-    event WhitelistDisabled(bool whitelistStatus);
-    event WhitelistEnabled(bool whitelistStatus);
 
     error IncorrectRole();
 
@@ -83,11 +81,11 @@ contract AuctionManager is
     ) external initializer {
         require(_nodeOperatorManagerContract != address(0), "No Zero Addresses");
         
-        whitelistBidAmount = 0.001 ether;
+        DEPRECATED_whitelistBidAmount = 0.001 ether;
         minBidAmount = 0.01 ether;
         maxBidAmount = 5 ether;
         numberOfBids = 1;
-        whitelistEnabled = true;
+        DEPRECATED_whitelistEnabled = true;
 
         nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerContract);
 
@@ -122,36 +120,13 @@ contract AuctionManager is
         uint256 _bidAmountPerBid
     ) external payable whenNotPaused nonReentrant returns (uint256[] memory) {
         require(_bidSize > 0, "Bid size is too small");
-        if (whitelistEnabled) {
-            require(
-                nodeOperatorManager.isWhitelisted(msg.sender),
-                "Only whitelisted addresses"
-            );
-            require(
-                msg.value == _bidSize * _bidAmountPerBid &&
-                    _bidAmountPerBid >= whitelistBidAmount &&
-                    _bidAmountPerBid <= maxBidAmount,
-                "Incorrect bid value"
-            );
-        } else {
-            if (
-                nodeOperatorManager.isWhitelisted(msg.sender)
-            ) {
-                require(
-                    msg.value == _bidSize * _bidAmountPerBid &&
-                        _bidAmountPerBid >= whitelistBidAmount &&
-                        _bidAmountPerBid <= maxBidAmount,
-                    "Incorrect bid value"
-                );
-            } else {
-                require(
+        require(
                     msg.value == _bidSize * _bidAmountPerBid &&
                         _bidAmountPerBid >= minBidAmount &&
                         _bidAmountPerBid <= maxBidAmount,
                     "Incorrect bid value"
                 );
-            }
-        }
+
         uint64 keysRemaining = nodeOperatorManager.getNumKeysRemaining(msg.sender);
         require(_bidSize <= keysRemaining, "Insufficient public keys");
 
@@ -247,24 +222,6 @@ contract AuctionManager is
         require(sent, "Failed to send Ether");
     }
 
-    /// @notice Disables the whitelisting phase of the bidding
-    /// @dev Allows both regular users and whitelisted users to bid
-    function disableWhitelist() public {
-        if (!roleRegistry.hasRole(AUCTION_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-
-        whitelistEnabled = false;
-        emit WhitelistDisabled(whitelistEnabled);
-    }
-
-    /// @notice Enables the whitelisting phase of the bidding
-    /// @dev Only users who are on a whitelist can bid
-    function enableWhitelist() public {
-        if (!roleRegistry.hasRole(AUCTION_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-
-        whitelistEnabled = true;
-        emit WhitelistEnabled(whitelistEnabled);
-    }
-
     // Pauses the contract
     function pauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
@@ -337,22 +294,21 @@ contract AuctionManager is
         stakingManagerContractAddress = _stakingManagerContractAddress;
     }
 
-    /// @notice Updates the minimum bid price for a non-whitelisted bidder
+    /// @notice Updates the minimum bid price for bidders
     /// @param _newMinBidAmount the new amount to set the minimum bid price as
     function setMinBidPrice(uint64 _newMinBidAmount) external {
         if (!roleRegistry.hasRole(AUCTION_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         
-        require(_newMinBidAmount < maxBidAmount, "Min bid exceeds max bid");
-        require(_newMinBidAmount >= whitelistBidAmount, "Min bid less than whitelist bid amount");
+        require(_newMinBidAmount <= maxBidAmount, "Min bid exceeds max bid");
         minBidAmount = _newMinBidAmount;
     }
 
-    /// @notice Updates the maximum bid price for both whitelisted and non-whitelisted bidders
+    /// @notice Updates the maximum bid price for bidders
     /// @param _newMaxBidAmount the new amount to set the maximum bid price as
     function setMaxBidPrice(uint64 _newMaxBidAmount) external {
         if (!roleRegistry.hasRole(AUCTION_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
-        require(_newMaxBidAmount > minBidAmount, "Min bid exceeds max bid");
+        require(_newMaxBidAmount >= minBidAmount, "Min bid exceeds max bid");
         maxBidAmount = _newMaxBidAmount;
     }
 
@@ -362,15 +318,6 @@ contract AuctionManager is
         if (!roleRegistry.hasRole(AUCTION_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
         accumulatedRevenueThreshold = _newThreshold;
-    }
-
-    /// @notice Updates the minimum bid price for a whitelisted address
-    /// @param _newAmount the new amount to set the minimum bid price as
-    function updateWhitelistMinBidAmount(
-        uint128 _newAmount
-    ) external onlyOwner {
-        require(_newAmount < minBidAmount && _newAmount > 0, "Invalid Amount");
-        whitelistBidAmount = _newAmount;
     }
 
     function updateNodeOperatorManager(address _address) external onlyOwner {
