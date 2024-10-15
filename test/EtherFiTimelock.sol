@@ -313,6 +313,15 @@ contract TimelockTest is TestSetup {
             _execute_timelock(target, data, true, true, true, true);
         }
     }
+
+    function test_whitelist_RewardsCoordinator_processClaim() public {
+        initializeRealisticFork(MAINNET_FORK);
+        address target = address(managerInstance);
+        bytes4 selector = 0x3ccc861d;
+
+        bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector, selector, 0x7750d328b314EfFa365A0402CcfD489B80B0adda, true);
+        _execute_timelock(target, data, true, true, true, true);
+    }
 }
 
 // {"version":"1.0","chainId":"1
