@@ -450,18 +450,21 @@ contract LiquifierTest is TestSetup {
         uint256 beforeLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
         uint256 totalValueOutOfLpBefore = liquidityPoolInstance.totalValueOutOfLp(); 
         uint256 totalValueInLpBefore = liquidityPoolInstance.totalValueInLp(); 
+        uint256 preBalance = IERC20(liquifierInstance.lido()).balanceOf(address(liquifierInstance));
         liquifierInstance.swapEEthForStEth(50 ether);
+        uint256 postBalance = IERC20(liquifierInstance.lido()).balanceOf(address(liquifierInstance));
+        uint256 changeInBalance = preBalance - postBalance;
         uint256 afterTVL = liquidityPoolInstance.getTotalPooledEther();
         uint256 afterLiquifierTotalPooledEther = liquifierInstance.getTotalPooledEther();
         uint256 totalValueOutOfLpAfter = liquidityPoolInstance.totalValueOutOfLp();
         uint256 totalValueInLpAfter = liquidityPoolInstance.totalValueInLp();  
         vm.stopPrank();
         // Check LP eth balance remains same, eeth supply decreases, liquifier total pooled ether should decrease
-        assertApproxEqAbs(afterTVL + 50 ether, beforeTVL, 1);
-        assertApproxEqAbs(afterLiquifierTotalPooledEther + 50 ether, beforeLiquifierTotalPooledEther, 1);
-        assertApproxEqAbs(totalValueOutOfLpAfter + 50 ether, totalValueOutOfLpBefore, 1);
+        assertApproxEqAbs(IERC20(address(liquifierInstance.lido())).balanceOf(bob), changeInBalance, 1);
+        assertApproxEqAbs(afterTVL + changeInBalance, beforeTVL, 1);
+        assertApproxEqAbs(afterLiquifierTotalPooledEther + changeInBalance, beforeLiquifierTotalPooledEther, 1);
+        assertApproxEqAbs(totalValueOutOfLpAfter, totalValueOutOfLpBefore, changeInBalance);
         assertApproxEqAbs(totalValueInLpAfter, totalValueInLpBefore, 1);
-
     }
 
     //same as no fees for whitelisted user

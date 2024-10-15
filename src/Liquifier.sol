@@ -182,10 +182,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
         if (_amount > liquidityPool.eETH().balanceOf(msg.sender)) revert NotEnoughBalance();
         if (!roleRegistry.hasRole(EETH_STETH_SWAPPER, msg.sender)) revert IncorrectRole();
-
+        uint256 preBalance = liquidityPool.eETH().balanceOf(address(this));
         IERC20(address(liquidityPool.eETH())).safeTransferFrom(msg.sender, address(this), _amount);
+        uint256 postBalance = liquidityPool.eETH().balanceOf(address(this));
+        uint256 transferredAmount = postBalance - preBalance;
         IERC20(address(lido)).safeTransfer(msg.sender, _amount);
-        liquidityPool.withdraw(address(liquidityPool), _amount-1);
+        liquidityPool.withdraw(address(liquidityPool), transferredAmount);
     }
 
     function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused returns (uint256) {
