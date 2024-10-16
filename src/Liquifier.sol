@@ -291,7 +291,11 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         pausers[_address] = _isPauser;
     }
 
-    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyOwner {
+    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyAdmin {
+        tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
+    }
+
+    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyAdmin {
         quoteStEthWithCurve = _quoteStEthWithCurve;
     }
 

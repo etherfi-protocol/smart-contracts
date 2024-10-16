@@ -85,8 +85,10 @@ contract LiquifierTest is TestSetup {
 
         vm.deal(alice, 100 ether);
 
-        vm.prank(liquifierInstance.owner());
+        vm.startPrank(liquifierInstance.owner());
         liquifierInstance.updateQuoteStEthWithCurve(true);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500); // 5%
+        vm.stopPrank();
 
         vm.startPrank(alice);
         stEth.submit{value: 10 ether}(address(0));
@@ -94,7 +96,7 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.depositWithERC20(address(stEth), 10 ether, address(0));
         vm.stopPrank();
 
-        assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.1 ether);
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), 10 ether - 0.5 ether, 0.1 ether);
     }
 
     function test_deopsit_stEth_and_swap() internal {
