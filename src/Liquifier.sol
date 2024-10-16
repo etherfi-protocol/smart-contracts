@@ -168,11 +168,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
         // The L1SyncPool's `_anticipatedDeposit` should be the only place to mint the `token` and always send its entirety to the Liquifier contract
         if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
-
-        uint256 dx = quoteByMarketValue(_token, _amount);
-
-        // discount
-        dx = (10000 - tokenInfos[_token].discountInBasisPoints) * dx / 10000;
+    
+        uint256 dx = quoteByDiscountedValue(_token, _amount);
         require(!isDepositCapReached(_token, dx), "CAPPED");
 
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, dx, _referral);
@@ -418,6 +415,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         }
 
         revert NotSupportedToken();
+    }
+
+    // Calculates the amount of eETH that will be minted for a given token considering the discount rate
+    function quoteByDiscountedValue(address _token, uint256 _amount) public view returns (uint256) {
+        uint256 marketValue = quoteByMarketValue(_token, _amount);
+
+        return (10000 - tokenInfos[_token].discountInBasisPoints) * marketValue / 10000;
     }
 
     function verifyQueuedWithdrawal(address _user, IDelegationManager.Withdrawal calldata _queuedWithdrawal) public view returns (bytes32) {
