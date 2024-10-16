@@ -101,6 +101,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error NotRegistered();
     error WrongOutput();
     error IncorrectCaller();
+    error IncorrectAmount();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -213,7 +214,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function stEthRequestWithdrawal(uint256 _amount) public onlyAdmin returns (uint256[] memory) {
-        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT() || _amount < lido.balanceOf(address(this))) revert NotEnoughBalance();
+        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) revert IncorrectAmount();
+        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
 
         tokenInfos[address(lido)].ethAmountPendingForWithdrawals += uint128(_amount);
 
