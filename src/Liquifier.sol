@@ -53,7 +53,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     uint32 public DEPRECATED_eigenLayerWithdrawalClaimGasCost;
     uint32 public timeBoundCapRefreshInterval; // seconds
 
-    bool public DEPRECATED_quoteStEthWithCurve;
+    bool public quoteStEthWithCurve;
 
     uint128 public DEPRECATED_accumulatedFee;
 
@@ -130,20 +130,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
         DEPRECATED_eigenLayerWithdrawalClaimGasCost = 150_000;
-    }
-
-    function initializeOnUpgrade(address _eigenLayerDelegationManager, address _pancakeRouter) external onlyOwner {
-        // Disable the deposits on {cbETH, wBETH}
-        updateDepositCap(address(cbEth), 0, 0);
-        updateDepositCap(address(wbEth), 0, 0);
-
-        pancakeRouter = IPancackeV3SwapRouter(_pancakeRouter);
-        eigenLayerDelegationManager = IDelegationManager(_eigenLayerDelegationManager);
-    }
-
-    function initializeL1SyncPool(address _l1SyncPool) external onlyOwner {
-        if (l1SyncPool != address(0)) revert();
-        l1SyncPool = _l1SyncPool;
     }
 
     receive() external payable {}
@@ -305,6 +291,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         pausers[_address] = _isPauser;
     }
 
+    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyOwner {
+        quoteStEthWithCurve = _quoteStEthWithCurve;
+    }
+
     //Pauses the contract
     function pauseContract() external onlyPauser {
         _pause();
@@ -407,7 +397,11 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (!isTokenWhitelisted(_token)) revert NotSupportedToken();
 
         if (_token == address(lido)) {
-            return _amount; /// 1:1 from stETH to eETH
+            if (quoteStEthWithCurve) {
+                return _min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
+            } else {
+                return _amount; /// 1:1 from stETH to eETH
+            }
         } else if (_token == address(cbEth)) {
             return _min(_amount * cbEth.exchangeRate() / 1e18, ICurvePoolQuoter2(address(cbEth_Eth_Pool)).get_dy(1, 0, _amount));
         } else if (_token == address(wbEth)) {

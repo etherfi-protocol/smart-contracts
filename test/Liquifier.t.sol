@@ -85,6 +85,9 @@ contract LiquifierTest is TestSetup {
 
         vm.deal(alice, 100 ether);
 
+        vm.prank(liquifierInstance.owner());
+        liquifierInstance.updateQuoteStEthWithCurve(true);
+
         vm.startPrank(alice);
         stEth.submit{value: 10 ether}(address(0));
         stEth.approve(address(liquifierInstance), 10 ether);
