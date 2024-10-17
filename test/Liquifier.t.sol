@@ -85,13 +85,22 @@ contract LiquifierTest is TestSetup {
 
         vm.deal(alice, 100 ether);
 
+        vm.startPrank(liquifierInstance.owner());
+        liquifierInstance.updateQuoteStEthWithCurve(true);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500); // 5%
+        vm.stopPrank();
+
         vm.startPrank(alice);
         stEth.submit{value: 10 ether}(address(0));
         stEth.approve(address(liquifierInstance), 10 ether);
         liquifierInstance.depositWithERC20(address(stEth), 10 ether, address(0));
         vm.stopPrank();
 
-        assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.1 ether);
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), 10 ether - 0.5 ether, 0.1 ether);
+
+        uint256 aliceQuotedEETH = liquifierInstance.quoteByDiscountedValue(address(stEth), 10 ether);
+        // alice will actually receive 1 wei less due to the infamous 1 wei rounding corner case
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), aliceQuotedEETH, 1);
     }
 
     function test_deopsit_stEth_and_swap() internal {
