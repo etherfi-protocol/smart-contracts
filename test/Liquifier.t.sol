@@ -97,6 +97,10 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
 
         assertApproxEqAbs(eETHInstance.balanceOf(alice), 10 ether - 0.5 ether, 0.1 ether);
+
+        uint256 aliceQuotedEETH = liquifierInstance.quoteByDiscountedValue(address(stEth), 10 ether);
+        // alice will actually receive 1 wei less due to the infamous 1 wei rounding corner case
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), aliceQuotedEETH, 1);
     }
 
     function test_deopsit_stEth_and_swap() internal {
