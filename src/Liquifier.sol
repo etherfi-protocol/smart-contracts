@@ -523,7 +523,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     
     function _completeWithdrawals(IDelegationManager.Withdrawal memory _queuedWithdrawal) internal {
         bytes32 withdrawalRoot = eigenLayerDelegationManager.calculateWithdrawalRoot(_queuedWithdrawal);
-        if (!isRegisteredQueuedWithdrawals[withdrawalRoot]) revert NotRegistered();
 
         uint256 numStrategies = _queuedWithdrawal.strategies.length;
         for (uint256 i = 0; i < numStrategies; i++) {
