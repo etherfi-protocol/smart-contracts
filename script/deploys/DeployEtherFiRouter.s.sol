@@ -39,7 +39,7 @@ contract DeployEtherFiRewardsRouter is Script {
 
         address liquidityPoolProxyAddress = addressProvider.getContractAddress("LiquidityPool");
         bytes memory initializerData =  abi.encodeWithSelector(EtherFiRewardsRouter.initialize.selector);
-        EtherFiRewardsRouter etherFiRewardsRouterImplementation = new EtherFiRewardsRouter(liquidityPoolProxyAddress, roleRegistryProxyAddress, treasuryGnosisSafeAddress);
+        EtherFiRewardsRouter etherFiRewardsRouterImplementation = new EtherFiRewardsRouter(liquidityPoolProxyAddress, treasuryGnosisSafeAddress, roleRegistryProxyAddress);
         UUPSProxy etherFiRewardsRouterProxy = new UUPSProxy(address(etherFiRewardsRouterImplementation), initializerData);
     }
 }
