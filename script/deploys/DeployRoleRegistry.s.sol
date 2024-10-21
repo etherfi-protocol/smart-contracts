@@ -19,11 +19,10 @@ contract DeployRoleRegistry is Script {
 
     AddressProvider public addressProvider;
     ///////////////////////////////////////
-    address superAdmin = address(0xc351788DDb96cD98d99E62C97f57952A8b3Fc1B5); //replace with actual super admin address
+    address superAdmin = address(0x8D5AAc5d3d5cda4c404fA7ee31B0822B648Bb150); //replace with actual super admin address
     //////////////////////////////////////
 
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast();
 
         RoleRegistry roleRegistryImplementation = new RoleRegistry();

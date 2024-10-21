@@ -20,17 +20,16 @@ contract DeployEtherFiRewardsRouter is Script {
 
     AddressProvider public addressProvider;
     ///////////////////////////////////////
-    address roleRegistryProxyAddress = address(0x084C62123FccfC9fA7cbc3952cE9321259C0EcB9); //replace with deployed RoleRegistryProxy address
+    address roleRegistryProxyAddress = address(0x1d3Af47C1607A2EF33033693A9989D1d1013BB50); //replace with deployed RoleRegistryProxy address
     address treasuryGnosisSafeAddress = address(0x0c83EAe1FE72c390A02E426572854931EefF93BA);
-    address etherfiRouterAdmin = address(0xc351788DDb96cD98d99E62C97f57952A8b3Fc1B5);
+    address etherfiRouterAdmin = address(0xc13C06899a9BbEbB3E2b38dBe86e4Ea8852AFC9b);
     //////////////////////////////////////
 
     function run() external {
 
         address addressProviderAddress = vm.envAddress("CONTRACT_REGISTRY");
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
 
         RoleRegistry roleRegistryInstance = RoleRegistry(roleRegistryProxyAddress);
         roleRegistryInstance.grantRole(keccak256("ETHERFI_ROUTER_ADMIN"), etherfiRouterAdmin);
