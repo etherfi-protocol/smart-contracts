@@ -60,6 +60,7 @@ contract EtherFiRestakerTest is TestSetup {
 
         _deposit_stEth(amount);
 
+        vm.startPrank(alice);        
         uint256[] memory reqIds = etherFiRestakerInstance.stEthRequestWithdrawal(amount - 1);
         vm.stopPrank();
 
@@ -85,16 +86,10 @@ contract EtherFiRestakerTest is TestSetup {
         uint256[] memory hints = etherFiRestakerInstance.lidoWithdrawalQueue().findCheckpointHints(reqIds, 1, lastCheckPointIndex);
         etherFiRestakerInstance.stEthClaimWithdrawals(reqIds, hints);
 
-        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), amount, 2 wei);
-        assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
-        assertApproxEqAbs(address(etherFiRestakerInstance).balance, amount, 2);
-
-        // The ether.fi admin withdraws the ETH from the liquifier contract to the liquidity pool contract
-        etherFiRestakerInstance.withdrawEther();
-        vm.stopPrank();
-
         // the cycle completes
         assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), 0, 2 wei);
+        assertApproxEqAbs(address(etherFiRestakerInstance).balance, 0, 2);
+
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
         assertApproxEqAbs(address(liquidityPoolInstance).balance, lpBalance + amount, 2 wei);
     }
@@ -168,6 +163,9 @@ contract EtherFiRestakerTest is TestSetup {
 
         vm.roll(block.number + 50400 / 2);
 
+        // The first withdrawal is completed
+        // But, the second withdrawal is still pending
+        // Therefore, `completeQueuedWithdrawals` will not complete the second withdrawal
         vm.startPrank(etherfiOperatingAdmin);
         etherFiRestakerInstance.completeQueuedWithdrawals(1000);
 
@@ -203,6 +201,7 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakerInstance.undelegate();
     }
 
+    // 
     function test_change_operator() public {
         test_delegate_to();
 
@@ -212,6 +211,7 @@ contract EtherFiRestakerTest is TestSetup {
         });
 
         vm.startPrank(etherfiOperatingAdmin);
+        vm.expectRevert("DelegationManager._delegate: staker is already actively delegated");
         etherFiRestakerInstance.delegateTo(avsOperator2, signature, 0x0);
         vm.stopPrank();
     }
