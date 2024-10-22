@@ -318,17 +318,24 @@ contract TimelockTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         address target = address(managerInstance);
         bytes4 selector = 0x3ccc861d;
-
         bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector, selector, 0x7750d328b314EfFa365A0402CcfD489B80B0adda, true);
         _execute_timelock(target, data, true, true, true, true);
     }
-
+    
     function test_update_treasury() public {
+        initializeRealisticFork(MAINNET_FORK);
         {
-            initializeRealisticFork(MAINNET_FORK);
-            address target = 
-            address(liquidityPoolInstance);
+            address target = address(liquidityPoolInstance);
             bytes memory data = abi.encodeWithSelector(LiquidityPool.setTreasury.selector, 0x0c83EAe1FE72c390A02E426572854931EefF93BA);
+            _execute_timelock(target, data, true, true, true, true);
+        }
+    }
+
+    function test_upgrade_liquifier() public {
+        initializeRealisticFork(MAINNET_FORK);
+        {
+            address target = address(liquifierInstance);
+            bytes memory data = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0x5769ff35545B0BBFA27cc97C9407C5ed9d395455);
             _execute_timelock(target, data, true, true, true, true);
         }
     }
