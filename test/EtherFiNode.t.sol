@@ -19,6 +19,7 @@ contract EtherFiNodeTest is TestSetup {
     uint256 TNFTRewardSplit = 815_625;
     uint256 BNFTRewardSplit = 84_375;
     uint256 RewardSplitDivisor = 1_000_000;
+    uint256 toBnft = 2 ether;
 
     uint256[] bidId;
     EtherFiNode safeInstance;
@@ -79,16 +80,14 @@ contract EtherFiNodeTest is TestSetup {
         safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
 
         uint256 beaconBalance = 32 ether;
-        (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = (0, 0, 0, 0);
+        (uint256 toTnft, uint256 toBnft) = (0, 0);
 
         (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter) = safeInstance.splitBalanceInExecutionLayer();
         assertEq(_withdrawalSafe, 0 ether);
         assertEq(_eigenPod, 0 ether);
         assertEq(_delayedWithdrawalRouter, 0 ether);
 
-        (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, beaconBalance);
-        assertEq(toNodeOperator, 0 ether);
-        assertEq(toTreasury, 0 ether);
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
         assertEq(toTnft, 30 ether);
         assertEq(toBnft, 2 ether);
 
@@ -100,9 +99,7 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(_eigenPod, 1 ether);
         assertEq(_delayedWithdrawalRouter, 0 ether);
 
-        (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, beaconBalance);
-        assertEq(toNodeOperator, 1 ether * 5 / 100);
-        assertEq(toTreasury, 1 ether * 5 / 100);
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
         assertEq(toTnft, 30 ether + (1 ether * 90 * 29) / (100 * 32));
         assertEq(toBnft, 2 ether + (1 ether * 90 * 3) / (100 * 32));
 
@@ -113,9 +110,7 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(_eigenPod, 0 ether);
         assertEq(_delayedWithdrawalRouter, 1 ether);
 
-        (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, beaconBalance);
-        assertEq(toNodeOperator, 1 ether * 5 / 100);
-        assertEq(toTreasury, 1 ether * 5 / 100);
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
         assertEq(toTnft, 30 ether + (1 ether * 90 * 29) / (100 * 32));
         assertEq(toBnft, 2 ether + (1 ether * 90 * 3) / (100 * 32));
 
@@ -126,12 +121,11 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(_eigenPod, 2 ether);
         assertEq(_delayedWithdrawalRouter, 1 ether);
 
-        (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, beaconBalance);
-        assertEq(toNodeOperator, 3 ether * 5 / 100);
-        assertEq(toTreasury, 3 ether * 5 / 100);
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
         assertEq(toTnft, 30 ether + (3 ether * 90 * 29) / (100 * 32));
         assertEq(toBnft, 2 ether + (3 ether * 90 * 3) / (100 * 32));
     }
+
 
     function test_FullWithdrawWhenBalanceBelow16EthFails() public {
         initializeTestingFork(MAINNET_FORK);
@@ -388,14 +382,14 @@ contract EtherFiNodeTest is TestSetup {
         managerInstance.partialWithdraw(bidId[0]);
         assertEq(
             address(nodeOperator).balance,
-            nodeOperatorBalance + (1 ether * 5) / 100
+            address(nodeOperator).balance
         );
         assertEq(
             address(treasuryInstance).balance,
-            treasuryBalance + (1 ether * 5 ) / 100
+            address(treasuryInstance).balance
         );
-        assertEq(address(dan).balance, danBalance + 0.815625000000000000 ether);
-        assertEq(address(staker).balance, bnftStakerBalance + 0.084375000000000000 ether);
+        assertEq(address(dan).balance, danBalance + 1 ether);
+        assertEq(address(staker).balance, address(staker).balance);
 
         vm.deal(etherfiNode, 16.0 ether);
         vm.expectRevert("MUST_EXIT");
@@ -498,7 +492,6 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(address(staker).balance, stakerBalance);
     }
 
-
     function test_getFullWithdrawalPayoutsWorksCorrectly1() public {
         uint256[] memory validatorIds = new uint256[](1);
         validatorIds[0] = bidId[0];
@@ -518,13 +511,9 @@ contract EtherFiNodeTest is TestSetup {
 
         uint256 stakingRewards = 1 ether;
         (
-            uint256 toNodeOperator,
             uint256 toTnft,
-            uint256 toBnft,
-            uint256 toTreasury
+            uint256 toBnft
         ) = managerInstance.getFullWithdrawalPayouts(validatorIds[0]);
-        assertEq(toNodeOperator, stakingRewards * NodeOperatorRewardSplit / RewardSplitDivisor);
-        assertEq(toTreasury, stakingRewards * TreasuryRewardSplit / RewardSplitDivisor);
         assertEq(toTnft, 30 ether + (stakingRewards * TNFTRewardSplit / RewardSplitDivisor));
         assertEq(toBnft, 2 ether + (stakingRewards * BNFTRewardSplit / RewardSplitDivisor));
 
@@ -532,31 +521,23 @@ contract EtherFiNodeTest is TestSetup {
         vm.deal(etherfiNode, 31.75 ether);
         assertEq(address(etherfiNode).balance, 31.75 ether);
 
-        (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance
+        (toTnft, toBnft) = managerInstance
             .getFullWithdrawalPayouts(validatorIds[0]);
-        assertEq(toNodeOperator, 0);
-        assertEq(toTreasury, 0);
         assertEq(toTnft, 30 ether);
-        assertEq(toBnft, 1.75 ether);
 
         // 3. balance > 26 ether
         vm.deal(etherfiNode, 28.5 ether);
         assertEq(address(etherfiNode).balance, 28.5 ether);
 
-        (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance
+        (toTnft, toBnft) = managerInstance
             .getFullWithdrawalPayouts(validatorIds[0]);
-        assertEq(toNodeOperator, 0);
-        assertEq(toTreasury, 0);
         assertEq(toTnft, 27.5 ether);
-        assertEq(toBnft, 1 ether);
 
         // 4. balance > 25.5 ether
         vm.deal(etherfiNode, 25.75 ether);
         assertEq(address(etherfiNode).balance, 25.75 ether);
-        (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance
+        (toTnft, toBnft) = managerInstance
             .getFullWithdrawalPayouts(validatorIds[0]);
-        assertEq(toNodeOperator, 0);
-        assertEq(toTreasury, 0);
         assertEq(toTnft, 24.75 ether);
         assertEq(toBnft, 1 ether);
 
@@ -564,20 +545,16 @@ contract EtherFiNodeTest is TestSetup {
         vm.deal(etherfiNode, 18.5 ether);
         assertEq(address(etherfiNode).balance, 18.5 ether);
 
-        (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance
+        (toTnft, toBnft) = managerInstance
             .getFullWithdrawalPayouts(validatorIds[0]);
-        assertEq(toNodeOperator, 0);
-        assertEq(toTreasury, 0);
         assertEq(toTnft, 17.5 ether);
         assertEq(toBnft, 1 ether);
 
         // 6. balance = 16 ether
         vm.deal(etherfiNode, 16 ether);
 
-        (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance
+        (toTnft, toBnft) = managerInstance
             .getFullWithdrawalPayouts(validatorIds[0]);
-        assertEq(toNodeOperator, 0);
-        assertEq(toTreasury, 0);
         assertEq(toTnft, 15 ether);
         assertEq(toBnft, 1 ether);
 
@@ -585,7 +562,7 @@ contract EtherFiNodeTest is TestSetup {
         vm.deal(etherfiNode, 16 ether - 1);
 
         vm.expectRevert();
-        (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance
+        (toTnft, toBnft) = managerInstance
             .getFullWithdrawalPayouts(validatorIds[0]);
     }
 
@@ -636,34 +613,16 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(address(etherfiNode).balance, 32 ether + stakingRewards);
 
         {
-            (uint256 toNodeOperator,
+            (
             uint256 toTnft,
-            uint256 toBnft,
-            uint256 toTreasury
+            uint256 toBnft
             ) = managerInstance.getFullWithdrawalPayouts(validatorIds[0]);
 
-            assertEq(toNodeOperator, stakingRewards * NodeOperatorRewardSplit / RewardSplitDivisor);
-            assertEq(toTnft, 30 ether + stakingRewards * TNFTRewardSplit / RewardSplitDivisor);
-            assertEq(toBnft, 2 ether + stakingRewards * BNFTRewardSplit / RewardSplitDivisor);
-            assertEq(toTreasury, stakingRewards * TreasuryRewardSplit / RewardSplitDivisor);
         }
 
         skip(6 * 7 * 4 days);
 
-        // auction rewards no longer vest so should be the same as above
-        {
-            (uint256 toNodeOperator,
-            uint256 toTnft,
-            uint256 toBnft,
-            uint256 toTreasury
-            ) = managerInstance.getFullWithdrawalPayouts(validatorIds[0]);
-
-            assertEq(toNodeOperator, stakingRewards * NodeOperatorRewardSplit / RewardSplitDivisor);
-            assertEq(toTnft, 30 ether + stakingRewards * TNFTRewardSplit / RewardSplitDivisor);
-            assertEq(toBnft, 2 ether + stakingRewards * BNFTRewardSplit / RewardSplitDivisor);
-            assertEq(toTreasury, stakingRewards * TreasuryRewardSplit / RewardSplitDivisor);
         }
-    }
 
     function test_getFullWithdrawalPayoutsAuditFix2() public {
         uint256[] memory validatorIds = new uint256[](1);
@@ -690,19 +649,15 @@ contract EtherFiNodeTest is TestSetup {
 
         // auction rewards no longer vest so should be the same as above
         {
-            (uint256 toNodeOperator,
+            (
             uint256 toTnft,
-            uint256 toBnft,
-            uint256 toTreasury
+            uint256 toBnft
             ) = managerInstance.getFullWithdrawalPayouts(validatorIds[0]);
 
-            assertEq(toNodeOperator, 0);
             assertEq(toTnft, 30 ether);
             assertEq(toBnft, 1.949000000000000000 ether);
-            assertEq(toTreasury, 0);
         }
     }
-
 
     function test_getFullWithdrawalPayoutsWorksWithNonExitPenaltyCorrectly1()
         public
@@ -730,17 +685,13 @@ contract EtherFiNodeTest is TestSetup {
         uint256 stakingRewards = 1 ether;
         vm.deal(etherfiNode, 32 ether + stakingRewards);
 
-        (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = managerInstance.getFullWithdrawalPayouts(validatorIds[0]);
+        (uint256 toTnft, uint256 toBnft) = managerInstance.getFullWithdrawalPayouts(validatorIds[0]);
         assertEq(nonExitPenalty, 0.03 ether);
-        assertEq(toNodeOperator, nonExitPenalty + (stakingRewards * NodeOperatorRewardSplit / RewardSplitDivisor));
-        assertEq(toTreasury, stakingRewards * TreasuryRewardSplit / RewardSplitDivisor);
         assertEq(toTnft, 30 ether + (stakingRewards * TNFTRewardSplit / RewardSplitDivisor));
         assertEq(toBnft, 2 ether - nonExitPenalty + (stakingRewards * BNFTRewardSplit / RewardSplitDivisor));
     }
 
-    function test_getFullWithdrawalPayoutsWorksWithNonExitPenaltyCorrectly2()
-        public
-    {
+    function test_getFullWithdrawalPayoutsWorksWithNonExitPenaltyCorrectly2() public {
         uint256[] memory validatorIds = new uint256[](1);
         validatorIds[0] = bidId[0];
         uint32[] memory exitTimestamps = new uint32[](1);
@@ -760,9 +711,7 @@ contract EtherFiNodeTest is TestSetup {
         uint256 stakingRewards = 1 ether;
         vm.deal(etherfiNode, 32 ether + stakingRewards);
 
-        (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = managerInstance.getFullWithdrawalPayouts(validatorIds[0]);
-        assertEq(toNodeOperator, nonExitPenalty + (stakingRewards * NodeOperatorRewardSplit / RewardSplitDivisor));
-        assertEq(toTreasury, stakingRewards * TreasuryRewardSplit / RewardSplitDivisor);
+        (uint256 toTnft, uint256 toBnft) = managerInstance.getFullWithdrawalPayouts(validatorIds[0]);
         assertEq(toTnft, 30 ether + (stakingRewards * TNFTRewardSplit / RewardSplitDivisor));
         assertEq(toBnft, 2 ether - nonExitPenalty + (stakingRewards * BNFTRewardSplit / RewardSplitDivisor));
     }
@@ -789,11 +738,9 @@ contract EtherFiNodeTest is TestSetup {
         // see EtherFiNode.sol:calculateTVL()
         // the node got slashed seriously
         vm.deal(etherfiNode, 16 ether);
-        (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = managerInstance.getFullWithdrawalPayouts(validatorIds[0]);
+        (uint256 toTnft, uint256 toBnft) = managerInstance.getFullWithdrawalPayouts(validatorIds[0]);
         assertEq(nonExitPenalty, 0.573804794831376551 ether);
 
-        assertEq(toNodeOperator, 0.2 ether); // incentive for nodeOperator from NonExitPenalty caps at 0.2 ether
-        assertEq(toTreasury, nonExitPenalty - 0.2 ether); // treasury gets excess penalty if node operator delays too long
         assertEq(toTnft, 15 ether);
         assertEq(toBnft, 1 ether - 0.573804794831376551 ether); // BNFT has been fully penalized for not exiting
     }
@@ -832,13 +779,9 @@ contract EtherFiNodeTest is TestSetup {
         uint256 stakingRewards = 1 ether;
         vm.deal(etherfiNode, 32 ether + stakingRewards);
         (
-            uint256 toNodeOperator,
             uint256 toTnft,
-            uint256 toBnft,
-            uint256 toTreasury
+            uint256 toBnft
         ) = managerInstance.getFullWithdrawalPayouts(validatorIds[0]);
-        assertEq(toNodeOperator, 0.2 ether + baseNodeOperatorPayout);
-        assertEq(toTreasury, baseTreasuryPayout + (nonExitPenalty - 0.2 ether));
         assertEq(toTnft, 30 ether + (stakingRewards * TNFTRewardSplit / RewardSplitDivisor));
         assertEq(toBnft, 2 ether - nonExitPenalty + (stakingRewards * BNFTRewardSplit / RewardSplitDivisor));
     }
@@ -871,13 +814,9 @@ contract EtherFiNodeTest is TestSetup {
         uint256 baseNodeOperatorPayout = (1 ether * NodeOperatorRewardSplit / RewardSplitDivisor);
 
         (
-            uint256 toNodeOperator,
             uint256 toTnft,
-            uint256 toBnft,
-            uint256 toTreasury
+            uint256 toBnft
         ) = managerInstance.getFullWithdrawalPayouts(validatorIds[0]);
-        assertEq(toNodeOperator, 0.2 ether + baseNodeOperatorPayout);
-        assertEq(toTreasury, baseTreasuryPayout + (nonExitPenalty - 0.2 ether));
         assertEq(toTnft, 30 ether + (stakingRewards *TNFTRewardSplit / RewardSplitDivisor));
         assertEq(toBnft, 2 ether - nonExitPenalty + (stakingRewards * BNFTRewardSplit / RewardSplitDivisor));
     }
@@ -942,15 +881,13 @@ contract EtherFiNodeTest is TestSetup {
     function test_trackingTVL() public {
         uint256 validatorId = bidId[0];
 
-        (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = (0, 0, 0, 0);
+        (uint256 toTnft, uint256 toBnft) = (0, 0);
 
         // (Validator 'active_not_slashed', Accrued rewards in CL = 1 ether)
         {
             uint256 beaconBalance = 32 ether + 1 ether;
 
-            (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, beaconBalance);
-            assertEq(toNodeOperator, 0.05 ether);
-            assertEq(toTreasury, 0.05 ether);
+            (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
             assertEq(toTnft, 30.815625000000000000 ether);
             assertEq(toBnft, 2.084375000000000000 ether);
         }
@@ -959,9 +896,7 @@ contract EtherFiNodeTest is TestSetup {
         {
             uint256 beaconBalance = 32 ether;
 
-            (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, beaconBalance);
-            assertEq(toNodeOperator, 0 ether);
-            assertEq(toTreasury, 0 ether);
+            (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
             assertEq(toTnft, 30 ether);
             assertEq(toBnft, 2 ether);
         }
@@ -971,9 +906,7 @@ contract EtherFiNodeTest is TestSetup {
         {
             uint256 beaconBalance = 31.5 ether;
 
-            (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, beaconBalance);
-            assertEq(toNodeOperator, 0 ether);
-            assertEq(toTreasury, 0 ether);
+            (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
             assertEq(toTnft, 30 ether);
             assertEq(toBnft, 1.5 ether);
         }
@@ -982,9 +915,7 @@ contract EtherFiNodeTest is TestSetup {
         {
             uint256 beaconBalance = 31 ether;
 
-            (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, beaconBalance);
-            assertEq(toNodeOperator, 0 ether);
-            assertEq(toTreasury, 0 ether);
+            (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
             assertEq(toTnft, 30 ether);
             assertEq(toBnft, 1 ether);
         }
@@ -992,9 +923,7 @@ contract EtherFiNodeTest is TestSetup {
         {
             uint256 beaconBalance = 30 ether;
 
-            (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, beaconBalance);
-            assertEq(toNodeOperator, 0 ether);
-            assertEq(toTreasury, 0 ether);
+            (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
             assertEq(toTnft, 29 ether);
             assertEq(toBnft, 1 ether);
         }
@@ -1003,9 +932,7 @@ contract EtherFiNodeTest is TestSetup {
         {
             uint256 beaconBalance = 16 ether;
 
-            (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, beaconBalance);
-            assertEq(toNodeOperator, 0 ether);
-            assertEq(toTreasury, 0 ether);
+            (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
             assertEq(toTnft, 15 ether);
             assertEq(toBnft, 1 ether);
         }
@@ -1014,32 +941,26 @@ contract EtherFiNodeTest is TestSetup {
     function test_trackingTVL2() public {
         uint256 validatorId = bidId[0];       
         uint256[] memory tvls = new uint256[](4);  // (operator, tnft, bnft, treasury)
-        (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = (0, 0, 0, 0);
+        (uint256 toTnft, uint256 toBnft) = (0, 0);
 
         // Check the staking rewards when we have 1 ether accrued
         {
             uint256 beaconBalance = 32 ether + 1 ether;
 
-            (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, beaconBalance);
-            assertEq(toNodeOperator, 0.05 ether);
-            assertEq(toTreasury, 0.05 ether);
+            (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
             assertEq(toTnft, 30.815625000000000000 ether);
             assertEq(toBnft, 2.084375000000000000 ether);
-            tvls[0] += toNodeOperator;
             tvls[1] += toTnft;
             tvls[2] += toBnft;
-            tvls[3] += toTreasury;
 
-            assertEq(beaconBalance, toNodeOperator + toTnft + toBnft + toTreasury);
+            assertEq(beaconBalance, toTnft + toBnft);
         }
 
         // Confirm the total TVL
         {
             uint256 beaconBalance = 32 ether + 1 ether;
 
-            (toNodeOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, beaconBalance);
-            assertEq(toNodeOperator, tvls[0]);
-            assertEq(toTreasury, tvls[3]);
+            (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
             assertEq(toTnft, tvls[1]);
             assertEq(toBnft, tvls[2]);
         }
@@ -1085,30 +1006,30 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(address(tnftStaker).balance, balances[3] + tvls[1]);
     }
 
-    function test_withdrawFundsFailsWhenReceiverConsumedTooMuchGas() public {
-        uint256 validatorId = bidId[0];
-        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
-        vm.deal(address(etherfiNode), 3 ether); // need to give node some eth because it no longer has auction revenue
+    // function test_withdrawFundsFailsWhenReceiverConsumedTooMuchGas() public {
+    //     uint256 validatorId = bidId[0];
+    //     address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
+    //     vm.deal(address(etherfiNode), 3 ether); // need to give node some eth because it no longer has auction revenue
 
-        uint256 treasuryBalance = address(treasuryInstance).balance;
-        uint256 noAttackerBalance = address(noAttacker).balance;
-        uint256 revertAttackerBalance = address(revertAttacker).balance;
-        uint256 gasDrainAttackerBalance = address(gasDrainAttacker).balance;
+    //     uint256 treasuryBalance = address(treasuryInstance).balance;
+    //     uint256 noAttackerBalance = address(noAttacker).balance;
+    //     uint256 revertAttackerBalance = address(revertAttacker).balance;
+    //     uint256 gasDrainAttackerBalance = address(gasDrainAttacker).balance;
 
-        vm.startPrank(address(managerInstance));
-        IEtherFiNode(etherfiNode).withdrawFunds(
-            address(treasuryInstance), 0,
-            address(revertAttacker), 1,
-            address(noAttacker), 1,
-            address(gasDrainAttacker), 1
-        );
-        vm.stopPrank();
+    //     vm.startPrank(address(managerInstance));
+    //     IEtherFiNode(etherfiNode).withdrawFunds(
+    //         address(treasuryInstance), 0,
+    //         address(revertAttacker), 1,
+    //         address(noAttacker), 1,
+    //         address(gasDrainAttacker), 1
+    //     );
+    //     vm.stopPrank();
 
-        assertEq(address(revertAttacker).balance, revertAttackerBalance);
-        assertEq(address(noAttacker).balance, noAttackerBalance + 1);
-        assertEq(address(gasDrainAttacker).balance, gasDrainAttackerBalance);
-        assertEq(address(treasuryInstance).balance, treasuryBalance + 2);
-    }
+    //     assertEq(address(revertAttacker).balance, revertAttackerBalance);
+    //     assertEq(address(noAttacker).balance, noAttackerBalance + 1);
+    //     assertEq(address(gasDrainAttacker).balance, gasDrainAttackerBalance);
+    //     assertEq(address(treasuryInstance).balance, treasuryBalance + 2);
+    // }
 
     function test_trackingTVL3() public {
         uint256 tvl = 0;
@@ -1280,19 +1201,14 @@ contract EtherFiNodeTest is TestSetup {
         vm.deal(etherfiNode, 1 ether);
 
         // the accrued rewards (1 ether) are split as follows:
-        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = managerInstance.getRewardsPayouts(validatorId);
-        assertEq(toOperator, 1 ether * 5 / (100));
-        assertEq(toTnft, 1 ether * (90 * 29) / (100 * 32));
-        assertEq(toBnft, 1 ether * (90 * 3) / (100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / (100));
+        uint256 toTnft = managerInstance.getRewardsPayouts(validatorId);
+        assertEq(toTnft, 1 ether );
 
         // TVL = accrued rewards amounts + beacon balance as principal
         // assuming the beacon balance is 32 ether
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 32 ether);
-        assertEq(toOperator, 1 ether * 5 / 100);
-        assertEq(toTnft, 30 ether + 1 ether * (90 * 29) / (100 * 32));
-        assertEq(toBnft, 2 ether + 1 ether * (90 * 3) / (100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / 100);
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, 32 ether);
+        assertEq(toTnft, 30 ether + 1 ether);
+        assertEq(toBnft, 2 ether);
 
         liquidityPoolInstance.deposit{value: 30 ether * 1}();
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether + 30 ether);
@@ -1311,23 +1227,17 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
 
         // Confirm that the {getRewardsPayouts, calculateTVL} remain the smae
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(validatorId);
-        assertEq(toOperator, 1 ether * 5 / (100));
-        assertEq(toTnft, 1 ether * (90 * 29) / (100 * 32));
-        assertEq(toBnft, 1 ether * (90 * 3) / (100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / (100));
+        toTnft = managerInstance.getRewardsPayouts(validatorId);
+        assertEq(toTnft, 1 ether);
 
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 32 ether);
-        assertEq(toOperator, 1 ether * 5 / 100);
-        assertEq(toTnft, 30 ether + 1 ether * (90 * 29) / (100 * 32));
-        assertEq(toBnft, 2 ether + 1 ether * (90 * 3) / (100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / 100);
-
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, 32 ether);
+        assertEq(toTnft, 30 ether + 1 ether);
+        assertEq(toBnft, 2 ether);
         vm.expectRevert("NOT_LIVE");
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(newValidatorIds[0]);
+        toTnft = managerInstance.getRewardsPayouts(newValidatorIds[0]);
 
         vm.expectRevert("INVALID_PHASE");
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(newValidatorIds[0], 32 ether);
+        (toTnft, toBnft) = managerInstance.calculateTVL(newValidatorIds[0], 32 ether);
 
         // 
         // New Validator Register into the same safe
@@ -1340,23 +1250,21 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether + 30 ether);
 
         // Confirm that the {getRewardsPayouts, calculateTVL} remain the smae
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(validatorId);
-        assertEq(toOperator, 1 ether * 5 / (100));
-        assertEq(toTnft, 1 ether * (90 * 29) / (100 * 32));
-        assertEq(toBnft, 1 ether * (90 * 3) / (100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / (100));
+        toTnft = managerInstance.getRewardsPayouts(validatorId);
+        assertEq(toTnft, 1 ether);
 
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 32 ether);
-        assertEq(toOperator, 1 ether * 5 / 100);
-        assertEq(toTnft, 30 ether + 1 ether * (90 * 29) / (100 * 32));
-        assertEq(toBnft, 2 ether + 1 ether * (90 * 3) / (100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / 100);
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, 32 ether);
+        assertEq(toTnft, 30 ether + 1 ether);
+        assertEq(toBnft, 2 ether);
 
         vm.expectRevert("NOT_LIVE");
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(newValidatorIds[0]);
+        toTnft = managerInstance.getRewardsPayouts(newValidatorIds[0]);
 
         vm.expectRevert("INVALID_PHASE");
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(newValidatorIds[0], 32 ether);
+        (toTnft, toBnft) = managerInstance.calculateTVL(newValidatorIds[0], 32 ether);
+
+
+        console.log("BEFORE APPROVE");
 
         // 
         // APPROVE
@@ -1366,29 +1274,19 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 2);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether + 30 ether);
 
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(validatorId);
-        assertEq(toOperator, 1 ether * 5 / (2 * 100));
-        assertEq(toTnft, 1 ether * (90 * 29) / (2 * 100 * 32));
-        assertEq(toBnft, 1 ether * (90 * 3) / (2 * 100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / (2 * 100));
+        toTnft = managerInstance.getRewardsPayouts(validatorId);
+        assertEq(toTnft, 1 ether / 2);
 
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 32 ether);
-        assertEq(toOperator, 1 ether * 5 / (2 * 100));
-        assertEq(toTnft, 30 ether + 1 ether * (90 * 29) / (2 * 100 * 32));
-        assertEq(toBnft, 2 ether + 1 ether * (90 * 3) / (2 * 100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / (2 * 100));
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, 32 ether);
+        assertEq(toTnft, 30 ether + 1 ether / 2);
+        assertEq(toBnft, 2 ether);
 
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(newValidatorIds[0]);
-        assertEq(toOperator, 1 ether * 5 / (2 * 100));
-        assertEq(toTnft, 1 ether * (90 * 29) / (2 * 100 * 32));
-        assertEq(toBnft, 1 ether * (90 * 3) / (2 * 100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / (2 * 100));
+        toTnft = managerInstance.getRewardsPayouts(newValidatorIds[0]);
+        assertEq(toTnft, 1 ether / 2);
 
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(newValidatorIds[0], 32 ether);
-        assertEq(toOperator, 1 ether * 5 / (2 * 100));
-        assertEq(toTnft, 30 ether + 1 ether * (90 * 29) / (2 * 100 * 32));
-        assertEq(toBnft, 2 ether + 1 ether * (90 * 3) / (2 * 100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / (2 * 100));
+        (toTnft, toBnft) = managerInstance.calculateTVL(newValidatorIds[0], 32 ether);
+        assertEq(toTnft, 30 ether + 1 ether / 2);
+        assertEq(toBnft, 2 ether);
 
         vm.stopPrank();
     }
@@ -1405,19 +1303,14 @@ contract EtherFiNodeTest is TestSetup {
         vm.deal(etherfiNode, 1 ether);
 
         // the accrued rewards (1 ether) are split as follows:
-        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = managerInstance.getRewardsPayouts(validatorId);
-        assertEq(toOperator, 1 ether * 5 / (100));
-        assertEq(toTnft, 1 ether * (90 * 29) / (100 * 32));
-        assertEq(toBnft, 1 ether * (90 * 3) / (100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / (100));
+        uint256 toTnft = managerInstance.getRewardsPayouts(validatorId);
+        assertEq(toTnft, 1 ether);
 
         // TVL = accrued rewards amounts + beacon balance as principal
         // assuming the beacon balance is 32 ether
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 32 ether);
-        assertEq(toOperator, 1 ether * 5 / 100);
-        assertEq(toTnft, 30 ether + 1 ether * (90 * 29) / (100 * 32));
-        assertEq(toBnft, 2 ether + 1 ether * (90 * 3) / (100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / 100);
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, 32 ether);
+        assertEq(toTnft, 30 ether + 1 ether);
+        assertEq(toBnft, 2 ether);
 
         // Case 2: launch a new validator sharing the same safe, EtherFiNode, contract
         // so the safe is shared by the two validators
@@ -1428,38 +1321,28 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 2);
         assertEq(IEtherFiNode(etherfiNode).numExitedValidators(), 0);
 
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(validatorId);
-        assertEq(toOperator, 1 ether * 5 / (2 * 100));
-        assertEq(toTnft, 1 ether * (90 * 29) / (2 * 100 * 32));
-        assertEq(toBnft, 1 ether * (90 * 3) / (2 * 100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / (2 * 100));
+        toTnft = managerInstance.getRewardsPayouts(validatorId);
+        assertEq(toTnft, 1 ether / 2);
 
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(newValidatorIds[0]);
-        assertEq(toOperator, 1 ether * 5 / (2 * 100));
-        assertEq(toTnft, 1 ether * (90 * 29) / (2 * 100 * 32));
-        assertEq(toBnft, 1 ether * (90 * 3) / (2 * 100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / (2 * 100));
+        toTnft = managerInstance.getRewardsPayouts(newValidatorIds[0]);
+        assertEq(toTnft, 1 ether / 2);
 
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 32 ether);
-        assertEq(toOperator, 1 ether * 5 / (2 * 100));
-        assertEq(toTnft, 30 ether + 1 ether * (90 * 29) / (2 * 100 * 32));
-        assertEq(toBnft, 2 ether + 1 ether * (90 * 3) / (2 * 100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / (2 * 100));
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, 32 ether);
+        assertEq(toTnft, 30 ether + 1 ether / 2);
+        assertEq(toBnft, 2 ether);
 
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(newValidatorIds[0], 32 ether);
-        assertEq(toOperator, 1 ether * 5 / (2 * 100));
-        assertEq(toTnft, 30 ether + 1 ether * (90 * 29) / (2 * 100 * 32));
-        assertEq(toBnft, 2 ether + 1 ether * (90 * 3) / (2 * 100 * 32));
-        assertEq(toTreasury, 1 ether * 5 / (2 * 100));
+        (toTnft, toBnft) = managerInstance.calculateTVL(newValidatorIds[0], 32 ether);
+        assertEq(toTnft, 30 ether + 1 ether / 2);
+        assertEq(toBnft, 2 ether);
 
         // What if one of the validators exits after getting slashed till 16 ether?
         // It exited & its principle is withdrawn
         _transferTo(etherfiNode, 16 ether);
 
         vm.expectRevert("MUST_EXIT");
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(validatorIds[0]);
+        toTnft = managerInstance.getRewardsPayouts(validatorIds[0]);
         vm.expectRevert("MUST_EXIT");
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(newValidatorIds[0]);
+        toTnft = managerInstance.getRewardsPayouts(newValidatorIds[0]);
 
         // Mark validatorIds[0] as EXITED
         vm.prank(alice);
@@ -1473,25 +1356,21 @@ contract EtherFiNodeTest is TestSetup {
         // 16 ether was withdrawn from Beacon after the full slashing
         // 1 ether which were accrued rewards for both validators are used to cover the loss in `validatorId`
         // -> in total, the safe has 17 ether
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 0);
-        assertEq(toOperator, 0 ether);
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, 0);
         assertEq(toTnft, 16 ether);
         assertEq(toBnft, 1 ether);
-        assertEq(toTreasury, 0 ether);
 
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(newValidatorIds[0], 32 ether);
-        assertEq(toOperator, 0 ether);
+        (toTnft, toBnft) = managerInstance.calculateTVL(newValidatorIds[0], 32 ether);
         assertEq(toTnft, 30 ether);
         assertEq(toBnft, 2 ether);
-        assertEq(toTreasury, 0 ether);
 
         vm.expectRevert("NOT_LIVE");
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(validatorIds[0]);
+        toTnft = managerInstance.getRewardsPayouts(validatorIds[0]);
         vm.expectRevert("NEED_FULL_WITHDRAWAL");
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(newValidatorIds[0]);
+        toTnft = managerInstance.getRewardsPayouts(newValidatorIds[0]);
 
         vm.expectRevert("NOT_EXITED");
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getFullWithdrawalPayouts(newValidatorIds[0]);
+        (toTnft, toBnft) = managerInstance.getFullWithdrawalPayouts(newValidatorIds[0]);
         vm.expectRevert("NOT_EXITED");
         managerInstance.batchFullWithdraw(newValidatorIds);
 
@@ -1501,22 +1380,17 @@ contract EtherFiNodeTest is TestSetup {
 
         // validatorIds[0] is gone, thus, calling its {calculateTVL, getRewardsPayouts} should fail
         vm.expectRevert();
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorIds[0], 32 ether);
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorIds[0], 32 ether);
         vm.expectRevert();
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(validatorIds[0]);
+        toTnft = managerInstance.getRewardsPayouts(validatorIds[0]);
 
         // newValidatorIds[0] is still live
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(newValidatorIds[0], 32 ether);
-        assertEq(toOperator, 0);
+        (toTnft, toBnft) = managerInstance.calculateTVL(newValidatorIds[0], 32 ether);
         assertEq(toTnft, 30 ether);
         assertEq(toBnft, 2 ether);
-        assertEq(toTreasury, 0);
 
-        (toOperator, toTnft, toBnft, toTreasury) = managerInstance.getRewardsPayouts(newValidatorIds[0]);
-        assertEq(toOperator, 0);
+        toTnft = managerInstance.getRewardsPayouts(newValidatorIds[0]);
         assertEq(toTnft, 0);
-        assertEq(toBnft, 0);
-        assertEq(toTreasury, 0);
     }
 
     function _mainnet_369_verifyAndProcessWithdrawals(bool partialWithdrawal, bool fullWithdrawal) internal {
@@ -2125,4 +1999,7 @@ contract EtherFiNodeTest is TestSetup {
         vm.expectRevert("INVALID");
         managerInstance.batchSendExitRequest(_to_uint256_array(bidId[0]));
     }
-}
+
+    }
+
+

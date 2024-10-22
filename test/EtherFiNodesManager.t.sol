@@ -16,7 +16,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         vm.expectRevert("Initializable: contract is already initialized");
         vm.prank(owner);
         managerImplementation.initialize(
-            address(treasuryInstance),
             address(auctionInstance),
             address(stakingManagerInstance),
             address(TNFTInstance),
@@ -29,27 +28,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         bidId = new uint256[](1);
         bidId[0] = depositAndRegisterValidator(false);
         etherFiNode = managerInstance.etherfiNodeAddress(bidId[0]);
-    }
-
-    function test_SetStakingRewardsSplit() public {
-        vm.expectRevert(EtherFiNodesManager.IncorrectRole.selector);
-        vm.prank(bob);
-        managerInstance.setStakingRewardsSplit(100000, 100000, 400000, 400000);
-
-        (uint64 treasury, uint64 nodeOperator, uint64 tnft, uint64 bnft) = managerInstance.stakingRewardsSplit();
-        assertEq(treasury, 50000);
-        assertEq(nodeOperator, 50000);
-        assertEq(tnft, 815625);
-        assertEq(bnft, 84375);
-
-        vm.prank(alice);
-        managerInstance.setStakingRewardsSplit(100000, 100000, 400000, 400000);
-
-        (treasury, nodeOperator, tnft, bnft) = managerInstance.stakingRewardsSplit();
-        assertEq(treasury, 100000);
-        assertEq(nodeOperator, 100000);
-        assertEq(tnft, 400000);
-        assertEq(bnft, 400000);
     }
     
     function test_SetNonExitPenaltyPrincipal() public {

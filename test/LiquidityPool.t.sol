@@ -709,12 +709,10 @@ contract LiquidityPoolTest is TestSetup {
         for (uint256 i = 0; i < validatorIds.length; i++) {
             // Beacon Balance < 32 ether means that the validator got slashed
             uint256 beaconBalance = 16 ether * (i + 1) + 1 ether;
-            (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury)
+            (uint256 toTnft, uint256 toBnft)
                 = managerInstance.calculateTVL(validatorIds[i], beaconBalance);
-            tvls[0] += toNodeOperator;
-            tvls[1] += toTnft;
-            tvls[2] += toBnft;
-            tvls[3] += toTreasury;
+            tvls[0] += toTnft;
+            tvls[1] += toBnft;
         }
         uint256 eEthTVL = tvls[1];
 
