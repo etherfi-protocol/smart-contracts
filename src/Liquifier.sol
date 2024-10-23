@@ -53,7 +53,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     uint32 public DEPRECATED_eigenLayerWithdrawalClaimGasCost;
     uint32 public timeBoundCapRefreshInterval; // seconds
 
-    bool public DEPRECATED_quoteStEthWithCurve;
+    bool public quoteStEthWithCurve;
 
     uint128 public DEPRECATED_accumulatedFee;
 
@@ -158,11 +158,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
         // The L1SyncPool's `_anticipatedDeposit` should be the only place to mint the `token` and always send its entirety to the Liquifier contract
         if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
-
-        uint256 dx = quoteByMarketValue(_token, _amount);
-
-        // discount
-        dx = (10000 - tokenInfos[_token].discountInBasisPoints) * dx / 10000;
+    
+        uint256 dx = quoteByDiscountedValue(_token, _amount);
         require(!isDepositCapReached(_token, dx), "CAPPED");
 
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, dx, _referral);
@@ -220,6 +217,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         pausers[_address] = _isPauser;
     }
 
+    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyAdmin {
+        tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
+    }
+
+    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyAdmin {
+        quoteStEthWithCurve = _quoteStEthWithCurve;
+    }
+
     //Pauses the contract
     function pauseContract() external onlyPauser {
         _pause();
@@ -263,7 +268,11 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (!isTokenWhitelisted(_token)) revert NotSupportedToken();
 
         if (_token == address(lido)) {
-            return _amount; /// 1:1 from stETH to eETH
+            if (quoteStEthWithCurve) {
+                return _min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
+            } else {
+                return _amount; /// 1:1 from stETH to eETH
+            }
         } else if (_token == address(cbEth)) {
             return _min(_amount * cbEth.exchangeRate() / 1e18, ICurvePoolQuoter2(address(cbEth_Eth_Pool)).get_dy(1, 0, _amount));
         } else if (_token == address(wbEth)) {
@@ -276,6 +285,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         revert NotSupportedToken();
     }
 
+    // Calculates the amount of eETH that will be minted for a given token considering the discount rate
+    function quoteByDiscountedValue(address _token, uint256 _amount) public view returns (uint256) {
+        uint256 marketValue = quoteByMarketValue(_token, _amount);
+
+        return (10000 - tokenInfos[_token].discountInBasisPoints) * marketValue / 10000;
+    }
+    
     function isTokenWhitelisted(address _token) public view returns (bool) {
         return tokenInfos[_token].isWhitelisted;
     }
