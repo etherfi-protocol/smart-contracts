@@ -4,7 +4,7 @@
     "hardhat": "^2.12.6",
     "hardhat-preprocessor": "^0.1.5",
     "keccak256": "^1.0.6",
-    "merkletreejs": "^0.3.9"
+    "merkletreejs": "^0.3.11"
   },
   "devDependencies": {
     "@ethersproject/abi": "^5.4.7",
