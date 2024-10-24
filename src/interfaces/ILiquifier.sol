@@ -68,6 +68,21 @@ interface IEigenLayerStrategyTVLLimits is IStrategy {
 
 // mainnet: 0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1
 interface ILidoWithdrawalQueue {
+    struct WithdrawalRequestStatus {
+        /// @notice stETH token amount that was locked on withdrawal queue for this request
+        uint256 amountOfStETH;
+        /// @notice amount of stETH shares locked on withdrawal queue for this request
+        uint256 amountOfShares;
+        /// @notice address that can claim or transfer this request
+        address owner;
+        /// @notice timestamp of when the request was created, in seconds
+        uint256 timestamp;
+        /// @notice true, if request is finalized
+        bool isFinalized;
+        /// @notice true, if request is claimed. Request is claimable if (isFinalized && !isClaimed)
+        bool isClaimed;
+    }
+
     function FINALIZE_ROLE() external view returns (bytes32);
     function MAX_STETH_WITHDRAWAL_AMOUNT() external view returns (uint256);
     function MIN_STETH_WITHDRAWAL_AMOUNT() external view returns (uint256);
@@ -81,6 +96,8 @@ interface ILidoWithdrawalQueue {
     function getRoleMember(bytes32 _role, uint256 _index) external view returns (address);
     function getLastRequestId() external view returns (uint256);
     function getLastCheckpointIndex() external view returns (uint256);
+    function getWithdrawalRequests(address _owner) external view returns (uint256[] memory requestsIds);
+    function getWithdrawalStatus(uint256[] memory _requestIds) external view returns (WithdrawalRequestStatus[] memory statuses);
 }
 
 interface ILiquifier {
@@ -108,4 +125,5 @@ interface ILiquifier {
     }
 
     function depositWithERC20(address _token, uint256 _amount, address _referral) external returns (uint256);
+    function quoteByFairValue(address _token, uint256 _amount) external view returns (uint256);
 }
