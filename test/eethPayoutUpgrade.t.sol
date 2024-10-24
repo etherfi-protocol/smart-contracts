@@ -14,7 +14,6 @@ contract eethPayoutUpgradeTest is TestSetup {
         treasury = address(alice);
         upgradeContract();
         vm.startPrank(managerInstance.owner());
-        managerInstance.setStakingRewardsSplit(0, 0, 1000000, 0);
         etherFiAdminInstance.initializeV2dot5(address(roleRegistry));
         withdrawRequestNFTInstance.initializeV2dot5(address(roleRegistry));
         vm.stopPrank();

@@ -162,8 +162,6 @@ contract UpgradeTest is TestSetup {
 
     function test_CanUpgradeEtherFiNodesManager() public {
         vm.prank(alice);
-        managerInstance.setStakingRewardsSplit(uint64(100000), uint64(100000), uint64(400000), uint64(400000));
-
         EtherFiNodesManagerV2 managerV2Implementation = new EtherFiNodesManagerV2();
 
         vm.expectRevert("Ownable: caller is not the owner");
@@ -178,7 +176,6 @@ contract UpgradeTest is TestSetup {
         vm.expectRevert("Initializable: contract is already initialized");
         vm.prank(owner);
         etherFiNodesManagerV2Instance.initialize(
-            address(treasuryInstance),
             address(auctionInstance),
             address(stakingManagerInstance),
             address(TNFTInstance),
@@ -190,13 +187,6 @@ contract UpgradeTest is TestSetup {
 
         assertEq(etherFiNodesManagerV2Instance.getImplementation(), address(managerV2Implementation));
         assertEq(etherFiNodesManagerV2Instance.isUpgraded(), true);
-
-        // State is maintained
-        (uint64 treasury, uint64 nodeOperator, uint64 tnft, uint64 bnft) = etherFiNodesManagerV2Instance.stakingRewardsSplit();
-        assertEq(treasury, 100000);
-        assertEq(nodeOperator, 100000);
-        assertEq(tnft, 400000);
-        assertEq(bnft, 400000);
     }
 
     function test_CanUpgradeProtocolRevenueManager() public {

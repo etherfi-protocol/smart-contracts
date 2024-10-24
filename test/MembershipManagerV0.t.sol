@@ -723,12 +723,10 @@ contract MembershipManagerV0Test is TestSetup {
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             uint256 beaconBalance = 32 ether;
-            (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury)
+            (uint256 toTnft, uint256 toBnft)
                 = managerInstance.calculateTVL(_validatorIds[i], beaconBalance);
-            tvls[0] += toNodeOperator;
-            tvls[1] += toTnft;
-            tvls[2] += toBnft;
-            tvls[3] += toTreasury;
+            tvls[0] += toTnft;
+            tvls[1] += toBnft;
         }
 
         return tvls;

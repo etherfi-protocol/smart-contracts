@@ -583,7 +583,6 @@ contract TestSetup is Test {
         );
 
         managerInstance.initialize(
-            address(treasuryInstance),
             address(auctionInstance),
             address(stakingManagerInstance),
             address(TNFTInstance),
@@ -638,7 +637,6 @@ contract TestSetup is Test {
         vm.stopPrank();
 
         vm.startPrank(admin);
-        managerInstance.setStakingRewardsSplit(50_000, 50_000, 815_625, 84_375);
         managerInstance.setNonExitPenalty(300, 1 ether);
         membershipManagerInstance.setTopUpCooltimePeriod(28 days);
         vm.stopPrank();
