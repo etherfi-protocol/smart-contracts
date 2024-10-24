@@ -111,8 +111,8 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(_delayedWithdrawalRouter, 1 ether);
 
         (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
-        assertEq(toTnft, 30 ether + (1 ether * 90 * 29) / (100 * 32));
-        assertEq(toBnft, 2 ether + (1 ether * 90 * 3) / (100 * 32));
+        assertEq(toTnft, 30 ether + 1 ether);
+        assertEq(toBnft, 2 ether);
 
         // more staking rewards
         _transferTo(address(safeInstance.eigenPod()), 2 ether);
@@ -122,8 +122,8 @@ contract EtherFiNodeTest is TestSetup {
         assertEq(_delayedWithdrawalRouter, 1 ether);
 
         (toTnft, toBnft) = managerInstance.calculateTVL(validatorId, beaconBalance);
-        assertEq(toTnft, 30 ether + (3 ether * 90 * 29) / (100 * 32));
-        assertEq(toBnft, 2 ether + (3 ether * 90 * 3) / (100 * 32));
+        assertEq(toTnft, 30 ether + 3 ether);
+        assertEq(toBnft, 2 ether);
     }
 
 
