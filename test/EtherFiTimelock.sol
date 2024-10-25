@@ -339,6 +339,37 @@ contract TimelockTest is TestSetup {
             _execute_timelock(target, data, true, true, true, true);
         }
     }
+
+    function test_whitelist_DelegationManager() public {
+        initializeRealisticFork(MAINNET_FORK);
+        address target = address(managerInstance);
+        bytes4[] memory selectors = new bytes4[](4);
+
+        // https://etherscan.io/address/0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A#writeProxyContract
+        selectors[0] = 0xeea9064b; // delegateTo
+        selectors[1] = 0x7f548071; // delegateToBySignature
+        selectors[2] = 0xda8be864; // undelegate
+        selectors[3] = 0x0dd8dd02; // queueWithdrawals
+
+        for (uint256 i = 0; i < selectors.length; i++) {
+            bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector, selectors[i], 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, true);
+            _execute_timelock(target, data, true, true, true, true);
+        }
+
+        vm.startPrank(owner);
+        IDelegationManager.SignatureWithExpiry memory signatureWithExpiry;
+        address delegationManager = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
+        uint256[] memory validatorIds = new uint256[](1);
+        bytes[] memory data = new bytes[](1);
+        validatorIds[0] = 65536;
+        data[0] = abi.encodeWithSelector(selectors[0], 0x67943aE8e07bFC9f5C9A90d608F7923D9C21e051, signatureWithExpiry, bytes32(0));
+        managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
+
+        data[0] = abi.encodeWithSelector(selectors[2],  managerInstance.etherfiNodeAddress(validatorIds[0]));
+        managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
+
+        vm.stopPrank();
+    }
 }
 
 // {"version":"1.0","chainId":"1
