@@ -335,7 +335,7 @@ contract TimelockTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         {
             address target = address(liquifierInstance);
-            bytes memory data = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0x5769ff35545B0BBFA27cc97C9407C5ed9d395455);
+            bytes memory data = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0xB27b1dc838898368E9a81F69c626AEC7e71f02c1);
             _execute_timelock(target, data, true, true, true, true);
         }
     }
