@@ -337,6 +337,14 @@ contract TimelockTest is TestSetup {
             address target = address(liquifierInstance);
             bytes memory data = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0xB27b1dc838898368E9a81F69c626AEC7e71f02c1);
             _execute_timelock(target, data, true, true, true, true);
+            
+        }
+
+        {
+            address target = address(liquifierInstance);
+            bytes memory data = abi.encodeWithSelector(Liquifier.initializeOnUpgrade.selector, 0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf);
+            _execute_timelock(target, data, true, true, true, true);
+            
         }
     }
 
