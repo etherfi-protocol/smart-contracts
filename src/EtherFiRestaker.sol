@@ -144,7 +144,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // undelegate from the current AVS operator & un-restake all
-    function undelegate() external onlyAdmin returns (bytes32[] memory withdrawalRoots) {
+    function undelegate() external onlyAdmin returns (bytes32[] memory) {
         // Un-restake all assets
         // Currently, only stETH is supported
         TokenInfo memory info = tokenInfos[address(lido)];
