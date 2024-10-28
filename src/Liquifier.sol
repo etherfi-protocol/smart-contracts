@@ -104,7 +104,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error WrongOutput();
     error IncorrectCaller();
     error IncorrectAmount();
-    error IncorrectAmount();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -182,7 +181,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
         if (!sent) revert EthTransferFailed();
     }
-    
+
     function sendToEtherFiRestaker(address _token, uint256 _amount) external onlyAdmin {
         IERC20(_token).safeTransfer(etherfiRestaker, _amount);
     }
@@ -362,47 +361,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     /* INTERNAL FUNCTIONS */
-    function _enqueueForWithdrawal(IStrategy[] memory _strategies, uint256[] memory _shares) internal returns (uint256) {
-        uint256 numStrategies = _strategies.length;
-        uint256 amount = 0;
-        for (uint256 i = 0; i < numStrategies; i++) {
-            IStrategy strategy = _strategies[i];
-            uint256 share = _shares[i];
-            address token = address(strategy.underlyingToken());
-            uint256 dx = quoteStrategyShareForDeposit(token, strategy, share);
-
-            // discount
-            dx = (10000 - tokenInfos[token].discountInBasisPoints) * dx / 10000;
-
-            // Disable it because the deposit through EL queued withdrawal will be deprecated by EigenLayer anyway
-            // But, we need to still support '_enqueueForWithdrawal' as the backward compatibility for the already queued ones
-            // require(!isDepositCapReached(token, dx), "CAPPED");
-
-            amount += dx;
-            tokenInfos[token].strategyShare += uint128(share);
-
-            _afterDeposit(token, amount);
-
-            emit Liquified(msg.sender, dx, token, true);
-        }
-        return amount;
-    }
-    
-    function _completeWithdrawals(IDelegationManager.Withdrawal memory _queuedWithdrawal) internal {
-        bytes32 withdrawalRoot = eigenLayerDelegationManager.calculateWithdrawalRoot(_queuedWithdrawal);
-
-        uint256 numStrategies = _queuedWithdrawal.strategies.length;
-        for (uint256 i = 0; i < numStrategies; i++) {
-            address token = address(_queuedWithdrawal.strategies[i].underlyingToken());
-            uint128 share = uint128(_queuedWithdrawal.shares[i]);
-
-            if (tokenInfos[token].strategyShare < share) revert StrategyShareNotEnough();
-            tokenInfos[token].strategyShare -= share;
-        }
-
-        emit CompletedQueuedWithdrawal(withdrawalRoot);
-    }
-
     function _afterDeposit(address _token, uint256 _amount) internal {
         TokenInfo storage info = tokenInfos[_token];
         if (block.timestamp >= info.timeBoundCapClockStartTime + timeBoundCapRefreshInterval) {
