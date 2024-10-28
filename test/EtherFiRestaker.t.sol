@@ -26,6 +26,9 @@ contract EtherFiRestakerTest is TestSetup {
         avsOperator = 0x5ACCC90436492F24E6aF278569691e2c942A676d; // EigenYields
         avsOperator2 = 0xfB487f216CA24162119C0C6Ae015d680D7569C2f;
         etherfiOperatingAdmin = alice; //
+
+        vm.prank(owner);
+        liquifierInstance.updateQuoteStEthWithCurve(false);
     }
 
     function _deposit_stEth(uint256 _amount) internal {
@@ -42,6 +45,7 @@ contract EtherFiRestakerTest is TestSetup {
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(liquifierInstance), _amount, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         ILiquifier.PermitInput memory permitInput2 = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         liquifierInstance.depositWithERC20WithPermit(address(stEth), _amount, address(0), permitInput2);
+
 
         // Aliice has 10 ether eETH
         // Total eETH TVL is 10 ether
@@ -60,10 +64,14 @@ contract EtherFiRestakerTest is TestSetup {
 
         _deposit_stEth(amount);
 
-        vm.startPrank(alice);        
-        uint256[] memory reqIds = etherFiRestakerInstance.stEthRequestWithdrawal(amount - 1);
-        vm.stopPrank();
+        assertEq(etherFiRestakerInstance.getEthAmountPendingForRedemption(address(stEth)), 0);
 
+        vm.startPrank(alice);
+        uint256 stEthBalance = stEth.balanceOf(address(etherFiRestakerInstance));
+        uint256[] memory reqIds = etherFiRestakerInstance.stEthRequestWithdrawal(stEthBalance);
+        vm.stopPrank();
+        
+        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountPendingForRedemption(address(stEth)), amount, 2 wei);
         assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), amount, 2 wei);
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
 
@@ -77,6 +85,7 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakerInstance.lidoWithdrawalQueue().finalize(reqIds[reqIds.length-1], currentRate);
         vm.stopPrank();
 
+        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountPendingForRedemption(address(stEth)), amount, 2 wei);
         assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), amount, 2 wei);
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
 
@@ -87,6 +96,7 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakerInstance.stEthClaimWithdrawals(reqIds, hints);
 
         // the cycle completes
+        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountPendingForRedemption(address(stEth)), 0, 2 wei);
         assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), 0, 2 wei);
         assertApproxEqAbs(address(etherFiRestakerInstance).balance, 0, 2);
 
@@ -141,13 +151,13 @@ contract EtherFiRestakerTest is TestSetup {
         // It won't complete the withdrawal because the withdrawal is still pending
         etherFiRestakerInstance.completeQueuedWithdrawals(1000);
         assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
-        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountInEigenLayerPnedingForWithdrawals(address(stEth)), 5 ether, 2 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountInEigenLayerPendingForWithdrawals(address(stEth)), 5 ether, 2 wei);
 
         vm.roll(block.number + 50400);
 
         etherFiRestakerInstance.completeQueuedWithdrawals(1000);
         assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
-        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountInEigenLayerPnedingForWithdrawals(address(stEth)), 0, 2 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountInEigenLayerPendingForWithdrawals(address(stEth)), 0, 2 wei);
         vm.stopPrank();
     }
 
@@ -215,5 +225,4 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakerInstance.delegateTo(avsOperator2, signature, 0x0);
         vm.stopPrank();
     }
-
 }
