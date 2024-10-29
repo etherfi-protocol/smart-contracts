@@ -99,6 +99,8 @@ contract EtherFiNodesManager is
 
     event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toTnft);
     event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toTnft, uint256 toBnft);
+    event PartialWithdrawal_V2(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toTnft);
+    event FullWithdrawal_V2(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toTnft, uint256 toBnft);
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
 
     event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
@@ -262,7 +264,7 @@ contract EtherFiNodesManager is
         uint256 toTnft = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
         _distributePayouts(etherfiNode, _validatorId, toTnft, 0);
 
-        emit PartialWithdrawal(_validatorId, etherfiNode, toTnft);
+        emit PartialWithdrawal_V2(_validatorId, etherfiNode, toTnft);
     }
 
     function batchPartialWithdraw(uint256[] calldata _validatorIds) external whenNotPaused{
@@ -297,7 +299,7 @@ contract EtherFiNodesManager is
         tnft.burnFromWithdrawal(_validatorId);
         bnft.burnFromWithdrawal(_validatorId);
 
-        emit FullWithdrawal(_validatorId, etherfiNode, toTnft, toBnft);
+        emit FullWithdrawal_V2(_validatorId, etherfiNode, toTnft, toBnft);
     }
 
     /// @notice Process the full withdrawal for multiple validators
