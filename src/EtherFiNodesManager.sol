@@ -96,9 +96,8 @@ contract EtherFiNodesManager is
     event NodeExitProcessed(uint256 _validatorId);
     event NodeEvicted(uint256 _validatorId);
     event PhaseChanged(uint256 indexed _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
-
-    event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toTnft);
-    event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toTnft, uint256 toBnft);
+    event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
+    event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
     event PartialWithdrawal_V2(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toTnft);
     event FullWithdrawal_V2(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toTnft, uint256 toBnft);
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
