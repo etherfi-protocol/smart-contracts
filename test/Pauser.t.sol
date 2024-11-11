@@ -86,4 +86,13 @@ contract PauserTest is TestSetup {
         vm.expectRevert("Sender requires permission");
         pauserInstance.pauseSingle(IPausable(address(liquidityPoolInstance)));
     }
+
+    function test_pushDuplicate() public {
+        vm.expectRevert("Contract already in pausables");
+        pauserInstance.addPausable(IPausable(address(liquidityPoolInstance)));
+
+        pauserInstance.removePausable(0);
+
+        pauserInstance.addPausable(IPausable(address(liquidityPoolInstance)));
+    }
 }
