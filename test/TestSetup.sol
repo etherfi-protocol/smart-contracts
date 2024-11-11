@@ -27,6 +27,7 @@ import "../src/Treasury.sol";
 import "../src/EtherFiNode.sol";
 import "../src/LiquidityPool.sol";
 import "../src/Liquifier.sol";
+import "../src/EtherFiRestaker.sol";
 import "../src/EETH.sol";
 import "../src/WeETH.sol";
 import "../src/MembershipManager.sol";
@@ -92,6 +93,7 @@ contract TestSetup is Test {
     UUPSProxy public BNFTProxy;
     UUPSProxy public liquidityPoolProxy;
     UUPSProxy public liquifierProxy;
+    UUPSProxy public etherFiRestakerProxy;
     UUPSProxy public eETHProxy;
     UUPSProxy public regulationsManagerProxy;
     UUPSProxy public weETHProxy;
@@ -137,6 +139,9 @@ contract TestSetup is Test {
 
     Liquifier public liquifierImplementation;
     Liquifier public liquifierInstance;
+
+    EtherFiRestaker public etherFiRestakerImplementation;
+    EtherFiRestaker public etherFiRestakerInstance;
 
     EETH public eETHImplementation;
     EETH public eETHInstance;
@@ -388,10 +393,7 @@ contract TestSetup is Test {
     function setUpLiquifier(uint8 forkEnum) internal {
         vm.startPrank(owner);
             
-        if (forkEnum == MAINNET_FORK) {            
-            liquifierInstance.upgradeTo(address(new Liquifier()));
-            liquifierInstance.updateAdmin(alice, true);
-        } else if (forkEnum == TESTNET_FORK) {
+        if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {            
             liquifierInstance.upgradeTo(address(new Liquifier()));
             liquifierInstance.updateAdmin(alice, true);
         }
@@ -408,7 +410,20 @@ contract TestSetup is Test {
 
         // liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
 
+        deployEtherFiRestaker();
+
         vm.stopPrank();
+    }
+
+    function deployEtherFiRestaker() internal {
+        etherFiRestakerImplementation = new EtherFiRestaker();
+        etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
+        etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
+
+        etherFiRestakerInstance.initialize(address(liquidityPoolInstance), address(liquifierInstance));
+        etherFiRestakerInstance.updateAdmin(alice, true);
+
+        liquifierInstance.initializeOnUpgrade(address(etherFiRestakerInstance));
     }
 
     function setUpTests() internal {
@@ -553,6 +568,9 @@ contract TestSetup is Test {
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
 
+        etherFiRestakerImplementation = new EtherFiRestaker();
+        etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
+        etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
@@ -1360,10 +1378,10 @@ contract TestSetup is Test {
         vm.startPrank(alice);
         uint256 lastCheckPointIndex = liquifierInstance.lidoWithdrawalQueue().getLastCheckpointIndex();
         uint256[] memory hints = liquifierInstance.lidoWithdrawalQueue().findCheckpointHints(reqIds, 1, lastCheckPointIndex);
-        liquifierInstance.stEthClaimWithdrawals(reqIds, hints);
+        etherFiRestakerInstance.stEthClaimWithdrawals(reqIds, hints);
 
         // The ether.fi admin withdraws the ETH from the liquifier contract to the liquidity pool contract
-        liquifierInstance.withdrawEther();
+        etherFiRestakerInstance.withdrawEther();
         vm.stopPrank();
     }
 

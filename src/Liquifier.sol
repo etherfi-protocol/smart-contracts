@@ -86,6 +86,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     mapping(address => bool) public pausers;
 
+    address public etherfiRestaker;
+
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     event RegisteredQueuedWithdrawal(bytes32 _withdrawalRoot, IStrategyManager.DeprecatedStruct_QueuedWithdrawal _queuedWithdrawal);
     event RegisteredQueuedWithdrawal_V2(bytes32 _withdrawalRoot, IDelegationManager.Withdrawal _queuedWithdrawal);
@@ -133,27 +135,11 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         DEPRECATED_eigenLayerWithdrawalClaimGasCost = 150_000;
     }
 
-    receive() external payable {}
-
-    /// the users mint eETH given the queued withdrawal for their LRT with withdrawer == address(this)
-    /// @param _queuedWithdrawal The QueuedWithdrawal to be used for the deposit. This is the proof that the user has the re-staked ETH and requested the withdrawals setting the Liquifier contract as the withdrawer.
-    /// @param _referral The referral address
-    /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
-    function depositWithQueuedWithdrawal(IDelegationManager.Withdrawal calldata _queuedWithdrawal, address _referral) external whenNotPaused nonReentrant returns (uint256) {
-        bytes32 withdrawalRoot = verifyQueuedWithdrawal(msg.sender, _queuedWithdrawal);
-
-        /// register it to prevent duplicate deposits with the same queued withdrawal
-        isRegisteredQueuedWithdrawals[withdrawalRoot] = true;
-        emit RegisteredQueuedWithdrawal_V2(withdrawalRoot, _queuedWithdrawal);
-
-        /// queue the strategy share for withdrawal
-        uint256 amount = _enqueueForWithdrawal(_queuedWithdrawal.strategies, _queuedWithdrawal.shares);
-        
-        /// mint eETH to the user
-        uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, amount, _referral);
-
-        return eEthShare;
+    function initializeOnUpgrade(address _etherfiRestaker) external onlyOwner {
+        etherfiRestaker = _etherfiRestaker;
     }
+
+    receive() external payable {}
 
     /// Deposit Liquid Staking Token such as stETH and Mint eETH
     /// @param _token The address of the token to deposit
@@ -164,7 +150,11 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {        
         require(isTokenWhitelisted(_token) && (!tokenInfos[_token].isL2Eth || msg.sender == l1SyncPool), "NOT_ALLOWED");
 
-        IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
+        if (tokenInfos[_token].isL2Eth) {
+            IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);     
+        } else {
+            IERC20(_token).safeTransferFrom(msg.sender, address(etherfiRestaker), _amount);
+        }
 
         // The L1SyncPool's `_anticipatedDeposit` should be the only place to mint the `token` and always send its entirety to the Liquifier contract
         if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
@@ -185,71 +175,15 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return depositWithERC20(_token, _amount, _referral);
     }
 
-    /// @notice Used to complete the specified `queuedWithdrawals`. The function caller must match `queuedWithdrawals[...].withdrawer`
-    /// @param _queuedWithdrawals The QueuedWithdrawals to complete.
-    /// @param _tokens Array of tokens for each QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single array.
-    /// @param _middlewareTimesIndexes One index to reference per QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single index.
-    /// @dev middlewareTimesIndex should be calculated off chain before calling this function by finding the first index that satisfies `slasher.canWithdraw`
-    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata _queuedWithdrawals, IERC20[][] calldata _tokens, uint256[] calldata _middlewareTimesIndexes) external onlyAdmin {
-        uint256 num = _queuedWithdrawals.length;
-        bool[] memory receiveAsTokens = new bool[](num);
-        for (uint256 i = 0; i < num; i++) {
-            _completeWithdrawals(_queuedWithdrawals[i]);
-
-            /// so that the shares withdrawn from the specified strategies are sent to the caller
-            receiveAsTokens[i] = true;
-        }
-
-        /// it will update the erc20 balances of this contract
-        eigenLayerDelegationManager.completeQueuedWithdrawals(_queuedWithdrawals, _tokens, _middlewareTimesIndexes, receiveAsTokens);
-    }
-
-    /// Initiate the process for redemption of stETH 
-    function stEthRequestWithdrawal() external onlyAdmin returns (uint256[] memory) {
-        uint256 amount = lido.balanceOf(address(this));
-        return stEthRequestWithdrawal(amount);
-    }
-
-    function stEthRequestWithdrawal(uint256 _amount) public onlyAdmin returns (uint256[] memory) {
-        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) revert IncorrectAmount();
-        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
-
-        tokenInfos[address(lido)].ethAmountPendingForWithdrawals += uint128(_amount);
-
-        uint256 maxAmount = lidoWithdrawalQueue.MAX_STETH_WITHDRAWAL_AMOUNT();
-        uint256 numReqs = (_amount + maxAmount - 1) / maxAmount;
-        uint256[] memory reqAmounts = new uint256[](numReqs);
-        for (uint256 i = 0; i < numReqs; i++) {
-            reqAmounts[i] = (i == numReqs - 1) ? _amount - i * maxAmount : maxAmount;
-        }
-        lido.approve(address(lidoWithdrawalQueue), _amount);
-        uint256[] memory reqIds = lidoWithdrawalQueue.requestWithdrawals(reqAmounts, address(this));
-
-        emit QueuedStEthWithdrawals(reqIds);
-
-        return reqIds;
-    }
-
-    /// @notice Claim a batch of withdrawal requests if they are finalized sending the ETH to the this contract back
-    /// @param _requestIds array of request ids to claim
-    /// @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
-    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyAdmin {
-        uint256 balance = address(this).balance;
-        lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
-        uint256 newBalance = address(this).balance;
-
-        // to prevent the underflow error
-        uint128 dx = uint128(_min(newBalance - balance, tokenInfos[address(lido)].ethAmountPendingForWithdrawals));
-        tokenInfos[address(lido)].ethAmountPendingForWithdrawals -= dx;
-
-        emit CompletedStEthQueuedWithdrawals(_requestIds);
-    }
-
     // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
     function withdrawEther() external onlyAdmin {
         uint256 amountToLiquidityPool = address(this).balance;
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
         if (!sent) revert EthTransferFailed();
+    }
+
+    function sendToEtherFiRestaker(address _token, uint256 _amount) external onlyAdmin {
+        IERC20(_token).safeTransfer(etherfiRestaker, _amount);
     }
 
     function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOwner {
@@ -318,65 +252,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return msg.value;
     }
 
-    // uint256 _amount, uint24 _fee, uint256 _minOutputAmount, uint256 _maxWaitingTime
-    function pancakeSwapForEth(address _token, uint256 _amount, uint24 _fee, uint256 _minOutputAmount, uint256 _maxWaitingTime) external onlyAdmin {
-        if (_amount > IERC20(_token).balanceOf(address(this))) revert NotEnoughBalance();
-        uint256 beforeBalance = address(this).balance;
-        
-        IERC20(_token).approve(address(pancakeRouter), _amount);
-
-        IPancackeV3SwapRouter.ExactInputSingleParams memory input = IPancackeV3SwapRouter.ExactInputSingleParams({
-            tokenIn: _token,
-            tokenOut: pancakeRouter.WETH9(),
-            fee: _fee,
-            recipient: address(pancakeRouter),
-            deadline: block.timestamp + _maxWaitingTime,
-            amountIn: _amount,
-            amountOutMinimum: _minOutputAmount,
-            sqrtPriceLimitX96: 0
-        });
-        uint256 amountOut = pancakeRouter.exactInputSingle(input);
-
-        pancakeRouter.unwrapWETH9(amountOut, address(this));
-        
-        uint256 currentBalance = address(this).balance;
-        if (currentBalance < _minOutputAmount + beforeBalance) revert WrongOutput();
-    }
-
-    function swapCbEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin returns (uint256) {
-        if (_amount > cbEth.balanceOf(address(this))) revert NotEnoughBalance();
-        cbEth.approve(address(cbEth_Eth_Pool), _amount);
-        return cbEth_Eth_Pool.exchange_underlying(1, 0, _amount, _minOutputAmount);
-    }
-
-    function swapWbEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin returns (uint256) {
-        if (_amount > wbEth.balanceOf(address(this))) revert NotEnoughBalance();
-        wbEth.approve(address(wbEth_Eth_Pool), _amount);
-        return wbEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
-    }
-
-    function swapStEthToEth(uint256 _amount, uint256 _minOutputAmount) external onlyAdmin returns (uint256) {
-        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
-        lido.approve(address(stEth_Eth_Pool), _amount);
-        return stEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
-    }
-
-    // https://etherscan.io/tx/0x4dde6b6d232f706466b18422b004e2584fd6c0d3c0afe40adfdc79c79031fe01
-    // This user deposited 625 wBETH and minted only 7.65 eETH due to the low liquidity in the curve pool that it used
-    // Rescue him!
-    // function CASE1() external onlyAdmin {
-    //     if (flags["CASE1"]) revert();
-    //     flags["CASE1"] = true;
-
-    //     // address recipient = 0xc0948cE48e87a55704EfEf8E4b8f92CA34D2087E;
-    //     // uint256 wbethAmount = 625601006520000000000;
-    //     // uint256 eEthAmount = 7650414487237129340;
-    //     // uint256 exchagneRate = 1032800000000000000; // "the price of wBETH to ETH should be 1.0328"
-    //     // uint256 diff = (wbethAmount * exchagneRate / 1e18) - eEthAmount;
-    //     // uint256 diff = 617.302086995462789012 ether;
-    //     liquidityPool.depositToRecipient(0xc0948cE48e87a55704EfEf8E4b8f92CA34D2087E, 617.302086995462789012 ether, address(0));
-    // }
-
     /* VIEW FUNCTIONS */
 
     // Given the `_amount` of `_token` token, returns the equivalent amount of ETH 
@@ -422,19 +297,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         uint256 marketValue = quoteByMarketValue(_token, _amount);
 
         return (10000 - tokenInfos[_token].discountInBasisPoints) * marketValue / 10000;
-    }
-
-    function verifyQueuedWithdrawal(address _user, IDelegationManager.Withdrawal calldata _queuedWithdrawal) public view returns (bytes32) {
-        require(_queuedWithdrawal.staker == _user && _queuedWithdrawal.withdrawer == address(this), "wrong depositor/withdrawer");
-        for (uint256 i = 0; i < _queuedWithdrawal.strategies.length; i++) {
-            address token = address(_queuedWithdrawal.strategies[i].underlyingToken());
-            require(tokenInfos[token].isWhitelisted && tokenInfos[token].strategy == _queuedWithdrawal.strategies[i], "NotWhitelisted");
-        }
-        bytes32 withdrawalRoot = eigenLayerDelegationManager.calculateWithdrawalRoot(_queuedWithdrawal);
-        require(eigenLayerDelegationManager.pendingWithdrawals(withdrawalRoot), "WrongQ");
-        require(!isRegisteredQueuedWithdrawals[withdrawalRoot], "Deposited");
-
-        return withdrawalRoot;
     }
 
     function isTokenWhitelisted(address _token) public view returns (bool) {
@@ -499,47 +361,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     /* INTERNAL FUNCTIONS */
-    function _enqueueForWithdrawal(IStrategy[] memory _strategies, uint256[] memory _shares) internal returns (uint256) {
-        uint256 numStrategies = _strategies.length;
-        uint256 amount = 0;
-        for (uint256 i = 0; i < numStrategies; i++) {
-            IStrategy strategy = _strategies[i];
-            uint256 share = _shares[i];
-            address token = address(strategy.underlyingToken());
-            uint256 dx = quoteStrategyShareForDeposit(token, strategy, share);
-
-            // discount
-            dx = (10000 - tokenInfos[token].discountInBasisPoints) * dx / 10000;
-
-            // Disable it because the deposit through EL queued withdrawal will be deprecated by EigenLayer anyway
-            // But, we need to still support '_enqueueForWithdrawal' as the backward compatibility for the already queued ones
-            // require(!isDepositCapReached(token, dx), "CAPPED");
-
-            amount += dx;
-            tokenInfos[token].strategyShare += uint128(share);
-
-            _afterDeposit(token, amount);
-
-            emit Liquified(msg.sender, dx, token, true);
-        }
-        return amount;
-    }
-    
-    function _completeWithdrawals(IDelegationManager.Withdrawal memory _queuedWithdrawal) internal {
-        bytes32 withdrawalRoot = eigenLayerDelegationManager.calculateWithdrawalRoot(_queuedWithdrawal);
-
-        uint256 numStrategies = _queuedWithdrawal.strategies.length;
-        for (uint256 i = 0; i < numStrategies; i++) {
-            address token = address(_queuedWithdrawal.strategies[i].underlyingToken());
-            uint128 share = uint128(_queuedWithdrawal.shares[i]);
-
-            if (tokenInfos[token].strategyShare < share) revert StrategyShareNotEnough();
-            tokenInfos[token].strategyShare -= share;
-        }
-
-        emit CompletedQueuedWithdrawal(withdrawalRoot);
-    }
-
     function _afterDeposit(address _token, uint256 _amount) internal {
         TokenInfo storage info = tokenInfos[_token];
         if (block.timestamp >= info.timeBoundCapClockStartTime + timeBoundCapRefreshInterval) {
@@ -554,7 +375,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (IERC20(_token).totalSupply() != IERC20(_token).balanceOf(address(this))) revert();
     }
 
-     function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
+    function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
         return (_a > _b) ? _b : _a;
     }
 
