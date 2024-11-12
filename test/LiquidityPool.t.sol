@@ -567,7 +567,8 @@ contract LiquidityPoolTest is TestSetup {
         managerInstance.batchPartialWithdraw(validatorIds);
 
         // The liquidity pool receives the rewards as B-NFT holder and T-NFT holder
-        assertEq((address(liquidityPoolInstance).balance), 1 * 0.9 ether);
+        console.log("LP balance: ", address(liquidityPoolInstance).balance);
+        assertEq((address(liquidityPoolInstance).balance), 1 ether);
     }
 
     function test_batchPartialWithdrawOptimized() internal {
@@ -657,27 +658,37 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.warp(1681351200 + 12 * 6);
 
-        address etherfiNode1 = managerInstance.etherfiNodeAddress(newValidators[0]);
-        address etherfiNode2 = managerInstance.etherfiNodeAddress(newValidators[1]);
+        uint256 beforeTvl = 0;
+        (uint256 toTnft, uint256 toBnft) = managerInstance.calculateTVL(newValidators[0], 32 ether - slashingPenalties[0]);
+        beforeTvl += toTnft;
+        (toTnft, toBnft) = managerInstance.calculateTVL(newValidators[1], 32 ether - slashingPenalties[1]);
+        beforeTvl += toTnft;
 
-        _transferTo(etherfiNode1, 32 ether - slashingPenalties[0]);
-        _transferTo(etherfiNode2, 32 ether - slashingPenalties[1]);
+        _transferTo(managerInstance.etherfiNodeAddress(newValidators[0]), 32 ether - slashingPenalties[0]);
+        _transferTo(managerInstance.etherfiNodeAddress(newValidators[1]), 32 ether - slashingPenalties[1]);
 
-        // Process the node exit via nodeManager
+            //     // Process the node exit via nodeManager
         vm.prank(alice);
         managerInstance.processNodeExit(newValidators, exitRequestTimestamps);
+        uint256 afterTvl = 0;
+        (toTnft, toBnft) = managerInstance.calculateTVL(newValidators[1], 0);
+        afterTvl += toTnft;
+        (toTnft, toBnft) = managerInstance.calculateTVL(newValidators[1], 0);
+        afterTvl += toTnft;
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 60 ether);
+        int128 rebaseAmount = int128(int256(afterTvl) - int256(beforeTvl));    
+        // need to do rebase after processNodeExit
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(rebaseAmount);
+
+        assertEq(int128(int256(liquidityPoolInstance.getTotalPooledEther())), 60 ether + rebaseAmount);
         assertTrue(managerInstance.phase(newValidators[0]) == IEtherFiNode.VALIDATOR_PHASE.EXITED);
         assertTrue(managerInstance.phase(newValidators[1]) == IEtherFiNode.VALIDATOR_PHASE.EXITED);
-        
-        // Delist the node from the liquidity pool
+         // Delist the node from the liquidity pool
         vm.prank(henry);
-        managerInstance.batchFullWithdraw(newValidators);
-
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 60 ether);
-        assertEq(address(liquidityPoolInstance).balance, 60 ether);
-    }
+         managerInstance.batchFullWithdraw(newValidators);
+         assertEq(int128(int256(liquidityPoolInstance.getTotalPooledEther())), 60 ether + rebaseAmount);
+     }
 
     function test_fallback() public {
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 0 ether);
@@ -704,22 +715,21 @@ contract LiquidityPoolTest is TestSetup {
     function test_rebase_withdraw_flow() public {
         uint256[] memory validatorIds = launch_validator();
 
-        uint256[] memory tvls = new uint256[](4);
+        uint256[] memory tvls = new uint256[](2);
 
         for (uint256 i = 0; i < validatorIds.length; i++) {
             // Beacon Balance < 32 ether means that the validator got slashed
             uint256 beaconBalance = 16 ether * (i + 1) + 1 ether;
-            (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury)
+            (uint256 toTnft, uint256 toBnft)
                 = managerInstance.calculateTVL(validatorIds[i], beaconBalance);
-            tvls[0] += toNodeOperator;
-            tvls[1] += toTnft;
-            tvls[2] += toBnft;
-            tvls[3] += toTreasury;
+            tvls[0] += toTnft;
+            tvls[1] += toBnft;
         }
-        uint256 eEthTVL = tvls[1];
+        uint256 eEthTVL = tvls[0];
 
         // Reflect the loss in TVL by rebasing
         int128 lossInTVL = int128(uint128(eEthTVL)) - int128(uint128(60 ether));
+        console.logInt(int256(lossInTVL));
         vm.prank(address(membershipManagerInstance));
         liquidityPoolInstance.rebase(lossInTVL);
 
@@ -737,14 +747,28 @@ contract LiquidityPoolTest is TestSetup {
         address etherfiNode1 = managerInstance.etherfiNodeAddress(validatorIds[0]);
         address etherfiNode2 = managerInstance.etherfiNodeAddress(validatorIds[1]);
 
+        uint256 beforeTvl = 0;
+        (uint256 toTnft, uint256 toBnft) = managerInstance.calculateTVL(validatorIds[0], 33 ether );
+        beforeTvl += toTnft;
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorIds[1], 17 ether);
+        beforeTvl += toTnft;
+
+        console.log("beforeTvl: ", beforeTvl);
+
         _transferTo(etherfiNode1, 17 ether);
         _transferTo(etherfiNode2, 33 ether);
 
         // Process the node exit via nodeManager
         vm.prank(alice);
         managerInstance.processNodeExit(validatorIds, exitRequestTimestamps);
-        managerInstance.batchFullWithdraw(validatorIds);
 
+        uint256 afterTvl = 0;
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorIds[0], 0);
+        afterTvl += toTnft;
+        (toTnft, toBnft) = managerInstance.calculateTVL(validatorIds[1],0);
+        afterTvl += toTnft;
+
+        managerInstance.batchFullWithdraw(validatorIds);
         assertEq(address(liquidityPoolInstance).balance, eEthTVL);
         assertEq(eETHInstance.totalSupply(), eEthTVL);
         assertEq(eETHInstance.balanceOf(bob), eEthTVL);

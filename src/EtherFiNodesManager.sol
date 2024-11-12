@@ -38,7 +38,7 @@ contract EtherFiNodesManager is
     uint64 public nonExitPenaltyDailyRate; // in basis points
     uint64 public SCALE;
 
-    address public treasuryContract;
+    address public DEPRECATED_treasuryContract;
     address public stakingManagerContract;
     address public DEPRECATED_protocolRevenueManagerContract;
 
@@ -50,7 +50,7 @@ contract EtherFiNodesManager is
     IAuctionManager public auctionManager;
     address public DEPRECATED_protocolRevenueManager;
 
-    RewardsSplit public stakingRewardsSplit;
+    RewardsSplit public DEPRECATED_stakingRewardsSplit;
     uint256 public DEPRECATED_protocolRewardsSplit;
 
     address public DEPRECATED_admin;
@@ -96,9 +96,10 @@ contract EtherFiNodesManager is
     event NodeExitProcessed(uint256 _validatorId);
     event NodeEvicted(uint256 _validatorId);
     event PhaseChanged(uint256 indexed _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
-
     event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
     event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
+    event PartialWithdrawal_V2(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toTnft);
+    event FullWithdrawal_V2(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toTnft, uint256 toBnft);
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
 
     event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
@@ -122,14 +123,12 @@ contract EtherFiNodesManager is
     error InvalidForwardedCall();
 
     /// @dev Sets the revenue splits on deployment
-    /// @dev AuctionManager, treasury and deposit contracts must be deployed first
-    /// @param _treasuryContract The address of the treasury contract for interaction
+    /// @dev AuctionManager and deposit contracts must be deployed first
     /// @param _auctionContract The address of the auction contract for interaction
     /// @param _stakingManagerContract The address of the staking contract for interaction
     /// @param _tnftContract The address of the TNFT contract for interaction
     /// @param _bnftContract The address of the BNFT contract for interaction
     function initialize(
-        address _treasuryContract,
         address _auctionContract,
         address _stakingManagerContract,
         address _tnftContract,
@@ -143,8 +142,6 @@ contract EtherFiNodesManager is
         __ReentrancyGuard_init();
 
         SCALE = 1_000_000;
-
-        treasuryContract = _treasuryContract;
         stakingManagerContract = _stakingManagerContract;
 
         auctionManager = IAuctionManager(_auctionContract);
@@ -263,10 +260,10 @@ contract EtherFiNodesManager is
         _updateEtherFiNode(_validatorId);
 
         // distribute the rewards payouts. It reverts if the safe's balance >= 16 ether
-        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
-        _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
+        uint256 toTnft = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
+        _distributePayouts(etherfiNode, _validatorId, toTnft, 0);
 
-        emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
+        emit PartialWithdrawal_V2(_validatorId, etherfiNode, toTnft);
     }
 
     function batchPartialWithdraw(uint256[] calldata _validatorIds) external whenNotPaused{
@@ -293,15 +290,15 @@ contract EtherFiNodesManager is
         _updateEtherFiNode(_validatorId);
         require(phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.EXITED, "NOT_EXITED");
 
-        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) = getFullWithdrawalPayouts(_validatorId);
+        (uint256 toTnft, uint256 toBnft) = getFullWithdrawalPayouts(_validatorId);
         _setValidatorPhase(etherfiNode, _validatorId, IEtherFiNode.VALIDATOR_PHASE.FULLY_WITHDRAWN); // EXITED -> FULLY_WITHDRAWN
         _unRegisterValidator(_validatorId);
-        _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
+        _distributePayouts(etherfiNode, _validatorId, toTnft, toBnft);
 
         tnft.burnFromWithdrawal(_validatorId);
         bnft.burnFromWithdrawal(_validatorId);
 
-        emit FullWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
+        emit FullWithdrawal_V2(_validatorId, etherfiNode, toTnft, toBnft);
     }
 
     /// @notice Process the full withdrawal for multiple validators
@@ -507,22 +504,6 @@ contract EtherFiNodesManager is
     //-------------------------------------  SETTER   --------------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @notice Sets the staking rewards split
-    /// @notice Splits must add up to the SCALE of 1_000_000
-    /// @param _treasury the split going to the treasury
-    /// @param _nodeOperator the split going to the nodeOperator
-    /// @param _tnft the split going to the tnft holder
-    /// @param _bnft the split going to the bnft holder
-    function setStakingRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnft) public {
-        if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (_treasury + _nodeOperator + _tnft + _bnft != SCALE) revert InvalidParams();
-
-        stakingRewardsSplit.treasury = _treasury;
-        stakingRewardsSplit.nodeOperator = _nodeOperator;
-        stakingRewardsSplit.tnft = _tnft;
-        stakingRewardsSplit.bnft = _bnft;
-    }
-
     error InvalidPenaltyRate();
     /// @notice Sets the Non Exit Penalty 
     /// @param _nonExitPenaltyPrincipal the new principal amount
@@ -607,7 +588,7 @@ contract EtherFiNodesManager is
     function _getTotalRewardsPayoutsFromSafe(
         uint256 _validatorId,
         bool _checkExit
-    ) internal view returns (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) {
+    ) internal view returns (uint256 toTnft) {
         require(phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "NOT_LIVE");
         address etherfiNode = etherfiNodeAddress[_validatorId];
 
@@ -629,16 +610,11 @@ contract EtherFiNodesManager is
         // where the Admin handles the case when the balance goes over 16 ETH
         require(!_checkExit || address(etherfiNode).balance < 16 ether, "MUST_EXIT");
 
-        return IEtherFiNode(etherfiNode).getRewardsPayouts(
-            validatorInfos[_validatorId].exitRequestTimestamp,
-            stakingRewardsSplit
-        );
+        return IEtherFiNode(etherfiNode).getRewardsPayouts(validatorInfos[_validatorId].exitRequestTimestamp);
     }
 
-    function _distributePayouts(address _etherfiNode, uint256 _validatorId, uint256 _toTreasury, uint256 _toOperator, uint256 _toTnft, uint256 _toBnft) internal {
+    function _distributePayouts(address _etherfiNode, uint256 _validatorId, uint256 _toTnft, uint256 _toBnft) internal {
         IEtherFiNode(_etherfiNode).withdrawFunds(
-            treasuryContract, _toTreasury,
-            auctionManager.getBidOwner(_validatorId), _toOperator,
             tnft.ownerOf(_validatorId), _toTnft,
             bnft.ownerOf(_validatorId), _toBnft
         );
@@ -734,49 +710,42 @@ contract EtherFiNodesManager is
     /// @notice Get the rewards payouts for a specific validator = (total payouts from the safe / N) where N is the number of the validators associated with the same safe
     /// @param _validatorId ID of the validator
     ///
-    /// @return toNodeOperator  the TVL for the Node Operator
     /// @return toTnft          the TVL for the T-NFT holder
-    /// @return toBnft          the TVL for the B-NFT holder
-    /// @return toTreasury      the TVL for the Treasury
     function getRewardsPayouts(
         uint256 _validatorId
-    ) public view returns (uint256, uint256, uint256, uint256) {
+    ) public view returns (uint256) {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         uint256 n = IEtherFiNode(etherfiNode).numAssociatedValidators();
-        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
-        return (toOperator / n, toTnft / n, toBnft / n, toTreasury / n);
+        uint256 toTnft = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
+        return (toTnft / n);
     }
 
     /// @notice Fetches the full withdraw payouts for a specific validator
     /// @param _validatorId id of the validator associated to etherfi node
-    ///
-    /// @return toNodeOperator  the TVL for the Node Operator
-    /// @return toTnft          the TVL for the T-NFT holder
     /// @return toBnft          the TVL for the B-NFT holder
-    /// @return toTreasury      the TVL for the Treasury
+    /// @return toTnft      the TVL for the toTNFT holder
     function getFullWithdrawalPayouts(
         uint256 _validatorId
-    ) public view returns (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) {
+    ) public view returns (uint256 toBnft, uint256 toTnft) {
         require(phase(_validatorId) == IEtherFiNode.VALIDATOR_PHASE.EXITED, "NOT_EXITED");
 
         address etherfiNode = etherfiNodeAddress[_validatorId];
-        return IEtherFiNode(etherfiNode).getFullWithdrawalPayouts(getValidatorInfo(_validatorId), stakingRewardsSplit);
+        return IEtherFiNode(etherfiNode).getFullWithdrawalPayouts(getValidatorInfo(_validatorId));
     }
 
-    /// @notice Compute the TVLs for {node operator, t-nft holder, b-nft holder, treasury}
+    /// @notice Compute the TVLs for {t-nft holder, b-nft holder}
     /// @param _validatorId id of the validator associated to etherfi node
     /// @param _beaconBalance the balance of the validator in Consensus Layer
     ///
-    /// @return toNodeOperator  the TVL for the Node Operator
     /// @return toTnft          the TVL for the T-NFT holder
     /// @return toBnft          the TVL for the B-NFT holder
-    /// @return toTreasury      the TVL for the Treasury
     function calculateTVL(
         uint256 _validatorId,
         uint256 _beaconBalance
-    ) public view returns (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) {
+    ) public view returns (uint256 toTnft, uint256 toBnft) {
         address etherfiNode = etherfiNodeAddress[_validatorId];
-        return IEtherFiNode(etherfiNode).calculateTVL(_beaconBalance, getValidatorInfo(_validatorId), stakingRewardsSplit, false);
+        (toTnft, toBnft) = IEtherFiNode(etherfiNode).calculateTVL(_beaconBalance, getValidatorInfo(_validatorId), false);
+        return (toTnft, toBnft);
     }
 
     /// @notice return the eigenpod associated with the etherFiNode connected to the provided validator

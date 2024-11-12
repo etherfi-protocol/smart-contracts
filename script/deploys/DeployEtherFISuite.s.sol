@@ -138,7 +138,6 @@ contract DeployEtherFiSuiteScript is Script {
         etherFiNodeManagerProxy = new UUPSProxy(address(etherFiNodesManagerImplementation),"");
         etherFiNodesManager = EtherFiNodesManager(payable(address(etherFiNodeManagerProxy)));
         etherFiNodesManager.initialize(
-            address(treasury),
             address(auctionManager),
             address(stakingManager),
             address(TNFTInstance),

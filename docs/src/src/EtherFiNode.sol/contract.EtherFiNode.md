@@ -174,7 +174,7 @@ function withdrawFunds(
 
 ### getStakingRewardsPayouts
 
-get the accrued staking rewards payouts to (toNodeOperator, toTnft, toBnft, toTreasury)
+get the accrued staking rewards payouts to (toTnft, toBnft)
 
 
 ```solidity
@@ -203,7 +203,7 @@ function getStakingRewardsPayouts(IEtherFiNodesManager.RewardsSplit memory _spli
 
 ### getProtocolRewards
 
-get the accrued protocol rewards payouts to (toNodeOperator, toTnft, toBnft, toTreasury)
+get the accrued protocol rewards payouts to (toTnft, toBnft)
 
 
 ```solidity

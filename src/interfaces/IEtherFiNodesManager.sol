@@ -30,13 +30,12 @@ interface IEtherFiNodesManager {
     function DEPRECATED_delayedWithdrawalRouter() external view returns (IDelayedWithdrawalRouter);
     function eigenPodManager() external view returns (IEigenPodManager);
     function delegationManager() external view returns (IDelegationManager);
-    function treasuryContract() external view returns (address);
 
     function etherfiNodeAddress(uint256 _validatorId) external view returns (address);
-    function calculateTVL(uint256 _validatorId, uint256 _beaconBalance) external view returns (uint256, uint256, uint256, uint256);
-    function getFullWithdrawalPayouts(uint256 _validatorId) external view returns (uint256, uint256, uint256, uint256);
+    function calculateTVL(uint256 _validatorId, uint256 _beaconBalance) external view returns (uint256, uint256);
+    function getFullWithdrawalPayouts(uint256 _validatorId) external view returns (uint256, uint256);
     function getNonExitPenalty(uint256 _validatorId) external view returns (uint256);
-    function getRewardsPayouts(uint256 _validatorId) external view returns (uint256, uint256, uint256, uint256);
+    function getRewardsPayouts(uint256 _validatorId) external view returns (uint256);
     function getWithdrawalCredentials(uint256 _validatorId) external view returns (bytes memory);
     function getValidatorInfo(uint256 _validatorId) external view returns (ValidatorInfo memory);
     function numAssociatedValidators(uint256 _validatorId) external view returns (uint256);
@@ -58,17 +57,16 @@ interface IEtherFiNodesManager {
     function batchQueueRestakedWithdrawal(uint256[] calldata _validatorIds) external;
     function batchSendExitRequest(uint256[] calldata _validatorIds) external;
     function batchFullWithdraw(uint256[] calldata _validatorIds) external;
-    function batchPartialWithdraw(uint256[] calldata _validatorIds) external;
+    function batchPartialWithdraw(uint256[] calldata _validatorIds) external; //look into this
     function fullWithdraw(uint256 _validatorId) external;
     function getUnusedWithdrawalSafesLength() external view returns (uint256);
     function incrementNumberOfValidators(uint64 _count) external;
     function markBeingSlashed(uint256[] calldata _validatorIds) external;
-    function partialWithdraw(uint256 _validatorId) external;
+    function partialWithdraw(uint256 _validatorId) external; //look into this
     function processNodeExit(uint256[] calldata _validatorIds, uint32[] calldata _exitTimestamp) external;
     function allocateEtherFiNode(bool _enableRestaking) external returns (address);
     function registerValidator(uint256 _validatorId, bool _enableRestaking, address _withdrawalSafeAddress) external;
     function setValidatorPhase(uint256 _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase) external;
     function setNonExitPenalty(uint64 _nonExitPenaltyDailyRate, uint64 _nonExitPenaltyPrincipal) external;
-    function setStakingRewardsSplit(uint64 _treasury, uint64 _nodeOperator, uint64 _tnft, uint64 _bnf) external;
     function unregisterValidator(uint256 _validatorId) external;
 }
