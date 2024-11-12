@@ -721,6 +721,7 @@ contract TestSetup is Test {
         whitelist[0] = address(weEthInstance);
         whitelist[1] = address(liquidityPoolInstance);
         eETHInstance.setWhitelistedSpender(whitelist, true);
+
     }
 
     function setupRoleRegistry() public {

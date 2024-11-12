@@ -65,6 +65,9 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
     IEtherFiAdmin public etherFiAdmin;
 
+    // Phase 2.5
+    uint256 public membershipShares;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -99,6 +102,11 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         admins[_etherFiAdminAddress] = true;
     }
 
+    function initializeV2dot5() external onlyOwner {
+        require(membershipShares == 0, "already initialized");
+        membershipShares = eETH.shares(address(this));
+    }
+
     error InvalidEAPRollover();
 
     /// @notice EarlyAdopterPool users can re-deposit and mint a membership NFT claiming their points & tiers
@@ -123,7 +131,8 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         uint40 loyaltyPoints = uint40(_min(_points, type(uint40).max));
         uint40 tierPoints = membershipNFT.computeTierPointsForEap(_eapDepositBlockNumber);
 
-        liquidityPool.deposit{value: msg.value}(msg.sender, address(0));
+        uint256 mintedShares = liquidityPool.deposit{value: msg.value}(msg.sender, address(0));
+        membershipShares += mintedShares;
 
         uint256 tokenId = _mintMembershipNFT(msg.sender, msg.value - _amountForPoints, _amountForPoints, loyaltyPoints, tierPoints);
 
@@ -167,10 +176,12 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         (uint256 totalBalance, uint256 feeAmount) = _withdrawAndBurn(_tokenId);
 
         // transfer 'eEthShares' of eETH to the owner
+        membershipShares -= liquidityPool.sharesForAmount(totalBalance - feeAmount);
         eETH.transfer(msg.sender, totalBalance - feeAmount);
 
         if (feeAmount > 0) {
-            liquidityPool.withdraw(address(this), feeAmount);
+            uint256 feeShares = liquidityPool.withdraw(address(this), feeAmount);
+            membershipShares += feeShares;
         }
 
         emit NftUnwrappedForEEth(msg.sender, _tokenId, totalBalance - feeAmount, loyaltyPoints, feeAmount);
@@ -187,7 +198,9 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         claim(_tokenId);
 
         uint256 additionalDeposit = _topUpDeposit(_tokenId, _amount, _amountForPoints);
-        liquidityPool.deposit{value: additionalDeposit}(msg.sender, address(0));
+        uint256 mintedShares = liquidityPool.deposit{value: additionalDeposit}(msg.sender, address(0));
+        membershipShares += mintedShares;
+
         _emitNftUpdateEvent(_tokenId);
     }
 
@@ -216,6 +229,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
         // send EETH to recipient before requesting withdraw?
         eETH.approve(address(liquidityPool), _amount);
+        membershipShares -= liquidityPool.sharesForAmount(_amount);
         uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(address(msg.sender), _amount, uint64(0));
 
         _emitNftUpdateEvent(_tokenId);
@@ -236,6 +250,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         (uint256 totalBalance, uint256 feeAmount) = _withdrawAndBurn(_tokenId);
 
         eETH.approve(address(liquidityPool), totalBalance);
+        membershipShares -= liquidityPool.sharesForAmount(totalBalance);
         uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(msg.sender, totalBalance, feeAmount);
         
         return withdrawTokenId;
@@ -266,10 +281,11 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
         // The balance of MembershipManager contract is used to reward ether.fan stakers (not eETH stakers)
         // Eth Rewards Amount per NFT = (eETH share amount of the NFT) * (total rewards ETH amount) / (total eETH share amount in ether.fan)
-        uint256 etherFanEEthShares = eETH.shares(address(this));
+        uint256 etherFanEEthShares = membershipShares;
         uint256 thresholdAmount = fanBoostThresholdEthAmount();
         if (address(this).balance >= thresholdAmount) {
-            uint256 mintedShare = liquidityPool.deposit{value: thresholdAmount}(address(this), address(0));
+            uint256 mintedShares = liquidityPool.deposit{value: thresholdAmount}(address(this), address(0));
+            membershipShares += mintedShares;
             ethRewardsPerEEthShareAfterRebase += 1 ether * thresholdAmount / etherFanEEthShares;
         }
 
@@ -457,7 +473,9 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     }
 
     function _wrapEth(uint256 _amount, uint256 _amountForPoints, address _referral) internal returns (uint256) {
-        liquidityPool.deposit{value: _amount + _amountForPoints}(msg.sender, _referral);
+        uint256 mintedShares = liquidityPool.deposit{value: _amount + _amountForPoints}(msg.sender, _referral);
+        membershipShares += mintedShares;
+
         uint256 tokenId = _mintMembershipNFT(msg.sender, _amount, _amountForPoints, 0, 0);
         _emitNftUpdateEvent(tokenId);
         return tokenId;
