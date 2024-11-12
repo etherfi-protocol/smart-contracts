@@ -247,7 +247,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     // Swap Liquifier's eETH for ETH from the liquidity pool and send it back to the liquidity pool
-    function withdrawEEth(uint256 amount) public {
+    function withdrawEEth(uint256 amount) external {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         liquidityPool.withdraw(address(liquidityPool), amount);
     }
