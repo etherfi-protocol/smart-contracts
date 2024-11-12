@@ -277,7 +277,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         mgr.completeQueuedWithdrawals(withdrawals, tokens, middlewareTimesIndexes, receiveAsTokens);
     }
 
-    /// @dev transfer funds from the withdrawal safe to the 4 associated parties (bNFT, tNFT)
+    /// @dev transfer funds from the withdrawal safe to the 2 associated parties (bNFT, tNFT)
     function withdrawFunds(
         address _tnftHolder, uint256 _tnftAmount,
         address _bnftHolder, uint256 _bnftAmount
