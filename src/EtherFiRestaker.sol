@@ -28,6 +28,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     LiquidityPool public liquidityPool;
     Liquifier public liquifier;
+    address public etherFiRestakeManager;
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
     ILido public lido;
     IDelegationManager public eigenLayerDelegationManager;
@@ -61,13 +62,14 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     /// @notice initialize to set variables on deployment
-    function initialize(address _liquidityPool, address _liquifier) initializer external {
+    function initialize(address _liquidityPool, address _liquifier, address _manager) initializer external {
         __Ownable_init();
         __Pausable_init();
         __UUPSUpgradeable_init();
 
         liquidityPool = LiquidityPool(payable(_liquidityPool));
         liquifier = Liquifier(payable(_liquifier));
+        etherFiRestakeManager = _manager;
 
         lido = liquifier.lido();
         lidoWithdrawalQueue = liquifier.lidoWithdrawalQueue();
@@ -85,66 +87,16 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     receive() external payable {}
 
     // |--------------------------------------------------------------------------------------------|
-    // |                                   Handling Lido's stETH                                    |
-    // |--------------------------------------------------------------------------------------------|
-
-    /// Initiate the redemption of stETH for ETH 
-    /// @notice Request for all stETH holdings
-    function stEthRequestWithdrawal() external onlyAdmin returns (uint256[] memory) {
-        uint256 amount = lido.balanceOf(address(this));
-        return stEthRequestWithdrawal(amount);
-    }
-
-    /// @notice Request for a specific amount of stETH holdings
-    /// @param _amount the amount of stETH to request
-    function stEthRequestWithdrawal(uint256 _amount) public onlyAdmin returns (uint256[] memory) {
-        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) revert IncorrectAmount();
-        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
-
-        uint256 maxAmount = lidoWithdrawalQueue.MAX_STETH_WITHDRAWAL_AMOUNT();
-        uint256 numReqs = (_amount + maxAmount - 1) / maxAmount;
-        uint256[] memory reqAmounts = new uint256[](numReqs);
-        for (uint256 i = 0; i < numReqs; i++) {
-            reqAmounts[i] = (i == numReqs - 1) ? _amount - i * maxAmount : maxAmount;
-        }
-        lido.approve(address(lidoWithdrawalQueue), _amount);
-        uint256[] memory reqIds = lidoWithdrawalQueue.requestWithdrawals(reqAmounts, address(this));
-
-        emit QueuedStEthWithdrawals(reqIds);
-
-        return reqIds;
-    }
-
-    /// @notice Claim a batch of withdrawal requests if they are finalized sending the ETH to the this contract back
-    /// @param _requestIds array of request ids to claim
-    /// @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
-    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyAdmin {
-        uint256 balance = address(this).balance;
-        lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
-
-        withdrawEther();
-
-        emit CompletedStEthQueuedWithdrawals(_requestIds);
-    }
-
-    // Send the ETH back to the liquidity pool
-    function withdrawEther() public onlyAdmin {
-        uint256 amountToLiquidityPool = address(this).balance;
-        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
-        require(sent, "ETH_SEND_TO_LIQUIDITY_POOL_FAILED");
-    }
-
-    // |--------------------------------------------------------------------------------------------|
     // |                                    EigenLayer Restaking                                    |
     // |--------------------------------------------------------------------------------------------|
     
     // delegate to an AVS operator
-    function delegateTo(address operator, IDelegationManager.SignatureWithExpiry memory approverSignatureAndExpiry, bytes32 approverSalt) external onlyAdmin {
+    function delegateTo(address operator, IDelegationManager.SignatureWithExpiry memory approverSignatureAndExpiry, bytes32 approverSalt) external managerOnly {
         eigenLayerDelegationManager.delegateTo(operator, approverSignatureAndExpiry, approverSalt);
     }
 
     // undelegate from the current AVS operator & un-restake all
-    function undelegate() external onlyAdmin returns (bytes32[] memory) {
+    function undelegate() external managerOnly returns (bytes32[] memory) {
         // Un-restake all assets
         // Currently, only stETH is supported
         TokenInfo memory info = tokenInfos[address(lido)];
@@ -159,7 +111,9 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // deposit the token in holding into the restaking strategy
-    function depositIntoStrategy(address token, uint256 amount) external onlyAdmin returns (uint256) {
+    function depositIntoStrategy(address token) external managerOnly returns (uint256) {
+        // using `balanceOf` instead of passing the amount param from `EtherFiRestakeManager.depositIntoStrategy` to avoid 1-2 wei corner case on stETH transfers
+        uint256 amount = IERC20(token).balanceOf(address(this));
         IERC20(token).safeApprove(address(eigenLayerStrategyManager), amount);
 
         IStrategy strategy = tokenInfos[token].elStrategy;
@@ -172,13 +126,13 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// Made easy for operators
     /// @param token the token to withdraw
     /// @param amount the amount of token to withdraw
-    function queueWithdrawals(address token, uint256 amount) public onlyAdmin returns (bytes32[] memory) {
+    function queueWithdrawals(address token, uint256 amount) public managerOnly returns (bytes32[] memory) {
         uint256 shares = getEigenLayerRestakingStrategy(token).underlyingToSharesView(amount);
         return _queueWithdrawlsByShares(token, shares);
     }
 
     /// Advanced version
-    function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] memory queuedWithdrawalParams) public onlyAdmin returns (bytes32[] memory) {
+    function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] memory queuedWithdrawalParams) public managerOnly returns (bytes32[] memory) {
         uint256 currentNonce = eigenLayerDelegationManager.cumulativeWithdrawalsQueued(address(this));
         
         bytes32[] memory withdrawalRoots = eigenLayerDelegationManager.queueWithdrawals(queuedWithdrawalParams);
@@ -212,7 +166,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     /// @notice Complete the queued withdrawals that are ready to be withdrawn
     /// @param max_cnt the maximum number of withdrawals to complete
-    function completeQueuedWithdrawals(uint256 max_cnt) external onlyAdmin {
+    function completeQueuedWithdrawals(uint256 max_cnt) external managerOnly {
         bytes32[] memory withdrawalRoots = pendingWithdrawalRoots();
 
         // process the first `max_cnt` withdrawals
@@ -262,7 +216,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @param _tokens Array of tokens for each QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single array.
     /// @param _middlewareTimesIndexes One index to reference per QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single index.
     /// @dev middlewareTimesIndex should be calculated off chain before calling this function by finding the first index that satisfies `slasher.canWithdraw`
-    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory _queuedWithdrawals, IERC20[][] memory _tokens, uint256[] memory _middlewareTimesIndexes) public onlyAdmin {
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory _queuedWithdrawals, IERC20[][] memory _tokens, uint256[] memory _middlewareTimesIndexes) public managerOnly {
         uint256 num = _queuedWithdrawals.length;
         bool[] memory receiveAsTokens = new bool[](num);
         for (uint256 i = 0; i < num; i++) {
@@ -276,24 +230,34 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
         /// it will update the erc20 balances of this contract
         eigenLayerDelegationManager.completeQueuedWithdrawals(_queuedWithdrawals, _tokens, _middlewareTimesIndexes, receiveAsTokens);
+
+        /// transfer tokens back to manager
+        for (uint256 i = 0; i < _queuedWithdrawals.length; ++i) {
+            for (uint256 j = 0; j < _tokens[i].length; ++i) {
+                _tokens[i][j].transfer(etherFiRestakeManager, _tokens[i][j].balanceOf(address(this)));
+            }
+        }
     }
 
+    // |--------------------------------------------------------------------------------------------|
+    // |                                    VIEW functions                                          |
+    // |--------------------------------------------------------------------------------------------|
+    
     /// Enumerate the pending withdrawal roots
+    // used in complete queued withdrawal function
     function pendingWithdrawalRoots() public view returns (bytes32[] memory) {
         return withdrawalRootsSet.values();
     }
 
     /// Check if a withdrawal is pending for a given withdrawal root
+    // not directly used in withdrawal logic, seems like it could be useful
     function isPendingWithdrawal(bytes32 _withdrawalRoot) external view returns (bool) {
         return withdrawalRootsSet.contains(_withdrawalRoot);
     }
 
-
-    // |--------------------------------------------------------------------------------------------|
-    // |                                    VIEW functions                                        |
-    // |--------------------------------------------------------------------------------------------|
-    function getTotalPooledEther() public view returns (uint256 total) {
-        total = address(this).balance + getTotalPooledEther(address(lido));
+    // Returns the amount that this contract has restaked denominated in Ether
+    function getRestakedAmount() external view returns (uint256 amount) {
+        return getTotalPooledEther(address(lido));
     }
 
     function getTotalPooledEther(address _token) public view returns (uint256) {
@@ -301,6 +265,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         return restaked + unrestaking + holding + pendingForWithdrawals;
     }
     
+    // used in the getRestakedAmount function
     function getRestakedAmount(address _token) public view returns (uint256) {
         TokenInfo memory info = tokenInfos[_token];
         uint256 shares = eigenLayerStrategyManager.stakerStrategyShares(address(this), info.elStrategy);
@@ -352,7 +317,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         admins[_address] = _isAdmin;
     }
 
-    function updatePauser(address _address, bool _isPauser) external onlyAdmin {
+    function updatePauser(address _address, bool _isPauser) external managerOnly {
         pausers[_address] = _isPauser;
     }
 
@@ -362,7 +327,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external managerOnly {
         _unpause();
     }
 
@@ -398,14 +363,13 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         if (!(pausers[msg.sender] || admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
     }
 
-    /* MODIFIER */
-    modifier onlyAdmin() {
-        _requireAdmin();
+    modifier onlyPauser() {
+        _requirePauser();
         _;
     }
 
-    modifier onlyPauser() {
-        _requirePauser();
+    modifier managerOnly() {
+        require(msg.sender == etherFiRestakeManager, "NOT_MANAGER");
         _;
     }
 }

@@ -420,7 +420,7 @@ contract TestSetup is Test {
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
-        etherFiRestakerInstance.initialize(address(liquidityPoolInstance), address(liquifierInstance));
+        etherFiRestakerInstance.initialize(address(liquidityPoolInstance), address(liquifierInstance), address(0x0));
         etherFiRestakerInstance.updateAdmin(alice, true);
 
         liquifierInstance.initializeOnUpgrade(address(etherFiRestakerInstance));
@@ -1378,10 +1378,10 @@ contract TestSetup is Test {
         vm.startPrank(alice);
         uint256 lastCheckPointIndex = liquifierInstance.lidoWithdrawalQueue().getLastCheckpointIndex();
         uint256[] memory hints = liquifierInstance.lidoWithdrawalQueue().findCheckpointHints(reqIds, 1, lastCheckPointIndex);
-        etherFiRestakerInstance.stEthClaimWithdrawals(reqIds, hints);
+        // etherFiRestakerInstance.stEthClaimWithdrawals(reqIds, hints);
 
         // The ether.fi admin withdraws the ETH from the liquifier contract to the liquidity pool contract
-        etherFiRestakerInstance.withdrawEther();
+        // etherFiRestakerInstance.withdrawEther();
         vm.stopPrank();
     }
 
