@@ -15,7 +15,7 @@ interface IEtherFiOracle {
         uint256[] exitedValidators;
         uint32[]  exitedValidatorsExitTimestamps;
         uint256[] slashedValidators;
-        uint256[] withdrawalRequestsToInvalidate;
+        uint32[] withdrawalRequestsToInvalidate;
         uint32 lastFinalizedWithdrawalRequestId;
         uint32 eEthTargetAllocationWeight;
         uint32 etherFanTargetAllocationWeight;

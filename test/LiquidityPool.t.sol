@@ -138,13 +138,13 @@ contract LiquidityPoolTest is TestSetup {
         uint256 aliceNonce = eETHInstance.nonces(alice);
         // alice priv key = 2
         ILiquidityPool.PermitInput memory permitInputAlice = createPermitInput(2, address(liquidityPoolInstance), 2 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
-        uint256 aliceReqId = liquidityPoolInstance.requestWithdrawWithPermit(alice, 2 ether, permitInputAlice);
+        uint32 aliceReqId = liquidityPoolInstance.requestWithdrawWithPermit(alice, 2 ether, permitInputAlice);
         vm.stopPrank();
         
         _finalizeWithdrawalRequest(aliceReqId);
         
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(aliceReqId);
+        withdrawRequestNFTInstance.claimWithdraw(aliceReqId, 1);
         assertEq(eETHInstance.balanceOf(alice), 1 ether);
         assertEq(alice.balance, 2 ether);
         vm.stopPrank();
@@ -153,13 +153,13 @@ contract LiquidityPoolTest is TestSetup {
         uint256 bobNonce = eETHInstance.nonces(bob);
         // bob priv key = 3
         ILiquidityPool.PermitInput memory permitInputBob = createPermitInput(3, address(liquidityPoolInstance), 2 ether, bobNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
-        uint256 bobReqId = liquidityPoolInstance.requestWithdrawWithPermit(bob, 2 ether, permitInputBob);
+        uint32 bobReqId = liquidityPoolInstance.requestWithdrawWithPermit(bob, 2 ether, permitInputBob);
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(bobReqId);
 
         vm.startPrank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(bobReqId);
+        withdrawRequestNFTInstance.claimWithdraw(bobReqId, 2);
         assertEq(eETHInstance.balanceOf(bob), 0);
         assertEq(bob.balance, 3 ether);
         vm.stopPrank();
@@ -775,13 +775,13 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.startPrank(bob);
         eETHInstance.approve(address(liquidityPoolInstance), eEthTVL);
-        uint256 bobRequestId = liquidityPoolInstance.requestWithdraw(bob, eEthTVL);
+        uint32 bobRequestId = liquidityPoolInstance.requestWithdraw(bob, eEthTVL);
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(bobRequestId);
 
         vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(bobRequestId);
+        withdrawRequestNFTInstance.claimWithdraw(bobRequestId, 1);
 
         assertEq(address(liquidityPoolInstance).balance, 0);
         assertEq(eETHInstance.totalSupply(), 0);

@@ -15,7 +15,7 @@ contract WithdrawRequestNFTUpgrade is Script {
         address addressProviderAddress = vm.envAddress("CONTRACT_REGISTRY");
         addressProvider = AddressProvider(addressProviderAddress);
 
-        address proxyAddress = addressProvider.getContractAddress("WithdrawRequestNFT");
+        address payable proxyAddress = payable(addressProvider.getContractAddress("WithdrawRequestNFT"));
 
         vm.startBroadcast(deployerPrivateKey);
 

@@ -75,13 +75,13 @@ contract MembershipManagerV0Test is TestSetup {
         membershipManagerInstance.requestWithdrawAndBurn(aliceToken);
 
         // Bob burns the NFT extracting remaining value
-        uint256 bobTokenId = membershipManagerInstance.requestWithdrawAndBurn(bobToken);
+        uint32 bobTokenId = uint32(membershipManagerInstance.requestWithdrawAndBurn(bobToken));
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(bobTokenId);
 
         vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(bobTokenId);
+        withdrawRequestNFTInstance.claimWithdraw(bobTokenId, 1);
 
         assertEq(bob.balance, 100 ether, "Bob should have 100 ether");
         assertEq(membershipNftInstance.balanceOf(bob, bobToken), 0);
@@ -111,13 +111,13 @@ contract MembershipManagerV0Test is TestSetup {
         assertEq(membershipNftInstance.tierPointsOf(tokenId), 24);
 
         // Alice's NFT unwraps 1 membership points to 1 ETH
-        uint256 aliceRequestId1 = membershipManagerInstance.requestWithdraw(tokenId, 1 ether);
+        uint32 aliceRequestId1 = uint32(membershipManagerInstance.requestWithdraw(tokenId, 1 ether));
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(aliceRequestId1);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId1);
+        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId1, 1);
         assertEq(membershipNftInstance.loyaltyPointsOf(tokenId), 2 * kwei);
         assertEq(membershipNftInstance.tierPointsOf(tokenId), 0);
         assertEq(membershipNftInstance.valueOf(tokenId), 1 ether);
@@ -133,13 +133,13 @@ contract MembershipManagerV0Test is TestSetup {
         assertEq(membershipNftInstance.tierPointsOf(tokenId), 24 * 2);
 
         // Alice's NFT unwraps all her remaining membership points, burning the NFT
-        uint256 aliceRequestId2 = membershipManagerInstance.requestWithdrawAndBurn(tokenId);
+        uint32 aliceRequestId2 = uint32(membershipManagerInstance.requestWithdrawAndBurn(tokenId));
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(aliceRequestId2);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId2);
+        withdrawRequestNFTInstance.claimWithdraw(aliceRequestId2, 2);
         assertEq(membershipNftInstance.balanceOf(alice, tokenId), 0); 
         assertEq(alice.balance, 2 ether);
         vm.stopPrank();
@@ -859,14 +859,14 @@ contract MembershipManagerV0Test is TestSetup {
         assertEq(membershipNftInstance.valueOf(tokens[4]), 1 ether + 1 ether * uint256(30) / uint256(100));
     }
 
-    function test_token_vault_migratino() public {
+    function test_token_vault_migration() public {
         vm.deal(alice, 100 ether);
 
         // Alice mints two NFTs with 50 ETH for each
         vm.startPrank(alice);
         uint256 aliceToken1 = membershipManagerInstance.wrapEth{value: 50 ether}(50 ether, 0 ether);
         uint256 aliceToken2 = membershipManagerInstance.wrapEth{value: 50 ether}(50 ether, 0 ether);
-        uint256 reqId;
+        uint32 reqId;
 
         skip(1 days);
 
@@ -917,7 +917,7 @@ contract MembershipManagerV0Test is TestSetup {
 
         vm.startPrank(alice);
         // Alice requests to withdraw 10 ETH 
-        reqId = membershipManagerV1Instance.requestWithdraw(aliceToken1, 10 ether);
+        reqId = uint32(membershipManagerV1Instance.requestWithdraw(aliceToken1, 10 ether));
         assertEq(membershipNftInstance.valueOf(aliceToken1), 190 ether);
         assertEq(membershipNftInstance.loyaltyPointsOf(aliceToken1), 50 * kwei);
         assertEq(membershipNftInstance.tierPointsOf(aliceToken1), 0);
@@ -926,27 +926,27 @@ contract MembershipManagerV0Test is TestSetup {
         _finalizeWithdrawalRequest(reqId);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        withdrawRequestNFTInstance.claimWithdraw(reqId, 1);
         assertEq(address(alice).balance, 10 ether);
 
-        reqId = membershipManagerV1Instance.requestWithdrawAndBurn(aliceToken1);
+        reqId = uint32(membershipManagerV1Instance.requestWithdrawAndBurn(aliceToken1));
         assertEq(membershipNftInstance.valueOf(aliceToken1), 0 ether);
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(reqId);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        withdrawRequestNFTInstance.claimWithdraw(reqId, 2);
         assertEq(address(alice).balance, 200 ether);
 
-        reqId = membershipManagerV1Instance.requestWithdrawAndBurn(aliceToken2);
+        reqId = uint32(membershipManagerV1Instance.requestWithdrawAndBurn(aliceToken2));
         assertEq(membershipNftInstance.valueOf(aliceToken2), 0 ether);
         vm.stopPrank();
 
         _finalizeWithdrawalRequest(reqId);
 
         vm.startPrank(alice);
-        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        withdrawRequestNFTInstance.claimWithdraw(reqId, 3);
         assertEq(address(alice).balance, 400 ether);
 
         vm.stopPrank();
