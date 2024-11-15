@@ -6,32 +6,28 @@ import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
 import "./Liquifier.sol";
 import "./EtherFiRestaker.sol";
+import "./RoleRegistry.sol";
 
-contract EtherFiRestakeManager is
-    Initializable,
-    OwnableUpgradeable,
-    PausableUpgradeable,
-    UUPSUpgradeable
-{
+contract EtherFiRestakeManager is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     LiquidityPool public liquidityPool;
     Liquifier public liquifier;
+    RoleRegistry public roleRegistry;
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
     ILido public lido;
-
-    mapping(address => bool) public pausers;
-    mapping(address => bool) public admins;
 
     UpgradeableBeacon public upgradableBeacon;
     uint256 public nextAvsOperatorId;
     mapping(uint256 => EtherFiRestaker) public etherFiRestaker;
 
+    bytes32 public constant RESTAKING_MANAGER_ADMIN_ROLE = keccak256("RESTAKING_MANAGER_ADMIN_ROLE");
+
     event QueuedStEthWithdrawals(uint256[] _reqIds);
     event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
     event CreatedEtherFiRestaker(uint256 indexed id, address etherFiRestaker);
 
-    error IncorrectCaller();
     error IncorrectAmount();
+    error IncorrectRole();
     error NotEnoughBalance();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -39,16 +35,23 @@ contract EtherFiRestakeManager is
         _disableInitializers();
     }
 
-    function initialize(address _liquidityPool, address _liquifier) initializer external {
+    function initialize(address _liquidityPool, address _liquifier, address _roleRegistry) initializer external {
         __Ownable_init();
-        __Pausable_init();
         __UUPSUpgradeable_init();
 
+        nextAvsOperatorId = 1;
+        upgradableBeacon = new UpgradeableBeacon(address(new EtherFiRestaker()));
         liquidityPool = LiquidityPool(payable(_liquidityPool));
         liquifier = Liquifier(payable(_liquifier));
+        roleRegistry = RoleRegistry(_roleRegistry);
 
         lido = liquifier.lido();
         lidoWithdrawalQueue = liquifier.lidoWithdrawalQueue();
+    }
+
+    
+    function upgradeEtherFiRestaker(address _newImplementation) public onlyOwner {
+        upgradableBeacon.upgradeTo(_newImplementation);
     }
 
     function instantiateEtherFiRestaker(uint256 _nums) external onlyOwner returns (uint256[] memory _ids) {
@@ -75,52 +78,91 @@ contract EtherFiRestakeManager is
     // |                                    EigenLayer Restaking                                    |
     // |--------------------------------------------------------------------------------------------|
 
+    /// @notice delegate to an AVS operator for a `EtherFiRestaker` instance by index
+    /// @param index `EtherFiRestaker` instance to call `delegate` on
     function delegateTo(uint256 index, address operator, IDelegationManager.SignatureWithExpiry memory approverSignatureAndExpiry, bytes32 approverSalt) external {
+        if (!roleRegistry.hasRole(RESTAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         return etherFiRestaker[index].delegateTo(operator, approverSignatureAndExpiry, approverSalt);
     }
 
+    /// @notice undelegate from the current AVS operator & un-restake all
+    /// @param index `EtherFiRestaker` instance to call `undelegate` on
     function undelegate(uint256 index) external returns (bytes32[] memory) {
+        if (!roleRegistry.hasRole(RESTAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         return etherFiRestaker[index].undelegate();
     }
 
+    /// @notice deposit the token in holding into the restaking strategy
+    /// @param index `EtherFiRestaker` instance to deposit from
     function depositIntoStrategy(
         uint256 index,
         address token,
         uint256 amount
     ) external  returns (uint256) {
+        if (!roleRegistry.hasRole(RESTAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         IERC20(token).transfer(address(etherFiRestaker[index]), amount);
         return etherFiRestaker[index].depositIntoStrategy(token);
     }
 
+    /// @notice queue withdrawals for un-restaking the token
+    /// Made easy for operators
+    /// @param index `EtherFiRestaker` instance to withdraw from
+    /// @param token the token to withdraw
+    /// @param amount the amount of token to withdraw
     function queueWithdrawals(
         uint256 index,
         address token,
         uint256 amount
     ) external returns (bytes32[] memory) {
+        if (!roleRegistry.hasRole(RESTAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         return etherFiRestaker[index].queueWithdrawals(token, amount);
     }
 
+    /// Advanced version
+    /// @notice queue withdrawals with custom parameters for un-restaking multiple tokens
+    /// @param index `EtherFiRestaker` instance to withdraw from
+    /// @param queuedWithdrawalParams Array of withdrawal parameters including strategies and share amounts
     function queueWithdrawalsAdvanced(
         uint256 index,
         IDelegationManager.QueuedWithdrawalParams[] memory queuedWithdrawalParams
     ) external returns (bytes32[] memory) {
-        return etherFiRestaker[index].queueWithdrawals(queuedWithdrawalParams);
+        if (!roleRegistry.hasRole(RESTAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
+        return etherFiRestaker[index].queueWithdrawalsAdvanced(queuedWithdrawalParams);
     }
 
+    /// @notice Complete the queued withdrawals that are ready to be withdrawn
+    /// @param index `EtherFiRestaker` instance to call `completeQueuedWithdrawals` on
+    /// @param max_cnt the maximum number of withdrawals to complete
     function completeQueuedWithdrawals(
         uint256 index,
         uint256 max_cnt
     ) external {
+        if (!roleRegistry.hasRole(RESTAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         etherFiRestaker[index].completeQueuedWithdrawals(max_cnt);
     }
 
+    /// Advanced version
+    /// @notice Used to complete the specified `queuedWithdrawals`. The function caller must match `queuedWithdrawals[...].withdrawer`
+    /// @param index `EtherFiRestaker` instance to call `completeQueuedWithdrawals` on
+    /// @param _queuedWithdrawals The QueuedWithdrawals to complete.
+    /// @param _tokens Array of tokens for each QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single array.
+    /// @param _middlewareTimesIndexes One index to reference per QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single index.
+    /// @dev middlewareTimesIndex should be calculated off chain before calling this function by finding the first index that satisfies `slasher.canWithdraw`
     function completeQueuedWithdrawalsAdvanced(
         uint256 index,
         IDelegationManager.Withdrawal[] memory _queuedWithdrawals,
         IERC20[][] memory _tokens,
         uint256[] memory _middlewareTimesIndexes
     ) external {
-        etherFiRestaker[index].completeQueuedWithdrawals(
+        if (!roleRegistry.hasRole(RESTAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
+        etherFiRestaker[index].completeQueuedWithdrawalsAdvanced(
             _queuedWithdrawals,
             _tokens,
             _middlewareTimesIndexes
@@ -131,16 +173,18 @@ contract EtherFiRestakeManager is
     // |                                   Handling Lido's stETH                                    |
     // |--------------------------------------------------------------------------------------------|
 
-    /// Initiate the redemption of stETH for ETH 
-    /// @notice Request for all stETH holdings
-    function stEthRequestWithdrawal() external onlyAdmin returns (uint256[] memory) {
+    /// @notice Initiate the redemption of stETH for ETH 
+    function stEthRequestWithdrawal() external returns (uint256[] memory) {
+        if (!roleRegistry.hasRole(RESTAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         uint256 amount = lido.balanceOf(address(this));
         return stEthRequestWithdrawal(amount);
     }
 
     /// @notice Request for a specific amount of stETH holdings
     /// @param _amount the amount of stETH to request
-    function stEthRequestWithdrawal(uint256 _amount) public onlyAdmin returns (uint256[] memory) {
+    function stEthRequestWithdrawal(uint256 _amount) public returns (uint256[] memory) {
+        if (!roleRegistry.hasRole(RESTAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) revert IncorrectAmount();
         if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
 
@@ -161,8 +205,9 @@ contract EtherFiRestakeManager is
     /// @notice Claim a batch of withdrawal requests if they are finalized sending the ETH to the this contract back
     /// @param _requestIds array of request ids to claim
     /// @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
-    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyAdmin {
-        uint256 balance = address(this).balance;
+    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external {
+        if (!roleRegistry.hasRole(RESTAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
 
         withdrawEther();
@@ -170,8 +215,10 @@ contract EtherFiRestakeManager is
         emit CompletedStEthQueuedWithdrawals(_requestIds);
     }
 
-    // Send the ETH back to the liquidity pool
-    function withdrawEther() public onlyAdmin {
+    /// @notice Sends the ETH in this contract to the liquidity pool
+    function withdrawEther() public {
+        if (!roleRegistry.hasRole(RESTAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        
         uint256 amountToLiquidityPool = address(this).balance;
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
         require(sent, "ETH_SEND_TO_LIQUIDITY_POOL_FAILED");
@@ -181,35 +228,49 @@ contract EtherFiRestakeManager is
     // |                                    VIEW functions                                          |
     // |--------------------------------------------------------------------------------------------|
 
-    /// @notice Returns the total stETH {staked, unstaked}
-    function getTotalPooledStETH() external view returns (uint256 amount){
+    /// @notice The total amount in wei of assets controlled by the `EtherFiRestakingManager` and `EtherFiRestaker` instances
+    /// @dev Only considers stETH. Will need modification to support additional tokens
+    function getTotalPooledEther() external view returns (uint256 amount){
         uint256 amount = lido.balanceOf(address(this));
-        for (uint256 i = 0; i < nextAvsOperatorId; i++) {
-            amount += etherFiRestaker[i].getRestakedAmount();
+        amount += getEthAmountPendingForRedemption(address(lido));
+        for (uint256 i = 1; i < nextAvsOperatorId; i++) {
+            amount += etherFiRestaker[i].getTotalPooledEther();
         }
         return amount;
+    }
+
+    /// @notice The assets controlled by the manager split between the 4 states
+    /// - restaked in Eigenlayer, 
+    /// - pending for un-restaking from Eigenlayer
+    /// - non-restaked & held by this contract
+    /// - non-restaked & pending in redemption for ETH
+    /// @dev Only considers stETH. Will need modification to support additional tokens
+    function getTotalPooledEtherSplits() public view returns (uint256 holding, uint256 pendingForWithdrawals, uint256 restaked, uint256 unrestaking) {
+        holding = lido.balanceOf(address(this));
+        pendingForWithdrawals = getEthAmountPendingForRedemption(address(lido));
+        for (uint256 i = 1; i < nextAvsOperatorId; i++) {
+            (uint256 restakedInInstance, uint256 unrestakedInInstance) = etherFiRestaker[i].getTotalPooledEtherSplits();
+            restaked += restakedInInstance;
+            unrestaking += unrestakedInInstance;
+        }
+    }
+
+    function getEthAmountPendingForRedemption(address _token) public view returns (uint256) {
+        uint256 total = 0;
+        if (_token == address(lido)) {
+            uint256[] memory stEthWithdrawalRequestIds = lidoWithdrawalQueue.getWithdrawalRequests(address(this));
+            ILidoWithdrawalQueue.WithdrawalRequestStatus[] memory statuses = lidoWithdrawalQueue.getWithdrawalStatus(stEthWithdrawalRequestIds);
+            for (uint256 i = 0; i < statuses.length; i++) {
+                require(statuses[i].owner == address(this), "Not the owner");
+                require(!statuses[i].isClaimed, "Already claimed");
+                total += statuses[i].amountOfStETH;
+            }
+        }
+        return total;
     }
 
     receive() external payable {}
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    function _requireAdmin() internal view virtual {
-        if (!(admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
-    }
-
-    function _requirePauser() internal view virtual {
-        if (!(pausers[msg.sender] || admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
-    }
-
-    /* MODIFIER */
-    modifier onlyAdmin() {
-        _requireAdmin();
-        _;
-    }
-
-    modifier onlyPauser() {
-        _requirePauser();
-        _;
-    }
 }
