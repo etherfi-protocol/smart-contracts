@@ -30,9 +30,10 @@ contract EtherFiRestakerTest is TestSetup {
         vm.startPrank(owner);
         liquifierInstance.updateQuoteStEthWithCurve(false);
         roleRegistryInstance.grantRole(etherFiRestakeManagerInstance.RESTAKING_MANAGER_ADMIN_ROLE(), etherfiOperatingAdmin);
-        etherFiRestakeManagerInstance.instantiateEtherFiRestaker(3);
         vm.stopPrank();
 
+        vm.prank(etherfiOperatingAdmin);
+        etherFiRestakeManagerInstance.instantiateEtherFiRestaker(3);
     }
 
     function _deposit_stEth(uint256 _amount) internal {

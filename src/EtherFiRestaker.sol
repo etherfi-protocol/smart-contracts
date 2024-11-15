@@ -68,6 +68,7 @@ contract EtherFiRestaker is Initializable {
     }
 
     /// @notice undelegate from the current AVS operator & un-restake all
+    /// @dev Only considers stETH. Will need modification to support additional tokens
     function undelegate() external managerOnly returns (bytes32[] memory) {
         // Un-restake all assets
         // Currently, only stETH is supported
@@ -245,7 +246,7 @@ contract EtherFiRestaker is Initializable {
         TokenInfo memory info = tokenInfos[_token];
         if (info.elStrategy != IStrategy(address(0))) {
             uint256 restakedTokenAmount = getRestakedAmount(_token);
-            restaked = liquifier.quoteByFairValue(_token, restakedTokenAmount); /// restaked & pending for withdrawals
+            restaked = liquifier.quoteByFairValue(_token, restakedTokenAmount);
             unrestaking = getEthAmountInEigenLayerPendingForWithdrawals(_token);
         }
     }

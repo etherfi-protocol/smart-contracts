@@ -49,12 +49,13 @@ contract EtherFiRestakeManager is Initializable, OwnableUpgradeable, UUPSUpgrade
         lidoWithdrawalQueue = liquifier.lidoWithdrawalQueue();
     }
 
-    
-    function upgradeEtherFiRestaker(address _newImplementation) public onlyOwner {
+    function upgradeEtherFiRestaker(address _newImplementation) external onlyOwner {
         upgradableBeacon.upgradeTo(_newImplementation);
     }
 
-    function instantiateEtherFiRestaker(uint256 _nums) external onlyOwner returns (uint256[] memory _ids) {
+    function instantiateEtherFiRestaker(uint256 _nums) external returns (uint256[] memory _ids) {
+        if (!roleRegistry.hasRole(RESTAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         _ids = new uint256[](_nums);
         for (uint256 i = 0; i < _nums; i++) {
             _ids[i] = _instantiateEtherFiRestaker();
@@ -87,6 +88,7 @@ contract EtherFiRestakeManager is Initializable, OwnableUpgradeable, UUPSUpgrade
     }
 
     /// @notice undelegate from the current AVS operator & un-restake all
+    /// @dev Only considers stETH. Will need modification to support additional tokens
     /// @param index `EtherFiRestaker` instance to call `undelegate` on
     function undelegate(uint256 index) external returns (bytes32[] memory) {
         if (!roleRegistry.hasRole(RESTAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
