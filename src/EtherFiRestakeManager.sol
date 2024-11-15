@@ -239,8 +239,8 @@ contract EtherFiRestakeManager is Initializable, OwnableUpgradeable, UUPSUpgrade
         return amount;
     }
 
-    /// @notice The assets controlled by the manager split between the 4 states
-    /// - restaked in Eigenlayer, 
+    /// @notice The assets controlled by the manager split between 4 states
+    /// - restaked in Eigenlayer from an `EtherFiRestaker` instance
     /// - pending for un-restaking from Eigenlayer
     /// - non-restaked & held by this contract
     /// - non-restaked & pending in redemption for ETH

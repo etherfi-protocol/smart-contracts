@@ -227,6 +227,20 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakeManagerInstance.undelegate(1);
     }
 
+    function test_change_operator() public {
+        test_delegate_to();
+
+        ISignatureUtils.SignatureWithExpiry memory signature = ISignatureUtils.SignatureWithExpiry({
+            signature: hex"",
+            expiry: 0
+        });
+
+        vm.startPrank(etherfiOperatingAdmin);
+        vm.expectRevert("DelegationManager._delegate: staker is already actively delegated");
+        etherFiRestakeManagerInstance.delegateTo(1, avsOperator2, signature, 0x0);
+        vm.stopPrank();
+    }
+
     function test_multi_restakers_multi_states() public {
         EtherFiRestaker etherFiRestakerInstance = etherFiRestakeManagerInstance.etherFiRestaker(1);
         
@@ -272,17 +286,24 @@ contract EtherFiRestakerTest is TestSetup {
 
     }
 
-    function test_change_operator() public {
-        test_delegate_to();
+    function test_beacon_upgrade() public {
+        _deposit_stEth(10 ether);
 
-        ISignatureUtils.SignatureWithExpiry memory signature = ISignatureUtils.SignatureWithExpiry({
-            signature: hex"",
-            expiry: 0
-        });
+        vm.prank(owner);
+        etherFiRestakeManagerInstance.upgradeEtherFiRestaker(address(roleRegistryInstance));
 
-        vm.startPrank(etherfiOperatingAdmin);
-        vm.expectRevert("DelegationManager._delegate: staker is already actively delegated");
-        etherFiRestakeManagerInstance.delegateTo(1, avsOperator2, signature, 0x0);
+        vm.prank(alice);
+        vm.expectRevert();
+        etherFiRestakeManagerInstance.depositIntoStrategy(1, address(stEth), 5 ether);
+
+        vm.startPrank(owner);
+        etherFiRestakeManagerInstance.upgradeEtherFiRestaker(address(new EtherFiRestaker()));
         vm.stopPrank();
+        
+
+        vm.startPrank(alice);
+        etherFiRestakeManagerInstance.depositIntoStrategy(1, address(stEth), 5 ether);
+        etherFiRestakeManagerInstance.depositIntoStrategy(3, address(stEth), 5 ether);
+
     }
 }
