@@ -35,12 +35,12 @@ contract EtherFiRestakeManager is Initializable, OwnableUpgradeable, UUPSUpgrade
         _disableInitializers();
     }
 
-    function initialize(address _liquidityPool, address _liquifier, address _roleRegistry) initializer external {
+    function initialize(address _liquidityPool, address _liquifier, address _roleRegistry, address _etherFiRestakerImpl) initializer external {
         __Ownable_init();
         __UUPSUpgradeable_init();
 
         nextAvsOperatorId = 1;
-        upgradableBeacon = new UpgradeableBeacon(address(new EtherFiRestaker()));
+        upgradableBeacon = new UpgradeableBeacon(_etherFiRestakerImpl);
         liquidityPool = LiquidityPool(payable(_liquidityPool));
         liquifier = Liquifier(payable(_liquifier));
         roleRegistry = RoleRegistry(_roleRegistry);
