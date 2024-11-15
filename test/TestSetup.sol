@@ -425,7 +425,9 @@ contract TestSetup is Test {
         etherFiRestakeManagerProxy = new UUPSProxy(address(etherFiRestakeManagerImplementation), "");
         etherFiRestakeManagerInstance = EtherFiRestakeManager(payable(etherFiRestakeManagerProxy));
 
-        etherFiRestakeManagerInstance.initialize(address(liquidityPoolInstance), address(liquifierInstance), address(roleRegistryInstance));
+        address etherFiRestakerImpl = address(new EtherFiRestaker());
+
+        etherFiRestakeManagerInstance.initialize(address(liquidityPoolInstance), address(liquifierInstance), address(roleRegistryInstance), address(etherFiRestakerImpl));
 
         liquifierInstance.initializeOnUpgrade(address(etherFiRestakeManagerInstance));
     }
