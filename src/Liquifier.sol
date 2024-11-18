@@ -193,51 +193,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return depositWithERC20(_token, _amount, _referral);
     }
 
-    /// Initiate the process for redemption of stETH 
-    function stEthRequestWithdrawal() external returns (uint256[] memory) {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-
-        uint256 amount = lido.balanceOf(address(this));
-        return stEthRequestWithdrawal(amount);
-    }
-
-    function stEthRequestWithdrawal(uint256 _amount) public returns (uint256[] memory) {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) revert IncorrectAmount();
-        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
-
-        tokenInfos[address(lido)].ethAmountPendingForWithdrawals += uint128(_amount);
-
-        uint256 maxAmount = lidoWithdrawalQueue.MAX_STETH_WITHDRAWAL_AMOUNT();
-        uint256 numReqs = (_amount + maxAmount - 1) / maxAmount;
-        uint256[] memory reqAmounts = new uint256[](numReqs);
-        for (uint256 i = 0; i < numReqs; i++) {
-            reqAmounts[i] = (i == numReqs - 1) ? _amount - i * maxAmount : maxAmount;
-        }
-        lido.approve(address(lidoWithdrawalQueue), _amount);
-        uint256[] memory reqIds = lidoWithdrawalQueue.requestWithdrawals(reqAmounts, address(this));
-
-        emit QueuedStEthWithdrawals(reqIds);
-
-        return reqIds;
-    }
-
-    /// @notice Claim a batch of withdrawal requests if they are finalized sending the ETH to the this contract back
-    /// @param _requestIds array of request ids to claim
-    /// @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
-    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        uint256 balance = address(this).balance;
-        lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
-        uint256 newBalance = address(this).balance;
-
-        // to prevent the underflow error
-        uint128 dx = uint128(_min(newBalance - balance, tokenInfos[address(lido)].ethAmountPendingForWithdrawals));
-        tokenInfos[address(lido)].ethAmountPendingForWithdrawals -= dx;
-
-        emit CompletedStEthQueuedWithdrawals(_requestIds);
-    }
-
     // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
     function withdrawEther() external {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
@@ -384,11 +339,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
-    }
-
-    function isDepositCapReached(address _token, uint256 _amount) public view returns (bool) {
-        uint256 amountOut = quoteByMarketValue(_token, _amount);
-        return rateLimiter.canConsume(_token, _amount, amountOut);
     }
 
     /* INTERNAL FUNCTIONS */
