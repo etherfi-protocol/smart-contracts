@@ -72,16 +72,25 @@ contract LiquifierTest is TestSetup {
 
         vm.deal(alice, 100 ether);
 
+        vm.startPrank(liquifierInstance.owner());
+        liquifierInstance.updateQuoteStEthWithCurve(true);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500); // 5%
+        vm.stopPrank();
+
         vm.startPrank(alice);
         stEth.submit{value: 10 ether}(address(0));
         stEth.approve(address(liquifierInstance), 10 ether);
         liquifierInstance.depositWithERC20(address(stEth), 10 ether, address(0));
         vm.stopPrank();
 
-        assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.1 ether);
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), 10 ether - 0.5 ether, 0.1 ether);
+
+        uint256 aliceQuotedEETH = liquifierInstance.quoteByDiscountedValue(address(stEth), 10 ether);
+        // alice will actually receive 1 wei less due to the infamous 1 wei rounding corner case
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), aliceQuotedEETH, 1);
     }
 
-    function test_deopsit_stEth_and_swap() internal {
+    function test_deposit_stEth_and_swap() internal {
         _setUp(MAINNET_FORK);
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
         vm.deal(alice, 100 ether);
@@ -101,7 +110,7 @@ contract LiquifierTest is TestSetup {
         lpTvl = liquidityPoolInstance.getTotalPooledEther();
     }
 
-    function test_deopsit_stEth_with_explicit_permit() public {
+    function test_deposit_stEth_with_explicit_permit() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
@@ -194,62 +203,6 @@ contract LiquifierTest is TestSetup {
         eigenLayerStrategyManager.unpause(0);
         strategyTVLLimits.unpause(0);
         strategyTVLLimits.setTVLLimits(1_000_000_0 ether, 1_000_000_0 ether);
-        vm.stopPrank();
-    }
-
-    function test_pancacke_wbETH_swap() internal {
-        initializeRealisticFork(MAINNET_FORK);
-        setUpLiquifier(MAINNET_FORK);
-
-        uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
-        uint256 lpBalance = address(liquidityPoolInstance).balance;
-
-        uint256 inputAmount = 50 ether;
-
-        vm.startPrank(alice);
-
-        vm.expectRevert("Too little received");
-        liquifierInstance.pancakeSwapForEth(address(wbEth), inputAmount, 500, 2 * inputAmount, 3600);
-
-        uint256 beforeTVL = liquidityPoolInstance.getTotalPooledEther();
-        uint256 beforeBalance = address(liquifierInstance).balance;
-
-        uint256 exchangeRate = IWBETH(address(wbEth)).exchangeRate();
-        uint256 maxSlippageBp = 50; // 0.5%
-        uint256 minOutput = (exchangeRate * inputAmount * (10000 - maxSlippageBp)) / 10000 / 1e18;
-        liquifierInstance.pancakeSwapForEth(address(wbEth), inputAmount, 500, minOutput, 3600);
-
-        assertGe(address(liquifierInstance).balance, beforeBalance + minOutput);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), beforeTVL); // does not change till Oracle updates
-
-        vm.stopPrank();
-    }
-
-    function test_pancacke_cbETH_swap() internal {
-        initializeRealisticFork(MAINNET_FORK);
-        setUpLiquifier(MAINNET_FORK);
-
-        uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
-        uint256 lpBalance = address(liquidityPoolInstance).balance;
-
-        uint256 inputAmount = 50 ether;
-
-        vm.startPrank(alice);
-
-        vm.expectRevert("Too little received");
-        liquifierInstance.pancakeSwapForEth(address(cbEth), inputAmount, 500, 2 * inputAmount, 3600);
-
-        uint256 beforeTVL = liquidityPoolInstance.getTotalPooledEther();
-        uint256 beforeBalance = address(liquifierInstance).balance;
-
-        uint256 exchangeRate = IWBETH(address(cbEth)).exchangeRate();
-        uint256 maxSlippageBp = 50; // 0.5%
-        uint256 minOutput = (exchangeRate * inputAmount * (10000 - maxSlippageBp)) / 10000 / 1e18;
-        liquifierInstance.pancakeSwapForEth(address(cbEth), inputAmount, 500, minOutput, 3600);
-
-        assertGe(address(liquifierInstance).balance, beforeBalance + minOutput);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), beforeTVL); // does not change till Oracle updates
-
         vm.stopPrank();
     }
 
