@@ -1424,27 +1424,6 @@ contract TestSetup is Test {
         }
     }
 
-    function _finalizeLidoWithdrawals(uint256[] memory reqIds) internal {
-        bytes32 FINALIZE_ROLE = liquifierInstance.lidoWithdrawalQueue().FINALIZE_ROLE();
-        address finalize_role = liquifierInstance.lidoWithdrawalQueue().getRoleMember(FINALIZE_ROLE, 0);
-
-        // The redemption is approved by the Lido
-        vm.startPrank(finalize_role);
-        uint256 currentRate = stEth.getTotalPooledEther() * 1e27 / stEth.getTotalShares();
-        (uint256 ethToLock, uint256 sharesToBurn) = liquifierInstance.lidoWithdrawalQueue().prefinalize(reqIds, currentRate);
-        liquifierInstance.lidoWithdrawalQueue().finalize(reqIds[reqIds.length-1], currentRate);
-        vm.stopPrank();
-
-        // The ether.fi admin claims the finalized withdrawal, which sends the ETH to the liquifier contract
-        vm.startPrank(alice);
-        uint256 lastCheckPointIndex = liquifierInstance.lidoWithdrawalQueue().getLastCheckpointIndex();
-        uint256[] memory hints = liquifierInstance.lidoWithdrawalQueue().findCheckpointHints(reqIds, 1, lastCheckPointIndex);
-        liquifierInstance.stEthClaimWithdrawals(reqIds, hints);
-
-        liquifierInstance.withdrawEther();
-        vm.stopPrank();
-    }
-
     function _prepareForDepositData(uint256[] memory _validatorIds, uint256 _depositAmount) internal returns (IStakingManager.DepositData[] memory) {
         IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](_validatorIds.length);
         bytes[] memory pubKey = new bytes[](_validatorIds.length);

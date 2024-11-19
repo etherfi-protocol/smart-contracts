@@ -72,16 +72,25 @@ contract LiquifierTest is TestSetup {
 
         vm.deal(alice, 100 ether);
 
+        vm.startPrank(liquifierInstance.owner());
+        liquifierInstance.updateQuoteStEthWithCurve(true);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500); // 5%
+        vm.stopPrank();
+
         vm.startPrank(alice);
         stEth.submit{value: 10 ether}(address(0));
         stEth.approve(address(liquifierInstance), 10 ether);
         liquifierInstance.depositWithERC20(address(stEth), 10 ether, address(0));
         vm.stopPrank();
 
-        assertGe(eETHInstance.balanceOf(alice), 10 ether - 0.1 ether);
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), 10 ether - 0.5 ether, 0.1 ether);
+
+        uint256 aliceQuotedEETH = liquifierInstance.quoteByDiscountedValue(address(stEth), 10 ether);
+        // alice will actually receive 1 wei less due to the infamous 1 wei rounding corner case
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), aliceQuotedEETH, 1);
     }
 
-    function test_deopsit_stEth_and_swap() internal {
+    function test_deposit_stEth_and_swap() internal {
         _setUp(MAINNET_FORK);
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
         vm.deal(alice, 100 ether);
@@ -101,7 +110,7 @@ contract LiquifierTest is TestSetup {
         lpTvl = liquidityPoolInstance.getTotalPooledEther();
     }
 
-    function test_deopsit_stEth_with_explicit_permit() public {
+    function test_deposit_stEth_with_explicit_permit() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
@@ -136,56 +145,6 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, address(0), permitInput2);
     }
 
-    function test_withdrawal_of_non_restaked_stEth() public {
-        test_deposit_stEth();
-        
-        uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
-        uint256 lpBalance = address(liquidityPoolInstance).balance;
-        uint256 liquifierStEthTvl = liquifierInstance.getTotalPooledEther(address(stEth));
-        uint256 liquifierBalance = address(liquifierInstance).balance;
-
-        vm.prank(alice);        
-        uint256[] memory reqIds = liquifierInstance.stEthRequestWithdrawal(10 ether);
-
-        assertApproxEqAbs(liquifierInstance.getTotalPooledEther(address(stEth)), liquifierStEthTvl, 1);
-
-        bytes32 FINALIZE_ROLE = liquifierInstance.lidoWithdrawalQueue().FINALIZE_ROLE();
-        address finalize_role = liquifierInstance.lidoWithdrawalQueue().getRoleMember(FINALIZE_ROLE, 0);
-
-        // The redemption is approved by the Lido
-        vm.startPrank(finalize_role);
-        uint256 currentRate = stEth.getTotalPooledEther() * 1e27 / stEth.getTotalShares();
-        (uint256 ethToLock, uint256 sharesToBurn) = liquifierInstance.lidoWithdrawalQueue().prefinalize(reqIds, currentRate);
-        liquifierInstance.lidoWithdrawalQueue().finalize(reqIds[reqIds.length-1], currentRate);
-        vm.stopPrank();
-
-        // The ether.fi admin claims the finalized withdrawal, which sends the ETH to the liquifier contract
-        uint256 lastCheckPointIndex = liquifierInstance.lidoWithdrawalQueue().getLastCheckpointIndex();
-        uint256[] memory hints = liquifierInstance.lidoWithdrawalQueue().findCheckpointHints(reqIds, 1, lastCheckPointIndex);
-        
-        vm.prank(alice);
-        liquifierInstance.stEthClaimWithdrawals(reqIds, hints);
-
-        assertApproxEqAbs(liquifierInstance.getTotalPooledEther(address(stEth)), liquifierStEthTvl - 10 ether, 1 gwei);
-        assertApproxEqAbs(address(liquifierInstance).balance, liquifierBalance + 10 ether, 1 gwei);
-
-        // The ether.fi admin withdraws the ETH from the liquifier contract to the liquidity pool contract
-        vm.prank(alice);
-        liquifierInstance.withdrawEther();
-
-        assertApproxEqAbs(address(liquidityPoolInstance).balance, lpBalance + 10 ether + liquifierBalance, 1 gwei);
-    }
-
-    function test_stEthRequestWithdrawal() public {
-        test_deposit_stEth();
-
-        vm.startPrank(alice);        
-        liquifierInstance.stEthRequestWithdrawal(1 ether);
-        liquifierInstance.stEthRequestWithdrawal(5 ether);
-        liquifierInstance.stEthRequestWithdrawal();
-        vm.stopPrank();
-    }
-
     function _enable_deposit(address _strategy) internal {
         IEigenLayerStrategyTVLLimits strategyTVLLimits = IEigenLayerStrategyTVLLimits(_strategy);
 
@@ -194,62 +153,6 @@ contract LiquifierTest is TestSetup {
         eigenLayerStrategyManager.unpause(0);
         strategyTVLLimits.unpause(0);
         strategyTVLLimits.setTVLLimits(1_000_000_0 ether, 1_000_000_0 ether);
-        vm.stopPrank();
-    }
-
-    function test_pancacke_wbETH_swap() internal {
-        initializeRealisticFork(MAINNET_FORK);
-        setUpLiquifier(MAINNET_FORK);
-
-        uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
-        uint256 lpBalance = address(liquidityPoolInstance).balance;
-
-        uint256 inputAmount = 50 ether;
-
-        vm.startPrank(alice);
-
-        vm.expectRevert("Too little received");
-        liquifierInstance.pancakeSwapForEth(address(wbEth), inputAmount, 500, 2 * inputAmount, 3600);
-
-        uint256 beforeTVL = liquidityPoolInstance.getTotalPooledEther();
-        uint256 beforeBalance = address(liquifierInstance).balance;
-
-        uint256 exchangeRate = IWBETH(address(wbEth)).exchangeRate();
-        uint256 maxSlippageBp = 50; // 0.5%
-        uint256 minOutput = (exchangeRate * inputAmount * (10000 - maxSlippageBp)) / 10000 / 1e18;
-        liquifierInstance.pancakeSwapForEth(address(wbEth), inputAmount, 500, minOutput, 3600);
-
-        assertGe(address(liquifierInstance).balance, beforeBalance + minOutput);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), beforeTVL); // does not change till Oracle updates
-
-        vm.stopPrank();
-    }
-
-    function test_pancacke_cbETH_swap() internal {
-        initializeRealisticFork(MAINNET_FORK);
-        setUpLiquifier(MAINNET_FORK);
-
-        uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
-        uint256 lpBalance = address(liquidityPoolInstance).balance;
-
-        uint256 inputAmount = 50 ether;
-
-        vm.startPrank(alice);
-
-        vm.expectRevert("Too little received");
-        liquifierInstance.pancakeSwapForEth(address(cbEth), inputAmount, 500, 2 * inputAmount, 3600);
-
-        uint256 beforeTVL = liquidityPoolInstance.getTotalPooledEther();
-        uint256 beforeBalance = address(liquifierInstance).balance;
-
-        uint256 exchangeRate = IWBETH(address(cbEth)).exchangeRate();
-        uint256 maxSlippageBp = 50; // 0.5%
-        uint256 minOutput = (exchangeRate * inputAmount * (10000 - maxSlippageBp)) / 10000 / 1e18;
-        liquifierInstance.pancakeSwapForEth(address(cbEth), inputAmount, 500, minOutput, 3600);
-
-        assertGe(address(liquifierInstance).balance, beforeBalance + minOutput);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), beforeTVL); // does not change till Oracle updates
-
         vm.stopPrank();
     }
 

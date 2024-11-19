@@ -56,7 +56,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     uint32 public DEPRECATED_eigenLayerWithdrawalClaimGasCost;
     uint32 public DEPRECATED_timeBoundCapRefreshInterval; // seconds
 
-    bool public DEPRECATED_quoteStEthWithCurve;
+    bool public quoteStEthWithCurve;
 
     uint128 public DEPRECATED_accumulatedFee;
 
@@ -88,6 +88,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     address public l1SyncPool;
 
     mapping(address => bool) public DEPRECATED_pausers;
+
+    address etherFiRestakeManager;
 
     RoleRegistry public roleRegistry;
 
@@ -148,6 +150,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         rateLimiter = BucketRateLimiter(_rateLimiter);
     }
 
+    function initializeOnRestakerUpgrade(address _etherFiRestakeManager) external onlyOwner {
+        etherFiRestakeManager = _etherFiRestakeManager;
+    }
+
     /// Deposit Liquid Staking Token such as stETH and Mint eETH
     /// @param _token The address of the token to deposit
     /// @param _amount The amount of the token to deposit
@@ -157,15 +163,16 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {        
         require(isTokenWhitelisted(_token) && (!tokenInfos[_token].isL2Eth || msg.sender == l1SyncPool), "NOT_ALLOWED");
 
-        IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
+        if (tokenInfos[_token].isL2Eth) {
+            IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);     
+        } else {
+            IERC20(_token).safeTransferFrom(msg.sender, address(etherFiRestakeManager), _amount);
+        }
 
         // The L1SyncPool's `_anticipatedDeposit` should be the only place to mint the `token` and always send its entirety to the Liquifier contract
         if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
 
-        uint256 dx = quoteByMarketValue(_token, _amount);
-
-        // discount
-        dx = (10000 - tokenInfos[_token].discountInBasisPoints) * dx / 10000;
+        uint256 dx = quoteByDiscountedValue(_token, _amount);
 
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, dx, _referral);
 
@@ -195,55 +202,15 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return depositWithERC20(_token, _amount, _referral);
     }
 
-    /// Initiate the process for redemption of stETH 
-    function stEthRequestWithdrawal() external returns (uint256[] memory) {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-
-        uint256 amount = lido.balanceOf(address(this));
-        return stEthRequestWithdrawal(amount);
-    }
-
-    function stEthRequestWithdrawal(uint256 _amount) public returns (uint256[] memory) {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) revert IncorrectAmount();
-        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
-
-        tokenInfos[address(lido)].ethAmountPendingForWithdrawals += uint128(_amount);
-
-        uint256 maxAmount = lidoWithdrawalQueue.MAX_STETH_WITHDRAWAL_AMOUNT();
-        uint256 numReqs = (_amount + maxAmount - 1) / maxAmount;
-        uint256[] memory reqAmounts = new uint256[](numReqs);
-        for (uint256 i = 0; i < numReqs; i++) {
-            reqAmounts[i] = (i == numReqs - 1) ? _amount - i * maxAmount : maxAmount;
-        }
-        lido.approve(address(lidoWithdrawalQueue), _amount);
-        uint256[] memory reqIds = lidoWithdrawalQueue.requestWithdrawals(reqAmounts, address(this));
-
-        emit QueuedStEthWithdrawals(reqIds);
-
-        return reqIds;
-    }
-
-    /// @notice Claim a batch of withdrawal requests if they are finalized sending the ETH to the this contract back
-    /// @param _requestIds array of request ids to claim
-    /// @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
-    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        uint256 balance = address(this).balance;
-        lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
-        uint256 newBalance = address(this).balance;
-
-        // to prevent the underflow error
-        uint128 dx = uint128(_min(newBalance - balance, tokenInfos[address(lido)].ethAmountPendingForWithdrawals));
-        tokenInfos[address(lido)].ethAmountPendingForWithdrawals -= dx;
-
-        emit CompletedStEthQueuedWithdrawals(_requestIds);
-    }
-
     // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
     function withdrawEther() external {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _withdrawEther();
+    }
+
+    function sendToEtherFiRestakeManager(address _token, uint256 _amount) external {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        IERC20(_token).safeTransfer(etherFiRestakeManager, _amount);
     }
 
     // Swap Liquifier's eETH for ETH from the liquidity pool and send it back to the liquidity pool
@@ -272,6 +239,16 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token].totalCapInEther = 0;
     }
 
+    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
+    }
+
+    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        quoteStEthWithCurve = _quoteStEthWithCurve;
+    }
+
     // Pauses the contract
     function pauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
@@ -294,56 +271,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return msg.value;
     }
 
-    // uint256 _amount, uint24 _fee, uint256 _minOutputAmount, uint256 _maxWaitingTime
-    function pancakeSwapForEth(address _token, uint256 _amount, uint24 _fee, uint256 _minOutputAmount, uint256 _maxWaitingTime) external {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (_amount > IERC20(_token).balanceOf(address(this))) revert NotEnoughBalance();
-        uint256 beforeBalance = address(this).balance;
-        
-        IERC20(_token).approve(address(pancakeRouter), _amount);
-
-        IPancackeV3SwapRouter.ExactInputSingleParams memory input = IPancackeV3SwapRouter.ExactInputSingleParams({
-            tokenIn: _token,
-            tokenOut: pancakeRouter.WETH9(),
-            fee: _fee,
-            recipient: address(pancakeRouter),
-            deadline: block.timestamp + _maxWaitingTime,
-            amountIn: _amount,
-            amountOutMinimum: _minOutputAmount,
-            sqrtPriceLimitX96: 0
-        });
-        uint256 amountOut = pancakeRouter.exactInputSingle(input);
-
-        pancakeRouter.unwrapWETH9(amountOut, address(this));
-        
-        uint256 currentBalance = address(this).balance;
-        if (currentBalance < _minOutputAmount + beforeBalance) revert WrongOutput();
-    }
-
-    function swapCbEthToEth(uint256 _amount, uint256 _minOutputAmount) external returns (uint256) {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (_amount > cbEth.balanceOf(address(this))) revert NotEnoughBalance();
-
-        cbEth.approve(address(cbEth_Eth_Pool), _amount);
-        return cbEth_Eth_Pool.exchange_underlying(1, 0, _amount, _minOutputAmount);
-    }
-
-    function swapWbEthToEth(uint256 _amount, uint256 _minOutputAmount) external returns (uint256) {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (_amount > wbEth.balanceOf(address(this))) revert NotEnoughBalance();
-
-        wbEth.approve(address(wbEth_Eth_Pool), _amount);
-        return wbEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
-    }
-
-    function swapStEthToEth(uint256 _amount, uint256 _minOutputAmount) external returns (uint256) {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
-        
-        lido.approve(address(stEth_Eth_Pool), _amount);
-        return stEth_Eth_Pool.exchange(1, 0, _amount, _minOutputAmount);
-    }
-
     /* VIEW FUNCTIONS */
 
     // Given the `_amount` of `_token` token, returns the equivalent amount of ETH 
@@ -362,7 +289,11 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (!isTokenWhitelisted(_token)) revert NotSupportedToken();
 
         if (_token == address(lido)) {
-            return _amount; /// 1:1 from stETH to eETH
+            if (quoteStEthWithCurve) {
+                return _min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
+            } else {
+                return _amount; /// 1:1 from stETH to eETH
+            }
         } else if (_token == address(cbEth)) {
             return _min(_amount * cbEth.exchangeRate() / 1e18, ICurvePoolQuoter2(address(cbEth_Eth_Pool)).get_dy(1, 0, _amount));
         } else if (_token == address(wbEth)) {
@@ -373,6 +304,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         }
 
         revert NotSupportedToken();
+    }
+
+    // Calculates the amount of eETH that will be minted for a given token considering the discount rate
+    function quoteByDiscountedValue(address _token, uint256 _amount) public view returns (uint256) {
+        uint256 marketValue = quoteByMarketValue(_token, _amount);
+
+        return (10000 - tokenInfos[_token].discountInBasisPoints) * marketValue / 10000;
     }
 
     function isTokenWhitelisted(address _token) public view returns (bool) {
