@@ -150,6 +150,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         rateLimiter = BucketRateLimiter(_rateLimiter);
     }
 
+    function initializeOnRestakerUpgrade(address _etherFiRestakeManager) external onlyOwner {
+        etherFiRestakeManager = _etherFiRestakeManager;
+    }
+
     /// Deposit Liquid Staking Token such as stETH and Mint eETH
     /// @param _token The address of the token to deposit
     /// @param _amount The amount of the token to deposit
