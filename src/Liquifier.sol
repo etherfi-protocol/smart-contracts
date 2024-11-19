@@ -94,6 +94,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     BucketRateLimiter public rateLimiter;
 
     bytes32 public constant LIQUIFIER_ADMIN_ROLE = keccak256("LIQUIFIER_ADMIN_ROLE");
+    bytes32 public constant EETH_STETH_SWAPPER = keccak256("EETH_STETH_SWAPPER");
     
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     event QueuedStEthWithdrawals(uint256[] _reqIds);
@@ -180,9 +181,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function swapEEthForStEth(uint256 _amount) external whenNotPaused nonReentrant {
         if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
         if (_amount > liquidityPool.eETH().balanceOf(msg.sender)) revert NotEnoughBalance();
-
+        if (!roleRegistry.hasRole(EETH_STETH_SWAPPER, msg.sender)) revert IncorrectRole();
+        uint256 preBalance = liquidityPool.eETH().balanceOf(address(this));
         IERC20(address(liquidityPool.eETH())).safeTransferFrom(msg.sender, address(this), _amount);
+        uint256 postBalance = liquidityPool.eETH().balanceOf(address(this));
+        uint256 transferredAmount = postBalance - preBalance;
         IERC20(address(lido)).safeTransfer(msg.sender, _amount);
+        liquidityPool.withdraw(address(liquidityPool), transferredAmount);
     }
 
     function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused returns (uint256) {
@@ -383,7 +388,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         for (uint256 i = 0; i < dummies.length; i++) {
             total += getTotalPooledEther(address(dummies[i]));
         }
-        total += liquidityPool.eETH().balanceOf(address(this));
     }
 
     /// deposited ETH can have 2 states:

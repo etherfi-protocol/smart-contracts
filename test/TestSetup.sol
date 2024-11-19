@@ -1441,7 +1441,6 @@ contract TestSetup is Test {
         uint256[] memory hints = liquifierInstance.lidoWithdrawalQueue().findCheckpointHints(reqIds, 1, lastCheckPointIndex);
         liquifierInstance.stEthClaimWithdrawals(reqIds, hints);
 
-        // The ether.fi admin withdraws the ETH from the liquifier contract to the liquidity pool contract
         liquifierInstance.withdrawEther();
         vm.stopPrank();
     }
