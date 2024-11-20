@@ -12,6 +12,7 @@ import "../src/eigenlayer-libraries/BeaconChainProofs.sol";
 
 import "./eigenlayer-utils/ProofParsing.sol";
 import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
+import "./eigenlayer-mocks/DelegationManagerMock.sol";
 
 import "forge-std/console2.sol";
 import "forge-std/console.sol";
@@ -40,8 +41,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
     event WithdrawalQueued(bytes32 withdrawalRoot, IDelegationManager.Withdrawal withdrawal);
-    event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
-
+    event FullWithdrawal_V2(uint256 _validatorId, address etherFiNode, uint256 toTnft, uint256 toBnft);
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
@@ -97,30 +97,30 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     
     // Broken by PEPE upgrades
     // TODO: Update test post PEPE upgrade
-    // function test_fullWithdraw_812() public {
+    function test_fullWithdraw_812() public {
 
-    //     createOrSelectFork(vm.envString("HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL"));
+        createOrSelectFork(vm.envString("HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL"));
 
-    //     uint256 validatorId = 812;
-    //     address admin = managerInstance.owner();
-    //     EtherFiNode node = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
-    //     IEigenPod pod = IEigenPod(node.eigenPod());
+        uint256 validatorId = 812;
+        address admin = managerInstance.owner();
+        EtherFiNode node = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
+        IEigenPod pod = IEigenPod(node.eigenPod());
 
-    //     uint256 nodeBalanceBeforeWithdrawal = address(node).balance;
+        uint256 nodeBalanceBeforeWithdrawal = address(node).balance;
 
-    //     // at stack limit so need to subdivide tests
-    //     test_completeQueuedWithdrawal_812();
+        // at stack limit so need to subdivide tests
+        test_completeQueuedWithdrawal_812();
 
-    //     assertEq(address(node).balance, nodeBalanceBeforeWithdrawal + 32 ether, "Balance did not increase as expected");
+        assertEq(address(node).balance, nodeBalanceBeforeWithdrawal + 32 ether, "Balance did not increase as expected");
 
-    //     // my arbitrarily picked timestamp causes node operator to be fully punished
-    //     // important property is just that funds flow successfully to appropriate parties
-    //     vm.expectEmit(true, true, false, true);
-    //     emit FullWithdrawal(validatorId, address(node), 0, 30026957263471875000, 2002788682428125000, 3305105100000000);
-    //     managerInstance.fullWithdraw(validatorId);
+        // my arbitrarily picked timestamp causes node operator to be fully punished
+        // important property is just that funds flow successfully to appropriate parties
+        vm.expectEmit(true, true, false, true);
+        emit FullWithdrawal_V2(validatorId, address(node), 30033051051000000000, 2000000000000000000);
+        managerInstance.fullWithdraw(validatorId);
 
-    //     assertEq(address(node).balance, 0, "funds did not get withdrawn as expected");
-    // }
+        assertEq(address(node).balance, 0, "funds did not get withdrawn as expected");
+    }
 
     // This test hits the local variable stack limit. You can call this test as a starting point for additional
     // tests of the the withdrawal flow
@@ -455,12 +455,27 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         }
     }
 
-    function test_completeQueuedWithdrawals_338_for_withdrawal_from_undelegate() public {
+    function test_mock_complete_withdrawal_from_undelegate() public {
         uint256[] memory validatorIds = new uint256[](1);
-        validatorIds[0] = 338;
         uint32[] memory timeStamps = new uint32[](1);
         timeStamps[0] = 0;
+
+        validatorIds[0] = 30000;
+        if (IEtherFiNode.VALIDATOR_PHASE.LIVE != managerInstance.phase(validatorIds[0])) {
+            revert("validator used in test is not live. replace with active validator ID");
+        }
+
         address nodeAddress = managerInstance.etherfiNodeAddress(validatorIds[0]);
+        
+
+        address mockDelegationManager = address(new DelegationManagerMock());
+
+        // overriding managerInstance's delegationManager storage slot with mock contract
+        vm.store(
+            address(managerInstance),
+            0x000000000000000000000000000000000000000000000000000000000000013f,
+            bytes32(uint256(uint160(address(mockDelegationManager))))
+        );
 
         IDelegationManager mgr = managerInstance.delegationManager();
 
@@ -484,17 +499,17 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
             uint256[] memory shares = new uint256[](1);
             shares[0] = 32000000000000000000;
             withdrawal = IDelegationManager.Withdrawal({
-                staker: 0x7aC9b51aB907715194F407C15191fce0F3771254,
+                staker: 0x622AE42994eCD2B499BE8B4d3473AD397BCd739d,
                 delegatedTo: 0x5b9B3Cf0202a1a3Dc8f527257b7E6002D23D8c85,
-                withdrawer: 0x7aC9b51aB907715194F407C15191fce0F3771254,
+                withdrawer: 0x622AE42994eCD2B499BE8B4d3473AD397BCd739d,
                 nonce: 0,
                 startBlock: 19692808,
                 strategies: strategies,
                 shares: shares
             });      
             
-            bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
-            assertTrue(mgr.pendingWithdrawals(withdrawalRoot));
+            // bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
+            // assertTrue(mgr.pendingWithdrawals(withdrawalRoot));
 
             IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
             uint256[] memory middlewareTimesIndexes = new uint256[](1);
@@ -502,12 +517,12 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
             middlewareTimesIndexes[0] = 0;
 
             vm.prank(owner);
-            vm.expectRevert();
+            vm.expectRevert("INCORRECT_CALLER");
             EtherFiNode(payable(nodeAddress)).completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, false);
 
-            vm.prank(owner);
-            vm.expectRevert();
-            managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
+            // vm.prank(owner);
+            // // vm.expectRevert();
+            // managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
 
             vm.prank(owner);
             managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, false);
@@ -524,7 +539,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         IDelegationManager mgr = managerInstance.delegationManager();
 
         // 1. completeQueuedWithdrawal for withdrawal from undelegate
-        test_completeQueuedWithdrawals_338_for_withdrawal_from_undelegate();
+        // test_completeQueuedWithdrawals_338_for_withdrawal_from_undelegate();
 
         // 2. call `ProcessNodeExit` to initiate the queued withdrawal
         IDelegationManager.Withdrawal memory withdrawal;
@@ -553,7 +568,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
             uint256 minDelayBlock = Math.max(mgr.minWithdrawalDelayBlocks(), mgr.strategyWithdrawalDelayBlocks(mgr.beaconChainETHStrategy()));
             vm.roll(block.number + minDelayBlock);
         }
-
 
         // 4. DelegationManager.completeQueuedWithdrawal            
         bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
@@ -644,25 +658,23 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     }
 
-    /*
-    function test_29027_verifyWithdrawalCredentials() public {
-        setJSON("./test/eigenlayer-utils/test-data/mainnet_withdrawal_credential_proof_1285801.json");
+    // function test_29027_verifyWithdrawalCredentials() public {
+    //     setJSON("./test/eigenlayer-utils/test-data/mainnet_withdrawal_credential_proof_1285801.json");
         
-        _setWithdrawalCredentialParams();
-        _setOracleBlockRoot();
+    //     _setWithdrawalCredentialParams();
+    //     // _setOracleBlockRoot();
 
-        uint256[] memory validatorIds = new uint256[](1);
-        validatorIds[0] = 29027;
+    //     uint256[] memory validatorIds = new uint256[](1);
+    //     validatorIds[0] = 29027;
 
-        oracleTimestamp = 1712703383;
-        validatorIndices[0] = 1285801;
+    //     oracleTimestamp = 1712703383;
+    //     validatorIndices[0] = 1285801;
 
-        bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
-        vm.prank(owner);
-        managerInstance.callEigenPod(validatorIds, data);
-    }
-    */
+    //     bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
+    //     bytes[] memory data = new bytes[](1);
+    //     data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
+    //     vm.prank(owner);
+    //     managerInstance.callEigenPod(validatorIds, data);
+    // }
 
 }

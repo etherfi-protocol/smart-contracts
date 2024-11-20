@@ -61,7 +61,7 @@ contract EtherFiNodeTest is TestSetup {
         vm.prank(alice); // alice is admin
         managerInstance.batchQueueRestakedWithdrawal(validatorIds);
 
-        // as of PEPE queing withdrawal does not automatically process partial withdrawals
+        // as of PEPE queuing withdrawal does not automatically process partial withdrawals
         (_withdrawalSafe, _eigenPod, _delayedWithdrawalRouter) = safe1.splitBalanceInExecutionLayer();
         assertEq(_withdrawalSafe, 0 ether);
         assertEq(_eigenPod, 1 ether);
@@ -251,7 +251,7 @@ contract EtherFiNodeTest is TestSetup {
         address safe = managerInstance.etherfiNodeAddress(validatorId);
         address eigenPod = managerInstance.getEigenPod(validatorId);
 
-        bytes4 selector = bytes4(keccak256("withdrawNonBeaconChainETHBalanceWei(address,uint256)"));
+        bytes4 selector = bytes4(keccak256("withdrawRestakedBeaconChainETH(address,uint256)"));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, safe, address(eigenPod).balance);
 
@@ -1992,6 +1992,6 @@ contract EtherFiNodeTest is TestSetup {
         managerInstance.batchSendExitRequest(_to_uint256_array(bidId[0]));
     }
 
-    }
+}
 
 
