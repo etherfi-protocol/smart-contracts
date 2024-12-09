@@ -49,6 +49,7 @@ import "../src/EtherFiAdmin.sol";
 import "../src/EtherFiTimelock.sol";
 
 import "../src/BucketRateLimiter.sol";
+import "../src/EtherFiWithdrawalBuffer.sol";
 
 import "../script/ContractCodeChecker.sol";
 import "../script/Create2Factory.sol";
@@ -107,6 +108,7 @@ contract TestSetup is Test, ContractCodeChecker {
     UUPSProxy public membershipNftProxy;
     UUPSProxy public nftExchangeProxy;
     UUPSProxy public withdrawRequestNFTProxy;
+    UUPSProxy public etherFiWithdrawalBufferProxy;
     UUPSProxy public etherFiOracleProxy;
     UUPSProxy public etherFiAdminProxy;
 
@@ -165,6 +167,8 @@ contract TestSetup is Test, ContractCodeChecker {
 
     WithdrawRequestNFT public withdrawRequestNFTImplementation;
     WithdrawRequestNFT public withdrawRequestNFTInstance;
+
+    EtherFiWithdrawalBuffer public etherFiWithdrawalBufferInstance;
 
     NFTExchange public nftExchangeImplementation;
     NFTExchange public nftExchangeInstance;
@@ -556,7 +560,7 @@ contract TestSetup is Test, ContractCodeChecker {
         membershipNftProxy = new UUPSProxy(address(membershipNftImplementation), "");
         membershipNftInstance = MembershipNFT(payable(membershipNftProxy));
 
-        withdrawRequestNFTImplementation = new WithdrawRequestNFT();
+        withdrawRequestNFTImplementation = new WithdrawRequestNFT(address(0), 0);
         withdrawRequestNFTProxy = new UUPSProxy(address(withdrawRequestNFTImplementation), "");
         withdrawRequestNFTInstance = WithdrawRequestNFT(payable(withdrawRequestNFTProxy));
 
@@ -577,7 +581,13 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
+        etherFiWithdrawalBufferProxy = new UUPSProxy(address(new EtherFiWithdrawalBuffer(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance))), "");
+        etherFiWithdrawalBufferInstance = EtherFiWithdrawalBuffer(payable(etherFiWithdrawalBufferProxy));
+        etherFiWithdrawalBufferInstance.initialize(0, 1_00, 10_00);
+        
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
+        liquidityPoolInstance.initializeOnUpgradeWithWithdrawalBuffer(address(etherFiWithdrawalBufferInstance));
+
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
         withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolInstance)), payable(address(eETHInstance)), payable(address(membershipManagerInstance)));
         membershipManagerInstance.initialize(
