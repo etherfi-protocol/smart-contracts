@@ -8,6 +8,8 @@ import "./TestSetup.sol";
 
 contract WithdrawRequestNFTTest is TestSetup {
 
+    uint256[] public reqIds =[ 20, 388, 478, 714, 726, 729, 735, 815, 861, 916, 941, 1014, 1067, 1154, 1194, 1253];
+
     function setUp() public {
         setUpTests();
     }
@@ -179,7 +181,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
-        assertEq(withdrawRequestNFTInstance.accumulatedDustEEthShares(), 0, "Accumulated dust should be 0");
         assertEq(eETHInstance.balanceOf(bob), 9 ether);
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 1 ether, "eETH balance should be 1 ether");
 
@@ -202,12 +203,6 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         assertEq(bobsEndingBalance, bobsStartingBalance + 1 ether, "Bobs balance should be 1 ether higher");
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 1 ether, "eETH balance should be 1 ether");
-        assertEq(liquidityPoolInstance.amountForShare(withdrawRequestNFTInstance.accumulatedDustEEthShares()), 1 ether);
-
-        vm.prank(alice);
-        withdrawRequestNFTInstance.burnAccumulatedDustEEthShares();
-        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 0 ether, "eETH balance should be 0 ether");
-        assertEq(eETHInstance.balanceOf(bob), 18 ether + 1 ether); // 1 ether eETH in `withdrawRequestNFT` contract is re-distributed to the eETH holders
     }
 
     function test_ValidClaimWithdrawWithNegativeRebase() public {
@@ -417,5 +412,14 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
         assertEq(address(chad).balance, chadBalance + claimableAmount, "Chad should receive the claimable amount");
+    }
+
+    function test_distributeImplicitFee() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        vm.startPrank(withdrawRequestNFTInstance.owner());
+        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(owner), 50_00)));
+    
+        withdrawRequestNFTInstance.handleAccumulatedShareRemainder(reqIds);
     }
 }

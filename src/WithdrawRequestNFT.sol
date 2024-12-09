@@ -10,9 +10,15 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IMembershipManager.sol";
 
+import "@openzeppelin/contracts/utils/math/Math.sol";
+
 
 contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IWithdrawRequestNFT {
+    using Math for uint256;
 
+    uint256 private constant BASIS_POINT_SCALE = 1e4;
+    address public immutable treasury;
+    
     ILiquidityPool public liquidityPool;
     IeETH public eETH; 
     IMembershipManager public membershipManager;
@@ -22,16 +28,20 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     uint32 public nextRequestId;
     uint32 public lastFinalizedRequestId;
-    uint96 public accumulatedDustEEthShares; // to be burned or used to cover the validator churn cost
+    uint16 public shareRemainderSplitToTreasuryInBps;
 
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
     event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
     event WithdrawRequestInvalidated(uint32 indexed requestId);
     event WithdrawRequestValidated(uint32 indexed requestId);
     event WithdrawRequestSeized(uint32 indexed requestId);
+    event HandledRemainderOfClaimedWithdrawRequests(uint256 eEthAmountToTreasury, uint256 eEthAmountBurnt);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _treasury, uint16 _shareRemainderSplitToTreasuryInBps) {
+        treasury = _treasury;
+        shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
+        
         _disableInitializers();
     }
 
@@ -100,16 +110,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         _burn(tokenId);
         delete _requests[tokenId];
 
+        uint256 amountBurnedShare = 0;
         if (fee > 0) {
-            // send fee to membership manager
-            liquidityPool.withdraw(address(membershipManager), fee);
+            amountBurnedShare += liquidityPool.withdraw(address(membershipManager), fee);
         }
-
-        uint256 amountBurnedShare = liquidityPool.withdraw(recipient, amountToWithdraw);
+        amountBurnedShare += liquidityPool.withdraw(recipient, amountToWithdraw);
         uint256 amountUnBurnedShare = request.shareOfEEth - amountBurnedShare;
-        if (amountUnBurnedShare > 0) {
-            accumulatedDustEEthShares += uint96(amountUnBurnedShare);
-        }
+        handleRemainder(amountUnBurnedShare);
 
         emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw + fee, amountBurnedShare, recipient, fee);
     }
@@ -120,13 +127,33 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         }
     }
 
-    // a function to transfer accumulated shares to admin
-    function burnAccumulatedDustEEthShares() external onlyAdmin {
-        require(eETH.totalShares() > accumulatedDustEEthShares, "Inappropriate burn");
-        uint256 amount = accumulatedDustEEthShares;
-        accumulatedDustEEthShares = 0;
+    // There have been errors tracking `accumulatedDustEEthShares` in the past.
+    // - https://github.com/etherfi-protocol/smart-contracts/issues/24
+    // This is a one-time function to handle the remainder of the eEth shares after the claim of the withdraw requests
+    // It must be called only once with ALL the requests that have not been claimed yet.
+    // there are <3000 such requests and the total gas spending is expected to be ~9.0 M gas.
+    function handleAccumulatedShareRemainder(uint256[] memory _reqIds) external onlyOwner {        
+        bytes32 slot = keccak256("handleAccumulatedShareRemainder");
+        uint256 executed;
+        assembly {
+            executed := sload(slot)
+        }
+        require(executed == 0, "ALREADY_EXECUTED");
 
-        eETH.burnShares(address(this), amount);
+        uint256 eEthSharesUnclaimedYet = 0;
+        for (uint256 i = 0; i < _reqIds.length; i++) {
+            assert (_requests[_reqIds[i]].isValid);
+            eEthSharesUnclaimedYet += _requests[_reqIds[i]].shareOfEEth;
+        }
+        uint256 eEthSharesRemainder = eETH.shares(address(this)) - eEthSharesUnclaimedYet;
+
+        handleRemainder(eEthSharesRemainder);
+
+        assembly {
+            sstore(slot, 1)
+            executed := sload(slot)
+        }
+        assert (executed == 1);
     }
 
     // Given an invalidated withdrawal request NFT of ID `requestId`:,
@@ -194,6 +221,28 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
         require(_address != address(0), "Cannot be address zero");
         admins[_address] = _isAdmin;
+    }
+
+    function updateShareRemainderSplitToTreasuryInBps(uint16 _shareRemainderSplitToTreasuryInBps) external onlyOwner {
+        shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
+    }
+
+    /// @dev Handles the remainder of the eEth shares after the claim of the withdraw request
+    /// the remainder eETH share for a request = request.shareOfEEth - request.amountOfEEth / (eETH amount to eETH shares rate)
+    /// - Splits the remainder into two parts:
+    ///  - Treasury: treasury gets a split of the remainder
+    ///   - Burn: the rest of the remainder is burned
+    /// @param _eEthShares: the remainder of the eEth shares
+    function handleRemainder(uint256 _eEthShares) internal {
+        uint256 eEthSharesToTreasury = _eEthShares.mulDiv(shareRemainderSplitToTreasuryInBps, BASIS_POINT_SCALE);
+
+        uint256 eEthAmountToTreasury = liquidityPool.amountForShare(eEthSharesToTreasury);
+        eETH.transfer(treasury, eEthAmountToTreasury);
+
+        uint256 eEthSharesToBurn = _eEthShares - eEthSharesToTreasury;
+        eETH.burnShares(address(this), eEthSharesToBurn);
+
+        emit HandledRemainderOfClaimedWithdrawRequests(eEthAmountToTreasury, liquidityPool.amountForShare(eEthSharesToBurn));
     }
 
     // invalid NFTs is non-transferable except for the case they are being burnt by the owner via `seizeInvalidRequest`
