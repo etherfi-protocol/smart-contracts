@@ -337,7 +337,7 @@ contract TimelockTest is TestSetup {
         {   
             assertEq(new_impl, computeAddressByCreate2(address(create2factory), type(Liquifier).creationCode, keccak256("ETHER_FI")));
             address target = address(liquifierInstance);
-            bytes memory data = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0xE41aeaEf27EC73A6958c3D35E0daC95c3dE33F72);
+            bytes memory data = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, new_impl);
             _execute_timelock(target, data, true, true, true, true);
         }
     }
