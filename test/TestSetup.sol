@@ -1440,14 +1440,16 @@ contract TestSetup is Test {
 
     function _execute_timelock(address target, bytes memory data, bool _schedule, bool _log_schedule, bool _execute, bool _log_execute) internal {
         vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+
+        bytes32 salt = keccak256(abi.encodePacked(target, data, block.number));
         
-        if (_schedule) etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
-        if (_log_schedule) _output_schedule_txn(target, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+        if (_schedule) etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
+        if (_log_schedule) _output_schedule_txn(target, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
 
         vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
 
-        if (_execute) etherFiTimelockInstance.execute(target, 0, data, bytes32(0), bytes32(0));
-        if (_log_execute) _output_execute_timelock_txn(target, data, bytes32(0), bytes32(0));
+        if (_execute) etherFiTimelockInstance.execute(target, 0, data, bytes32(0), salt);
+        if (_log_execute) _output_execute_timelock_txn(target, data, bytes32(0), salt);
 
         vm.warp(block.timestamp + 1);
         vm.stopPrank();

@@ -378,6 +378,13 @@ contract TimelockTest is TestSetup {
 
         vm.stopPrank();
     }
+
+    function test_unpause_liquifier() public {
+        initializeRealisticFork(MAINNET_FORK);
+        address target = address(liquifierInstance);
+        bytes memory data = abi.encodeWithSelector(Liquifier.unPauseContract.selector);
+        _execute_timelock(target, data, true, true, true, true);
+    }
 }
 
 // {"version":"1.0","chainId":"1
