@@ -20,7 +20,7 @@ contract WithdrawRequestNFTUpgrade is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         WithdrawRequestNFT oracleInstance = WithdrawRequestNFT(proxyAddress);
-        WithdrawRequestNFT v2Implementation = new WithdrawRequestNFT();
+        WithdrawRequestNFT v2Implementation = new WithdrawRequestNFT(address(0), 0);
 
         oracleInstance.upgradeTo(address(v2Implementation));
 
