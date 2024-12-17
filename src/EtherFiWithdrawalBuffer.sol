@@ -20,6 +20,7 @@ import "./interfaces/IWeETH.sol";
 
 import "lib/BucketLimiter.sol";
 
+import "./RoleRegistry.sol";
 
 /*
     The contract allows instant redemption of eETH and weETH tokens to ETH with an exit fee.
@@ -32,6 +33,12 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
 
     uint256 private constant BUCKET_UNIT_SCALE = 1e12;
     uint256 private constant BASIS_POINT_SCALE = 1e4;
+
+    bytes32 public constant PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
+    bytes32 public constant PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
+    bytes32 public constant PROTOCOL_ADMIN = keccak256("PROTOCOL_ADMIN");
+
+    RoleRegistry public immutable roleRegistry;
     address public immutable treasury;
     IeETH public immutable eEth;
     IWeETH public immutable weEth;
@@ -45,9 +52,8 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
     receive() external payable {}
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _liquidityPool, address _eEth, address _weEth, address _treasury) {
-        require(address(liquidityPool) == address(0) && address(eEth) == address(0) && address(treasury) == address(0), "EtherFiWithdrawalBuffer: Cannot initialize twice");
-
+    constructor(address _liquidityPool, address _eEth, address _weEth, address _treasury, address _roleRegistry) {
+        roleRegistry = RoleRegistry(_roleRegistry);
         treasury = _treasury;
         liquidityPool = ILiquidityPool(payable(_liquidityPool));
         eEth = IeETH(_eEth);
@@ -56,13 +62,13 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
         _disableInitializers();
     }
 
-    function initialize(uint16 _exitFeeSplitToTreasuryInBps, uint16 _exitFeeInBps, uint16 _lowWatermarkInBpsOfTvl) external initializer {
+    function initialize(uint16 _exitFeeSplitToTreasuryInBps, uint16 _exitFeeInBps, uint16 _lowWatermarkInBpsOfTvl, uint256 _bucketCapacity, uint256 _bucketRefillRate) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
         __Pausable_init();
         __ReentrancyGuard_init();
 
-        limit = BucketLimiter.create(0, 0);
+        limit = BucketLimiter.create(_convertToBucketUnit(_bucketCapacity, Math.Rounding.Down), _convertToBucketUnit(_bucketRefillRate, Math.Rounding.Down));
         exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
         exitFeeInBps = _exitFeeInBps;
         lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
@@ -76,8 +82,8 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
      * @return The amount of ETH sent to the receiver and the exit fee amount.
      */
     function redeemEEth(uint256 eEthAmount, address receiver, address owner) public whenNotPaused nonReentrant returns (uint256, uint256) {
-        require(canRedeem(eEthAmount), "EtherFiWithdrawalBuffer: Exceeded total redeemable amount");
         require(eEthAmount <= eEth.balanceOf(owner), "EtherFiWithdrawalBuffer: Insufficient balance");
+        require(canRedeem(eEthAmount), "EtherFiWithdrawalBuffer: Exceeded total redeemable amount");
 
         uint256 beforeEEthAmount = eEth.balanceOf(address(this));
         IERC20(address(eEth)).safeTransferFrom(owner, address(this), eEthAmount);
@@ -97,8 +103,8 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
     function redeemWeEth(uint256 weEthAmount, address receiver, address owner) public whenNotPaused nonReentrant returns (uint256, uint256) {
         uint256 eEthShares = weEthAmount;
         uint256 eEthAmount = liquidityPool.amountForShare(eEthShares);
-        require(canRedeem(eEthAmount), "EtherFiWithdrawalBuffer: Exceeded total redeemable amount");
         require(weEthAmount <= weEth.balanceOf(owner), "EtherFiWithdrawalBuffer: Insufficient balance");
+        require(canRedeem(eEthAmount), "EtherFiWithdrawalBuffer: Exceeded total redeemable amount");
 
         uint256 beforeEEthAmount = eEth.balanceOf(address(this));
         IERC20(address(weEth)).safeTransferFrom(owner, address(this), weEthAmount);
@@ -135,14 +141,14 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
         uint256 feeShareToStakers = ethShareFee - feeShareToTreasury;
 
         // To Stakers by burning shares
-        eEth.burnShares(address(this), liquidityPool.sharesForAmount(feeShareToStakers));
+        eEth.burnShares(address(this), feeShareToStakers);
 
         // To Treasury by transferring eETH
         IERC20(address(eEth)).safeTransfer(treasury, eEthFeeAmountToTreasury);
         
         // To Receiver by transferring ETH
-        payable(receiver).transfer(ethReceived);
-        require(address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiWithdrawalBuffer: Transfer failed");
+        (bool success, ) = receiver.call{value: ethReceived, gas: 100_000}("");
+        require(success && address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiWithdrawalBuffer: Transfer failed");
 
         return (ethReceived, eEthAmountFee);
     }
@@ -158,12 +164,13 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
      * @dev Returns the total amount that can be redeemed.
      */
     function totalRedeemableAmount() external view returns (uint256) {
-        if (address(liquidityPool).balance < lowWatermarkInETH()) {
+        uint256 liquidEthAmount = address(liquidityPool).balance - liquidityPool.ethAmountLockedForWithdrawal();
+        if (liquidEthAmount < lowWatermarkInETH()) {
             return 0;
         }
         uint64 consumableBucketUnits = BucketLimiter.consumable(limit);
-        uint256 consumableAmount = _convertBucketUnitToAmount(consumableBucketUnits);
-        return consumableAmount;
+        uint256 consumableAmount = _convertFromBucketUnit(consumableBucketUnits);
+        return Math.min(consumableAmount, liquidEthAmount);
     }
 
     /**
@@ -171,21 +178,22 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
      * @param amount The ETH or eETH amount to check.
      */
     function canRedeem(uint256 amount) public view returns (bool) {
-        if (address(liquidityPool).balance < lowWatermarkInETH()) {
+        uint256 liquidEthAmount = address(liquidityPool).balance - liquidityPool.ethAmountLockedForWithdrawal();
+        if (liquidEthAmount < lowWatermarkInETH()) {
             return false;
         }
-        uint64 bucketUnit = _convertSharesToBucketUnit(amount, Math.Rounding.Up);
+        uint64 bucketUnit = _convertToBucketUnit(amount, Math.Rounding.Up);
         bool consumable = BucketLimiter.canConsume(limit, bucketUnit);
-        return consumable;
+        return consumable && amount <= liquidEthAmount;
     }
 
     /**
      * @dev Sets the maximum size of the bucket that can be consumed in a given time period.
      * @param capacity The capacity of the bucket.
      */
-    function setCapacity(uint256 capacity) external onlyOwner {
+    function setCapacity(uint256 capacity) external hasRole(PROTOCOL_ADMIN) {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
-        uint64 bucketUnit = _convertSharesToBucketUnit(capacity, Math.Rounding.Down);
+        uint64 bucketUnit = _convertToBucketUnit(capacity, Math.Rounding.Down);
         BucketLimiter.setCapacity(limit, bucketUnit);
     }
 
@@ -193,9 +201,9 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
      * @dev Sets the rate at which the bucket is refilled per second.
      * @param refillRate The rate at which the bucket is refilled per second.
      */
-    function setRefillRatePerSecond(uint256 refillRate) external onlyOwner {
+    function setRefillRatePerSecond(uint256 refillRate) external hasRole(PROTOCOL_ADMIN) {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
-        uint64 bucketUnit = _convertSharesToBucketUnit(refillRate, Math.Rounding.Down);
+        uint64 bucketUnit = _convertToBucketUnit(refillRate, Math.Rounding.Down);
         BucketLimiter.setRefillRate(limit, bucketUnit);
     }
 
@@ -203,31 +211,39 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
      * @dev Sets the exit fee.
      * @param _exitFeeInBps The exit fee.
      */
-    function setExitFeeBasisPoints(uint16 _exitFeeInBps) external onlyOwner {
+    function setExitFeeBasisPoints(uint16 _exitFeeInBps) external hasRole(PROTOCOL_ADMIN) {
         require(_exitFeeInBps <= BASIS_POINT_SCALE, "INVALID");
         exitFeeInBps = _exitFeeInBps;
     }
 
-    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl) external onlyOwner {
+    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl) external hasRole(PROTOCOL_ADMIN) {
         require(_lowWatermarkInBpsOfTvl <= BASIS_POINT_SCALE, "INVALID");
         lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
     }
 
-    function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps) external onlyOwner {
+    function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps) external hasRole(PROTOCOL_ADMIN) {
         require(_exitFeeSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
         exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
     }
 
-    function _updateRateLimit(uint256 shares) internal {
-        uint64 bucketUnit = _convertSharesToBucketUnit(shares, Math.Rounding.Up);
+    function pauseContract() external hasRole(PROTOCOL_PAUSER) {
+        _pause();
+    }
+
+    function unPauseContract() external hasRole(PROTOCOL_UNPAUSER) {
+        _unpause();
+    }
+
+    function _updateRateLimit(uint256 amount) internal {
+        uint64 bucketUnit = _convertToBucketUnit(amount, Math.Rounding.Up);
         require(BucketLimiter.consume(limit, bucketUnit), "BucketRateLimiter: rate limit exceeded");
     }
 
-    function _convertSharesToBucketUnit(uint256 shares, Math.Rounding rounding) internal pure returns (uint64) {
-        return (rounding == Math.Rounding.Up) ? SafeCast.toUint64((shares + BUCKET_UNIT_SCALE - 1) / BUCKET_UNIT_SCALE) : SafeCast.toUint64(shares / BUCKET_UNIT_SCALE);
+    function _convertToBucketUnit(uint256 amount, Math.Rounding rounding) internal pure returns (uint64) {
+        return (rounding == Math.Rounding.Up) ? SafeCast.toUint64((amount + BUCKET_UNIT_SCALE - 1) / BUCKET_UNIT_SCALE) : SafeCast.toUint64(amount / BUCKET_UNIT_SCALE);
     }
 
-    function _convertBucketUnitToAmount(uint64 bucketUnit) internal pure returns (uint256) {
+    function _convertFromBucketUnit(uint64 bucketUnit) internal pure returns (uint256) {
         return bucketUnit * BUCKET_UNIT_SCALE;
     }
 
@@ -245,5 +261,18 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    function getImplementation() external view returns (address) {
+        return _getImplementation();
+    }
+
+    function _hasRole(bytes32 role, address account) internal view returns (bool) {
+        require(roleRegistry.hasRole(role, account), "EtherFiWithdrawalBuffer: Unauthorized");
+    }
+
+    modifier hasRole(bytes32 role) {
+        _hasRole(role, msg.sender);
+        _;
+    }
 
 }
