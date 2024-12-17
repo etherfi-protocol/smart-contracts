@@ -106,6 +106,7 @@ contract TestSetup is Test {
     UUPSProxy public etherFiWithdrawalBufferProxy;
     UUPSProxy public etherFiOracleProxy;
     UUPSProxy public etherFiAdminProxy;
+    UUPSProxy public roleRegistryProxy;
 
     DepositDataGeneration public depGen;
     IDepositContract public depositContractEth2;
@@ -189,6 +190,8 @@ contract TestSetup is Test {
 
     EtherFiTimelock public etherFiTimelockInstance;
     BucketRateLimiter public bucketRateLimiter;
+
+    RoleRegistry public roleRegistry;
 
     bytes32 root;
     bytes32 rootMigration;
@@ -392,6 +395,7 @@ contract TestSetup is Test {
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
+        roleRegistry = RoleRegistry(0x1d3Af47C1607A2EF33033693A9989D1d1013BB50);
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
@@ -576,9 +580,15 @@ contract TestSetup is Test {
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
-        etherFiWithdrawalBufferProxy = new UUPSProxy(address(new EtherFiWithdrawalBuffer(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance))), "");
+        roleRegistryProxy = new UUPSProxy(address(new RoleRegistry()), "");
+        roleRegistry = RoleRegistry(address(roleRegistryProxy));
+        roleRegistry.initialize(owner);
+
+        etherFiWithdrawalBufferProxy = new UUPSProxy(address(new EtherFiWithdrawalBuffer(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistry))), "");
         etherFiWithdrawalBufferInstance = EtherFiWithdrawalBuffer(payable(etherFiWithdrawalBufferProxy));
-        etherFiWithdrawalBufferInstance.initialize(0, 1_00, 10_00);
+        etherFiWithdrawalBufferInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether);
+
+        roleRegistry.grantRole(keccak256("PROTOCOL_ADMIN"), owner);
         
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
         liquidityPoolInstance.initializeOnUpgradeWithWithdrawalBuffer(address(etherFiWithdrawalBufferInstance));
