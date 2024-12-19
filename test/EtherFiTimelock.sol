@@ -378,6 +378,19 @@ contract TimelockTest is TestSetup {
 
         vm.stopPrank();
     }
-}
 
-// {"version":"1.0","chainId":"1
+    function test_update_min_bid_amount() public {
+        initializeRealisticFork(MAINNET_FORK);
+        address target = address(auctionInstance);
+        
+        {
+            bytes memory data = abi.encodeWithSelector(AuctionManager.updateWhitelistMinBidAmount.selector, 1 gwei);
+            _execute_timelock(target, data, true, true, true, true);
+        }
+
+        {
+            bytes memory data = abi.encodeWithSelector(AuctionManager.setMinBidPrice.selector, 1 gwei);
+            _execute_timelock(target, data, true, true, true, true);
+        }
+    }
+}
