@@ -71,6 +71,11 @@ library BucketLimiter {
         return limit.remaining >= amount;
     }
 
+    function consumable(Limit memory limit) external view returns (uint64) {
+        _refill(limit);
+        return limit.remaining;
+    }
+
     /*
      * Consumes the given amount from the bucket, if there is sufficient capacity, and returns
      * whether the bucket had enough remaining capacity to consume the amount.
