@@ -366,9 +366,16 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         vm.startPrank(withdrawRequestNFTInstance.owner());
         withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(owner))));
-
         withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(50_00);
-    
+        vm.stopPrank();
+
+        // timelock transaction is scheduled to call `handleAccumulatedShareRemainder with reqIds array`
+        
+        // at some point over the next 3 days, a user claims a withdrawal from reqIds array
+        vm.prank(0xd82A61246465E62Cf3e227a187c868cAF2fDa516);
+        withdrawRequestNFTInstance.claimWithdraw(reqIds[0]);
+
+        vm.startPrank(withdrawRequestNFTInstance.owner());
         withdrawRequestNFTInstance.handleAccumulatedShareRemainder(reqIds);
     }
 
