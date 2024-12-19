@@ -15,6 +15,7 @@ import "./LiquidityPool.sol";
 
 import "./eigenlayer-interfaces/IStrategyManager.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
+import "./eigenlayer-interfaces/IRewardsCoordinator.sol";
 
 contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
@@ -41,6 +42,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     EnumerableSet.Bytes32Set private withdrawalRootsSet;
     mapping(bytes32 => IDelegationManager.Withdrawal) public withdrawalRootToWithdrawal;
 
+    IRewardsCoordinator public immutable rewardsCoordinator;
 
     event QueuedStEthWithdrawals(uint256[] _reqIds);
     event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
@@ -56,7 +58,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     error IncorrectCaller();
 
      /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _rewardsCoordinator) {
+        rewardsCoordinator = IRewardsCoordinator(_rewardsCoordinator);
         _disableInitializers();
     }
 
@@ -137,6 +140,11 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     // |--------------------------------------------------------------------------------------------|
     // |                                    EigenLayer Restaking                                    |
     // |--------------------------------------------------------------------------------------------|
+
+    /// Set the claimer of the restaking rewards of this contract
+    function setRewardsClaimer(address _claimer) external onlyAdmin {
+        rewardsCoordinator.setClaimerFor(_claimer);
+    }
     
     // delegate to an AVS operator
     function delegateTo(address operator, IDelegationManager.SignatureWithExpiry memory approverSignatureAndExpiry, bytes32 approverSalt) external onlyAdmin {
@@ -288,9 +296,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         return withdrawalRootsSet.contains(_withdrawalRoot);
     }
 
-
     // |--------------------------------------------------------------------------------------------|
-    // |                                    VIEW functions                                        |
+    // |                                    VIEW functions                                          |
     // |--------------------------------------------------------------------------------------------|
     function getTotalPooledEther() public view returns (uint256 total) {
         total = address(this).balance + getTotalPooledEther(address(lido));
