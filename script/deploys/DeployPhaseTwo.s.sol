@@ -81,7 +81,7 @@ contract DeployPhaseTwoScript is Script {
         }
         retrieve_contract_addresses();
 
-        withdrawRequestNftImplementation = new WithdrawRequestNFT(address(0), 0);
+        withdrawRequestNftImplementation = new WithdrawRequestNFT(address(0));
         withdrawRequestNftProxy = new UUPSProxy(address(withdrawRequestNftImplementation), "");
         withdrawRequestNftInstance = WithdrawRequestNFT(payable(withdrawRequestNftProxy));
 

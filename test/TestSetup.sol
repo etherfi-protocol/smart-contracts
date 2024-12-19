@@ -559,7 +559,7 @@ contract TestSetup is Test {
         membershipNftProxy = new UUPSProxy(address(membershipNftImplementation), "");
         membershipNftInstance = MembershipNFT(payable(membershipNftProxy));
 
-        withdrawRequestNFTImplementation = new WithdrawRequestNFT(address(0), 0);
+        withdrawRequestNFTImplementation = new WithdrawRequestNFT(address(treasuryInstance));
         withdrawRequestNFTProxy = new UUPSProxy(address(withdrawRequestNFTImplementation), "");
         withdrawRequestNFTInstance = WithdrawRequestNFT(payable(withdrawRequestNFTProxy));
 
