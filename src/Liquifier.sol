@@ -190,7 +190,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token].isWhitelisted = _isWhitelisted;
     }
 
-    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyOwner {
+    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyAdmin {
         tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
     }
@@ -238,7 +238,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyOwner {
+    function unPauseContract() external onlyAdmin {
         _unpause();
     }
 
