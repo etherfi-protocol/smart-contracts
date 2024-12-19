@@ -38,9 +38,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     event HandledRemainderOfClaimedWithdrawRequests(uint256 eEthAmountToTreasury, uint256 eEthAmountBurnt);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _treasury, uint16 _shareRemainderSplitToTreasuryInBps) {
+    constructor(address _treasury) {
         treasury = _treasury;
-        shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
         
         _disableInitializers();
     }
