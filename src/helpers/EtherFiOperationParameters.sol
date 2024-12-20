@@ -16,18 +16,18 @@ contract EtherFiOperationParameters is UUPSUpgradeable, OwnableUpgradeable {
         _disableInitializers();
     }
 
-    function initialize() public initializer {
+    function initialize() external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
     }
 
-    function updateTagAdmin(string memory tag, address admin, bool allowed) public {
+    function updateTagAdmin(string memory tag, address admin, bool allowed) external onlyOwner {
         tagAdmins[tag][admin] = allowed;
      
         emit UpdatedAdmin(tag, admin, allowed);
     }
 
-    function updateTagKeyValue(string memory tag, string memory key, string memory value) public {
+    function updateTagKeyValue(string memory tag, string memory key, string memory value) external onlyAdmin(tag) {
         string memory old_value = tagKeyValues[tag][key];
         tagKeyValues[tag][key] = value;
      
@@ -38,5 +38,10 @@ contract EtherFiOperationParameters is UUPSUpgradeable, OwnableUpgradeable {
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    modifier onlyAdmin(string memory tag) {
+        require(tagAdmins[tag][msg.sender], "Only admin can call");
+        _;
     }
 }
