@@ -131,7 +131,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     // This is a one-time function to handle the remainder of the eEth shares after the claim of the withdraw requests
     // It must be called only once with ALL the requests that have not been claimed yet.
     // there are <3000 such requests and the total gas spending is expected to be ~9.0 M gas.
-    function handleAccumulatedShareRemainder(uint256[] memory _reqIds) external onlyOwner {        
+    function handleAccumulatedShareRemainder(uint256[] memory _reqIds, uint256 _scanBegin) external onlyOwner {      
+        assert (_scanBegin < nextRequestId);
+
         bytes32 slot = keccak256("handleAccumulatedShareRemainder");
         uint256 executed;
         assembly {
@@ -141,8 +143,12 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         uint256 eEthSharesUnclaimedYet = 0;
         for (uint256 i = 0; i < _reqIds.length; i++) {
-            assert (_requests[_reqIds[i]].isValid);
+            if (!_requests[_reqIds[i]].isValid) continue;
             eEthSharesUnclaimedYet += _requests[_reqIds[i]].shareOfEEth;
+        }
+        for (uint256 i = _scanBegin + 1; i < nextRequestId; i++) {
+            if (!_requests[i].isValid) continue;
+            eEthSharesUnclaimedYet += _requests[i].shareOfEEth;
         }
         uint256 eEthSharesRemainder = eETH.shares(address(this)) - eEthSharesUnclaimedYet;
 
