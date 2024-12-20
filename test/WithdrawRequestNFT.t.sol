@@ -374,10 +374,14 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Option 1 is to perform the off-chain calculation and input it as a parameter to the function, which is less transparent and not ideal
         // Option 2 is to perform the calculation on-chain, which is more transparent but would require a lot of gas iterating for all CLAIMED requests
         // -> The idea is to calculate the total eETH shares of ALL UNCLAIMED requests. 
-        //    Then, we can calculate the dust shares as the difference between the total eETH shares and the total eETH shares of all CLAIMED requests.
+        //    Then, we can calculate the dust shares as the difference between the total eETH shares and the total eETH shares of all UNCLAIMED requests.
         //   -> eETH.share(withdrawRequsetNFT) - Sum(request.shareOfEEth) for ALL unclaimed
 
-        // Now the question is how to calculate the total eETH shares of all unclaimed requests on-chain:
+        // Now the question is how to calculate the total eETH shares of all unclaimed requests on-chain.
+        // One way is to iterate through all requests and sum up the shareOfEEth for all unclaimed requests.
+        // However, this would require a lot of gas and is not ideal.
+        // 
+        // The idea is:
         // 1. When we queue up the txn, we will take a snapshot of ALL unclaimed requests and put their IDs as a parameter.
         // 2. (issue) during the timelock period, there will be new requests that can't be included in the snapshot.
         //    the idea is to input last finalized request ID and scan from there to the latest request ID on-chain 
