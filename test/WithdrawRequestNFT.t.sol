@@ -368,8 +368,31 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(owner))));
 
         withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(50_00);
-    
-        withdrawRequestNFTInstance.handleAccumulatedShareRemainder(reqIds);
+        vm.stopPrank();
+
+        // The goal is to count ALL dust shares that could be burnt in the past if we had the feature.
+        // Option 1 is to perform the off-chain calculation and input it as a parameter to the function, which is less transparent and not ideal
+        // Option 2 is to perform the calculation on-chain, which is more transparent but would require a lot of gas iterating for all CLAIMED requests
+        // -> The idea is to calculate the total eETH shares of ALL UNCLAIMED requests. 
+        //    Then, we can calculate the dust shares as the difference between the total eETH shares and the total eETH shares of all CLAIMED requests.
+        //   -> eETH.share(withdrawRequsetNFT) - Sum(request.shareOfEEth) for ALL unclaimed
+
+        // Now the question is how to calculate the total eETH shares of all unclaimed requests on-chain:
+        // 1. When we queue up the txn, we will take a snapshot of ALL unclaimed requests and put their IDs as a parameter.
+        // 2. (issue) during the timelock period, there will be new requests that can't be included in the snapshot.
+        //    the idea is to input last finalized request ID and scan from there to the latest request ID on-chain 
+        uint256 scanBegin = withdrawRequestNFTInstance.lastFinalizedRequestId();
+
+        // If the request gets claimed during the timelock period, it will get skipped in the calculation.
+        vm.prank(withdrawRequestNFTInstance.ownerOf(reqIds[0]));
+        withdrawRequestNFTInstance.claimWithdraw(reqIds[0]);
+
+        vm.startPrank(withdrawRequestNFTInstance.owner());    
+        withdrawRequestNFTInstance.handleAccumulatedShareRemainder(reqIds, scanBegin);
+        vm.stopPrank();
+
+        vm.prank(withdrawRequestNFTInstance.ownerOf(reqIds[1]));
+        withdrawRequestNFTInstance.claimWithdraw(reqIds[1]);
     }
 
     function testFuzz_RequestWithdraw(uint96 depositAmount, uint96 withdrawAmount, address recipient) public {
