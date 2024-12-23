@@ -8,6 +8,7 @@ optimizer_runs = 2000
 extra_output = ["storageLayout"]
 bytecode_hash = 'none'
 solc-version = '0.8.24'
+bytecode_hash = 'none'
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 [rpc_endpoints]
