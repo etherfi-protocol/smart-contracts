@@ -125,22 +125,23 @@ contract EtherFiRestakerTest is TestSetup {
     }
 
     function test_queueWithdrawals_2() public returns (bytes32[] memory) {
-        test_restake_stEth();
+        revert("FIX BELOW");
+        // test_restake_stEth();
 
-        IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
-        IStrategy[] memory strategies = new IStrategy[](1);
-        strategies[0] = etherFiRestakerInstance.getEigenLayerRestakingStrategy(address(stEth));
-        uint256[] memory shares = new uint256[](1);
-        shares[0] = eigenLayerStrategyManager.stakerStrategyShares(address(etherFiRestakerInstance), strategies[0]);
+        // IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
+        // IStrategy[] memory strategies = new IStrategy[](1);
+        // strategies[0] = etherFiRestakerInstance.getEigenLayerRestakingStrategy(address(stEth));
+        // uint256[] memory shares = new uint256[](1);
+        // shares[0] = eigenLayerStrategyManager.stakerStrategyShares(address(etherFiRestakerInstance), strategies[0]);
         
-        params[0] = IDelegationManager.QueuedWithdrawalParams({
-            strategies: strategies,
-            shares: shares,
-            withdrawer: address(etherFiRestakerInstance)
-        });
+        // params[0] = IDelegationManager.QueuedWithdrawalParams({
+        //     strategies: strategies,
+        //     shares: shares,
+        //     withdrawer: address(etherFiRestakerInstance)
+        // });
 
-        vm.prank(etherfiOperatingAdmin);
-        return etherFiRestakerInstance.queueWithdrawals(params);
+        // vm.prank(etherfiOperatingAdmin);
+        // return etherFiRestakerInstance.queueWithdrawals(params);
     }
 
     function test_completeQueuedWithdrawals_1() public {

@@ -43,10 +43,11 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function EigenPod_hasRestaked(uint256[] memory _validatorIds) external view returns (bool[] memory _hasRestaked) {
-        _hasRestaked = new bool[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _hasRestaked[i] = _getEigenPod(_validatorIds[i]).hasRestaked();
-        }
+        revert("FIX BELOW");
+        // _hasRestaked = new bool[](_validatorIds.length);
+        // for (uint256 i = 0; i < _validatorIds.length; i++) {
+        //     _hasRestaked[i] = _getEigenPod(_validatorIds[i]).hasRestaked();
+        // }
     }
 
     function EigenPod_withdrawableRestakedExecutionLayerGwei(uint256[] memory _validatorIds) external view returns (uint256[] memory _withdrawableRestakedExecutionLayerGwei) {
@@ -57,17 +58,19 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function EigenPod_nonBeaconChainETHBalanceWei(uint256[] memory _validatorIds) external view returns (uint256[] memory _nonBeaconChainETHBalanceWei) {
-        _nonBeaconChainETHBalanceWei = new uint256[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _nonBeaconChainETHBalanceWei[i] = _getEigenPod(_validatorIds[i]).nonBeaconChainETHBalanceWei();
-        }
+        revert("FIX BELOW");
+        // _nonBeaconChainETHBalanceWei = new uint256[](_validatorIds.length);
+        // for (uint256 i = 0; i < _validatorIds.length; i++) {
+        //     _nonBeaconChainETHBalanceWei[i] = _getEigenPod(_validatorIds[i]).nonBeaconChainETHBalanceWei();
+        // }
     }
 
     function EigenPod_mostRecentWithdrawalTimestamp(uint256[] memory _validatorIds) external view returns (uint256[] memory _mostRecentWithdrawalTimestamp) {
-        _mostRecentWithdrawalTimestamp = new uint256[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _mostRecentWithdrawalTimestamp[i] = _getEigenPod(_validatorIds[i]).mostRecentWithdrawalTimestamp();
-        }
+        revert("FIX BELOW");
+        // _mostRecentWithdrawalTimestamp = new uint256[](_validatorIds.length);
+        // for (uint256 i = 0; i < _validatorIds.length; i++) {
+        //     _mostRecentWithdrawalTimestamp[i] = _getEigenPod(_validatorIds[i]).mostRecentWithdrawalTimestamp();
+        // }
     }
 
     function EigenPod_validatorPubkeyHashToInfo(uint256[] memory _validatorIds, bytes[][] memory _validatorPubkeys) external view returns (IEigenPod.ValidatorInfo[][] memory _validatorInfos) {
@@ -101,11 +104,12 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function EigenPodManager_podOwnerShares(uint256[] memory _validatorIds) external view returns (int256[] memory _podOwnerShares) {
-        _podOwnerShares = new int256[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            address podOwner = address(_getEtherFiNode(_validatorIds[i]));
-            _podOwnerShares[i] = _getEigenPodManager().podOwnerShares(podOwner);
-        }
+        revert("FIX BELOW");
+        // _podOwnerShares = new int256[](_validatorIds.length);
+        // for (uint256 i = 0; i < _validatorIds.length; i++) {
+        //     address podOwner = address(_getEtherFiNode(_validatorIds[i]));
+        //     _podOwnerShares[i] = _getEigenPodManager().podOwnerShares(podOwner);
+        // }
     }
 
     function DelegationManager_delegatedTo(uint256[] memory _validatorIds) external view returns (address[] memory _delegatedTo) {
@@ -117,10 +121,11 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function DelegationManager_operatorDetails(address[] memory _operators) external view returns (IDelegationManager.OperatorDetails[] memory _operatorDetails) {
-        _operatorDetails = new IDelegationManager.OperatorDetails[](_operators.length);
-        for (uint256 i = 0; i < _operators.length; i++) {
-            _operatorDetails[i] = _getDelegationManager().operatorDetails(_operators[i]);
-        }
+        revert("FIX BELOW");
+        // _operatorDetails = new IDelegationManager.OperatorDetails[](_operators.length);
+        // for (uint256 i = 0; i < _operators.length; i++) {
+        //     _operatorDetails[i] = _getDelegationManager().operatorDetails(_operators[i]);
+        // }
     }
 
     function EtherFiNodesManager_etherFiNodeAddress(uint256[] memory _validatorIds) external view returns (address[] memory _etherFiNodeAddresses) {
