@@ -333,18 +333,12 @@ contract TimelockTest is TestSetup {
 
     function test_upgrade_liquifier() public {
         initializeRealisticFork(MAINNET_FORK);
-        {
+        address new_impl = 0xA1A15FB15cbda9E6c480C5bca6E9ABA9C5E2ff95;
+        {   
+            assertEq(new_impl, computeAddressByCreate2(address(create2factory), type(Liquifier).creationCode, keccak256("ETHER_FI")));
             address target = address(liquifierInstance);
-            bytes memory data = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0xB27b1dc838898368E9a81F69c626AEC7e71f02c1);
+            bytes memory data = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, new_impl);
             _execute_timelock(target, data, true, true, true, true);
-            
-        }
-
-        {
-            address target = address(liquifierInstance);
-            bytes memory data = abi.encodeWithSelector(Liquifier.initializeOnUpgrade.selector, 0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf);
-            _execute_timelock(target, data, true, true, true, true);
-            
         }
     }
 
