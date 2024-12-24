@@ -364,6 +364,8 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_distributeImplicitFee() public {
         initializeRealisticFork(MAINNET_FORK);
 
+        address etherfi_admin_wallet = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
+
         vm.startPrank(withdrawRequestNFTInstance.owner());
         withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(owner))));
 
@@ -391,7 +393,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(withdrawRequestNFTInstance.ownerOf(reqIds[0]));
         withdrawRequestNFTInstance.claimWithdraw(reqIds[0]);
 
-        vm.startPrank(withdrawRequestNFTInstance.owner());    
+        vm.startPrank(etherfi_admin_wallet);    
         uint32[] memory reqIdsWithIssues = new uint32[](4);
         reqIdsWithIssues[0] = reqIds[0];
         reqIdsWithIssues[1] = reqIds[1];
@@ -406,10 +408,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         reqIdsWithIssues[3] = reqIds[2];
         vm.expectRevert();
         withdrawRequestNFTInstance.handleAccumulatedShareRemainder(reqIdsWithIssues, scanBegin);
-        vm.stopPrank();
 
-
-        vm.startPrank(withdrawRequestNFTInstance.owner());
         withdrawRequestNFTInstance.handleAccumulatedShareRemainder(reqIds, scanBegin);
         vm.stopPrank();
 
