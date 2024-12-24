@@ -8,7 +8,7 @@ import "./TestSetup.sol";
 
 contract WithdrawRequestNFTTest is TestSetup {
 
-    uint256[] public reqIds =[ 20, 388, 478, 714, 726, 729, 735, 815, 861, 916, 941, 1014, 1067, 1154, 1194, 1253];
+    uint32[] public reqIds =[ 20, 388, 478, 714, 726, 729, 735, 815, 861, 916, 941, 1014, 1067, 1154, 1194, 1253];
 
     function setUp() public {
         setUpTests();
@@ -392,6 +392,24 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.claimWithdraw(reqIds[0]);
 
         vm.startPrank(withdrawRequestNFTInstance.owner());    
+        uint32[] memory reqIdsWithIssues = new uint32[](4);
+        reqIdsWithIssues[0] = reqIds[0];
+        reqIdsWithIssues[1] = reqIds[1];
+        reqIdsWithIssues[2] = reqIds[3];
+        reqIdsWithIssues[3] = reqIds[2];
+        vm.expectRevert();
+        withdrawRequestNFTInstance.handleAccumulatedShareRemainder(reqIdsWithIssues, scanBegin);
+
+        reqIdsWithIssues[0] = reqIds[0];
+        reqIdsWithIssues[1] = reqIds[1];
+        reqIdsWithIssues[2] = reqIds[2];
+        reqIdsWithIssues[3] = reqIds[2];
+        vm.expectRevert();
+        withdrawRequestNFTInstance.handleAccumulatedShareRemainder(reqIdsWithIssues, scanBegin);
+        vm.stopPrank();
+
+
+        vm.startPrank(withdrawRequestNFTInstance.owner());
         withdrawRequestNFTInstance.handleAccumulatedShareRemainder(reqIds, scanBegin);
         vm.stopPrank();
 
