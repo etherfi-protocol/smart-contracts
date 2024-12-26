@@ -49,6 +49,8 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
     uint16 public exitFeeInBps;
     uint16 public lowWatermarkInBpsOfTvl; // bps of TVL
 
+    event Redeemed(address indexed receiver, uint256 redemptionAmount, uint256 feeAmountToTreasury, uint256 feeAmountToStakers);
+
     receive() external payable {}
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -79,9 +81,8 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
      * @param eEthAmount The amount of eETH to redeem after the exit fee.
      * @param receiver The address to receive the redeemed ETH.
      * @param owner The address of the owner of the eETH.
-     * @return The amount of ETH sent to the receiver and the exit fee amount.
      */
-    function redeemEEth(uint256 eEthAmount, address receiver, address owner) public whenNotPaused nonReentrant returns (uint256, uint256) {
+    function redeemEEth(uint256 eEthAmount, address receiver, address owner) public whenNotPaused nonReentrant {
         require(eEthAmount <= eEth.balanceOf(owner), "EtherFiWithdrawalBuffer: Insufficient balance");
         require(canRedeem(eEthAmount), "EtherFiWithdrawalBuffer: Exceeded total redeemable amount");
 
@@ -90,7 +91,7 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
         uint256 afterEEthAmount = eEth.balanceOf(address(this));
 
         uint256 transferredEEthAmount = afterEEthAmount - beforeEEthAmount;
-        return _redeem(transferredEEthAmount, receiver);
+        _redeem(transferredEEthAmount, receiver);
     }
 
     /**
@@ -98,9 +99,8 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
      * @param weEthAmount The amount of weETH to redeem after the exit fee.
      * @param receiver The address to receive the redeemed ETH.
      * @param owner The address of the owner of the weETH.
-     * @return The amount of ETH sent to the receiver and the exit fee amount.
      */
-    function redeemWeEth(uint256 weEthAmount, address receiver, address owner) public whenNotPaused nonReentrant returns (uint256, uint256) {
+    function redeemWeEth(uint256 weEthAmount, address receiver, address owner) public whenNotPaused nonReentrant {
         uint256 eEthShares = weEthAmount;
         uint256 eEthAmount = liquidityPool.amountForShare(eEthShares);
         require(weEthAmount <= weEth.balanceOf(owner), "EtherFiWithdrawalBuffer: Insufficient balance");
@@ -112,7 +112,7 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
         uint256 afterEEthAmount = eEth.balanceOf(address(this));
 
         uint256 transferredEEthAmount = afterEEthAmount - beforeEEthAmount;
-        return _redeem(transferredEEthAmount, receiver);
+        _redeem(transferredEEthAmount, receiver);
     }
 
 
@@ -120,9 +120,8 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
      * @notice Redeems ETH.
      * @param ethAmount The amount of ETH to redeem after the exit fee.
      * @param receiver The address to receive the redeemed ETH.
-     * @return The amount of ETH sent to the receiver and the exit fee amount.
      */
-    function _redeem(uint256 ethAmount, address receiver) internal returns (uint256, uint256) {
+    function _redeem(uint256 ethAmount, address receiver) internal {
         _updateRateLimit(ethAmount);
 
         uint256 ethShares = liquidityPool.sharesForAmount(ethAmount);
@@ -130,15 +129,17 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
         uint256 eEthAmountToReceiver = liquidityPool.amountForShare(ethShareToReceiver);
 
         uint256 prevLpBalance = address(liquidityPool).balance;
-        uint256 prevBalance = address(this).balance;
-        uint256 burnedShares = (eEthAmountToReceiver > 0) ? liquidityPool.withdraw(address(this), eEthAmountToReceiver) : 0;
-        uint256 ethReceived = address(this).balance - prevBalance;
+        uint256 sharesToBurn = liquidityPool.sharesForWithdrawalAmount(eEthAmountToReceiver);
 
-        uint256 ethShareFee = ethShares - burnedShares;
-        uint256 eEthAmountFee = liquidityPool.amountForShare(ethShareFee);
+        uint256 ethShareFee = ethShares - sharesToBurn;
         uint256 feeShareToTreasury = ethShareFee.mulDiv(exitFeeSplitToTreasuryInBps, BASIS_POINT_SCALE);
         uint256 eEthFeeAmountToTreasury = liquidityPool.amountForShare(feeShareToTreasury);
         uint256 feeShareToStakers = ethShareFee - feeShareToTreasury;
+
+        // Withdraw ETH from the liquidity pool
+        uint256 prevBalance = address(this).balance;
+        assert (liquidityPool.withdraw(address(this), eEthAmountToReceiver) == sharesToBurn);
+        uint256 ethReceived = address(this).balance - prevBalance;
 
         // To Stakers by burning shares
         eEth.burnShares(address(this), feeShareToStakers);
@@ -148,9 +149,10 @@ contract EtherFiWithdrawalBuffer is Initializable, OwnableUpgradeable, PausableU
         
         // To Receiver by transferring ETH
         (bool success, ) = receiver.call{value: ethReceived, gas: 100_000}("");
-        require(success && address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiWithdrawalBuffer: Transfer failed");
+        require(success, "EtherFiWithdrawalBuffer: Transfer failed");
+        require(address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiWithdrawalBuffer: Invalid liquidity pool balance");
 
-        return (ethReceived, eEthAmountFee);
+        emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver);
     }
 
     /**

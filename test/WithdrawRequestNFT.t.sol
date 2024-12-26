@@ -327,93 +327,66 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.transferFrom(alice, bob, requestId);
     }
 
-    function test_seizeInvalidAndMintNew_revert_if_not_owner() public {
+    function test_seizeRequest() public {
         uint256 requestId = test_InvalidatedRequestNft_after_finalization();
         uint256 claimableAmount = withdrawRequestNFTInstance.getRequest(requestId).amountOfEEth;
 
         // REVERT if not owner
         vm.prank(alice);
         vm.expectRevert("Ownable: caller is not the owner");
-        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad);
-    }
-
-    function test_InvalidatedRequestNft_seizeInvalidAndMintNew_1() public {
-        uint256 requestId = test_InvalidatedRequestNft_after_finalization();
-        uint256 claimableAmount = withdrawRequestNFTInstance.getRequest(requestId).amountOfEEth;
-        uint256 chadBalance = address(chad).balance;
+        withdrawRequestNFTInstance.seizeRequest(requestId, chad);
 
         vm.prank(owner);
-        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad);
+        withdrawRequestNFTInstance.seizeRequest(requestId, chad);
 
         assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
-        assertEq(address(chad).balance, chadBalance + claimableAmount, "Chad should receive the claimable amount");
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), chad, "Chad should own the NFT");
     }
 
-    function test_InvalidatedRequestNft_seizeInvalidAndMintNew_2() public {
-        uint256 requestId = test_InvalidatedRequestNft_before_finalization();
-        uint256 claimableAmount = withdrawRequestNFTInstance.getRequest(requestId).amountOfEEth;
-        uint256 chadBalance = address(chad).balance;
 
-        vm.prank(owner);
-        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, chad);
-
-        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
-        assertEq(address(chad).balance, chadBalance + claimableAmount, "Chad should receive the claimable amount");
-    }
-
-    function test_distributeImplicitFee() public {
+    function test_aggregateSumEEthShareAmount() public {
         initializeRealisticFork(MAINNET_FORK);
 
         address etherfi_admin_wallet = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
 
         vm.startPrank(withdrawRequestNFTInstance.owner());
+        // 1. Upgrade
         withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(owner))));
-
+        withdrawRequestNFTInstance.initializeOnUpgrade(etherfi_admin_wallet);
         withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(50_00);
+        withdrawRequestNFTInstance.updateAdmin(etherfi_admin_wallet, true);
+
+        // 2. PAUSE
+        withdrawRequestNFTInstance.pauseContract();
         vm.stopPrank();
 
-        // The goal is to count ALL dust shares that could be burnt in the past if we had the feature.
-        // Option 1 is to perform the off-chain calculation and input it as a parameter to the function, which is less transparent and not ideal
-        // Option 2 is to perform the calculation on-chain, which is more transparent but would require a lot of gas iterating for all CLAIMED requests
-        // -> The idea is to calculate the total eETH shares of ALL UNCLAIMED requests. 
-        //    Then, we can calculate the dust shares as the difference between the total eETH shares and the total eETH shares of all UNCLAIMED requests.
-        //   -> eETH.share(withdrawRequsetNFT) - Sum(request.shareOfEEth) for ALL unclaimed
+        vm.startPrank(etherfi_admin_wallet);
 
-        // Now the question is how to calculate the total eETH shares of all unclaimed requests on-chain.
-        // One way is to iterate through all requests and sum up the shareOfEEth for all unclaimed requests.
-        // However, this would require a lot of gas and is not ideal.
-        // 
-        // The idea is:
-        // 1. When we queue up the txn, we will take a snapshot of ALL unclaimed requests and put their IDs as a parameter.
-        // 2. (issue) during the timelock period, there will be new requests that can't be included in the snapshot.
-        //    the idea is to input last finalized request ID and scan from there to the latest request ID on-chain 
-        uint256 scanBegin = withdrawRequestNFTInstance.lastFinalizedRequestId();
+        // 3. AggSum
+        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(1000);
+        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(1000);
+        // ...
 
-        // If the request gets claimed during the timelock period, it will get skipped in the calculation.
-        vm.prank(withdrawRequestNFTInstance.ownerOf(reqIds[0]));
-        withdrawRequestNFTInstance.claimWithdraw(reqIds[0]);
-
-        vm.startPrank(etherfi_admin_wallet);    
-        uint32[] memory reqIdsWithIssues = new uint32[](4);
-        reqIdsWithIssues[0] = reqIds[0];
-        reqIdsWithIssues[1] = reqIds[1];
-        reqIdsWithIssues[2] = reqIds[3];
-        reqIdsWithIssues[3] = reqIds[2];
-        vm.expectRevert();
-        withdrawRequestNFTInstance.handleAccumulatedShareRemainder(reqIdsWithIssues, scanBegin);
-
-        reqIdsWithIssues[0] = reqIds[0];
-        reqIdsWithIssues[1] = reqIds[1];
-        reqIdsWithIssues[2] = reqIds[2];
-        reqIdsWithIssues[3] = reqIds[2];
-        vm.expectRevert();
-        withdrawRequestNFTInstance.handleAccumulatedShareRemainder(reqIdsWithIssues, scanBegin);
-
-        withdrawRequestNFTInstance.handleAccumulatedShareRemainder(reqIds, scanBegin);
         vm.stopPrank();
 
+        // 4. Unpause
+        vm.startPrank(withdrawRequestNFTInstance.owner());
+        withdrawRequestNFTInstance.unPauseContract();
+        vm.stopPrank();
+
+        // Back to normal
         vm.prank(withdrawRequestNFTInstance.ownerOf(reqIds[1]));
         withdrawRequestNFTInstance.claimWithdraw(reqIds[1]);
+    }
+
+    function test_handleRemainder() public {
+        test_aggregateSumEEthShareAmount();
+
+        vm.startPrank(withdrawRequestNFTInstance.owner());
+
+        withdrawRequestNFTInstance.handleRemainder(1 ether);
+        
+        vm.stopPrank();
     }
 
     function testFuzz_RequestWithdraw(uint96 depositAmount, uint96 withdrawAmount, address recipient) public {
