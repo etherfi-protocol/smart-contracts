@@ -270,6 +270,11 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
     function test_mainnet_redeem_eEth() public {
         setUp_Fork();
 
+        vm.deal(alice, 50000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 50000 ether}();
+
+
         vm.deal(user, 100 ether);
         vm.startPrank(user);
 
@@ -298,6 +303,10 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
 
     function test_mainnet_redeem_weEth_with_rebase() public {
         setUp_Fork();
+
+        vm.deal(alice, 50000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 50000 ether}();
 
         vm.deal(user, 100 ether);
 
