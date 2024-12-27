@@ -10,11 +10,9 @@ interface IAuctionManager {
     }
     
     struct BatchedBid {
-        uint16 numBids;
-        uint16 isActiveBits;
+        uint8 numBids;
         uint32 amountPerBidInGwei;
-        uint32 bidderPubKeyStartIndex;
-        address bidderAddress;
+        uint216 availableBidsBitset;
     }
 
     function initialize(address _nodeOperatorManagerContract) external;

@@ -46,13 +46,14 @@ contract AuctionManagerGasOptimized is
     mapping(address => bool) public admins;
 
     uint256 public bidIdsBeforeGasOptimization;
-    mapping(uint256 => BatchedBid) public batchedBids;
+    mapping(uint256 bidIndex => BatchedBid bids) public batchedBids;
+    mapping(uint256 bidIndex => address operator) public operatorBidIndexMap;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
-    event BidCreated(address indexed bidder, uint256 amountPerBid, uint256[] bidIdArray, uint64[] ipfsIndexArray);
+    event BidCreated(address indexed bidder, uint256 amountPerBid, uint256 bidIdIndex, uint64 ipfsStartIndex, uint8 numBids);
     event BidCancelled(uint256 indexed bidId);
     event BidReEnteredAuction(uint256 indexed bidId);
     event WhitelistDisabled(bool whitelistStatus);
@@ -98,18 +99,18 @@ contract AuctionManagerGasOptimized is
 
     function initializeOnUpgradeVersion2() external onlyOwner() {
         bidIdsBeforeGasOptimization = numberOfBids;
-        numberOfBids = 10 * ((numberOfBids + 10 - 1) / 10); // offset
+        numberOfBids = 256 * ((numberOfBids + 256 - 1) / 256); // offset
     }
 
     /// @notice Creates bid(s) for the right to run a validator node when ETH is deposited
     /// @param _bidSize the number of bids that the node operator would like to create
     /// @param _bidAmountPerBid the ether value of each bid that is created
-    /// @return bidIdArray array of the bidIDs that were created
+    /// @return bidId Batched Bid ID
     function createBid(
         uint256 _bidSize,
         uint256 _bidAmountPerBid
     ) external payable whenNotPaused nonReentrant returns (uint256[] memory) {
-        require(_bidSize > 0, "Bid size is too small");
+        require(_bidSize > 0 && _bidSize < 217, "Invalid bid size");
         if (whitelistEnabled) {
             require(
                 nodeOperatorManager.isWhitelisted(msg.sender),
@@ -143,49 +144,25 @@ contract AuctionManagerGasOptimized is
         uint64 keysRemaining = nodeOperatorManager.getNumKeysRemaining(msg.sender);
         require(_bidSize <= keysRemaining, "Insufficient public keys");
 
-        uint256[] memory bidIdArray = new uint256[](_bidSize);
-        uint64[] memory ipfsIndexArray = new uint64[](_bidSize);
-
-        uint256 numBatchedBids = (_bidSize + 10 - 1) / 10;
-        uint256 batchedBidId = numberOfBids / 10;
+        uint256 batchedBidId = numberOfBids / 256;
         uint64 ipfsStartIndex = nodeOperatorManager.batchFetchNextKeyIndex(msg.sender, _bidSize);
 
-        for (uint256 i = 0; i < _bidSize;) {
-            unchecked {
-                bidIdArray[i] = batchedBidId * 10 + i;
-                ipfsIndexArray[i] = ipfsStartIndex + uint64(1);
-                ++i; 
-            }
-        }
+        uint216 bitset = type(uint216).max >> (216 - _bidSize);
+        batchedBids[batchedBidId] = BatchedBid({
+            numBids: uint8(_bidSize),
+            amountPerBidInGwei: uint32(_bidAmountPerBid / 1 gwei),
+            availableBidsBitset: bitset
+        });
 
-        for (uint256 i = 0; i < numBatchedBids;) {
-            uint256 numBids = Math.min(10, _bidSize - i * 10);
-            uint256 bidBatchId = batchedBidId + i;
-            uint16 isActiveBits = uint16((1 << numBids) - 1);
-
-            batchedBids[bidBatchId] = BatchedBid({
-                numBids: uint16(numBids),
-                isActiveBits: isActiveBits,
-                amountPerBidInGwei:  uint32(_bidAmountPerBid / 1 gwei),
-                bidderPubKeyStartIndex: uint32(ipfsStartIndex + i),
-                bidderAddress: msg.sender
-            });
-
-            unchecked {
-                ++i;
-            }
-
-            // The Bid with its bid Id `x` can be accessed
-            // - if x <= bidIdsBeforeGasOptimization, then bids[x] is the bid
-            // - otherwise, then batchedBids[x / 10] is all needed to construct the bid info
-            //   - isAcitve = (batchedBids[x / 10].isActiveBits >> (x % 10)) & 1
-            //   - bidderPubKeyIndex = batchedBids[x / 10].bidderPubKeyStartIndex + (x % 10)
-        }
-        numberOfBids += numBatchedBids * 10;
+        numberOfBids += 256;
         numberOfActiveBids += _bidSize;
+        operatorBidIndexMap[batchedBidId] = msg.sender;
 
-        emit BidCreated(msg.sender, _bidAmountPerBid, bidIdArray, ipfsIndexArray);
-        return bidIdArray;
+        emit BidCreated(msg.sender, _bidAmountPerBid, batchedBidId, ipfsStartIndex, uint8(_bidSize));
+
+        uint256[] memory returnBatchedBidId = new uint256[](1);
+        returnBatchedBidId[0] = batchedBidId;
+        return returnBatchedBidId;
     }
 
     /// @notice Cancels bids in a batch by calling the 'cancelBid' function multiple times
@@ -215,11 +192,11 @@ contract AuctionManagerGasOptimized is
             require(bid.isActive, "The bid is not active");
             bid.isActive = false;
         } else {
-            uint256 bidPosition = _bidId % 10;
-            // batchedBidId = _bidId / 10
-            BatchedBid storage batchedBid = batchedBids[_bidId / 10];
-            require(((batchedBid.isActiveBits >> bidPosition) & 1) == 1, "The bid is not active");
-            batchedBid.isActiveBits &= ~(uint16(1 << bidPosition));
+            uint256 bidPosition = _bidId % 256;
+            // batchedBidId = _bidId / 256
+            BatchedBid storage batchedBid = batchedBids[_bidId / 256];
+            require(((1 << bidPosition) & batchedBid.availableBidsBitset) == 1, "The bid is not active");
+            batchedBid.availableBidsBitset &= ~(uint216(1 << bidPosition));
         }
 
         numberOfActiveBids--;
@@ -235,12 +212,12 @@ contract AuctionManagerGasOptimized is
             require(!bid.isActive, "Bid already active");
             bid.isActive = true;
         } else {
-            uint256 bidPosition = _bidId % 10;
-            // batchedBidId = _bidId / 10
-            BatchedBid storage batchedBid = batchedBids[_bidId / 10];
+            uint256 bidPosition = _bidId % 256;
+            // batchedBidId = _bidId / 256
+            BatchedBid storage batchedBid = batchedBids[_bidId / 256];
             
-            require(((batchedBid.isActiveBits >> bidPosition) & 1) == 0, "Bid already active");
-            batchedBid.isActiveBits |= uint16(1 << bidPosition);
+            require(((1 << bidPosition) & batchedBid.availableBidsBitset) == 0, "Bid already active");
+            batchedBid.availableBidsBitset |= uint216(1 << bidPosition);
         }
 
         numberOfActiveBids++;
@@ -257,7 +234,7 @@ contract AuctionManagerGasOptimized is
         if (_bidId <= bidIdsBeforeGasOptimization) {
             amount = bids[_bidId].amount;
         } else {
-            amount = uint256(batchedBids[_bidId / 10].amountPerBidInGwei) * 1 gwei;
+            amount = uint256(batchedBids[_bidId / 256].amountPerBidInGwei) * 1 gwei;
         }
 
         uint256 newAccumulatedRevenue = accumulatedRevenue + amount;
@@ -316,14 +293,14 @@ contract AuctionManagerGasOptimized is
             (bool sent, ) = msg.sender.call{value: bid.amount}("");
             require(sent, "Failed to send Ether");
         } else {
-            uint256 batchId = _bidId / 10;
-            uint256 bidPosition = _bidId % 10;
+            uint256 batchId = _bidId / 256;
+            uint256 bidPosition = _bidId % 256;
             BatchedBid storage batchedBid = batchedBids[batchId];
             
-            require(batchedBid.bidderAddress == msg.sender, "Invalid bid");
-            require(((batchedBid.isActiveBits >> bidPosition) & 1) == 1, "Bid already cancelled");
+            require(operatorBidIndexMap[batchId] == msg.sender, "Invalid bid");
+            require(((1 << bidPosition) & batchedBid.availableBidsBitset) == 1, "Bid already cancelled");
 
-            batchedBid.isActiveBits &= ~(uint16(1 << bidPosition));
+            batchedBid.availableBidsBitset &= ~(uint216(1 << bidPosition));
 
             uint256 amount = uint256(batchedBid.amountPerBidInGwei) * 1 gwei;
             (bool sent, ) = msg.sender.call{value: amount}("");
@@ -345,8 +322,12 @@ contract AuctionManagerGasOptimized is
     /// @return the address of the user who placed (owns) the bid
     function getBidOwner(uint256 _bidId) external view returns (address) {
         if (_bidId <= bidIdsBeforeGasOptimization) return bids[_bidId].bidderAddress;
-        // batchedBidId = _bidId / 10
-        return batchedBids[_bidId / 10].bidderAddress; 
+
+        uint256 bucket = _bidId / 256;
+        uint256 subIndex = _bidId % 256;
+        if (subIndex >= batchedBids[bucket].numBids) return address(0);
+
+        return operatorBidIndexMap[bucket]; 
     }
 
     /// @notice Fetches if a selected bid is currently active
@@ -355,9 +336,14 @@ contract AuctionManagerGasOptimized is
     function isBidActive(uint256 _bidId) external view returns (bool) {
         if (_bidId <= bidIdsBeforeGasOptimization) return bids[_bidId].isActive;
 
-        uint256 bidPosition = _bidId % 10;
-        // batchedBidId = _bidId / 10
-        return (batchedBids[_bidId / 10].isActiveBits >> bidPosition) & 1 == 1; 
+        uint256 bucket = _bidId / 256;
+        uint256 subIndex = _bidId % 256;
+        BatchedBid memory batchedBid = batchedBids[bucket];
+
+        // bid ID outside of accepted range for this aggregate bid
+        if (subIndex >= batchedBid.numBids) return false;
+
+        return ((1 << subIndex) & batchedBid.availableBidsBitset) != 0;
     }
 
     /// @notice Fetches the address of the implementation contract currently being used by the proxy
