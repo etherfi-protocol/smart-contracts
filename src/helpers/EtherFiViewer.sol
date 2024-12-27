@@ -43,11 +43,11 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function EigenPod_hasRestaked(uint256[] memory _validatorIds) external view returns (bool[] memory _hasRestaked) {
-        revert("FIX BELOW");
-        // _hasRestaked = new bool[](_validatorIds.length);
-        // for (uint256 i = 0; i < _validatorIds.length; i++) {
-        //     _hasRestaked[i] = _getEigenPod(_validatorIds[i]).hasRestaked();
-        // }
+        _hasRestaked = new bool[](_validatorIds.length);
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            // now every validator within eigenlayer is guaranteed to have this flag set
+            _hasRestaked[i] = _getEtherFiNode(_validatorIds[i]).isRestakingEnabled();
+        }
     }
 
     function EigenPod_withdrawableRestakedExecutionLayerGwei(uint256[] memory _validatorIds) external view returns (uint256[] memory _withdrawableRestakedExecutionLayerGwei) {
@@ -55,22 +55,6 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             _withdrawableRestakedExecutionLayerGwei[i] = _getEigenPod(_validatorIds[i]).withdrawableRestakedExecutionLayerGwei();
         }
-    }
-
-    function EigenPod_nonBeaconChainETHBalanceWei(uint256[] memory _validatorIds) external view returns (uint256[] memory _nonBeaconChainETHBalanceWei) {
-        revert("FIX BELOW");
-        // _nonBeaconChainETHBalanceWei = new uint256[](_validatorIds.length);
-        // for (uint256 i = 0; i < _validatorIds.length; i++) {
-        //     _nonBeaconChainETHBalanceWei[i] = _getEigenPod(_validatorIds[i]).nonBeaconChainETHBalanceWei();
-        // }
-    }
-
-    function EigenPod_mostRecentWithdrawalTimestamp(uint256[] memory _validatorIds) external view returns (uint256[] memory _mostRecentWithdrawalTimestamp) {
-        revert("FIX BELOW");
-        // _mostRecentWithdrawalTimestamp = new uint256[](_validatorIds.length);
-        // for (uint256 i = 0; i < _validatorIds.length; i++) {
-        //     _mostRecentWithdrawalTimestamp[i] = _getEigenPod(_validatorIds[i]).mostRecentWithdrawalTimestamp();
-        // }
     }
 
     function EigenPod_validatorPubkeyHashToInfo(uint256[] memory _validatorIds, bytes[][] memory _validatorPubkeys) external view returns (IEigenPod.ValidatorInfo[][] memory _validatorInfos) {
