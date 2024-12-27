@@ -87,13 +87,13 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    function EigenPodManager_podOwnerShares(uint256[] memory _validatorIds) external view returns (int256[] memory _podOwnerShares) {
-        revert("FIX BELOW");
-        // _podOwnerShares = new int256[](_validatorIds.length);
-        // for (uint256 i = 0; i < _validatorIds.length; i++) {
-        //     address podOwner = address(_getEtherFiNode(_validatorIds[i]));
-        //     _podOwnerShares[i] = _getEigenPodManager().podOwnerShares(podOwner);
-        // }
+    // WARNING: these shares have not been scaled by any slashing events
+    function EigenPodManager_podOwnerDepositShares(uint256[] memory _validatorIds) external view returns (int256[] memory _podOwnerShares) {
+        _podOwnerShares = new int256[](_validatorIds.length);
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            address podOwner = address(_getEtherFiNode(_validatorIds[i]));
+            _podOwnerShares[i] = _getEigenPodManager().podOwnerDepositShares(podOwner);
+        }
     }
 
     function DelegationManager_delegatedTo(uint256[] memory _validatorIds) external view returns (address[] memory _delegatedTo) {
@@ -102,14 +102,6 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             address podOwner = address(_getEtherFiNode(_validatorIds[i]));
             _delegatedTo[i] = _getDelegationManager().delegatedTo(podOwner);
         }
-    }
-
-    function DelegationManager_operatorDetails(address[] memory _operators) external view returns (IDelegationManager.OperatorDetails[] memory _operatorDetails) {
-        revert("FIX BELOW");
-        // _operatorDetails = new IDelegationManager.OperatorDetails[](_operators.length);
-        // for (uint256 i = 0; i < _operators.length; i++) {
-        //     _operatorDetails[i] = _getDelegationManager().operatorDetails(_operators[i]);
-        // }
     }
 
     function EtherFiNodesManager_etherFiNodeAddress(uint256[] memory _validatorIds) external view returns (address[] memory _etherFiNodeAddresses) {
