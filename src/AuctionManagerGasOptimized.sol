@@ -181,6 +181,10 @@ contract AuctionManagerGasOptimized is
         _cancelBid(_bidId);
     }
 
+    function _available(uint256 bidPosition, uint216 bitset) internal pure returns (bool) {
+        return ((1 << bidPosition) & bitset) != 0;
+    }
+
     /// @notice Updates the details of the bid which has been used in a stake match
     /// @dev Called by batchDepositWithBidIds() in StakingManager.sol
     /// @param _bidId the ID of the bid being removed from the auction (since it has been selected)
@@ -195,7 +199,7 @@ contract AuctionManagerGasOptimized is
             uint256 bidPosition = _bidId % 256;
             // batchedBidId = _bidId / 256
             BatchedBid storage batchedBid = batchedBids[_bidId / 256];
-            require(((1 << bidPosition) & batchedBid.availableBidsBitset) == 1, "The bid is not active");
+            require(_available(bidPosition, batchedBid.availableBidsBitset), "The bid is not active");
             batchedBid.availableBidsBitset &= ~(uint216(1 << bidPosition));
         }
 
@@ -216,7 +220,7 @@ contract AuctionManagerGasOptimized is
             // batchedBidId = _bidId / 256
             BatchedBid storage batchedBid = batchedBids[_bidId / 256];
             
-            require(((1 << bidPosition) & batchedBid.availableBidsBitset) == 0, "Bid already active");
+            require(!_available(bidPosition, batchedBid.availableBidsBitset), "Bid already active");
             batchedBid.availableBidsBitset |= uint216(1 << bidPosition);
         }
 
@@ -298,7 +302,7 @@ contract AuctionManagerGasOptimized is
             BatchedBid storage batchedBid = batchedBids[batchId];
             
             require(operatorBidIndexMap[batchId] == msg.sender, "Invalid bid");
-            require(((1 << bidPosition) & batchedBid.availableBidsBitset) == 1, "Bid already cancelled");
+            require(_available(bidPosition, batchedBid.availableBidsBitset), "Bid already cancelled");
 
             batchedBid.availableBidsBitset &= ~(uint216(1 << bidPosition));
 
@@ -336,14 +340,14 @@ contract AuctionManagerGasOptimized is
     function isBidActive(uint256 _bidId) external view returns (bool) {
         if (_bidId <= bidIdsBeforeGasOptimization) return bids[_bidId].isActive;
 
-        uint256 bucket = _bidId / 256;
-        uint256 subIndex = _bidId % 256;
-        BatchedBid memory batchedBid = batchedBids[bucket];
+        uint256 batchedBidIndex = _bidId / 256;
+        uint256 bidPosition = _bidId % 256;
+        BatchedBid memory batchedBid = batchedBids[batchedBidIndex];
 
         // bid ID outside of accepted range for this aggregate bid
-        if (subIndex >= batchedBid.numBids) return false;
+        if (bidPosition >= batchedBid.numBids) return false;
 
-        return ((1 << subIndex) & batchedBid.availableBidsBitset) != 0;
+        return _available(bidPosition, batchedBid.availableBidsBitset);
     }
 
     /// @notice Fetches the address of the implementation contract currently being used by the proxy
