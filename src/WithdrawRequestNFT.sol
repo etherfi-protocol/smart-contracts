@@ -70,11 +70,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         nextRequestId = 1;
     }
 
-    function initializeOnUpgrade(address _pauser) external onlyOwner {
+    function initializeOnUpgrade(address _pauser, uint16 _shareRemainderSplitToTreasuryInBps) external onlyOwner {
         require(pauser == address(0), "Already initialized");
 
         paused = false;
         pauser = _pauser;
+
+        shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
 
         _currentRequestIdToScanFromForShareRemainder = 1;
         _lastRequestIdToScanUntilForShareRemainder = nextRequestId - 1;

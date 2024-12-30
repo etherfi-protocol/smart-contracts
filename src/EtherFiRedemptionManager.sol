@@ -148,7 +148,7 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
         IERC20(address(eEth)).safeTransfer(treasury, eEthFeeAmountToTreasury);
         
         // To Receiver by transferring ETH
-        (bool success, ) = receiver.call{value: ethReceived, gas: 100_000}("");
+        (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
         require(success, "EtherFiRedemptionManager: Transfer failed");
         require(address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiRedemptionManager: Invalid liquidity pool balance");
 

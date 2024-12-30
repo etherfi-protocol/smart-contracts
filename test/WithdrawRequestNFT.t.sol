@@ -327,8 +327,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.startPrank(withdrawRequestNFTInstance.owner());
         // 1. Upgrade
         withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(owner))));
-        withdrawRequestNFTInstance.initializeOnUpgrade(etherfi_admin_wallet);
-        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(50_00);
+        withdrawRequestNFTInstance.initializeOnUpgrade(etherfi_admin_wallet, 50_00);
         withdrawRequestNFTInstance.updateAdmin(etherfi_admin_wallet, true);
 
         // 2. PAUSE
