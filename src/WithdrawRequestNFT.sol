@@ -42,6 +42,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
     event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
     event WithdrawRequestInvalidated(uint32 indexed requestId);
+    event WithdrawRequestValidated(uint32 indexed requestId);
     event WithdrawRequestSeized(uint32 indexed requestId);
     event HandledRemainderOfClaimedWithdrawRequests(uint256 eEthAmountToTreasury, uint256 eEthAmountBurnt);
 
@@ -155,7 +156,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         uint256 scanUntil = Math.min(_lastRequestIdToScanUntilForShareRemainder, scanFrom + _numReqsToScan - 1);
 
         for (uint256 i = scanFrom; i <= scanUntil; i++) {
-            if (!_requests[i].isValid) continue;
+            if (!_exists(i)) continue;
             totalLockedEEthShares += _requests[i].shareOfEEth;
         }
 
@@ -165,7 +166,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     // Seize the request simply by transferring it to another recipient
     function seizeRequest(uint256 requestId, address recipient) external onlyOwner {
         require(!_requests[requestId].isValid, "Request is valid");
-        require(ownerOf(requestId) != address(0), "Already Claimed");
+        require(_exists(requestId), "Request does not exist");
 
         _transfer(ownerOf(requestId), recipient, requestId);
 
@@ -181,7 +182,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function isValid(uint256 requestId) public view returns (bool) {
-        require(_exists(requestId), "Request does not exist");
+        require(_exists(requestId), "Request does not exist11");
         return _requests[requestId].isValid;
     }
 
@@ -191,15 +192,17 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     function invalidateRequest(uint256 requestId) external onlyAdmin {
         require(isValid(requestId), "Request is not valid");
-
-        if (isFinalized(requestId)) {
-            uint256 ethAmount = getClaimableAmount(requestId);
-            liquidityPool.reduceEthAmountLockedForWithdrawal(uint128(ethAmount));
-        }
-
         _requests[requestId].isValid = false;
 
         emit WithdrawRequestInvalidated(uint32(requestId));
+    }
+
+    function validateRequest(uint256 requestId) external onlyAdmin {
+        require(_exists(requestId), "Request does not exist22");
+        require(!_requests[requestId].isValid, "Request is valid");
+        _requests[requestId].isValid = true;
+
+        emit WithdrawRequestValidated(uint32(requestId));
     }
 
     function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
@@ -229,7 +232,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     ///   - Burn: the rest of the remainder is burned
     /// @param _eEthAmount: the remainder of the eEth amount
     function handleRemainder(uint256 _eEthAmount) external onlyAdmin {
-        require (getEEthRemainderAmount() >= _eEthAmount, "Not enough eETH remainder");
+        require(getEEthRemainderAmount() >= _eEthAmount, "Not enough eETH remainder");
         require(_currentRequestIdToScanFromForShareRemainder == nextRequestId, "Not all requests have been scanned");
 
         uint256 beforeEEthShares = eETH.shares(address(this));
@@ -252,6 +255,16 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function getEEthRemainderAmount() public view returns (uint256) {
         uint256 eEthRemainderShare = eETH.shares(address(this)) - totalLockedEEthShares;
         return liquidityPool.amountForShare(eEthRemainderShare);
+    }
+
+    // the withdraw request NFT is transferrable
+    // - if the request is valid, it can be transferred by the owner of the NFT
+    // - if the request is invalid, it can be transferred only by the owner of the WithdarwRequestNFT contract
+    function _beforeTokenTransfer(address from, address to, uint256 firstTokenId, uint256 batchSize) internal override {
+        for (uint256 i = 0; i < batchSize; i++) {
+            uint256 tokenId = firstTokenId + i;
+            require(_requests[tokenId].isValid || msg.sender == owner(), "INVALID_REQUEST");
+        }
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

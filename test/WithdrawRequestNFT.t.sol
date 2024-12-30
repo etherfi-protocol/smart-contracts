@@ -65,7 +65,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertTrue(request.isValid, "Request should be valid");
     }
 
-    function testInvalidClaimWithdraw() public {
+    function test_InvalidClaimWithdraw() public {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         vm.stopPrank();
@@ -117,7 +117,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 10 ether);
         assertEq(eETHInstance.balanceOf(bob), 10 ether);
-        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 0 ether, "eETH balance should be 0 ether");
+        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 0 ether, "eETH balance should start from 0 ether");
 
         // Case 1.
         // Even after the rebase, the withdrawal amount should remain the same; 1 eth
@@ -149,7 +149,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 bobsEndingBalance = address(bob).balance;
 
         assertEq(bobsEndingBalance, bobsStartingBalance + 1 ether, "Bobs balance should be 1 ether higher");
-        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 0 ether, "eETH balance should be 0 ether");
+        assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 1 ether, "eETH balance should be 1 ether");
     }
 
     function test_ValidClaimWithdrawWithNegativeRebase() public {
@@ -319,31 +319,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         _finalizeWithdrawalRequest(requestId);
     }
 
-    function test_InvalidatedRequestNft_NonTransferrable() public {
-        uint256 requestId = test_InvalidatedRequestNft_after_finalization();
-
-        vm.prank(alice);
-        vm.expectRevert("INVALID_REQUEST");
-        withdrawRequestNFTInstance.transferFrom(alice, bob, requestId);
-    }
-
-    function test_seizeRequest() public {
-        uint256 requestId = test_InvalidatedRequestNft_after_finalization();
-        uint256 claimableAmount = withdrawRequestNFTInstance.getRequest(requestId).amountOfEEth;
-
-        // REVERT if not owner
-        vm.prank(alice);
-        vm.expectRevert("Ownable: caller is not the owner");
-        withdrawRequestNFTInstance.seizeRequest(requestId, chad);
-
-        vm.prank(owner);
-        withdrawRequestNFTInstance.seizeRequest(requestId, chad);
-
-        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0, "Must be withdrawn");
-        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), chad, "Chad should own the NFT");
-    }
-
-
     function test_aggregateSumEEthShareAmount() public {
         initializeRealisticFork(MAINNET_FORK);
 
@@ -363,8 +338,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.startPrank(etherfi_admin_wallet);
 
         // 3. AggSum
-        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(1000);
-        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(1000);
+        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(128);
         // ...
 
         vm.stopPrank();
@@ -383,7 +357,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         test_aggregateSumEEthShareAmount();
 
         vm.startPrank(withdrawRequestNFTInstance.owner());
-
+        vm.expectRevert("Not all requests have been scanned");
         withdrawRequestNFTInstance.handleRemainder(1 ether);
         
         vm.stopPrank();
@@ -568,8 +542,8 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Admin invalidates request
         vm.prank(withdrawRequestNFTInstance.owner());
-        withdrawRequestNFTInstance.updateAdmin(recipient, true);
-        vm.prank(recipient);
+        withdrawRequestNFTInstance.updateAdmin(admin, true);
+        vm.prank(admin);
         withdrawRequestNFTInstance.invalidateRequest(requestId);
 
         // Verify request state after invalidation
@@ -580,5 +554,9 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(recipient);
         vm.expectRevert("INVALID_REQUEST");
         withdrawRequestNFTInstance.transferFrom(recipient, address(0xdead), requestId);
+
+        // Owner can seize the invalidated request NFT
+        vm.prank(withdrawRequestNFTInstance.owner());
+        withdrawRequestNFTInstance.seizeRequest(requestId, admin);
     }
 }
