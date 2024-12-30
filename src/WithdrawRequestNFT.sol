@@ -233,7 +233,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @param _eEthAmount: the remainder of the eEth amount
     function handleRemainder(uint256 _eEthAmount) external onlyAdmin {
         require(getEEthRemainderAmount() >= _eEthAmount, "Not enough eETH remainder");
-        require(_currentRequestIdToScanFromForShareRemainder == nextRequestId, "Not all requests have been scanned");
+        require(_currentRequestIdToScanFromForShareRemainder == _lastRequestIdToScanUntilForShareRemainder + 1, "Not all prev requests have been scanned");
 
         uint256 beforeEEthShares = eETH.shares(address(this));
         
