@@ -9,7 +9,7 @@ import "../../src/Liquifier.sol";
 import "../../src/EtherFiRestaker.sol";
 import "../../src/helpers/AddressProvider.sol";
 import "../../src/UUPSProxy.sol";
-import "../../src/EtherFiWithdrawalBuffer.sol";
+import "../../src/EtherFiRedemptionManager.sol";
 
 
 contract Deploy is Script {
@@ -23,7 +23,7 @@ contract Deploy is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        EtherFiWithdrawalBuffer impl = new EtherFiWithdrawalBuffer(
+        EtherFiRedemptionManager impl = new EtherFiRedemptionManager(
             addressProvider.getContractAddress("LiquidityPool"), 
             addressProvider.getContractAddress("EETH"), 
             addressProvider.getContractAddress("WeETH"), 
@@ -32,7 +32,7 @@ contract Deploy is Script {
         );
         UUPSProxy proxy = new UUPSProxy(payable(impl), "");
 
-        EtherFiWithdrawalBuffer instance = EtherFiWithdrawalBuffer(payable(proxy));
+        EtherFiRedemptionManager instance = EtherFiRedemptionManager(payable(proxy));
         instance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether);
 
         vm.stopBroadcast();

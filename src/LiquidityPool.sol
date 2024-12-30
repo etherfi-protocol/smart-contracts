@@ -23,7 +23,7 @@ import "./interfaces/IEtherFiAdmin.sol";
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/ILiquifier.sol";
 
-import "./EtherFiWithdrawalBuffer.sol";
+import "./EtherFiRedemptionManager.sol";
 
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
@@ -72,7 +72,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     bool private isLpBnftHolder;
 
-    EtherFiWithdrawalBuffer public etherFiWithdrawalBuffer;
+    EtherFiRedemptionManager public etherFiRedemptionManager;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -144,8 +144,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         liquifier = ILiquifier(_liquifier);
     }
 
-    function initializeOnUpgradeWithWithdrawalBuffer(address _withdrawalBuffer) external onlyOwner {
-        etherFiWithdrawalBuffer = EtherFiWithdrawalBuffer(payable(_withdrawalBuffer));
+    function initializeOnUpgradeWithRedemptionManager(address _etherFiRedemptionManager) external onlyOwner {
+        require(address(etherFiRedemptionManager) == address(0), "Already initialized");
+        etherFiRedemptionManager = EtherFiRedemptionManager(payable(_etherFiRedemptionManager));
     }
 
     // Used by eETH staking flow
@@ -188,7 +189,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// it returns the amount of shares burned
     function withdraw(address _recipient, uint256 _amount) external whenNotPaused returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);
-        require(msg.sender == address(withdrawRequestNFT) || msg.sender == address(membershipManager) || msg.sender == address(etherFiWithdrawalBuffer), "Incorrect Caller");
+        require(msg.sender == address(withdrawRequestNFT) || msg.sender == address(membershipManager) || msg.sender == address(etherFiRedemptionManager), "Incorrect Caller");
         if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
 

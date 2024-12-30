@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/console2.sol";
 import "./TestSetup.sol";
 
-contract EtherFiWithdrawalBufferTest is TestSetup {
+contract EtherFiRedemptionManagerTest is TestSetup {
 
     address user = vm.addr(999);
     address op_admin = vm.addr(1000);
@@ -20,14 +20,14 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
         roleRegistry.grantRole(keccak256("PROTOCOL_ADMIN"), op_admin);
         vm.stopPrank();
 
-        etherFiWithdrawalBufferProxy = new UUPSProxy(address(new EtherFiWithdrawalBuffer(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistry))), "");
-        etherFiWithdrawalBufferInstance = EtherFiWithdrawalBuffer(payable(etherFiWithdrawalBufferProxy));
-        etherFiWithdrawalBufferInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark
+        etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistry))), "");
+        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
+        etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark
 
         _upgrade_liquidity_pool_contract();
 
         vm.prank(liquidityPoolInstance.owner());
-        liquidityPoolInstance.initializeOnUpgradeWithWithdrawalBuffer(address(etherFiWithdrawalBufferInstance));
+        liquidityPoolInstance.initializeOnUpgradeWithRedemptionManager(address(etherFiRedemptionManagerInstance));
     }
 
     function test_rate_limit() public {
@@ -35,33 +35,33 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
         vm.prank(user);
         liquidityPoolInstance.deposit{value: 1000 ether}();
 
-        assertEq(etherFiWithdrawalBufferInstance.canRedeem(1 ether), true);
-        assertEq(etherFiWithdrawalBufferInstance.canRedeem(5 ether - 1), true);
-        assertEq(etherFiWithdrawalBufferInstance.canRedeem(5 ether + 1), false);
-        assertEq(etherFiWithdrawalBufferInstance.canRedeem(10 ether), false);
-        assertEq(etherFiWithdrawalBufferInstance.totalRedeemableAmount(), 5 ether);
+        assertEq(etherFiRedemptionManagerInstance.canRedeem(1 ether), true);
+        assertEq(etherFiRedemptionManagerInstance.canRedeem(5 ether - 1), true);
+        assertEq(etherFiRedemptionManagerInstance.canRedeem(5 ether + 1), false);
+        assertEq(etherFiRedemptionManagerInstance.canRedeem(10 ether), false);
+        assertEq(etherFiRedemptionManagerInstance.totalRedeemableAmount(), 5 ether);
     }
 
     function test_lowwatermark_guardrail() public {
         vm.deal(user, 100 ether);
         
-        assertEq(etherFiWithdrawalBufferInstance.lowWatermarkInETH(), 0 ether);
+        assertEq(etherFiRedemptionManagerInstance.lowWatermarkInETH(), 0 ether);
 
         vm.prank(user);
         liquidityPoolInstance.deposit{value: 100 ether}();
 
-        vm.startPrank(etherFiWithdrawalBufferInstance.owner());
-        etherFiWithdrawalBufferInstance.setLowWatermarkInBpsOfTvl(1_00); // 1%
-        assertEq(etherFiWithdrawalBufferInstance.lowWatermarkInETH(), 1 ether);
+        vm.startPrank(etherFiRedemptionManagerInstance.owner());
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(1_00); // 1%
+        assertEq(etherFiRedemptionManagerInstance.lowWatermarkInETH(), 1 ether);
 
-        etherFiWithdrawalBufferInstance.setLowWatermarkInBpsOfTvl(50_00); // 50%
-        assertEq(etherFiWithdrawalBufferInstance.lowWatermarkInETH(), 50 ether);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(50_00); // 50%
+        assertEq(etherFiRedemptionManagerInstance.lowWatermarkInETH(), 50 ether);
 
-        etherFiWithdrawalBufferInstance.setLowWatermarkInBpsOfTvl(100_00); // 100%
-        assertEq(etherFiWithdrawalBufferInstance.lowWatermarkInETH(), 100 ether);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100_00); // 100%
+        assertEq(etherFiRedemptionManagerInstance.lowWatermarkInETH(), 100 ether);
 
         vm.expectRevert("INVALID");
-        etherFiWithdrawalBufferInstance.setLowWatermarkInBpsOfTvl(100_01); // 100.01%
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100_01); // 100.01%
     }
 
     function testFuzz_redeemEEth(
@@ -84,22 +84,22 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
 
         // Set exitFeeSplitToTreasuryInBps
         vm.prank(owner);
-        etherFiWithdrawalBufferInstance.setExitFeeSplitToTreasuryInBps(uint16(exitFeeSplitBps));
+        etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(uint16(exitFeeSplitBps));
 
         // Set exitFeeBasisPoints and lowWatermarkInBpsOfTvl
         vm.prank(owner);
-        etherFiWithdrawalBufferInstance.setExitFeeBasisPoints(exitFeeBps);
+        etherFiRedemptionManagerInstance.setExitFeeBasisPoints(exitFeeBps);
 
         vm.prank(owner);
-        etherFiWithdrawalBufferInstance.setLowWatermarkInBpsOfTvl(lowWatermarkBps);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(lowWatermarkBps);
 
         vm.startPrank(user);
-        if (etherFiWithdrawalBufferInstance.canRedeem(redeemAmount)) {
+        if (etherFiRedemptionManagerInstance.canRedeem(redeemAmount)) {
             uint256 userBalanceBefore = address(user).balance;
             uint256 treasuryBalanceBefore = eETHInstance.balanceOf(address(treasuryInstance));
 
-            eETHInstance.approve(address(etherFiWithdrawalBufferInstance), redeemAmount);
-            etherFiWithdrawalBufferInstance.redeemEEth(redeemAmount, user, user);
+            eETHInstance.approve(address(etherFiRedemptionManagerInstance), redeemAmount);
+            etherFiRedemptionManagerInstance.redeemEEth(redeemAmount, user, user);
 
             uint256 totalFee = (redeemAmount * exitFeeBps) / 10000;
             uint256 treasuryFee = (totalFee * exitFeeSplitBps) / 10000;
@@ -118,7 +118,7 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
 
         } else {
             vm.expectRevert();
-            etherFiWithdrawalBufferInstance.redeemEEth(redeemAmount, user, user);
+            etherFiRedemptionManagerInstance.redeemEEth(redeemAmount, user, user);
         }
         vm.stopPrank();
     }
@@ -151,13 +151,13 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
 
         // Set fee and watermark configurations
         vm.prank(owner);
-        etherFiWithdrawalBufferInstance.setExitFeeSplitToTreasuryInBps(uint16(exitFeeSplitBps));
+        etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(uint16(exitFeeSplitBps));
 
         vm.prank(owner);
-        etherFiWithdrawalBufferInstance.setExitFeeBasisPoints(exitFeeBps);
+        etherFiRedemptionManagerInstance.setExitFeeBasisPoints(exitFeeBps);
 
         vm.prank(owner);
-        etherFiWithdrawalBufferInstance.setLowWatermarkInBpsOfTvl(lowWatermarkBps);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(lowWatermarkBps);
 
         // Convert redeemAmount from ETH to weETH
         vm.startPrank(user);
@@ -165,14 +165,14 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
         weEthInstance.wrap(redeemAmount);
         uint256 weEthAmount = weEthInstance.balanceOf(user);
 
-        if (etherFiWithdrawalBufferInstance.canRedeem(redeemAmount)) {
+        if (etherFiRedemptionManagerInstance.canRedeem(redeemAmount)) {
             uint256 userBalanceBefore = address(user).balance;
             uint256 treasuryBalanceBefore = eETHInstance.balanceOf(address(treasuryInstance));
 
             uint256 eEthAmount = liquidityPoolInstance.amountForShare(weEthAmount);
 
-            weEthInstance.approve(address(etherFiWithdrawalBufferInstance), weEthAmount);
-            etherFiWithdrawalBufferInstance.redeemWeEth(weEthAmount, user, user);
+            weEthInstance.approve(address(etherFiRedemptionManagerInstance), weEthAmount);
+            etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, user, user);
 
             uint256 totalFee = (eEthAmount * exitFeeBps) / 10000;
             uint256 treasuryFee = (totalFee * exitFeeSplitBps) / 10000;
@@ -191,7 +191,7 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
 
         } else {
             vm.expectRevert();
-            etherFiWithdrawalBufferInstance.redeemWeEth(weEthAmount, user, user);
+            etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, user, user);
         }
         vm.stopPrank();
     }
@@ -217,23 +217,23 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
 
         // Admin performs admin-only actions
         vm.startPrank(admin);
-        etherFiWithdrawalBufferInstance.setCapacity(10 ether);
-        etherFiWithdrawalBufferInstance.setRefillRatePerSecond(0.001 ether);
-        etherFiWithdrawalBufferInstance.setExitFeeSplitToTreasuryInBps(1e4);
-        etherFiWithdrawalBufferInstance.setLowWatermarkInBpsOfTvl(1e2);
-        etherFiWithdrawalBufferInstance.setExitFeeBasisPoints(1e2);
+        etherFiRedemptionManagerInstance.setCapacity(10 ether);
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(0.001 ether);
+        etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(1e4);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(1e2);
+        etherFiRedemptionManagerInstance.setExitFeeBasisPoints(1e2);
         vm.stopPrank();
 
         // Pauser pauses the contract
         vm.startPrank(pauser);
-        etherFiWithdrawalBufferInstance.pauseContract();
-        assertTrue(etherFiWithdrawalBufferInstance.paused());
+        etherFiRedemptionManagerInstance.pauseContract();
+        assertTrue(etherFiRedemptionManagerInstance.paused());
         vm.stopPrank();
 
         // Unpauser unpauses the contract
         vm.startPrank(unpauser);
-        etherFiWithdrawalBufferInstance.unPauseContract();
-        assertFalse(etherFiWithdrawalBufferInstance.paused());
+        etherFiRedemptionManagerInstance.unPauseContract();
+        assertFalse(etherFiRedemptionManagerInstance.paused());
         vm.stopPrank();
 
         // Revoke PROTOCOL_ADMIN role from admin
@@ -242,28 +242,28 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
 
         // Admin attempts admin-only actions after role revocation
         vm.startPrank(admin);
-        vm.expectRevert("EtherFiWithdrawalBuffer: Unauthorized");
-        etherFiWithdrawalBufferInstance.setCapacity(10 ether);
+        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        etherFiRedemptionManagerInstance.setCapacity(10 ether);
         vm.stopPrank();
 
         // Pauser attempts to unpause (should fail)
         vm.startPrank(pauser);
-        vm.expectRevert("EtherFiWithdrawalBuffer: Unauthorized");
-        etherFiWithdrawalBufferInstance.unPauseContract();
+        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        etherFiRedemptionManagerInstance.unPauseContract();
         vm.stopPrank();
 
         // Unpauser attempts to pause (should fail)
         vm.startPrank(unpauser);
-        vm.expectRevert("EtherFiWithdrawalBuffer: Unauthorized");
-        etherFiWithdrawalBufferInstance.pauseContract();
+        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        etherFiRedemptionManagerInstance.pauseContract();
         vm.stopPrank();
 
         // User without role attempts admin-only actions
         vm.startPrank(user);
-        vm.expectRevert("EtherFiWithdrawalBuffer: Unauthorized");
-        etherFiWithdrawalBufferInstance.pauseContract();
-        vm.expectRevert("EtherFiWithdrawalBuffer: Unauthorized");
-        etherFiWithdrawalBufferInstance.unPauseContract();
+        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        etherFiRedemptionManagerInstance.pauseContract();
+        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        etherFiRedemptionManagerInstance.unPauseContract();
         vm.stopPrank();
     }
 
@@ -280,23 +280,23 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
 
         liquidityPoolInstance.deposit{value: 10 ether}();
 
-        uint256 redeemableAmount = etherFiWithdrawalBufferInstance.totalRedeemableAmount();
+        uint256 redeemableAmount = etherFiRedemptionManagerInstance.totalRedeemableAmount();
         uint256 userBalance = address(user).balance;
-        uint256 treasuryBalance = eETHInstance.balanceOf(address(etherFiWithdrawalBufferInstance.treasury()));
+        uint256 treasuryBalance = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
 
-        eETHInstance.approve(address(etherFiWithdrawalBufferInstance), 1 ether);
-        etherFiWithdrawalBufferInstance.redeemEEth(1 ether, user, user);
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, user);
 
         uint256 totalFee = (1 ether * 1e2) / 1e4;
         uint256 treasuryFee = (totalFee * 1e3) / 1e4;
         uint256 userReceives = 1 ether - totalFee;
 
-        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiWithdrawalBufferInstance.treasury())), treasuryBalance + treasuryFee, 1e1);
+        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury())), treasuryBalance + treasuryFee, 1e1);
         assertApproxEqAbs(address(user).balance, userBalance + userReceives, 1e1);
 
-        eETHInstance.approve(address(etherFiWithdrawalBufferInstance), 5 ether);
-        vm.expectRevert("EtherFiWithdrawalBuffer: Exceeded total redeemable amount");
-        etherFiWithdrawalBufferInstance.redeemEEth(5 ether, user, user);
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), 5 ether);
+        vm.expectRevert("EtherFiRedemptionManager: Exceeded total redeemable amount");
+        etherFiRedemptionManagerInstance.redeemEEth(5 ether, user, user);
 
         vm.stopPrank();
     }
@@ -326,8 +326,8 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
         uint256 eEthAmount = liquidityPoolInstance.amountForShare(weEthAmount);
         uint256 userBalance = address(user).balance;
         uint256 treasuryBalance = eETHInstance.balanceOf(address(treasuryInstance));
-        weEthInstance.approve(address(etherFiWithdrawalBufferInstance), 1 ether);
-        etherFiWithdrawalBufferInstance.redeemWeEth(weEthAmount, user, user);
+        weEthInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
+        etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, user, user);
         
         uint256 totalFee = (eEthAmount * 1e2) / 1e4;
         uint256 treasuryFee = (totalFee * 1e3) / 1e4;
@@ -347,8 +347,8 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
         eETHInstance.mintShares(user, 2 * redeemAmount);
 
         vm.startPrank(op_admin);
-        etherFiWithdrawalBufferInstance.setCapacity(2 * redeemAmount);
-        etherFiWithdrawalBufferInstance.setRefillRatePerSecond(2 * redeemAmount);
+        etherFiRedemptionManagerInstance.setCapacity(2 * redeemAmount);
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(2 * redeemAmount);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 1);
@@ -356,11 +356,11 @@ contract EtherFiWithdrawalBufferTest is TestSetup {
         vm.startPrank(user);
 
         uint256 userBalance = address(user).balance;
-        uint256 treasuryBalance = eETHInstance.balanceOf(address(etherFiWithdrawalBufferInstance.treasury()));
+        uint256 treasuryBalance = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
 
-        eETHInstance.approve(address(etherFiWithdrawalBufferInstance), redeemAmount);
-        vm.expectRevert("EtherFiWithdrawalBuffer: Exceeded total redeemable amount");
-        etherFiWithdrawalBufferInstance.redeemEEth(redeemAmount, user, user);
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), redeemAmount);
+        vm.expectRevert("EtherFiRedemptionManager: Exceeded total redeemable amount");
+        etherFiRedemptionManagerInstance.redeemEEth(redeemAmount, user, user);
 
         vm.stopPrank();
     }
