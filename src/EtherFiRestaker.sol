@@ -260,22 +260,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         pendingForWithdrawals = getEthAmountPendingForRedemption(_token);
     }
 
-    function getEthAmountInEigenLayerPendingForWithdrawals() public view returns (uint256) {
-        (IDelegationManager.Withdrawal[] memory withdrawals, uint256[][] memory shares) = eigenLayerDelegationManager.getQueuedWithdrawals(address(this));
-
-        uint256 total = 0;
-        for (uint256 i = 0; i < withdrawals.length; i++) {
-            IStrategy[] memory strategies = withdrawals[i].strategies;
-            for (uint256 j = 0; j < strategies.length; j++) {
-                IStrategy strategy = strategies[j];
-                address token = address(strategy.underlyingToken());
-                uint256 token_amount = strategy.sharesToUnderlyingView(shares[i][j]);
-                total += liquifier.quoteByFairValue(token, token_amount);
-            }
-        }
-        return total;
-    }
-
     function getEthAmountInEigenLayerPendingForWithdrawals(address _token) public view returns (uint256) {
         TokenInfo memory info = tokenInfos[_token];
         if (info.elStrategy == IStrategy(address(0))) return 0;
