@@ -125,8 +125,7 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
         _updateRateLimit(ethAmount);
 
         uint256 ethShares = liquidityPool.sharesForAmount(ethAmount);
-        uint256 ethShareToReceiver = ethShares.mulDiv(BASIS_POINT_SCALE - exitFeeInBps, BASIS_POINT_SCALE);
-        uint256 eEthAmountToReceiver = liquidityPool.amountForShare(ethShareToReceiver);
+        uint256 eEthAmountToReceiver = liquidityPool.amountForShare(ethShares.mulDiv(BASIS_POINT_SCALE - exitFeeInBps, BASIS_POINT_SCALE)); // ethShareToReceiver
 
         uint256 prevLpBalance = address(liquidityPool).balance;
         uint256 sharesToBurn = liquidityPool.sharesForWithdrawalAmount(eEthAmountToReceiver);
@@ -137,6 +136,7 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
         uint256 feeShareToStakers = ethShareFee - feeShareToTreasury;
 
         // Withdraw ETH from the liquidity pool
+        uint256 totalEEthShare = eEth.totalShares();
         uint256 prevBalance = address(this).balance;
         assert (liquidityPool.withdraw(address(this), eEthAmountToReceiver) == sharesToBurn);
         uint256 ethReceived = address(this).balance - prevBalance;
@@ -150,7 +150,10 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
         // To Receiver by transferring ETH
         (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
         require(success, "EtherFiRedemptionManager: Transfer failed");
+
+        // Make sure the liquidity pool balance is correct && total shares are correct
         require(address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiRedemptionManager: Invalid liquidity pool balance");
+        require(eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
 
         emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver);
     }
