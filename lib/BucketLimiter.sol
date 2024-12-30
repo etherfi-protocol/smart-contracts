@@ -111,6 +111,11 @@ library BucketLimiter {
     function _refill(Limit memory limit) internal view {
         // We allow for overflow here, as the delta is resilient against it.
         uint64 now_ = uint64(block.timestamp);
+
+        if (now_ == limit.lastRefill) {
+            return;
+        }
+
         uint64 delta;
         unchecked {
             delta = now_ - limit.lastRefill;
