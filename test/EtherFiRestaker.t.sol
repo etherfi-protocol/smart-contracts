@@ -125,40 +125,40 @@ contract EtherFiRestakerTest is TestSetup {
     }
 
     function test_queueWithdrawals_2() public returns (bytes32[] memory) {
-        revert("FIX BELOW");
-        // test_restake_stEth();
+        test_restake_stEth();
 
-        // IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
-        // IStrategy[] memory strategies = new IStrategy[](1);
-        // strategies[0] = etherFiRestakerInstance.getEigenLayerRestakingStrategy(address(stEth));
-        // uint256[] memory shares = new uint256[](1);
-        // shares[0] = eigenLayerStrategyManager.stakerStrategyShares(address(etherFiRestakerInstance), strategies[0]);
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = etherFiRestakerInstance.getEigenLayerRestakingStrategy(address(stEth));
+        (uint256[] memory withdrawableShares, ) = eigenLayerDelegationManager.getWithdrawableShares(address(this), strategies);
         
-        // params[0] = IDelegationManager.QueuedWithdrawalParams({
-        //     strategies: strategies,
-        //     shares: shares,
-        //     withdrawer: address(etherFiRestakerInstance)
-        // });
+        IDelegationManagerTypes.QueuedWithdrawalParams[] memory params = new IDelegationManagerTypes.QueuedWithdrawalParams[](1);
+        params[0] = IDelegationManagerTypes.QueuedWithdrawalParams({
+            strategies: strategies,
+            depositShares: withdrawableShares,
+            withdrawer: address(etherFiRestakerInstance)
+        });
 
-        // vm.prank(etherfiOperatingAdmin);
-        // return etherFiRestakerInstance.queueWithdrawals(params);
+        vm.prank(etherfiOperatingAdmin);
+        return etherFiRestakerInstance.queueWithdrawalsWithParams(params);
     }
 
     function test_completeQueuedWithdrawals_1() public {
         bytes32[] memory withdrawalRoots = test_queueWithdrawals_1();
         assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
 
+        revert("FIX BELOW");
+
         vm.startPrank(etherfiOperatingAdmin);
-        // It won't complete the withdrawal because the withdrawal is still pending
-        etherFiRestakerInstance.completeQueuedWithdrawals(1000);
-        assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
-        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountInEigenLayerPendingForWithdrawals(address(stEth)), 5 ether, 2 wei);
+        // // It won't complete the withdrawal because the withdrawal is still pending
+        // etherFiRestakerInstance.completeQueuedWithdrawals(1000);
+        // assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
+        // assertApproxEqAbs(etherFiRestakerInstance.getEthAmountInEigenLayerPendingForWithdrawals(address(stEth)), 5 ether, 2 wei);
 
-        vm.roll(block.number + 50400);
+        // vm.roll(block.number + 50400);
 
-        etherFiRestakerInstance.completeQueuedWithdrawals(1000);
-        assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
-        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountInEigenLayerPendingForWithdrawals(address(stEth)), 0, 2 wei);
+        // etherFiRestakerInstance.completeQueuedWithdrawals(1000);
+        // assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
+        // assertApproxEqAbs(etherFiRestakerInstance.getEthAmountInEigenLayerPendingForWithdrawals(address(stEth)), 0, 2 wei);
         vm.stopPrank();
     }
 
@@ -174,20 +174,22 @@ contract EtherFiRestakerTest is TestSetup {
 
         vm.roll(block.number + 50400 / 2);
 
+        revert("FIX BELOW");
+
         // The first withdrawal is completed
         // But, the second withdrawal is still pending
         // Therefore, `completeQueuedWithdrawals` will not complete the second withdrawal
-        vm.startPrank(etherfiOperatingAdmin);
-        etherFiRestakerInstance.completeQueuedWithdrawals(1000);
+        // vm.startPrank(etherfiOperatingAdmin);
+        // etherFiRestakerInstance.completeQueuedWithdrawals(1000);
 
-        assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots1[0]));
-        assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots2[0]));
+        // assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots1[0]));
+        // assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots2[0]));
 
-        vm.roll(block.number + 50400 / 2);
+        // vm.roll(block.number + 50400 / 2);
 
-        etherFiRestakerInstance.completeQueuedWithdrawals(1000);
-        assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots1[0]));
-        assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots2[0]));
+        // etherFiRestakerInstance.completeQueuedWithdrawals(1000);
+        // assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots1[0]));
+        // assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots2[0]));
         vm.stopPrank();
     }
 
