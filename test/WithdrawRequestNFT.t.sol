@@ -357,7 +357,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         test_aggregateSumEEthShareAmount();
 
         vm.startPrank(withdrawRequestNFTInstance.owner());
-        vm.expectRevert("Not all requests have been scanned");
+        vm.expectRevert("Not all prev requests have been scanned");
         withdrawRequestNFTInstance.handleRemainder(1 ether);
         
         vm.stopPrank();
