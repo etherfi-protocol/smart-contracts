@@ -49,7 +49,7 @@ import "../src/EtherFiAdmin.sol";
 import "../src/EtherFiTimelock.sol";
 
 import "../src/BucketRateLimiter.sol";
-import "../src/EtherFiWithdrawalBuffer.sol";
+import "../src/EtherFiRedemptionManager.sol";
 
 import "../script/ContractCodeChecker.sol";
 import "../script/Create2Factory.sol";
@@ -108,7 +108,7 @@ contract TestSetup is Test, ContractCodeChecker {
     UUPSProxy public membershipNftProxy;
     UUPSProxy public nftExchangeProxy;
     UUPSProxy public withdrawRequestNFTProxy;
-    UUPSProxy public etherFiWithdrawalBufferProxy;
+    UUPSProxy public etherFiRedemptionManagerProxy;
     UUPSProxy public etherFiOracleProxy;
     UUPSProxy public etherFiAdminProxy;
     UUPSProxy public roleRegistryProxy;
@@ -169,7 +169,7 @@ contract TestSetup is Test, ContractCodeChecker {
     WithdrawRequestNFT public withdrawRequestNFTImplementation;
     WithdrawRequestNFT public withdrawRequestNFTInstance;
 
-    EtherFiWithdrawalBuffer public etherFiWithdrawalBufferInstance;
+    EtherFiRedemptionManager public etherFiRedemptionManagerInstance;
 
     NFTExchange public nftExchangeImplementation;
     NFTExchange public nftExchangeInstance;
@@ -589,14 +589,14 @@ contract TestSetup is Test, ContractCodeChecker {
         roleRegistry = RoleRegistry(address(roleRegistryProxy));
         roleRegistry.initialize(owner);
 
-        etherFiWithdrawalBufferProxy = new UUPSProxy(address(new EtherFiWithdrawalBuffer(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistry))), "");
-        etherFiWithdrawalBufferInstance = EtherFiWithdrawalBuffer(payable(etherFiWithdrawalBufferProxy));
-        etherFiWithdrawalBufferInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether);
+        etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistry))), "");
+        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
+        etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether);
 
         roleRegistry.grantRole(keccak256("PROTOCOL_ADMIN"), owner);
         
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
-        liquidityPoolInstance.initializeOnUpgradeWithWithdrawalBuffer(address(etherFiWithdrawalBufferInstance));
+        liquidityPoolInstance.initializeOnUpgradeWithRedemptionManager(address(etherFiRedemptionManagerInstance));
 
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
         withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolInstance)), payable(address(eETHInstance)), payable(address(membershipManagerInstance)));
