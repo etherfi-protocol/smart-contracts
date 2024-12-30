@@ -254,7 +254,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         if (info.elStrategy != IStrategy(address(0))) {
             uint256 restakedTokenAmount = getRestakedAmount(_token);
             restaked = liquifier.quoteByFairValue(_token, restakedTokenAmount); /// restaked & pending for withdrawals
-            unrestaking = getEthAmountInEigenLayerPendingForWithdrawals(_token);
+            unrestaking = liquifier.quoteByFairValue(_token, getEthAmountInEigenLayerPendingForWithdrawals(_token));
         }
         holding = liquifier.quoteByFairValue(_token, IERC20(_token).balanceOf(address(this))); /// eth value for erc20 holdings
         pendingForWithdrawals = getEthAmountPendingForRedemption(_token);
@@ -268,7 +268,9 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
             IStrategy[] memory strategies = withdrawals[i].strategies;
             for (uint256 j = 0; j < strategies.length; j++) {
                 IStrategy strategy = strategies[j];
-                total += strategy.sharesToUnderlyingView(shares[i][j]);
+                address token = address(strategy.underlyingToken());
+                uint256 token_amount = strategy.sharesToUnderlyingView(shares[i][j]);
+                total += liquifier.quoteByFairValue(token, token_amount);
             }
         }
         return total;
