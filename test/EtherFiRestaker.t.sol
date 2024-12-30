@@ -64,14 +64,14 @@ contract EtherFiRestakerTest is TestSetup {
 
         _deposit_stEth(amount);
 
-        assertEq(etherFiRestakerInstance.getEthAmountPendingForRedemption(address(stEth)), 0);
+        assertEq(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), 0);
 
         vm.startPrank(alice);
         uint256 stEthBalance = stEth.balanceOf(address(etherFiRestakerInstance));
         uint256[] memory reqIds = etherFiRestakerInstance.stEthRequestWithdrawal(stEthBalance);
         vm.stopPrank();
         
-        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountPendingForRedemption(address(stEth)), amount, 2 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), amount, 2 wei);
         assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), amount, 2 wei);
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
 
@@ -85,7 +85,7 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakerInstance.lidoWithdrawalQueue().finalize(reqIds[reqIds.length-1], currentRate);
         vm.stopPrank();
 
-        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountPendingForRedemption(address(stEth)), amount, 2 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), amount, 2 wei);
         assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), amount, 2 wei);
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
 
@@ -96,7 +96,7 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakerInstance.stEthClaimWithdrawals(reqIds, hints);
 
         // the cycle completes
-        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountPendingForRedemption(address(stEth)), 0, 2 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), 0, 2 wei);
         assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), 0, 2 wei);
         assertApproxEqAbs(address(etherFiRestakerInstance).balance, 0, 2);
 

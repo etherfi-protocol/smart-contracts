@@ -39,7 +39,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     mapping(address => TokenInfo) public tokenInfos;
     
     EnumerableSet.Bytes32Set private withdrawalRootsSet;
-    mapping(bytes32 => IDelegationManager.Withdrawal) public withdrawalRootToWithdrawal;
 
 
     event QueuedStEthWithdrawals(uint256[] _reqIds);
@@ -187,7 +186,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @notice Used to complete the specified `queuedWithdrawals`. The function caller must match `queuedWithdrawals[...].withdrawer`
     /// @param _queuedWithdrawals The QueuedWithdrawals to complete.
     /// @param _tokens Array of tokens for each QueuedWithdrawal. See `completeQueuedWithdrawal` for the usage of a single array.
-    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory _queuedWithdrawals, IERC20[][] memory _tokens) public onlyAdmin {
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory _queuedWithdrawals, IERC20[][] memory _tokens) external onlyAdmin {
         uint256 num = _queuedWithdrawals.length;
         bool[] memory receiveAsTokens = new bool[](num);
         for (uint256 i = 0; i < num; i++) {
@@ -204,7 +203,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     /// Enumerate the pending withdrawal roots
-    function pendingWithdrawalRoots() public view returns (bytes32[] memory) {
+    function pendingWithdrawalRoots() external view returns (bytes32[] memory) {
         return withdrawalRootsSet.values();
     }
 
@@ -217,7 +216,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     // |--------------------------------------------------------------------------------------------|
     // |                                    VIEW functions                                        |
     // |--------------------------------------------------------------------------------------------|
-    function getTotalPooledEther() public view returns (uint256 total) {
+    function getTotalPooledEther() external view returns (uint256 total) {
         total = address(this).balance + getTotalPooledEther(address(lido));
     }
 
@@ -253,21 +252,24 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         TokenInfo memory info = tokenInfos[_token];
         if (info.elStrategy != IStrategy(address(0))) {
             uint256 restakedTokenAmount = getRestakedAmount(_token);
-            restaked = liquifier.quoteByFairValue(_token, restakedTokenAmount); /// restaked & pending for withdrawals
-            unrestaking = liquifier.quoteByFairValue(_token, getEthAmountInEigenLayerPendingForWithdrawals(_token));
+            uint256 unrestakingTokenAmount = getAmountInEigenLayerPendingForWithdrawals(_token);
+            restaked = liquifier.quoteByFairValue(_token, restakedTokenAmount); // restaked & pending for withdrawals
+            unrestaking = liquifier.quoteByFairValue(_token, unrestakingTokenAmount); // restaked & pending for withdrawals
         }
         holding = liquifier.quoteByFairValue(_token, IERC20(_token).balanceOf(address(this))); /// eth value for erc20 holdings
-        pendingForWithdrawals = getEthAmountPendingForRedemption(_token);
+        pendingForWithdrawals = liquifier.quoteByFairValue(_token, getAmountPendingForRedemption(_token));
     }
 
-    function getEthAmountInEigenLayerPendingForWithdrawals(address _token) public view returns (uint256) {
+    // get the amount of token restaked in EigenLayer pending for withdrawals
+    function getAmountInEigenLayerPendingForWithdrawals(address _token) public view returns (uint256) {
         TokenInfo memory info = tokenInfos[_token];
         if (info.elStrategy == IStrategy(address(0))) return 0;
         uint256 amount = info.elStrategy.sharesToUnderlyingView(info.elSharesInPendingForWithdrawals);
         return amount;
     }
 
-    function getEthAmountPendingForRedemption(address _token) public view returns (uint256) {
+    // get the amount of token pending for redemption. e.g., pending in Lido's withdrawal queue
+    function getAmountPendingForRedemption(address _token) public view returns (uint256) {
         uint256 total = 0;
         if (_token == address(lido)) {
             uint256[] memory stEthWithdrawalRequestIds = lidoWithdrawalQueue.getWithdrawalRequests(address(this));
