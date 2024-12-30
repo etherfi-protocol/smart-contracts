@@ -70,6 +70,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function initializeOnUpgrade(address _pauser) external onlyOwner {
+        require(pauser == address(0), "Already initialized");
+
         paused = false;
         pauser = _pauser;
 
@@ -89,9 +91,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         uint32 feeGwei = uint32(fee / 1 gwei);
 
         _requests[requestId] = IWithdrawRequestNFT.WithdrawRequest(amountOfEEth, shareOfEEth, true, feeGwei);
-        _safeMint(recipient, requestId);
-
         totalLockedEEthShares += shareOfEEth;
+
+        _safeMint(recipient, requestId);
 
         emit WithdrawRequestCreated(uint32(requestId), amountOfEEth, shareOfEEth, recipient, fee);
         return requestId;
@@ -206,6 +208,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function updateShareRemainderSplitToTreasuryInBps(uint16 _shareRemainderSplitToTreasuryInBps) external onlyOwner {
+        require(_shareRemainderSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
         shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
     }
 
@@ -227,6 +230,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @param _eEthAmount: the remainder of the eEth amount
     function handleRemainder(uint256 _eEthAmount) external onlyAdmin {
         require (getEEthRemainderAmount() >= _eEthAmount, "Not enough eETH remainder");
+        require(_currentRequestIdToScanFromForShareRemainder == nextRequestId, "Not all requests have been scanned");
 
         uint256 beforeEEthShares = eETH.shares(address(this));
         

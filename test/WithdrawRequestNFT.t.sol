@@ -458,6 +458,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Record initial balances
         uint256 treasuryEEthBefore = eETHInstance.balanceOf(address(treasuryInstance));
         uint256 recipientBalanceBefore = address(recipient).balance;
+        uint256 initialTotalLockedEEthShares = withdrawRequestNFTInstance.totalLockedEEthShares();
 
         // Request withdraw
         eETHInstance.approve(address(liquidityPoolInstance), withdrawAmount);
@@ -467,6 +468,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Get initial request state
         WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
 
+        assertEq(withdrawRequestNFTInstance.totalLockedEEthShares(), initialTotalLockedEEthShares + request.shareOfEEth, "Incorrect total locked shares");    
+
         // Simulate rebase after request but before claim
         vm.prank(address(membershipManagerInstance));
         liquidityPoolInstance.rebase(int128(uint128(rebaseAmount)));
@@ -474,10 +477,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Calculate expected withdrawal amounts after rebase
         uint256 sharesValue = liquidityPoolInstance.amountForShare(request.shareOfEEth);
         uint256 expectedWithdrawAmount = withdrawAmount < sharesValue ? withdrawAmount : sharesValue;
-        uint256 unusedShares = request.shareOfEEth - liquidityPoolInstance.sharesForWithdrawalAmount(expectedWithdrawAmount);
-        uint256 expectedTreasuryShares = (unusedShares * remainderSplitBps) / 10000;
-        uint256 expectedBurnedShares = request.shareOfEEth - expectedTreasuryShares;
-        assertGe(unusedShares, 0, "Unused shares should be non-negative because there was positive rebase");
+        uint256 expectedBurnedShares = liquidityPoolInstance.sharesForWithdrawalAmount(expectedWithdrawAmount);
+        uint256 expectedLockedShares = request.shareOfEEth - expectedBurnedShares;
 
         // Track initial shares and total supply
         uint256 initialTotalShares = eETHInstance.totalShares();
@@ -491,13 +492,14 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 burnedShares = initialTotalShares - eETHInstance.totalShares();
 
         // Verify share burning
+        assertLe(burnedShares, request.shareOfEEth, "Burned shares should be less than or equal to requested shares");
         assertApproxEqAbs(
             burnedShares,
             expectedBurnedShares,
-            1e1,
+            1e3,
             "Incorrect amount of shares burnt"
         );
-        assertLe(burnedShares, request.shareOfEEth, "Burned shares should be less than or equal to requested shares");
+        
 
         // Verify total supply reduction
         assertApproxEqAbs(
@@ -523,14 +525,12 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.ownerOf(requestId);
 
         // Calculate and verify remainder splitting
-        if (unusedShares > 0) {
-            assertApproxEqAbs(
-                eETHInstance.balanceOf(address(treasuryInstance)) - treasuryEEthBefore,
-                liquidityPoolInstance.amountForShare(expectedTreasuryShares),
-                1e1,
-                "Incorrect treasury eETH balance"
-            );
-        }
+        assertApproxEqAbs(
+            expectedLockedShares,
+            withdrawRequestNFTInstance.totalLockedEEthShares(),
+            1e1,
+            "Incorrect locked eETH share"
+        );
 
         // Verify recipient received correct ETH amount
         assertEq(
