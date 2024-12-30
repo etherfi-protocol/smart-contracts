@@ -556,6 +556,6 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Owner can seize the invalidated request NFT
         vm.prank(withdrawRequestNFTInstance.owner());
-        withdrawRequestNFTInstance.seizeRequest(requestId, admin);
+        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, admin);
     }
 }

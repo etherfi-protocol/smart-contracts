@@ -130,12 +130,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         require(request.isValid, "Request is not valid");
 
         uint256 amountToWithdraw = getClaimableAmount(tokenId);
+        uint256 shareAmountToBurnForWithdrawal = liquidityPool.sharesForWithdrawalAmount(amountToWithdraw);
 
         // transfer eth to recipient
         _burn(tokenId);
         delete _requests[tokenId];
-        
-        uint256 shareAmountToBurnForWithdrawal = liquidityPool.sharesForWithdrawalAmount(amountToWithdraw);
+
+        // update accounting 
         totalLockedEEthShares -= shareAmountToBurnForWithdrawal;
 
         uint256 amountBurnedShare = liquidityPool.withdraw(recipient, amountToWithdraw);
@@ -166,7 +167,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     // Seize the request simply by transferring it to another recipient
-    function seizeRequest(uint256 requestId, address recipient) external onlyOwner {
+    function seizeInvalidRequest(uint256 requestId, address recipient) external onlyOwner {
         require(!_requests[requestId].isValid, "Request is valid");
         require(_exists(requestId), "Request does not exist");
 
@@ -184,7 +185,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function isValid(uint256 requestId) public view returns (bool) {
-        require(_exists(requestId), "Request does not exist11");
+        require(_exists(requestId), "Request does not exist");
         return _requests[requestId].isValid;
     }
 
@@ -200,7 +201,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function validateRequest(uint256 requestId) external onlyAdmin {
-        require(_exists(requestId), "Request does not exist22");
+        require(_exists(requestId), "Request does not exist");
         require(!_requests[requestId].isValid, "Request is valid");
         _requests[requestId].isValid = true;
 
