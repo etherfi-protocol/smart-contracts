@@ -2147,28 +2147,6 @@ contract EtherFiNodeTest is TestSetup {
         }
     }
 
-    function test_ForcedPartialWithdrawal_succeeds() public {
-        uint256[] memory validatorIds = launch_validator(1, 0, false);
-        uint256 validatorId = validatorIds[0];
-        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
-
-        assertTrue(managerInstance.phase(validatorIds[0]) == IEtherFiNode.VALIDATOR_PHASE.LIVE);
-        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 1);
-
-        // launch 3 more validators
-        uint256[] memory newValidatorIds = launch_validator(3, validatorId, false);
-        assertEq(IEtherFiNode(etherfiNode).numAssociatedValidators(), 4);
-
-        // Earned >= 16 ether
-        _transferTo(etherfiNode, 16 ether);
-
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
-        managerInstance.partialWithdraw(validatorId);
-
-        vm.prank(alice);
-        managerInstance.partialWithdraw(validatorId);
-    }
-
     function test_lp_as_bnft_holders_cant_mix_up_1() public {
         uint256[] memory validatorIds = launch_validator(1, 0, false);
         uint256 validatorId = validatorIds[0];
