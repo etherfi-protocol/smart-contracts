@@ -449,8 +449,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Calculate expected withdrawal amounts after rebase
         uint256 sharesValue = liquidityPoolInstance.amountForShare(request.shareOfEEth);
         uint256 expectedWithdrawAmount = withdrawAmount < sharesValue ? withdrawAmount : sharesValue;
-        uint256 expectedBurnedShares = liquidityPoolInstance.sharesForWithdrawalAmount(expectedWithdrawAmount);
-        uint256 expectedLockedShares = request.shareOfEEth - expectedBurnedShares;
+        uint256 expectedBurnedShares = liquidityPoolInstance.sharesForAmount(expectedWithdrawAmount);
+        uint256 expectedDustShares = request.shareOfEEth - expectedBurnedShares;
 
         // Track initial shares and total supply
         uint256 initialTotalShares = eETHInstance.totalShares();
@@ -503,10 +503,17 @@ contract WithdrawRequestNFTTest is TestSetup {
             "Recipient should receive correct ETH amount"
         );
 
-        uint256 expectedLockedEEthAmount = liquidityPoolInstance.amountForShare(expectedLockedShares);
-        withdrawRequestNFTInstance.getEEthRemainderAmount();
-        vm.prank(admin);
-        withdrawRequestNFTInstance.handleRemainder(expectedLockedEEthAmount);
+        assertApproxEqAbs(
+            withdrawRequestNFTInstance.totalRemainderEEthShares(),
+            expectedDustShares,
+            1,
+            "Incorrect remainder shares"
+        );
+
+        uint256 dustEEthAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
+        vm.startPrank(admin);
+        withdrawRequestNFTInstance.handleRemainder(dustEEthAmount / 2);
+        withdrawRequestNFTInstance.handleRemainder(dustEEthAmount / 2);
     }
 
     function testFuzz_InvalidateRequest(uint96 depositAmount, uint96 withdrawAmount, address recipient) public {
