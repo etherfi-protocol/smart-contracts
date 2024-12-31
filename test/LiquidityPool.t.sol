@@ -9,7 +9,6 @@ contract LiquidityPoolTest is TestSetup {
     uint256[] public validatorArray;
     uint256[] public bidIds;
     uint256[] public bids;
-    uint256[] public validators;
     bytes[] public sig;
     bytes32 public rootForApproval;
     uint256 public testnetFork;
@@ -831,21 +830,21 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.prank(shonee);
         //Shonee deposits and her index is 4, allowing her to deposit for 4 validators
-        validators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 8 ether}(bidIds, 4);
-        assertEq(validators[0], 1);
-        assertEq(validators[1], 2);
-        assertEq(validators[2], 3);
-        assertEq(validators[3], 4);
+        uint256[] memory newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 8 ether}(bidIds, 4);
+        assertEq(newValidators[0], 1);
+        assertEq(newValidators[1], 2);
+        assertEq(newValidators[2], 3);
+        assertEq(newValidators[3], 4);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 4);
 
         vm.prank(dan);
 
         //Dan deposits and his index is 5, allowing him to deposit
-        validators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 4 ether}(bidIds, 2);
+        newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 4 ether}(bidIds, 2);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 6);
 
-        assertEq(validators[0], 5);
-        assertEq(validators[1], 6);
+        assertEq(newValidators[0], 5);
+        assertEq(newValidators[1], 6);
     }
 
     function test_DeRegisterBnftHolder() public {

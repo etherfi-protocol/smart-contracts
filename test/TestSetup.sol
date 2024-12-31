@@ -11,6 +11,9 @@ import "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
 import "../src/eigenlayer-interfaces/ITimelock.sol";
 
+import "test/eigenlayer-mocks/utils/EigenPodManagerMock.sol";
+import "test/eigenlayer-mocks/DelegationManagerMock.sol";
+
 import "../src/interfaces/IStakingManager.sol";
 import "../src/interfaces/IEtherFiNode.sol";
 import "../src/interfaces/ILiquidityPool.sol";
@@ -53,12 +56,15 @@ import "../src/BucketRateLimiter.sol";
 import "../script/ContractCodeChecker.sol";
 import "../script/Create2Factory.sol";
 
+import "test/eigenlayer-mocks/integration/mocks/BeaconChainMock.t.sol";
+
 contract TestSetup is Test, ContractCodeChecker {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
     event Execute(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt);
     event Transaction(address to, uint256 value, bytes data);
 
+    BeaconChainMock public beaconChainMock = new BeaconChainMock();
 
     uint256 public constant kwei = 10 ** 3;
     uint256 public slippageLimit = 50;
@@ -435,6 +441,27 @@ contract TestSetup is Test, ContractCodeChecker {
     }
 
     function setUpTests() internal {
+        // configure eigenlayer dependency differently for mainnet vs testnet because we rely
+        // on the contracts already deployed by eigenlayer on those chains
+        bool restakingBnftDeposits;
+        if (block.chainid == 1) {
+            restakingBnftDeposits = true;
+            eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
+            eigenLayerEigenPodManager = IEigenPodManager(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
+            eigenLayerDelegationManager = IDelegationManager(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+            eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
+        } else if (block.chainid == 17000) {
+            restakingBnftDeposits = false;
+            eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
+        } else {
+            restakingBnftDeposits = false;
+            // TODO
+            // - restakingBnftDeposits = true; 
+            // - add mocks
+            eigenLayerDelegationManager = IDelegationManager(address(new DelegationManagerMock()));
+            eigenLayerEigenPodManager = IEigenPodManager(payable(address(new EigenPodManagerMock())));
+        }
+
         vm.startPrank(owner);
 
         mockDepositContractEth2 = new DepositContract();
@@ -638,6 +665,7 @@ contract TestSetup is Test, ContractCodeChecker {
         } else {
             genesisSlotTimestamp = 0;
         }
+        beaconChainMock.initialize_beaconchain_mock(genesisSlotTimestamp);
         etherFiOracleInstance.initialize(2, 1024, 0, 32, 12, genesisSlotTimestamp);
 
         etherFiOracleInstance.addCommitteeMember(alice);
@@ -679,23 +707,6 @@ contract TestSetup is Test, ContractCodeChecker {
         stakingManagerInstance.initializeOnUpgrade(address(nodeOperatorManagerInstance), address(etherFiAdminInstance));
         auctionInstance.initializeOnUpgrade(address(membershipManagerInstance), 1 ether, address(etherFiAdminInstance), address(nodeOperatorManagerInstance));
         membershipNftInstance.initializeOnUpgrade(address(liquidityPoolInstance));
-
-
-        // configure eigenlayer dependency differently for mainnet vs testnet because we rely
-        // on the contracts already deployed by eigenlayer on those chains
-        bool restakingBnftDeposits;
-        if (block.chainid == 1) {
-            restakingBnftDeposits = true;
-            eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
-            eigenLayerEigenPodManager = IEigenPodManager(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
-            eigenLayerDelegationManager = IDelegationManager(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
-            eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
-        } else if (block.chainid == 17000) {
-            restakingBnftDeposits = false;
-            eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
-        } else {
-            restakingBnftDeposits = false;
-        }
 
         _initOracleReportsforTesting();
         vm.stopPrank();
@@ -1109,10 +1120,6 @@ contract TestSetup is Test, ContractCodeChecker {
     function launch_validator(uint256 _numValidators, uint256 _validatorIdToCoUseWithdrawalSafe, bool _isLpBnftHolder, address _bnftStaker, address _nodeOperator) internal returns (uint256[] memory) {
         bytes32 rootForApproval;
 
-        // IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        // report.numValidatorsToSpinUp = uint32(_numValidators);
-        // _executeAdminTasks(report);
-
         vm.deal(owner, 10000 ether);
         vm.deal(alice, 10000 ether);
         vm.deal(bob, 10000 ether);
@@ -1227,7 +1234,14 @@ contract TestSetup is Test, ContractCodeChecker {
         vm.startPrank(admin);
         liquidityPoolInstance.batchApproveRegistration(newValidators, pubKey, sig);
         vm.stopPrank();
-    
+
+        for (uint256 i = 0; i < newValidators.length; i++) {
+            vm.deal(msg.sender, 32 ether);
+            bytes memory wc = managerInstance.getWithdrawalCredentials(newValidators[i]);
+            beaconChainMock.newValidator{value: 32 ether}(wc);
+        }
+        beaconChainMock.advanceEpoch();
+
         return newValidators;
     }
 

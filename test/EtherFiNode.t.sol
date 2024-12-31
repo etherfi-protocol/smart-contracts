@@ -2365,4 +2365,58 @@ contract EtherFiNodeTest is TestSetup {
         _transferTo(eigenPod, 32 ether);
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 0 ether);
     }
+
+    function test_launch_validator() public {
+        vm.prank(admin);
+        liquidityPoolInstance.setRestakeBnftDeposits(true);
+        uint256[] memory newValidatorIds = launch_validator(1, 0, true);
+
+        IEigenPod eigenPod = IEigenPod(managerInstance.getEigenPod(newValidatorIds[0]));
+        
+        vm.startPrank(managerInstance.etherfiNodeAddress(newValidatorIds[0]));
+        uint40[] memory validatorIndexes = new uint40[](1);
+        validatorIndexes[0] = 1;
+
+        _verifyWithdrawalCredentials(eigenPod, validatorIndexes);
+
+        eigenPod.startCheckpoint(false);
+        _completeCheckpoint(eigenPod, validatorIndexes);
+    }
+
+    function _completeCheckpoint(IEigenPod pod, uint40[] memory _validators) internal {
+        console.log("- active validator count", pod.activeValidatorCount());
+        console.log("- proofs remaining", pod.currentCheckpoint().proofsRemaining);
+
+        uint64 checkpointTimestamp = pod.currentCheckpointTimestamp();
+        if (checkpointTimestamp == 0) {
+            revert("User._completeCheckpoint: no existing checkpoint");
+        }
+
+        CheckpointProofs memory proofs = beaconChainMock.getCheckpointProofs(_validators, checkpointTimestamp);
+        console.log("- submitting num checkpoint proofs", proofs.balanceProofs.length);
+
+        pod.verifyCheckpointProofs({
+            balanceContainerProof: proofs.balanceContainerProof,
+            proofs: proofs.balanceProofs
+        });
+    }
+
+    function _verifyWithdrawalCredentials(IEigenPod pod, uint40[] memory _validators) internal {
+        CredentialProofs memory proofs = beaconChainMock.getCredentialProofs(_validators);
+
+        pod.verifyWithdrawalCredentials({
+            beaconTimestamp: proofs.beaconTimestamp,
+            stateRootProof: proofs.stateRootProof,
+            validatorIndices: _validators,
+            validatorFieldsProofs: proofs.validatorFieldsProofs,
+            validatorFields: proofs.validatorFields
+        });
+    }
+
+    function test_new_validator() public {
+        bytes memory wc = abi.encode(alice);
+        uint40 validatorIndex = beaconChainMock.newValidator{ 
+            value: 32 ether 
+        }(wc);
+    }
 }

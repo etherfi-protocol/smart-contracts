@@ -15,6 +15,18 @@ contract DelegationManagerMock is Test {
     mapping (address => address) public delegatedTo;
     mapping(address => mapping(IStrategy => uint256)) public operatorShares;
 
+    function beaconChainETHStrategy() external view returns (IStrategy) {
+        // SYKO
+        return IStrategy(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0);
+    }
+
+    function getWithdrawableShares(
+        address staker,
+        IStrategy[] memory strategies
+    ) public view returns (uint256[] memory withdrawableShares, uint256[] memory depositShares) {
+        // SYKO
+    }
+
     function getDelegatableShares(address staker) external view returns (IStrategy[] memory, uint256[] memory) {}
 
     function setMinWithdrawalDelayBlocks(uint256 newMinWithdrawalDelayBlocks) external {}
