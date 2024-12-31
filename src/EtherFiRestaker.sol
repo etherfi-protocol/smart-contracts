@@ -27,6 +27,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         uint256 elSharesInPendingForWithdrawals;
     }
 
+    IRewardsCoordinator public immutable rewardsCoordinator;
+
     LiquidityPool public liquidityPool;
     Liquifier public liquifier;
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
@@ -40,8 +42,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     mapping(address => TokenInfo) public tokenInfos;
     
     EnumerableSet.Bytes32Set private withdrawalRootsSet;
+    mapping(bytes32 => IDelegationManager.Withdrawal) public DEPRECATED_withdrawalRootToWithdrawal;
 
-    IRewardsCoordinator public immutable rewardsCoordinator;
 
     event QueuedStEthWithdrawals(uint256[] _reqIds);
     event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
@@ -177,7 +179,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @param amount the amount of token to withdraw
     function queueWithdrawals(address token, uint256 amount) public onlyAdmin returns (bytes32[] memory) {
         uint256 shares = getEigenLayerRestakingStrategy(token).underlyingToSharesView(amount);
-        return _queueWithdrawlsByShares(token, shares);
+        return _queueWithdrawalsByShares(token, shares);
     }
 
     /// Advanced version
@@ -309,7 +311,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // INTERNAL functions
-    function _queueWithdrawlsByShares(address _token, uint256 _shares) internal returns (bytes32[] memory) {
+    function _queueWithdrawalsByShares(address _token, uint256 _shares) internal returns (bytes32[] memory) {
         IDelegationManagerTypes.QueuedWithdrawalParams[] memory params = new IDelegationManagerTypes.QueuedWithdrawalParams[](1);
         IStrategy[] memory strategies = new IStrategy[](1);
         uint256[] memory shares = new uint256[](1);

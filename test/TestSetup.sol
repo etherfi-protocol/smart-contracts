@@ -424,7 +424,7 @@ contract TestSetup is Test, ContractCodeChecker {
     }
 
     function deployEtherFiRestaker() internal {
-        etherFiRestakerImplementation = new EtherFiRestaker(address(0));
+        etherFiRestakerImplementation = new EtherFiRestaker(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
