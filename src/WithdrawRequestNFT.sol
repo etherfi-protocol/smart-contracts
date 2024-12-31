@@ -31,8 +31,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint16 public shareRemainderSplitToTreasuryInBps;
 
     // inclusive
-    uint32 private _currentRequestIdToScanFromForShareRemainder;
-    uint32 private _lastRequestIdToScanUntilForShareRemainder;
+    uint256 private _currentRequestIdToScanFromForShareRemainder;
+    uint256 private _lastRequestIdToScanUntilForShareRemainder;
     uint256 public _aggregateSumOfEEthShare;
 
     uint256 public totalRemainderEEthShares;
@@ -163,7 +163,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
             _aggregateSumOfEEthShare += _requests[i].shareOfEEth;
         }
 
-        _currentRequestIdToScanFromForShareRemainder = uint32(scanUntil + 1);
+        _currentRequestIdToScanFromForShareRemainder = scanUntil + 1;
         
         // When the scan is completed, update the `totalRemainderEEthShares` and reset the `_aggregateSumOfEEthShare`
         if (_currentRequestIdToScanFromForShareRemainder == _lastRequestIdToScanUntilForShareRemainder + 1) {
