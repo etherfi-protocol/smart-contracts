@@ -318,11 +318,12 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
 
         if (isRestakingEnabled) {
             IDelegationManager delegationManager = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
+            IStrategy beaconStrategy = delegationManager.beaconChainETHStrategy();
 
             // get the shares locked in the EigenPod
             // - `withdrawableShares` reflects the slashing on 'depositShares'
             (uint256[] memory withdrawableShares, uint256[] memory depositShares) = delegationManager.getWithdrawableShares(address(this), getStrategies());
-            _eigenPod = withdrawableShares[0];
+            _eigenPod = beaconStrategy.sharesToUnderlyingView(withdrawableShares[0]);
 
             // get the shares locked in the DelegationManager
             // - `shares` reflects the slashing. but it can change over time while in the queue until the slashing completion
@@ -333,6 +334,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
                     _withdrawal_queue += shares[i][j];
                 }
             }
+            _withdrawal_queue = beaconStrategy.sharesToUnderlyingView(_withdrawal_queue);
         }
         return (_withdrawalSafe, _eigenPod, _withdrawal_queue);
     }
@@ -603,11 +605,22 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         IStrategy[] memory strategies = getStrategies();
         (uint256[] memory withdrawableShares, uint256[] memory depositShares) = delegationManager.getWithdrawableShares(address(this), strategies);
 
-        // calculate the amount to withdraw
-        // as this is per validator withdrawal, we cap the withdrawal amount to 32 ether
-        // in the case of slashing, the withdrawals for the last few validators might have less than 32 ether
+        // calculate the amount to withdraw:
+        // if the withdrawal is for the last validator:
+        //  withdraw the full balance including staking rewards
+        // else
+        //  as this is per validator withdrawal, we cap the withdrawal amount to 32 ether
+        //  in the case of slashing, the withdrawals for the last few validators might have less than 32 ether
+        // 
         // TODO: revisit for Pectra where a validator can have more than 32 ether
-        uint256 depositSharesToWithdraw = Math.min(depositShares[0], 32 ether);
+        uint256 depositSharesToWithdraw;
+        if (numAssociatedValidators() == 1) {
+            require(IEigenPod(eigenPod).activeValidatorCount() == 0, "ACTIVE_VALIDATOR_EXISTS");
+            depositSharesToWithdraw = depositShares[0];
+        } else {
+            uint256 eigenLayerBeaconStrategyShare = delegationManager.beaconChainETHStrategy().underlyingToShares(32 ether);
+            depositSharesToWithdraw = Math.min(depositShares[0], eigenLayerBeaconStrategyShare);
+        }
 
         // Queue the withdrawal
         // Note that the actual withdarwal amount can change if the slashing happens
