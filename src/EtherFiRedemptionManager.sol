@@ -86,12 +86,11 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
         require(eEthAmount <= eEth.balanceOf(owner), "EtherFiRedemptionManager: Insufficient balance");
         require(canRedeem(eEthAmount), "EtherFiRedemptionManager: Exceeded total redeemable amount");
 
-        uint256 beforeEEthAmount = eEth.balanceOf(address(this));
-        IERC20(address(eEth)).safeTransferFrom(owner, address(this), eEthAmount);
-        uint256 afterEEthAmount = eEth.balanceOf(address(this));
+        (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount);
 
-        uint256 transferredEEthAmount = afterEEthAmount - beforeEEthAmount;
-        _redeem(transferredEEthAmount, receiver);
+        IERC20(address(eEth)).safeTransferFrom(owner, address(this), eEthAmount);
+
+        _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury);
     }
 
     /**
@@ -101,18 +100,16 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
      * @param owner The address of the owner of the weETH.
      */
     function redeemWeEth(uint256 weEthAmount, address receiver, address owner) public whenNotPaused nonReentrant {
-        uint256 eEthShares = weEthAmount;
-        uint256 eEthAmount = liquidityPool.amountForShare(eEthShares);
+        uint256 eEthAmount = weEth.getEETHByWeETH(weEthAmount);
         require(weEthAmount <= weEth.balanceOf(owner), "EtherFiRedemptionManager: Insufficient balance");
         require(canRedeem(eEthAmount), "EtherFiRedemptionManager: Exceeded total redeemable amount");
 
-        uint256 beforeEEthAmount = eEth.balanceOf(address(this));
+        (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount);
+
         IERC20(address(weEth)).safeTransferFrom(owner, address(this), weEthAmount);
         weEth.unwrap(weEthAmount);
-        uint256 afterEEthAmount = eEth.balanceOf(address(this));
 
-        uint256 transferredEEthAmount = afterEEthAmount - beforeEEthAmount;
-        _redeem(transferredEEthAmount, receiver);
+        _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury);
     }
 
 
@@ -121,23 +118,19 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
      * @param ethAmount The amount of ETH to redeem after the exit fee.
      * @param receiver The address to receive the redeemed ETH.
      */
-    function _redeem(uint256 ethAmount, address receiver) internal {
+    function _redeem(uint256 ethAmount, uint256 eEthShares, address receiver, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) internal {
         _updateRateLimit(ethAmount);
 
-        uint256 ethShares = liquidityPool.sharesForAmount(ethAmount);
-        uint256 eEthAmountToReceiver = liquidityPool.amountForShare(ethShares.mulDiv(BASIS_POINT_SCALE - exitFeeInBps, BASIS_POINT_SCALE)); // ethShareToReceiver
+        // Derive additionals
+        uint256 eEthShareFee = eEthShares - sharesToBurn;
+        uint256 feeShareToStakers = eEthShareFee - feeShareToTreasury;
 
+        // Snapshot balances & shares for sanity check at the end
+        uint256 prevBalance = address(this).balance;
         uint256 prevLpBalance = address(liquidityPool).balance;
-        uint256 sharesToBurn = liquidityPool.sharesForWithdrawalAmount(eEthAmountToReceiver);
-
-        uint256 ethShareFee = ethShares - sharesToBurn;
-        uint256 feeShareToTreasury = ethShareFee.mulDiv(exitFeeSplitToTreasuryInBps, BASIS_POINT_SCALE);
-        uint256 eEthFeeAmountToTreasury = liquidityPool.amountForShare(feeShareToTreasury);
-        uint256 feeShareToStakers = ethShareFee - feeShareToTreasury;
+        uint256 totalEEthShare = eEth.totalShares();
 
         // Withdraw ETH from the liquidity pool
-        uint256 totalEEthShare = eEth.totalShares();
-        uint256 prevBalance = address(this).balance;
         assert (liquidityPool.withdraw(address(this), eEthAmountToReceiver) == sharesToBurn);
         uint256 ethReceived = address(this).balance - prevBalance;
 
@@ -250,6 +243,17 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
 
     function _convertFromBucketUnit(uint64 bucketUnit) internal pure returns (uint256) {
         return bucketUnit * BUCKET_UNIT_SCALE;
+    }
+
+
+    function _calcRedemption(uint256 ethAmount) internal view returns (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) {
+        eEthShares = liquidityPool.sharesForAmount(ethAmount);
+        eEthAmountToReceiver = liquidityPool.amountForShare(eEthShares.mulDiv(BASIS_POINT_SCALE - exitFeeInBps, BASIS_POINT_SCALE)); // ethShareToReceiver
+
+        sharesToBurn = liquidityPool.sharesForWithdrawalAmount(eEthAmountToReceiver);
+        uint256 eEthShareFee = eEthShares - sharesToBurn;
+        feeShareToTreasury = eEthShareFee.mulDiv(exitFeeSplitToTreasuryInBps, BASIS_POINT_SCALE);
+        eEthFeeAmountToTreasury = liquidityPool.amountForShare(feeShareToTreasury);
     }
 
     /**
