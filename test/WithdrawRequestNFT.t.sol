@@ -417,6 +417,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.assume(remainderSplitBps <= 10000);
         vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance));
 
+        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(10);
+
         // Setup initial balance for recipient
         vm.deal(recipient, depositAmount);
 
@@ -431,7 +433,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Record initial balances
         uint256 treasuryEEthBefore = eETHInstance.balanceOf(address(treasuryInstance));
         uint256 recipientBalanceBefore = address(recipient).balance;
-        uint256 initialTotalLockedEEthShares = withdrawRequestNFTInstance.totalLockedEEthShares();
 
         // Request withdraw
         eETHInstance.approve(address(liquidityPoolInstance), withdrawAmount);
@@ -440,8 +441,6 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Get initial request state
         WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
-
-        assertEq(withdrawRequestNFTInstance.totalLockedEEthShares(), initialTotalLockedEEthShares + request.shareOfEEth, "Incorrect total locked shares");    
 
         // Simulate rebase after request but before claim
         vm.prank(address(membershipManagerInstance));
@@ -497,20 +496,17 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.expectRevert("ERC721: invalid token ID");
         withdrawRequestNFTInstance.ownerOf(requestId);
 
-        // Calculate and verify remainder splitting
-        assertApproxEqAbs(
-            expectedLockedShares,
-            withdrawRequestNFTInstance.totalLockedEEthShares(),
-            1e1,
-            "Incorrect locked eETH share"
-        );
-
         // Verify recipient received correct ETH amount
         assertEq(
             address(recipient).balance,
             recipientBalanceBefore + expectedWithdrawAmount,
             "Recipient should receive correct ETH amount"
         );
+
+        uint256 expectedLockedEEthAmount = liquidityPoolInstance.amountForShare(expectedLockedShares);
+        withdrawRequestNFTInstance.getEEthRemainderAmount();
+        vm.prank(admin);
+        withdrawRequestNFTInstance.handleRemainder(expectedLockedEEthAmount);
     }
 
     function testFuzz_InvalidateRequest(uint96 depositAmount, uint96 withdrawAmount, address recipient) public {

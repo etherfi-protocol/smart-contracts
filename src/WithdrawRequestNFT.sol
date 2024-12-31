@@ -33,8 +33,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     // inclusive
     uint32 private _currentRequestIdToScanFromForShareRemainder;
     uint32 private _lastRequestIdToScanUntilForShareRemainder;
+    uint256 public _aggregateSumOfEEthShare;
 
-    uint256 public totalLockedEEthShares;
+    uint256 public totalRemainderEEthShares;
 
     bool public paused;
     address public pauser;
@@ -94,7 +95,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         uint32 feeGwei = uint32(fee / 1 gwei);
 
         _requests[requestId] = IWithdrawRequestNFT.WithdrawRequest(amountOfEEth, shareOfEEth, true, feeGwei);
-        totalLockedEEthShares += shareOfEEth;
 
         _safeMint(recipient, requestId);
 
@@ -137,7 +137,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         delete _requests[tokenId];
 
         // update accounting 
-        totalLockedEEthShares -= shareAmountToBurnForWithdrawal;
+        totalRemainderEEthShares += request.shareOfEEth - shareAmountToBurnForWithdrawal;
 
         uint256 amountBurnedShare = liquidityPool.withdraw(recipient, amountToWithdraw);
         assert (amountBurnedShare == shareAmountToBurnForWithdrawal);
@@ -160,10 +160,17 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         for (uint256 i = scanFrom; i <= scanUntil; i++) {
             if (!_exists(i)) continue;
-            totalLockedEEthShares += _requests[i].shareOfEEth;
+            _aggregateSumOfEEthShare += _requests[i].shareOfEEth;
         }
 
         _currentRequestIdToScanFromForShareRemainder = uint32(scanUntil + 1);
+        
+        // When the scan is completed, update the `totalRemainderEEthShares` and reset the `_aggregateSumOfEEthShare`
+        if (_currentRequestIdToScanFromForShareRemainder == _lastRequestIdToScanUntilForShareRemainder + 1) {
+            require(_currentRequestIdToScanFromForShareRemainder == nextRequestId, "new req has been created");
+            totalRemainderEEthShares = eETH.shares(address(this)) - _aggregateSumOfEEthShare;
+            _aggregateSumOfEEthShare = 0; // gone
+        }
     }
 
     // Seize the request simply by transferring it to another recipient
@@ -235,18 +242,17 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     ///   - Burn: the rest of the remainder is burned
     /// @param _eEthAmount: the remainder of the eEth amount
     function handleRemainder(uint256 _eEthAmount) external onlyAdmin {
-        require(getEEthRemainderAmount() >= _eEthAmount, "Not enough eETH remainder");
         require(_currentRequestIdToScanFromForShareRemainder == _lastRequestIdToScanUntilForShareRemainder + 1, "Not all prev requests have been scanned");
+        require(getEEthRemainderAmount() >= _eEthAmount, "Not enough eETH remainder");
 
         uint256 beforeEEthShares = eETH.shares(address(this));
-        
-        uint256 eEthShares = liquidityPool.sharesForWithdrawalAmount(_eEthAmount);
-        uint256 eEthSharesToTreasury = eEthShares.mulDiv(shareRemainderSplitToTreasuryInBps, BASIS_POINT_SCALE);
-        uint256 eEthAmountToTreasury = liquidityPool.amountForShare(eEthSharesToTreasury);
-        uint256 eEthSharesToBurn = eEthShares - eEthSharesToTreasury;
-        uint256 eEthSharesToMoved = eEthSharesToTreasury + eEthSharesToBurn;
 
-        totalLockedEEthShares -= eEthSharesToMoved;
+        uint256 eEthAmountToTreasury = _eEthAmount.mulDiv(shareRemainderSplitToTreasuryInBps, BASIS_POINT_SCALE);
+        uint256 eEthAmountToBurn = _eEthAmount - eEthAmountToTreasury;
+        uint256 eEthSharesToBurn = liquidityPool.sharesForAmount(eEthAmountToBurn);
+        uint256 eEthSharesToMoved = eEthSharesToBurn + liquidityPool.sharesForAmount(eEthAmountToTreasury);
+
+        totalRemainderEEthShares -= eEthSharesToMoved;
 
         eETH.transfer(treasury, eEthAmountToTreasury);
         eETH.burnShares(address(this), eEthSharesToBurn);
@@ -257,8 +263,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function getEEthRemainderAmount() public view returns (uint256) {
-        uint256 eEthRemainderShare = eETH.shares(address(this)) - totalLockedEEthShares;
-        return liquidityPool.amountForShare(eEthRemainderShare);
+        return liquidityPool.amountForShare(totalRemainderEEthShares);
     }
 
     // the withdraw request NFT is transferrable
