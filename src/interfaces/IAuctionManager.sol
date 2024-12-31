@@ -8,6 +8,12 @@ interface IAuctionManager {
         address bidderAddress;
         bool isActive;
     }
+    
+    struct BatchedBid {
+        uint8 numBids;
+        uint32 amountPerBidInGwei;
+        uint216 availableBidsBitset;
+    }
 
     function initialize(address _nodeOperatorManagerContract) external;
 
