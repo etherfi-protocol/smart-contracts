@@ -2,10 +2,9 @@
 pragma solidity ^0.8.9;
 
 import "forge-std/Test.sol";
-import "src/eigenlayer-interfaces/IStrategy.sol";
-import "./Pausable.sol";
+import "../../src/eigenlayer-interfaces/IStrategy.sol";
 
-contract EigenPodManagerMock is Test, Pausable {
+contract EigenPodManagerMock is Test {
     receive() external payable {}
     fallback() external payable {}
 
@@ -20,9 +19,7 @@ contract EigenPodManagerMock is Test, Pausable {
 
     mapping(address => BeaconChainSlashingFactor) _beaconChainSlashingFactor;
 
-    constructor(IPauserRegistry _pauserRegistry) Pausable(_pauserRegistry) {
-        _setPausedStatus(0);
-    }
+    constructor() {}
 
     function podOwnerShares(address podOwner) external view returns (int256) {
         return podOwnerDepositShares[podOwner];
@@ -30,7 +27,7 @@ contract EigenPodManagerMock is Test, Pausable {
 
     function stakerDepositShares(address user, address) public view returns (uint256 depositShares) {
         return podOwnerDepositShares[user] < 0 ? 0 : uint256(podOwnerDepositShares[user]);
-    } 
+    }
 
     function setPodOwnerShares(address podOwner, int256 shares) external {
         podOwnerDepositShares[podOwner] = shares;
