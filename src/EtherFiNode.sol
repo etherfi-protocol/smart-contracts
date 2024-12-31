@@ -38,14 +38,8 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     mapping(uint256 => uint256) public associatedValidatorIndices;
     uint256[] public associatedValidatorIds; // validators in {STAKE_DEPOSITED, WAITING_FOR_APPROVAL, LIVE, BEING_SLASHED, EXITED} phase
 
-    // Track the amount of pending/completed withdrawals;
-    uint64 public pendingWithdrawalFromRestakingInGwei; // incremented when the delayed withdrawal (from EigenPod to EtherFiNode) is queued, decremented when it is completed
-    uint64 public completedWithdrawalFromRestakingInGwei; // incremented when the delayed withdarwal is completed, decremented when the fund is withdrawan (from EtherFiNode to the externals via fullWithdraw call)
-
-    // eigenLayer phase 1 bookeeping
-    // we need to mark a block from which we know all beaconchain eth has been moved to the eigenPod
-    // so that we can properly calculate exit payouts and ensure queued withdrawals have been resolved
-    // (eigenLayer withdrawals are tied to blocknumber instead of timestamp)
+    uint64 public DEPRECATED_pendingWithdrawalFromRestakingInGwei;
+    uint64 public DEPRECATED_completedWithdrawalFromRestakingInGwei;
     mapping(uint256 => uint32) DEPRECATED_restakingObservedExitBlocks;
 
     error CallFailed(bytes data);
@@ -213,61 +207,32 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
 
     function processFullWithdraw(uint256 _validatorId) external onlyEtherFiNodeManagerContract ensureLatestVersion {
         updateNumberOfAssociatedValidators(0, 1);
-
-        if (isRestakingEnabled) {
-            // TODO: revisit for the case of slashing
-            require(completedWithdrawalFromRestakingInGwei >= 32 ether / 1 gwei, "INSUFFICIENT_BALANCE");
-            completedWithdrawalFromRestakingInGwei -= uint64(32 ether / 1 gwei);
-        }
     }
 
-    function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, uint256 middlewareTimesIndexes, bool _receiveAsTokens) external onlyEtherFiNodeManagerContract {
+    function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, bool _receiveAsTokens) external onlyEtherFiNodeManagerContract {
         IDelegationManager.Withdrawal[] memory _withdrawals = new IDelegationManager.Withdrawal[](1);
         _withdrawals[0] = withdrawals;
-        uint256[] memory _middlewareTimesIndexes = new uint256[](1);
-        _middlewareTimesIndexes[0] = middlewareTimesIndexes;
-        return _completeQueuedWithdrawals(_withdrawals, _middlewareTimesIndexes, _receiveAsTokens);
+        return _completeQueuedWithdrawals(_withdrawals, _receiveAsTokens);
     }
 
-    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] memory middlewareTimesIndexes, bool _receiveAsTokens) external onlyEtherFiNodeManagerContract {
-        return _completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, _receiveAsTokens);
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, bool _receiveAsTokens) external onlyEtherFiNodeManagerContract {
+        return _completeQueuedWithdrawals(withdrawals, _receiveAsTokens);
     }
 
     // `DelegationManager.completeQueuedWithdrawals` is used to complete the withdrawals:
-    // (1) by `EtherFiNode._queueRestakedFullWithdrawal`. It is used to process the full withdraw
-    // (2) by `DelegationManager.undelegate`
-    // While `_receiveAsTokens == True` for (1), `_receiveAsTokens == False` for (2)
-    // (Note that this is a simplication based on the use cases)
-    function _completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, uint256[] memory middlewareTimesIndexes, bool _receiveAsTokens) internal {
-        uint256 totalAmount = 0;
-
+    // if `_receiveAsTokens` is true, the ETH in EigenPod will be withdrawn to EtherFiNode via EigenPodManager.withdrawSharesAsTokens(...) call
+    // if `_receiveAsTokens` is false, the ETH in EigenPod will be delegated to the current operator
+    function _completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, bool _receiveAsTokens) internal {
         bool[] memory receiveAsTokens = new bool[](withdrawals.length);
-        IERC20[][] memory tokens = new IERC20[][](withdrawals.length);
+        IERC20[][] memory tokens = new IERC20[][](withdrawals.length); // redundant for BeaconETH strategy
         for (uint256 i = 0; i < withdrawals.length; i++) {
             require(withdrawals[i].withdrawer == address(this) && withdrawals[i].staker == address(this), "INVALID");
-
             receiveAsTokens[i] = _receiveAsTokens;
             tokens[i] = new IERC20[](withdrawals[i].strategies.length);
-            for (uint256 j = 0; j < withdrawals[i].shares.length; j++) {
-                totalAmount += withdrawals[i].shares[j];
-            }
-        }
-
-        if (_receiveAsTokens) {
-            // the queued withdrawal is for (1) full withdraw, so the pendingWithdrawalFromRestakingInGwei should be at least 32 ether
-            require(pendingWithdrawalFromRestakingInGwei >= uint64(totalAmount / 1 gwei), "NO_PENDING_WITHDRAWAL");
-            pendingWithdrawalFromRestakingInGwei -= uint64(totalAmount / 1 gwei);
-            completedWithdrawalFromRestakingInGwei += uint64(totalAmount / 1 gwei);
-        } else {
-            // the queued withdrawal is for (2) undelegate, we put a guard `pendingWithdrawalFromRestakingInGwei` == 0
-            // If it is non-zero, that means there is at least one validator of which delayed withdrawal is in the queue.
-            // Complete that first.
-            /// @dev this is not the most optimal way to handle these two use cases, but we ack that it's a temporary solution
-            require(pendingWithdrawalFromRestakingInGwei == 0, "PENDING_WITHDRAWAL_NOT_ZERO");
         }
 
         IDelegationManager mgr = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
-        mgr.completeQueuedWithdrawals(withdrawals, tokens, middlewareTimesIndexes, receiveAsTokens);
+        mgr.completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
     }
 
     /// @dev transfer funds from the withdrawal safe to the 4 associated parties (bNFT, tNFT, treasury, nodeOperator)
@@ -347,43 +312,44 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     /// @notice total balance (in the execution layer) of this withdrawal safe split into its component parts.
     ///   1. the withdrawal safe balance
     ///   2. the EigenPod balance
-    ///   3. the withdrawals pending in DelayedWithdrawalRouter
-    function splitBalanceInExecutionLayer() public view returns (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter) {
+    ///   3. the withdrawals pending in the DelegationManager
+    function splitBalanceInExecutionLayer() public view returns (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _withdrawal_queue) {
         _withdrawalSafe = address(this).balance;
 
         if (isRestakingEnabled) {
-            _eigenPod = eigenPod.balance;
+            IDelegationManager delegationManager = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
+            IStrategy beaconStrategy = delegationManager.beaconChainETHStrategy();
 
-            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
-            IDelayedWithdrawalRouter.DelayedWithdrawal[] memory delayedWithdrawals = delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this));
-            for (uint256 x = 0; x < delayedWithdrawals.length; x++) {
-                _delayedWithdrawalRouter += delayedWithdrawals[x].amount;
+            // get the shares locked in the EigenPod
+            // - `withdrawableShares` reflects the slashing on 'depositShares'
+            (uint256[] memory withdrawableShares, uint256[] memory depositShares) = delegationManager.getWithdrawableShares(address(this), getStrategies());
+            _eigenPod = beaconStrategy.sharesToUnderlyingView(withdrawableShares[0]);
+
+            // get the shares locked in the DelegationManager
+            // - `shares` reflects the slashing. but it can change over time while in the queue until the slashing completion
+            (IDelegationManager.Withdrawal[] memory withdrawals, uint256[][] memory shares) = delegationManager.getQueuedWithdrawals(address(this));
+            for (uint256 i = 0; i < withdrawals.length; i++) {
+                assert (withdrawals[i].strategies.length == 1); // only BeaconETH strategy is used
+                for (uint256 j = 0; j < shares[i].length; j++) {
+                    _withdrawal_queue += shares[i][j];
+                }
             }
+            _withdrawal_queue = beaconStrategy.sharesToUnderlyingView(_withdrawal_queue);
         }
-        return (_withdrawalSafe, _eigenPod, _delayedWithdrawalRouter);
+        return (_withdrawalSafe, _eigenPod, _withdrawal_queue);
     }
-
 
     /// @notice total balance (wei) of this safe currently in the execution layer.
     function totalBalanceInExecutionLayer() public view returns (uint256) {
-        (uint256 _safe, uint256 _pod, uint256 _router) = splitBalanceInExecutionLayer();
-        return _safe + _pod + _router;
+        (uint256 _safe, uint256 _pod, uint256 _withdrawal_queue) = splitBalanceInExecutionLayer();
+        return _safe + _pod + _withdrawal_queue;
     }
 
-    /// @notice balance (wei) of this safe that could be immediately withdrawn.
-    ///         This only differs from the balance in the safe in the case of restaked validators
-    ///         because some funds might not be withdrawable yet due to eigenlayer's queued withdrawal system
+    /// @notice balance (wei) of this safe that could be immediately withdrawn
+    // This withdrawable balance amount is updated after completion of the queued withdarawal with `receiveAsToken = True`
     function withdrawableBalanceInExecutionLayer() public view returns (uint256) {
         uint256 safeBalance = address(this).balance;
-        uint256 claimableBalance = 0;
-        if (isRestakingEnabled) {
-            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
-            IDelayedWithdrawalRouter.DelayedWithdrawal[] memory claimableWithdrawals = delayedWithdrawalRouter.getClaimableUserDelayedWithdrawals(address(this));
-            for (uint256 x = 0; x < claimableWithdrawals.length; x++) {
-                claimableBalance += claimableWithdrawals[x].amount;
-            }
-        }
-        return safeBalance + claimableBalance;
+        return safeBalance;
     }
 
     function moveFundsToManager(uint256 _amount) external onlyEtherFiNodeManagerContract {
@@ -620,8 +586,11 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         emit EigenPodCreated(address(this), eigenPod);
     }
 
+    // per Validator, queue the withdrawal of native ETH from EigenPod to EtherFiNode
+    // Pre-Requisite:
+    // - the ETH was withdrawn from the beacon chain to the EigenPod
+    // - the PEPE proofs were submitted and verified
     // returns the withdrawal roots for the queued full-withdrawals
-    // the {NonBeaconChainEthWithdrawal, partial withdraw}'s queued withdrawals can be retrieved (indexed) on DelayedWithdrawalRouter
     function queueEigenpodFullWithdrawal() public onlyEtherFiNodeManagerContract returns (bytes32[] memory fullWithdrawalRoots) {
         return _queueEigenpodFullWithdrawal();
     }
@@ -629,56 +598,51 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     function _queueEigenpodFullWithdrawal() private returns (bytes32[] memory fullWithdrawalRoots) {
         if (!isRestakingEnabled) return fullWithdrawalRoots;
 
-        // Withdrawals from Eigenlayer are queued through either the DelayedWithdrawalRouter (DEPRECATED) or the DelegationManager.
-        // pre-PEPE update, nonBeaconChainEth and partial withdrawals are queued through the DelayedWithdrawalRouter.
-        // post-PEPE update, all withdrawals are queued through the DelegationManager
-
-        // calculate the pending amount. The withdrawal proof verification will update the EigenPod's `withdrawableRestakedExecutionLayerGwei` value
-        uint256 unclaimedFullWithdrawalAmountInGwei = IEigenPod(eigenPod).withdrawableRestakedExecutionLayerGwei() - pendingWithdrawalFromRestakingInGwei;
-        if (unclaimedFullWithdrawalAmountInGwei == 0) return fullWithdrawalRoots;
-
-        // TODO: revisit for the case of slashing
-        // we will need to re-visit this logic once the EigenLayer's slashing mechanism is implemented
-        // + we need to consider the slashing amount in the full withdrawal from the beacon layer as well
-        require(unclaimedFullWithdrawalAmountInGwei >= 32 ether / 1 gwei, "SLASHED");
-
-        // Update the pending withdrawal amount
-        // Note that the call to `DelegationManager.queueWithdrawals(...)` won't update the EigenPod's `withdrawableRestakedExecutionLayerGwei`
-        // It is updated only when the withdrawal is completed by the `DelegationManager.completeQueuedWithdrawals(...)`
-        // That is why we use two variables for accounting
-        pendingWithdrawalFromRestakingInGwei += uint64(32 ether / 1 gwei);
-
+        // Withdrawals from Eigenlayer are queued through the DelegationManager
         IDelegationManager delegationManager = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
 
-        // Queue the withdrawal for whatever amount is available
-        IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
-        IStrategy[] memory strategies = new IStrategy[](1);
+        // get the withdrawable amount        
+        IStrategy[] memory strategies = getStrategies();
+        (uint256[] memory withdrawableShares, uint256[] memory depositShares) = delegationManager.getWithdrawableShares(address(this), strategies);
+
+        // calculate the amount to withdraw:
+        // if the withdrawal is for the last validator:
+        //  withdraw the full balance including staking rewards
+        // else
+        //  as this is per validator withdrawal, we cap the withdrawal amount to 32 ether
+        //  in the case of slashing, the withdrawals for the last few validators might have less than 32 ether
+        // 
+        // TODO: revisit for Pectra where a validator can have more than 32 ether
+        uint256 depositSharesToWithdraw;
+        if (numAssociatedValidators() == 1) {
+            require(IEigenPod(eigenPod).activeValidatorCount() == 0, "ACTIVE_VALIDATOR_EXISTS");
+            depositSharesToWithdraw = depositShares[0];
+        } else {
+            uint256 eigenLayerBeaconStrategyShare = delegationManager.beaconChainETHStrategy().underlyingToShares(32 ether);
+            depositSharesToWithdraw = Math.min(depositShares[0], eigenLayerBeaconStrategyShare);
+        }
+
+        // Queue the withdrawal
+        // Note that the actual withdarwal amount can change if the slashing happens
+        IDelegationManagerTypes.QueuedWithdrawalParams[] memory params = new IDelegationManagerTypes.QueuedWithdrawalParams[](1);
         uint256[] memory shares = new uint256[](1);
 
         strategies[0] = delegationManager.beaconChainETHStrategy();
-        shares[0] = 32 ether;
-        params[0] = IDelegationManager.QueuedWithdrawalParams({
+        shares[0] = depositSharesToWithdraw;
+        params[0] = IDelegationManagerTypes.QueuedWithdrawalParams({
             strategies: strategies,
-            shares: shares,
+            depositShares: shares,
             withdrawer: address(this)
         });
 
-        // each withdrawal root is hash of the withdrawal object, "keccak256(abi.encode(withdrawal))"
         return delegationManager.queueWithdrawals(params);
     }
 
-    /// @dev as of eigenlayer's PEPE upgrade the delayedWithdrawalRouter is deprecated.
-    ///         once all outstanding funds have been claimed we can delete this functionality
-    function DEPRECATED_claimDelayedWithdrawalRouterWithdrawals() public {
-        if (!isRestakingEnabled) return;
-
-        uint256 maxWithdrawals = 10; // maximum number of withdrawals to process in 1 tx
-
-        // only claim if we have active unclaimed withdrawals
-        IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
-        if (delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this)).length > 0) {
-            delayedWithdrawalRouter.claimDelayedWithdrawals(address(this), maxWithdrawals);
-        }
+    function getStrategies() public view returns (IStrategy[] memory) {
+        IDelegationManager delegationManager = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = delegationManager.beaconChainETHStrategy();
+        return strategies;
     }
 
     function validatePhaseTransition(VALIDATOR_PHASE _currentPhase, VALIDATOR_PHASE _newPhase) public pure returns (bool) {
