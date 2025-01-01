@@ -73,8 +73,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     function initializeOnUpgrade(address _pauser, uint16 _shareRemainderSplitToTreasuryInBps) external onlyOwner {
         require(pauser == address(0) && _pauser != address(0), "Already initialized");
+        require(_shareRemainderSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
 
-        paused = false;
+        paused = true; // make sure the contract is paused after the upgrade
         pauser = _pauser;
 
         shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
@@ -154,6 +155,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     // This function is used to aggregate the sum of the eEth shares of the requests that have not been claimed yet.
     // To be triggered during the upgrade to the new version of the contract.
     function aggregateSumEEthShareAmount(uint256 _numReqsToScan) external {
+        require(_currentRequestIdToScanFromForShareRemainder != _lastRequestIdToScanUntilForShareRemainder + 1, "scan is completed");
+
         // [scanFrom, scanUntil]
         uint256 scanFrom = _currentRequestIdToScanFromForShareRemainder;
         uint256 scanUntil = Math.min(_lastRequestIdToScanUntilForShareRemainder, scanFrom + _numReqsToScan - 1);
@@ -167,7 +170,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         
         // When the scan is completed, update the `totalRemainderEEthShares` and reset the `_aggregateSumOfEEthShare`
         if (_currentRequestIdToScanFromForShareRemainder == _lastRequestIdToScanUntilForShareRemainder + 1) {
-            require(_currentRequestIdToScanFromForShareRemainder == nextRequestId, "new req has been created");
             totalRemainderEEthShares = eETH.shares(address(this)) - _aggregateSumOfEEthShare;
             _aggregateSumOfEEthShare = 0; // gone
         }
@@ -197,6 +199,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function finalizeRequests(uint256 requestId) external onlyAdmin {
+        require(requestId > lastFinalizedRequestId, "Cannot undo finalization");
         lastFinalizedRequestId = uint32(requestId);
     }
 
