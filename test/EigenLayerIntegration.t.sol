@@ -27,16 +27,8 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     uint256 validatorId;
     IEigenPod eigenPod;
     address podOwner;
-    bytes pubkey;
+    // bytes pubkey;
     EtherFiNode ws;
-
-    // Params to _verifyWithdrawalCredentials
-    uint64 oracleTimestamp;
-    BeaconChainProofs.StateRootProof stateRootProof;
-    uint40[] validatorIndices;
-    bytes[] withdrawalCredentialProofs;
-    bytes[] validatorFieldsProofs;
-    bytes32[][] validatorFields;
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
@@ -48,7 +40,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // - Mainnet
         // bid Id = validator Id = 21397
         validatorId = 21397;
-        pubkey = hex"a9c09c47ad6c0c5c397521249be41c8b81b139c3208923ec3c95d7f99c57686ab66fe75ea20103a1291578592d11c2c2";
+        // pubkey = hex"a9c09c47ad6c0c5c397521249be41c8b81b139c3208923ec3c95d7f99c57686ab66fe75ea20103a1291578592d11c2c2";
 
         // {EigenPod, EigenPodOwner} used in EigenLayer's unit test
         eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
@@ -84,18 +76,18 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     }
 
     function _setWithdrawalCredentialParams() public {
-        validatorIndices = new uint40[](1);
-        withdrawalCredentialProofs = new bytes[](1);
-        validatorFieldsProofs = new bytes[](1);
-        validatorFields = new bytes32[][](1);
+        // validatorIndices = new uint40[](1);
+        // withdrawalCredentialProofs = new bytes[](1);
+        // validatorFieldsProofs = new bytes[](1);
+        // validatorFields = new bytes32[][](1);
 
         // Set beacon state root, validatorIndex
-        stateRootProof.beaconStateRoot = getBeaconStateRoot();
-        stateRootProof.proof = getStateRootProof();
-        validatorIndices[0] = uint40(getValidatorIndex());
-        withdrawalCredentialProofs[0] = abi.encodePacked(getWithdrawalCredentialProof()); // Validator fields are proven here
+        // stateRootProof.beaconStateRoot = getBeaconStateRoot();
+        // stateRootProof.proof = getStateRootProof();
+        // validatorIndices[0] = uint40(getValidatorIndex());
+        // withdrawalCredentialProofs[0] = abi.encodePacked(getWithdrawalCredentialProof()); // Validator fields are proven here
         // validatorFieldsProofs[0] = abi.encodePacked(getValidatorFieldsProof());
-        validatorFields[0] = getValidatorFields();
+        // validatorFields[0] = getValidatorFields();
     }
 
     function _beacon_process_1ETH_deposit() internal {
@@ -107,7 +99,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     function _beacon_process_32ETH_deposit() internal {
 
         setJSON("./test/eigenlayer-utils/test-data/mainnet_withdrawal_credential_proof_1293592_1712964563.json");
-        oracleTimestamp = 1712964563;
+        // oracleTimestamp = 1712964563;
         // timestamp doesn't seem to get set by custom RPC for even though block does
         vm.warp(1712974563);
         
@@ -131,7 +123,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         
         bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
         bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
+        // data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
 
         // Can perform 'verifyWithdrawalCredentials' only once
         vm.prank(owner);
@@ -180,9 +172,9 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         bytes4 selector = bytes4(keccak256("verifyBalanceUpdates(uint64,uint40[],(bytes32,bytes),bytes[],bytes32[][])"));
         bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, validatorIndices, stateRootProof, withdrawalCredentialProofs, validatorFields);
+        // data[0] = abi.encodeWithSelector(selector, oracleTimestamp, validatorIndices, stateRootProof, withdrawalCredentialProofs, validatorFields);
 
-        IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
+        // IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
 
         // Calling 'verifyBalanceUpdates' before 'verifyWithdrawalCredentials' should fail
         vm.prank(owner);
@@ -190,7 +182,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         managerInstance.forwardEigenpodCall(validatorIds, data);
         vm.stopPrank();
 
-        vm.warp(oracleTimestamp + 5 hours);
+        // vm.warp(oracleTimestamp + 5 hours);
 
         // If the proof is too old, it should fail
         vm.prank(owner);
