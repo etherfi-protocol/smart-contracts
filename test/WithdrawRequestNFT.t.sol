@@ -419,6 +419,9 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         withdrawRequestNFTInstance.aggregateSumEEthShareAmount(10);
 
+        vm.expectRevert("scan is completed");
+        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(10);
+
         // Setup initial balance for recipient
         vm.deal(recipient, depositAmount);
 
