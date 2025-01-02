@@ -249,6 +249,7 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
     }
 
     function _convertToBucketUnit(uint256 amount, Math.Rounding rounding) internal pure returns (uint64) {
+        require(amount <= type(uint64).max * BUCKET_UNIT_SCALE, "EtherFiRedemptionManager: Amount too large");
         return (rounding == Math.Rounding.Up) ? SafeCast.toUint64((amount + BUCKET_UNIT_SCALE - 1) / BUCKET_UNIT_SCALE) : SafeCast.toUint64(amount / BUCKET_UNIT_SCALE);
     }
 
