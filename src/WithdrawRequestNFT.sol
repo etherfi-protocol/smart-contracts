@@ -104,7 +104,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function getClaimableAmount(uint256 tokenId) public view returns (uint256) {
-        require(tokenId < nextRequestId, "Request does not exist");
         require(tokenId <= lastFinalizedRequestId, "Request is not finalized");
         require(ownerOf(tokenId) != address(0), "Already Claimed");
 
