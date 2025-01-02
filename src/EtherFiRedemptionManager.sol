@@ -65,6 +65,10 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
     }
 
     function initialize(uint16 _exitFeeSplitToTreasuryInBps, uint16 _exitFeeInBps, uint16 _lowWatermarkInBpsOfTvl, uint256 _bucketCapacity, uint256 _bucketRefillRate) external initializer {
+        require(_exitFeeInBps <= BASIS_POINT_SCALE, "INVALID");
+        require(_exitFeeSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
+        require(_lowWatermarkInBpsOfTvl <= BASIS_POINT_SCALE, "INVALID");
+
         __Ownable_init();
         __UUPSUpgradeable_init();
         __Pausable_init();
