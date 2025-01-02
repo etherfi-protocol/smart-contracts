@@ -80,15 +80,14 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
      * @notice Redeems eETH for ETH.
      * @param eEthAmount The amount of eETH to redeem after the exit fee.
      * @param receiver The address to receive the redeemed ETH.
-     * @param owner The address of the owner of the eETH.
      */
-    function redeemEEth(uint256 eEthAmount, address receiver, address owner) public whenNotPaused nonReentrant {
-        require(eEthAmount <= eEth.balanceOf(owner), "EtherFiRedemptionManager: Insufficient balance");
+    function redeemEEth(uint256 eEthAmount, address receiver) public whenNotPaused nonReentrant {
+        require(eEthAmount <= eEth.balanceOf(msg.sender), "EtherFiRedemptionManager: Insufficient balance");
         require(canRedeem(eEthAmount), "EtherFiRedemptionManager: Exceeded total redeemable amount");
 
         (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount);
 
-        IERC20(address(eEth)).safeTransferFrom(owner, address(this), eEthAmount);
+        IERC20(address(eEth)).safeTransferFrom(msg.sender, address(this), eEthAmount);
 
         _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury);
     }
@@ -97,16 +96,15 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
      * @notice Redeems weETH for ETH.
      * @param weEthAmount The amount of weETH to redeem after the exit fee.
      * @param receiver The address to receive the redeemed ETH.
-     * @param owner The address of the owner of the weETH.
      */
-    function redeemWeEth(uint256 weEthAmount, address receiver, address owner) public whenNotPaused nonReentrant {
+    function redeemWeEth(uint256 weEthAmount, address receiver) public whenNotPaused nonReentrant {
         uint256 eEthAmount = weEth.getEETHByWeETH(weEthAmount);
-        require(weEthAmount <= weEth.balanceOf(owner), "EtherFiRedemptionManager: Insufficient balance");
+        require(weEthAmount <= weEth.balanceOf(msg.sender), "EtherFiRedemptionManager: Insufficient balance");
         require(canRedeem(eEthAmount), "EtherFiRedemptionManager: Exceeded total redeemable amount");
 
         (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount);
 
-        IERC20(address(weEth)).safeTransferFrom(owner, address(this), weEthAmount);
+        IERC20(address(weEth)).safeTransferFrom(msg.sender, address(this), weEthAmount);
         weEth.unwrap(weEthAmount);
 
         _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury);
