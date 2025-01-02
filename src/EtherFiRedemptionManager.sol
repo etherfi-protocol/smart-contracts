@@ -151,6 +151,8 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
         // To Treasury by transferring eETH
         IERC20(address(eEth)).safeTransfer(treasury, eEthFeeAmountToTreasury);
         
+        require(eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
+
         // To Receiver by transferring ETH
         (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
         require(success, "EtherFiRedemptionManager: Transfer failed");
