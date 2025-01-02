@@ -114,6 +114,15 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
         _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury);
     }
 
+    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit) external {
+        try eEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
+        redeemEEth(eEthAmount, receiver);
+    }
+
+    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit) external {
+        try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
+        redeemWeEth(weEthAmount, receiver);
+    }
 
     /**
      * @notice Redeems ETH.

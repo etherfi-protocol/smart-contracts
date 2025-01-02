@@ -109,9 +109,9 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         if (etherFiRedemptionManagerInstance.canRedeem(redeemAmount)) {
             uint256 userBalanceBefore = address(user).balance;
             uint256 treasuryBalanceBefore = eETHInstance.balanceOf(address(treasuryInstance));
-
-            eETHInstance.approve(address(etherFiRedemptionManagerInstance), redeemAmount);
-            etherFiRedemptionManagerInstance.redeemEEth(redeemAmount, user);
+            
+            IeETH.PermitInput memory permit = eEth_createPermitInput(999, address(etherFiRedemptionManagerInstance), redeemAmount, eETHInstance.nonces(user), 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
+            etherFiRedemptionManagerInstance.redeemEEthWithPermit(redeemAmount, user, permit);
 
             uint256 totalFee = (redeemAmount * exitFeeBps) / 10000;
             uint256 treasuryFee = (totalFee * exitFeeSplitBps) / 10000;
@@ -183,8 +183,8 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
             uint256 eEthAmount = liquidityPoolInstance.amountForShare(weEthAmount);
 
-            weEthInstance.approve(address(etherFiRedemptionManagerInstance), weEthAmount);
-            etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, user);
+            IWeETH.PermitInput memory permit = weEth_createPermitInput(999, address(etherFiRedemptionManagerInstance), weEthAmount, weEthInstance.nonces(user), 2**256 - 1, weEthInstance.DOMAIN_SEPARATOR());
+            etherFiRedemptionManagerInstance.redeemWeEthWithPermit(weEthAmount, user, permit);
 
             uint256 totalFee = (eEthAmount * exitFeeBps) / 10000;
             uint256 treasuryFee = (totalFee * exitFeeSplitBps) / 10000;

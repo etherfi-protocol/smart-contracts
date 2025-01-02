@@ -1038,6 +1038,34 @@ contract TestSetup is Test, ContractCodeChecker {
         return permitInput;
     }
 
+    function eEth_createPermitInput(uint256 privKey, address spender, uint256 value, uint256 nonce, uint256 deadline, bytes32 domianSeparator) public returns (IeETH.PermitInput memory) {
+        address _owner = vm.addr(privKey);
+        bytes32 digest = calculatePermitDigest(_owner, spender, value, nonce, deadline, domianSeparator);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privKey, digest);
+        IeETH.PermitInput memory permitInput = IeETH.PermitInput({
+            value: value,
+            deadline: deadline,
+            v: v,
+            r: r,
+            s: s
+        });
+        return permitInput;
+    }
+
+    function weEth_createPermitInput(uint256 privKey, address spender, uint256 value, uint256 nonce, uint256 deadline, bytes32 domianSeparator) public returns (IWeETH.PermitInput memory) {
+        address _owner = vm.addr(privKey);
+        bytes32 digest = calculatePermitDigest(_owner, spender, value, nonce, deadline, domianSeparator);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privKey, digest);
+        IWeETH.PermitInput memory permitInput = IWeETH.PermitInput({
+            value: value,
+            deadline: deadline,
+            v: v,
+            r: r,
+            s: s
+        });
+        return permitInput;
+    }
+
     function registerAsBnftHolder(address _user) internal {
         (bool registered, uint32 index) = liquidityPoolInstance.bnftHoldersIndexes(_user);
         if (!registered) liquidityPoolInstance.registerAsBnftHolder(_user);

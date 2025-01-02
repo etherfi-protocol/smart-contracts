@@ -343,7 +343,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_aggregateSumEEthShareAmount() public {
         initializeRealisticFork(MAINNET_FORK);
 
-        address pauser = 0x9af1298993dc1f397973c62a5d47a284cf76844d;
+        address pauser = 0x9AF1298993DC1f397973C62A5D47a284CF76844D;
 
         vm.startPrank(withdrawRequestNFTInstance.owner());
         // 1. Upgrade
