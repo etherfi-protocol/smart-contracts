@@ -145,7 +145,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function initializeOnUpgradeWithRedemptionManager(address _etherFiRedemptionManager) external onlyOwner {
-        require(address(etherFiRedemptionManager) == address(0), "Already initialized");
+        require(address(etherFiRedemptionManager) == address(0) && _etherFiRedemptionManager != address(0), "Invalid");
         etherFiRedemptionManager = EtherFiRedemptionManager(payable(_etherFiRedemptionManager));
     }
 
