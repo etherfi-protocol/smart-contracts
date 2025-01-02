@@ -151,7 +151,7 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
         // To Treasury by transferring eETH
         IERC20(address(eEth)).safeTransfer(treasury, eEthFeeAmountToTreasury);
         
-        require(eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
+        require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
 
         // To Receiver by transferring ETH
         (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
@@ -159,7 +159,7 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
 
         // Make sure the liquidity pool balance is correct && total shares are correct
         require(address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiRedemptionManager: Invalid liquidity pool balance");
-        require(eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
+        require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
 
         emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver);
     }
