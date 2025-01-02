@@ -343,10 +343,12 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_aggregateSumEEthShareAmount() public {
         initializeRealisticFork(MAINNET_FORK);
 
+        address pauser = 0x9af1298993dc1f397973c62a5d47a284cf76844d;
+
         vm.startPrank(withdrawRequestNFTInstance.owner());
         // 1. Upgrade
         withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(owner))));
-        withdrawRequestNFTInstance.initializeOnUpgrade(etherfi_admin_wallet, 50_00);
+        withdrawRequestNFTInstance.initializeOnUpgrade(pauser, 50_00);
         withdrawRequestNFTInstance.updateAdmin(etherfi_admin_wallet, true);
 
         // 2. (For test) update the scan range
