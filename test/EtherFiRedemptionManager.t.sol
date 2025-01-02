@@ -99,7 +99,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
             uint256 treasuryBalanceBefore = eETHInstance.balanceOf(address(treasuryInstance));
 
             eETHInstance.approve(address(etherFiRedemptionManagerInstance), redeemAmount);
-            etherFiRedemptionManagerInstance.redeemEEth(redeemAmount, user, user);
+            etherFiRedemptionManagerInstance.redeemEEth(redeemAmount, user);
 
             uint256 totalFee = (redeemAmount * exitFeeBps) / 10000;
             uint256 treasuryFee = (totalFee * exitFeeSplitBps) / 10000;
@@ -118,7 +118,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         } else {
             vm.expectRevert();
-            etherFiRedemptionManagerInstance.redeemEEth(redeemAmount, user, user);
+            etherFiRedemptionManagerInstance.redeemEEth(redeemAmount, user);
         }
         vm.stopPrank();
     }
@@ -172,7 +172,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
             uint256 eEthAmount = liquidityPoolInstance.amountForShare(weEthAmount);
 
             weEthInstance.approve(address(etherFiRedemptionManagerInstance), weEthAmount);
-            etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, user, user);
+            etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, user);
 
             uint256 totalFee = (eEthAmount * exitFeeBps) / 10000;
             uint256 treasuryFee = (totalFee * exitFeeSplitBps) / 10000;
@@ -191,7 +191,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         } else {
             vm.expectRevert();
-            etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, user, user);
+            etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, user);
         }
         vm.stopPrank();
     }
@@ -285,7 +285,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 treasuryBalance = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
 
         eETHInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
-        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, user);
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user);
 
         uint256 totalFee = (1 ether * 1e2) / 1e4;
         uint256 treasuryFee = (totalFee * 1e3) / 1e4;
@@ -296,7 +296,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         eETHInstance.approve(address(etherFiRedemptionManagerInstance), 5 ether);
         vm.expectRevert("EtherFiRedemptionManager: Exceeded total redeemable amount");
-        etherFiRedemptionManagerInstance.redeemEEth(5 ether, user, user);
+        etherFiRedemptionManagerInstance.redeemEEth(5 ether, user);
 
         vm.stopPrank();
     }
@@ -327,7 +327,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 userBalance = address(user).balance;
         uint256 treasuryBalance = eETHInstance.balanceOf(address(treasuryInstance));
         weEthInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
-        etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, user, user);
+        etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, user);
         
         uint256 totalFee = (eEthAmount * 1e2) / 1e4;
         uint256 treasuryFee = (totalFee * 1e3) / 1e4;
@@ -360,7 +360,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         eETHInstance.approve(address(etherFiRedemptionManagerInstance), redeemAmount);
         vm.expectRevert("EtherFiRedemptionManager: Exceeded total redeemable amount");
-        etherFiRedemptionManagerInstance.redeemEEth(redeemAmount, user, user);
+        etherFiRedemptionManagerInstance.redeemEEth(redeemAmount, user);
 
         vm.stopPrank();
     }
