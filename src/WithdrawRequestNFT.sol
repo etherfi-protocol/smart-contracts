@@ -200,6 +200,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     function finalizeRequests(uint256 requestId) external onlyAdmin {
         require(requestId > lastFinalizedRequestId, "Cannot undo finalization");
+        require(requestId < nextRequestId, "Cannot finalize future requests");
         lastFinalizedRequestId = uint32(requestId);
     }
 
