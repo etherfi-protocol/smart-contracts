@@ -30,6 +30,18 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         liquidityPoolInstance.initializeOnUpgradeWithRedemptionManager(address(etherFiRedemptionManagerInstance));
     }
 
+    function test_upgrade_only_by_owner() public {
+        setUp_Fork();
+
+        address impl = etherFiRedemptionManagerInstance.getImplementation();
+        vm.prank(admin);
+        vm.expectRevert();
+        etherFiRedemptionManagerInstance.upgradeTo(impl);
+
+        vm.prank(etherFiRedemptionManagerInstance.owner());
+        etherFiRedemptionManagerInstance.upgradeTo(impl);
+    }
+
     function test_rate_limit() public {
         vm.deal(user, 1000 ether);
         vm.prank(user);

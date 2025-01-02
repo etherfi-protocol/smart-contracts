@@ -6,12 +6,33 @@ pragma solidity ^0.8.13;
 import "forge-std/console2.sol";
 import "./TestSetup.sol";
 
+
+contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
+
+    constructor() WithdrawRequestNFT(address(0)) {}
+
+    function updateParam(uint32 _currentRequestIdToScanFromForShareRemainder, uint32 _lastRequestIdToScanUntilForShareRemainder) external {
+        currentRequestIdToScanFromForShareRemainder = _currentRequestIdToScanFromForShareRemainder;
+        lastRequestIdToScanUntilForShareRemainder = _lastRequestIdToScanUntilForShareRemainder;
+    }
+    
+}
+
 contract WithdrawRequestNFTTest is TestSetup {
 
     uint32[] public reqIds =[ 20, 388, 478, 714, 726, 729, 735, 815, 861, 916, 941, 1014, 1067, 1154, 1194, 1253];
+    address etherfi_admin_wallet = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
 
     function setUp() public {
         setUpTests();
+    }
+
+    function updateParam(uint32 _currentRequestIdToScanFromForShareRemainder, uint32 _lastRequestIdToScanUntilForShareRemainder) internal {
+        address cur_impl = withdrawRequestNFTInstance.getImplementation();
+        address new_impl = address(new WithdrawRequestNFTIntrusive());
+        withdrawRequestNFTInstance.upgradeTo(new_impl);
+        WithdrawRequestNFTIntrusive(address(withdrawRequestNFTInstance)).updateParam(_currentRequestIdToScanFromForShareRemainder, _lastRequestIdToScanUntilForShareRemainder);
+        withdrawRequestNFTInstance.upgradeTo(cur_impl);
     }
 
     function test_finalizeRequests() public {
@@ -322,42 +343,50 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_aggregateSumEEthShareAmount() public {
         initializeRealisticFork(MAINNET_FORK);
 
-        address etherfi_admin_wallet = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
-
         vm.startPrank(withdrawRequestNFTInstance.owner());
         // 1. Upgrade
         withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(owner))));
         withdrawRequestNFTInstance.initializeOnUpgrade(etherfi_admin_wallet, 50_00);
         withdrawRequestNFTInstance.updateAdmin(etherfi_admin_wallet, true);
 
-        // 2. PAUSE
-        withdrawRequestNFTInstance.pauseContract();
-        vm.stopPrank();
+        // 2. (For test) update the scan range
+        updateParam(1, 200);
 
-        vm.startPrank(etherfi_admin_wallet);
+        // 2. Confirm Paused & Can't Unpause
+        assertTrue(withdrawRequestNFTInstance.paused(), "Contract should be paused");
+        vm.expectRevert("scan is not completed");
+        withdrawRequestNFTInstance.unPauseContract();
+        vm.stopPrank();
 
         // 3. AggSum
+        // - Can't Unpause untill the scan is not completed
+        // - Can't aggregateSumEEthShareAmount after the scan is completed
         withdrawRequestNFTInstance.aggregateSumEEthShareAmount(128);
-        // ...
+        assertFalse(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should be completed");
 
-        vm.stopPrank();
+        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.expectRevert("scan is not completed");
+        withdrawRequestNFTInstance.unPauseContract();
 
-        // 4. Unpause
+        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(128);
+        assertTrue(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should be completed");
+
+        vm.expectRevert("scan is completed");
+        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(128);
+
+        // 4. Can Unpause
         vm.startPrank(withdrawRequestNFTInstance.owner());
         withdrawRequestNFTInstance.unPauseContract();
         vm.stopPrank();
 
-        // Back to normal
-        vm.prank(withdrawRequestNFTInstance.ownerOf(reqIds[1]));
-        withdrawRequestNFTInstance.claimWithdraw(reqIds[1]);
+        // we will run the test on the forked mainnet to perform the full scan and confirm we can unpause
     }
 
     function test_handleRemainder() public {
         test_aggregateSumEEthShareAmount();
 
-        vm.startPrank(withdrawRequestNFTInstance.owner());
-        vm.expectRevert("Not all prev requests have been scanned");
-        withdrawRequestNFTInstance.handleRemainder(1 ether);
+        vm.prank(etherfi_admin_wallet);
+        withdrawRequestNFTInstance.handleRemainder(0.01 ether);
         
         vm.stopPrank();
     }
