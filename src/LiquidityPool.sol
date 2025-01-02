@@ -138,7 +138,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function initializeOnUpgrade(address _auctionManager, address _liquifier) external onlyOwner { 
-        require(_auctionManager != address(0) && _liquifier != address(0), "Invalid params");
+        require(_auctionManager != address(0) && _liquifier != address(0) && address(auctionManager) == address(0) && address(liquifier) == address(0), "Invalid");
 
         auctionManager = IAuctionManager(_auctionManager);
         liquifier = ILiquifier(_liquifier);

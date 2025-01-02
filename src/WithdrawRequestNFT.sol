@@ -29,6 +29,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint32 public nextRequestId;
     uint32 public lastFinalizedRequestId;
     uint16 public shareRemainderSplitToTreasuryInBps;
+    uint16 public _unused_gap;
 
     // inclusive
     uint32 public currentRequestIdToScanFromForShareRemainder;
@@ -78,10 +79,15 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         paused = true; // make sure the contract is paused after the upgrade
         pauser = _pauser;
 
+        _unused_gap = 0;
+        
         shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
 
         currentRequestIdToScanFromForShareRemainder = 1;
         lastRequestIdToScanUntilForShareRemainder = nextRequestId - 1;
+
+        aggregateSumOfEEthShare = 0;
+        totalRemainderEEthShares = 0;
     }
 
     /// @notice creates a withdraw request and issues an associated NFT to the recipient
