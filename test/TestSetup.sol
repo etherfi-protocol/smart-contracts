@@ -9,6 +9,7 @@ import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
 import "../src/eigenlayer-interfaces/IBeaconChainOracle.sol";
 import "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
+import "./eigenlayer-mocks/MockEigenPodManager.sol";
 import "../src/eigenlayer-interfaces/ITimelock.sol";
 
 import "../src/interfaces/IStakingManager.sol";
@@ -579,6 +580,8 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiRestakerImplementation = new EtherFiRestaker(address(0));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
+
+        eigenLayerEigenPodManager = new MockEigenPodManager();
 
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));

@@ -2365,4 +2365,10 @@ contract EtherFiNodeTest is TestSetup {
         _transferTo(eigenPod, 32 ether);
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 0 ether);
     }
+
+    function test_postSlashingWithdrawal() public {
+        uint256 validator1 = depositAndRegisterValidator(true);
+
+        // set etherfinodesmanager.eigenpodManager
+    }
 }

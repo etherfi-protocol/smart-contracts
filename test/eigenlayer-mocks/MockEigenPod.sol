@@ -4,7 +4,7 @@ pragma solidity ^0.8.9;
 import "forge-std/Test.sol";
 import "src/eigenlayer-interfaces/IEigenPod.sol";
 
-contract EigenPodMock is IEigenPod, Test {
+contract MockEigenPod is IEigenPod, Test {
 
     function nonBeaconChainETHBalanceWei() external view returns(uint256) {}
 
