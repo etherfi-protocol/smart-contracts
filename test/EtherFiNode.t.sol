@@ -10,8 +10,32 @@ import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 
 import "forge-std/console2.sol";
 
+contract ArrayTestHelper {
+    // Common types used throughout our and eigenlayers protocol
+    function toArray_u256(uint256 val) public returns (uint256[] memory) {
+        uint256[] memory vals = new uint256[](1);
+        vals[0] = val;
+        return vals;
+    }
+    function toArray_u256(uint32 val) public returns (uint256[] memory) {
+        uint256[] memory vals = new uint256[](1);
+        vals[0] = val;
+        return vals;
+    }
+    function toArray_u32(uint32 val) public returns (uint32[] memory) {
+        uint32[] memory vals = new uint32[](1);
+        vals[0] = val;
+        return vals;
+    }
+    function toArray_u40(uint40 val) public returns (uint40[] memory) {
+        uint40[] memory vals = new uint40[](1);
+        vals[0] = val;
+        return vals;
+    }
+}
 
-contract EtherFiNodeTest is TestSetup {
+
+contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
 
     // from EtherFiNodesManager.sol
     uint256 TreasuryRewardSplit = 50_000;
@@ -2366,9 +2390,47 @@ contract EtherFiNodeTest is TestSetup {
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 0 ether);
     }
 
-    function test_postSlashingWithdrawal() public {
-        uint256 validator1 = depositAndRegisterValidator(true);
+    // exit flow
+    /// Full Flow of the full withdrawal for a validator
+    //  1. validator is exited & fund is withdrawn from the beacon chain
+    //  2. perform `EigenPod.startCheckpoint()`
+    //  3. perform `EigenPod.verifyCheckpointProofs()`
+    //  4. perform `EtherFiNodesManager.processNodeExit` which calls `DelegationManager.queueWithdrawals`
+    //  5. wait for 'minWithdrawalDelayBlocks' (= 7 days) delay to be passed
+    //  6. perform `EtherFiNodesManager.completeQueuedWithdrawals` which calls `DelegationManager.completeQueuedWithdrawal`
+    //  7. Finally, perform `EtherFiNodesManager.fullWithdraw`
 
-        // set etherfinodesmanager.eigenpodManager
+    function test_postSlashingWithdrawal() public {
+        uint256 validator = depositAndRegisterValidator(true);
+        uint32 exitTimestamp = 5;
+
+        address admin = managerInstance.owner();
+
+        uint256[] memory validators = toArray_u256(validator);
+        uint32[] memory timestamps = toArray_u32(exitTimestamp);
+
+        vm.prank(owner);
+        managerInstance.processNodeExit(validators, timestamps);
+
+
     }
 }
+
+
+
+/*
+library arrayTestHelper {
+    function toArray_u32(uint32 val) external returns (uint32[] memory) {
+        uint32[] memory vals = new uint32[](1);
+        vals[0] = val;
+        return vals;
+    }
+
+   function toArray_u256(uint256 val) external returns (uint256[] memory) {
+        uint256[] memory vals = new uint256[](1);
+        vals[0] = val;
+        return vals;
+    }
+
+}
+*/
