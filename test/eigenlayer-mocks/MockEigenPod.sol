@@ -4,7 +4,7 @@ pragma solidity ^0.8.9;
 import "forge-std/Test.sol";
 import "src/eigenlayer-interfaces/IEigenPod.sol";
 
-contract MockEigenPod is IEigenPod, Test {
+contract MockEigenPodBase is IEigenPod, Test {
 
     function nonBeaconChainETHBalanceWei() external view returns(uint256) {}
 
@@ -44,7 +44,7 @@ contract MockEigenPod is IEigenPod, Test {
     function validatorStatus(bytes32 pubkeyHash) external view returns(VALIDATOR_STATUS) {}
 
     /// @notice Number of validators with proven withdrawal credentials, who do not have proven full withdrawals
-    function activeValidatorCount() external view returns (uint256) {}
+    function activeValidatorCount() external virtual view returns (uint256) {}
 
     /// @notice The timestamp of the last checkpoint finalized
     function lastCheckpointTimestamp() external view returns (uint64) {}
@@ -102,4 +102,13 @@ contract MockEigenPod is IEigenPod, Test {
     /// to an existing slot within the last 24 hours. If the slot at `timestamp` was skipped, this method
     /// will revert.
     function getParentBlockRoot(uint64 timestamp) external view returns (bytes32) {}
+}
+
+
+contract MockEigenPod is MockEigenPodBase {
+
+    function activeValidatorCount() external override view returns (uint256) { return mock_activeValidatorCount; }
+    uint256 public mock_activeValidatorCount;
+    function mockSet_activeValidatorCount(uint256 count) public { mock_activeValidatorCount = count; }
+
 }

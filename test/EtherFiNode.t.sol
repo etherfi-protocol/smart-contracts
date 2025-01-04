@@ -2401,14 +2401,26 @@ contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
     //  7. Finally, perform `EtherFiNodesManager.fullWithdraw`
 
     function test_postSlashingWithdrawal() public {
-        uint256 validator = depositAndRegisterValidator(true);
-        uint32 exitTimestamp = 5;
-
         address admin = managerInstance.owner();
+        uint256 validator = depositAndRegisterValidator(true);
+        uint32 exitTimestamp = 5; // arbitrary
 
         uint256[] memory validators = toArray_u256(validator);
         uint32[] memory timestamps = toArray_u32(exitTimestamp);
 
+        address eigenPod = managerInstance.getEigenPod(validator);
+
+        /*
+        // simulate multiple validators tied to this pod
+        MockEigenPod mockPod = MockEigenPod(managerInstance.getEigenPod(validator));
+        mockPod.mockSet_activeValidatorCount(0);
+        */
+
+        // able to withdraw 32 non-slashed ether
+        MockDelegationManager delegationManager = MockDelegationManager(address(managerInstance.delegationManager()));
+        delegationManager.mockSet_withdrawableShares(eigenPod, delegationManager.beaconChainETHStrategy(), 32 ether, 32 ether);
+
+        // exit the validator
         vm.prank(owner);
         managerInstance.processNodeExit(validators, timestamps);
 
