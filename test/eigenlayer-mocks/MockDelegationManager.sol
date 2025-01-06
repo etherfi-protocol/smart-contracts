@@ -361,6 +361,7 @@ contract MockDelegationManager is MockDelegationManagerBase {
         mock_beaconChainETHStrategy = new MockStrategy();
     }
 
+    // OVERRIDES
 
     //************************************************************
     // beaconChainETHStrategy()
