@@ -365,4 +365,9 @@ contract AuctionManager is
         require(admins[msg.sender], "Caller is not the admin");
         _;
     }
+
+    function updateSelectedBidsInformation(
+        uint256 _batchBidId,
+        uint216 _bidAcceptBitmap
+    ) external returns (uint256[] memory) {}
 }

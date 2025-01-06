@@ -35,6 +35,10 @@ interface IAuctionManager {
     function reEnterAuction(uint256 _bidId) external;
 
     function updateSelectedBidInformation(uint256 _bidId) external;
+    function updateSelectedBidsInformation(
+        uint256 _batchBidId,
+        uint216 _bidAcceptBitmap
+    ) external returns (uint256[] memory);
 
     function processAuctionFeeTransfer(uint256 _validatorId) external;
 

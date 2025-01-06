@@ -10,6 +10,8 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
+import "./libraries/PopCount.sol";
+
 contract AuctionManagerGasOptimized is
     Initializable,
     IAuctionManager,
@@ -18,6 +20,7 @@ contract AuctionManagerGasOptimized is
     ReentrancyGuardUpgradeable,
     UUPSUpgradeable
 {
+    using PopCount for uint216;
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -204,6 +207,40 @@ contract AuctionManagerGasOptimized is
         }
 
         numberOfActiveBids--;
+    }
+
+    /// @notice Updates the details of the bid which has been used in a stake match
+    /// @dev Called by batchDepositWithBidIds() in StakingManager.sol
+    /// @param _batchBidId the bidId of the batch
+    /// @param _bidAcceptBitmap the bitmap of the bids to accept from the batch
+    function updateSelectedBidsInformation(
+        uint256 _batchBidId,
+        uint216 _bidAcceptBitmap
+    ) external onlyStakingManagerContract returns (uint256[] memory) {
+        require(_batchBidId * 256 > bidIdsBeforeGasOptimization, "Cannot use before optimization upgrade");
+        BatchedBid memory batchedBidInfo = batchedBids[_batchBidId];
+
+        // Verify requested positions are available
+        require(_bidAcceptBitmap & ~batchedBidInfo.availableBidsBitset == 0, "Invalid bid positions");
+
+        uint256 numBidsAccepted = _bidAcceptBitmap.popcount256B();
+        // mark accepted bids as inactive
+        batchedBids[_batchBidId].availableBidsBitset &= ~_bidAcceptBitmap;
+        numberOfActiveBids -= numBidsAccepted;
+
+        uint256[] memory bidIdsAccepted = new uint256[](numBidsAccepted);
+        uint256 currentIndex = 0;
+        uint256 baseId = _batchBidId * 256;
+        uint256 tempBitmap = _bidAcceptBitmap;
+
+        for (uint256 position = 0; position < 216 && currentIndex < numBidsAccepted; position++) {
+            if ((tempBitmap & (1 << position)) != 0) {
+                bidIdsAccepted[currentIndex] = baseId + position;
+                currentIndex++;
+            }
+        }
+
+        return bidIdsAccepted;
     }
 
     /// @notice Lets a bid that was matched to a cancelled stake re-enter the auction

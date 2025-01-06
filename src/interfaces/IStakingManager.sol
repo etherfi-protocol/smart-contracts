@@ -16,6 +16,11 @@ interface IStakingManager {
         ILiquidityPool.SourceOfFunds sourceOfFund;
     }
 
+    struct BatchBidRequest {
+        uint256 batchId;
+        uint216 bidAcceptBitmap;
+    }
+
     function bidIdToStaker(uint256 id) external view returns (address);
 
     function getEtherFiNodeBeacon() external view returns (address);

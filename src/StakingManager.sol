@@ -123,6 +123,46 @@ contract StakingManager is
         return processedBidIds;
     }
 
+    function batchDepositWithBatchedBids(
+        BatchBidRequest[] calldata _batchBidRequests,
+        bool _enableRestaking
+    ) external payable whenNotPaused nonReentrant {
+        require(isFullStakeEnabled, "DEPRECATED");
+        require(msg.value > 0 && msg.value % stakeAmount == 0 && msg.value / stakeAmount > 0, "WRONG_STAKING_AMOUNT");
+
+        uint256 totalBidsCollected = 0;
+
+        for (uint256 i = 0; i < _batchBidRequests.length; i++) {
+            address operator = auctionManager.getBidOwner(_batchBidRequests[i].batchId * 256);
+            
+            if (!_verifyNodeOperator(operator, ILiquidityPool.SourceOfFunds.DELEGATED_STAKING)) {
+                continue;
+            }
+
+            uint256[] memory bidIdsAccepted = auctionManager.updateSelectedBidsInformation(
+                _batchBidRequests[i].batchId,
+                _batchBidRequests[i].bidAcceptBitmap
+            );
+
+            for (uint256 i = 0; i < bidIdsAccepted.length; i++) {
+                _processDeposit(
+                    bidIdsAccepted[i],
+                    msg.sender,
+                    msg.sender,
+                    msg.sender,
+                    _enableRestaking,
+                    ILiquidityPool.SourceOfFunds.DELEGATED_STAKING,
+                    0
+                );
+            }
+
+            totalBidsCollected += bidIdsAccepted.length;
+        }
+
+        require(totalBidsCollected <= maxBatchDepositSize, "EXCEEDS_MAX_BATCH_SIZE");
+        require(totalBidsCollected == msg.value / stakeAmount, "INVALID_STAKING_AMOUNT");
+    }
+
     /// @notice Allows depositing multiple stakes at once
     /// @dev Function gets called from the liquidity pool as part of the BNFT staker flow
     /// @param _candidateBidIds IDs of the bids to be matched with each stake
