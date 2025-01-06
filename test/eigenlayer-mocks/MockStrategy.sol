@@ -46,7 +46,7 @@ contract MockStrategyBase is IStrategy {
      */
     function underlyingToShares(
         uint256 amountUnderlying
-    ) external returns (uint256) {}
+    ) external virtual returns (uint256) {}
 
     /**
      * @notice convenience function for fetching the current underlying value of all of the `user`'s shares in
@@ -106,12 +106,23 @@ contract MockStrategyBase is IStrategy {
 
 contract MockStrategy is MockStrategyBase {
 
-    //*****************************************************
-    //*                   OVERRIDES                       *
-    //*****************************************************
+    // OVERRIDES
+
+    //************************************************************
+    // sharesToUnderlying()
+    //************************************************************
     uint256 internal mock_sharesToUnderlying;
     function mockSet_sharesToUnderlying(uint256 underlying) public { mock_sharesToUnderlying = underlying; }
     function sharesToUnderlying(uint256) external override view returns (uint256) {
         return mock_sharesToUnderlying;
+    }
+
+
+    //************************************************************
+    // underlyingToShares()
+    //************************************************************
+    function underlyingToShares(uint256 amountUnderlying) external override returns (uint256) {
+        // just return the same amount assuming unslashed beacon eth
+        return amountUnderlying;
     }
 }

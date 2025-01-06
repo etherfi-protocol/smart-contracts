@@ -32,6 +32,11 @@ contract ArrayTestHelper {
         vals[0] = val;
         return vals;
     }
+    function toArray(IDelegationManager.Withdrawal memory withdrawal) public returns (IDelegationManager.Withdrawal[] memory) {
+        IDelegationManager.Withdrawal[] memory vals = new IDelegationManager.Withdrawal[](1);
+        vals[0] = withdrawal;
+        return vals;
+    }
 }
 
 
@@ -47,6 +52,9 @@ contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
     uint256[] bidId;
     EtherFiNode safeInstance;
     EtherFiNode restakingSafe;
+
+    event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
+    event mockEvent_queuedWithdrawalShares(uint256 shares); // MockDelegationManager
 
     function setUp() public {
         setUpTests();
@@ -2390,59 +2398,214 @@ contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
         (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 0 ether);
     }
 
-    // exit flow
-    /// Full Flow of the full withdrawal for a validator
-    //  1. validator is exited & fund is withdrawn from the beacon chain
-    //  2. perform `EigenPod.startCheckpoint()`
-    //  3. perform `EigenPod.verifyCheckpointProofs()`
-    //  4. perform `EtherFiNodesManager.processNodeExit` which calls `DelegationManager.queueWithdrawals`
-    //  5. wait for 'minWithdrawalDelayBlocks' (= 7 days) delay to be passed
-    //  6. perform `EtherFiNodesManager.completeQueuedWithdrawals` which calls `DelegationManager.completeQueuedWithdrawal`
-    //  7. Finally, perform `EtherFiNodesManager.fullWithdraw`
 
-    function test_postSlashingWithdrawal() public {
+    function test_postSlashingUpdateFullWithdrawal() public {
+
+        // This test simulates the normal withdrawal of a 32 ether validator
+
         address admin = managerInstance.owner();
-        uint256 validator = depositAndRegisterValidator(true);
+        uint256 validatorID = depositAndRegisterValidator(true);
         uint32 exitTimestamp = 5; // arbitrary
 
-        uint256[] memory validators = toArray_u256(validator);
+        uint256[] memory validators = toArray_u256(validatorID);
         uint32[] memory timestamps = toArray_u32(exitTimestamp);
 
-        address eigenPod = managerInstance.getEigenPod(validator);
+        address eigenPod = managerInstance.getEigenPod(validatorID);
+        address etherfiNode = managerInstance.etherfiNodeAddress(validatorID);
+        address tnftOwner = TNFTInstance.ownerOf(validatorID);
+        address bnftOwner = BNFTInstance.ownerOf(validatorID);
 
-        /*
-        // simulate multiple validators tied to this pod
-        MockEigenPod mockPod = MockEigenPod(managerInstance.getEigenPod(validator));
-        mockPod.mockSet_activeValidatorCount(0);
-        */
-
-        // able to withdraw 32 non-slashed ether
+        // simulate 32 ether of withdrawable shares
         MockDelegationManager delegationManager = MockDelegationManager(address(managerInstance.delegationManager()));
-        delegationManager.mockSet_withdrawableShares(eigenPod, delegationManager.beaconChainETHStrategy(), 32 ether, 32 ether);
+        delegationManager.mockSet_withdrawableShares(etherfiNode, delegationManager.beaconChainETHStrategy(), 32 ether, 32 ether);
+
+        // node should queue a withdrawal for 32 ether
+        vm.expectEmit(false, false, false, true);
+        emit mockEvent_queuedWithdrawalShares(32 ether);
 
         // exit the validator
         vm.prank(owner);
         managerInstance.processNodeExit(validators, timestamps);
 
+        // because there are no staking rewards we expect 100% to be paid to TNFT and BNFT when completed
+        uint256 preTNFTBalance = tnftOwner.balance;
+        uint256 preBNFTBalance = bnftOwner.balance;
 
+        // complete the withdrawal from eigenlayer
+        bool receiveAsTokens = true;
+        IDelegationManagerTypes.Withdrawal memory withdrawal;
+        withdrawal.scaledShares = toArray_u256(32 ether); // determines amount of eth withdrawn by mock
+        withdrawal.withdrawer = etherfiNode; // checked by EtherfiNode.processNodeExit()
+        withdrawal.staker = etherfiNode;     // checked by EtherfiNode.processNodeExit()
+        vm.prank(owner);
+        managerInstance.completeQueuedWithdrawals(validators, toArray(withdrawal), receiveAsTokens);
+
+        // finalize the full withdrawal in our protocol
+        vm.prank(owner);
+        managerInstance.fullWithdraw(validatorID);
+
+        // we expect the same owner of TNFT and BNFT in this example
+        require(tnftOwner == bnftOwner, "different owners");
+        require(preTNFTBalance + 32 ether == tnftOwner.balance, "TNFT owner did not receive expected funds");
+        require(preBNFTBalance + 32 ether == bnftOwner.balance, "BNFT owner did not receive expected funds");
+    }
+
+    function test_postSlashingUpdateSlashedWithdrawalFinalValidator() public {
+
+        // This test simulates the withdrawal of a validator that has been slashed by eigenlayer by 1 ether
+        // It is expected to succeed because when processing the final validator
+        // from both the eigenpod and the etherfiNode, all remaining funds are withdrawn
+        // regardless of if slashing has occurred
+
+        address admin = managerInstance.owner();
+        uint256 validatorID = depositAndRegisterValidator(true);
+        uint32 exitTimestamp = 5; // arbitrary
+
+        uint256[] memory validators = toArray_u256(validatorID);
+        uint32[] memory timestamps = toArray_u32(exitTimestamp);
+
+        address eigenPod = managerInstance.getEigenPod(validatorID);
+        address etherfiNode = managerInstance.etherfiNodeAddress(validatorID);
+        address tnftOwner = TNFTInstance.ownerOf(validatorID);
+        address bnftOwner = BNFTInstance.ownerOf(validatorID);
+
+        // simulate 31 ether of withdrawable shares, this validator has been slashed
+        MockDelegationManager delegationManager = MockDelegationManager(address(managerInstance.delegationManager()));
+        delegationManager.mockSet_withdrawableShares(etherfiNode, delegationManager.beaconChainETHStrategy(), 31 ether, 32 ether);
+
+        // node should queue a withdrawal for 32 ether
+        // This is 32 instead of 31 because we queue the target deposit shares but
+        // eigenlayer will later apply the slashing 
+        vm.expectEmit(false, false, false, true);
+        emit mockEvent_queuedWithdrawalShares(32 ether);
+
+        // exit the validator
+        vm.prank(owner);
+        managerInstance.processNodeExit(validators, timestamps);
+
+        // because there are no staking rewards we expect 100% to be paid to TNFT and BNFT when completed
+        uint256 preTNFTBalance = tnftOwner.balance;
+        uint256 preBNFTBalance = bnftOwner.balance;
+
+        // complete the withdrawal from eigenlayer
+        bool receiveAsTokens = true;
+        IDelegationManagerTypes.Withdrawal memory withdrawal;
+        withdrawal.scaledShares = toArray_u256(31 ether); // determines amount of eth withdrawn by mock
+        withdrawal.withdrawer = etherfiNode; // checked by EtherfiNode.processNodeExit()
+        withdrawal.staker = etherfiNode;     // checked by EtherfiNode.processNodeExit()
+        vm.prank(owner);
+        managerInstance.completeQueuedWithdrawals(validators, toArray(withdrawal), receiveAsTokens);
+
+        // finalize the full withdrawal in our protocol
+        vm.prank(owner);
+        managerInstance.fullWithdraw(validatorID);
+
+        // we expect the same owner of TNFT and BNFT in this example
+        require(tnftOwner == bnftOwner, "different owners");
+        require(preTNFTBalance + 31 ether == tnftOwner.balance, "TNFT owner did not receive expected funds");
+        require(preBNFTBalance + 31 ether == bnftOwner.balance, "BNFT owner did not receive expected funds");
+    }
+
+    function test_postSlashingUpdateWithdrawalFinalValidatorWithRewards() public {
+
+        // This test simulates the withdrawal of the final validator in the eigenpod/etherfi Node
+        // where the validator has earned an extra 1 eth of staking rewards.
+        // It is expected that all 33 eth is claimed because it is the final validator
+        address admin = managerInstance.owner();
+        uint256 validatorID = depositAndRegisterValidator(true);
+        uint32 exitTimestamp = 5; // arbitrary
+
+        uint256[] memory validators = toArray_u256(validatorID);
+        uint32[] memory timestamps = toArray_u32(exitTimestamp);
+
+        address eigenPod = managerInstance.getEigenPod(validatorID);
+        address etherfiNode = managerInstance.etherfiNodeAddress(validatorID);
+        address tnftOwner = TNFTInstance.ownerOf(validatorID);
+        address bnftOwner = BNFTInstance.ownerOf(validatorID);
+
+        // simulate 33 ether of withdrawable shares, this validator has earned rewards
+        MockDelegationManager delegationManager = MockDelegationManager(address(managerInstance.delegationManager()));
+        delegationManager.mockSet_withdrawableShares(etherfiNode, delegationManager.beaconChainETHStrategy(), 33 ether, 33 ether);
+
+        // node should queue a withdrawal for 33 ether
+        vm.expectEmit(false, false, false, true);
+        emit mockEvent_queuedWithdrawalShares(33 ether);
+
+        // exit the validator
+        vm.prank(owner);
+        managerInstance.processNodeExit(validators, timestamps);
+
+        // complete the withdrawal from eigenlayer
+        bool receiveAsTokens = true;
+        IDelegationManagerTypes.Withdrawal memory withdrawal;
+        withdrawal.scaledShares = toArray_u256(33 ether); // determines amount of eth withdrawn by mock
+        withdrawal.withdrawer = etherfiNode; // checked by EtherfiNode.processNodeExit()
+        withdrawal.staker = etherfiNode;     // checked by EtherfiNode.processNodeExit()
+        vm.prank(owner);
+        managerInstance.completeQueuedWithdrawals(validators, toArray(withdrawal), receiveAsTokens);
+
+        // since there are additional staking rewards, expect payouts to NO and treasury
+        // event(validator, node, toOperator, toTnft, toBnft, toTreasury)
+        vm.expectEmit(true, true, false, true);
+        emit FullWithdrawal(validatorID, etherfiNode, 50000000000000000, 30815625000000000000, 2084375000000000000, 50000000000000000);
+
+        // finalize the full withdrawal in our protocol
+        vm.prank(owner);
+        managerInstance.fullWithdraw(validatorID);
+
+    }
+
+    function test_postSlashingUpdateWithdrawalIntermediateValidatorWithRewards() public {
+
+        // This test simulates the withdrawal of a validator with multiple other validators remaining
+        address admin = managerInstance.owner();
+        uint256 validatorID = depositAndRegisterValidator(true);
+        uint32 exitTimestamp = 5; // arbitrary
+
+        uint256[] memory validators = toArray_u256(validatorID);
+        uint32[] memory timestamps = toArray_u32(exitTimestamp);
+
+        address eigenPod = managerInstance.getEigenPod(validatorID);
+        address etherfiNode = managerInstance.etherfiNodeAddress(validatorID);
+        address tnftOwner = TNFTInstance.ownerOf(validatorID);
+        address bnftOwner = BNFTInstance.ownerOf(validatorID);
+
+        // simulate multiple validators tied to this etherfiNode
+        MockEigenPod(eigenPod).mockSet_activeValidatorCount(2);
+        vm.prank(address(managerInstance));
+        IEtherFiNode(etherfiNode).updateNumberOfAssociatedValidators(1, 0); // increase by 1
+        vm.prank(address(managerInstance));
+        IEtherFiNode(etherfiNode).registerValidator(1337, true); // appends to `associatedValidatorIds` array
+
+        // simulate multiple exited validators worth of withdrawable shares in the pod
+        MockDelegationManager delegationManager = MockDelegationManager(address(managerInstance.delegationManager()));
+        delegationManager.mockSet_withdrawableShares(etherfiNode, delegationManager.beaconChainETHStrategy(), 64 ether, 64 ether);
+
+        // even though there is a lot of withdrawable shares, expect the exit
+        // to only queue up 32 eth of withdrawals because it is not the last validator
+        vm.expectEmit(false, false, false, true);
+        emit mockEvent_queuedWithdrawalShares(32 ether);
+
+        // exit the validator
+        vm.prank(owner);
+        managerInstance.processNodeExit(validators, timestamps);
+
+        // complete the withdrawal from eigenlayer
+        bool receiveAsTokens = true;
+        IDelegationManagerTypes.Withdrawal memory withdrawal;
+        withdrawal.scaledShares = toArray_u256(32 ether); // determines amount of eth withdrawn by mock
+        withdrawal.withdrawer = etherfiNode; // checked by EtherfiNode.processNodeExit()
+        withdrawal.staker = etherfiNode;     // checked by EtherfiNode.processNodeExit()
+        vm.prank(owner);
+        managerInstance.completeQueuedWithdrawals(validators, toArray(withdrawal), receiveAsTokens);
+
+        // since there are additional staking rewards, expect payouts to NO and treasury
+        // event(validator, node, toOperator, toTnft, toBnft, toTreasury)
+        //vm.expectEmit(true, true, false, true);
+        //emit FullWithdrawal(validatorID, etherfiNode, 0, 30 ether, 2 ether, 0);
+
+        // finalize the full withdrawal in our protocol
+        vm.prank(owner);
+        managerInstance.fullWithdraw(validatorID);
     }
 }
-
-
-
-/*
-library arrayTestHelper {
-    function toArray_u32(uint32 val) external returns (uint32[] memory) {
-        uint32[] memory vals = new uint32[](1);
-        vals[0] = val;
-        return vals;
-    }
-
-   function toArray_u256(uint256 val) external returns (uint256[] memory) {
-        uint256[] memory vals = new uint256[](1);
-        vals[0] = val;
-        return vals;
-    }
-
-}
-*/

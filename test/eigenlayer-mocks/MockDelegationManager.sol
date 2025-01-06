@@ -3,10 +3,12 @@ pragma solidity ^0.8.27;
 
 import "src/eigenlayer-interfaces/IDelegationManager.sol";
 import "test/eigenlayer-mocks/MockStrategy.sol";
+import "forge-std/Test.sol";
+import "forge-std/console2.sol";
 
-contract MockDelegationManagerBase is IDelegationManager {
+contract MockDelegationManagerBase is IDelegationManager, Test {
 
-        /**
+     /**
      * @dev Initializes the initial owner and paused status.
      */
     function initialize(address initialOwner, uint256 initialPausedStatus) external {}
@@ -137,7 +139,7 @@ contract MockDelegationManagerBase is IDelegationManager {
         Withdrawal[] calldata withdrawals,
         IERC20[][] calldata tokens,
         bool[] calldata receiveAsTokens
-    ) external {}
+    ) external virtual {}
 
     /**
      * @notice Increases a staker's delegated share balance in a strategy. Note that before adding to operator shares,
@@ -359,6 +361,7 @@ contract MockDelegationManager is MockDelegationManagerBase {
         mock_beaconChainETHStrategy = new MockStrategy();
     }
 
+
     //************************************************************
     // beaconChainETHStrategy()
     //************************************************************
@@ -388,12 +391,38 @@ contract MockDelegationManager is MockDelegationManagerBase {
     //************************************************************
     // queueWithdrawals()
     //************************************************************
+    event mockEvent_queuedWithdrawalShares(uint256 shares);
     function queueWithdrawals(QueuedWithdrawalParams[] calldata params) external override returns (bytes32[] memory) {
+        uint256 queuedShares;
+        for (uint256 i = 0; i < params.length; i++) {
+            for (uint256 s = 0; s < params[i].strategies.length; s++) {
+                queuedShares += params[i].depositShares[s];
+            }
+        }
+
+        // capture this value easier in tests
+        emit mockEvent_queuedWithdrawalShares(queuedShares);
+
         bytes32[] memory withdrawalRoots = new bytes32[](params.length);
         return withdrawalRoots;
     }
 
 
+    //************************************************************
+    // completeQueuedWithdrawals()
+    //************************************************************
+    function completeQueuedWithdrawals(
+        Withdrawal[] calldata withdrawals,
+        IERC20[][] calldata tokens,
+        bool[] calldata receiveAsTokens
+    ) external override {
 
+        // EtherfiNode currently doesn't support any tokens other than beacon ETH
+        // so I just assume it here
+        for (uint256 i = 0; i < withdrawals.length; i++) {
+            uint256 ethClaimed = withdrawals[i].scaledShares[i];
+            vm.deal(withdrawals[i].staker, ethClaimed);
+        }
+    }
 
 }
