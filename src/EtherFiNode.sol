@@ -581,8 +581,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     function createEigenPod() public {
         if (eigenPod != address(0x0)) return; // already have pod
         IEigenPodManager eigenPodManager = IEigenPodManager(IEtherFiNodesManager(etherFiNodesManager).eigenPodManager());
-        eigenPodManager.createPod();
-        eigenPod = address(eigenPodManager.getPod(address(this)));
+        eigenPod = eigenPodManager.createPod();
         emit EigenPodCreated(address(this), eigenPod);
     }
 
@@ -614,6 +613,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         // 
         // TODO: revisit for Pectra where a validator can have more than 32 ether
         uint256 depositSharesToWithdraw;
+
         if (numAssociatedValidators() == 1) {
             require(IEigenPod(eigenPod).activeValidatorCount() == 0, "ACTIVE_VALIDATOR_EXISTS");
             depositSharesToWithdraw = depositShares[0];

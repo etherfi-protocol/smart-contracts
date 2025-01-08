@@ -6,6 +6,7 @@ import "forge-std/Test.sol";
 import "src/eigenlayer-interfaces/IDelegationManager.sol";
 import "src/eigenlayer-interfaces/IStrategyManager.sol";
 import "src/eigenlayer-libraries/SlashingLib.sol";
+import "src/eigenlayer-interfaces/IStrategy.sol";
 
 contract DelegationManagerMock is Test {
     receive() external payable {}
@@ -24,6 +25,7 @@ contract DelegationManagerMock is Test {
     function setIsOperator(address operator, bool _isOperatorReturnValue) external {
         isOperator[operator] = _isOperatorReturnValue;
     }
+
 
     function burnOperatorShares(
         address operator,
