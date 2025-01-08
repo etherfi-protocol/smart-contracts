@@ -3,6 +3,7 @@ pragma solidity ^0.8.27;
 
 import "src/eigenlayer-interfaces/IStrategy.sol";
 
+// See MockStrategy contract below this contract for testing overrides
 contract MockStrategyBase is IStrategy {
 
      /**
