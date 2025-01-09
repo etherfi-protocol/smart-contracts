@@ -632,7 +632,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         params[0] = IDelegationManagerTypes.QueuedWithdrawalParams({
             strategies: strategies,
             depositShares: shares,
-            withdrawer: address(this)
+            __deprecated_withdrawer: address(this)
         });
 
         return delegationManager.queueWithdrawals(params);
