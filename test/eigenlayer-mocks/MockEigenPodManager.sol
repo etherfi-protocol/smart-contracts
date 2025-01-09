@@ -83,7 +83,10 @@ contract MockEigenPodManagerBase is IEigenPodManager {
         address staker
     ) external view returns (uint64) {}
 
-        /// @notice Address of the `PauserRegistry` contract that this contract defers to for determining access control (for pausing).
+     /// @notice Returns the accumulated amount of beacon chain ETH Strategy shares
+    function burnableETHShares() external view returns (uint256) {}
+
+    /// @notice Address of the `PauserRegistry` contract that this contract defers to for determining access control (for pausing).
     function pauserRegistry() external view returns (IPauserRegistry) {}
 
     /**
@@ -144,6 +147,15 @@ contract MockEigenPodManagerBase is IEigenPodManager {
     /// @dev strategy must be beaconChainETH when talking to the EigenPodManager
     /// @dev returns 0 if the user has negative shares
     function stakerDepositShares(address user, IStrategy strategy) external view returns (uint256 depositShares) {}
+
+    /**
+     * @notice Increase the amount of burnable shares for a given Strategy. This is called by the DelegationManager
+     * when an operator is slashed in EigenLayer.
+     * @param strategy The strategy to burn shares in.
+     * @param addedSharesToBurn The amount of added shares to burn.
+     * @dev This function is only called by the DelegationManager when an operator is slashed.
+     */
+    function increaseBurnableShares(IStrategy strategy, uint256 addedSharesToBurn) external {}
 }
 
 contract MockEigenPodManager is MockEigenPodManagerBase {
