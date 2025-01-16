@@ -266,7 +266,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         totalRemainderEEthShares -= eEthSharesToMoved;
 
         eETH.transfer(treasury, eEthAmountToTreasury);
-        eETH.burnShares(address(this), eEthSharesToBurn);
+        liquidityPool.burnEEthShares(eEthSharesToBurn);
 
         require (beforeEEthShares - eEthSharesToMoved == eETH.shares(address(this)), "Invalid eETH shares after remainder handling");
 
