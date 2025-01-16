@@ -190,7 +190,7 @@ contract MockDelegationManagerBase is IDelegationManager, Test {
      * @dev Note: Assumes `prevMaxMagnitude <= newMaxMagnitude`. This invariant is maintained in
      * the AllocationManager.
      */
-    function burnOperatorShares(
+    function slashOperatorShares(
         address operator,
         IStrategy strategy,
         uint64 prevMaxMagnitude,
@@ -354,6 +354,18 @@ contract MockDelegationManagerBase is IDelegationManager, Test {
 
     /// @notice The EIP-712 typehash for the DelegationApproval struct used by the contract
     function DELEGATION_APPROVAL_TYPEHASH() external view returns (bytes32) {}
+
+    /// @notice Returns the Withdrawal associated with a `withdrawalRoot`, if it exists. NOTE that
+    /// withdrawals queued before the slashing release can NOT be queried with this method.
+    function getQueuedWithdrawal(
+        bytes32 withdrawalRoot
+    ) external view returns (Withdrawal memory) {}
+
+    /// @notice Returns a list of queued withdrawal roots for the `staker`.
+    /// NOTE that this only returns withdrawals queued AFTER the slashing release.
+    function getQueuedWithdrawalRoots(
+        address staker
+    ) external view returns (bytes32[] memory) {}
 
 }
 

@@ -135,7 +135,7 @@ contract EtherFiRestakerTest is TestSetup {
         params[0] = IDelegationManagerTypes.QueuedWithdrawalParams({
             strategies: strategies,
             depositShares: withdrawableShares,
-            withdrawer: address(etherFiRestakerInstance)
+            __deprecated_withdrawer: address(etherFiRestakerInstance)
         });
 
         vm.prank(etherfiOperatingAdmin);
