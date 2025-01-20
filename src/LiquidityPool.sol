@@ -11,7 +11,6 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import "./interfaces/IRegulationsManager.sol";
-import "./interfaces/IStakingManager.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IStakingManager.sol";
@@ -27,6 +26,7 @@ import "./EtherFiRedemptionManager.sol";
 
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
+    using SafeERC20 for IERC20;
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -87,7 +87,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     event UpdatedTreasury(address newTreasury);
     event BnftHolderDeregistered(address user, uint256 index);
     event BnftHolderRegistered(address user, uint256 index);
-    event UpdatedSchedulingPeriod(uint128 newPeriodInSeconds);
     event ValidatorRegistered(uint256 indexed validatorId, bytes signature, bytes pubKey, bytes32 depositRoot);
     event ValidatorApproved(uint256 indexed validatorId);
     event ValidatorRegistrationCanceled(uint256 indexed validatorId);
@@ -97,10 +96,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     error IncorrectCaller();
     error InvalidAmount();
-    error InvalidParams();
     error DataNotSet();
     error InsufficientLiquidity();
-    error SendFail();
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -215,7 +212,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
 
         // transfer shares to WithdrawRequestNFT contract from this contract
-        eETH.transferFrom(msg.sender, address(withdrawRequestNFT), amount);
+        IERC20(address(eETH)).safeTransferFrom(msg.sender, address(withdrawRequestNFT), amount);
 
         uint256 requestId = withdrawRequestNFT.requestWithdraw(uint96(amount), uint96(share), recipient, 0);
        
@@ -251,7 +248,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
 
         // transfer shares to WithdrawRequestNFT contract
-        eETH.transferFrom(msg.sender, address(withdrawRequestNFT), amount);
+        IERC20(address(eETH)).safeTransferFrom(msg.sender, address(withdrawRequestNFT), amount);
 
         uint256 requestId = withdrawRequestNFT.requestWithdraw(uint96(amount), uint96(share), recipient, fee);
 
@@ -538,7 +535,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function burnEEthShares(uint256 shares) external {
-        if (msg.sender != address(etherFiRedemptionManager) || msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
+        if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
         eETH.burnShares(msg.sender, shares);
     }
 
@@ -571,9 +568,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function _sendFund(address _recipient, uint256 _amount) internal {
-        uint256 balanace = address(this).balance;
+        uint256 balance = address(this).balance;
         (bool sent, ) = _recipient.call{value: _amount}("");
-        require(sent && address(this).balance == balanace - _amount, "SendFail");
+        require(sent && address(this).balance >= balance - _amount, "SendFail");
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

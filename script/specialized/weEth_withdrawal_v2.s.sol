@@ -39,15 +39,27 @@ contract Upgrade is Script {
             addressProvider.getContractAddress("EETH"), 
             addressProvider.getContractAddress("WeETH"), 
             treasury, 
-            roleRegistry)), "");
+            roleRegistry)), 
+            abi.encodeWithSelector(
+                EtherFiRedemptionManager.initialize.selector,
+                10_00, 1_00, 1_00, 5 ether, 0.001 ether // 10% fee split to treasury, 1% exit fee, 1% low watermark
+            )
+        );
         EtherFiRedemptionManager etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
-        etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark
+        // etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark
 
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(treasury)));
-        withdrawRequestNFTInstance.initializeOnUpgrade(pauser, 50_00); // 50% fee split to treasury
+        withdrawRequestNFTInstance.upgradeToAndCall(
+            address(new WithdrawRequestNFT(treasury)), 
+            abi.encodeWithSelector(WithdrawRequestNFT.initializeOnUpgrade.selector, pauser, 50_00) // 50% fee split to treasury
+        );
+        // withdrawRequestNFTInstance.initializeOnUpgrade(pauser, 50_00); // 50% fee split to treasury
 
-        liquidityPoolInstance.upgradeTo(address(new LiquidityPool()));
-        liquidityPoolInstance.initializeOnUpgradeWithRedemptionManager(address(etherFiRedemptionManagerInstance));
+        liquidityPoolInstance.upgradeToAndCall(address(new LiquidityPool()), abi.encodeWithSelector(LiquidityPool.initializeOnUpgradeWithRedemptionManager.selector, address(etherFiRedemptionManagerInstance)));
+        // liquidityPoolInstance.initializeOnUpgradeWithRedemptionManager(address(etherFiRedemptionManagerInstance));
+
+        // verification
+        assert(withdrawRequestNFTInstance.pauser() == pauser);
+        assert(address(liquidityPoolInstance.etherFiRedemptionManager()) == address(etherFiRedemptionManagerInstance));
     }
 
     function agg() internal {

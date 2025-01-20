@@ -11,10 +11,13 @@ import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IMembershipManager.sol";
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
 
 
 contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IWithdrawRequestNFT {
     using Math for uint256;
+    using SafeERC20 for IERC20;
 
     uint256 private constant BASIS_POINT_SCALE = 1e4;
     address public immutable treasury;
@@ -97,7 +100,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @param recipient address to recieve with WithdrawRequestNFT
     /// @param fee fee to be subtracted from amount when recipient calls claimWithdraw
     /// @return uint256 id of the withdraw request
-    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external payable onlyLiquidtyPool whenNotPaused returns (uint256) {
+    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external payable onlyLiquidityPool whenNotPaused returns (uint256) {
         uint256 requestId = nextRequestId++;
         uint32 feeGwei = uint32(fee / 1 gwei);
 
@@ -253,6 +256,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     ///   - Burn: the rest of the remainder is burned
     /// @param _eEthAmount: the remainder of the eEth amount
     function handleRemainder(uint256 _eEthAmount) external onlyAdmin {
+        require(_eEthAmount != 0, "EETH amount cannot be 0"); 
         require(isScanOfShareRemainderCompleted(), "Not all prev requests have been scanned");
         require(getEEthRemainderAmount() >= _eEthAmount, "Not enough eETH remainder");
 
@@ -265,8 +269,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         totalRemainderEEthShares -= eEthSharesToMoved;
 
-        eETH.transfer(treasury, eEthAmountToTreasury);
-        liquidityPool.burnEEthShares(eEthSharesToBurn);
+        if (eEthAmountToTreasury > 0) IERC20(address(eETH)).safeTransfer(treasury, eEthAmountToTreasury);
+        if (eEthSharesToBurn > 0) liquidityPool.burnEEthShares(eEthSharesToBurn);
 
         require (beforeEEthShares - eEthSharesToMoved == eETH.shares(address(this)), "Invalid eETH shares after remainder handling");
 
@@ -311,7 +315,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         _;
     }
 
-    modifier onlyLiquidtyPool() {
+    modifier onlyLiquidityPool() {
         require(msg.sender == address(liquidityPool), "Caller is not the liquidity pool");
         _;
     }
