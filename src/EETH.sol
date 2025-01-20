@@ -68,7 +68,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     }
 
     function burnShares(address _user, uint256 _share) external {
-        require(msg.sender == address(liquidityPool) || msg.sender == _user, "Incorrect Caller");
+        require(msg.sender == address(liquidityPool), "Incorrect Caller");
         require(shares[_user] >= _share, "BURN_AMOUNT_EXCEEDS_BALANCE");
         shares[_user] -= _share;
         totalShares -= _share;
