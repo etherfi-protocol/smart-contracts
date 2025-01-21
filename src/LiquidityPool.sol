@@ -392,10 +392,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         _batchCancelDeposit(_validatorIds, msg.sender);
     }
 
-    function batchCancelDepositByAdmin(uint256[] calldata _validatorIds, address _bnftStaker) external whenNotPaused onlyAdmin {
-        _batchCancelDeposit(_validatorIds, _bnftStaker);
-    }
-
     function _batchCancelDeposit(uint256[] calldata _validatorIds, address _bnftStaker) internal {
         uint256 returnAmount = 0;
 

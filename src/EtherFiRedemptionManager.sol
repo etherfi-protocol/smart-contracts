@@ -150,8 +150,8 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
         // uint256 totalShares = eEth.totalShares();
         require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
 
-        // To Receiver by transferring ETH
-        (bool success, ) = receiver.call{value: ethReceived, gas: 50_000}("");
+        // To Receiver by transferring ETH, using gas 10k for additional safety
+        (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
         require(success, "EtherFiRedemptionManager: Transfer failed");
 
         // Make sure the liquidity pool balance is correct && total shares are correct
