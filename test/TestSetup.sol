@@ -51,7 +51,10 @@ import "../src/EtherFiTimelock.sol";
 import "../src/BucketRateLimiter.sol";
 import "../src/EtherFiRedemptionManager.sol";
 
-contract TestSetup is Test {
+import "../script/ContractCodeChecker.sol";
+import "../script/Create2Factory.sol";
+
+contract TestSetup is Test, ContractCodeChecker {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
     event Execute(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt);
@@ -60,6 +63,8 @@ contract TestSetup is Test {
 
     uint256 public constant kwei = 10 ** 3;
     uint256 public slippageLimit = 50;
+
+    Create2Factory immutable create2factory = Create2Factory(0x6521991A0BC180a5df7F42b27F4eE8f3B192BA62);
 
     TestERC20 public rETH;
     TestERC20 public wstETH;
@@ -1488,14 +1493,16 @@ contract TestSetup is Test {
 
     function _execute_timelock(address target, bytes memory data, bool _schedule, bool _log_schedule, bool _execute, bool _log_execute) internal {
         vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+
+        bytes32 salt = keccak256(abi.encodePacked(target, data, block.number));
         
-        if (_schedule) etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
-        if (_log_schedule) _output_schedule_txn(target, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+        if (_schedule) etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
+        if (_log_schedule) _output_schedule_txn(target, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
 
         vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
 
-        if (_execute) etherFiTimelockInstance.execute(target, 0, data, bytes32(0), bytes32(0));
-        if (_log_execute) _output_execute_timelock_txn(target, data, bytes32(0), bytes32(0));
+        if (_execute) etherFiTimelockInstance.execute(target, 0, data, bytes32(0), salt);
+        if (_log_execute) _output_execute_timelock_txn(target, data, bytes32(0), salt);
 
         vm.warp(block.timestamp + 1);
         vm.stopPrank();
@@ -1551,5 +1558,19 @@ contract TestSetup is Test {
         string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
         string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
         stdJson.write(output, output_path);
+    }
+
+    function computeAddressByCreate2(address deployer, bytes memory code, bytes32 salt) public view returns (address) {
+        // Compute the final address:
+        // address = keccak256( 0xff ++ this.address ++ salt ++ keccak256(code))[12:]
+        bytes32 hash = keccak256(
+            abi.encodePacked(
+                bytes1(0xff),
+                deployer,
+                salt,
+                keccak256(code)
+            )
+        );
+        return address(uint160(uint256(hash)));
     }
 }
