@@ -8,8 +8,8 @@ import "src/helpers/AddressProvider.sol";
 
 contract Upgrade is Script {
 
-    AddressProvider public addressProvider;
     address public addressProviderAddress = 0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848;
+    AddressProvider public addressProvider = AddressProvider(addressProviderAddress);
     address public roleRegistry = 0x1d3Af47C1607A2EF33033693A9989D1d1013BB50;
     address public treasury = 0x0c83EAe1FE72c390A02E426572854931EefF93BA;
     address public pauser = 0x9AF1298993DC1f397973C62A5D47a284CF76844D;
@@ -19,16 +19,15 @@ contract Upgrade is Script {
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        AddressProvider addressProvider = AddressProvider(addressProviderAddress);
-
+        
         withdrawRequestNFTInstance = WithdrawRequestNFT(payable(addressProvider.getContractAddress("WithdrawRequestNFT")));
         liquidityPoolInstance = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));
 
         vm.startBroadcast(deployerPrivateKey);
 
-        // deploy_upgrade();
-        // agg();
-        // handle_remainder();
+        deploy_upgrade();
+        agg();
+        handle_remainder();
 
         vm.stopBroadcast();
     }
@@ -77,5 +76,22 @@ contract Upgrade is Script {
         uint256 remainder = withdrawRequestNFTInstance.getEEthRemainderAmount();
         console.log(remainder);
         withdrawRequestNFTInstance.handleRemainder(remainder);
+    }
+}
+
+contract TestUpgrade is Test, Upgrade {
+    address etherFiTimelock = 0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761;
+    function setUp() public {
+        vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+
+        withdrawRequestNFTInstance = WithdrawRequestNFT(payable(addressProvider.getContractAddress("WithdrawRequestNFT")));
+        liquidityPoolInstance = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));        
+    }
+    
+    function test_UpgradeWeETHInstantWithdrawal() public {
+        startHoax(etherFiTimelock);
+        deploy_upgrade();
+        agg();
+        handle_remainder();
     }
 }
