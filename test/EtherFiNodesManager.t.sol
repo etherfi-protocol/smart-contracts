@@ -9,7 +9,6 @@ import "forge-std/console2.sol";
 contract EtherFiNodesManagerTest is TestSetup {
     address etherFiNode;
     uint256[] bidId;
-    EtherFiNode safeInstance;
 
     function setUp() public {
         setUpTests();
@@ -17,7 +16,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         vm.expectRevert("Initializable: contract is already initialized");
         vm.prank(owner);
         managerImplementation.initialize(
-            address(treasuryInstance),
             address(auctionInstance),
             address(stakingManagerInstance),
             address(TNFTInstance),
@@ -26,82 +24,14 @@ contract EtherFiNodesManagerTest is TestSetup {
             address(0),
             address(0)
         );
-        
-        vm.prank(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 5);
 
-        hoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        bidId = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-
-        startHoax(0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf);
-
-        uint256[] memory bidIdArray = new uint256[](1);
-        bidIdArray[0] = bidId[0];
-
-        stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
-            bidIdArray,
-            false
-        );
-
+        bidId = new uint256[](1);
+        bidId[0] = depositAndRegisterValidator(false);
         etherFiNode = managerInstance.etherfiNodeAddress(bidId[0]);
-
-        assertTrue(
-            managerInstance.phase(bidId[0]) ==
-                IEtherFiNode.VALIDATOR_PHASE.STAKE_DEPOSITED
-        );
-
-        IStakingManager.DepositData[]
-            memory depositDataArray = new IStakingManager.DepositData[](1);
-
-        bytes32 root = depGen.generateDepositRoot(
-            hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-            hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-            managerInstance.generateWithdrawalCredentials(etherFiNode),
-            32 ether
-        );
-        IStakingManager.DepositData memory depositData = IStakingManager
-            .DepositData({
-                publicKey: hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-                signature: hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-                depositDataRoot: root,
-                ipfsHashForEncryptedValidatorKey: "test_ipfs"
-            });
-
-        depositDataArray[0] = depositData;
-
-        stakingManagerInstance.batchRegisterValidators(zeroRoot, bidId, depositDataArray);
-        vm.stopPrank();
-
-        assertTrue(
-            managerInstance.phase(bidId[0]) == IEtherFiNode.VALIDATOR_PHASE.LIVE
-        );
-
-        safeInstance = EtherFiNode(payable(etherFiNode));
-    }
-
-    function test_SetStakingRewardsSplit() public {
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
-        vm.prank(bob);
-        managerInstance.setStakingRewardsSplit(100000, 100000, 400000, 400000);
-
-        (uint64 treasury, uint64 nodeOperator, uint64 tnft, uint64 bnft) = managerInstance.stakingRewardsSplit();
-        assertEq(treasury, 50000);
-        assertEq(nodeOperator, 50000);
-        assertEq(tnft, 815625);
-        assertEq(bnft, 84375);
-
-        vm.prank(alice);
-        managerInstance.setStakingRewardsSplit(100000, 100000, 400000, 400000);
-
-        (treasury, nodeOperator, tnft, bnft) = managerInstance.stakingRewardsSplit();
-        assertEq(treasury, 100000);
-        assertEq(nodeOperator, 100000);
-        assertEq(tnft, 400000);
-        assertEq(bnft, 400000);
     }
     
     function test_SetNonExitPenaltyPrincipal() public {
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert(EtherFiNodesManager.IncorrectRole.selector);
         vm.prank(bob);
         managerInstance.setNonExitPenalty(300, 2 ether);
 
@@ -114,7 +44,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_SetNonExitPenaltyDailyRate() public {
-        vm.expectRevert(EtherFiNodesManager.NotAdmin.selector);
+        vm.expectRevert(EtherFiNodesManager.IncorrectRole.selector);
         vm.prank(bob);
         managerInstance.setNonExitPenalty(300, 2 ether);
 
@@ -164,69 +94,8 @@ contract EtherFiNodesManagerTest is TestSetup {
         assert(managerInstance.getEigenPod(restakedValidatorId) != address(0x0));
     }
 
-    function test_CreateEtherFiNode() public {
-        vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            _ipfsHash,
-            5
-        );
-
-        hoax(alice);
-        bidId = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-
-        assertEq(managerInstance.etherfiNodeAddress(bidId[0]), address(0));
-
-        hoax(alice);
-        uint256[] memory processedBids = stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidId, false);
-
-        address node = managerInstance.etherfiNodeAddress(processedBids[0]);
-        assert(node != address(0));
-    }
-
-    function test_RegisterEtherFiNode() public {
-        vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            _ipfsHash,
-            5
-        );
-
-        hoax(alice);
-        bidId = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-
-        assertEq(managerInstance.etherfiNodeAddress(bidId[0]), address(0));
-
-        hoax(alice);
-        uint256[] memory processedBids = stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidId, false);
-
-        address node = managerInstance.etherfiNodeAddress(processedBids[0]);
-        assert(node != address(0));
-
-    }
-
-    function test_RegisterEtherFiNodeReusesAvailableSafes() public {
-        vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 5);
-
-        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 0);
-
-        // create bid with no matching deposit yet
-        hoax(alice);
-        bidId = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-        assertEq(managerInstance.etherfiNodeAddress(bidId[0]), address(0));
-        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 0);
-
-        // deposit
-        hoax(alice);
-        uint256[] memory processedBids = stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidId, false);
-        address node = managerInstance.etherfiNodeAddress(processedBids[0]);
-
-        // recycle the safe
-        vm.prank(alice);
-        stakingManagerInstance.batchCancelDeposit(processedBids);
-        assertEq(managerInstance.getUnusedWithdrawalSafesLength(), 1);
-
-        // original premade safe should be on top of the stack after being recycled
-        assertEq(managerInstance.unusedWithdrawalSafes(0), node);
+    function test_RegisterEtherFiNodeSuccess() public {
+        assert(managerInstance.etherfiNodeAddress(bidId[0]) != address(0));
     }
 
     // TODO(Dave): Remaining withdrawal-safe-pool Tests
@@ -269,11 +138,11 @@ contract EtherFiNodesManagerTest is TestSetup {
     function test_SendExitRequestWorksCorrectly() public {
         assertEq(managerInstance.isExitRequested(bidId[0]), false);
 
-        hoax(alice);
+        hoax(0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf);
         vm.expectRevert("INVALID");
         managerInstance.batchSendExitRequest(_to_uint256_array(bidId[0]));
 
-        hoax(0x9154a74AAfF2F586FB0a884AeAb7A64521c64bCf);
+        hoax(alice);
         managerInstance.batchSendExitRequest(_to_uint256_array(bidId[0]));
 
         assertEq(managerInstance.isExitRequested(bidId[0]), true);
@@ -386,9 +255,10 @@ contract EtherFiNodesManagerTest is TestSetup {
         }
 
         // Chad becomes an admin
-        vm.prank(owner);
-        managerInstance.updateEigenLayerOperatingAdmin(chad, true);
-        assertTrue(managerInstance.operatingAdmin(chad));
+        bytes32 NODE_ADMIN_ROLE = keccak256("EFNM_NODE_ADMIN_ROLE");
+        vm.prank(admin);
+        roleRegistry.grantRole(NODE_ADMIN_ROLE, chad);
+        assertTrue(roleRegistry.hasRole(NODE_ADMIN_ROLE, chad));
 
         // it works now
         {

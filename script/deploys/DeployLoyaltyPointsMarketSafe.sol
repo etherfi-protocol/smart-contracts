@@ -3,8 +3,8 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
 import "../../src/UUPSProxy.sol";
-import "../../src/LoyaltyPointsMarketSafe.sol";
-import "../../src/helpers/AddressProvider.sol";
+import "src/archive/LoyaltyPointsMarketSafe.sol";
+import "src/helpers/AddressProvider.sol";
 
 contract DeployLoyaltyPointsMarketSafeScript is Script {
 

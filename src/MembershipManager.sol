@@ -268,7 +268,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         // Eth Rewards Amount per NFT = (eETH share amount of the NFT) * (total rewards ETH amount) / (total eETH share amount in ether.fan)
         uint256 etherFanEEthShares = eETH.shares(address(this));
         uint256 thresholdAmount = fanBoostThresholdEthAmount();
-        if (address(this).balance >= thresholdAmount) {
+        if (address(this).balance >= thresholdAmount && etherFanEEthShares > 0) {
             uint256 mintedShare = liquidityPool.deposit{value: thresholdAmount}(address(this), address(0));
             ethRewardsPerEEthShareAfterRebase += 1 ether * thresholdAmount / etherFanEEthShares;
         }

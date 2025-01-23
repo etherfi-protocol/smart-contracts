@@ -3,14 +3,16 @@ pragma solidity ^0.8.13;
 
 import "../src/interfaces/INodeOperatorManager.sol";
 import "../src/interfaces/IAuctionManager.sol";
+import "../src/interfaces/IPausable.sol";
 import "../src/LiquidityPool.sol";
+import "../src/RoleRegistry.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 /// Contract which helps us control our node operators and their permissions in different aspects of the protocol
-contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgradeable, PausableUpgradeable, OwnableUpgradeable {
+contract NodeOperatorManager is INodeOperatorManager, IPausable, Initializable, UUPSUpgradeable, PausableUpgradeable, OwnableUpgradeable {
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -20,6 +22,8 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     event AddedToWhitelist(address userAddress);
     event RemovedFromWhitelist(address userAddress);
     event UpdatedOperatorApprovals(address operator, LiquidityPool.SourceOfFunds source, bool approved);
+    
+    error IncorrectRole();
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -32,8 +36,16 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     mapping(address => bool) private whitelistedAddresses;
     mapping(address => bool) public registered;
 
-    mapping(address => bool) public admins;
-    mapping(address => mapping(ILiquidityPool.SourceOfFunds => bool)) public operatorApprovedTags;
+    mapping(address => bool) public DEPRECATED_admins;
+    mapping(address => mapping(ILiquidityPool.SourceOfFunds => bool)) public DEPRECATED_operatorApprovedTags;
+
+    RoleRegistry public roleRegistry;
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ROLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 public constant NODE_OPERATOR_MANAGER_ADMIN_ROLE = keccak256("NODE_OPERATOR_MANAGER_ADMIN_ROLE");
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -82,6 +94,13 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         }
     }
 
+    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+
+        // TODO: compile list of values in DEPRECATED_admins to clear out
+        roleRegistry = RoleRegistry(_roleRegistry);
+    }
+
     /// @notice Registers a user as a operator to allow them to bid
     /// @param _ipfsHash location of all IPFS data stored for operator
     /// @param _totalKeys The number of keys they have available, relates to how many validators they can run
@@ -126,30 +145,10 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         return ipfsIndex;
     }
 
-    /// @notice Approves or un approves an operator to run validators from a specific source of funds
-    /// @dev To allow a permissioned system, we will approve node operators to run validators only for a specific source of funds (EETH / ETHER_FAN)
-    ///         Some operators can be approved for both sources and some for only one. Being approved means that when a BNFT player deposits,
-    ///         we allocate a source of funds to be used for the deposit. And only operators approved for that source can run the validators
-    ///         being created.
-    /// @param _users the operator addresses to perform an approval or denial on
-    /// @param _approvedTags the source of funds we will be updating operator permissions for
-    /// @param _approvals whether we are approving or un approving the operator
-    function batchUpdateOperatorsApprovedTags(
-        address[] memory _users, 
-        LiquidityPool.SourceOfFunds[] memory _approvedTags, 
-        bool[] memory _approvals
-    ) external onlyAdmin {
-        require(_users.length == _approvedTags.length && _users.length == _approvals.length, "Invalid array lengths");
-
-        for(uint256 x; x < _approvedTags.length; x++) {
-            operatorApprovedTags[_users[x]][_approvedTags[x]] = _approvals[x];
-            emit UpdatedOperatorApprovals(_users[x], _approvedTags[x], _approvals[x]);
-        }
-    }
-
     /// @notice Adds an address to the whitelist
     /// @param _address Address of the user to add
-    function addToWhitelist(address _address) external onlyAdmin {
+    function addToWhitelist(address _address) external {
+        if (!roleRegistry.hasRole(NODE_OPERATOR_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         whitelistedAddresses[_address] = true;
 
         emit AddedToWhitelist(_address);
@@ -157,28 +156,23 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     /// @notice Removed an address from the whitelist
     /// @param _address Address of the user to remove
-    function removeFromWhitelist(address _address) external onlyAdmin {
+    function removeFromWhitelist(address _address) external {
+        if (!roleRegistry.hasRole(NODE_OPERATOR_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         whitelistedAddresses[_address] = false;
 
         emit RemovedFromWhitelist(_address);
     }
 
-    //Pauses the contract
-    function pauseContract() external onlyAdmin {
+    // Pauses the contract
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
-    //Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    // Unpauses the contract
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
-    }
-
-    /// @notice Function to check whether an operator is approved for a specified source of funds
-    /// @param _operator the operator we are checking permissions for
-    /// @param _source the source of funds we are checking the operator against
-    /// @return approved whether the operator is approved or not
-    function isEligibleToRunValidatorsForSourceOfFund(address _operator, ILiquidityPool.SourceOfFunds _source) external view returns (bool approved) {
-        approved = operatorApprovedTags[_operator][_source];
     }
 
     //--------------------------------------------------------------------------------------
@@ -235,13 +229,6 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         auctionManagerContractAddress = _auctionContractAddress;
     }
 
-    /// @notice Updates the address of the admin
-    /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        require(_address != address(0), "Cannot be address zero");
-        admins[_address] = _isAdmin;
-    }
-
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
@@ -259,11 +246,6 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
             msg.sender == auctionManagerContractAddress,
             "Only auction manager contract function"
         );
-        _;
-    }
-
-    modifier onlyAdmin() {
-        require(admins[msg.sender], "Caller is not the admin");
         _;
     }
 }

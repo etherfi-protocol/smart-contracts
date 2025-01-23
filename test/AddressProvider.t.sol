@@ -126,9 +126,8 @@ contract AddressProviderTest is TestSetup {
             "RegulationsManager"
         );
 
-        assertEq(addressProviderInstance.getImplementationAddress("LiquidityPool"), address(liquidityPoolImplementation));
-        assertEq(addressProviderInstance.getImplementationAddress("RegulationsManager"), address(regulationsManagerImplementation));
-        assertEq(addressProviderInstance.getImplementationAddress("AuctionManager"), address(auctionImplementation));
+        assertEq(addressProviderInstance.getImplementationAddress("LiquidityPool"), address(liquidityPoolInstance.getImplementation()));
+        assertEq(addressProviderInstance.getImplementationAddress("AuctionManager"), address(auctionInstance.getImplementation()));
 
         AuctionManagerV2Test auctionManagerV2Implementation = new AuctionManagerV2Test();
         auctionInstance.upgradeTo(address(auctionManagerV2Implementation));

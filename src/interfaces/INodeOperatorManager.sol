@@ -34,14 +34,6 @@ interface INodeOperatorManager {
         uint64[] memory _keysUsed
     ) external; 
 
-    function batchUpdateOperatorsApprovedTags(
-        address[] memory _users, 
-        LiquidityPool.SourceOfFunds[] memory _approvedTags, 
-        bool[] memory _approvals
-    ) external;
-
     function fetchNextKeyIndex(address _user) external returns (uint64);
-
-    function isEligibleToRunValidatorsForSourceOfFund(address _operator, LiquidityPool.SourceOfFunds _source) external view returns (bool approved);
 
 }

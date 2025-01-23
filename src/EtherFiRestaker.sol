@@ -72,8 +72,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         lido = liquifier.lido();
         lidoWithdrawalQueue = liquifier.lidoWithdrawalQueue();
 
-        eigenLayerStrategyManager = liquifier.eigenLayerStrategyManager();
-        eigenLayerDelegationManager = liquifier.eigenLayerDelegationManager();
+        eigenLayerStrategyManager = liquifier.DEPRECATED_eigenLayerStrategyManager();
+        eigenLayerDelegationManager = liquifier.DEPRECATED_eigenLayerDelegationManager();
 
         (,, IStrategy strategy,,,,,,,,) = liquifier.tokenInfos(address(lido));
         tokenInfos[address(lido)] = TokenInfo({

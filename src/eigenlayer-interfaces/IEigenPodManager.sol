@@ -6,7 +6,7 @@ import "./IETHPOSDeposit.sol";
 import "./IStrategyManager.sol";
 import "./IEigenPod.sol";
 import "./IBeaconChainOracle.sol";
-import "./IPausable.sol";
+import "./IEigenPausable.sol";
 import "./ISlasher.sol";
 import "./IStrategy.sol";
 
@@ -16,7 +16,7 @@ import "./IStrategy.sol";
  * @notice Terms of Service: https://docs.eigenlayer.xyz/overview/terms-of-service
  */
 
-interface IEigenPodManager is IPausable {
+interface IEigenPodManager is IEigenPausable {
     /// @notice Emitted to notify the update of the beaconChainOracle address
     event BeaconOracleUpdated(address indexed newOracleAddress);
 

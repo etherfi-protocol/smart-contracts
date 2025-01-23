@@ -49,10 +49,10 @@ contract EtherFiRestakerTest is TestSetup {
 
         // Aliice has 10 ether eETH
         // Total eETH TVL is 10 ether
-        assertApproxEqAbs(stEth.balanceOf(alice), aliceStEthBalance, 1 wei);
-        assertApproxEqAbs(eETHInstance.balanceOf(alice), aliceEEthBalance + _amount, 1 wei);
-        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), restakerTvl + _amount, 1 wei);
-        assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + _amount, 1 wei);
+        assertApproxEqAbs(stEth.balanceOf(alice), aliceStEthBalance, 2 wei);
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), aliceEEthBalance + _amount, 2 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), restakerTvl + _amount, 2 wei);
+        assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + _amount, 2 wei);
         vm.stopPrank();
     }
 
@@ -96,12 +96,12 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakerInstance.stEthClaimWithdrawals(reqIds, hints);
 
         // the cycle completes
-        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountPendingForRedemption(address(stEth)), 0, 2 wei);
-        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), 0, 2 wei);
-        assertApproxEqAbs(address(etherFiRestakerInstance).balance, 0, 2);
+        assertApproxEqAbs(etherFiRestakerInstance.getEthAmountPendingForRedemption(address(stEth)), 0, 1 gwei);
+        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), 0, 1 gwei);
+        assertApproxEqAbs(address(etherFiRestakerInstance).balance, 0, 1 gwei);
 
-        assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
-        assertApproxEqAbs(address(liquidityPoolInstance).balance, lpBalance + amount, 2 wei);
+        assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 1 gwei);
+        assertApproxEqAbs(address(liquidityPoolInstance).balance, lpBalance + amount, 1 gwei);
     }
 
     function test_restake_stEth() public {

@@ -2,9 +2,9 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "./interfaces/IMembershipNFT.sol";
-import "./interfaces/IEtherFiNodesManager.sol";
-import "./interfaces/IEtherFiNode.sol";
+import "src/interfaces/IMembershipNFT.sol";
+import "src/interfaces/IEtherFiNodesManager.sol";
+import "src/interfaces/IEtherFiNode.sol";
 
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";

@@ -3,6 +3,7 @@ pragma solidity ^0.8.9;
 
 import "forge-std/Test.sol";
 import "../../src/eigenlayer-interfaces/IEigenPodManager.sol";
+import "../../test/eigenlayer-mocks/EigenPodMock.sol";
 
 contract EigenPodManagerMock is IEigenPodManager, Test {
     IStrategy public constant beaconChainETHStrategy = IStrategy(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0);
@@ -19,7 +20,9 @@ contract EigenPodManagerMock is IEigenPodManager, Test {
 
     function slasher() external view returns(ISlasher) {}
 
-    function createPod() external returns(address) {}
+    function createPod() external returns(address) {
+        return address(new EigenPodMock());
+    }
 
     function stake(bytes calldata /*pubkey*/, bytes calldata /*signature*/, bytes32 /*depositDataRoot*/) external payable {}
 
