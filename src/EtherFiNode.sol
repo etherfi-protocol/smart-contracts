@@ -46,7 +46,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     // we need to mark a block from which we know all beaconchain eth has been moved to the eigenPod
     // so that we can properly calculate exit payouts and ensure queued withdrawals have been resolved
     // (eigenLayer withdrawals are tied to blocknumber instead of timestamp)
-    mapping(uint256 => uint32) restakingObservedExitBlocks;
+    mapping(uint256 => uint32) DEPRECATED_restakingObservedExitBlocks;
 
     error ForwardedCallNotAllowed();
     error CallFailed(bytes data);
@@ -177,7 +177,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         if (associatedValidatorIds.length == 0) {
             require(numAssociatedValidators() == 0, "INVALID_STATE");
 
-            restakingObservedExitBlocks[_validatorId] = 0;
+            DEPRECATED_restakingObservedExitBlocks[_validatorId] = 0;
             isRestakingEnabled = false;
             return true;
         }
@@ -207,12 +207,6 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     // TODO: make it permission-less call
     function processNodeExit(uint256 _validatorId) external onlyEtherFiNodeManagerContract ensureLatestVersion returns (bytes32[] memory fullWithdrawalRoots) {
         if (isRestakingEnabled) {
-            // eigenLayer bookeeping
-            // we need to mark a block from which we know all beaconchain eth has been moved to the eigenPod
-            // so that we can properly calculate exit payouts and ensure queued withdrawals have been resolved
-            // (eigenLayer withdrawals are tied to blocknumber instead of timestamp)
-            restakingObservedExitBlocks[_validatorId] = uint32(block.number);
-
             fullWithdrawalRoots = _queueEigenpodFullWithdrawal();
             require(fullWithdrawalRoots.length == 1, "NO_FULLWITHDRAWAL_QUEUED");
         }
@@ -484,11 +478,9 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         return Address.functionCall(_to, _data);
     }
 
-
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
-
 
     function _applyNonExitPenalty(
         IEtherFiNodesManager.ValidatorInfo memory _info, 
@@ -618,20 +610,6 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
 
         // each withdrawal root is hash of the withdrawal object, "keccak256(abi.encode(withdrawal))"
         return delegationManager.queueWithdrawals(params);
-    }
-
-    /// @dev as of eigenlayer's PEPE upgrade the delayedWithdrawalRouter is deprecated.
-    ///         once all outstanding funds have been claimed we can delete this functionality
-    function DEPRECATED_claimDelayedWithdrawalRouterWithdrawals(uint256 _validatorId) public {
-        if (!isRestakingEnabled) return;
-
-        uint256 maxWithdrawals = 10; // maximum number of withdrawals to process in 1 tx
-
-        // only claim if we have active unclaimed withdrawals
-        IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).DEPRECATED_delayedWithdrawalRouter());
-        if (delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this)).length > 0) {
-            delayedWithdrawalRouter.claimDelayedWithdrawals(address(this), maxWithdrawals);
-        }
     }
 
     function validatePhaseTransition(VALIDATOR_PHASE _currentPhase, VALIDATOR_PHASE _newPhase) public pure returns (bool) {

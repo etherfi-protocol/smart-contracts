@@ -377,25 +377,38 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         _registerAsOperator(dsrv);
     }
 
-    // activateStaking & verifyWithdrawalCredentials & delegate to p2p
-    function test_delegateTo() public {
-
-        createOrSelectFork(vm.envString("HISTORICAL_PROOF_RPC_URL"));
-
-        test_verifyWithdrawalCredentials_32ETH();
-
-        etherfi_avs_operator_1 = 0xfB487f216CA24162119C0C6Ae015d680D7569C2f;
-
-        address operator = etherfi_avs_operator_1;
-        address mainnet_earningsReceiver = 0x88C3c0AeAC97287E71D78bb97138727A60b2623b;
+    function _undelegate(address node) internal {
         address delegationManager = address(managerInstance.delegationManager());
-        address delayedWithdrawalRouter = address(managerInstance.DEPRECATED_delayedWithdrawalRouter());
 
+        bytes4 selector = bytes4(keccak256("undelegate(address)"));
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(selector, node);
 
+        vm.prank(managerInstance.owner());
+        managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
+
+        address[] memory etherfiNodes = new address[](1);
+        etherfiNodes[0] = node;
+        vm.prank(managerInstance.owner());
+        managerInstance.forwardExternalCall(etherfiNodes, data, delegationManager);
+    }
+
+    function test_delegateTo() public returns (EtherFiNode node) {
         test_registerAsOperator();
 
+        address operator = 0xfB487f216CA24162119C0C6Ae015d680D7569C2f;
+        address delegationManager = address(managerInstance.delegationManager());
+
+        // 1. undelegate the last unused withdrawal safe
+        // since it will be used for the new validator
+        _undelegate(managerInstance.unusedWithdrawalSafes(managerInstance.getUnusedWithdrawalSafesLength() - 1));
+        (uint256 validatorId, address nodeAddress, EtherFiNode node) = create_validator();
+
+        // 2. delegate to the operator
         bytes4 selector = bytes4(keccak256("delegateTo(address,(bytes,uint256),bytes32)"));
         IDelegationManager.SignatureWithExpiry memory signatureWithExpiry;
+        uint256[] memory validatorIds = new uint256[](1);
+        validatorIds[0] = validatorId;
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, operator, signatureWithExpiry, bytes32(0));
 
@@ -403,56 +416,23 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.prank(managerInstance.owner());
         managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
 
-        // Confirm, the earningsReceiver is set to treasuryInstance
-        assertEq(eigenLayerDelegationManager.earningsReceiver(operator), address(mainnet_earningsReceiver));
-        assertEq(eigenLayerDelegationManager.isDelegated(podOwner), false);
+        assertEq(eigenLayerDelegationManager.isDelegated(address(node)), false);
 
         vm.startPrank(owner);
-        managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
+        address[] memory etherfiNodes = new address[](1);
+        etherfiNodes[0] = address(node);
+        managerInstance.forwardExternalCall(etherfiNodes, data, delegationManager);
         vm.stopPrank();
 
-        assertEq(eigenLayerDelegationManager.isDelegated(podOwner), true);
+        assertEq(eigenLayerDelegationManager.isDelegated(address(node)), true);
+
+        return node;
     }
 
     function test_undelegate() public {
-        createOrSelectFork(vm.envString("HISTORICAL_PROOF_RPC_URL"));
-        address delegationManager = address(managerInstance.delegationManager());
+        EtherFiNode node = test_delegateTo();
 
-        // 1. activateStaking & verifyWithdrawalCredentials & delegate to p2p & undelegate from p2p
-        {
-            bytes4 selector = bytes4(keccak256("undelegate(address)"));
-            bytes[] memory data = new bytes[](1);
-            data[0] = abi.encodeWithSelector(selector, podOwner);
-
-            // whitelist this external call
-            vm.prank(managerInstance.owner());
-            managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
-
-            vm.prank(owner);
-            vm.expectRevert("DelegationManager.undelegate: staker must be delegated to undelegate");
-            managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
-
-            test_delegateTo();
-
-            vm.prank(owner);
-            managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
-        }
-
-        // 2. delegate to dsrv
-        {
-            bytes4 selector = bytes4(keccak256("delegateTo(address,(bytes,uint256),bytes32)"));
-            IDelegationManager.SignatureWithExpiry memory signatureWithExpiry;
-            bytes[] memory data = new bytes[](1);
-            data[0] = abi.encodeWithSelector(selector, dsrv, signatureWithExpiry, bytes32(0));
-
-            // whitelist this external call
-            vm.prank(managerInstance.owner());
-            managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
-
-            vm.startPrank(owner);
-            managerInstance.forwardExternalCall(validatorIds, data, delegationManager);
-            vm.stopPrank();
-        }
+        _undelegate(address(node));
     }
 
     function test_completeQueuedWithdrawals_338_for_withdrawal_from_undelegate() public {
@@ -575,11 +555,8 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
     }
 
-    // Only {eigenLayerOperatingAdmin / Admin / Owner} can perform EigenLayer-related actions
+    // Only {operatingAdmin / Admin / Owner} can perform EigenLayer-related actions
     function test_access_control() public {
-
-        setupRoleRegistry();
-
         bytes4 selector = bytes4(keccak256(""));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector);
@@ -640,29 +617,9 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         data[0] = abi.encodeWithSelector(selector4);
         managerInstance.forwardExternalCall(validatorIds, data, delayedWithdrawalRouter);
 
+        data[0] = abi.encodeWithSelector(selector4);
+        managerInstance.forwardExternalCall(validatorIds, data, delayedWithdrawalRouter);
         vm.stopPrank();
-
     }
-
-    /*
-    function test_29027_verifyWithdrawalCredentials() public {
-        setJSON("./test/eigenlayer-utils/test-data/mainnet_withdrawal_credential_proof_1285801.json");
-        
-        _setWithdrawalCredentialParams();
-        _setOracleBlockRoot();
-
-        uint256[] memory validatorIds = new uint256[](1);
-        validatorIds[0] = 29027;
-
-        oracleTimestamp = 1712703383;
-        validatorIndices[0] = 1285801;
-
-        bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
-        vm.prank(owner);
-        managerInstance.callEigenPod(validatorIds, data);
-    }
-    */
 
 }

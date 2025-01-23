@@ -22,7 +22,7 @@ contract EtherFiAdminUpgrade is Script {
         EtherFiAdmin instance = EtherFiAdmin(proxyAddress);
         EtherFiAdmin v2Implementation = new EtherFiAdmin();
 
-        instance.upgradeTo(address(v2Implementation));
+        //instance.upgradeTo(address(v2Implementation));
 
         vm.stopBroadcast();
     }

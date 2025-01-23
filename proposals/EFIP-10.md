@@ -28,6 +28,7 @@ The proposal introduces changes to the EtherFiNode and EtherFiNodesManager contr
 ## References
 
 - [Pull Request #100](https://github.com/etherfi-protocol/smart-contracts/pull/100)
+- [Audit Review](./references/NM-0217-whitelisted-delegate-calls-for-efip-10.md)
 
 ## Copyright
 

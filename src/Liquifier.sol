@@ -64,24 +64,24 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     mapping(bytes32 => bool) public DEPRECATED_isRegisteredQueuedWithdrawals;
     mapping(address => bool) public DEPRECATED_admins;
 
-    address public treasury;
+    address public treasury; // TODO: deprecate it
     ILiquidityPool public liquidityPool;
     IStrategyManager public DEPRECATED_eigenLayerStrategyManager;
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
 
-    ICurvePool public cbEth_Eth_Pool;
-    ICurvePool public wbEth_Eth_Pool;
+    ICurvePool public cbEth_Eth_Pool; // TODO: deprecate it
+    ICurvePool public wbEth_Eth_Pool; // TODO: deprecate it
     ICurvePool public stEth_Eth_Pool;
 
-    IcbETH public cbEth;
-    IwBETH public wbEth;
+    IcbETH public cbEth; // TODO: deprecate it
+    IwBETH public wbEth; // TODO: deprecate it
     ILido public lido;
 
     IDelegationManager public DEPRECATED_eigenLayerDelegationManager;
 
-    IPancackeV3SwapRouter pancakeRouter;
+    IPancackeV3SwapRouter pancakeRouter; // TODO: deprecate it
 
-    mapping(string => bool) flags;
+    mapping(string => bool) flags; // TODO: deprecate it
     
     // To support L2 native minting of weETH
     IERC20[] public dummies;
@@ -89,7 +89,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     mapping(address => bool) public DEPRECATED_pausers;
 
-    address etherFiRestakeManager;
+    address public etherfiRestaker;
 
     RoleRegistry public roleRegistry;
 
@@ -110,6 +110,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error WrongOutput();
     error IncorrectCaller();
     error IncorrectRole();
+
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -150,9 +151,11 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         rateLimiter = BucketRateLimiter(_rateLimiter);
     }
 
-    function initializeOnRestakerUpgrade(address _etherFiRestakeManager) external onlyOwner {
-        etherFiRestakeManager = _etherFiRestakeManager;
+    function initializeOnUpgrade(address _etherfiRestaker) external onlyOwner {
+        etherfiRestaker = _etherfiRestaker;
     }
+
+    receive() external payable {}
 
     /// Deposit Liquid Staking Token such as stETH and Mint eETH
     /// @param _token The address of the token to deposit
@@ -166,12 +169,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (tokenInfos[_token].isL2Eth) {
             IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);     
         } else {
-            IERC20(_token).safeTransferFrom(msg.sender, address(etherFiRestakeManager), _amount);
+            IERC20(_token).safeTransferFrom(msg.sender, address(etherfiRestaker), _amount);
         }
 
         // The L1SyncPool's `_anticipatedDeposit` should be the only place to mint the `token` and always send its entirety to the Liquifier contract
         if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
-
+    
         uint256 dx = quoteByDiscountedValue(_token, _amount);
 
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, dx, _referral);
@@ -202,7 +205,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return depositWithERC20(_token, _amount, _referral);
     }
 
-    // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
+    // Send the redeemed ETH back to the liquidity pool
     function withdrawEther() external {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _withdrawEther();
@@ -210,7 +213,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     function sendToEtherFiRestakeManager(address _token, uint256 _amount) external {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        IERC20(_token).safeTransfer(etherFiRestakeManager, _amount);
+        IERC20(_token).safeTransfer(etherfiRestaker, _amount);
     }
 
     // Swap Liquifier's eETH for ETH from the liquidity pool and send it back to the liquidity pool
@@ -219,10 +222,15 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         liquidityPool.withdraw(address(liquidityPool), amount);
     }
 
+    function sendToEtherFiRestaker(address _token, uint256 _amount) external {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        IERC20(_token).safeTransfer(etherfiRestaker, _amount);
+    }
+
     function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOwner {
         tokenInfos[_token].isWhitelisted = _isWhitelisted;
     }
-
+    
     function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, bool _isL2Eth) external onlyOwner {
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
@@ -231,12 +239,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         } 
         
         tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), 0, 0, 0, 0, _isL2Eth);
-    }
-
-    function pauseDeposits(address _token) external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
-        tokenInfos[_token].timeBoundCapInEther = 0;
-        tokenInfos[_token].totalCapInEther = 0;
     }
 
     function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external {
@@ -351,7 +353,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     function isDepositCapReached(address _token, uint256 _amount) public view returns (bool) {
         uint256 amountOut = quoteByMarketValue(_token, _amount);
-        return rateLimiter.canConsume(_token, _amount, amountOut);
+        return !rateLimiter.canConsume(_token, _amount, amountOut);
     }
 
     /* INTERNAL FUNCTIONS */
@@ -377,8 +379,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
         if (!sent) revert EthTransferFailed();
     }
-
-    receive() external payable {}
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 }

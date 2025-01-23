@@ -28,6 +28,7 @@ import "../src/Treasury.sol";
 import "../src/EtherFiNode.sol";
 import "../src/LiquidityPool.sol";
 import "../src/Liquifier.sol";
+import "../src/EtherFiRestaker.sol";
 import "../src/EETH.sol";
 import "../src/WeETH.sol";
 import "../src/MembershipManager.sol";
@@ -51,7 +52,10 @@ import "../src/EtherFiTimelock.sol";
 import "../src/BucketRateLimiter.sol";
 import "../src/Pauser.sol";
 
-contract TestSetup is Test {
+import "../script/ContractCodeChecker.sol";
+import "../script/Create2Factory.sol";
+
+contract TestSetup is Test, ContractCodeChecker {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
     event Execute(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt);
@@ -60,6 +64,8 @@ contract TestSetup is Test {
 
     uint256 public constant kwei = 10 ** 3;
     uint256 public slippageLimit = 50;
+
+    Create2Factory immutable create2factory = Create2Factory(0x6521991A0BC180a5df7F42b27F4eE8f3B192BA62);
 
     TestERC20 public rETH;
     TestERC20 public wstETH;
@@ -94,6 +100,7 @@ contract TestSetup is Test {
     UUPSProxy public BNFTProxy;
     UUPSProxy public liquidityPoolProxy;
     UUPSProxy public liquifierProxy;
+    UUPSProxy public etherFiRestakerProxy;
     UUPSProxy public eETHProxy;
     UUPSProxy public regulationsManagerProxy;
     UUPSProxy public weETHProxy;
@@ -139,6 +146,9 @@ contract TestSetup is Test {
 
     Liquifier public liquifierImplementation;
     Liquifier public liquifierInstance;
+
+    EtherFiRestaker public etherFiRestakerImplementation;
+    EtherFiRestaker public etherFiRestakerInstance;
 
     EETH public eETHImplementation;
     EETH public eETHInstance;
@@ -398,9 +408,10 @@ contract TestSetup is Test {
     function setUpLiquifier(uint8 forkEnum) internal {
         // intialize `pauser` and `roleRegistry` for testing against V2.5
         vm.startPrank(owner);
-
-        if (liquifierInstance.paused()) {
-            liquifierInstance.unPauseContract();
+            
+        if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {            
+            liquifierInstance.upgradeTo(address(new Liquifier()));
+            // liquifierInstance.updateAdmin(alice, true);
         }
 
         address impl = address(new BucketRateLimiter());
@@ -415,8 +426,24 @@ contract TestSetup is Test {
         setupRoleRegistry();
 
         vm.warp(block.timestamp + 1 days);
+
+        // liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
+
+        deployEtherFiRestaker();
     }
 
+    function deployEtherFiRestaker() internal {
+        vm.startPrank(owner);
+        etherFiRestakerImplementation = new EtherFiRestaker();
+        etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
+        etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
+
+        etherFiRestakerInstance.initialize(address(liquidityPoolInstance), address(liquifierInstance));
+        etherFiRestakerInstance.updateAdmin(alice, true);
+
+        liquifierInstance.initializeOnUpgrade(address(etherFiRestakerInstance));
+        vm.stopPrank();
+    }
 
     function setUpTests() internal {
         vm.startPrank(owner);
@@ -557,6 +584,9 @@ contract TestSetup is Test {
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
 
+        etherFiRestakerImplementation = new EtherFiRestaker();
+        etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
+        etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
@@ -715,12 +745,7 @@ contract TestSetup is Test {
         _initializePeople();
         _initializeEtherFiAdmin();
 
-        // weETH and Liquidity Pool must be on eETH to function as expected
-        vm.prank(owner);
-        address[] memory whitelist = new address[](2);
-        whitelist[0] = address(weEthInstance);
-        whitelist[1] = address(liquidityPoolInstance);
-        eETHInstance.setWhitelistedSpender(whitelist, true);
+        admin = alice;
     }
 
     function setupRoleRegistry() public {
@@ -792,17 +817,6 @@ contract TestSetup is Test {
         roleRegistry.grantRole(etherFiOracleInstance.ORACLE_ADMIN_ROLE(), alice);
         roleRegistry.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), alice);
         roleRegistry.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
-        vm.stopPrank();
-
-        vm.startPrank(owner);
-        eETHImplementation = new EETH();
-        eETHInstance.upgradeTo(address(eETHImplementation));
-
-        // weETH and Liquidity Pool must be on eETH to function as expected
-        address[] memory whitelist = new address[](2);
-        whitelist[0] = address(weEthInstance);
-        whitelist[1] = address(liquidityPoolInstance);
-        eETHInstance.setWhitelistedSpender(whitelist, true);
         vm.stopPrank();
     }
 
@@ -1424,6 +1438,28 @@ contract TestSetup is Test {
         }
     }
 
+    function _finalizeLidoWithdrawals(uint256[] memory reqIds) internal {
+        bytes32 FINALIZE_ROLE = liquifierInstance.lidoWithdrawalQueue().FINALIZE_ROLE();
+        address finalize_role = liquifierInstance.lidoWithdrawalQueue().getRoleMember(FINALIZE_ROLE, 0);
+
+        // The redemption is approved by the Lido
+        vm.startPrank(finalize_role);
+        uint256 currentRate = stEth.getTotalPooledEther() * 1e27 / stEth.getTotalShares();
+        (uint256 ethToLock, uint256 sharesToBurn) = liquifierInstance.lidoWithdrawalQueue().prefinalize(reqIds, currentRate);
+        liquifierInstance.lidoWithdrawalQueue().finalize(reqIds[reqIds.length-1], currentRate);
+        vm.stopPrank();
+
+        // The ether.fi admin claims the finalized withdrawal, which sends the ETH to the liquifier contract
+        vm.startPrank(alice);
+        uint256 lastCheckPointIndex = liquifierInstance.lidoWithdrawalQueue().getLastCheckpointIndex();
+        uint256[] memory hints = liquifierInstance.lidoWithdrawalQueue().findCheckpointHints(reqIds, 1, lastCheckPointIndex);
+        etherFiRestakerInstance.stEthClaimWithdrawals(reqIds, hints);
+
+        // The ether.fi admin withdraws the ETH from the liquifier contract to the liquidity pool contract
+        etherFiRestakerInstance.withdrawEther();
+        vm.stopPrank();
+    }
+
     function _prepareForDepositData(uint256[] memory _validatorIds, uint256 _depositAmount) internal returns (IStakingManager.DepositData[] memory) {
         IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](_validatorIds.length);
         bytes[] memory pubKey = new bytes[](_validatorIds.length);
@@ -1486,14 +1522,16 @@ contract TestSetup is Test {
 
     function _execute_timelock(address target, bytes memory data, bool _schedule, bool _log_schedule, bool _execute, bool _log_execute) internal {
         vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+
+        bytes32 salt = keccak256(abi.encodePacked(target, data, block.number));
         
-        if (_schedule) etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
-        if (_log_schedule) _output_schedule_txn(target, data, bytes32(0), bytes32(0), etherFiTimelockInstance.getMinDelay());
+        if (_schedule) etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
+        if (_log_schedule) _output_schedule_txn(target, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
 
         vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
 
-        if (_execute) etherFiTimelockInstance.execute(target, 0, data, bytes32(0), bytes32(0));
-        if (_log_execute) _output_execute_timelock_txn(target, data, bytes32(0), bytes32(0));
+        if (_execute) etherFiTimelockInstance.execute(target, 0, data, bytes32(0), salt);
+        if (_log_execute) _output_execute_timelock_txn(target, data, bytes32(0), salt);
 
         vm.warp(block.timestamp + 1);
         vm.stopPrank();
@@ -1549,5 +1587,19 @@ contract TestSetup is Test {
         string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
         string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
         stdJson.write(output, output_path);
+    }
+
+    function computeAddressByCreate2(address deployer, bytes memory code, bytes32 salt) public view returns (address) {
+        // Compute the final address:
+        // address = keccak256( 0xff ++ this.address ++ salt ++ keccak256(code))[12:]
+        bytes32 hash = keccak256(
+            abi.encodePacked(
+                bytes1(0xff),
+                deployer,
+                salt,
+                keccak256(code)
+            )
+        );
+        return address(uint160(uint256(hash)));
     }
 }

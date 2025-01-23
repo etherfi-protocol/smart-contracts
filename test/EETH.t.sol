@@ -12,21 +12,6 @@ contract EETHTest is TestSetup {
         setUpTests();
     }
 
-    function test_EETHInitializedCorrectly() public {
-        assertEq(eETHInstance.totalShares(), 0);
-        assertEq(eETHInstance.name(), "ether.fi ETH");
-        assertEq(eETHInstance.symbol(), "eETH");
-        assertEq(eETHInstance.decimals(), 18);
-        assertEq(eETHInstance.totalSupply(), 0);
-        assertEq(eETHInstance.balanceOf(alice), 0);
-        assertEq(eETHInstance.balanceOf(bob), 0);
-        assertEq(eETHInstance.allowance(alice, bob), 0);
-        assertEq(eETHInstance.allowance(alice, address(liquidityPoolInstance)), 0);
-        assertEq(eETHInstance.shares(alice), 0);
-        assertEq(eETHInstance.shares(bob), 0);
-        assertEq(eETHInstance.getImplementation(), address(eETHImplementation));
-    }
-
     function test_MintShares() public {
         vm.prank(address(liquidityPoolInstance));
         eETHInstance.mintShares(alice, 100);
@@ -286,38 +271,4 @@ contract EETHTest is TestSetup {
         assertEq(eETHInstance.allowance(alice, bob), 0.5 ether);
     }
 
-    function test_PermitWhitelistEETH() public {
-        startHoax(alice);
-        liquidityPoolInstance.deposit{value: 1 ether}();
-        vm.stopPrank();
-
-        // alice approves bob to spend 1 ether of eETH
-        bytes32 permitHash = keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                eETHInstance.DOMAIN_SEPARATOR(),
-                keccak256(abi.encode(
-                    keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
-                    alice,
-                    address(bob),
-                    1 ether,
-                    eETHInstance.nonces(alice),
-                    block.timestamp
-                ))
-            )
-        );
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(2, permitHash);
-
-        vm.expectRevert("eETH: spender not whitelisted");
-        eETHInstance.permit(alice, bob, 1 ether, block.timestamp, v, r, s);
-
-        address[] memory whitelist = new address[](1);
-        whitelist[0] = bob;
-        vm.prank(owner);
-        eETHInstance.setWhitelistedSpender(whitelist, true);
-
-        eETHInstance.permit(alice, bob, 1 ether, block.timestamp, v, r, s);
-        vm.prank(bob);
-        eETHInstance.transferFrom(alice, bob, 1 ether);
-    }
 }

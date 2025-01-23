@@ -31,6 +31,7 @@ The proposal introduces changes to the EtherFiNode contract to implement the EIP
 
 - [Pull Request #97](https://github.com/etherfi-protocol/smart-contracts/pull/97)
 - [EIP-1271 Standard](https://eips.ethereum.org/EIPS/eip-1271)
+- [Audit review](./references/NM-0217-efip1271-for-etherfinode-contract.md)
 
 ## Copyright
 

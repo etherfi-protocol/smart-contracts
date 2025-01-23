@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "../eigenlayer-libraries/BeaconChainProofs.sol";
+import "src/eigenlayer-libraries/BeaconChainProofs.sol";
 import "./IEigenPodManager.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -190,9 +190,6 @@ interface IEigenPod {
         BeaconChainProofs.ValidatorProof calldata proof
     ) external;
 
-    /// @notice called by owner of a pod to remove any ERC20s deposited in the pod
-    function recoverTokens(IERC20[] memory tokenList, uint256[] memory amountsToWithdraw, address recipient) external;
-
     /// @notice Allows the owner of a pod to update the proof submitter, a permissioned
     /// address that can call `startCheckpoint` and `verifyWithdrawalCredentials`.
     /// @dev Note that EITHER the podOwner OR proofSubmitter can access these methods,
@@ -235,51 +232,38 @@ interface IEigenPod {
     /// @notice This returns the status of a given validator pubkey
     function validatorStatus(bytes calldata validatorPubkey) external view returns (VALIDATOR_STATUS);
 
-    /// @notice Number of validators with proven withdrawal credentials, who do not have proven full withdrawals
-    function activeValidatorCount() external view returns (uint256);
+    /**
+     * @notice This function records an update (either increase or decrease) in the pod's balance in the StrategyManager.  
+               It also verifies a merkle proof of the validator's current beacon chain balance.  
+     * @param oracleTimestamp The oracleTimestamp whose state root the `proof` will be proven against.
+     *        Must be within `VERIFY_BALANCE_UPDATE_WINDOW_SECONDS` of the current block.
+     * @param validatorIndices is the list of indices of the validators being proven, refer to consensus specs 
+     * @param validatorFieldsProofs proofs against the `beaconStateRoot` for each validator in `validatorFields`
+     * @param validatorFields are the fields of the "Validator Container", refer to consensus specs
+     * @dev For more details on the Beacon Chain spec, see: https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/beacon-chain.md#validator
+     */
+    function verifyBalanceUpdates(
+        uint64 oracleTimestamp,
+        uint40[] calldata validatorIndices,
+        BeaconChainProofs.StateRootProof calldata stateRootProof,
+        bytes[] calldata validatorFieldsProofs,
+        bytes32[][] calldata validatorFields
+    ) external;
 
-    /// @notice The timestamp of the last checkpoint finalized
-    function lastCheckpointTimestamp() external view returns (uint64);
 
-    /// @notice The timestamp of the currently-active checkpoint. Will be 0 if there is not active checkpoint
-    function currentCheckpointTimestamp() external view returns (uint64);
+    /**
+     * @notice Called by the pod owner to activate restaking by withdrawing
+     * all existing ETH from the pod and preventing further withdrawals via
+     * "withdrawBeforeRestaking()"
+     */
+    function activateRestaking() external;
 
-    /// @notice Returns the currently-active checkpoint
-    function currentCheckpoint() external view returns (Checkpoint memory);
+    /// @notice Called by the pod owner to withdraw the balance of the pod when `hasRestaked` is set to false
+    function withdrawBeforeRestaking() external;
 
-    /// @notice For each checkpoint, the total balance attributed to exited validators, in gwei
-    ///
-    /// NOTE that the values added to this mapping are NOT guaranteed to capture the entirety of a validator's
-    /// exit - rather, they capture the total change in a validator's balance when a checkpoint shows their
-    /// balance change from nonzero to zero. While a change from nonzero to zero DOES guarantee that a validator
-    /// has been fully exited, it is possible that the magnitude of this change does not capture what is
-    /// typically thought of as a "full exit."
-    ///
-    /// For example:
-    /// 1. Consider a validator was last checkpointed at 32 ETH before exiting. Once the exit has been processed,
-    /// it is expected that the validator's exited balance is calculated to be `32 ETH`.
-    /// 2. However, before `startCheckpoint` is called, a deposit is made to the validator for 1 ETH. The beacon
-    /// chain will automatically withdraw this ETH, but not until the withdrawal sweep passes over the validator
-    /// again. Until this occurs, the validator's current balance (used for checkpointing) is 1 ETH.
-    /// 3. If `startCheckpoint` is called at this point, the balance delta calculated for this validator will be
-    /// `-31 ETH`, and because the validator has a nonzero balance, it is not marked WITHDRAWN.
-    /// 4. After the exit is processed by the beacon chain, a subsequent `startCheckpoint` and checkpoint proof
-    /// will calculate a balance delta of `-1 ETH` and attribute a 1 ETH exit to the validator.
-    ///
-    /// If this edge case impacts your usecase, it should be possible to mitigate this by monitoring for deposits
-    /// to your exited validators, and waiting to call `startCheckpoint` until those deposits have been automatically
-    /// exited.
-    ///
-    /// Additional edge cases this mapping does not cover:
-    /// - If a validator is slashed, their balance exited will reflect their original balance rather than the slashed amount
-    /// - The final partial withdrawal for an exited validator will be likely be included in this mapping.
-    ///   i.e. if a validator was last checkpointed at 32.1 ETH before exiting, the next checkpoint will calculate their
-    ///   "exited" amount to be 32.1 ETH rather than 32 ETH.
-    function checkpointBalanceExitedGwei(uint64) external view returns (uint64);
+    /// @notice Called by the pod owner to withdraw the nonBeaconChainETHBalanceWei
+    function withdrawNonBeaconChainETHBalanceWei(address recipient, uint256 amountToWithdraw) external;
 
-    /// @notice Query the 4788 oracle to get the parent block root of the slot with the given `timestamp`
-    /// @param timestamp of the block for which the parent block root will be returned. MUST correspond
-    /// to an existing slot within the last 24 hours. If the slot at `timestamp` was skipped, this method
-    /// will revert.
-    function getParentBlockRoot(uint64 timestamp) external view returns (bytes32);
+    /// @notice called by owner of a pod to remove any ERC20s deposited in the pod
+    function recoverTokens(IERC20[] memory tokenList, uint256[] memory amountsToWithdraw, address recipient) external;
 }

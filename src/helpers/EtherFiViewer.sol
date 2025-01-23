@@ -52,6 +52,16 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
+    function EigenPod_validatorPubkeyToInfo(uint256[] memory _validatorIds, bytes[][] memory _validatorPubkeys) external view returns (IEigenPod.ValidatorInfo[][] memory _validatorInfos) {
+        _validatorInfos = new IEigenPod.ValidatorInfo[][](_validatorIds.length);
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            _validatorInfos[i] = new IEigenPod.ValidatorInfo[](_validatorPubkeys[i].length);
+            for (uint256 j = 0; j < _validatorPubkeys[i].length; j++) {
+                _validatorInfos[i][j] = _getEigenPod(_validatorIds[i]).validatorPubkeyToInfo(_validatorPubkeys[i][j]);
+            }
+        }
+    }
+
     function EigenPod_validatorStatus(uint256[] memory _validatorIds, bytes[][] memory _validatorPubkeys) external view returns (IEigenPod.VALIDATOR_STATUS[][] memory _validatorStatuses) {
         _validatorStatuses = new IEigenPod.VALIDATOR_STATUS[][](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
@@ -108,6 +118,16 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             _withdrawableBalance[i] = _getEtherFiNode(_validatorIds[i]).withdrawableBalanceInExecutionLayer();
+        }
+    }
+
+    function EtherFiNodesManager_aggregatedBalanceOfUnusedSafes() external view returns (uint256 total) {
+        uint256 n = nodesManager.getUnusedWithdrawalSafesLength();
+
+        for (uint256 i = 0; i < n; i++) {
+            address safe = nodesManager.unusedWithdrawalSafes(i);
+            address eigenpod = IEtherFiNode(safe).eigenPod();
+            total += safe.balance + eigenpod.balance;
         }
     }
 

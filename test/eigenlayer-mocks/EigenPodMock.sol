@@ -60,23 +60,7 @@ contract EigenPodMock is IEigenPod, Test {
     function mock_set_activeValidatorCount(uint256 count) external { mock_activeValidatorCount = count; }
     function activeValidatorCount() external view returns (uint256) { return mock_activeValidatorCount; }
 
-    /// @notice The timestamp of the last checkpoint finalized
-    function lastCheckpointTimestamp() external view returns (uint64) {}
-
-    /// @notice The timestamp of the currently-active checkpoint. Will be 0 if there is not active checkpoint
-    function currentCheckpointTimestamp() external view returns (uint64) {}
-
-    /// @notice Returns the currently-active checkpoint
-    function currentCheckpoint() external view returns (Checkpoint memory) {}
-
     function checkpointBalanceExitedGwei(uint64) external view returns (uint64) {}
-
-    function startCheckpoint(bool revertIfNoBalance) external {}
-
-    function verifyCheckpointProofs(
-        BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof,
-        BeaconChainProofs.BalanceProof[] calldata proofs
-    ) external {}
 
     function verifyStaleBalance(
         uint64 beaconTimestamp,
@@ -84,15 +68,6 @@ contract EigenPodMock is IEigenPod, Test {
         BeaconChainProofs.ValidatorProof calldata proof
     ) external {}
 
-    function verifyWithdrawalCredentials(
-        uint64 oracleTimestamp,
-        BeaconChainProofs.StateRootProof calldata stateRootProof,
-        uint40[] calldata validatorIndices,
-        bytes[] calldata withdrawalCredentialProofs,
-        bytes32[][] calldata validatorFields
-    ) external {}
-
-    /// DEPRECATED
     /// @notice Called by the pod owner to withdraw the balance of the pod when `hasRestaked` is set to false
     function activateRestaking() external {}
 
@@ -106,8 +81,6 @@ contract EigenPodMock is IEigenPod, Test {
     /// @notice called by owner of a pod to remove any ERC20s deposited in the pod
     function recoverTokens(IERC20[] memory tokenList, uint256[] memory amountsToWithdraw, address recipient) external {}
 
-    function setProofSubmitter(address newProofSubmitter) external {}
-
     function proofSubmitter() external view returns (address) {}
 
     function validatorStatus(bytes calldata pubkey) external view returns (VALIDATOR_STATUS){}
@@ -118,5 +91,32 @@ contract EigenPodMock is IEigenPod, Test {
     /// to an existing slot within the last 24 hours. If the slot at `timestamp` was skipped, this method
     /// will revert.
     function getParentBlockRoot(uint64 timestamp) external view returns (bytes32) {}
+    function currentCheckpoint() external view returns (Checkpoint memory) {}
+    function currentCheckpointTimestamp() external view returns (uint64) {}
+    function lastCheckpointTimestamp() external view returns (uint64) {}
+
+    function startCheckpoint(bool revertIfNoBalance) external {}
+    function verifyCheckpointProofs(
+        BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof,
+        BeaconChainProofs.BalanceProof[] calldata proofs
+    ) external {}
+    function setProofSubmitter(address newProofSubmitter) external {}
+
+
+    function verifyBalanceUpdates(
+        uint64 oracleTimestamp,
+        uint40[] calldata validatorIndices,
+        BeaconChainProofs.StateRootProof calldata stateRootProof,
+        bytes[] calldata validatorFieldsProofs,
+        bytes32[][] calldata validatorFields
+    ) external {}
+    
+    function verifyWithdrawalCredentials(
+        uint64 beaconTimestamp,
+        BeaconChainProofs.StateRootProof calldata stateRootProof,
+        uint40[] calldata validatorIndices,
+        bytes[] calldata validatorFieldsProofs,
+        bytes32[][] calldata validatorFields
+    ) external {}
 
 }

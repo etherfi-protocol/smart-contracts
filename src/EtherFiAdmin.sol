@@ -15,6 +15,10 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 
+interface IEtherFiPausable {
+    function paused() external view returns (bool);
+}
+
 contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     enum TaskType {

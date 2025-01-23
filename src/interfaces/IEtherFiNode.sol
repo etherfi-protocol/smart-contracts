@@ -66,7 +66,6 @@ interface IEtherFiNode {
 
     // Non-VIEW functions
     function initialize(address _etherFiNodesManager) external;
-    function DEPRECATED_claimDelayedWithdrawalRouterWithdrawals(uint256 _validatorId) external;
     function createEigenPod() external;
     function isRestakingEnabled() external view returns (bool);
     function processNodeExit(uint256 _validatorId) external returns (bytes32[] memory withdrawalRoots);

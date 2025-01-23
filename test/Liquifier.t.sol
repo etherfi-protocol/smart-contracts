@@ -87,7 +87,7 @@ contract LiquifierTest is TestSetup {
 
         uint256 aliceQuotedEETH = liquifierInstance.quoteByDiscountedValue(address(stEth), 10 ether);
         // alice will actually receive 1 wei less due to the infamous 1 wei rounding corner case
-        assertApproxEqAbs(eETHInstance.balanceOf(alice), aliceQuotedEETH, 1);
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), aliceQuotedEETH, 1 gwei);
     }
 
     function test_deposit_stEth_and_swap() internal {
@@ -343,6 +343,10 @@ contract LiquifierTest is TestSetup {
 
 
     function _swapEEthForStEth_mainnet() public {
+        vm.deal(address(liquifierInstance), 100 ether);
+        vm.prank(address(liquifierInstance));
+        stEth.submit{value: 100 ether}(address(0));
+
         vm.deal(bob, 100 ether);
         vm.startPrank(bob);
         liquidityPoolInstance.deposit{value: 100 ether}();

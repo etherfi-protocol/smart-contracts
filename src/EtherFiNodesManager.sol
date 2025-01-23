@@ -71,11 +71,13 @@ contract EtherFiNodesManager is
 
     mapping(address => bool) public DEPRECATED_eigenLayerOperatingAdmin;
 
-    RoleRegistry public roleRegistry;
     // function -> allowed
     mapping(bytes4 => bool) public allowedForwardedEigenpodCalls;
     // function -> target_address -> allowed
     mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls;
+
+    RoleRegistry public roleRegistry;
+
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
@@ -191,7 +193,6 @@ contract EtherFiNodesManager is
         }
     }
 
-
     /// @notice Once the node's exit & funds withdrawal from Beacon is observed, the protocol calls this function to process their exits.
     /// @param _validatorIds The list of validators which exited
     /// @param _exitTimestamps The list of exit timestamps of the validators
@@ -221,7 +222,7 @@ contract EtherFiNodesManager is
     }
 
     /// @notice queue a withdrawal of eth from an eigenPod. You must wait for the queuing period
-    ///         defined by eigenLayer before you can finish the withdrawal via etherFiNode.claimDelayedWithdrawalRouterWithdrawals()
+    ///         defined by eigenLayer before you can finish the withdrawal
     /// @param _validatorIds The validator Ids
     function batchQueueRestakedWithdrawal(uint256[] calldata _validatorIds) public whenNotPaused {
         if (!roleRegistry.hasRole(NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
@@ -321,20 +322,6 @@ contract EtherFiNodesManager is
             _updateEtherFiNode(_validatorIds[i]);
             _setValidatorPhase(etherfiNodeAddress[_validatorIds[i]], _validatorIds[i], IEtherFiNode.VALIDATOR_PHASE.BEING_SLASHED);
         }
-    }
-
-    /// @dev instantiate EtherFiNode and EigenPod proxy instances
-    /// @param _count How many instances to create
-    /// @param _enableRestaking Whether or not to instantiate an associated eigenPod. (This can still be done later)
-    function createUnusedWithdrawalSafe(uint256 _count, bool _enableRestaking) external returns (address[] memory) {
-        address[] memory createdSafes = new address[](_count);
-        for (uint256 i = 0; i < _count; i++) {
-            address newNode = IStakingManager(stakingManagerContract).instantiateEtherFiNode(_enableRestaking);
-            unusedWithdrawalSafes.push(newNode);
-
-            createdSafes[i] = address(newNode);
-        }
-        return createdSafes;
     }
 
     error AlreadyInstalled();
@@ -468,6 +455,16 @@ contract EtherFiNodesManager is
         }
     }
 
+    function forwardEigenpodCall(address[] calldata _etherfiNodes, bytes[] calldata _data) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
+        if (!roleRegistry.hasRole(EIGENPOD_CALLER_ROLE, msg.sender)) revert IncorrectRole();
+
+        returnData = new bytes[](_etherfiNodes.length);
+        for (uint256 i = 0; i < _etherfiNodes.length; i++) {
+            _verifyForwardedEigenpodCall(_data[i]);
+            returnData[i] = IEtherFiNode(_etherfiNodes[i]).callEigenPod(_data[i]);
+        }
+    }
+
     function forwardExternalCall(uint256[] calldata _validatorIds, bytes[] calldata _data, address _target) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
         if (!roleRegistry.hasRole(EXTERNAL_CALLER_ROLE, msg.sender)) revert IncorrectRole();
 
@@ -475,6 +472,16 @@ contract EtherFiNodesManager is
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             _verifyForwardedExternalCall(_target, _data[i], _validatorIds[i]);
             returnData[i] = IEtherFiNode(etherfiNodeAddress[_validatorIds[i]]).forwardCall(_target, _data[i]);
+        }
+    }
+
+    function forwardExternalCall(address[] calldata _etherfiNodes, bytes[] calldata _data, address _target) external nonReentrant whenNotPaused returns (bytes[] memory returnData) {
+        if (!roleRegistry.hasRole(EXTERNAL_CALLER_ROLE, msg.sender)) revert IncorrectRole();
+
+        returnData = new bytes[](_etherfiNodes.length);
+        for (uint256 i = 0; i < _etherfiNodes.length; i++) {
+            _verifyForwardedExternalCall(_target, _data[i]);
+            returnData[i] = IEtherFiNode(_etherfiNodes[i]).forwardCall(_target, _data[i]);
         }
     }
 
@@ -498,6 +505,18 @@ contract EtherFiNodesManager is
 
         // can add extra restrictions to specific calls here i.e. checking specific paramaters
         // if (selector == ...) { custom logic }
+    }
+
+    function _verifyForwardedEigenpodCall(bytes calldata _data) internal view {
+        if (_data.length < 4) revert InvalidForwardedCall();
+        bytes4 selector = bytes4(_data[:4]);
+        if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
+    }
+
+    function _verifyForwardedExternalCall(address _to, bytes calldata _data) internal view {
+        if (_data.length < 4) revert InvalidForwardedCall();
+        bytes4 selector = bytes4(_data[:4]);
+        if (!allowedForwardedExternalCalls[selector][_to]) revert ForwardedCallNotAllowed();
     }
 
     //--------------------------------------------------------------------------------------

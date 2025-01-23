@@ -6,10 +6,13 @@
 
 ## Summary
 
-The purpose of this EFIP is to optimize reward skimming when paying out the node operator. Every quarter, we pay out 5% of validator rewards to the corresponding node operator. This is a very expensive operation because we need to skim rewards from over 20,000 eigenpods and 20,000 etherfinode contracts, where all the execution and consensus rewards are directed. Furthermore, determining the rewards accrued by the entire protocol is not a straightforward process due to the number of different contracts holding the rewards.
+The purpose of this EFIP is to optimize reward skimming when paying out the node operator. EtherFi’s Oracle mints eETH daily, distributing 90% of staking rewards from validators to all stakers. The remaining 10% is allocated to node operators and EtherFi’s treasury, which are distributed across Eigenpods and EtherFiNodes. However, the process of claiming ETH from over 20,000 Eigenpods and EtherFiNodes has been inefficient for both node operators and EtherFi.
 
-To address this, during the rebase operation, instead of minting shares of 90% of the rewards (with 5% going to the treasury and 5% to the node operator), we mint 100% of the rewards and distribute 10% to the treasury. This would require a feature in the liquidity pool that mint shares to the treasury or EOA based on the rewards accrued to the protocol and node operators which would be called by the etherfiadmin. 
+To address this issue, we will now mint 100% of staking rewards from validators and distribute them as follows: 5% to node operators, 5% to the treasury, and the remaining 90% to stakers, as usual.
 
+## First Deposit of Protocol Fees for EETH
+
+The 10% staking rewards have been accumulating and unclaimed for over 50,000 validator for the past 10 months. EtherFi will deposit all the unclaimed protocol rewards, owned by EtherFi, node operators, and bNFTs to mint eETH. As a result, 2,700 eETH will be minted for the 2,700 ETH in accrued staking rewards across Eigenpods and EtherFi Nodes, which will be distributed to the node operators and the EtherFi treasury. Thereafter, EtherFi will be depositing their 10% staking rewards and bnft rewards for eeth on a daily basis. 
 
 ## Motivation
 
@@ -22,16 +25,14 @@ Paying our node operators and the treasury in eETH reduces gas costs by allowing
 To implement this proposal, we need to report the rewards accrued to the treasury and node operators and mint the corresponding amount of shares to the treasury during each rebase. Here are the steps to implement the proposal:
 
 1. Add the rewards accrued for the treasury and node operators to the oracle report.  
-2. Add functionality in liquidity pool to mint shares for treasury/EOA
+2. Add functionality in liquidity pool to mint shares for treasury
 3. Add call to the EtherfiAdmin to mint the shares within executeTask
-4. Add functionality for the treasury to transfer and withdraw eETH for ETH
-5. Call setStakingRewardsSplit to set the treasury's allocation to 0 and reallocate it to the tNFT.
+4. Call setStakingRewardsSplit to set the treasury's allocation to 0 and reallocate it to the TNFT.
 
+## Audits
+- [Nethermind Audit Report](./references/efip-4-nethermind-review.md)
 
-
-## References
-
-This architecture of paying the treasury and node operators in ETH was inspired by Lido's protocol, which holds stETH in its treasury instead of ETH.
+- [Certora Draft Report](../audits/2024.10.08%20-%20Certora%20-%20EtherFi%20draft.pdf)
 
 ## Copyright
 

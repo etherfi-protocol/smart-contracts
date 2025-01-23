@@ -17,14 +17,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     IeETH public eETH;
     ILiquidityPool public liquidityPool;
 
-    mapping (address => bool) public whitelistedSpender;
-
-    //--------------------------------------------------------------------------------------
-    //------------------------------------  EVENTS  ----------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    event WhitelistStatusChange(address indexed account, bool isWhitelisted);
-
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
@@ -34,9 +26,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         _disableInitializers();
     }
 
-    /// @notice Initializes the contract with the specified liquidity pool and eETH addresses
-    /// @param _liquidityPool The address of the liquidity pool
-    /// @param _eETH The address of the eETH contract
     function initialize(address _liquidityPool, address _eETH) external initializer {
         require(_liquidityPool != address(0), "No zero addresses");
         require(_eETH != address(0), "No zero addresses");
@@ -93,44 +82,13 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
        _transfer(treasury, msg.sender, treasuryBal);
     }
 
-    /// @notice Requires the spender to be whitelisted before calling {ERC20PermitUpgradeable-permit}
-    function permit(
-        address owner,
-        address spender,
-        uint256 value,
-        uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) public override {
-        require(whitelistedSpender[spender], "weETH: spender not whitelisted"); 
-        super.permit(owner, spender, value, deadline, v, r, s);
-    }
-
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @dev Authorizes the upgrade of the contract to a new implementation by the owner
-    /// @param newImplementation The address of the new contract implementation
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {}
-
-    //--------------------------------------------------------------------------------------
-    //------------------------------------  SETTERS  ---------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    /// @notice Sets the whitelisted status for a list of addresses
-    /// @param _spenders An array of spender addresses
-    /// @param _isWhitelisted Boolean value to set the whitelisted status
-    function setWhitelistedSpender(address[] calldata _spenders, bool _isWhitelisted) external onlyOwner {
-        uint256 length = _spenders.length;
-        for (uint i = 0; i < length; i++) {
-            whitelistedSpender[_spenders[i]] = _isWhitelisted;
-            emit WhitelistStatusChange(_spenders[i], _isWhitelisted);
-        }
-    }
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
@@ -150,14 +108,11 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         return liquidityPool.amountForShare(_weETHAmount);
     }
 
-    /// @notice Fetches the exchange rate of eETH for 1 weETH
-    /// @return The amount of eETH for 1 weETH
+    // Amount of eETH for 1 weETH
     function getRate() external view returns (uint256) {
         return getEETHByWeETH(1 ether);
     }
 
-    /// @notice Fetches the address of the current contract implementation
-    /// @return The address of the current implementation   
     function getImplementation() external view returns (address) {
         return _getImplementation();
     }

@@ -148,7 +148,7 @@ library BeaconChainProofs {
             "BeaconChainProofs.verifyValidatorFields: Proof has incorrect length"
         );
 
-        // EigenlayerMerkle.ze `validatorFields` to get the leaf to prove
+        // Merkleize `validatorFields` to get the leaf to prove
         bytes32 validatorRoot = EigenlayerMerkle.merkleizeSha256(validatorFields);
 
         /// This proof combines two proofs, so its index accounts for the relative position of leaves in two trees:
