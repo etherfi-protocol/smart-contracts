@@ -12,7 +12,7 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./libraries/PopCount.sol";
 
-contract AuctionManager is
+contract AuctionManagerGasOptimized is
     Initializable,
     IAuctionManager,
     PausableUpgradeable,

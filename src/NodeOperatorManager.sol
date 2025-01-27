@@ -126,6 +126,25 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         return ipfsIndex;
     }
 
+    /// @notice Fetches the next key they have available to use
+    /// @param _user the user to fetch the key for
+    /// @return The ipfs index available for the validators
+    function batchFetchNextKeyIndex(
+        address _user,
+        uint256 _size
+    ) external onlyAuctionManagerContract returns (uint64) {
+        KeyData storage keyData = addressToOperatorData[_user];
+        uint64 totalKeys = keyData.totalKeys;
+        require(
+            keyData.keysUsed + _size < totalKeys,
+            "Insufficient public keys"
+        );
+
+        uint64 ipfsIndex = keyData.keysUsed;
+        keyData.keysUsed += uint64(_size);
+        return ipfsIndex;
+    }
+
     /// @notice Approves or un approves an operator to run validators from a specific source of funds
     /// @dev To allow a permissioned system, we will approve node operators to run validators only for a specific source of funds (EETH / ETHER_FAN)
     ///         Some operators can be approved for both sources and some for only one. Being approved means that when a BNFT player deposits,
