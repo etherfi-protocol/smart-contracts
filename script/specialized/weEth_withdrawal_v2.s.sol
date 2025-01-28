@@ -21,12 +21,12 @@ contract Upgrade is Script, GnosisHelpers {
     EtherFiRedemptionManager etherFiRedemptionManagerInstance;
 
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        // uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         
         withdrawRequestNFTInstance = WithdrawRequestNFT(payable(addressProvider.getContractAddress("WithdrawRequestNFT")));
         liquidityPoolInstance = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
 
         deploy_upgrade();
         // agg();
