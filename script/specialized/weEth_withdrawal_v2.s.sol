@@ -112,20 +112,17 @@ contract TestUpgrade is Test, Upgrade {
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
 
         withdrawRequestNFTInstance = WithdrawRequestNFT(payable(addressProvider.getContractAddress("WithdrawRequestNFT")));
-        liquidityPoolInstance = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));        
+        liquidityPoolInstance = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));     
+        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(0xD5fd46F4df70a63d60a8563CaD0444Fcc25dcE7f));   
     }
     
     function test_UpgradeWeETHInstantWithdrawal() public {
-        // startHoax(etherFiTimelock);
-        deploy_upgrade();
-        // agg();
-        // handle_remainder();
-
-        string memory path = "./operations/20250127_upgrade_instant_withdrawal_schedule.json";
+        string memory path = "./operations/20250128_upgrade_instant_withdrawal_schedule.json";
         executeGnosisTransactionBundle(path, 0xcdd57D11476c22d265722F68390b036f3DA48c21);
-
-        path = "./operations/20250127_upgrade_instant_withdrawal_execute.json";
+        
         vm.warp(block.timestamp + 3 days + 1);
+
+        path = "./operations/20250128_upgrade_instant_withdrawal_execute.json";
         executeGnosisTransactionBundle(path, 0xcdd57D11476c22d265722F68390b036f3DA48c21);
 
         assert(withdrawRequestNFTInstance.pauser() == pauser);
