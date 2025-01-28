@@ -86,14 +86,7 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
      * @param receiver The address to receive the redeemed ETH.
      */
     function redeemEEth(uint256 eEthAmount, address receiver) public whenNotPaused nonReentrant {
-        require(eEthAmount <= eEth.balanceOf(msg.sender), "EtherFiRedemptionManager: Insufficient balance");
-        require(canRedeem(eEthAmount), "EtherFiRedemptionManager: Exceeded total redeemable amount");
-
-        (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount);
-
-        IERC20(address(eEth)).safeTransferFrom(msg.sender, address(this), eEthAmount);
-
-        _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury);
+        _redeemEEth(eEthAmount, receiver);
     }
 
     /**
@@ -102,26 +95,29 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
      * @param receiver The address to receive the redeemed ETH.
      */
     function redeemWeEth(uint256 weEthAmount, address receiver) public whenNotPaused nonReentrant {
-        uint256 eEthAmount = weEth.getEETHByWeETH(weEthAmount);
-        require(weEthAmount <= weEth.balanceOf(msg.sender), "EtherFiRedemptionManager: Insufficient balance");
-        require(canRedeem(eEthAmount), "EtherFiRedemptionManager: Exceeded total redeemable amount");
-
-        (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount);
-
-        IERC20(address(weEth)).safeTransferFrom(msg.sender, address(this), weEthAmount);
-        weEth.unwrap(weEthAmount);
-
-        _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury);
+        _redeemWeEth(weEthAmount, receiver);
     }
 
-    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit) external {
+    /**
+     * @notice Redeems eETH for ETH with permit.
+     * @param eEthAmount The amount of eETH to redeem after the exit fee.
+     * @param receiver The address to receive the redeemed ETH.
+     * @param permit The permit params.
+     */
+    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit) external whenNotPaused nonReentrant {
         try eEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
-        redeemEEth(eEthAmount, receiver);
+        _redeemEEth(eEthAmount, receiver);
     }
 
-    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit) external {
+    /**
+     * @notice Redeems weETH for ETH.
+     * @param weEthAmount The amount of weETH to redeem after the exit fee.
+     * @param receiver The address to receive the redeemed ETH.
+     * @param permit The permit params.
+     */
+    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit) external whenNotPaused nonReentrant {
         try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
-        redeemWeEth(weEthAmount, receiver);
+        _redeemWeEth(weEthAmount, receiver);
     }
 
     /**
@@ -142,24 +138,25 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
         uint256 totalEEthShare = eEth.totalShares();
 
         // Withdraw ETH from the liquidity pool
-        assert (liquidityPool.withdraw(address(this), eEthAmountToReceiver) == sharesToBurn);
+        require(liquidityPool.withdraw(address(this), eEthAmountToReceiver) == sharesToBurn, "invalid num shares burnt");
         uint256 ethReceived = address(this).balance - prevBalance;
 
         // To Stakers by burning shares
-        eEth.burnShares(address(this), feeShareToStakers);
+        liquidityPool.burnEEthShares(feeShareToStakers);
 
         // To Treasury by transferring eETH
         IERC20(address(eEth)).safeTransfer(treasury, eEthFeeAmountToTreasury);
         
+        // uint256 totalShares = eEth.totalShares();
         require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
 
-        // To Receiver by transferring ETH
+        // To Receiver by transferring ETH, using gas 10k for additional safety
         (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
         require(success, "EtherFiRedemptionManager: Transfer failed");
 
         // Make sure the liquidity pool balance is correct && total shares are correct
         require(address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiRedemptionManager: Invalid liquidity pool balance");
-        require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
+        // require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
 
         emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver);
     }
@@ -244,6 +241,31 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
     function unPauseContract() external hasRole(PROTOCOL_UNPAUSER) {
         _unpause();
     }
+
+    function _redeemEEth(uint256 eEthAmount, address receiver) internal {
+        require(eEthAmount <= eEth.balanceOf(msg.sender), "EtherFiRedemptionManager: Insufficient balance");
+        require(canRedeem(eEthAmount), "EtherFiRedemptionManager: Exceeded total redeemable amount");
+
+        (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount);
+
+        IERC20(address(eEth)).safeTransferFrom(msg.sender, address(this), eEthAmount);
+
+        _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury);
+    }
+
+    function _redeemWeEth(uint256 weEthAmount, address receiver) internal {
+        uint256 eEthAmount = weEth.getEETHByWeETH(weEthAmount);
+        require(weEthAmount <= weEth.balanceOf(msg.sender), "EtherFiRedemptionManager: Insufficient balance");
+        require(canRedeem(eEthAmount), "EtherFiRedemptionManager: Exceeded total redeemable amount");
+
+        (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount);
+
+        IERC20(address(weEth)).safeTransferFrom(msg.sender, address(this), weEthAmount);
+        weEth.unwrap(weEthAmount);
+
+        _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury);
+    }
+
 
     function _updateRateLimit(uint256 amount) internal {
         uint64 bucketUnit = _convertToBucketUnit(amount, Math.Rounding.Up);
