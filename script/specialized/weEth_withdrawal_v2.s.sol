@@ -29,8 +29,8 @@ contract Upgrade is Script, GnosisHelpers {
         vm.startBroadcast(deployerPrivateKey);
 
         deploy_upgrade();
-        agg();
-        handle_remainder();
+        // agg();
+        // handle_remainder();
 
         vm.stopBroadcast();
     }
@@ -42,12 +42,14 @@ contract Upgrade is Script, GnosisHelpers {
             addressProvider.getContractAddress("WeETH"), 
             treasury, 
             roleRegistry)), 
-            abi.encodeWithSelector(
-                EtherFiRedemptionManager.initialize.selector,
-                10_00, 1_00, 1_00, 5 ether, 0.001 ether // 10% fee split to treasury, 1% exit fee, 1% low watermark
-            )
+            ""
         );
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
+        etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 2_30, 500 ether, 0.005787037037 ether);
+        // abi.encodeWithSelector(
+        //         EtherFiRedemptionManager.initialize.selector,
+        //         10_00, 1_00, 2_30, 500 ether, 0.005787037037 ether // 10% fee split to treasury, 1% exit fee, 1% low watermark
+        //     )
 
         address withdrawRequestNFTImpl = address(new WithdrawRequestNFT(treasury));
         address liquidityPoolImpl = address(new LiquidityPool());
@@ -64,12 +66,11 @@ contract Upgrade is Script, GnosisHelpers {
         
         bytes[] memory payloads = new bytes[](2);
         bytes memory upgradeWithdrawRequestNFTUpgradeData = abi.encodeWithSignature(
-            "upgradeToAndCall(address,bytes)", 
+            "upgradeToAndCall(address,bytes)",
             withdrawRequestNFTImpl, 
             abi.encodeWithSelector(WithdrawRequestNFT.initializeOnUpgrade.selector, pauser, 50_00) // 50% fee split to treasury
         );
         bytes memory upgradeLiquidityPoolUpgradeData = abi.encodeWithSignature("upgradeToAndCall(address,bytes)", liquidityPoolImpl, abi.encodeWithSelector(LiquidityPool.initializeOnUpgradeWithRedemptionManager.selector, address(etherFiRedemptionManagerInstance)));
-
         payloads[0] = upgradeWithdrawRequestNFTUpgradeData;
         payloads[1] = upgradeLiquidityPoolUpgradeData;
 
@@ -77,14 +78,14 @@ contract Upgrade is Script, GnosisHelpers {
         string memory scheduleUpgrade = iToHex(abi.encodeWithSignature("scheduleBatch(address[],uint256[],bytes[],bytes32,bytes32,uint256)", targets, values, payloads, predecessor, salt, delay));
         scheduleGnosisTx = string(abi.encodePacked(scheduleGnosisTx, _getGnosisTransaction(addressToHex(timelock), scheduleUpgrade, true)));
 
-        string memory path = "./operations/20250127_upgrade_instant_withdrawal_schedule.json";
+        string memory path = "./operations/20250128_upgrade_instant_withdrawal_schedule.json";
         vm.writeFile(path, scheduleGnosisTx);
 
         string memory executeGnosisTx = _getGnosisHeader("1");
         string memory executeUpgrade = iToHex(abi.encodeWithSignature("executeBatch(address[],uint256[],bytes[],bytes32,bytes32)", targets, values, payloads, predecessor, salt));
         executeGnosisTx = string(abi.encodePacked(executeGnosisTx, _getGnosisTransaction(addressToHex(timelock), executeUpgrade, true)));
 
-        path = "./operations/20250127_upgrade_instant_withdrawal_execute.json";
+        path = "./operations/20250128_upgrade_instant_withdrawal_execute.json";
         vm.writeFile(path, executeGnosisTx);
     }
 
