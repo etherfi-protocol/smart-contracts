@@ -379,6 +379,24 @@ contract TimelockTest is TestSetup {
         bytes memory data = abi.encodeWithSelector(Liquifier.unPauseContract.selector);
         _execute_timelock(target, data, true, true, true, true);
     }
+
+        function test_update_committee_members() public {
+        initializeRealisticFork(MAINNET_FORK);
+        address etherfi_oracle1 = address(0x6d850af8e7AB3361CfF28b31C701647414b9C92b);
+        address etherfi_oracle2 = address(0x1a9AC2a6fC85A7234f9E21697C75D06B2b350864);
+        address avs_etherfi_oracle1 = address(0xDd777e5158Cb11DB71B4AF93C75A96eA11A2A615);
+        address avs_etherfi_oracle2 = address(0x2c7cB7d5dC4aF9caEE654553a144C76F10D4b320);
+        address target = address(etherFiOracleInstance);
+        bytes memory data = abi.encodeWithSelector(EtherFiOracle.removeCommitteeMember.selector, etherfi_oracle1);
+        _execute_timelock(target, data, true, true, true, true);
+       data = abi.encodeWithSelector(EtherFiOracle.removeCommitteeMember.selector, etherfi_oracle2);
+        _execute_timelock(target, data, true, true, true, true);
+        data = abi.encodeWithSelector(EtherFiOracle.addCommitteeMember.selector, avs_etherfi_oracle1);
+        _execute_timelock(target, data, true, true, true, true);
+        data = abi.encodeWithSelector(EtherFiOracle.addCommitteeMember.selector, avs_etherfi_oracle2);
+        _execute_timelock(target, data, true, true, true, true);
+
+    }
 }
 
 // {"version":"1.0","chainId":"1
