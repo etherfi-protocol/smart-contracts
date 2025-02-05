@@ -48,6 +48,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     // (eigenLayer withdrawals are tied to blocknumber instead of timestamp)
     mapping(uint256 => uint32) DEPRECATED_restakingObservedExitBlocks;
 
+    error ForwardedCallNotAllowed();
     error CallFailed(bytes data);
 
     event EigenPodCreated(address indexed nodeAddress, address indexed podAddress);
@@ -68,7 +69,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     ///  To receive the rewards from the execution layer, it should have 'receive()' function.
     receive() external payable {}
 
-    /// @dev called once immediately after creating a new instance of a EtheriNode beacon proxy
+    /// @dev called once immediately after creating a new instance of a EtherFiNode beacon proxy
     function initialize(address _etherFiNodesManager) external {
         require(DEPRECATED_phase == VALIDATOR_PHASE.NOT_INITIALIZED, "ALREADY_INITIALIZED");
         require(etherFiNodesManager == address(0), "ALREADY_INITIALIZED");
@@ -270,10 +271,8 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         mgr.completeQueuedWithdrawals(withdrawals, tokens, middlewareTimesIndexes, receiveAsTokens);
     }
 
-    /// @dev transfer funds from the withdrawal safe to the 4 associated parties (bNFT, tNFT, treasury, nodeOperator)
+    /// @dev transfer funds from the withdrawal safe to the 2 associated parties (bNFT, tNFT)
     function withdrawFunds(
-        address _treasury, uint256 _treasuryAmount,
-        address _operator, uint256 _operatorAmount,
         address _tnftHolder, uint256 _tnftAmount,
         address _bnftHolder, uint256 _bnftAmount
     ) external onlyEtherFiNodeManagerContract ensureLatestVersion {
@@ -281,21 +280,11 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         // if it is a smart contract, they should implement either receive() or fallback() properly
         // It's designed to prevent malicious actors from pausing the withdrawals
         bool sent;
-        if (_operatorAmount > 0) {
-            (sent, ) = payable(_operator).call{value: _operatorAmount, gas: 10000}("");
-            _treasuryAmount += (!sent) ? _operatorAmount : 0;
-        }
         if (_bnftAmount > 0) {
             (sent, ) = payable(_bnftHolder).call{value: _bnftAmount, gas: 12000}("");
-            _treasuryAmount += (!sent) ? _bnftAmount : 0;
         }
         if (_tnftAmount > 0) {
             (sent, ) = payable(_tnftHolder).call{value: _tnftAmount, gas: 12000}("");
-            _treasuryAmount += (!sent) ? _tnftAmount : 0;
-        }
-        if (_treasuryAmount > 0) {
-            (sent, ) = _treasury.call{value: _treasuryAmount, gas: 2300}("");
-            require(sent, "ETH_SEND_FAILED");
         }
     }
 
@@ -303,19 +292,14 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     //--------------------------------------  GETTER  --------------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @notice Fetch the staking rewards accrued in the safe that can be paid out to (toNodeOperator, toTnft, toBnft, toTreasury)
-    /// @param _splits the splits for the staking rewards
+    /// @notice Fetch the staking rewards accrued in the safe that can be paid out to (totnft)
     ///
-    /// @return toNodeOperator  the payout to the Node Operator
     /// @return toTnft          the payout to the T-NFT holder
-    /// @return toBnft          the payout to the B-NFT holder
-    /// @return toTreasury      the payout to the Treasury
     function getRewardsPayouts(
-        uint32 _exitRequestTimestamp,
-        IEtherFiNodesManager.RewardsSplit memory _splits
-    ) public view returns (uint256, uint256, uint256, uint256) {
+        uint32 _exitRequestTimestamp
+    ) public view returns (uint256) {
         uint256 _balance = withdrawableBalanceInExecutionLayer();
-        return _calculateSplits(_balance, _splits);
+        return _balance;
     }
 
     /// @notice Compute the non exit penalty for the b-nft holder
@@ -354,7 +338,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         if (isRestakingEnabled) {
             _eigenPod = eigenPod.balance;
 
-            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
+            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).DEPRECATED_delayedWithdrawalRouter());
             IDelayedWithdrawalRouter.DelayedWithdrawal[] memory delayedWithdrawals = delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this));
             for (uint256 x = 0; x < delayedWithdrawals.length; x++) {
                 _delayedWithdrawalRouter += delayedWithdrawals[x].amount;
@@ -377,7 +361,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         uint256 safeBalance = address(this).balance;
         uint256 claimableBalance = 0;
         if (isRestakingEnabled) {
-            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
+            IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).DEPRECATED_delayedWithdrawalRouter());
             IDelayedWithdrawalRouter.DelayedWithdrawal[] memory claimableWithdrawals = delayedWithdrawalRouter.getClaimableUserDelayedWithdrawals(address(this));
             for (uint256 x = 0; x < claimableWithdrawals.length; x++) {
                 claimableBalance += claimableWithdrawals[x].amount;
@@ -386,17 +370,11 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         return safeBalance + claimableBalance;
     }
 
-    function moveFundsToManager(uint256 _amount) external onlyEtherFiNodeManagerContract {
-        (bool sent, ) = etherFiNodesManager.call{value: _amount, gas: 6000}("");
-        require(sent, "ETH_SEND_FAILED");
-    }
-
     function getFullWithdrawalPayouts(
-        IEtherFiNodesManager.ValidatorInfo memory _info,
-        IEtherFiNodesManager.RewardsSplit memory _SRsplits
-    ) public view onlyEtherFiNodeManagerContract returns (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) {
+        IEtherFiNodesManager.ValidatorInfo memory _info
+    ) public view onlyEtherFiNodeManagerContract returns (uint256 toTnft, uint256 toBnft) {
         if (version == 0 || numAssociatedValidators() == 1) {
-            return calculateTVL(0, _info, _SRsplits, true);
+            return calculateTVL(0, _info, true);
         } else if (version == 1) {
             // If (version ==1 && numAssociatedValidators() > 1)
             //  the full withdrwal for a validator only considers its principal amount (= 16 ether ~ 32 ether)
@@ -404,18 +382,18 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
             // Therefore, if a validator is slashed, the accrued staking rewards are used to cover the slashing amount
             // In the upcoming version, the proof system will be ported so that the penalty amount properly considered for withdrawals
 
-            uint256[] memory payouts = new uint256[](4); // (toNodeOperator, toTnft, toBnft, toTreasury)
+            uint256[] memory payouts = new uint256[](2); // (toTnft, toBnft)
             uint256 principal = (withdrawableBalanceInExecutionLayer() >= 32 ether) ? 32 ether : withdrawableBalanceInExecutionLayer();
-            (payouts[2], payouts[1]) = _calculatePrincipals(principal);
-            (payouts[0], payouts[1], payouts[2], payouts[3]) = _applyNonExitPenalty(_info, payouts[0], payouts[1], payouts[2], payouts[3]);
+            (payouts[1], payouts[0]) = _calculatePrincipals(principal);
+            (payouts[0], payouts[1]) = _applyNonExitPenalty(_info, payouts[0], payouts[1]);
 
-            return (payouts[0], payouts[1], payouts[2], payouts[3]);
+            return (payouts[0], payouts[1]);
         } else {
             require(false, "WRONG_VERSION");
         }
     }
 
-    /// @notice Given the current (phase, beacon balance) of a validator, compute the TVLs for {node operator, t-nft holder, b-nft holder, treasury}
+    /// @notice Given the current (phase, beacon balance) of a validator, compute the TVLs for {t-nft holder, b-nft holder}
     function getTvlSplits(
         VALIDATOR_PHASE _phase, 
         uint256 _beaconBalance,
@@ -460,37 +438,32 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     /// @notice Given
     ///         - the current balance of the validator in Consensus Layer (or Beacon)
     ///         - the current balance of the ether fi node contract,
-    ///         Compute the TVLs for {node operator, t-nft holder, b-nft holder, treasury}
+    ///         Compute the TVLs for {t-nft holder, b-nft holde}
     /// @param _beaconBalance the balance of the validator in Consensus Layer
-    /// @param _SRsplits the splits for the Staking Rewards
     ///
-    /// @return toNodeOperator  the payout to the Node Operator
     /// @return toTnft          the payout to the T-NFT holder
     /// @return toBnft          the payout to the B-NFT holder
-    /// @return toTreasury      the payout to the Treasury
     function calculateTVL(
         uint256 _beaconBalance,
         IEtherFiNodesManager.ValidatorInfo memory _info,
-        IEtherFiNodesManager.RewardsSplit memory _SRsplits,
         bool _onlyWithdrawable
-    ) public view onlyEtherFiNodeManagerContract returns (uint256, uint256, uint256, uint256) {
+    ) public view onlyEtherFiNodeManagerContract returns (uint256, uint256) {
         (uint256 stakingRewards, uint256 principal) = getTvlSplits(_info.phase, _beaconBalance, _onlyWithdrawable);
-        if (stakingRewards + principal == 0) return (0, 0, 0, 0);
-
-        // Compute the payouts for the staking rewards
-        uint256[] memory payouts = new uint256[](4); // (toNodeOperator, toTnft, toBnft, toTreasury)
-        (payouts[0], payouts[1], payouts[2], payouts[3]) = _calculateSplits(stakingRewards, _SRsplits);
-
+        if (stakingRewards + principal == 0) return (0, 0);
+        uint256 [] memory payouts = new uint256[](2);
         // Compute the payouts for the principals to {B, T}-NFTs
         (uint256 toBnftPrincipal, uint256 toTnftPrincipal) = _calculatePrincipals(principal);
-        payouts[1] += toTnftPrincipal;
-        payouts[2] += toBnftPrincipal;
+        payouts[0] += toTnftPrincipal;
+        payouts[1] += toBnftPrincipal;
+
+        payouts[0] += stakingRewards;
+
 
         // Apply the non-exit penalty to the B-NFT
-        (payouts[0], payouts[1], payouts[2], payouts[3]) = _applyNonExitPenalty(_info, payouts[0], payouts[1], payouts[2], payouts[3]);
+        (payouts[0], payouts[1]) = _applyNonExitPenalty(_info, payouts[0], payouts[1]);
 
-        require(payouts[0] + payouts[1] + payouts[2] + payouts[3] == stakingRewards + principal, "INCORRECT_AMOUNT");
-        return (payouts[0], payouts[1], payouts[2], payouts[3]);
+        require(payouts[0] + payouts[1] == stakingRewards + principal, "INCORRECT_AMOUNT");
+        return (payouts[0], payouts[1]);
     }
 
     //--------------------------------------------------------------------------------------
@@ -504,50 +477,22 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     function forwardCall(address _to, bytes calldata _data) external onlyEtherFiNodeManagerContract returns (bytes memory) {
         return Address.functionCall(_to, _data);
     }
-    
+
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
 
     function _applyNonExitPenalty(
         IEtherFiNodesManager.ValidatorInfo memory _info, 
-        uint256 _toNodeOperator, 
         uint256 _toTnft, 
-        uint256 _toBnft, 
-        uint256 _toTreasury
-    ) internal view returns (uint256, uint256, uint256, uint256) {
-        // NonExitPenalty grows till 1 ether
+        uint256 _toBnft 
+    ) internal view returns (uint256, uint256) {
+
         uint256 bnftNonExitPenalty = getNonExitPenalty(_info.exitRequestTimestamp, _info.exitTimestamp);
         uint256 appliedPenalty = Math.min(_toBnft, bnftNonExitPenalty);
-        uint256 incentiveToNoToExitValidator = Math.min(appliedPenalty, 0.2 ether);
-
-        // Cap the incentive to the operator under 0.2 ether.
-        // the rest (= penalty - incentive to NO) goes to the treasury
-        _toNodeOperator += incentiveToNoToExitValidator;
-        _toTreasury += appliedPenalty - incentiveToNoToExitValidator;
         _toBnft -= appliedPenalty;
-
-        return (_toNodeOperator, _toTnft, _toBnft, _toTreasury);
-    }
-
-    /// @notice Calculates values for payouts based on certain parameters
-    /// @param _totalAmount The total amount to split
-    /// @param _splits The splits for the staking rewards
-    ///
-    /// @return toNodeOperator  the payout to the Node Operator
-    /// @return toTnft          the payout to the T-NFT holder
-    /// @return toBnft          the payout to the B-NFT holder
-    /// @return toTreasury      the payout to the Treasury
-    function _calculateSplits(
-        uint256 _totalAmount,
-        IEtherFiNodesManager.RewardsSplit memory _splits
-    ) internal pure returns (uint256 toNodeOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury) {
-        uint256 scale = _splits.treasury + _splits.nodeOperator + _splits.tnft + _splits.bnft;
-        toNodeOperator = (_totalAmount * _splits.nodeOperator) / scale;
-        toTnft = (_totalAmount * _splits.tnft) / scale;
-        toBnft = (_totalAmount * _splits.bnft) / scale;
-        toTreasury = _totalAmount - (toBnft + toTnft + toNodeOperator);
-        return (toNodeOperator, toTnft, toBnft, toTreasury);
+        _toTnft += appliedPenalty;
+        return (_toTnft, _toBnft);
     }
 
     /// @notice Calculate the principal for the T-NFT and B-NFT holders based on the balance
@@ -667,20 +612,6 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
         return delegationManager.queueWithdrawals(params);
     }
 
-    /// @dev as of eigenlayer's PEPE upgrade the delayedWithdrawalRouter is deprecated.
-    ///         once all outstanding funds have been claimed we can delete this functionality
-    function DEPRECATED_claimDelayedWithdrawalRouterWithdrawals() public {
-        if (!isRestakingEnabled) return;
-
-        uint256 maxWithdrawals = 10; // maximum number of withdrawals to process in 1 tx
-
-        // only claim if we have active unclaimed withdrawals
-        IDelayedWithdrawalRouter delayedWithdrawalRouter = IDelayedWithdrawalRouter(IEtherFiNodesManager(etherFiNodesManager).delayedWithdrawalRouter());
-        if (delayedWithdrawalRouter.getUserDelayedWithdrawals(address(this)).length > 0) {
-            delayedWithdrawalRouter.claimDelayedWithdrawals(address(this), maxWithdrawals);
-        }
-    }
-
     function validatePhaseTransition(VALIDATOR_PHASE _currentPhase, VALIDATOR_PHASE _newPhase) public pure returns (bool) {
         bool pass;
 
@@ -719,8 +650,9 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
      * @param _signature Signature byte array associated with _data
     */
     function isValidSignature(bytes32 _digestHash, bytes memory _signature) public view override returns (bytes4 magicValue) {
+        bytes32 NODE_ADMIN_ROLE = keccak256("EFNM_NODE_ADMIN_ROLE");
         (address signer, ) = ECDSA.tryRecover(_digestHash, _signature);
-        bool isAdmin = IEtherFiNodesManager(etherFiNodesManager).operatingAdmin(signer);
+        bool isAdmin = IEtherFiNodesManager(etherFiNodesManager).roleRegistry().hasRole(NODE_ADMIN_ROLE, signer);
         return isAdmin ? this.isValidSignature.selector : bytes4(0xffffffff);
     }
 

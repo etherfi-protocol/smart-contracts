@@ -1,42 +1,24 @@
-# [EFIP-8] Async Admin Task Execution for Validator Management
+# [EFIP-8] Withdraw weETH from Treasury contract
 
+**Author**: Vaibhav Valecha (vaibhav@ether.fi)
 
-**Author**: Vaibhav Valecha (vaibhav@ether.fi), syko (seongyun@ether.fi)
+**Date**: 2024-07-12
 
-**Date**: 2024-07-22
 
 ## Summary
 
-This EFIP proposes implementing asynchronous task execution for validator management admin tasks in the EtherFi protocol. This change will allow admin tasks to be queued and executed asynchronously, improving scalability.
+EFIP-8 proposes to rescue the weEth held by the [ether.fi treasury contract](https://etherscan.io/address/0x6329004e903b7f420245e7af3f355186f2432466), which lacks the functionality to transfer ERC20 tokens or upgrade the contract. This can be achieved by upgrading the weEth contract to add a function that allows the owner to transfer the weEth out of the treasury contract and only the treasury contract.  
+
 
 ## Motivation
 
-Currently, admin tasks are executed synchronously, which can lead to delays in validator management, especially during high-load periods. By introducing asynchronous task execution, we can ensure faster & prompt management.
+Currently, we have 32 weETH in the treasury, which is not transferable because the contract does not have the function to transfer ERC20 tokens, and it is not upgradeable. Therefore, the 32 weETH is stuck.
+
+The benefit of this proposal is that it allows us to move the weETH into another wallet from the treasury without losing the trust of our users, as we are only allowing the owner to transfer weETH out of the treasury.
 
 ## Proposal
 
-The proposal introduces changes to the EtherFiAdmin contract to enable asynchronous execution of admin tasks. Key features include:
-
-1. **Task Types**:
-    - Definition of various task types such as `ValidatorApproval`, `SendExitRequests`, `ProcessNodeExit`, and `MarkBeingSlashed`.
-
-2. **Task Status Management**:
-    - Introduction of a `TaskStatus` struct to track the status of each task.
-    - Mapping to manage task statuses.
-
-3. **Task Execution Functions**:
-    - `executeValidatorManagementTask`: Executes specified admin tasks based on their type.
-    - `invalidateValidatorManagementTask`: Invalidates tasks that are no longer needed.
-
-4. **Event Emission**:
-    - Emission of events such as `ValidatorManagementTaskCreated`, `ValidatorManagementTaskCompleted`, and `ValidatorManagementTaskInvalidated` to track task progress and status.
-
-5. **Task Enqueuing**:
-    - Functions to enqueue tasks for later execution, improving flexibility and responsiveness.
-
-## References
-
-- [Pull Request #82](https://github.com/etherfi-protocol/smart-contracts/pull/82)
+To implement this proposal, we add a function in the weEth contract which calls transfers for the amount of weEth held by the treasury and sends its to the owner.
 
 ## Copyright
 

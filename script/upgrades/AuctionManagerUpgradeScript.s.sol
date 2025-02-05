@@ -28,8 +28,6 @@ contract AuctionManagerUpgrade is Script {
         AuctionManagerInstance.upgradeTo(address(AuctionManagerImplementation));
         AuctionManagerInstance.initializeOnUpgrade(membershipManagerProxyAddress, 0.15 ether, etherFiAdminAddress, nodeOperatorManagerAddress);
 
-        require(AuctionManagerInstance.admins(etherFiAdminAddress), "EtherFiAdmin should be an admin");
-
         vm.stopBroadcast();
     }
 }

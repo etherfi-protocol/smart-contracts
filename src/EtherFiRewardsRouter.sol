@@ -42,6 +42,7 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     }
 
     function withdrawToLiquidityPool() external {
+        if (!roleRegistry.hasRole(ETHERFI_ROUTER_ADMIN, msg.sender)) revert IncorrectRole();
 
         uint256 balance = address(this).balance;
         require(balance > 0, "Contract balance is zero");

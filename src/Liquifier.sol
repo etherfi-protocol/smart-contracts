@@ -11,9 +11,12 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/ILiquifier.sol";
 import "./interfaces/ILiquidityPool.sol";
+import "./interfaces/IPausable.sol";
+import "./BucketRateLimiter.sol";
 
 import "./eigenlayer-interfaces/IStrategyManager.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
+import "./RoleRegistry.sol";
 
 
 /// @title Router token swapping functionality
@@ -47,63 +50,67 @@ interface IERC20Burnable is IERC20 {
 }
 
 /// Go wild, spread eETH/weETH to the world
-contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, ILiquifier {
+contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, ILiquifier, IPausable {
     using SafeERC20 for IERC20;
 
     uint32 public DEPRECATED_eigenLayerWithdrawalClaimGasCost;
-    uint32 public timeBoundCapRefreshInterval; // seconds
+    uint32 public DEPRECATED_timeBoundCapRefreshInterval; // seconds
 
     bool public quoteStEthWithCurve;
 
     uint128 public DEPRECATED_accumulatedFee;
 
     mapping(address => TokenInfo) public tokenInfos;
-    mapping(bytes32 => bool) public isRegisteredQueuedWithdrawals;
-    mapping(address => bool) public admins;
+    mapping(bytes32 => bool) public DEPRECATED_isRegisteredQueuedWithdrawals;
+    mapping(address => bool) public DEPRECATED_admins;
 
-    address public treasury;
+    address public treasury; // TODO: deprecate it
     ILiquidityPool public liquidityPool;
-    IStrategyManager public eigenLayerStrategyManager;
+    IStrategyManager public DEPRECATED_eigenLayerStrategyManager;
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
 
-    ICurvePool public cbEth_Eth_Pool;
-    ICurvePool public wbEth_Eth_Pool;
+    ICurvePool public cbEth_Eth_Pool; // TODO: deprecate it
+    ICurvePool public wbEth_Eth_Pool; // TODO: deprecate it
     ICurvePool public stEth_Eth_Pool;
 
-    IcbETH public cbEth;
-    IwBETH public wbEth;
+    IcbETH public cbEth; // TODO: deprecate it
+    IwBETH public wbEth; // TODO: deprecate it
     ILido public lido;
 
-    IDelegationManager public eigenLayerDelegationManager;
+    IDelegationManager public DEPRECATED_eigenLayerDelegationManager;
 
-    IPancackeV3SwapRouter pancakeRouter;
+    IPancackeV3SwapRouter pancakeRouter; // TODO: deprecate it
 
-    mapping(string => bool) flags;
+    mapping(string => bool) flags; // TODO: deprecate it
     
     // To support L2 native minting of weETH
     IERC20[] public dummies;
     address public l1SyncPool;
 
-    mapping(address => bool) public pausers;
+    mapping(address => bool) public DEPRECATED_pausers;
 
     address public etherfiRestaker;
 
+    RoleRegistry public roleRegistry;
+
+    BucketRateLimiter public rateLimiter;
+
+    bytes32 public constant LIQUIFIER_ADMIN_ROLE = keccak256("LIQUIFIER_ADMIN_ROLE");
+    bytes32 public constant EETH_STETH_SWAPPER = keccak256("EETH_STETH_SWAPPER");
+    
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
-    event RegisteredQueuedWithdrawal(bytes32 _withdrawalRoot, IStrategyManager.DeprecatedStruct_QueuedWithdrawal _queuedWithdrawal);
-    event RegisteredQueuedWithdrawal_V2(bytes32 _withdrawalRoot, IDelegationManager.Withdrawal _queuedWithdrawal);
-    event CompletedQueuedWithdrawal(bytes32 _withdrawalRoot);
     event QueuedStEthWithdrawals(uint256[] _reqIds);
     event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
 
-    error StrategyShareNotEnough();
     error NotSupportedToken();
     error EthTransferFailed();
     error NotEnoughBalance();
+    error IncorrectAmount();
     error AlreadyRegistered();
-    error NotRegistered();
     error WrongOutput();
     error IncorrectCaller();
-    error IncorrectAmount();
+    error IncorrectRole();
+
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -122,7 +129,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         treasury = _treasury;
         liquidityPool = ILiquidityPool(_liquidityPool);
         lidoWithdrawalQueue = ILidoWithdrawalQueue(_lidoWithdrawalQueue);
-        eigenLayerStrategyManager = IEigenLayerStrategyManager(_eigenLayerStrategyManager);
+        DEPRECATED_eigenLayerStrategyManager = IEigenLayerStrategyManager(_eigenLayerStrategyManager);
 
         lido = ILido(_stEth);
         cbEth = IcbETH(_cbEth);
@@ -131,8 +138,17 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         wbEth_Eth_Pool = ICurvePool(_wbEth_Eth_Pool);
         stEth_Eth_Pool = ICurvePool(_stEth_Eth_Pool);
         
-        timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
+        DEPRECATED_timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
         DEPRECATED_eigenLayerWithdrawalClaimGasCost = 150_000;
+    }
+    
+    function initializeV2dot5(address _roleRegistry, address _rateLimiter) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+        if (address(rateLimiter) != address(0)) revert();
+
+        // TODO: compile list of values in DEPRECATED_admins to clear out
+        roleRegistry = RoleRegistry(_roleRegistry);
+        rateLimiter = BucketRateLimiter(_rateLimiter);
     }
 
     function initializeOnUpgrade(address _etherfiRestaker) external onlyOwner {
@@ -160,9 +176,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
     
         uint256 dx = quoteByDiscountedValue(_token, _amount);
-        require(!isDepositCapReached(_token, dx), "CAPPED");
 
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, dx, _referral);
+
+        _consumeRate(_token, _amount, eEthShare);
 
         emit Liquified(msg.sender, dx, _token, false);
 
@@ -170,75 +187,79 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return eEthShare;
     }
 
+    // Swap user's eETH for Liquifier's stETH
+    function swapEEthForStEth(uint256 _amount) external whenNotPaused nonReentrant {
+        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
+        if (_amount > liquidityPool.eETH().balanceOf(msg.sender)) revert NotEnoughBalance();
+        if (!roleRegistry.hasRole(EETH_STETH_SWAPPER, msg.sender)) revert IncorrectRole();
+        uint256 preBalance = liquidityPool.eETH().balanceOf(address(this));
+        IERC20(address(liquidityPool.eETH())).safeTransferFrom(msg.sender, address(this), _amount);
+        uint256 postBalance = liquidityPool.eETH().balanceOf(address(this));
+        uint256 transferredAmount = postBalance - preBalance;
+        IERC20(address(lido)).safeTransfer(msg.sender, _amount);
+        liquidityPool.withdraw(address(liquidityPool), transferredAmount);
+    }
+
     function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused returns (uint256) {
         try IERC20Permit(_token).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return depositWithERC20(_token, _amount, _referral);
     }
 
-    // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
-    function withdrawEther() external onlyAdmin {
-        uint256 amountToLiquidityPool = address(this).balance;
-        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
-        if (!sent) revert EthTransferFailed();
+    // Send the redeemed ETH back to the liquidity pool
+    function withdrawEther() external {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _withdrawEther();
     }
 
-    function sendToEtherFiRestaker(address _token, uint256 _amount) external onlyAdmin {
+    function sendToEtherFiRestakeManager(address _token, uint256 _amount) external {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        IERC20(_token).safeTransfer(etherfiRestaker, _amount);
+    }
+
+    // Swap Liquifier's eETH for ETH from the liquidity pool and send it back to the liquidity pool
+    function withdrawEEth(uint256 amount) external {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        liquidityPool.withdraw(address(liquidityPool), amount);
+    }
+
+    function sendToEtherFiRestaker(address _token, uint256 _amount) external {
+        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         IERC20(_token).safeTransfer(etherfiRestaker, _amount);
     }
 
     function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOwner {
         tokenInfos[_token].isWhitelisted = _isWhitelisted;
     }
-
-    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyAdmin {
-        tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
-        tokenInfos[_token].totalCapInEther = _totalCapInEther;
-    }
     
-    function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyOwner {
+    function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, bool _isL2Eth) external onlyOwner {
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
             if (_token == address(0) || _target != address(0)) revert();
             dummies.push(IERC20(_token));
-        } else {
-            // _target = EigenLayer's Strategy contract
-            if (_token != address(IStrategy(_target).underlyingToken())) revert NotSupportedToken();
-        }
-        tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0, _isL2Eth);
+        } 
+        
+        tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), 0, 0, 0, 0, _isL2Eth);
     }
 
-    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyOwner {
-        timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
-    }
-
-    function pauseDeposits(address _token) external onlyPauser {
-        tokenInfos[_token].timeBoundCapInEther = 0;
-        tokenInfos[_token].totalCapInEther = 0;
-    }
-
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        admins[_address] = _isAdmin;
-    }
-
-    function updatePauser(address _address, bool _isPauser) external onlyAdmin {
-        pausers[_address] = _isPauser;
-    }
-
-    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyAdmin {
+    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
     }
 
-    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyAdmin {
+    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         quoteStEthWithCurve = _quoteStEthWithCurve;
     }
 
-    //Pauses the contract
-    function pauseContract() external onlyPauser {
+    // Pauses the contract
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
-    //Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    // Unpauses the contract
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 
@@ -264,11 +285,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         else if (tokenInfos[_token].isL2Eth) return _amount * 1; /// 1:1 from l2Eth to eETH
 
         revert NotSupportedToken();
-    }
-
-    function quoteStrategyShareForDeposit(address _token, IStrategy _strategy, uint256 _share) public view returns (uint256) {
-        uint256 tokenAmount = _strategy.sharesToUnderlyingView(_share);
-        return quoteByMarketValue(_token, tokenAmount);
     }
 
     function quoteByMarketValue(address _token, uint256 _amount) public view returns (uint256) {
@@ -314,61 +330,40 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         }
     }
 
-    /// deposited (restaked) ETH can have 3 states:
-    /// - restaked in EigenLayer & pending for withdrawals
-    /// - non-restaked & held by this contract
-    /// - non-restaked & not held by this contract & pending for withdrawals
-    function getTotalPooledEtherSplits(address _token) public view returns (uint256 restaked, uint256 holding, uint256 pendingForWithdrawals) {
+    /// deposited ETH can have 2 states:
+    /// - held by this contract
+    /// - not held by this contract & pending for withdrawals
+    function getTotalPooledEtherSplits(address _token) public view returns (uint256 holding, uint256 pendingForWithdrawals) {
         TokenInfo memory info = tokenInfos[_token];
-        if (!isTokenWhitelisted(_token)) return (0, 0, 0);
+        if (!isTokenWhitelisted(_token)) return (0, 0);
 
-        if (info.strategy != IStrategy(address(0))) {
-            restaked = quoteByFairValue(_token, info.strategy.sharesToUnderlyingView(info.strategyShare)); /// restaked & pending for withdrawals
-        }
         holding = quoteByFairValue(_token, IERC20(_token).balanceOf(address(this))); /// eth value for erc20 holdings
         pendingForWithdrawals = info.ethAmountPendingForWithdrawals; /// eth pending for withdrawals
     }
 
     function getTotalPooledEther(address _token) public view returns (uint256) {
-        (uint256 restaked, uint256 holding, uint256 pendingForWithdrawals) = getTotalPooledEtherSplits(_token);
-        return restaked + holding + pendingForWithdrawals;
+        (uint256 holding, uint256 pendingForWithdrawals) = getTotalPooledEtherSplits(_token);
+
+        return holding + pendingForWithdrawals;
     }
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
     }
 
-    function timeBoundCap(address _token) public view returns (uint256) {
-        return uint256(1 ether) * tokenInfos[_token].timeBoundCapInEther;
-    }
-
-    function totalCap(address _token) public view returns (uint256) {
-        return uint256(1 ether) * tokenInfos[_token].totalCapInEther;
-    }
-
-    function totalDeposited(address _token) public view returns (uint256) {
-        return tokenInfos[_token].totalDeposited;
-    }
-
     function isDepositCapReached(address _token, uint256 _amount) public view returns (bool) {
-        TokenInfo memory info = tokenInfos[_token];
-        uint96 totalDepositedThisPeriod_ = info.totalDepositedThisPeriod;
-        uint32 timeBoundCapClockStartTime_ = info.timeBoundCapClockStartTime;
-        if (block.timestamp >= timeBoundCapClockStartTime_ + timeBoundCapRefreshInterval) {
-            totalDepositedThisPeriod_ = 0;
-        }
-        return (totalDepositedThisPeriod_ + _amount > timeBoundCap(_token) || info.totalDeposited + _amount > totalCap(_token));
+        uint256 amountOut = quoteByMarketValue(_token, _amount);
+        return !rateLimiter.canConsume(_token, _amount, amountOut);
     }
 
     /* INTERNAL FUNCTIONS */
+
     function _afterDeposit(address _token, uint256 _amount) internal {
         TokenInfo storage info = tokenInfos[_token];
-        if (block.timestamp >= info.timeBoundCapClockStartTime + timeBoundCapRefreshInterval) {
-            info.totalDepositedThisPeriod = 0;
-            info.timeBoundCapClockStartTime = uint32(block.timestamp);
-        }
-        info.totalDepositedThisPeriod += uint96(_amount);
-        info.totalDeposited += uint96(_amount);
+    }
+
+    function _consumeRate(address _tokenIn, uint256 _tokenInAmount, uint256 _tokenOutAmount) internal {
+        rateLimiter.updateRateLimit(msg.sender, _tokenIn, _tokenInAmount, _tokenOutAmount);
     }
 
     function _L2SanityChecks(address _token) internal view {
@@ -379,24 +374,11 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return (_a > _b) ? _b : _a;
     }
 
+    function _withdrawEther() internal {
+        uint256 amountToLiquidityPool = address(this).balance;
+        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
+        if (!sent) revert EthTransferFailed();
+    }
+
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
-    function _requireAdmin() internal view virtual {
-        if (!(admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
-    }
-
-    function _requirePauser() internal view virtual {
-        if (!(pausers[msg.sender] || admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
-    }
-
-    /* MODIFIER */
-    modifier onlyAdmin() {
-        _requireAdmin();
-        _;
-    }
-
-    modifier onlyPauser() {
-        _requirePauser();
-        _;
-    }
 }

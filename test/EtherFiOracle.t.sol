@@ -3,10 +3,13 @@ pragma solidity ^0.8.13;
 
 import "./TestSetup.sol";
 import "forge-std/console2.sol";
+import "forge-std/console.sol";
 
 contract EtherFiOracleTest is TestSetup {
+    address treasury;
     function setUp() public {
         setUpTests();
+        _upgradeMembershipManagerFromV0ToV1();
 
         // Timestamp = 1, BlockNumber = 0
         vm.roll(0);
@@ -91,7 +94,7 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(reportAtPeriod2C);
 
        // Update the Consensus Version to 2
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiOracleInstance.setConsensusVersion(2);
 
         // alice submits the period 2 report
@@ -182,6 +185,8 @@ contract EtherFiOracleTest is TestSetup {
         // Now it's period 2!
         _moveClock(1024 + 2 * slotsPerEpoch);
 
+        console.log("0");
+
         // alice submits the period 2 report
         vm.prank(alice);
         bool consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod2A);
@@ -190,6 +195,8 @@ contract EtherFiOracleTest is TestSetup {
         vm.prank(bob);
         consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod2B);
         assertEq(consensusReached, false);
+
+        console.log("1");
 
         // Now it's period 3
         _moveClock(1024);
@@ -235,17 +242,17 @@ contract EtherFiOracleTest is TestSetup {
 
         (uint32 slotFrom, uint32 slotTo, uint32 blockFrom) = etherFiOracleInstance.blockStampForNextReport();
         assertEq(slotFrom, 0);
-        assertEq(slotTo, 1024-1);
+        assertEq(slotTo, 1024 - 1);
         assertEq(blockFrom, 0);
 
         report.refSlotFrom = 0;
-        report.refSlotTo = 1024-1;
+        report.refSlotTo = 1024 - 1;
         report.refBlockFrom = 0;
         report.refBlockTo = 1024-1;
 
         vm.startPrank(alice);
         etherFiOracleInstance.submitReport(report);
-        etherFiAdminInstance.executeTasks(report, emptyBytes, emptyBytes);
+        etherFiAdminInstance.executeTasks(report);
         vm.stopPrank();
 
         (slotFrom, slotTo, blockFrom) = etherFiOracleInstance.blockStampForNextReport();
@@ -253,7 +260,7 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(slotTo, 2 * 1024 - 1);
         assertEq(blockFrom, 1024);
 
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiOracleInstance.setReportStartSlot(1 * 1024 + 512);
 
         _moveClock(1 * 1024 + 512);
@@ -270,7 +277,7 @@ contract EtherFiOracleTest is TestSetup {
 
         vm.startPrank(alice);
         etherFiOracleInstance.submitReport(report);
-        etherFiAdminInstance.executeTasks(report, emptyBytes, emptyBytes);
+        etherFiAdminInstance.executeTasks(report);
         vm.stopPrank();
 
         (slotFrom, slotTo, blockFrom) = etherFiOracleInstance.blockStampForNextReport();
@@ -290,7 +297,7 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(blockFrom, 0);
 
         console.log(etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp));
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiOracleInstance.setReportStartSlot(1 * 1024 + 512);
 
         (slotFrom, slotTo, blockFrom) = etherFiOracleInstance.blockStampForNextReport();
@@ -300,7 +307,7 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_report_start_slot() public {
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiOracleInstance.setReportStartSlot(2048);
 
         // note that the block timestamp starts from 1 (= slot 0) and the block number starts from 0
@@ -333,7 +340,7 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(reportAtSlot3071);
 
         // change startSlot to 3264
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiOracleInstance.setReportStartSlot(3264);
 
         // slot 3236
@@ -361,7 +368,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Oracle accidentally generated an wrong report
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
-        vm.prank(alice);
+        vm.startPrank(alice);
         bool consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod2A);
         assertEq(consensusReached, true);
 
@@ -369,10 +376,8 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), reportAtPeriod2A.refBlockTo);
 
         // Owner performs manual operations to undo the published report
-        vm.startPrank(owner);
         etherFiOracleInstance.unpublishReport(reportHash);
         etherFiOracleInstance.updateLastPublishedBlockStamps(lastPublishedReportRefSlot, lastPublishedReportRefBlock);
-        vm.stopPrank();
 
         assertEq(etherFiOracleInstance.lastPublishedReportRefSlot(), lastPublishedReportRefSlot);
         assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), lastPublishedReportRefBlock);
@@ -408,7 +413,7 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_set_oracle_report_period() public {
-        vm.startPrank(owner);
+        vm.startPrank(alice);
 
         vm.expectRevert("Report period cannot be zero");
         etherFiOracleInstance.setOracleReportPeriod(0);
@@ -533,38 +538,19 @@ contract EtherFiOracleTest is TestSetup {
         vm.prank(alice);
         assertEq(etherFiAdminInstance.canExecuteTasks(reportAtPeriod2A), true);
 
-        vm.prank(owner);
+        vm.prank(alice);
         etherFiAdminInstance.updatePostReportWaitTimeInSlots(1);
         assertEq(etherFiAdminInstance.canExecuteTasks(reportAtPeriod2A), false);
 
         vm.expectRevert("EtherFiAdmin: report is too fresh");
         vm.prank(alice);
-        etherFiAdminInstance.executeTasks(reportAtPeriod2A, emptyBytes, emptyBytes);
+        etherFiAdminInstance.executeTasks(reportAtPeriod2A);
 
         _moveClock(1);
         assertEq(etherFiAdminInstance.canExecuteTasks(reportAtPeriod2A), true);
 
         vm.prank(alice);
-        etherFiAdminInstance.executeTasks(reportAtPeriod2A, emptyBytes, emptyBytes);
-    }
-
-    function test_all_pause() public {
-        vm.startPrank(alice);
-
-        etherFiAdminInstance.pause(true, true, true, false, false, false);
-        etherFiAdminInstance.pause(true, true, true, false, false, false);
-        etherFiAdminInstance.pause(true, true, true, true, true, true);
-        etherFiAdminInstance.pause(true, true, true, true, true, true);
-
-        vm.expectRevert("Ownable: caller is not the owner");
-        etherFiAdminInstance.unPause(false, false, false, false, false, false);
-        vm.stopPrank();
-
-        vm.startPrank(owner);
-        etherFiAdminInstance.unPause(false, false, false, true, true, true);
-        etherFiAdminInstance.unPause(true, true, true, true, true, true);
-        etherFiAdminInstance.unPause(true, true, true, true, true, true);
-        vm.stopPrank();
+        etherFiAdminInstance.executeTasks(reportAtPeriod2A);
     }
 
     function test_report_earlier_than_last_admin_execution_fails() public {
@@ -588,7 +574,7 @@ contract EtherFiOracleTest is TestSetup {
         vm.startPrank(alice);
         etherFiOracleInstance.submitReport(report);
         _moveClock(1 * 1024); // The oracle bot failed to submit the report for admin task execution... which can happen in real life
-        etherFiAdminInstance.executeTasks(report, emptyBytes, emptyBytes);
+        etherFiAdminInstance.executeTasks(report);
 
         report.refSlotFrom = 1024;
         report.refSlotTo = 2 * 1024 - 1;
@@ -607,7 +593,7 @@ contract EtherFiOracleTest is TestSetup {
         report.refBlockTo = 3 * 1024 - 1;
 
         etherFiOracleInstance.submitReport(report);
-        etherFiAdminInstance.executeTasks(report, emptyBytes, emptyBytes);
+        etherFiAdminInstance.executeTasks(report);
 
         vm.stopPrank();
     }
@@ -658,23 +644,139 @@ contract EtherFiOracleTest is TestSetup {
         assertTrue(consensusReached); // succeeded
     }
 
-    function test_execute_task_treasury_payout() public {
+    function helper_execute_task() public {
+        vm.startPrank(superAdmin);
+        roleRegistry.grantRole(
+            etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(),
+            chad
+        );
         vm.startPrank(owner);
         etherFiOracleInstance.addCommitteeMember(chad);
-        etherFiOracleInstance.setQuorumSize(2);
+        etherFiOracleInstance.setQuorumSize(1);
         liquidityPoolInstance.setTreasury(address(owner));
+        etherFiAdminInstance.setValidatorTaskBatchSize(10);
+        treasury = address(owner);
         vm.stopPrank();
+    }
 
+    function test_execute_task_treasury_payout() public {
+        helper_execute_task();
         _moveClock(1024 + 2 * slotsPerEpoch);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         _initReportBlockStamp(report);
 
-        // Assume that the accruedRewards must be 1 ether, all the time
-
-        // Alice submited the correct report 
-        vm.prank(alice);
+        deal(chad, 1000000 ether);
+        liquidityPoolInstance.deposit{value: 1000000 ether}();
         report.accruedRewards = 90 ether;
         report.protocolFees = 10 ether;
+
+        vm.startPrank(chad);
+        etherFiOracleInstance.submitReport(report);
+        skip(1000);
+        etherFiAdminInstance.executeTasks(report);
+        uint256 ownerBal = eETHInstance.balanceOf(address(owner));
+        assertApproxEqAbs(ownerBal, 10 ether, 1);
+        vm.stopPrank();
+    }
+
+    /// @dev Helper function to test the realistic scenario of the treasury payout and performing offchain operation
+    /// @param _validatorRewards The rewards accrued by the validators in the current period
+    /// @param _isEthFundValidator The boolean array indicating whether the validator is an EthFund validator or not
+    function helper_realistic_execute_task_treasury_payout(uint128[10] memory _validatorRewards, bool[10] memory _isEthFundValidator, uint256 _count, uint128 _totalValidatorRewards) public {
+        helper_execute_task();
+        uint128 totalBnftRewards = 0; // ethfund validator bnft rewards
+        uint128 etherFiRewards = 0; // 10% of total rewards
+        uint128 protocolRewards = 0; // users rewards for staking
+
+        uint128 sumOfValRewards = 0;
+        _moveClock(1024 + 2 * slotsPerEpoch);
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        _initReportBlockStamp(report);
+
+        //Required for oracle report
+        vm.startPrank(chad);
+        deal(chad, 1000000 ether);
+        liquidityPoolInstance.deposit{value: 1000000 ether}();
+        vm.stopPrank();
+
+        //verify the sum is what is intended
+        for (uint i = 0; i < 10; i++) {
+            sumOfValRewards += _validatorRewards[i];
+        }
+        assert(sumOfValRewards == _totalValidatorRewards);
+
+        for (uint i = 0; i < _count; i++) {
+            if (_isEthFundValidator[i]) {
+                totalBnftRewards +=(((_validatorRewards[i] * 3) / 32) * 9) /10;
+                protocolRewards +=(((_validatorRewards[i] * 29) / 32) * 9) /10;
+            } else {
+                protocolRewards += (_validatorRewards[i] * 9) / 10;
+            }
+            etherFiRewards += _validatorRewards[i] / 10;
+        }
+        uint128 protocolFees = totalBnftRewards + etherFiRewards; // total rewards not going to users
+        report.accruedRewards = int128(protocolRewards);
+        report.protocolFees = protocolFees;
+        vm.startPrank(chad);
+        etherFiOracleInstance.submitReport(report);
+        skip(1000);
+        etherFiAdminInstance.executeTasks(report);
+        uint256 treasuryBal = eETHInstance.balanceOf(treasury);
+        uint256 chadBal = eETHInstance.balanceOf(address(chad));
+        assertApproxEqAbs(treasuryBal, uint256(protocolFees), 1);
+        assertApproxEqAbs(uint256(1000000 ether) + uint256(protocolRewards), chadBal, 1);
+        vm.stopPrank();
+    }
+
+    function test_realistic_execute_task_treasury_payout() public {
+        uint128[10] memory validatorRewards = [
+            uint128(2 ether),
+            uint128(1 ether / 2),
+            uint128(5 ether),
+            uint128(1 ether / 2),
+            uint128(1 ether / 4),
+            uint128(1 ether / 4),
+            uint128(7 ether),
+            uint128(3 ether),
+            uint128(1 ether / 2),
+            uint128(1 ether)
+        ];
+        bool[10] memory isEthFundValidators = [true, false, true, false, false, false, true, true, false, true];
+        helper_realistic_execute_task_treasury_payout(validatorRewards, isEthFundValidators, 10, 20 ether);
+    }
+
+    function test_all_ethfund_vals_execute_task_treasury_payout() public {
+        uint128[10] memory validatorRewards = [
+            uint128(2 ether),
+            uint128(1 ether / 2),
+            uint128(5 ether),
+            uint128(1 ether / 2),
+            uint128(1 ether / 4),
+            uint128(1 ether / 4),
+            uint128(7 ether),
+            uint128(3 ether),
+            uint128(1 ether / 2),
+            uint128(1 ether)
+        ];
+        bool[10] memory isEthFundValidators = [true, true, true, true, true, true, true, true, true, true];
+        helper_realistic_execute_task_treasury_payout(validatorRewards, isEthFundValidators, 10, 20 ether);
+    }
+
+    function test_no_ethfund_vals_execute_task_treasury_payout() public {
+        uint128[10] memory validatorRewards = [
+            uint128(2 ether),
+            uint128(1 ether / 2),
+            uint128(5 ether),
+            uint128(1 ether / 2),
+            uint128(1 ether / 4),
+            uint128(1 ether / 4),
+            uint128(7 ether),
+            uint128(3 ether),
+            uint128(1 ether / 2),
+            uint128(1 ether)
+        ];
+        bool[10] memory isEthFundValidators = [false, false, false, false, false, false, false, false, false, false];
+        helper_realistic_execute_task_treasury_payout(validatorRewards, isEthFundValidators, 10, 20 ether);
     }
 }

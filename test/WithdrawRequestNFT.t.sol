@@ -205,9 +205,9 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(liquidityPoolInstance.amountForShare(withdrawRequestNFTInstance.accumulatedDustEEthShares()), 1 ether);
 
         vm.prank(alice);
-        withdrawRequestNFTInstance.burnAccumulatedDustEEthShares();
+        withdrawRequestNFTInstance.withdrawAccumulatedDustEEthShares(bob);
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 0 ether, "eETH balance should be 0 ether");
-        assertEq(eETHInstance.balanceOf(bob), 18 ether + 1 ether); // 1 ether eETH in `withdrawRequestNFT` contract is re-distributed to the eETH holders
+        assertEq(eETHInstance.balanceOf(bob), 18 ether + 1 ether); // 1 ether eETH in `withdrawRequestNFT` contract is sent to Bob
     }
 
     function test_ValidClaimWithdrawWithNegativeRebase() public {

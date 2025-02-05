@@ -6,7 +6,7 @@ import "../../src/MembershipManager.sol";
 import "../../src/MembershipNFT.sol";
 import "../../src/WeETH.sol";
 import "../../src/EETH.sol";
-import "../../src/NFTExchange.sol";
+import "src/archive/NFTExchange.sol";
 import "../../src/LiquidityPool.sol";
 import "../../src/helpers/AddressProvider.sol";
 import "../../src/archive/RegulationsManager.sol";
@@ -126,11 +126,12 @@ contract DeployPhaseOnePointFiveScript is Script {
     }
 
     function setUpAdmins(address _admin) internal {
-        liquidityPool.updateAdmin(_admin, true);
-        regulationsManager.updateAdmin(_admin, true);
-        membershipManager.updateAdmin(_admin, true);
-        membershipNFT.updateAdmin(_admin, true);
-        nftExchange.updateAdmin(_admin);
+        // DEPRECATED
+        // liquidityPool.updateAdmin(_admin, true);
+        // regulationsManager.updateAdmin(_admin, true);
+        // membershipManager.updateAdmin(_admin, true);
+        // membershipNFT.updateAdmin(_admin, true);
+        // nftExchange.updateAdmin(_admin);
     }
 
     function initializeTiers() internal {

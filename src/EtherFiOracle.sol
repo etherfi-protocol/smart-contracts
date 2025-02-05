@@ -9,9 +9,11 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "./interfaces/IEtherFiOracle.sol";
 import "./interfaces/IEtherFiAdmin.sol";
+import "./interfaces/IPausable.sol";
+import "./RoleRegistry.sol";
 
 
-contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle {
+contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle, IPausable {
 
     mapping(address => IEtherFiOracle.CommitteeMemberState) public committeeMemberStates; // committee member wallet address to its State
     mapping(bytes32 => IEtherFiOracle.ConsensusState) public consensusStates; // report's hash -> Consensus State
@@ -34,7 +36,11 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
     IEtherFiAdmin etherFiAdmin;
 
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
+
+    RoleRegistry public roleRegistry;
+
+    bytes32 public constant ORACLE_ADMIN_ROLE = keccak256("ORACLE_ADMIN_ROLE");
 
     event CommitteeMemberAdded(address indexed member);
     event CommitteeMemberRemoved(address indexed member);
@@ -47,6 +53,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     event ReportPublished(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash);
     event ReportSubmitted(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash, address indexed committeeMember);
 
+    error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -67,6 +74,13 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         SLOTS_PER_EPOCH = _slotsPerEpoch;
         SECONDS_PER_SLOT = _secondsPerSlot;
         BEACON_GENESIS_TIME = _genesisTime;
+    }
+
+    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+        require(address(roleRegistry) == address(0x00), "already initialized");
+
+        // TODO: compile list of values in DEPRECATED_admins to clear out
+        roleRegistry = RoleRegistry(_roleRegistry);
     }
 
     function submitReport(OracleReport calldata _report) external whenNotPaused returns (bool) {
@@ -266,7 +280,9 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit CommitteeMemberUpdated(_address, _enabled);
     }
 
-    function setReportStartSlot(uint32 _reportStartSlot) public isAdmin {
+    function setReportStartSlot(uint32 _reportStartSlot) public {
+        if (!roleRegistry.hasRole(ORACLE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         // check if the start slot is at the beginning of the epoch
         require(_reportStartSlot > computeSlotAtTimestamp(block.timestamp), "The start slot should be in the future");
         require(_reportStartSlot > lastPublishedReportRefSlot, "The start slot should be after the last published report");
@@ -282,7 +298,9 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit QuorumUpdated(_quorumSize);
     }
 
-    function setOracleReportPeriod(uint32 _reportPeriodSlot) public isAdmin {
+    function setOracleReportPeriod(uint32 _reportPeriodSlot) public {
+        if (!roleRegistry.hasRole(ORACLE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         require(_reportPeriodSlot != 0, "Report period cannot be zero");
         require(_reportPeriodSlot % SLOTS_PER_EPOCH == 0, "Report period must be a multiple of the epoch");
         reportPeriodSlot = _reportPeriodSlot;
@@ -290,7 +308,9 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit OracleReportPeriodUpdated(_reportPeriodSlot);
     }
 
-    function setConsensusVersion(uint32 _consensusVersion) public isAdmin {
+    function setConsensusVersion(uint32 _consensusVersion) public {
+        if (!roleRegistry.hasRole(ORACLE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         require(_consensusVersion > consensusVersion, "New consensus version must be greater than the current one");
         consensusVersion = _consensusVersion;
 
@@ -302,26 +322,30 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         etherFiAdmin = IEtherFiAdmin(_etherFiAdminAddress);
     }
     
-    function unpublishReport(bytes32 _hash) external isAdmin {
+    function unpublishReport(bytes32 _hash) external {
+        if (!roleRegistry.hasRole(ORACLE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         require(consensusStates[_hash].consensusReached, "Consensus is not reached yet");
         consensusStates[_hash].support = 0;
         consensusStates[_hash].consensusReached = false;
     }
 
-    function updateLastPublishedBlockStamps(uint32 _lastPublishedReportRefSlot, uint32 _lastPublishedReportRefBlock) external isAdmin {
+    function updateLastPublishedBlockStamps(uint32 _lastPublishedReportRefSlot, uint32 _lastPublishedReportRefBlock) external {
+        if (!roleRegistry.hasRole(ORACLE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
         lastPublishedReportRefSlot = _lastPublishedReportRefSlot;
         lastPublishedReportRefBlock = _lastPublishedReportRefBlock;
     }
 
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        admins[_address] = _isAdmin;
-    }
-
-    function pauseContract() external isAdmin {
+    // Pauses the contract
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
-    function unPauseContract() external isAdmin {
+    // Unpauses the contract
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 
@@ -330,9 +354,4 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
-    modifier isAdmin() {
-        require(admins[msg.sender] || msg.sender == owner(), "EtherFiAdmin: not an admin");
-        _;
-    }
 }

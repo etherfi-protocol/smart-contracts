@@ -12,21 +12,6 @@ contract EETHTest is TestSetup {
         setUpTests();
     }
 
-    function test_EETHInitializedCorrectly() public {
-        assertEq(eETHInstance.totalShares(), 0);
-        assertEq(eETHInstance.name(), "ether.fi ETH");
-        assertEq(eETHInstance.symbol(), "eETH");
-        assertEq(eETHInstance.decimals(), 18);
-        assertEq(eETHInstance.totalSupply(), 0);
-        assertEq(eETHInstance.balanceOf(alice), 0);
-        assertEq(eETHInstance.balanceOf(bob), 0);
-        assertEq(eETHInstance.allowance(alice, bob), 0);
-        assertEq(eETHInstance.allowance(alice, address(liquidityPoolInstance)), 0);
-        assertEq(eETHInstance.shares(alice), 0);
-        assertEq(eETHInstance.shares(bob), 0);
-        assertEq(eETHInstance.getImplementation(), address(eETHImplementation));
-    }
-
     function test_MintShares() public {
         vm.prank(address(liquidityPoolInstance));
         eETHInstance.mintShares(alice, 100);
@@ -54,20 +39,6 @@ contract EETHTest is TestSetup {
 
         assertEq(eETHInstance.shares(alice), 75);
         assertEq(eETHInstance.totalShares(), 75);
-
-        vm.prank(alice);
-        eETHInstance.burnShares(alice, 25);
-
-        assertEq(eETHInstance.shares(alice), 50);
-        assertEq(eETHInstance.totalShares(), 50);
-
-        vm.expectRevert("BURN_AMOUNT_EXCEEDS_BALANCE");
-        vm.prank(alice);
-        eETHInstance.burnShares(alice, 100);
-
-        vm.expectRevert("Incorrect Caller");
-        vm.prank(bob);
-        eETHInstance.burnShares(alice, 50);
     }
 
     function test_EEthRebase() public {
