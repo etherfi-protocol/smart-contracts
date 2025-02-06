@@ -591,8 +591,8 @@ contract MembershipManagerTest is TestSetup {
         vm.deal(henry, 12 ether);
         vm.deal(alice, 12 ether);
 
-        vm.prank(alice);
-        liquidityPoolInstance.updateWhitelistStatus(true);
+        // vm.prank(alice);
+        // liquidityPoolInstance.updateWhitelistStatus(true);
 
         vm.prank(henry);
 
@@ -606,8 +606,8 @@ contract MembershipManagerTest is TestSetup {
         address[] memory addrs = new address[](1);
         addrs[0] = address(henry);
 
-        vm.prank(alice);
-        liquidityPoolInstance.updateWhitelistedAddresses(addrs, true);
+        // vm.prank(alice);
+        // liquidityPoolInstance.updateWhitelistedAddresses(addrs, true);
         
         vm.startPrank(henry);
         membershipManagerV1Instance.wrapEth{value: 10 ether}(10 ether, 0);

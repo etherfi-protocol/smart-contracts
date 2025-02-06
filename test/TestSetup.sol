@@ -52,6 +52,7 @@ import "../src/BucketRateLimiter.sol";
 
 import "../script/ContractCodeChecker.sol";
 import "../script/Create2Factory.sol";
+import "../src/RoleRegistry.sol";
 
 contract TestSetup is Test, ContractCodeChecker {
 
@@ -109,6 +110,7 @@ contract TestSetup is Test, ContractCodeChecker {
     UUPSProxy public withdrawRequestNFTProxy;
     UUPSProxy public etherFiOracleProxy;
     UUPSProxy public etherFiAdminProxy;
+    UUPSProxy public roleRegistryProxy;
 
     DepositDataGeneration public depGen;
     IDepositContract public depositContractEth2;
@@ -132,6 +134,9 @@ contract TestSetup is Test, ContractCodeChecker {
 
     EarlyAdopterPool public earlyAdopterPoolInstance;
     AddressProvider public addressProviderInstance;
+    
+    RoleRegistry public roleRegistryImplementation;
+    RoleRegistry public roleRegistryInstance;
 
     TNFT public TNFTImplementation;
     TNFT public TNFTInstance;
@@ -217,8 +222,10 @@ contract TestSetup is Test, ContractCodeChecker {
     address liquidityPool = vm.addr(9);
     address shonee = vm.addr(1200);
     address jess = vm.addr(1201);
+    address committeeMember = address(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
 
     address admin;
+    address superAdmin;
 
     address[] public actors;
     address[] public bnftHoldersArray;
@@ -434,11 +441,17 @@ contract TestSetup is Test, ContractCodeChecker {
     function setUpTests() internal {
         vm.startPrank(owner);
 
+        admin = alice;
+
         mockDepositContractEth2 = new DepositContract();
         depositContractEth2 = IDepositContract(address(mockDepositContractEth2));
 
         // Deploy Contracts and Proxies
         treasuryInstance = new Treasury();
+
+        roleRegistryImplementation = new RoleRegistry();
+        roleRegistryProxy = new UUPSProxy(address(roleRegistryImplementation), abi.encodeWithSelector(RoleRegistry.initialize.selector, owner));
+        roleRegistryInstance = RoleRegistry(address(roleRegistryProxy));
 
         nodeOperatorManagerImplementation = new NodeOperatorManager();
         nodeOperatorManagerProxy = new UUPSProxy(address(nodeOperatorManagerImplementation), "");
@@ -519,6 +532,15 @@ contract TestSetup is Test, ContractCodeChecker {
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImplementation),"");
         liquidityPoolInstance = LiquidityPool(payable(address(liquidityPoolProxy)));
 
+        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin);
+
+        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
+
+
         liquifierImplementation = new Liquifier();
         liquifierProxy = new UUPSProxy(address(liquifierImplementation), "");
         liquifierInstance = Liquifier(payable(liquifierProxy));
@@ -578,6 +600,7 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
+        liquidityPoolInstance.initializeRoleRegistry(address(roleRegistryInstance));
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
         withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolInstance)), payable(address(eETHInstance)), payable(address(membershipManagerInstance)));
         membershipManagerInstance.initialize(
@@ -618,7 +641,7 @@ contract TestSetup is Test, ContractCodeChecker {
         membershipManagerInstance.updateAdmin(alice, true);
         membershipNftInstance.updateAdmin(alice, true);
         withdrawRequestNFTInstance.updateAdmin(alice, true);
-        liquidityPoolInstance.updateAdmin(alice, true);
+        // liquidityPoolInstance.updateAdmin(alice, true);
         // liquifierInstance.updateAdmin(alice, true);
 
         // special case for forked tests utilizing oracle
@@ -699,7 +722,7 @@ contract TestSetup is Test, ContractCodeChecker {
 
         vm.startPrank(alice);
         liquidityPoolInstance.unPauseContract();
-        liquidityPoolInstance.updateWhitelistStatus(false);
+        // liquidityPoolInstance.updateWhitelistStatus(false);
         liquidityPoolInstance.setRestakeBnftDeposits(restakingBnftDeposits);
         vm.stopPrank();
 
@@ -736,8 +759,40 @@ contract TestSetup is Test, ContractCodeChecker {
         _initializeMembershipTiers();
         _initializePeople();
         _initializeEtherFiAdmin();
+    }
 
-        admin = alice;
+    function _upgrade_contracts() internal {
+        _upgrade_liquidity_pool_contract();
+    }
+
+    function setupRoleRegistry() public {
+        // TODO: I don't love the coupling here but it was too easy to make tests
+        // where the roleRegistry global var diverged from the one set in the manager instance.
+        // We should work toward a better system that for each contract, will deploy+initialize
+        // proxy if it doesn't exist, or upgrade to the latest version otherwise
+        _upgrade_contracts();
+
+        if (address(liquidityPoolInstance.roleRegistry()) == address(0x0)) {
+            // deploy new versions of role registry
+            roleRegistryImplementation = new RoleRegistry();
+            bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
+            roleRegistryInstance = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
+            superAdmin = admin;
+
+            // upgrade our existing contracts to utilize `roleRegistry`
+            vm.startPrank(owner);
+            liquidityPoolInstance.initializeRoleRegistry(address(roleRegistryInstance));            
+        }
+
+        vm.startPrank(admin);
+        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin);
+
+        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
+        vm.stopPrank();
     }
 
     function _initOracleReportsforTesting() internal {
@@ -893,7 +948,7 @@ contract TestSetup is Test, ContractCodeChecker {
 
         address admin = address(etherFiAdminInstance);
         stakingManagerInstance.updateAdmin(admin, true); 
-        liquidityPoolInstance.updateAdmin(admin, true);
+        // liquidityPoolInstance.updateAdmin(admin, true);
         membershipManagerInstance.updateAdmin(admin, true);
         withdrawRequestNFTInstance.updateAdmin(admin, true);
         etherFiOracleInstance.updateAdmin(admin, true);
@@ -1019,7 +1074,7 @@ contract TestSetup is Test, ContractCodeChecker {
     }
 
     function registerAsBnftHolder(address _user) internal {
-        (bool registered, uint32 index) = liquidityPoolInstance.bnftHoldersIndexes(_user);
+        bool registered = liquidityPoolInstance.validatorSpawner(_user);
         if (!registered) liquidityPoolInstance.registerAsBnftHolder(_user);
     }
 
@@ -1045,13 +1100,11 @@ contract TestSetup is Test, ContractCodeChecker {
         vm.deal(henry, 100000 ether);
         vm.deal(chad, 100000 ether);
 
-        (bool registered, uint32 index) = liquidityPoolInstance.bnftHoldersIndexes(alice);
+        bool registered = liquidityPoolInstance.validatorSpawner(alice);
         assertEq(registered, true);
-        assertEq(index, 0);
 
-        (registered, index) = liquidityPoolInstance.bnftHoldersIndexes(henry);
+        registered = liquidityPoolInstance.validatorSpawner(henry);
         assertEq(registered, true);
-        assertEq(index, 7);
     }
 
     function depositAndRegisterValidator(bool restaked) public returns (uint256) {
@@ -1125,7 +1178,7 @@ contract TestSetup is Test, ContractCodeChecker {
         }
         vm.startPrank(admin);
         registerAsBnftHolder(_nodeOperator);
-        liquidityPoolInstance.updateBnftMode(_isLpBnftHolder);
+        // liquidityPoolInstance.updateBnftMode(_isLpBnftHolder);
         vm.stopPrank();
 
         vm.prank(admin);
@@ -1168,12 +1221,7 @@ contract TestSetup is Test, ContractCodeChecker {
         vm.stopPrank();
 
         vm.prank(_bnftStaker);
-        uint256[] memory newValidators;
-        if (_isLpBnftHolder) {
-            newValidators = liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(bidIds, _numValidators, _validatorIdToCoUseWithdrawalSafe);
-        } else {
-            newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether * _numValidators}(bidIds, _numValidators, _validatorIdToCoUseWithdrawalSafe);
-        }
+        uint256[] memory newValidators = liquidityPoolInstance.batchDeposit(bidIds, _numValidators, _validatorIdToCoUseWithdrawalSafe);
 
         IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](_numValidators);
 
@@ -1214,11 +1262,7 @@ contract TestSetup is Test, ContractCodeChecker {
 
         vm.startPrank(_bnftStaker);
         bytes32 depositRoot = zeroRoot;
-        if (_isLpBnftHolder) {
-            liquidityPoolInstance.batchRegisterWithLiquidityPoolAsBnftHolder(depositRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
-        } else {
-            liquidityPoolInstance.batchRegisterAsBnftHolder(depositRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
-        }
+        liquidityPoolInstance.batchRegister(depositRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
         vm.stopPrank();
 
         vm.startPrank(admin);
