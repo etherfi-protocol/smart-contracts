@@ -424,6 +424,7 @@ contract TestSetup is Test, ContractCodeChecker {
         // liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
 
         deployEtherFiRestaker();
+        _upgrade_weETH();
 
         vm.stopPrank();
     }
@@ -764,6 +765,12 @@ contract TestSetup is Test, ContractCodeChecker {
 
     function _upgrade_contracts() internal {
         _upgrade_liquidity_pool_contract();
+    }
+
+    function _upgrade_weETH() internal {
+        address newWeETHImpl = address(new WeETH());
+        vm.prank(owner);
+        weEthInstance.upgradeTo(newWeETHImpl);
     }
 
     function setupRoleRegistry() public {

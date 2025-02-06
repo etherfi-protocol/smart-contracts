@@ -289,4 +289,41 @@ contract WeETHTest is TestSetup {
         weEthInstance.unwrap(1 ether);
         assertEq(eETHInstance.balanceOf(bob), 1.333333333333333332 ether);
     }
+    
+    function test_WrapWithPermitGriefingAttack() public {
+        // alice sends a `wrapWithPermit` transaction to mempool with the following inputs
+        uint256 aliceNonce = eETHInstance.nonces(alice);
+        ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(weEthInstance), 5 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
+
+        // bob sees alice's `wrapWithPermit` in the mempool and frontruns her transaction with copied inputs 
+        vm.prank(bob);
+        eETHInstance.permit(alice, address(weEthInstance), 5 ether, 2**256 - 1, permitInput.v, permitInput.r, permitInput.s);
+
+        startHoax(alice);
+        // alices transaction still succeeds as the try catch swallows the error
+        weEthInstance.wrapWithPermit(5 ether, permitInput);
+    }
+
+    function test_rescueTreasuryWeeth() public {
+        uint256 treasuryBal = 31859761318927469119;
+        address treasuryInstance = 0x6329004E903B7F420245E7aF3f355186f2432466;
+        vm.deal(treasuryInstance, treasuryBal);
+        vm.startPrank(treasuryInstance);
+        liquidityPoolInstance.deposit{value: treasuryBal}();
+        eETHInstance.approve(address(weEthInstance), treasuryBal);
+        weEthInstance.wrap(treasuryBal);
+        vm.stopPrank();
+        uint256 preTreasuryBal = weEthInstance.balanceOf(treasuryInstance);
+        uint256 preOwnerBal = weEthInstance.balanceOf(owner);
+        vm.startPrank(alice);
+        vm.expectRevert();
+        weEthInstance.rescueTreasuryWeeth();
+        vm.stopPrank();
+        vm.startPrank(owner);
+        weEthInstance.rescueTreasuryWeeth();
+        vm.stopPrank();
+        assertEq(weEthInstance.balanceOf(address(treasuryInstance)), 0);
+        assertEq(weEthInstance.balanceOf(owner), preTreasuryBal + preOwnerBal);
+        vm.stopPrank(); 
+    }
 }

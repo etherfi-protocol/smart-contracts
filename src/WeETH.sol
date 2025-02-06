@@ -61,7 +61,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         external
         returns (uint256)
     {
-        eETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s);
+        try eETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return wrap(_eETHAmount);
     }
 
@@ -74,6 +74,13 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         _burn(msg.sender, _weETHAmount);
         eETH.transfer(msg.sender, eETHAmount);
         return eETHAmount;
+    }
+
+    /// @notice Transfer weEth out of treasury to the owner
+    function rescueTreasuryWeeth() public onlyOwner {
+        address treasury = 0x6329004E903B7F420245E7aF3f355186f2432466;
+        uint256 treasuryBal = balanceOf(treasury);
+       _transfer(treasury, msg.sender, treasuryBal);
     }
 
     //--------------------------------------------------------------------------------------
