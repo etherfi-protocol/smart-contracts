@@ -607,6 +607,9 @@ contract LiquidityPoolTest is TestSetup {
             assertEq(uint8(managerInstance.phase(newValidators[i])), uint8(IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL));
         }
 
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        liquidityPoolInstance.batchApproveRegistration(newValidators, pubKey, sig);
+
         vm.prank(alice);
         liquidityPoolInstance.batchApproveRegistration(newValidators, pubKey, sig);
 
@@ -629,6 +632,9 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.rebase(0 ether);
 
         vm.warp(1681075815 - 7 * 24 * 3600);   // Sun Apr 02 2023 21:30:15 UTC
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        liquidityPoolInstance.sendExitRequests(newValidators);
+        
         vm.prank(alice);
         liquidityPoolInstance.sendExitRequests(newValidators);
 
@@ -749,6 +755,9 @@ contract LiquidityPoolTest is TestSetup {
         //Move past one week
         vm.warp(804650);
 
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        liquidityPoolInstance.registerAsBnftHolder(alice);
+        
         //Let Alice sign up as a BNFT holder
         vm.startPrank(alice);
         registerAsBnftHolder(alice);
@@ -930,6 +939,9 @@ contract LiquidityPoolTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         _initBid();
 
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        liquidityPoolInstance.setRestakeBnftDeposits(true);
+
         vm.deal(alice, 1000 ether);
         vm.startPrank(alice);
 
@@ -939,7 +951,6 @@ contract LiquidityPoolTest is TestSetup {
         registerAsBnftHolder(alice);
         bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
 
-        // liquidityPoolInstance.updateBnftMode(false);
         liquidityPoolInstance.setRestakeBnftDeposits(true);
 
         liquidityPoolInstance.deposit{value: 120 ether}();
@@ -1341,5 +1352,15 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.unPauseContract();
 
         assertFalse(liquidityPoolInstance.paused());
+    }
+
+    function test_Upgrade2_49_onlyRoleRegistryOwnerCanUpgrade() public {
+        liquidityPool = address(new LiquidityPool());
+        vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.prank(address(100));
+        liquidityPoolInstance.upgradeTo(liquidityPool);
+
+        vm.prank(roleRegistryInstance.owner());
+        liquidityPoolInstance.upgradeTo(liquidityPool);
     }
 }
