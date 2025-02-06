@@ -2,13 +2,12 @@
 src = 'src'
 out = 'out'
 libs = ['lib']
-fs_permissions = [{ access = "read-write", path = "./release"}, { access = "read", path = "./test" }]
+fs_permissions = [{ access = "read-write", path = "./release"}, { access = "read", path = "./test" }, { access = "read-write", path = "./operations" }]
 gas_reports = ["*"]
 optimizer_runs = 2000
 extra_output = ["storageLayout"]
 bytecode_hash = 'none'
 solc-version = '0.8.24'
-bytecode_hash = 'none'
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 [rpc_endpoints]
