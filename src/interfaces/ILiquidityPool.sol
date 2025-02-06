@@ -37,7 +37,7 @@ interface ILiquidityPool {
         address holder;
     }
 
-    struct BnftHoldersIndex {
+    struct ValidatorSpawner {
         bool registered;
     }
 

@@ -62,7 +62,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     address public etherFiAdminContract;
     bool public DEPRECATED_whitelistEnabled;
     mapping(address => bool) public DEPRECATED_whitelisted;
-    mapping(address => BnftHoldersIndex) public validatorSpawner;
+    mapping(address => ValidatorSpawner) public validatorSpawner;
 
     bool public restakeBnftDeposits;
     uint128 public ethAmountLockedForWithdrawal;
@@ -194,23 +194,18 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// it returns the amount of shares burned
     function withdraw(address _recipient, uint256 _amount) external whenNotPaused returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);
-        require(msg.sender == address(withdrawRequestNFT) || msg.sender == address(membershipManager) || msg.sender == address(liquifier), "Incorrect Caller");
-        if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || (msg.sender == address(liquifier) && eETH.balanceOf(msg.sender) < _amount)) revert InsufficientLiquidity();
+        require(msg.sender == address(withdrawRequestNFT) || msg.sender == address(membershipManager), "Incorrect Caller");
+        if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
-        if (msg.sender == address(liquifier)) {
-            totalValueOutOfLp -= uint128(_amount);
-        } else {
+
         totalValueInLp -= uint128(_amount);
-        }
         if (msg.sender == address(withdrawRequestNFT)) {
             ethAmountLockedForWithdrawal -= uint128(_amount);
         }
 
         eETH.burnShares(msg.sender, share);
 
-        if (_recipient != address(this)) {
-            _sendFund(_recipient, _amount);
-        }
+        _sendFund(_recipient, _amount);
 
         return share;
     }
@@ -380,13 +375,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         uint256 returnAmount = 0;
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            if(nodesManager.phase(_validatorIds[i]) == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) {
-                if (bnftHolder != address(this)) returnAmount += 1 ether;
+            if(nodesManager.phase(_validatorIds[i]) == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) 
                 emit ValidatorRegistrationCanceled(_validatorIds[i]);
-            } else {
-                if (bnftHolder != address(this)) returnAmount += 2 ether;
-                numPendingDeposits -= 1;
-            }
+            else numPendingDeposits -= 1;
         }
 
         stakingManager.batchCancelDeposit(_validatorIds);
@@ -400,7 +391,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         require(!validatorSpawner[_user].registered, "Already registered");  
 
-        validatorSpawner[_user] = BnftHoldersIndex({registered: true});
+        validatorSpawner[_user] = ValidatorSpawner({registered: true});
 
         emit BnftHolderRegistered(_user, 0);
     }

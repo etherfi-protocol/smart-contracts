@@ -77,6 +77,9 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     }
 
     /// @notice Transfer weEth out of treasury to the owner
+    /// @dev The address 0x6329004E903B7F420245E7aF3f355186f2432466 is EtherFi's deprecated address
+    /// to receive the rewards. Since it doesn't have functionality to transfer out ERC20 tokens, we 
+    /// need a function here to rescue those funds
     function rescueTreasuryWeeth() public onlyOwner {
         address treasury = 0x6329004E903B7F420245E7aF3f355186f2432466;
         uint256 treasuryBal = balanceOf(treasury);
