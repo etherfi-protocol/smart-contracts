@@ -107,6 +107,31 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
+    function initialize(
+        address _etherFiOracle,
+        address _stakingManager,
+        address _auctionManager,
+        address _etherFiNodesManager,
+        address _liquidityPool,
+        address _membershipManager,
+        address _withdrawRequestNft,
+        int32 _acceptableRebaseAprInBps,
+        uint16 _postReportWaitTimeInSlots
+    ) external initializer {
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+
+        etherFiOracle = IEtherFiOracle(_etherFiOracle);
+        stakingManager = IStakingManager(_stakingManager);
+        auctionManager = IAuctionManager(_auctionManager);
+        etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
+        liquidityPool = ILiquidityPool(_liquidityPool);
+        membershipManager = IMembershipManager(_membershipManager);
+        withdrawRequestNft = IWithdrawRequestNFT(_withdrawRequestNft);
+        acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
+        postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
+    }
+
     function unPause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external {
         require(roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender), "Caller is not an unpauser");
         if (_etherFiOracle && IEtherFiPausable(address(etherFiOracle)).paused()) {
@@ -132,31 +157,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (_membershipManager && IEtherFiPausable(address(membershipManager)).paused()) {
             membershipManager.unPauseContract();
         }
-    }
-
-    function initialize(
-        address _etherFiOracle,
-        address _stakingManager,
-        address _auctionManager,
-        address _etherFiNodesManager,
-        address _liquidityPool,
-        address _membershipManager,
-        address _withdrawRequestNft,
-        int32 _acceptableRebaseAprInBps,
-        uint16 _postReportWaitTimeInSlots
-    ) external initializer {
-        __Ownable_init();
-        __UUPSUpgradeable_init();
-
-        etherFiOracle = IEtherFiOracle(_etherFiOracle);
-        stakingManager = IStakingManager(_stakingManager);
-        auctionManager = IAuctionManager(_auctionManager);
-        etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
-        liquidityPool = ILiquidityPool(_liquidityPool);
-        membershipManager = IMembershipManager(_membershipManager);
-        withdrawRequestNft = IWithdrawRequestNFT(_withdrawRequestNft);
-        acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
-        postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
 
     function initializeV2dot5(address _roleRegistry) external onlyOwner {
