@@ -102,7 +102,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
 
-        // pause {etherfi oracle, staking manager, auction manager, etherfi nodes manager, liquidity pool, membership manager}
+    // pause {etherfi oracle, staking manager, auction manager, etherfi nodes manager, liquidity pool, membership manager}
     // based on the boolean flags
     // if true, pause,
     // else, unpuase
@@ -246,6 +246,11 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if(_report.protocolFees == 0) {
             return;
         }
+
+        int128 totalRewards = _report.protocolFees + _report.accruedRewards;
+        // protocol fees are less than 20% of total rewards
+        require( _report.protocolFees * 5 <= totalRewards, "EtherFiAdmin: protocol fees exceed total rewards");
+
         liquidityPool.payProtocolFees(uint128(_report.protocolFees));
     }
 
