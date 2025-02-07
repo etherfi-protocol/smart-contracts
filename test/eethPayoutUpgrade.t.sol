@@ -103,7 +103,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         vm.startPrank(oracleAdmin);
         etherFiOracleInstance.submitReport(report);
         skip(1000);
-        etherFiAdminInstance.executeTasks(report, new bytes[](0), new bytes[](0));
+        etherFiAdminInstance.executeTasks(report);
         uint256 balOfTreasury = eETHInstance.balanceOf(treasury);
         assertApproxEqAbs(balOfTreasury, _protocolFees, 10);
         vm.stopPrank(); 
@@ -120,7 +120,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         vm.startPrank(oracleAdmin);
         etherFiOracleInstance.submitReport(new_report);
         skip(1000);
-        etherFiAdminInstance.executeTasks(new_report, new bytes[](0), new bytes[](0));
+        etherFiAdminInstance.executeTasks(new_report);
         uint256 total_pooled_eth_upgraded_after = liquidityPoolInstance.getTotalPooledEther();
         vm.stopPrank();
 
@@ -150,7 +150,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         vm.startPrank(oracleAdmin);
         etherFiOracleInstance.submitReport(new_report);
         skip(1000);
-        etherFiAdminInstance.executeTasks(new_report, new bytes[](0), new bytes[](0));
+        etherFiAdminInstance.executeTasks(new_report);
         uint256 share_price_upgraded_after = weEthInstance.getWeETHByeETH(1 ether);
         vm.stopPrank();
 
@@ -190,7 +190,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         etherFiOracleInstance.submitReport(report);
         skip(1000);
         vm.expectRevert();
-        etherFiAdminInstance.executeTasks(report, new bytes[](0), new bytes[](0));
+        etherFiAdminInstance.executeTasks(report);
         vm.stopPrank();
     }
 
