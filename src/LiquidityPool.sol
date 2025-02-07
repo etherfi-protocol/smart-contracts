@@ -285,21 +285,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function batchDeposit(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, uint256 _validatorIdToShareSafeWith) public payable whenNotPaused returns (uint256[] memory) {
         address tnftHolder = address(this);
         address bnftHolder = address(this);
-        uint256 spawnerDepositAmountPerValidator = 0;
 
         require(validatorSpawner[msg.sender].registered, "Incorrect Caller");        
-        require(msg.value == _numberOfValidators * spawnerDepositAmountPerValidator, "Not Enough Deposit");
         require(totalValueInLp + msg.value >= 32 ether * _numberOfValidators, "Not enough balance");
 
         uint256[] memory newValidators = stakingManager.batchDepositWithBidIds(_candidateBidIds, _numberOfValidators, msg.sender, tnftHolder, bnftHolder, SourceOfFunds.EETH, restakeBnftDeposits, _validatorIdToShareSafeWith);
         numPendingDeposits += uint32(newValidators.length);
         
-        // In the case when some bids are already taken, we refund 2 ETH for each
-        if (_numberOfValidators > newValidators.length) {
-            uint256 returnAmount = spawnerDepositAmountPerValidator * (_numberOfValidators - newValidators.length);
-            _sendFund(msg.sender, returnAmount);
-        }
-
         return newValidators;
     }
 
