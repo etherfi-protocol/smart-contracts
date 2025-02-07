@@ -694,7 +694,7 @@ contract TestSetup is Test, ContractCodeChecker {
             10000,
             0
         );
-        etherFiAdminInstance.updateAdmin(alice, true);
+        // etherFiAdminInstance.updateAdmin(alice, true);
 
         etherFiOracleInstance.setEtherFiAdmin(address(etherFiAdminInstance));
         liquidityPoolInstance.initializeOnUpgrade(address(auctionManagerProxy), address(liquifierInstance));
@@ -950,8 +950,6 @@ contract TestSetup is Test, ContractCodeChecker {
     function _initializeEtherFiAdmin() internal {
         vm.startPrank(owner);
 
-        etherFiAdminInstance.updatePauser(alice, true);
-        etherFiAdminInstance.updateAdmin(alice, true);
         etherFiOracleInstance.updateAdmin(alice, true);
 
         address admin = address(etherFiAdminInstance);
@@ -1045,7 +1043,7 @@ contract TestSetup is Test, ContractCodeChecker {
         }
 
         vm.prank(alice);
-        etherFiAdminInstance.executeTasks(_report, _pubKey, _pubKey);
+        etherFiAdminInstance.executeTasks(_report);
     }
 
     function _emptyOracleReport() internal view returns (IEtherFiOracle.OracleReport memory report) {

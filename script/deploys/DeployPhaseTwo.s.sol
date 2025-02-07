@@ -156,9 +156,7 @@ contract DeployPhaseTwoScript is Script {
             acceptableRebaseAprInBps,
             postReportWaitTimeInSlots
         );
-
-        etherFiAdminInstance.updateAdmin(oracleAdminAddress, true);
-
+        // etherFiAdminInstance.updateAdmin(oracleAdminAddress, true);
         IEtherFiOracle(address(etherFiOracleAddress)).setEtherFiAdmin(address(etherFiAdminInstance));
         IWithdrawRequestNFT(address(withdrawRequestNFTAddress)).updateAdmin(address(etherFiAdminInstance), true);
 

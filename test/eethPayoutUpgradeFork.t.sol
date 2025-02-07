@@ -81,7 +81,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         uint256 oldRate = weEthInstance.getRate();
         uint128 totalValueOutOfLpBefore = liquidityPoolInstance.totalValueOutOfLp();
 
-        etherFiAdminInstance.executeTasks(report, new bytes[](0), new bytes[](0));
+        etherFiAdminInstance.executeTasks(report);
 
         //post state
         uint256 newRate = weEthInstance.getRate();
