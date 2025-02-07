@@ -489,8 +489,8 @@ contract MembershipManagerV0Test is TestSetup {
         vm.deal(henry, 12 ether);
         vm.deal(alice, 12 ether);
 
-        vm.prank(alice);
-        liquidityPoolInstance.updateWhitelistStatus(true);
+        // vm.prank(alice);
+        // liquidityPoolInstance.updateWhitelistStatus(true);
 
         vm.prank(henry);
 

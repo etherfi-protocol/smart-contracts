@@ -5,7 +5,6 @@ contract eethPayoutUpgradeTest is TestSetup {
     address treasury;
     address lpAdmin;
     address oracleAdmin; 
-    address committeeMember;
     uint256 setupSnapshot;
 
     //forge test --match-test 'test_oraclefork' -vv

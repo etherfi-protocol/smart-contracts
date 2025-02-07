@@ -10,6 +10,11 @@ import {EnumerableRoles} from "solady/auth/EnumerableRoles.sol";
 /// @dev Implements UUPS upgradeability pattern and uses Solady's EnumerableRoles for efficient role management
 /// @author EtherFi
 contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, EnumerableRoles {
+    bytes32 public constant PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
+    bytes32 public constant PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
+
+    error OnlyProtocolUpgrader();
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -59,6 +64,10 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     /// @return address[] Array of addresses that have the specified role
     function roleHolders(bytes32 role) public view returns (address[] memory) {
         return roleHolders(uint256(role));
+    }
+
+    function onlyProtocolUpgrader(address account) public view {
+        if (owner() != account) revert OnlyProtocolUpgrader();
     }
 
     function __revertEnumerableRolesUnauthorized() private pure {
