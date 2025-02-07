@@ -61,6 +61,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     RoleRegistry public roleRegistry;
 
     bytes32 public constant ETHERFI_ADMIN_ADMIN_ROLE = keccak256("ETHERFI_ADMIN_ADMIN_ROLE");
+    bytes32 public constant ETHERFI_ADMIN_TASK_EXECUTOR_ROLE = keccak256("ETHERFI_ADMIN_TASK_EXECUTOR_ROLE");
 
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
@@ -159,7 +160,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    function initializeV2dot5(address _roleRegistry) external onlyOwner {
+    function initializeRoleRegistry(address _roleRegistry) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
 
         // TODO: compile list of values in DEPRECATED_pausers to clear out
@@ -209,7 +210,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     //_timestamp will only be used for TaskType.ProcessNodeExit and pubkeys and signatures will only be used for TaskType.ValidatorApproval
     function executeValidatorManagementTask(bytes32 _reportHash, uint256[] calldata _validators, uint32[] calldata _timestamps, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external {
-        if (!roleRegistry.hasRole(ETHERFI_ADMIN_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(ETHERFI_ADMIN_TASK_EXECUTOR_ROLE, msg.sender)) revert IncorrectRole();
 
         require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators, _timestamps));
