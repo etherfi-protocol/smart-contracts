@@ -223,7 +223,7 @@ contract TestSetup is Test, ContractCodeChecker {
     address shonee = vm.addr(1200);
     address jess = vm.addr(1201);
     address committeeMember = address(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
-
+    address timelock = address(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761);
     address admin;
     address superAdmin;
 
@@ -765,12 +765,19 @@ contract TestSetup is Test, ContractCodeChecker {
 
     function _upgrade_contracts() internal {
         _upgrade_liquidity_pool_contract();
+        _upgrade_etherfiAdmin();
     }
 
     function _upgrade_weETH() internal {
         address newWeETHImpl = address(new WeETH());
         vm.prank(owner);
         weEthInstance.upgradeTo(newWeETHImpl);
+    }
+
+    function _upgrade_etherfiAdmin() internal {
+        address newAdminImpl = address(new EtherFiAdmin());
+        vm.prank(etherFiAdminInstance.owner());
+        etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
 
     function setupRoleRegistry() public {
@@ -789,7 +796,11 @@ contract TestSetup is Test, ContractCodeChecker {
 
             // upgrade our existing contracts to utilize `roleRegistry`
             vm.startPrank(owner);
-            liquidityPoolInstance.initializeRoleRegistry(address(roleRegistryInstance));            
+            liquidityPoolInstance.initializeRoleRegistry(address(roleRegistryInstance));    
+        } 
+        if (address(etherFiAdminInstance.roleRegistry()) == address(0x0)) {
+            vm.startPrank(owner);
+            etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));    
         }
 
         vm.startPrank(admin);
