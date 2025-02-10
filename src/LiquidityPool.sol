@@ -356,7 +356,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
             emit ValidatorApproved(_validatorIds[i]);
         }
 
-        // As the LP is the T-NFT holder, the 30 ETH is taken from the LP for each validator
+        // As the LP is the T-NFT holder, the 31 ETH is taken from the LP for each validator
         // 
         // If the LP is the B-NFT holder, the 1 ether for each validator is taken from the LP as well
         // otherwise, the 1 ether is taken from the B-nft holder's separate deposit

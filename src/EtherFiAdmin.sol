@@ -162,14 +162,12 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function initializeRoleRegistry(address _roleRegistry) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
-
-        // TODO: compile list of values in DEPRECATED_pausers to clear out
-        // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
     }
 
 
-    function setValidatorTaskBatchSize(uint16 _batchSize) external onlyOwner {
+    function setValidatorTaskBatchSize(uint16 _batchSize) external {
+        if(!roleRegistry.hasRole(ETHERFI_ADMIN_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         validatorTaskBatchSize = _batchSize;
     }
 
