@@ -327,7 +327,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return (lastHandledReportRefBlock == 0) ? 0 : lastHandledReportRefBlock + 1;
     }
 
-    function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external onlyOwner {
+    function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external {
+        if (!roleRegistry.hasRole(ETHERFI_ADMIN_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
     }
 
@@ -341,5 +342,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return _getImplementation();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 }

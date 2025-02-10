@@ -155,6 +155,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         
         // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
+
+        //correct splits
+        uint128 tvl = uint128(getTotalPooledEther());
+        totalValueInLp = uint128(address(this).balance);
+        totalValueOutOfLp = tvl - totalValueInLp;
+
+        if(tvl != getTotalPooledEther()) revert();
     }
 
     // Used by eETH staking flow
@@ -423,7 +430,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     /// @notice Set the treasury address
     /// @param _treasury The address to set as the treasury
-    function setTreasury(address _treasury) external onlyOwner {
+    function setTreasury(address _treasury) external {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         treasury = _treasury;
         emit UpdatedTreasury(_treasury);
     }
@@ -461,17 +469,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         if (msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
 
         ethAmountLockedForWithdrawal += _amount;
-    }
-
-    // This function can't change the TVL
-    // but used only to correct the errors in tracking {totalValueOutOfLp} and {totalValueInLp}
-    function updateTvlSplits(int128 _diffTotalValueOutOfLp, int128 _diffTotalValueInLp) external onlyOwner {
-        uint256 tvl = getTotalPooledEther();
-
-        totalValueOutOfLp = uint128(int128(totalValueOutOfLp) + _diffTotalValueOutOfLp);
-        totalValueInLp = uint128(int128(totalValueInLp) + _diffTotalValueInLp);
-
-        if(tvl != getTotalPooledEther()) revert();
     }
 
     function reduceEthAmountLockedForWithdrawal(uint128 _amount) external {
