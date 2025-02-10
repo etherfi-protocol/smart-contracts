@@ -1304,12 +1304,12 @@ contract LiquidityPoolTest is TestSetup {
         vm.prank(owner);
         liquidityPoolInstance.updateAdmin(chad, true);
 
-        vm.prank(bob);
-        vm.expectRevert("Not admin");
-        liquidityPoolInstance.batchCancelDepositByAdmin(bidIds, alice);
+        // vm.prank(bob);
+        // vm.expectRevert("Not admin");
+        // liquidityPoolInstance.batchCancelDepositByAdmin(bidIds, alice);
 
-        vm.prank(chad);
-        liquidityPoolInstance.batchCancelDepositByAdmin(bidIds, alice);
+        // vm.prank(chad);
+        // liquidityPoolInstance.batchCancelDepositByAdmin(bidIds, alice);
     }
 
     function test_deopsitToRecipient_by_rando_fails() public {

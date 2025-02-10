@@ -76,4 +76,5 @@ interface ILiquidityPool {
     function updateAdmin(address _newAdmin, bool _isAdmin) external;
     function pauseContract() external;
     function unPauseContract() external;
+    function burnEEthShares(uint256 shares) external;
 }
