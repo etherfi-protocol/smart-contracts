@@ -694,6 +694,14 @@ contract TestSetup is Test, ContractCodeChecker {
             10000,
             0
         );
+        etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));
+        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), alice);
+        vm.startPrank(alice);
+        etherFiAdminInstance.setValidatorTaskBatchSize(100);
+        vm.stopPrank();
+        vm.startPrank(owner);
         // etherFiAdminInstance.updateAdmin(alice, true);
 
         etherFiOracleInstance.setEtherFiAdmin(address(etherFiAdminInstance));

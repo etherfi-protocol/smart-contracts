@@ -50,7 +50,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), committeeMember);
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), committeeMember);
-        vm.startPrank(etherFiAdminInstance.owner());
+        vm.startPrank(committeeMember);
         etherFiAdminInstance.setValidatorTaskBatchSize(batchSize);
         vm.stopPrank();
     }
@@ -141,8 +141,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         vm.startPrank(alice);
         vm.expectRevert();
         etherFiAdminInstance.setValidatorTaskBatchSize(alternativeBatchSize);
-        vm.stopPrank();
-        vm.startPrank(owner);
+        vm.startPrank(committeeMember);
         etherFiAdminInstance.setValidatorTaskBatchSize(alternativeBatchSize);
         vm.stopPrank();
     }

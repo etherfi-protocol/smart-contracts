@@ -791,7 +791,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.prank(elvis);
         //Making sure if a user is assigned they send in the correct amount (This will be updated 
         //as we will allow users to specify how many validator they want to spin up)
-        vm.expectRevert("Not Enough Deposit");
+        vm.expectRevert("Not enough balance");
         liquidityPoolInstance.batchDeposit{value: 6 ether}(bidIds, 4);
 
         //Move way more in the future

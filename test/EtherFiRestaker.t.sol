@@ -27,7 +27,7 @@ contract EtherFiRestakerTest is TestSetup {
         avsOperator2 = 0xfB487f216CA24162119C0C6Ae015d680D7569C2f;
         etherfiOperatingAdmin = alice; //
 
-        vm.prank(owner);
+        vm.startPrank(owner);
         liquifierInstance.updateQuoteStEthWithCurve(false);
     }
 
