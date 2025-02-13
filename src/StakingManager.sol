@@ -471,9 +471,9 @@ contract StakingManager is
     /// @param _depositOwner address of the user being refunded
     /// @param _amount the amount to refund the depositor
     function _refundDeposit(address _depositOwner, uint256 _amount) internal {
-        uint256 balance = address(this).balance;
+        uint256 balanace = address(this).balance;
         (bool sent, ) = _depositOwner.call{value: _amount}("");
-        require(sent && address(this).balance == balance - _amount, "SendFail");
+        require(sent && address(this).balance == balanace - _amount, "SendFail");
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

@@ -379,7 +379,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
             else numPendingDeposits -= 1;
         }
 
-        stakingManager.batchCancelDeposit(_validatorIds);
+        stakingManager.batchCancelDepositAsBnftHolder(_validatorIds, msg.sender);
 
         _sendFund(bnftHolder, returnAmount);
     }
@@ -466,7 +466,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function addEthAmountLockedForWithdrawal(uint128 _amount) external {
-        if (msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
+        if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
 
         ethAmountLockedForWithdrawal += _amount;
     }

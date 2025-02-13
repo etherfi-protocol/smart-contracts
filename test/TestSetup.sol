@@ -668,7 +668,7 @@ contract TestSetup is Test, ContractCodeChecker {
         vm.stopPrank();
 
         vm.startPrank(alice);
-        managerInstance.setStakingRewardsSplit(50_000, 50_000, 815_625, 84_375);
+        managerInstance.setStakingRewardsSplit(0, 0, 1_000_000, 0);
         managerInstance.setNonExitPenalty(300, 1 ether);
         membershipManagerInstance.setTopUpCooltimePeriod(28 days);
         vm.stopPrank();
@@ -1113,6 +1113,7 @@ contract TestSetup is Test, ContractCodeChecker {
         registerAsBnftHolder(dan);
         registerAsBnftHolder(elvis);
         registerAsBnftHolder(henry);
+        registerAsBnftHolder(address(liquidityPoolInstance));
         vm.stopPrank();
 
         vm.deal(alice, 100000 ether);
@@ -1241,7 +1242,7 @@ contract TestSetup is Test, ContractCodeChecker {
         if (_isLpBnftHolder) {
             liquidityPoolInstance.deposit{value: 32 ether * _numValidators}();
         } else {
-            liquidityPoolInstance.deposit{value: 30 ether * _numValidators}();
+            liquidityPoolInstance.deposit{value: 32 ether * _numValidators}();
         }
         vm.stopPrank();
 
