@@ -247,7 +247,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         int128 totalRewards = _report.protocolFees + _report.accruedRewards;
         // protocol fees are less than 20% of total rewards
-        require( _report.protocolFees * 5 <= totalRewards, "EtherFiAdmin: protocol fees exceed total rewards");
+        require( _report.protocolFees * 5 <= totalRewards, "EtherFiAdmin: protocol fees exceed 20% total rewards");
 
         liquidityPool.payProtocolFees(uint128(_report.protocolFees));
     }

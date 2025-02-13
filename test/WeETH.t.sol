@@ -81,7 +81,7 @@ contract WeETHTest is TestSetup {
         // 69 is an invalid private key for alice
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(69, address(weEthInstance), 5 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
 
-        vm.expectRevert("ERC20Permit: invalid signature");
+        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
         weEthInstance.wrapWithPermit(5 ether, permitInput);
     }
 
