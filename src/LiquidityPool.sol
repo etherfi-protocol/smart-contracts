@@ -320,8 +320,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         
         numPendingDeposits -= uint32(_validatorIds.length);
 
-        // If the LP is the B-nft holder, the 1 ether (for each validator) is taken from the LP
-        // otherwise, the 1 ether is taken from the B-nft holder's separate deposit. Thus, we don't need to update the accounting
+        // As the LP is the B-nft holder, the 1 ether (for each validator) is taken from the LP
         uint256 outboundEthAmountFromLp = 1 ether * _validatorIds.length;
         _accountForEthSentOut(outboundEthAmountFromLp);
 
@@ -357,9 +356,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         }
 
         // As the LP is the T-NFT holder, the 31 ETH is taken from the LP for each validator
-        // 
-        // If the LP is the B-NFT holder, the 1 ether for each validator is taken from the LP as well
-        // otherwise, the 1 ether is taken from the B-nft holder's separate deposit
         uint256 outboundEthAmountFromLp = 31 ether * _validatorIds.length;
         _accountForEthSentOut(outboundEthAmountFromLp);
 
