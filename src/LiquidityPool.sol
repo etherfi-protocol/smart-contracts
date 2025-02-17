@@ -316,6 +316,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         bytes[] calldata _signaturesForApprovalDeposit
     ) external whenNotPaused {
         address _bnftRecipient = address(this);
+
+        require(validatorSpawner[msg.sender].registered, "Incorrect Caller");        
         require(_validatorIds.length == _registerValidatorDepositData.length && _validatorIds.length == _depositDataRootApproval.length && _validatorIds.length == _signaturesForApprovalDeposit.length, "lengths differ");
         
         numPendingDeposits -= uint32(_validatorIds.length);
@@ -365,19 +367,21 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @notice Cancels the process
     /// @param _validatorIds the IDs to be cancelled
     /// Note that if the spawner cancels the flow after the registration (where the 1 ETH deposit is made), the 1 ETH refund must be made manually
+    /// Until then the 1 ETH is considered as a loss
+    /// Be careful not to cancel the registration after the approval phase
     function batchCancelDeposit(uint256[] calldata _validatorIds) external whenNotPaused {
         address bnftHolder = address(this);
-        uint256 returnAmount = 0;
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            if(nodesManager.phase(_validatorIds[i]) == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) 
+            if(nodesManager.phase(_validatorIds[i]) == IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL) {
+                totalValueOutOfLp -= 1 ether;
+
                 emit ValidatorRegistrationCanceled(_validatorIds[i]);
+            }
             else numPendingDeposits -= 1;
         }
 
         stakingManager.batchCancelDepositAsBnftHolder(_validatorIds, msg.sender);
-
-        _sendFund(bnftHolder, returnAmount);
     }
 
     /// @notice The admin can register an address to become a BNFT holder
