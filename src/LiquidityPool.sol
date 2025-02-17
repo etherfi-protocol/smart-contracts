@@ -149,11 +149,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         auctionManager = IAuctionManager(_auctionManager);
         liquifier = ILiquifier(_liquifier);
     }
-
+    // Note: Call this function when no validators to approve
     function initializeRoleRegistry(address _roleRegistry) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
         
-        // TODO: compile list of values in DEPRECATED_admins to clear out
         roleRegistry = RoleRegistry(_roleRegistry);
 
         //correct splits

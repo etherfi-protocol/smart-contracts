@@ -107,7 +107,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // if true, pause,
     // else, unpuase
     function pause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external {
-        require(roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender), "Caller is not an pauser");
+        if( !roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         if (_etherFiOracle && !IEtherFiPausable(address(etherFiOracle)).paused()) {
             etherFiOracle.pauseContract();
         }
@@ -134,7 +134,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function unPause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external {
-        require(roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender), "Caller is not an unpauser");
+        if( !roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         if (_etherFiOracle && IEtherFiPausable(address(etherFiOracle)).paused()) {
             etherFiOracle.unPauseContract();
         }
@@ -241,10 +241,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     //protocol owns the eth that was distributed to NO and treasury in eigenpods and etherfinodes 
     function _handleProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal { 
+        require(_report.protocolFees >= 0, "EtherFiAdmin: protocol fees can't be negative");
         if(_report.protocolFees == 0) {
             return;
         }
-
         int128 totalRewards = _report.protocolFees + _report.accruedRewards;
         // protocol fees are less than 20% of total rewards
         require( _report.protocolFees * 5 <= totalRewards, "EtherFiAdmin: protocol fees exceed 20% total rewards");
@@ -297,6 +297,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 }
             }
             bytes32 taskHash = keccak256(abi.encode(_reportHash, batchValidators, batchTimestamps));
+            require(!validatorManagementTaskStatus[taskHash].exists, "Task already exists");
             validatorManagementTaskStatus[taskHash] = TaskStatus({completed: false, exists: true, taskType: taskType});
             emit ValidatorManagementTaskCreated(taskHash, _reportHash, batchValidators, batchTimestamps, taskType);
         }
