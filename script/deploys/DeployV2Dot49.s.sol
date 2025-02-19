@@ -120,13 +120,12 @@ contract DeployV2Dot49Script is Script {
     function run() external {
         init();
         deployImplementationContracts();
-        //console.log("completed deployment");
         //only for tenderly test will be done through timelock in prod
         upgradeContracts();
 
         grantRoles();           
         completeRoleRegistrySetup();
-        //updateAddressProvider();
+        updateAddressProvider();
 
     } 
 
