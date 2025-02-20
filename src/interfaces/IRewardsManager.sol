@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 interface IRewardsManager {
 
     event RewardsAllocated(address token, address[] recipients, uint256[] amounts, uint256 blockNumber);
-    event RevertRewardsAllocated(uint256 blockNumber);
+    event RewardsReverted(uint256 blockNumber);
     event RewardsClaimed(address token, address indexed recipient, uint256 amount);
     event RewardsRecipientUpdated(address earner, address recipient);
 

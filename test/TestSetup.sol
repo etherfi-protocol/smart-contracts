@@ -53,6 +53,7 @@ import "../src/BucketRateLimiter.sol";
 import "../script/ContractCodeChecker.sol";
 import "../script/Create2Factory.sol";
 import "../src/RoleRegistry.sol";
+import { RewardsManager } from "../src/RewardsManager.sol";
 
 contract TestSetup is Test, ContractCodeChecker {
 
@@ -111,7 +112,7 @@ contract TestSetup is Test, ContractCodeChecker {
     UUPSProxy public etherFiOracleProxy;
     UUPSProxy public etherFiAdminProxy;
     UUPSProxy public roleRegistryProxy;
-
+    UUPSProxy public rewardsManagerProxy;
     DepositDataGeneration public depGen;
     IDepositContract public depositContractEth2;
 
@@ -182,6 +183,9 @@ contract TestSetup is Test, ContractCodeChecker {
 
     EtherFiAdmin public etherFiAdminImplementation;
     EtherFiAdmin public etherFiAdminInstance;
+
+    RewardsManager public rewardsManagerImplementation;
+    RewardsManager public rewardsManagerInstance;
 
     EtherFiNode public node;
     Treasury public treasuryInstance;
@@ -445,6 +449,7 @@ contract TestSetup is Test, ContractCodeChecker {
 
         admin = alice;
 
+
         mockDepositContractEth2 = new DepositContract();
         depositContractEth2 = IDepositContract(address(mockDepositContractEth2));
 
@@ -683,7 +688,8 @@ contract TestSetup is Test, ContractCodeChecker {
         nftExchangeInstance.initialize(address(TNFTInstance), address(membershipNftInstance), address(managerInstance));
         nftExchangeInstance.updateAdmin(alice);
 
-        etherFiAdminInstance.initialize(
+        
+            etherFiAdminInstance.initialize(
             address(etherFiOracleInstance),
             address(stakingManagerInstance),
             address(auctionInstance),
@@ -694,18 +700,31 @@ contract TestSetup is Test, ContractCodeChecker {
             10000,
             0
         );
+        uint256 BLOCKS_IN_DAY = 7200;
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE); //eth
+        tokens[1] = address(eETHInstance);
+        uint256[] memory lastProcessedBlocks = new uint256[](2);
+        lastProcessedBlocks[0] = lastProcessedBlocks[1] = 0;
+        rewardsManagerImplementation = new RewardsManager(tokens, lastProcessedBlocks, address(roleRegistryInstance));
+        rewardsManagerProxy = new UUPSProxy(address(rewardsManagerImplementation), "");
+        rewardsManagerInstance = RewardsManager((address(rewardsManagerProxy)));
+
+        vm.startPrank(owner);
+        console.log("here");
+
         etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), alice);
+        roleRegistryInstance.grantRole(rewardsManagerInstance.REWARDS_MANAGER_ADMIN(), superAdmin);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         vm.stopPrank();
-        vm.startPrank(owner);
+        console.log("here");
         // etherFiAdminInstance.updateAdmin(alice, true);
-
         etherFiOracleInstance.setEtherFiAdmin(address(etherFiAdminInstance));
         liquidityPoolInstance.initializeOnUpgrade(address(auctionManagerProxy), address(liquifierInstance));
         stakingManagerInstance.initializeOnUpgrade(address(nodeOperatorManagerInstance), address(etherFiAdminInstance));
@@ -975,6 +994,7 @@ contract TestSetup is Test, ContractCodeChecker {
     }
 
     function _initializeEtherFiAdmin() internal {
+        console.log("fuck me");
         vm.startPrank(owner);
 
         etherFiOracleInstance.updateAdmin(alice, true);

@@ -2,21 +2,27 @@
 pragma solidity ^0.8.24;
 
 import {IRewardsManager} from "./interfaces/IRewardsManager.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./RoleRegistry.sol";
 
+import {RoleRegistry} from "./RoleRegistry.sol";
+
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+
+/// @title RewardsManager
+/// @notice Manages the distribution and claiming of rewards for the EtherFi protocol
+/// @dev Implements reward distribution logic for both ETH and ERC20 tokens
 contract RewardsManager is IRewardsManager, OwnableUpgradeable, UUPSUpgradeable {
 
-    mapping (address => mapping(address => uint256)) public totalClaimableRewards; 
-    mapping(address => mapping(address => uint256)) public totalPendingRewards; 
-    mapping(address => uint256) public totalRewardsToDistribute;
-    mapping(address => address) public earnerToRecipient; 
-    mapping(address => uint256) public lastProcessedBlock; 
+    mapping (address token => mapping(address earner => uint256 amount)) public totalClaimableRewards; 
+    /// @notice Tracks the total pending rewards for each token and recipient claimable next time claimRewards is called
+    mapping(address token => mapping(address earner => uint256 amount)) public totalPendingRewards; 
+    mapping(address token => uint256 amount) public totalRewardsToDistribute;
+    mapping(address earner => address recipient) public earnerToRecipient; 
+    mapping(address token => uint256 blockNumber) public lastProcessedBlock; 
 
 
-    uint256 public constant CLAIM_DELAY = 1 days; // 1 day to verify if processRewards was called with wrong amounts
+    uint256 public constant CLAIM_DELAY = 7200; // 1 day to verify if processRewards was called with wrong amounts
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     bytes32 public constant REWARDS_MANAGER_ADMIN = keccak256("REWARD_MANAGER_ADMIN");
     RoleRegistry public immutable roleRegistry;
@@ -143,14 +149,14 @@ contract RewardsManager is IRewardsManager, OwnableUpgradeable, UUPSUpgradeable 
         if (totalRewardsToDistribute[_token] > tokenBalance) {
             revert("Insufficient balance");
         }
-        emit RevertRewardsAllocated(incorrectDistributionBlock);
+        emit RewardsReverted(incorrectDistributionBlock);
         emit RewardsAllocated(_token, _recipients, _amounts, block.number);
 
     }
 
+    function getImplementation() external view returns (address) {return _getImplementation();}
+
     function _authorizeUpgrade(address newImplementation) internal override {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
-
-    function getImplementation() external view returns (address) {return _getImplementation();}
 }
