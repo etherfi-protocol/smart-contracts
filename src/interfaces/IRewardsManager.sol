@@ -9,7 +9,7 @@ interface IRewardsManager {
     event RewardsRecipientUpdated(address earner, address recipient);
 
     function processRewards(address token, address[] calldata recipients, uint256[] calldata amounts, uint256 blockNumber) external;
-    function claimRewards(address token) external;
+    function claimRewards(address earner, address token) external;
     function updatePendingRewards(address token, address[] calldata recipients, uint256[] calldata amounts, uint256 blockNumber) external;
     function updateRewardsRecipient(address earner, address recipient) external;
 

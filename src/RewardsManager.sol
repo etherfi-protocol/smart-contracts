@@ -105,20 +105,21 @@ contract RewardsManager is IRewardsManager, OwnableUpgradeable, UUPSUpgradeable 
     /// @notice Claims rewards for the caller
     /// @dev Handles both ETH and ERC20 token distributions
     /// @param _token The address of the reward token being claimed
-    function claimRewards(address _token) external {
-        address recipient = msg.sender;
-        uint256 amountToClaim = totalClaimableRewards[_token][msg.sender];
+    function claimRewards(address _earner, address _token) external {
+        
+        address recipient = _earner;
+        uint256 amountToClaim = totalClaimableRewards[_token][_earner];
         if(amountToClaim == 0) {
             revert("No rewards to claim");
         }
-        if(earnerToRecipient[msg.sender] != address(0)) {
-            recipient = earnerToRecipient[msg.sender];
+        if(earnerToRecipient[_earner] != address(0)) {
+            recipient = earnerToRecipient[_earner];
         }
-        totalClaimableRewards[_token][msg.sender] = 0;
+        totalClaimableRewards[_token][_earner] = 0;
         totalRewardsToDistribute[_token] -= amountToClaim;
 
         if(_token == ETH_ADDRESS) {
-            totalClaimableRewards[_token][msg.sender] = 0;
+            totalClaimableRewards[_token][_earner] = 0;
             (bool success, ) = recipient.call{value: amountToClaim}("");
             if(!success) {
                 revert("ETH Transfer failed");
@@ -129,14 +130,14 @@ contract RewardsManager is IRewardsManager, OwnableUpgradeable, UUPSUpgradeable 
                 revert("ERC20 Transfer failed");
             }
         }
-        emit RewardsClaimed(_token, msg.sender, totalClaimableRewards[_token][msg.sender]);
+        emit RewardsClaimed(_token, _earner, amountToClaim);
     }
 
     /// @notice Updates pending rewards when previous processRewards call contained incorrect amounts
     /// @dev This function should only be called to correct errors in a previous processRewards call
     ///      The block number and token address serve as a primary key for the RewardsAllocated event,
     ///      allowing frontends to identify which distribution is being corrected
-    /// 
+    /// @dev All pending recipients must be provided, even if they have 0 rewards
     /// @param _token The address of the reward token to update
     /// @param _recipients Array of addresses whose rewards need correction
     /// @param _amounts Array of corrected reward amounts for each recipient
