@@ -721,13 +721,14 @@ contract TestSetup is Test, ContractCodeChecker {
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
+        vm.stopPrank();	
+        vm.startPrank(owner);
         // etherFiAdminInstance.updateAdmin(alice, true);
         etherFiOracleInstance.setEtherFiAdmin(address(etherFiAdminInstance));
         liquidityPoolInstance.initializeOnUpgrade(address(auctionManagerProxy), address(liquifierInstance));
         stakingManagerInstance.initializeOnUpgrade(address(nodeOperatorManagerInstance), address(etherFiAdminInstance));
         auctionInstance.initializeOnUpgrade(address(membershipManagerInstance), 1 ether, address(etherFiAdminInstance), address(nodeOperatorManagerInstance));
         membershipNftInstance.initializeOnUpgrade(address(liquidityPoolInstance));
-        vm.stopPrank();
 
 
         // configure eigenlayer dependency differently for mainnet vs testnet because we rely
