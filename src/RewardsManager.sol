@@ -19,7 +19,10 @@ contract RewardsManager is IRewardsManager, OwnableUpgradeable, UUPSUpgradeable 
     mapping(address token => mapping(address earner => uint256 amount)) public totalPendingRewards; 
     mapping(address token => uint256 amount) public totalRewardsToDistribute;
     mapping(address earner => address recipient) public earnerToRecipient; 
-    mapping(address token => uint256 blockNumber) public lastProcessedBlock; 
+    // @notice Tracks the last block number at which rewards were processed so delay can be provided
+    mapping(address token => uint256 blockNumber) public lastProcessedAtBlock; 
+    // @notice Tracks the last block number at which rewards were calculated so backend can know what the next start block is
+    mapping(address token => uint256 blockNumber) public rewardsCalculatedToBlock;
 
 
     uint256 public constant CLAIM_DELAY = 7200; // 1 day to verify if processRewards was called with wrong amounts
@@ -28,18 +31,18 @@ contract RewardsManager is IRewardsManager, OwnableUpgradeable, UUPSUpgradeable 
     RoleRegistry public immutable roleRegistry;
 
     /// @notice Constructor for RewardsManager contract
-    /// @dev Initializes the contract with lastProcessedBlock for each token
+    /// @dev Initializes the contract with lastProcessedAtBlock for each token
     /// @param _tokens Array of token addresses to initialize
-    /// @param _lastProcessedBlocks Array of block numbers corresponding to each token's last processed block
+    /// @param _lastProcessedAtBlocks Array of block numbers corresponding to each token's last processed block
     /// @param _roleRegistry Address of the RoleRegistry contract for permission management
-    constructor(address[] memory _tokens, uint256[] memory _lastProcessedBlocks, address _roleRegistry) {
+    constructor(address[] memory _tokens, uint256[] memory _lastProcessedAtBlocks, address _roleRegistry) {
         _disableInitializers();
-        if (_tokens.length != _lastProcessedBlocks.length) {
+        if (_tokens.length != _lastProcessedAtBlocks.length) {
             revert("Array lengths must match");
         }
         roleRegistry = RoleRegistry(_roleRegistry);
-        for (uint256 i = 0; i < _tokens.length; i++) { // initialize lastProcessedBlock for each token
-            lastProcessedBlock[_tokens[i]] = _lastProcessedBlocks[i];
+        for (uint256 i = 0; i < _tokens.length; i++) { // initialize lastProcessedAtBlock for each token
+            lastProcessedAtBlock[_tokens[i]] = _lastProcessedAtBlocks[i];
         }
     }
 
@@ -70,18 +73,23 @@ contract RewardsManager is IRewardsManager, OwnableUpgradeable, UUPSUpgradeable 
     /// @param _token The address of the reward token being distributed
     /// @param _recipients Array of addresses to receive rewards
     /// @param _amounts Array of reward amounts corresponding to each recipient
-    function processRewards(address _token, address[] calldata _recipients, uint256[] calldata _amounts) external {
+    /// @param _blockNumber The block number of the last block rewards were distributed
+    function processRewards(address _token, address[] calldata _recipients, uint256[] calldata _amounts, uint256 _blockNumber) external {
         if (_recipients.length != _amounts.length) {
             revert("Array lengths must match");
         }
         if (!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) {
             revert("Caller must be admin");
         }
-        if (lastProcessedBlock[_token] + CLAIM_DELAY > block.number) {
+        if (lastProcessedAtBlock[_token] + CLAIM_DELAY > block.number) {
             revert("Claim delay not met");
         }
+        if (_blockNumber <= rewardsCalculatedToBlock[_token] || _blockNumber > block.number)  {
+            revert("Invalid block number");
+        }
 
-        lastProcessedBlock[_token] = block.number;
+        lastProcessedAtBlock[_token] = block.number;
+        rewardsCalculatedToBlock[_token] = _blockNumber;
         uint256 tokenBalance = IERC20(_token).balanceOf(address(this));
         for (uint256 i = 0; i < _recipients.length; i++) {
             totalClaimableRewards[_token][_recipients[i]] += totalPendingRewards[_token][_recipients[i]];
@@ -91,7 +99,7 @@ contract RewardsManager is IRewardsManager, OwnableUpgradeable, UUPSUpgradeable 
         if (totalRewardsToDistribute[_token] > tokenBalance) {
             revert("Insufficient balance");
         }
-        emit RewardsAllocated(_token, _recipients, _amounts, block.number);
+        emit RewardsAllocated(_token, _recipients, _amounts, _blockNumber);
     }
     
     /// @notice Claims rewards for the caller
@@ -132,16 +140,21 @@ contract RewardsManager is IRewardsManager, OwnableUpgradeable, UUPSUpgradeable 
     /// @param _token The address of the reward token to update
     /// @param _recipients Array of addresses whose rewards need correction
     /// @param _amounts Array of corrected reward amounts for each recipient
-    function updatePendingRewards(address _token, address[] calldata _recipients, uint256[] calldata _amounts) external {
+    /// @param _blockNumber The block number of the last block rewards were distributed
+    function updatePendingRewards(address _token, address[] calldata _recipients, uint256[] calldata _amounts, uint256 _blockNumber) external {
         if (!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) {
             revert("Caller must be admin");
         }
         if (_recipients.length != _amounts.length) {
             revert("Array lengths must match");
         }
-        uint256 incorrectDistributionBlock = lastProcessedBlock[_token];
+        if (_blockNumber <= rewardsCalculatedToBlock[_token] || _blockNumber > block.number)  {
+            revert("Invalid block number");
+        }
+        uint256 incorrectRewardsCalculatedToBlock = rewardsCalculatedToBlock[_token];
         uint256 tokenBalance = IERC20(_token).balanceOf(address(this));
-        lastProcessedBlock[_token] = block.number;
+        lastProcessedAtBlock[_token] = block.number;
+        rewardsCalculatedToBlock[_token] = _blockNumber;
         for (uint256 i = 0; i < _recipients.length; i++) {
             totalRewardsToDistribute[_token] = totalRewardsToDistribute[_token] - totalPendingRewards[_token][_recipients[i]] + _amounts[i];
             totalPendingRewards[_token][_recipients[i]] = _amounts[i];
@@ -149,7 +162,7 @@ contract RewardsManager is IRewardsManager, OwnableUpgradeable, UUPSUpgradeable 
         if (totalRewardsToDistribute[_token] > tokenBalance) {
             revert("Insufficient balance");
         }
-        emit RewardsReverted(incorrectDistributionBlock);
+        emit RewardsReverted(incorrectRewardsCalculatedToBlock);
         emit RewardsAllocated(_token, _recipients, _amounts, block.number);
 
     }

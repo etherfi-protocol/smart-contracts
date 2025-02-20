@@ -704,32 +704,30 @@ contract TestSetup is Test, ContractCodeChecker {
         address[] memory tokens = new address[](2);
         tokens[0] = address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE); //eth
         tokens[1] = address(eETHInstance);
-        uint256[] memory lastProcessedBlocks = new uint256[](2);
-        lastProcessedBlocks[0] = lastProcessedBlocks[1] = 0;
-        rewardsManagerImplementation = new RewardsManager(tokens, lastProcessedBlocks, address(roleRegistryInstance));
+        uint256[] memory lastProcessedAtBlocks = new uint256[](2);
+        lastProcessedAtBlocks[0] = lastProcessedAtBlocks[1] = 0;
+        rewardsManagerImplementation = new RewardsManager(tokens, lastProcessedAtBlocks, address(roleRegistryInstance));
         rewardsManagerProxy = new UUPSProxy(address(rewardsManagerImplementation), "");
         rewardsManagerInstance = RewardsManager((address(rewardsManagerProxy)));
 
         vm.startPrank(owner);
-        console.log("here");
 
         etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), alice);
-        roleRegistryInstance.grantRole(rewardsManagerInstance.REWARDS_MANAGER_ADMIN(), superAdmin);
+        roleRegistryInstance.grantRole(rewardsManagerInstance.REWARDS_MANAGER_ADMIN(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
-        vm.stopPrank();
-        console.log("here");
         // etherFiAdminInstance.updateAdmin(alice, true);
         etherFiOracleInstance.setEtherFiAdmin(address(etherFiAdminInstance));
         liquidityPoolInstance.initializeOnUpgrade(address(auctionManagerProxy), address(liquifierInstance));
         stakingManagerInstance.initializeOnUpgrade(address(nodeOperatorManagerInstance), address(etherFiAdminInstance));
         auctionInstance.initializeOnUpgrade(address(membershipManagerInstance), 1 ether, address(etherFiAdminInstance), address(nodeOperatorManagerInstance));
         membershipNftInstance.initializeOnUpgrade(address(liquidityPoolInstance));
+        vm.stopPrank();
 
 
         // configure eigenlayer dependency differently for mainnet vs testnet because we rely
@@ -994,7 +992,6 @@ contract TestSetup is Test, ContractCodeChecker {
     }
 
     function _initializeEtherFiAdmin() internal {
-        console.log("fuck me");
         vm.startPrank(owner);
 
         etherFiOracleInstance.updateAdmin(alice, true);
