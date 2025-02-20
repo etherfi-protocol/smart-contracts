@@ -87,7 +87,7 @@ contract StakingManagerTest is TestSetup {
         vm.stopPrank();
         
         startHoax(alice);
-        processedBids = liquidityPoolInstance.batchDeposit{value: 8 ether}(bidIds, 4);
+        processedBids = liquidityPoolInstance.batchDeposit(bidIds, 4);
 
         IStakingManager.DepositData[]
             memory depositDataArray = new IStakingManager.DepositData[](1);

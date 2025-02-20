@@ -216,6 +216,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(!validatorManagementTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
         TaskType taskType = validatorManagementTaskStatus[taskHash].taskType;
 
+        validatorManagementTaskStatus[taskHash].completed = true;
+
         if (taskType == TaskType.ValidatorApproval) {
         liquidityPool.batchApproveRegistration(_validators, _pubKeys, _signatures);
         } else if (taskType == TaskType.SendExitRequests) {
@@ -225,7 +227,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         } else if (taskType == TaskType.MarkBeingSlashed) {
             etherFiNodesManager.markBeingSlashed(_validators);
         }
-        validatorManagementTaskStatus[taskHash].completed = true;
         emit ValidatorManagementTaskCompleted(taskHash, _reportHash, _validators, _timestamps, taskType);
     }
 

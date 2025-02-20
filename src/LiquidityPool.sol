@@ -280,7 +280,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// Step 1. [Deposit]
     /// @param _candidateBidIds validator IDs that have been matched with the BNFT holder on the FE
     /// @param _numberOfValidators how many validators the user wants to spin up. This can be less than the candidateBidIds length. 
-    function batchDeposit(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators) external payable whenNotPaused returns (uint256[] memory) {
+    function batchDeposit(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators) external whenNotPaused returns (uint256[] memory) {
         return batchDeposit(_candidateBidIds, _numberOfValidators, 0);
     }
 
@@ -288,12 +288,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @param _numberOfValidators how many validators the user wants to spin up; `len(_candidateBidIds)` must be >= `_numberOfValidators`
     /// @param _validatorIdToShareSafeWith the validator ID of the validator that the spawner wants to shafe the withdrawal safe with
     /// @return Array of bid IDs that were successfully processed.
-    function batchDeposit(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, uint256 _validatorIdToShareSafeWith) public payable whenNotPaused returns (uint256[] memory) {
+    function batchDeposit(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, uint256 _validatorIdToShareSafeWith) public whenNotPaused returns (uint256[] memory) {
         address tnftHolder = address(this);
         address bnftHolder = address(this);
 
         require(validatorSpawner[msg.sender].registered, "Incorrect Caller");        
-        require(totalValueInLp + msg.value >= 32 ether * _numberOfValidators, "Not enough balance");
+        require(totalValueInLp  >= 32 ether * _numberOfValidators, "Not enough balance");
 
         uint256[] memory newValidators = stakingManager.batchDepositWithBidIds(_candidateBidIds, _numberOfValidators, msg.sender, tnftHolder, bnftHolder, SourceOfFunds.EETH, restakeBnftDeposits, _validatorIdToShareSafeWith);
         numPendingDeposits += uint32(newValidators.length);
@@ -325,7 +325,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         uint256 outboundEthAmountFromLp = 1 ether * _validatorIds.length;
         _accountForEthSentOut(outboundEthAmountFromLp);
 
-        stakingManager.batchRegisterValidators{value: 1 ether * _validatorIds.length}(_depositRoot, _validatorIds, _bnftRecipient, address(this), _registerValidatorDepositData, msg.sender);
+        stakingManager.batchRegisterValidators{outboundEthAmountFromLp}(_depositRoot, _validatorIds, _bnftRecipient, address(this), _registerValidatorDepositData, msg.sender);
         
         for(uint256 i; i < _validatorIds.length; i++) {
             depositDataRootForApprovalDeposits[_validatorIds[i]] = _depositDataRootApproval[i];
@@ -360,7 +360,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         uint256 outboundEthAmountFromLp = 31 ether * _validatorIds.length;
         _accountForEthSentOut(outboundEthAmountFromLp);
 
-        stakingManager.batchApproveRegistration{value: 31 ether * _validatorIds.length}(_validatorIds, _pubKey, _signature, depositDataRootApproval);
+        stakingManager.batchApproveRegistration{outboundEthAmountFromLp}(_validatorIds, _pubKey, _signature, depositDataRootApproval);
     }
 
     /// @notice Cancels the process

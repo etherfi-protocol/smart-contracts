@@ -622,7 +622,7 @@ contract LiquidityPoolTest is TestSetup {
         //Making sure if a user is assigned they send in the correct amount (This will be updated 
         //as we will allow users to specify how many validator they want to spin up)
         vm.expectRevert("Not enough balance");
-        liquidityPoolInstance.batchDeposit{value: 6 ether}(bidIds, 4);
+        liquidityPoolInstance.batchDeposit(bidIds, 4);
 
         //Move way more in the future
         _moveClock(100000);
@@ -647,7 +647,7 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.prank(shonee);
         //Shonee deposits and her index is 4, allowing her to deposit for 4 validators
-        validators = liquidityPoolInstance.batchDeposit{value: 8 ether}(bidIds, 4);
+        validators = liquidityPoolInstance.batchDeposit(bidIds, 4);
         assertEq(validators[0], 1);
         assertEq(validators[1], 2);
         assertEq(validators[2], 3);
@@ -657,7 +657,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.prank(dan);
 
         //Dan deposits and his index is 5, allowing him to deposit
-        validators = liquidityPoolInstance.batchDeposit{value: 4 ether}(bidIds, 2);
+        validators = liquidityPoolInstance.batchDeposit(bidIds, 2);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 6);
 
         assertEq(validators[0], 5);
@@ -721,7 +721,7 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.startPrank(alice);
         //Alice deposits and her index is 0 (the last index), allowing her to deposit for 2 validators
-        liquidityPoolInstance.batchDeposit{value: 8 ether}(bidIds, 4);
+        liquidityPoolInstance.batchDeposit(bidIds, 4);
         vm.stopPrank();
 
         vm.startPrank(owner);
@@ -744,7 +744,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.deal(greg, 100000 ether);
 
         //Alice deposits funds into the LP to allow for validators to be spun and the calculations can work in dutyForWeek
-        liquidityPoolInstance.deposit{value: 120 ether}();
+        liquidityPoolInstance.deposit{value: 128 ether}();
         vm.stopPrank();
 
         //Move forward in time to make sure dutyForWeek runs with an arbitrary timestamp
@@ -757,7 +757,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
         
         startHoax(alice);
-        processedBids = liquidityPoolInstance.batchDeposit{value: 8 ether}(bidIds, 4);
+        processedBids = liquidityPoolInstance.batchDeposit(bidIds, 4);
 
         assertEq(stakingManagerInstance.bidIdToStaker(11), alice);
         assertEq(stakingManagerInstance.bidIdToStaker(12), alice);
@@ -791,7 +791,7 @@ contract LiquidityPoolTest is TestSetup {
 
         address bnftHolder = alice;
         startHoax(bnftHolder);
-        processedBids = liquidityPoolInstance.batchDeposit{value: 8 ether}(bidIds, 4);
+        processedBids = liquidityPoolInstance.batchDeposit(bidIds, 4);
 
         assertEq(stakingManagerInstance.bidIdToStaker(bidIds[0]), bnftHolder);
         assertEq(stakingManagerInstance.bidIdToStaker(bidIds[1]), bnftHolder);
@@ -895,7 +895,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
         
         startHoax(alice);
-        processedBids = liquidityPoolInstance.batchDeposit{value: 8 ether}(bidIds, 4);
+        processedBids = liquidityPoolInstance.batchDeposit(bidIds, 4);
 
         assertEq(stakingManagerInstance.bidIdToStaker(11), alice);
         assertEq(stakingManagerInstance.bidIdToStaker(12), alice);
@@ -1140,7 +1140,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.startPrank(henry);
         uint256[] memory x = new uint256[](1);
         x[0] = bidIds[0];
-        uint256[] memory newValidators1 = liquidityPoolInstance.batchDeposit{value: 2 ether}(x, 1);
+        uint256[] memory newValidators1 = liquidityPoolInstance.batchDeposit(x, 1);
 
         IStakingManager.DepositData[] memory depositDataArray1 = _prepareForDepositData(newValidators1, 32 ether);
 
