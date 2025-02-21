@@ -14,11 +14,13 @@ using SafeERC20 for IERC20;
     mapping(address token => bytes32 merkleRoot) public claimableMerkleRoots;
     mapping(address token => bytes32 merkleRoot) public pendingMerkleRoots;
     mapping(address token => mapping(address user => uint256 cumulativeBalance)) public cumulativeClaimed;
+    bool public paused;
 
     uint256 public constant CLAIM_DELAY = 7200; // 1 day to verify if processRewards was called with wrong amounts
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     bytes32 public constant REWARDS_MANAGER_ADMIN = keccak256("REWARD_MANAGER_ADMIN");
     RoleRegistry public immutable roleRegistry;
+
 
     constructor(address _roleRegistry) {
         _disableInitializers();
@@ -28,6 +30,7 @@ using SafeERC20 for IERC20;
     function initialize() external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
+        paused = false;
     }
 
     function setPendingMerkleRoot(address _token, bytes32 _merkleRoot) external {
@@ -44,6 +47,18 @@ using SafeERC20 for IERC20;
         claimableMerkleRoots[_token] = pendingMerkleRoots[_token];
         lastRewardsCalculatedToBlock[_token] = _finalizedBlock;
         emit ClaimableMerkleRootUpdated(_token, oldClaimableMerkleRoot, claimableMerkleRoots[_token], _finalizedBlock);
+    }
+
+    function pause() external {
+        if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        paused = true;
+        emit Paused(msg.sender);
+    }
+
+    function unpause() external {
+        if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        paused = false;
+        emit UnPaused(msg.sender);
     }
 
     function claim(
@@ -68,7 +83,7 @@ using SafeERC20 for IERC20;
         uint256 amount = cumulativeAmount - preclaimed;
         // Send the token
         if(token == ETH_ADDRESS){
-            (bool success, ) = recipient.call{value: amount}("");
+            (bool success, ) = account.call{value: amount}("");
             if(!success) {
                 revert("ETH Transfer failed");
             }
