@@ -325,7 +325,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         uint256 outboundEthAmountFromLp = 1 ether * _validatorIds.length;
         _accountForEthSentOut(outboundEthAmountFromLp);
 
-        stakingManager.batchRegisterValidators{outboundEthAmountFromLp}(_depositRoot, _validatorIds, _bnftRecipient, address(this), _registerValidatorDepositData, msg.sender);
+        stakingManager.batchRegisterValidators{value: outboundEthAmountFromLp}(_depositRoot, _validatorIds, _bnftRecipient, address(this), _registerValidatorDepositData, msg.sender);
         
         for(uint256 i; i < _validatorIds.length; i++) {
             depositDataRootForApprovalDeposits[_validatorIds[i]] = _depositDataRootApproval[i];
@@ -360,7 +360,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         uint256 outboundEthAmountFromLp = 31 ether * _validatorIds.length;
         _accountForEthSentOut(outboundEthAmountFromLp);
 
-        stakingManager.batchApproveRegistration{outboundEthAmountFromLp}(_validatorIds, _pubKey, _signature, depositDataRootApproval);
+        stakingManager.batchApproveRegistration{value: outboundEthAmountFromLp}(_validatorIds, _pubKey, _signature, depositDataRootApproval);
     }
 
     /// @notice Cancels the process

@@ -163,6 +163,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function initializeRoleRegistry(address _roleRegistry) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
         roleRegistry = RoleRegistry(_roleRegistry);
+        validatorTaskBatchSize = 100;
     }
 
 
