@@ -9,6 +9,11 @@ import {ICumulativeMerkleRewardsDistributor}  from "./interfaces/ICumulativeMerk
 contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, OwnableUpgradeable, UUPSUpgradeable {
 using SafeERC20 for IERC20;
 
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------------  STATE-VARIABLES  ----------------------------------
+    //--------------------------------------------------------------------------------------
+
     mapping(address token => uint256 blockNo) public lastPendingMerkleUpdatedToBlock;
     mapping(address token => uint256 blockNo) public lastRewardsCalculatedToBlock;
     mapping(address token => bytes32 merkleRoot) public claimableMerkleRoots;
@@ -16,11 +21,19 @@ using SafeERC20 for IERC20;
     mapping(address token => mapping(address user => uint256 cumulativeBalance)) public cumulativeClaimed;
     bool public paused;
 
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ROLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
     uint256 public constant CLAIM_DELAY = 7200; // 1 day to verify if processRewards was called with wrong amounts
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     bytes32 public constant REWARDS_MANAGER_ADMIN = keccak256("REWARD_MANAGER_ADMIN");
     RoleRegistry public immutable roleRegistry;
 
+//--------------------------------------------------------------------------------------
+//----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
+//--------------------------------------------------------------------------------------
 
     constructor(address _roleRegistry) {
         _disableInitializers();
@@ -32,7 +45,13 @@ using SafeERC20 for IERC20;
         __UUPSUpgradeable_init();
         paused = false;
     }
-
+/**
+* @notice Sets a new pending Merkle root for token rewards distribution
+* @dev Only callable by accounts with REWARDS_MANAGER_ADMIN role
+* @dev The pending root must be finalized after CLAIM_DELAY blocks before it becomes active
+* @param _token Address of the reward token (use ETH_ADDRESS for ETH rewards)
+* @param _merkleRoot New Merkle root containing the reward data
+**/
     function setPendingMerkleRoot(address _token, bytes32 _merkleRoot) external whenNotPaused {
         if(!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) revert IncorrectRole();
         pendingMerkleRoots[_token] = _merkleRoot;
@@ -40,6 +59,13 @@ using SafeERC20 for IERC20;
         emit PendingMerkleRootUpdated(_token, _merkleRoot);
     }
 
+/**
+* @notice Finalizes a pending Merkle root after the required delay period
+* @dev Only callable by accounts with REWARDS_MANAGER_ADMIN role
+* @dev Must wait CLAIM_DELAY blocks after setPendingMerkleRoot before finalizing
+* @param _token Address of the reward token (use ETH_ADDRESS for ETH rewards)
+* @param _finalizedBlock Block number up to which rewards are calculated
+*/
     function finalizeMerkleRoot(address _token, uint256 _finalizedBlock) external whenNotPaused {
         if(!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) revert IncorrectRole();
         if(!(block.number >= lastPendingMerkleUpdatedToBlock[_token] + CLAIM_DELAY)) revert InsufficentDelay();
@@ -49,18 +75,16 @@ using SafeERC20 for IERC20;
         emit ClaimableMerkleRootUpdated(_token, oldClaimableMerkleRoot, claimableMerkleRoots[_token], _finalizedBlock);
     }
 
-    function pause() external {
-        if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
-        paused = true;
-        emit Paused(msg.sender);
-    }
-
-    function unpause() external {
-        if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
-        paused = false;
-        emit UnPaused(msg.sender);
-    }
-
+    /**
+    * @notice Claims rewards for an account using Merkle proof verification
+    * @dev Supports both ERC20 tokens and ETH (using ETH_ADDRESS)
+    * @dev Uses cumulative amounts to prevent double-claiming and allow partial claims
+    * @param token Address of the reward token (use ETH_ADDRESS for ETH)
+    * @param account Address that will receive the rewards
+    * @param cumulativeAmount Total amount claimable by account, including previous claims
+    * @param expectedMerkleRoot The Merkle root containing the reward data
+    * @param merkleProof Array of hashes proving the claim's inclusion in the Merkle tree
+    **/
     function claim(
         address token,
         address account,
@@ -93,8 +117,25 @@ using SafeERC20 for IERC20;
         emit Claimed(token, account, amount);
     }
 
+    function pause() external {
+        if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        paused = true;
+        emit Paused(msg.sender);
+    }
+
+    function unpause() external {
+        if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        paused = false;
+        emit UnPaused(msg.sender);
+    }
+
 
     function getImplementation() external view returns (address) {return _getImplementation();}
+
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------  INTERNAL FUNCTIONS  ----------------------------------
+    //--------------------------------------------------------------------------------------
 
     function _authorizeUpgrade(address newImplementation) internal override {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
