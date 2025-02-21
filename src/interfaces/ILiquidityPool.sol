@@ -50,6 +50,7 @@ interface ILiquidityPool {
     function sharesForWithdrawalAmount(uint256 _amount) external view returns (uint256);
     function amountForShare(uint256 _share) external view returns (uint256);
     function eETH() external view returns (IeETH);
+    function ethAmountLockedForWithdrawal() external view returns (uint128);
 
     function deposit() external payable returns (uint256);
     function deposit(address _referral) external payable returns (uint256);
@@ -70,8 +71,9 @@ interface ILiquidityPool {
     function rebase(int128 _accruedRewards) external;
     function payProtocolFees(uint128 _protocolFees) external;
     function addEthAmountLockedForWithdrawal(uint128 _amount) external;
-    function reduceEthAmountLockedForWithdrawal(uint128 _amount) external; 
+    
     function pauseContract() external;
+    function burnEEthShares(uint256 shares) external;
     function unPauseContract() external; 
 
     function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external;  

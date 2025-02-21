@@ -49,6 +49,7 @@ import "../src/EtherFiAdmin.sol";
 import "../src/EtherFiTimelock.sol";
 
 import "../src/BucketRateLimiter.sol";
+import "../src/EtherFiRedemptionManager.sol";
 
 import "../script/ContractCodeChecker.sol";
 import "../script/Create2Factory.sol";
@@ -108,6 +109,7 @@ contract TestSetup is Test, ContractCodeChecker {
     UUPSProxy public membershipNftProxy;
     UUPSProxy public nftExchangeProxy;
     UUPSProxy public withdrawRequestNFTProxy;
+    UUPSProxy public etherFiRedemptionManagerProxy;
     UUPSProxy public etherFiOracleProxy;
     UUPSProxy public etherFiAdminProxy;
     UUPSProxy public roleRegistryProxy;
@@ -171,6 +173,8 @@ contract TestSetup is Test, ContractCodeChecker {
     WithdrawRequestNFT public withdrawRequestNFTImplementation;
     WithdrawRequestNFT public withdrawRequestNFTInstance;
 
+    EtherFiRedemptionManager public etherFiRedemptionManagerInstance;
+
     NFTExchange public nftExchangeImplementation;
     NFTExchange public nftExchangeInstance;
 
@@ -195,6 +199,8 @@ contract TestSetup is Test, ContractCodeChecker {
 
     EtherFiTimelock public etherFiTimelockInstance;
     BucketRateLimiter public bucketRateLimiter;
+
+    RoleRegistry public roleRegistry;
 
     bytes32 root;
     bytes32 rootMigration;
@@ -580,7 +586,7 @@ contract TestSetup is Test, ContractCodeChecker {
         membershipNftProxy = new UUPSProxy(address(membershipNftImplementation), "");
         membershipNftInstance = MembershipNFT(payable(membershipNftProxy));
 
-        withdrawRequestNFTImplementation = new WithdrawRequestNFT();
+        withdrawRequestNFTImplementation = new WithdrawRequestNFT(address(treasuryInstance));
         withdrawRequestNFTProxy = new UUPSProxy(address(withdrawRequestNFTImplementation), "");
         withdrawRequestNFTInstance = WithdrawRequestNFT(payable(withdrawRequestNFTProxy));
 
@@ -601,7 +607,19 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
+        roleRegistryProxy = new UUPSProxy(address(new RoleRegistry()), "");
+        roleRegistry = RoleRegistry(address(roleRegistryProxy));
+        roleRegistry.initialize(owner);
+
+        etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistry))), "");
+        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
+        etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether);
+
+        roleRegistry.grantRole(keccak256("PROTOCOL_ADMIN"), owner);
+        
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
+        liquidityPoolInstance.initializeOnUpgradeWithRedemptionManager(address(etherFiRedemptionManagerInstance));
+
         liquidityPoolInstance.initializeRoleRegistry(address(roleRegistryInstance));
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
         withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolInstance)), payable(address(eETHInstance)), payable(address(membershipManagerInstance)));
@@ -1097,6 +1115,34 @@ contract TestSetup is Test, ContractCodeChecker {
         bytes32 digest = calculatePermitDigest(_owner, spender, value, nonce, deadline, domianSeparator);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privKey, digest);
         ILiquidityPool.PermitInput memory permitInput = ILiquidityPool.PermitInput({
+            value: value,
+            deadline: deadline,
+            v: v,
+            r: r,
+            s: s
+        });
+        return permitInput;
+    }
+
+    function eEth_createPermitInput(uint256 privKey, address spender, uint256 value, uint256 nonce, uint256 deadline, bytes32 domianSeparator) public returns (IeETH.PermitInput memory) {
+        address _owner = vm.addr(privKey);
+        bytes32 digest = calculatePermitDigest(_owner, spender, value, nonce, deadline, domianSeparator);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privKey, digest);
+        IeETH.PermitInput memory permitInput = IeETH.PermitInput({
+            value: value,
+            deadline: deadline,
+            v: v,
+            r: r,
+            s: s
+        });
+        return permitInput;
+    }
+
+    function weEth_createPermitInput(uint256 privKey, address spender, uint256 value, uint256 nonce, uint256 deadline, bytes32 domianSeparator) public returns (IWeETH.PermitInput memory) {
+        address _owner = vm.addr(privKey);
+        bytes32 digest = calculatePermitDigest(_owner, spender, value, nonce, deadline, domianSeparator);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privKey, digest);
+        IWeETH.PermitInput memory permitInput = IWeETH.PermitInput({
             value: value,
             deadline: deadline,
             v: v,
