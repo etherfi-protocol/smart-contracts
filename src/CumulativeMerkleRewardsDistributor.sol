@@ -33,14 +33,14 @@ using SafeERC20 for IERC20;
         paused = false;
     }
 
-    function setPendingMerkleRoot(address _token, bytes32 _merkleRoot) external {
+    function setPendingMerkleRoot(address _token, bytes32 _merkleRoot) external whenNotPaused {
         if(!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) revert IncorrectRole();
         pendingMerkleRoots[_token] = _merkleRoot;
         lastPendingMerkleUpdatedToBlock[_token] = block.number;
         emit PendingMerkleRootUpdated(_token, _merkleRoot);
     }
 
-    function finalizeMerkleRoot(address _token, uint256 _finalizedBlock) external {
+    function finalizeMerkleRoot(address _token, uint256 _finalizedBlock) external whenNotPaused {
         if(!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) revert IncorrectRole();
         if(!(block.number >= lastPendingMerkleUpdatedToBlock[_token] + CLAIM_DELAY)) revert InsufficentDelay();
         bytes32 oldClaimableMerkleRoot = claimableMerkleRoots[_token];
@@ -67,7 +67,7 @@ using SafeERC20 for IERC20;
         uint256 cumulativeAmount,
         bytes32 expectedMerkleRoot,
         bytes32[] calldata merkleProof
-    ) external override {
+    ) external whenNotPaused override {
         if (claimableMerkleRoots[token] != expectedMerkleRoot) revert MerkleRootWasUpdated();
 
         // Verify the merkle proof
@@ -123,6 +123,19 @@ using SafeERC20 for IERC20;
 
             valid := eq(root, leaf)
         }
+    }
+
+        function _requireNotPaused() internal view virtual {
+        require(!paused, "Pausable: paused");
+    }
+
+    //--------------------------------------------------------------------------------------
+    //-----------------------------------  MODIFIERS  --------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    modifier whenNotPaused() {
+        _requireNotPaused();
+        _;
     }
 
 }
