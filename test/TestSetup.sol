@@ -53,7 +53,6 @@ import "../src/BucketRateLimiter.sol";
 import "../script/ContractCodeChecker.sol";
 import "../script/Create2Factory.sol";
 import "../src/RoleRegistry.sol";
-import { RewardsManager } from "../src/RewardsManager.sol";
 
 contract TestSetup is Test, ContractCodeChecker {
 
@@ -112,7 +111,6 @@ contract TestSetup is Test, ContractCodeChecker {
     UUPSProxy public etherFiOracleProxy;
     UUPSProxy public etherFiAdminProxy;
     UUPSProxy public roleRegistryProxy;
-    UUPSProxy public rewardsManagerProxy;
     DepositDataGeneration public depGen;
     IDepositContract public depositContractEth2;
 
@@ -183,9 +181,6 @@ contract TestSetup is Test, ContractCodeChecker {
 
     EtherFiAdmin public etherFiAdminImplementation;
     EtherFiAdmin public etherFiAdminInstance;
-
-    RewardsManager public rewardsManagerImplementation;
-    RewardsManager public rewardsManagerInstance;
 
     EtherFiNode public node;
     Treasury public treasuryInstance;
@@ -706,9 +701,6 @@ contract TestSetup is Test, ContractCodeChecker {
         tokens[1] = address(eETHInstance);
         uint256[] memory lastProcessedAtBlocks = new uint256[](2);
         lastProcessedAtBlocks[0] = lastProcessedAtBlocks[1] = 0;
-        rewardsManagerImplementation = new RewardsManager(tokens, lastProcessedAtBlocks, address(roleRegistryInstance));
-        rewardsManagerProxy = new UUPSProxy(address(rewardsManagerImplementation), "");
-        rewardsManagerInstance = RewardsManager((address(rewardsManagerProxy)));
 
         vm.startPrank(owner);
 
@@ -716,7 +708,6 @@ contract TestSetup is Test, ContractCodeChecker {
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), alice);
-        roleRegistryInstance.grantRole(rewardsManagerInstance.REWARDS_MANAGER_ADMIN(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
         vm.startPrank(alice);
