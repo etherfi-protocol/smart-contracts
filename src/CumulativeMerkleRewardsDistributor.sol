@@ -28,7 +28,7 @@ using SafeERC20 for IERC20;
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
-    uint256 public constant CLAIM_DELAY = 14400; // 1 day to verify if processRewards was called with wrong amounts
+    uint256 public constant CLAIM_DELAY = 14400; // 2 day to verify if processRewards was called with wrong amounts
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     bytes32 public constant REWARDS_MANAGER_ADMIN = keccak256("REWARD_MANAGER_ADMIN");
     RoleRegistry public immutable roleRegistry;
