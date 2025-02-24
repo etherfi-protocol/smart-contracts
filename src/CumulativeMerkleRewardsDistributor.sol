@@ -19,6 +19,8 @@ using SafeERC20 for IERC20;
     mapping(address token => bytes32 merkleRoot) public claimableMerkleRoots;
     mapping(address token => bytes32 merkleRoot) public pendingMerkleRoots;
     mapping(address token => mapping(address user => uint256 cumulativeBalance)) public cumulativeClaimed;
+    mapping(address user => bool isWhitelisted) public whitelistedRecipient;
+
     bool public paused;
 
 
@@ -26,7 +28,7 @@ using SafeERC20 for IERC20;
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
-    uint256 public constant CLAIM_DELAY = 7200; // 1 day to verify if processRewards was called with wrong amounts
+    uint256 public constant CLAIM_DELAY = 14400; // 1 day to verify if processRewards was called with wrong amounts
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     bytes32 public constant REWARDS_MANAGER_ADMIN = keccak256("REWARD_MANAGER_ADMIN");
     RoleRegistry public immutable roleRegistry;
@@ -93,6 +95,7 @@ using SafeERC20 for IERC20;
         bytes32[] calldata merkleProof
     ) external whenNotPaused override {
         if (claimableMerkleRoots[token] != expectedMerkleRoot) revert MerkleRootWasUpdated();
+        if (!whitelistedRecipient[msg.sender]) revert NonWhitelistedUser();
 
         // Verify the merkle proof
         bytes32 leaf = keccak256(abi.encodePacked(account, cumulativeAmount));
@@ -115,6 +118,12 @@ using SafeERC20 for IERC20;
             IERC20(token).safeTransfer(account, amount);
         }
         emit Claimed(token, account, amount);
+    }
+
+    function updateWhitelistedRecipient(address user, bool isWhitelisted) external {
+        if(!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) revert IncorrectRole();
+        whitelistedRecipient[user] = isWhitelisted;
+        emit RecipientStatusUpdated(user, isWhitelisted);
     }
 
     function pause() external {

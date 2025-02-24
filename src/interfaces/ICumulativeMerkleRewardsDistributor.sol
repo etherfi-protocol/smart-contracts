@@ -5,16 +5,18 @@ pragma solidity ^0.8.24;
 // Allows anyone to claim a token if they exist in a merkle root.
 interface ICumulativeMerkleRewardsDistributor {
 
-    event MerkleRootUpdated(bytes32 oldMerkleRoot, bytes32 newMerkleRoot);
     event Claimed(address indexed token, address indexed account, uint256 amount);
     event PendingMerkleRootUpdated(address indexed token, bytes32 merkleRoot);
     event ClaimableMerkleRootUpdated(address indexed token, bytes32 oldMerkleRoot, bytes32 newMerkleRoot, uint256 rewardsCalculatedToBlock);
+    event MerkleRootUpdated(bytes32 oldMerkleRoot, bytes32 newMerkleRoot);
+    event RecipientStatusUpdated(address user, bool isWhitelisted);
     event Paused(address account);
     event UnPaused(address account);
 
     error IncorrectRole();
     error InsufficentDelay();
     error InvalidProof();
+    error NonWhitelistedUser();
     error MerkleRootWasUpdated();
     error NothingToClaim();
 
