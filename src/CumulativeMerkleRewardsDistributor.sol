@@ -95,7 +95,7 @@ using SafeERC20 for IERC20;
         bytes32[] calldata merkleProof
     ) external whenNotPaused override {
         if (claimableMerkleRoots[token] != expectedMerkleRoot) revert MerkleRootWasUpdated();
-        if (!whitelistedRecipient[msg.sender]) revert NonWhitelistedUser();
+        if (!whitelistedRecipient[account]) revert NonWhitelistedUser();
 
         // Verify the merkle proof
         bytes32 leaf = keccak256(abi.encodePacked(account, cumulativeAmount));

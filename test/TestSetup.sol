@@ -53,6 +53,7 @@ import "../src/BucketRateLimiter.sol";
 import "../script/ContractCodeChecker.sol";
 import "../script/Create2Factory.sol";
 import "../src/RoleRegistry.sol";
+import "../src/CumulativeMerkleRewardsDistributor.sol";
 
 contract TestSetup is Test, ContractCodeChecker {
 
@@ -110,6 +111,7 @@ contract TestSetup is Test, ContractCodeChecker {
     UUPSProxy public withdrawRequestNFTProxy;
     UUPSProxy public etherFiOracleProxy;
     UUPSProxy public etherFiAdminProxy;
+    UUPSProxy public cumulativeMerkleRewardsDistributorProxy;
     UUPSProxy public roleRegistryProxy;
     DepositDataGeneration public depGen;
     IDepositContract public depositContractEth2;
@@ -181,6 +183,9 @@ contract TestSetup is Test, ContractCodeChecker {
 
     EtherFiAdmin public etherFiAdminImplementation;
     EtherFiAdmin public etherFiAdminInstance;
+
+    CumulativeMerkleRewardsDistributor public cumulativeMerkleRewardsDistributorImplementation;
+    CumulativeMerkleRewardsDistributor public cumulativeMerkleRewardsDistributorInstance;
 
     EtherFiNode public node;
     Treasury public treasuryInstance;
@@ -593,6 +598,14 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
 
+
+        cumulativeMerkleRewardsDistributorImplementation = new CumulativeMerkleRewardsDistributor(address(roleRegistryInstance));
+        cumulativeMerkleRewardsDistributorProxy = new UUPSProxy(address(cumulativeMerkleRewardsDistributorImplementation), "");
+        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(address(cumulativeMerkleRewardsDistributorProxy));
+
+        etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
+        etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
+
         etherFiOracleImplementation = new EtherFiOracle();
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
@@ -710,6 +723,7 @@ contract TestSetup is Test, ContractCodeChecker {
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(cumulativeMerkleRewardsDistributorInstance.REWARDS_MANAGER_ADMIN(), admin);
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         vm.stopPrank();	
