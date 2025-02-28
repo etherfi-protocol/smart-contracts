@@ -68,6 +68,9 @@ interface ILiquidityPool {
     function batchCancelDeposit(uint256[] calldata _validatorIds) external;
     function sendExitRequests(uint256[] calldata _validatorIds) external;
 
+    function registerValidatorSpawner(address _user) external;
+    function unregisterValidatorSpawner(address _user) external;
+
     function rebase(int128 _accruedRewards) external;
     function payProtocolFees(uint128 _protocolFees) external;
     function addEthAmountLockedForWithdrawal(uint128 _amount) external;

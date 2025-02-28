@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
-
 import "@openzeppelin-upgradeable/contracts/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -12,6 +11,7 @@ import "./interfaces/IMembershipManager.sol";
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./RoleRegistry.sol";
 
 
 
@@ -27,7 +27,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     IMembershipManager public membershipManager;
 
     mapping(uint256 => IWithdrawRequestNFT.WithdrawRequest) private _requests;
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
 
     uint32 public nextRequestId;
     uint32 public lastFinalizedRequestId;
@@ -42,7 +42,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint256 public totalRemainderEEthShares;
 
     bool public paused;
-    address public pauser;
+    RoleRegistry public roleRegistry;
+
+
+    bytes32 public constant WITHDRAWAL_ADMIN_ROLE = keccak256("WITHDRAWAL_ADMIN_ROLE");
+    
 
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
     event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
@@ -53,7 +57,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     event Paused(address account);
     event Unpaused(address account);
-    
+
+    error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _treasury) {
@@ -75,12 +80,12 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         nextRequestId = 1;
     }
 
-    function initializeOnUpgrade(address _pauser, uint16 _shareRemainderSplitToTreasuryInBps) external onlyOwner {
-        require(pauser == address(0) && _pauser != address(0), "Already initialized");
+    function initializeOnUpgrade(address _roleRegistry, uint16 _shareRemainderSplitToTreasuryInBps) external onlyOwner {
+        require(address(roleRegistry) == address(0) && _roleRegistry != address(0), "Already initialized");
         require(_shareRemainderSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
 
         paused = true; // make sure the contract is paused after the upgrade
-        pauser = _pauser;
+        roleRegistry = RoleRegistry(_roleRegistry);
 
         _unused_gap = 0;
         
@@ -227,23 +232,23 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestValidated(uint32(requestId));
     }
 
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        require(_address != address(0), "Cannot be address zero");
-        admins[_address] = _isAdmin;
-    }
-
     function updateShareRemainderSplitToTreasuryInBps(uint16 _shareRemainderSplitToTreasuryInBps) external onlyOwner {
         require(_shareRemainderSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
         shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
     }
 
-    function pauseContract() external onlyPauser {
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        if (paused) revert("Pausable: already paused");
         paused = true;
         emit Paused(msg.sender);
     }
 
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external {
         require(isScanOfShareRemainderCompleted(), "scan is not completed");
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        if (!paused) revert("Pausable: not paused");
+
 
         paused = false;
         emit Unpaused(msg.sender);
@@ -306,12 +311,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     modifier onlyAdmin() {
-        require(admins[msg.sender], "Caller is not the admin");
-        _;
-    }
-
-    modifier onlyPauser() {
-        require(msg.sender == pauser || admins[msg.sender] || msg.sender == owner(), "Caller is not the pauser");
+        require(roleRegistry.hasRole(WITHDRAWAL_ADMIN_ROLE, msg.sender), "Caller is not admin");
         _;
     }
 

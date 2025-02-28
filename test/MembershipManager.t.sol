@@ -18,6 +18,9 @@ contract MembershipManagerTest is TestSetup {
         eETHInstance.approve(address(membershipManagerInstance), 1_000_000_000 ether);
         vm.stopPrank();
 
+        vm.prank(admin);
+        withdrawRequestNFTInstance.unPauseContract();
+
 
         _upgradeMembershipManagerFromV0ToV1();
     }

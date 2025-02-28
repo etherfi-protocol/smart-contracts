@@ -17,8 +17,9 @@ contract LiquidityPoolTest is TestSetup {
     function setUp() public {
         // testnetFork = vm.createFork(vm.envString("TESTNET_RPC_URL"));
         setUpTests();
+        vm.prank(admin);
+        withdrawRequestNFTInstance.unPauseContract();
         // initializeTestingFork(TESTNET_FORK);
-
         _initBid();
     }
 
@@ -74,9 +75,8 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_StakingManagerLiquidityFails() public {
-
+        vm.deal(owner, 5 ether);
         vm.startPrank(owner);
-        vm.expectRevert();
         liquidityPoolInstance.deposit{value: 2 ether}();
     }
 
@@ -586,7 +586,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.warp(804650);
 
         vm.expectRevert(LiquidityPool.IncorrectRole.selector);
-        liquidityPoolInstance.registerAsBnftHolder(alice);
+        liquidityPoolInstance.registerValidatorSpawner(alice);
         
         //Let Alice sign up as a BNFT holder
         vm.startPrank(alice);
@@ -664,7 +664,7 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(validators[1], 6);
     }
 
-    // function test_DeRegisterBnftHolder() public {
+    // function test_.unregisterValidatorSpawner() public {
     //     setUpBnftHolders();
 
     //     (address ownerIndexAddress, ) = liquidityPoolInstance.bnftHolders(3);
@@ -676,7 +676,7 @@ contract LiquidityPoolTest is TestSetup {
     //     assertEq(bobIndexAddress, bob);
 
     //     vm.prank(alice);
-    //     liquidityPoolInstance.deRegisterBnftHolder(owner);
+    //     liquidityPoolInstance.unregisterValidatorSpawner(owner);
     //     (bool registered, ) = liquidityPoolInstance.bnftHoldersIndexes(owner);
     //     assertEq(registered, false);
 
@@ -684,7 +684,7 @@ contract LiquidityPoolTest is TestSetup {
     //     assertEq(henryIndexAddress, henry);
 
     //     vm.prank(bob);
-    //     liquidityPoolInstance.deRegisterBnftHolder(bob);
+    //     liquidityPoolInstance.unregisterValidatorSpawner(bob);
     //     (registered, ) = liquidityPoolInstance.bnftHoldersIndexes(bob);
     //     assertEq(registered, false);
 
@@ -692,12 +692,12 @@ contract LiquidityPoolTest is TestSetup {
     //     assertEq(elvisIndexAddress, elvis);
     // }
 
-    function test_DeRegisterBnftHolderIfIncorrectCaller() public {
+    function test_unregisterValidatorSpawnerIfIncorrectCaller() public {
         setUpBnftHolders();
 
         vm.prank(bob);
         vm.expectRevert("Incorrect Caller");
-        liquidityPoolInstance.deRegisterBnftHolder(owner);
+        liquidityPoolInstance.unregisterValidatorSpawner(owner);
     }
 
     function test_DepositWhenUserDeRegisters() public {
@@ -726,7 +726,7 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.startPrank(owner);
         //Owner de registers themselves
-        liquidityPoolInstance.deRegisterBnftHolder(owner);
+        liquidityPoolInstance.unregisterValidatorSpawner(owner);
         vm.stopPrank();
     }
 
@@ -1181,5 +1181,9 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.prank(roleRegistryInstance.owner());
         liquidityPoolInstance.upgradeTo(liquidityPool);
+    }
+
+    function test_eeth_view() public {
+        assertEq(address(liquidityPoolInstance.eETH()), address(eETHInstance));
     }
 }

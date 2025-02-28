@@ -65,8 +65,8 @@ contract StakingManagerTest is TestSetup {
         _executeAdminTasks(report);
 
         vm.startPrank(alice);
-        liquidityPoolInstance.registerAsBnftHolder(alice);
-        liquidityPoolInstance.registerAsBnftHolder(greg);
+        liquidityPoolInstance.registerValidatorSpawner(alice);
+        liquidityPoolInstance.registerValidatorSpawner(greg);
 
         vm.deal(alice, 100000 ether);
         vm.deal(greg, 100000 ether);

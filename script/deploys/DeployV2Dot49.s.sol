@@ -36,7 +36,7 @@ contract DeployV2Dot49Script is Script {
     function init() internal {
         addressProvider = AddressProvider(vm.envAddress("CONTRACT_REGISTRY"));
         timelockInstance = TimelockController(payable(address(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761)));
-        liquidityPoolInstance = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));
+        //liquidityPoolInstance = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));
         etherFiAdminInstance = EtherFiAdmin(addressProvider.getContractAddress("EtherFiAdmin"));
         weETHInstance = WeETH(addressProvider.getContractAddress("WeETH"));
         etherFiRewardsRouterInstance = EtherFiRewardsRouter(payable(address(0x73f7b1184B5cD361cC0f7654998953E2a251dd58)));
@@ -53,10 +53,10 @@ contract DeployV2Dot49Script is Script {
         roleRegistryInstance.initialize(address(0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39));
 
         // deploy new implementation contracts
-        newLiquidtyPoolImplementation = new LiquidityPool();
+        //newLiquidtyPoolImplementation = new LiquidityPool();
         newEtherFiAdminImplementation = new EtherFiAdmin();
-        newWeETHImplementation = new WeETH();
-        newEtherFiRewardsRouterImplementation = new EtherFiRewardsRouter(address(liquidityPoolInstance), treasuryGnosisSafeAddress, address(roleRegistryInstance));
+        //newWeETHImplementation = new WeETH();
+        //newEtherFiRewardsRouterImplementation = new EtherFiRewardsRouter(address(liquidityPoolInstance), treasuryGnosisSafeAddress, address(roleRegistryInstance));
         vm.stopBroadcast();
     }
 
@@ -111,7 +111,7 @@ contract DeployV2Dot49Script is Script {
     function completeRoleRegistrySetup() internal {
         vm.startBroadcast(address(timelockInstance));
         roleRegistryInstance.acceptOwnership();
-        liquidityPoolInstance.initializeRoleRegistry(address(roleRegistryInstance));
+        //liquidityPoolInstance.initializeRoleRegistry(address(roleRegistryInstance));
         etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));
         vm.stopBroadcast();
 
@@ -123,9 +123,9 @@ contract DeployV2Dot49Script is Script {
         //only for tenderly test will be done through timelock in prod
         upgradeContracts();
 
-        grantRoles();           
-        completeRoleRegistrySetup();
-        updateAddressProvider();
+        //grantRoles();           
+        //completeRoleRegistrySetup();
+        //updateAddressProvider();
 
     } 
 
