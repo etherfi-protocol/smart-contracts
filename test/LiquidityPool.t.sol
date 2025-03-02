@@ -357,6 +357,7 @@ contract LiquidityPoolTest is TestSetup {
 
         liquidityPoolInstance.deposit{value: 32 ether}();
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 32 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
 
         uint256[] memory validatorIds = liquidityPoolInstance.batchDeposit(bidIds, 1);
@@ -368,20 +369,31 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.batchRegister(zeroRoot, validatorIds, depositDataArray, depositDataRootsForApproval, sig);
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 31 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 1 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
 
         assertEq(BNFTInstance.ownerOf(validatorIds[0]), address(liquidityPoolInstance));
         assertEq(TNFTInstance.ownerOf(validatorIds[0]), address(liquidityPoolInstance));
 
         liquidityPoolInstance.batchApproveRegistration(validatorIds, pubKey, sig);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 0 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 32 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
 
         address etherfiNode = managerInstance.etherfiNodeAddress(validatorIds[0]);
         vm.deal(address(etherfiNode), 1 ether);
         managerInstance.batchPartialWithdraw(validatorIds);
 
+        assertEq(liquidityPoolInstance.totalValueInLp(), 1 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 31 ether);
+
+        vm.startPrank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(1 ether);
         // The liquidity pool receives the rewards as B-NFT holder and T-NFT holder
         assertEq((address(liquidityPoolInstance).balance), 1 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 1 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 32 ether);
     }
 
     function test_batchPartialWithdrawOptimized() internal {
@@ -592,7 +604,6 @@ contract LiquidityPoolTest is TestSetup {
         vm.startPrank(alice);
         registerAsBnftHolder(alice);
         vm.stopPrank();
-
         bool registered= liquidityPoolInstance.validatorSpawner(alice);
         assertEq(registered, true);
     }
@@ -719,14 +730,20 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.stopPrank();
 
-        vm.startPrank(alice);
-        //Alice deposits and her index is 0 (the last index), allowing her to deposit for 2 validators
-        liquidityPoolInstance.batchDeposit(bidIds, 4);
-        vm.stopPrank();
 
         vm.startPrank(owner);
         //Owner de registers themselves
+     
+        vm.expectEmit(true, true, false, false);
+        emit LiquidityPool.ValidatorSpawnerUnregistered(owner);
         liquidityPoolInstance.unregisterValidatorSpawner(owner);
+        vm.expectRevert();
+        liquidityPoolInstance.batchDeposit(bidIds, 4);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        //Alice deposits and her index is 0 (the last index), allowing her to deposit for 2 validators
+        liquidityPoolInstance.batchDeposit(bidIds, 4);
         vm.stopPrank();
     }
 

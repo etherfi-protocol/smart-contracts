@@ -15,7 +15,9 @@ contract RoleRegistryTest is Test {
     
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
-    
+
+   event RoleSet(address indexed holder, uint256 indexed role, bool active); 
+
     function setUp() public {
         owner = makeAddr("owner");
         user1 = makeAddr("user1");

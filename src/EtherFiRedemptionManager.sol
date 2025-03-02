@@ -305,7 +305,9 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
         return assets.mulDiv(feeBasisPoints, BASIS_POINT_SCALE, Math.Rounding.Up);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
