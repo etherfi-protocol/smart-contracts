@@ -95,6 +95,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     event UpdatedTreasury(address newTreasury);
     event BnftHolderDeregistered(address user, uint256 index);
     event BnftHolderRegistered(address user, uint256 index);
+    event ValidatorSpawnerRegistered(address user);
+    event ValidatorSpawnerUnregistered(address user);
     event ValidatorRegistered(uint256 indexed validatorId, bytes signature, bytes pubKey, bytes32 depositRoot);
     event ValidatorApproved(uint256 indexed validatorId);
     event ValidatorRegistrationCanceled(uint256 indexed validatorId);
@@ -149,10 +151,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         auctionManager = IAuctionManager(_auctionManager);
         liquifier = ILiquifier(_liquifier);
     }
+
     // Note: Call this function when no validators to approve
-    function initializeRoleRegistry(address _roleRegistry) external onlyOwner {
+    function initializeVTwoDotFourNine(address _roleRegistry, address _etherFiRedemptionManager) external onlyOwner {
+        require(address(etherFiRedemptionManager) == address(0) && _etherFiRedemptionManager != address(0), "Invalid");
         require(address(roleRegistry) == address(0x00), "already initialized");
-        
+
+        etherFiRedemptionManager = EtherFiRedemptionManager(payable(_etherFiRedemptionManager)); 
         roleRegistry = RoleRegistry(_roleRegistry);
 
         //correct splits
@@ -162,11 +167,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
         if(tvl != getTotalPooledEther()) revert();
     }
-
-    function initializeOnUpgradeWithRedemptionManager(address _etherFiRedemptionManager) external onlyOwner {
-        require(address(etherFiRedemptionManager) == address(0) && _etherFiRedemptionManager != address(0), "Invalid");
-        etherFiRedemptionManager = EtherFiRedemptionManager(payable(_etherFiRedemptionManager));
-    }
+    
     // Used by eETH staking flow
     function deposit() external payable returns (uint256) {
         return deposit(address(0));
@@ -388,25 +389,25 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     /// @notice The admin can register an address to become a BNFT holder
-    /// @param _user The address of the BNFT player to register
-    function registerAsBnftHolder(address _user) public {
+    /// @param _user The address of the Validator Spawner to register
+    function registerValidatorSpawner(address _user) public {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         require(!validatorSpawner[_user].registered, "Already registered");  
 
         validatorSpawner[_user] = ValidatorSpawner({registered: true});
 
-        emit BnftHolderRegistered(_user, 0);
+        emit ValidatorSpawnerRegistered(_user);
     }
 
-    /// @notice Removes a BNFT player from the bnftHolders array
-    /// @param _bNftHolder Address of the BNFT player to remove
-    function deRegisterBnftHolder(address _bNftHolder) external {
-        require(validatorSpawner[_bNftHolder].registered, "Not registered");
+    /// @notice Removes a Validator Spawner
+    /// @param _user the address of the Validator Spawner to remove
+    function unregisterValidatorSpawner(address _user) external {
+        require(validatorSpawner[_user].registered, "Not registered");
         require(roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender), "Incorrect Caller");
         
-        delete validatorSpawner[_bNftHolder];
+        delete validatorSpawner[_user];
 
-        emit BnftHolderDeregistered(_bNftHolder, 0);
+        emit ValidatorSpawnerUnregistered(_user);
     }
 
     /// @notice Send the exit requests as the T-NFT holder of the LiquidityPool validators

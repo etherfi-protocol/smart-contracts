@@ -18,6 +18,10 @@ contract MembershipManagerV0Test is TestSetup {
         vm.startPrank(bob);
         eETHInstance.approve(address(membershipManagerInstance), 1_000_000_000 ether);
         vm.stopPrank();
+
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.unPauseContract();
     }
 
     function test_wrapEthBatch() public {

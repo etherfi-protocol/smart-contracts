@@ -158,7 +158,7 @@ contract DeployPhaseTwoScript is Script {
         );
         // etherFiAdminInstance.updateAdmin(oracleAdminAddress, true);
         IEtherFiOracle(address(etherFiOracleAddress)).setEtherFiAdmin(address(etherFiAdminInstance));
-        IWithdrawRequestNFT(address(withdrawRequestNFTAddress)).updateAdmin(address(etherFiAdminInstance), true);
+        //IWithdrawRequestNFT(address(withdrawRequestNFTAddress)).updateAdmin(address(etherFiAdminInstance), true);
 
         // Used only for development
         if (false) {

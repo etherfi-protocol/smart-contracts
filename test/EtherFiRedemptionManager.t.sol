@@ -14,20 +14,13 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     }
 
     function setUp_Fork() public {
+        setUpTests();
         initializeRealisticFork(MAINNET_FORK);
 
-        vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(keccak256("PROTOCOL_ADMIN"), op_admin);
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(keccak256("PROTOCOL_ADMIN"), op_admin);
         vm.stopPrank();
 
-        etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistry))), "");
-        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
-        etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark
-
-        _upgrade_liquidity_pool_contract();
-
-        vm.prank(liquidityPoolInstance.owner());
-        liquidityPoolInstance.initializeOnUpgradeWithRedemptionManager(address(etherFiRedemptionManagerInstance));
     }
 
     function test_upgrade_only_by_owner() public {
@@ -209,7 +202,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     }
 
     function testFuzz_role_management(address admin, address pauser, address unpauser, address user) public {
-        address owner = roleRegistry.owner();
+        address owner = roleRegistryInstance.owner();
         bytes32 PROTOCOL_ADMIN = keccak256("PROTOCOL_ADMIN");
         bytes32 PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
         bytes32 PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
@@ -221,11 +214,11 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         // Grant roles to respective addresses
         vm.prank(owner);
-        roleRegistry.grantRole(PROTOCOL_ADMIN, admin);
+        roleRegistryInstance.grantRole(PROTOCOL_ADMIN, admin);
         vm.prank(owner);
-        roleRegistry.grantRole(PROTOCOL_PAUSER, pauser);
+        roleRegistryInstance.grantRole(PROTOCOL_PAUSER, pauser);
         vm.prank(owner);
-        roleRegistry.grantRole(PROTOCOL_UNPAUSER, unpauser);
+        roleRegistryInstance.grantRole(PROTOCOL_UNPAUSER, unpauser);
 
         // Admin performs admin-only actions
         vm.startPrank(admin);
@@ -250,7 +243,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         // Revoke PROTOCOL_ADMIN role from admin
         vm.prank(owner);
-        roleRegistry.revokeRole(PROTOCOL_ADMIN, admin);
+        roleRegistryInstance.revokeRole(PROTOCOL_ADMIN, admin);
 
         // Admin attempts admin-only actions after role revocation
         vm.startPrank(admin);
@@ -282,10 +275,9 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     function test_mainnet_redeem_eEth() public {
         setUp_Fork();
 
-        vm.deal(alice, 50000 ether);
+        vm.deal(alice, 100000 ether);
         vm.prank(alice);
-        liquidityPoolInstance.deposit{value: 50000 ether}();
-
+        liquidityPoolInstance.deposit{value: 100000 ether}();
 
         vm.deal(user, 100 ether);
         vm.startPrank(user);
