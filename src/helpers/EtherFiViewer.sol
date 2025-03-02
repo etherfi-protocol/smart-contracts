@@ -45,7 +45,8 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function EigenPod_hasRestaked(uint256[] memory _validatorIds) external view returns (bool[] memory _hasRestaked) {
         _hasRestaked = new bool[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _hasRestaked[i] = _getEigenPod(_validatorIds[i]).hasRestaked();
+            // now every validator within eigenlayer is guaranteed to have this flag set
+            _hasRestaked[i] = _getEtherFiNode(_validatorIds[i]).isRestakingEnabled();
         }
     }
 
@@ -53,20 +54,6 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         _withdrawableRestakedExecutionLayerGwei = new uint256[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             _withdrawableRestakedExecutionLayerGwei[i] = _getEigenPod(_validatorIds[i]).withdrawableRestakedExecutionLayerGwei();
-        }
-    }
-
-    function EigenPod_nonBeaconChainETHBalanceWei(uint256[] memory _validatorIds) external view returns (uint256[] memory _nonBeaconChainETHBalanceWei) {
-        _nonBeaconChainETHBalanceWei = new uint256[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _nonBeaconChainETHBalanceWei[i] = _getEigenPod(_validatorIds[i]).nonBeaconChainETHBalanceWei();
-        }
-    }
-
-    function EigenPod_mostRecentWithdrawalTimestamp(uint256[] memory _validatorIds) external view returns (uint256[] memory _mostRecentWithdrawalTimestamp) {
-        _mostRecentWithdrawalTimestamp = new uint256[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _mostRecentWithdrawalTimestamp[i] = _getEigenPod(_validatorIds[i]).mostRecentWithdrawalTimestamp();
         }
     }
 
@@ -100,11 +87,12 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    function EigenPodManager_podOwnerShares(uint256[] memory _validatorIds) external view returns (int256[] memory _podOwnerShares) {
+    // WARNING: these shares have not been scaled by any slashing events
+    function EigenPodManager_podOwnerDepositShares(uint256[] memory _validatorIds) external view returns (int256[] memory _podOwnerShares) {
         _podOwnerShares = new int256[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address podOwner = address(_getEtherFiNode(_validatorIds[i]));
-            _podOwnerShares[i] = _getEigenPodManager().podOwnerShares(podOwner);
+            _podOwnerShares[i] = _getEigenPodManager().podOwnerDepositShares(podOwner);
         }
     }
 
@@ -113,13 +101,6 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address podOwner = address(_getEtherFiNode(_validatorIds[i]));
             _delegatedTo[i] = _getDelegationManager().delegatedTo(podOwner);
-        }
-    }
-
-    function DelegationManager_operatorDetails(address[] memory _operators) external view returns (IDelegationManager.OperatorDetails[] memory _operatorDetails) {
-        _operatorDetails = new IDelegationManager.OperatorDetails[](_operators.length);
-        for (uint256 i = 0; i < _operators.length; i++) {
-            _operatorDetails[i] = _getDelegationManager().operatorDetails(_operators[i]);
         }
     }
 
