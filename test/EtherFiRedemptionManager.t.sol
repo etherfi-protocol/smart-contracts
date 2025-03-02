@@ -27,11 +27,11 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         setUp_Fork();
 
         address impl = etherFiRedemptionManagerInstance.getImplementation();
-        vm.prank(admin);
+        vm.prank(chad);
         vm.expectRevert();
         etherFiRedemptionManagerInstance.upgradeTo(impl);
 
-        vm.prank(etherFiRedemptionManagerInstance.owner());
+        vm.prank(admin);
         etherFiRedemptionManagerInstance.upgradeTo(impl);
     }
 
@@ -69,6 +69,23 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100_01); // 100.01%
     }
 
+    function test_admin_permission() public {
+        vm.startPrank(alice);
+        vm.expectRevert();
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(1_00); // 1%
+        vm.expectRevert();
+        etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(1_000); // 10%
+        vm.expectRevert();
+        etherFiRedemptionManagerInstance.setExitFeeBasisPoints(40); // 0.4%
+        vm.expectRevert();
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(1_00); // 1%
+        vm.expectRevert();
+        etherFiRedemptionManagerInstance.setCapacity(1_00); // 1%
+        vm.expectRevert();
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(1_00); // 1%
+        vm.stopPrank();
+    }
+
     function testFuzz_redeemEEth(
         uint256 depositAmount,
         uint256 redeemAmount,
@@ -76,11 +93,14 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint16 exitFeeBps,
         uint16 lowWatermarkBps
     ) public {
+        
+        vm.assume(depositAmount >= redeemAmount);
         depositAmount = bound(depositAmount, 1 ether, 1000 ether);
         redeemAmount = bound(redeemAmount, 0.1 ether, depositAmount);
         exitFeeSplitBps = bound(exitFeeSplitBps, 0, 10000);
         exitFeeBps = uint16(bound(uint256(exitFeeBps), 0, 10000));
         lowWatermarkBps = uint16(bound(uint256(lowWatermarkBps), 0, 10000));
+
 
         vm.deal(user, depositAmount);
         vm.startPrank(user);
@@ -138,6 +158,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     ) public {
         // Bound the parameters
         depositAmount = bound(depositAmount, 1 ether, 1000 ether);
+        console2.log(depositAmount);
         redeemAmount = bound(redeemAmount, 0.1 ether, depositAmount);
         exitFeeSplitBps = uint16(bound(exitFeeSplitBps, 0, 10000));
         exitFeeBps = uint16(bound(exitFeeBps, 0, 10000));

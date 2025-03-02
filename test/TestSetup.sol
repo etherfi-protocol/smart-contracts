@@ -686,8 +686,6 @@ contract TestSetup is Test, ContractCodeChecker {
         vm.stopPrank();
         
         vm.startPrank(owner);
-        console.log("owner");
-        console.log(owner);
 
         tvlOracle = new TVLOracle(alice);
 
@@ -1160,6 +1158,9 @@ contract TestSetup is Test, ContractCodeChecker {
 
     function registerAsBnftHolder(address _user) internal {
         bool registered = liquidityPoolInstance.validatorSpawner(_user);
+
+        vm.expectEmit(true, true, false, true);
+        emit LiquidityPool.ValidatorSpawnerRegistered(_user);
         if (!registered) liquidityPoolInstance.registerValidatorSpawner(_user);
     }
 
