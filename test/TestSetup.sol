@@ -3,13 +3,14 @@ pragma solidity ^0.8.13;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-
 import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
 import "../src/eigenlayer-interfaces/IBeaconChainOracle.sol";
 import "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
 import "../src/eigenlayer-interfaces/ITimelock.sol";
+//import "./eigenlayer-mocks/MockEigenPodManager.sol";
+//import "./eigenlayer-mocks/MockDelegationManager.sol";
 
 import "../src/interfaces/IStakingManager.sol";
 import "../src/interfaces/IEtherFiNode.sol";
@@ -88,7 +89,9 @@ contract TestSetup is Test, ContractCodeChecker {
     BeaconChainOracleMock public beaconChainOracleMock;
     IEigenPodManager public eigenLayerEigenPodManager;
     IDelegationManager public eigenLayerDelegationManager;
+    IRewardsCoordinator public eigenLayerRewardsCoordinator;
     ITimelock public eigenLayerTimelock;
+
 
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
 
@@ -352,6 +355,8 @@ contract TestSetup is Test, ContractCodeChecker {
             eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
             eigenLayerEigenPodManager = IEigenPodManager(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
             eigenLayerDelegationManager = IDelegationManager(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+            eigenLayerRewardsCoordinator = IRewardsCoordinator(0x7750d328b314EfFa365A0402CcfD489B80B0adda);
+
             eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
 
         } else if (forkEnum == TESTNET_FORK) {
@@ -374,6 +379,7 @@ contract TestSetup is Test, ContractCodeChecker {
             eigenLayerStrategyManager = IEigenLayerStrategyManager(0xdfB5f6CE42aAA7830E94ECFCcAd411beF4d4D5b6);
             eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
             eigenLayerDelegationManager = IDelegationManager(0xA44151489861Fe9e3055d95adC98FbD462B948e7);
+            eigenLayerRewardsCoordinator == IRewardsCoordinator(0x7750d328b314EfFa365A0402CcfD489B80B0adda);
             eigenLayerTimelock = ITimelock(0xcF19CE0561052a7A7Ff21156730285997B350A7D);
 
         } else {
@@ -602,7 +608,7 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
 
-        etherFiRestakerImplementation = new EtherFiRestaker();
+        etherFiRestakerImplementation = new EtherFiRestaker(address(0x0));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 

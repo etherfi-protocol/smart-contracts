@@ -8,6 +8,8 @@ import "../../src/eigenlayer-interfaces/ISemVerMixin.sol";
 contract EigenPodMock is IEigenPod, Test {
     constructor() {}
 
+    function version() external view returns (string memory) {}
+
     function nonBeaconChainETHBalanceWei() external view returns(uint256) {}
 
     /// @notice the amount of execution layer ETH in this contract that is staked in EigenLayer (i.e. withdrawn from beaconchain but not EigenLayer), 

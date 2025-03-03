@@ -130,34 +130,6 @@ contract EtherFiNodeTest is TestSetup {
 
     }
 
-    function test_claimMixedSafeAndPodFunds() public {
-        initializeTestingFork(MAINNET_FORK);
-
-        uint256 bidId = depositAndRegisterValidator(true);
-        safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(bidId)));
-
-        // simulate 1 eth of already claimed staking rewards and 1 eth of unclaimed restaked rewards
-        _transferTo(address(safeInstance.eigenPod()), 1 ether);
-        _transferTo(address(safeInstance), 1 ether);
-
-        assertEq(address(safeInstance).balance, 1 ether);
-        assertEq(address(safeInstance.eigenPod()).balance, 1 ether);
-
-        // claim the restaked rewards
-        // safeInstance.queueRestakedWithdrawal();
-        uint256[] memory validatorIds = new uint256[](1);
-        validatorIds[0] = bidId;
-        vm.prank(alice); // alice is admin
-        managerInstance.batchQueueRestakedWithdrawal(validatorIds);
-
-        vm.roll(block.number + (50400) + 1);
-
-        safeInstance.DEPRECATED_claimDelayedWithdrawalRouterWithdrawals();
-
-        assertEq(address(safeInstance).balance, 2 ether);
-        assertEq(address(safeInstance.eigenPod()).balance, 0 ether);
-    }
-
     function test_splitBalanceInExecutionLayer() public {
 
         initializeTestingFork(MAINNET_FORK);
@@ -291,51 +263,6 @@ contract EtherFiNodeTest is TestSetup {
         // assertEq(safeInstance.restakingObservedExitBlock(), 0);
     }
 
-    function test_withdrawableBalanceInExecutionLayer() public {
-        initializeTestingFork(MAINNET_FORK);
-
-        uint256 validatorId = depositAndRegisterValidator(true);
-        safeInstance = EtherFiNode(payable(managerInstance.etherfiNodeAddress(validatorId)));
-
-        assertEq(safeInstance.totalBalanceInExecutionLayer(), 0 ether);
-        assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 0 ether);
-
-        // send some funds to the pod
-        _transferTo(safeInstance.eigenPod(), 1 ether);
-        assertEq(safeInstance.totalBalanceInExecutionLayer(), 1 ether);
-        assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 0 ether);
-
-        // queue withdrawal
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-        assertEq(safeInstance.totalBalanceInExecutionLayer(), 1 ether);
-        assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 0 ether);
-
-        // more eth to pod
-        _transferTo(safeInstance.eigenPod(), 1 ether);
-        assertEq(safeInstance.totalBalanceInExecutionLayer(), 2 ether);
-        assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 0 ether);
-
-        // wait so queued withdrawal is claimable
-        vm.roll(block.number + (50400) + 1);
-        assertEq(safeInstance.totalBalanceInExecutionLayer(), 2 ether);
-        assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 1 ether);
-
-        // claim that withdrawal
-        safeInstance.DEPRECATED_claimDelayedWithdrawalRouterWithdrawals();
-        assertEq(safeInstance.totalBalanceInExecutionLayer(), 2 ether);
-        assertEq(address(safeInstance).balance, 1 ether);
-        assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 1 ether);
-
-        // queue multiple but only some that are claimable
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-        _transferTo(safeInstance.eigenPod(), 1 ether);
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-        vm.roll(block.number + (50400) + 1);
-        _transferTo(safeInstance.eigenPod(), 1 ether);
-        _withdrawNonBeaconChainETHBalanceWei(validatorId);
-        assertEq(safeInstance.withdrawableBalanceInExecutionLayer(), 3 ether);
-        assertEq(safeInstance.totalBalanceInExecutionLayer(), 4 ether);
-    }
 
     function _withdrawNonBeaconChainETHBalanceWei(uint256 validatorId) public {
         uint256[] memory validatorIds = new uint256[](1);
@@ -1770,10 +1697,10 @@ contract EtherFiNodeTest is TestSetup {
 
         strategies[0] = mgr.beaconChainETHStrategy();
         shares[0] = uint256(eigenPod.withdrawableRestakedExecutionLayerGwei()) * uint256(1 gwei);
-        params[0] = IDelegationManager.QueuedWithdrawalParams({
+        params[0] = IDelegationManagerTypes.QueuedWithdrawalParams({
             strategies: strategies,
-            shares: shares,
-            withdrawer: nodeAddress
+            depositShares: shares,
+            __deprecated_withdrawer: nodeAddress
         });
 
         // Caller != withdrawer
@@ -1800,21 +1727,21 @@ contract EtherFiNodeTest is TestSetup {
         vm.expectRevert();
         managerInstance.calculateTVL(validatorId, 0 ether);
 
-        IDelegationManager.Withdrawal memory withdrawal;
+        IDelegationManagerTypes.Withdrawal memory withdrawal;
         IERC20[] memory tokens = new IERC20[](1);
         {
             IStrategy[] memory strategies = new IStrategy[](1);
             strategies[0] = mgr.beaconChainETHStrategy();
             uint256[] memory shares = new uint256[](1);
             shares[0] = uint256(eigenPod.withdrawableRestakedExecutionLayerGwei()) * 1 gwei;
-            withdrawal = IDelegationManager.Withdrawal({
+            withdrawal = IDelegationManagerTypes.Withdrawal({
                 staker: nodeAddress,
                 delegatedTo: mgr.delegatedTo(nodeAddress),
                 withdrawer: nodeAddress,
                 nonce: mgr.cumulativeWithdrawalsQueued(nodeAddress),
                 startBlock: uint32(block.number),
                 strategies: strategies,
-                shares: shares
+                scaledShares: shares
             });      
 
             bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
@@ -1854,9 +1781,7 @@ contract EtherFiNodeTest is TestSetup {
 
         // mgr.completeQueuedWithdrawal(withdrawal, tokens, 0, true);
         IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
-        uint256[] memory middlewareTimesIndexes = new uint256[](1);
         withdrawals[0] = withdrawal;
-        middlewareTimesIndexes[0] = 0;
         
         IERC20[] memory tokens = new IERC20[](1);
         bytes[] memory data = new bytes[](1);
@@ -1870,21 +1795,21 @@ contract EtherFiNodeTest is TestSetup {
         // FAIL, if the `minWithdrawalDelayBlocks` is not passed
         vm.prank(owner);
         vm.expectRevert("DelegationManager._completeQueuedWithdrawal: minWithdrawalDelayBlocks period has not yet passed");
-        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, true);
 
         // 1. Wait
         // Wait 'minDelayBlock' after the `verifyAndProcessWithdrawals`
         {
-            uint256 minDelayBlock = Math.max(mgr.minWithdrawalDelayBlocks(), mgr.strategyWithdrawalDelayBlocks(mgr.beaconChainETHStrategy()));
+            uint256 minDelayBlock = mgr.minWithdrawalDelayBlocks();
             vm.roll(block.number + minDelayBlock);
         }
 
         // 2. DelegationManager.completeQueuedWithdrawal
         uint256 prevEtherFiNodeAddress = address(nodeAddress).balance;
-        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, true);
 
         assertEq(address(nodeAddress).balance, prevEtherFiNodeAddress + 32 ether);
-        assertEq(eigenPodManager.podOwnerShares(nodeAddress), 0);
+        assertEq(eigenPodManager.podOwnerDepositShares(nodeAddress), 0);
         assertEq(eigenPod.withdrawableRestakedExecutionLayerGwei(), 0);
     }
 
