@@ -6,6 +6,8 @@ import "../../src/eigenlayer-interfaces/IStrategy.sol";
 // See MockStrategy contract below this contract for testing overrides
 contract MockStrategyBase is IStrategy {
 
+    function version() external view returns (string memory) {}
+
      /**
      * @notice Used to deposit tokens into this Strategy
      * @param token is the ERC20 token being deposited

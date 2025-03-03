@@ -9,8 +9,8 @@ import "../src/eigenlayer-interfaces/IBeaconChainOracle.sol";
 import "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
 import "../src/eigenlayer-interfaces/ITimelock.sol";
-//import "./eigenlayer-mocks/MockEigenPodManager.sol";
-//import "./eigenlayer-mocks/MockDelegationManager.sol";
+//import "../test/mocks/MockEigenPodManager.sol";
+import "../test/mocks/MockDelegationManager.sol";
 
 import "../src/interfaces/IStakingManager.sol";
 import "../src/interfaces/IEtherFiNode.sol";

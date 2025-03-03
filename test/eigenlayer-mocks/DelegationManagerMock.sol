@@ -8,7 +8,7 @@ import "../../src/eigenlayer-interfaces/ISlasher.sol";
 import "../../src/eigenlayer-interfaces/IStrategyManager.sol";
 import "../../src/eigenlayer-libraries/SlashingLib.sol";
 
-contract DelegationManagerMock is Test, IDelegationManager {
+contract DelegationManagerMock is Test {
     receive() external payable {}
     fallback() external payable {}
 

@@ -2,13 +2,15 @@
 pragma solidity ^0.8.27;
 
 //import "src/eigenlayer-interfaces/IDelegationManager.sol";
-import "../../test/eigenlayer-mocks/DelegationManagerMock.sol";
+//import "../../test/eigenlayer-mocks/DelegationManagerMock.sol";
+import "../../test/mocks/MockDelegationManagerBase.sol";
 import "../../src/eigenlayer-interfaces/IDelegationManager.sol";
 import "../../test/mocks/MockStrategy.sol";
 import "forge-std/console2.sol";
+import "forge-std/Test.sol";
 
 
-contract MockDelegationManager is DelegationManagerMock {
+contract MockDelegationManager is MockDelegationManagerBase, Test {
 
     constructor() {
         mock_beaconChainETHStrategy = new MockStrategy();
