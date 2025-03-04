@@ -17,17 +17,19 @@ contract Deploy is Script {
     Liquifier public liquifierInstance;
 
     AddressProvider public addressProvider;
+    address eigenlayerRewardsCoordinator;
 
     address admin;
 
     function run() external {
+        require(eigenlayerRewardsCoordinator != address(0), "must set rewardsCoordinator");
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address addressProviderAddress = vm.envAddress("CONTRACT_REGISTRY");
         addressProvider = AddressProvider(addressProviderAddress);
 
         vm.startBroadcast(deployerPrivateKey);
 
-        EtherFiRestaker restaker = EtherFiRestaker(payable(new UUPSProxy(payable(new EtherFiRestaker()), "")));
+        EtherFiRestaker restaker = EtherFiRestaker(payable(new UUPSProxy(payable(new EtherFiRestaker(eigenlayerRewardsCoordinator)), "")));
         restaker.initialize(
             addressProvider.getContractAddress("LiquidityPool"),
             addressProvider.getContractAddress("Liquifier")
