@@ -15,8 +15,6 @@ import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
 import "./TNFT.sol";
 import "./BNFT.sol";
-import "forge-std/console.sol";
-
 
 contract EtherFiNodesManager is
     Initializable,
@@ -76,11 +74,8 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    event FundsWithdrawn(uint256 indexed _validatorId, uint256 amount);
     event NodeExitRequested(uint256 _validatorId);
-    event NodeExitRequestReverted(uint256 _validatorId);
     event NodeExitProcessed(uint256 _validatorId);
-    event NodeEvicted(uint256 _validatorId);
     event PhaseChanged(uint256 indexed _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
 
     event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
@@ -102,7 +97,6 @@ contract EtherFiNodesManager is
     receive() external payable {}
 
     error InvalidParams();
-    error NonZeroAddress();
     error ForwardedCallNotAllowed();
     error InvalidForwardedCall();
 

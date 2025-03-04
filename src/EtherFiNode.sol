@@ -11,7 +11,6 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "./eigenlayer-interfaces/IEigenPodManager.sol";
 import "./eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
-import "forge-std/console.sol";
 
 contract EtherFiNode is IEtherFiNode, IERC1271 {
     address public etherFiNodesManager;
@@ -41,8 +40,6 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     uint64 public DEPRECATED_pendingWithdrawalFromRestakingInGwei;
     uint64 public DEPRECATED_completedWithdrawalFromRestakingInGwei;
     mapping(uint256 => uint32) DEPRECATED_restakingObservedExitBlocks;
-
-    error CallFailed(bytes data);
 
     event EigenPodCreated(address indexed nodeAddress, address indexed podAddress);
 
@@ -346,7 +343,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     }
 
     /// @notice balance (wei) of this safe that could be immediately withdrawn
-    // This withdrawable balance amount is updated after completion of the queued withdarawal with `receiveAsToken = True`
+    // This withdrawable balance amount is updated after completion of the queued withdrawal with `receiveAsToken = True`
     function withdrawableBalanceInExecutionLayer() public view returns (uint256) {
         uint256 safeBalance = address(this).balance;
         return safeBalance;
