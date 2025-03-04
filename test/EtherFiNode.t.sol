@@ -2283,10 +2283,10 @@ contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
         vm.prank(owner);
         managerInstance.completeQueuedWithdrawals(validators, toArray(withdrawal), receiveAsTokens);
 
-        // since there are additional staking rewards, expect payouts to NO and treasury
+        // since there are additional staking rewards, expect payouts to tnft + bnft
         // event(validator, node, toOperator, toTnft, toBnft, toTreasury)
         vm.expectEmit(true, true, false, true);
-        emit FullWithdrawal(validatorID, etherfiNode, 50000000000000000, 30815625000000000000, 2084375000000000000, 50000000000000000);
+        emit FullWithdrawal(validatorID, etherfiNode, 0, 31 ether , 2 ether, 0);
 
         // finalize the full withdrawal in our protocol
         vm.prank(owner);

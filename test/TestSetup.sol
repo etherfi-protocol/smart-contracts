@@ -9,8 +9,8 @@ import "../src/eigenlayer-interfaces/IBeaconChainOracle.sol";
 import "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
 import "../src/eigenlayer-interfaces/ITimelock.sol";
-//import "../test/mocks/MockEigenPodManager.sol";
-import "../test/mocks/MockDelegationManager.sol";
+import "./mocks/MockEigenPodManager.sol";
+import "./mocks/MockDelegationManager.sol";
 
 import "../src/interfaces/IStakingManager.sol";
 import "../src/interfaces/IEtherFiNode.sol";
@@ -586,6 +586,9 @@ contract TestSetup is Test, ContractCodeChecker {
         vm.prank(alice);
         regulationsManagerInstance.initializeNewWhitelist(termsAndConditionsHash);
         vm.startPrank(owner);
+
+        eigenLayerEigenPodManager = new MockEigenPodManager();
+        eigenLayerDelegationManager = new MockDelegationManager();
 
         membershipNftImplementation = new MembershipNFT();
         membershipNftProxy = new UUPSProxy(address(membershipNftImplementation), "");
