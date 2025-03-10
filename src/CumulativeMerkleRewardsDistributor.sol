@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
 import { SafeERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -119,7 +120,7 @@ using SafeERC20 for IERC20;
         if(token == ETH_ADDRESS){
             (bool success, ) = account.call{value: amount}("");
             if(!success) {
-                revert("ETH Transfer failed");
+                revert ETHTransferFailed(); 
             }
         } else {
             IERC20(token).safeTransfer(account, amount);
@@ -158,8 +159,8 @@ using SafeERC20 for IERC20;
     }
 
     function _verifyAsm(bytes32[] calldata proof, bytes32 root, bytes32 leaf) private pure returns (bool valid) {
-        /// @solidity memory-safe-assembly
-        assembly {  // solhint-disable-line no-inline-assembly
+        if(proof.length > 1000) revert InvalidProof();
+        assembly ("memory-safe") { // solhint-disable-line no-inline-assembly
             let ptr := proof.offset
 
             for { let end := add(ptr, mul(0x20, proof.length)) } lt(ptr, end) { ptr := add(ptr, 0x20) } {
@@ -183,7 +184,7 @@ using SafeERC20 for IERC20;
     }
 
         function _requireNotPaused() internal view virtual {
-        require(!paused, "Pausable: paused");
+            if(paused) revert ContractPaused();
     }
 
     //--------------------------------------------------------------------------------------

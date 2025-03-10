@@ -8,7 +8,6 @@ interface ICumulativeMerkleRewardsDistributor {
     event Claimed(address indexed token, address indexed account, uint256 amount);
     event PendingMerkleRootUpdated(address indexed token, bytes32 merkleRoot);
     event ClaimableMerkleRootUpdated(address indexed token, bytes32 oldMerkleRoot, bytes32 newMerkleRoot, uint256 rewardsCalculatedToBlock);
-    event MerkleRootUpdated(bytes32 oldMerkleRoot, bytes32 newMerkleRoot);
     event RecipientStatusUpdated(address user, bool isWhitelisted);
     event Paused(address account);
     event UnPaused(address account);
@@ -20,6 +19,8 @@ interface ICumulativeMerkleRewardsDistributor {
     error NonWhitelistedUser();
     error MerkleRootWasUpdated();
     error NothingToClaim();
+    error ContractPaused();
+    error ETHTransferFailed();
 
     // Sets the merkle root of the merkle tree containing cumulative account balances available to claim.
     function setPendingMerkleRoot(address _token, bytes32 _merkleRoot) external;

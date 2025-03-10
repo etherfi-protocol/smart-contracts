@@ -150,11 +150,11 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
     cumulativeMerkleRewardsDistributorInstance.pause();
     vm.startPrank(admin);
     cumulativeMerkleRewardsDistributorInstance.pause();
-    vm.expectRevert("Pausable: paused");
+    vm.expectRevert(ICumulativeMerkleRewardsDistributor.ContractPaused.selector);
     cumulativeMerkleRewardsDistributorInstance.claim(address(eETHInstance), accounts[0], 100 ether, merkleRoot, proofs[0]);
-    vm.expectRevert("Pausable: paused");
+    vm.expectRevert(ICumulativeMerkleRewardsDistributor.ContractPaused.selector);
     cumulativeMerkleRewardsDistributorInstance.setPendingMerkleRoot(address(eETHInstance), merkleRoot);
-    vm.expectRevert("Pausable: paused");
+    vm.expectRevert(ICumulativeMerkleRewardsDistributor.ContractPaused.selector);
     vm.roll(block.number + 15000);
     vm.warp(block.timestamp + 15000 * 12);
     cumulativeMerkleRewardsDistributorInstance.finalizeMerkleRoot(address(eETHInstance), block.number - 12000);
