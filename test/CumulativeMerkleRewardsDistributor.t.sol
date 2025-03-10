@@ -49,6 +49,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
     vm.startPrank(admin);
     cumulativeMerkleRewardsDistributorInstance.setPendingMerkleRoot(token, merkleRoot);
     vm.roll(block.number + 15000);
+    vm.warp(block.timestamp + 15000 * 12);
     cumulativeMerkleRewardsDistributorInstance.finalizeMerkleRoot(token, block.number - 15000);
     vm.stopPrank();
     }
@@ -114,9 +115,11 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
     vm.startPrank(admin);
     cumulativeMerkleRewardsDistributorInstance.setPendingMerkleRoot(address(eETHInstance), merkleRoot);
     vm.roll(block.number + 14399);
+    vm.warp(block.timestamp + 14399 * 12);
     vm.expectRevert(ICumulativeMerkleRewardsDistributor.InsufficentDelay.selector);
     cumulativeMerkleRewardsDistributorInstance.finalizeMerkleRoot(address(eETHInstance), block.number - 12000);
     vm.roll(block.number + 1);
+    vm.warp(block.timestamp + 12);
     cumulativeMerkleRewardsDistributorInstance.finalizeMerkleRoot(address(eETHInstance), block.number - 12000);
     vm.assertEq(cumulativeMerkleRewardsDistributorInstance.claimableMerkleRoots(address(eETHInstance)), merkleRoot);
     vm.stopPrank();
@@ -153,6 +156,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
     cumulativeMerkleRewardsDistributorInstance.setPendingMerkleRoot(address(eETHInstance), merkleRoot);
     vm.expectRevert("Pausable: paused");
     vm.roll(block.number + 15000);
+    vm.warp(block.timestamp + 15000 * 12);
     cumulativeMerkleRewardsDistributorInstance.finalizeMerkleRoot(address(eETHInstance), block.number - 12000);
     cumulativeMerkleRewardsDistributorInstance.unpause();
     test_claiming();

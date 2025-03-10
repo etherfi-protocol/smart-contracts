@@ -14,13 +14,14 @@ using SafeERC20 for IERC20;
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    mapping(address token => uint256 blockNo) public lastPendingMerkleUpdatedToBlock;
+    mapping(address token => uint256 blockNo) public lastPendingMerkleUpdatedToTimestamp;
     mapping(address token => uint256 blockNo) public lastRewardsCalculatedToBlock;
     mapping(address token => bytes32 merkleRoot) public claimableMerkleRoots;
     mapping(address token => bytes32 merkleRoot) public pendingMerkleRoots;
     mapping(address token => mapping(address user => uint256 cumulativeBalance)) public cumulativeClaimed;
     mapping(address user => bool isWhitelisted) public whitelistedRecipient;
 
+    uint256 public claimDelay;
     bool public paused;
 
 
@@ -28,7 +29,6 @@ using SafeERC20 for IERC20;
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
-    uint256 public constant CLAIM_DELAY = 14400; // 2 day to verify if processRewards was called with wrong amounts
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     bytes32 public constant REWARDS_MANAGER_ADMIN = keccak256("REWARD_MANAGER_ADMIN");
     RoleRegistry public immutable roleRegistry;
@@ -46,6 +46,12 @@ using SafeERC20 for IERC20;
         __Ownable_init();
         __UUPSUpgradeable_init();
         paused = false;
+        claimDelay = 172800; // 48 hours
+    }
+
+    function setClaimDelay(uint256 _claimDelay) external {
+        if(!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) revert IncorrectRole();
+        claimDelay = _claimDelay;
     }
 /**
 * @notice Sets a new pending Merkle root for token rewards distribution
@@ -57,7 +63,7 @@ using SafeERC20 for IERC20;
     function setPendingMerkleRoot(address _token, bytes32 _merkleRoot) external whenNotPaused {
         if(!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) revert IncorrectRole();
         pendingMerkleRoots[_token] = _merkleRoot;
-        lastPendingMerkleUpdatedToBlock[_token] = block.number;
+        lastPendingMerkleUpdatedToTimestamp[_token] = block.timestamp;
         emit PendingMerkleRootUpdated(_token, _merkleRoot);
     }
 
@@ -70,7 +76,8 @@ using SafeERC20 for IERC20;
 */
     function finalizeMerkleRoot(address _token, uint256 _finalizedBlock) external whenNotPaused {
         if(!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) revert IncorrectRole();
-        if(!(block.number >= lastPendingMerkleUpdatedToBlock[_token] + CLAIM_DELAY)) revert InsufficentDelay();
+        if(!(block.timestamp >= lastPendingMerkleUpdatedToTimestamp[_token] + claimDelay)) revert InsufficentDelay();
+        if(_finalizedBlock < lastRewardsCalculatedToBlock[_token] || _finalizedBlock > block.number) revert InvalidFinalizedBlock();
         bytes32 oldClaimableMerkleRoot = claimableMerkleRoots[_token];
         claimableMerkleRoots[_token] = pendingMerkleRoots[_token];
         lastRewardsCalculatedToBlock[_token] = _finalizedBlock;

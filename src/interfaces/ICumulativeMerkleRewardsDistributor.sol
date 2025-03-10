@@ -15,6 +15,7 @@ interface ICumulativeMerkleRewardsDistributor {
 
     error IncorrectRole();
     error InsufficentDelay();
+    error InvalidFinalizedBlock();
     error InvalidProof();
     error NonWhitelistedUser();
     error MerkleRootWasUpdated();
