@@ -2440,13 +2440,14 @@ contract EtherFiNodeTest is TestSetup {
     function test_mainnet_70300_queueWithdrawals() public {
         initializeRealisticFork(MAINNET_FORK);
 
+        _whitelist_completeQueuedWithdrawals();
+        _upgrade_etherfi_nodes_manager_contract();
+
         uint256 validatorId = 70300;
         _perform_withdrawals(validatorId);
     }
 
     function _perform_withdrawals(uint256 validatorId) internal {
-        _whitelist_completeQueuedWithdrawals();
-
         uint256[] memory validatorIds = new uint256[](1);
         validatorIds[0] = validatorId;
 
@@ -2511,7 +2512,7 @@ contract EtherFiNodeTest is TestSetup {
         selectors[0] = 0x33404396; // completeQueuedWithdrawals
 
         bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector, selectors[0], 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, true);
-        _execute_timelock(target, data, true, true, true, true);
+        _execute_timelock(target, data, true, false, true, false);
     }
 
     function _completeQueuedWithdrawals(uint256[] memory validatorIds, IDelegationManager.Withdrawal[] memory withdrawals) internal {

@@ -237,14 +237,29 @@ contract EtherFiNodesManager is
     //  3. perform `EigenPod.verifyCheckpointProofs()`
     //  4. wait for 'withdrawalDelayBlocks' (= 7 days) delay to be passed
     //  5. Finally, perform `EtherFiNodesManager.partialWithdraw` for the validator
+    /// @dev This function is will be deprecated in the future for simpler operations using the advanced rewards distribution
     function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused onlyAdmin {
-
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
 
-        // distribute the rewards payouts. It reverts if the safe's balance >= 16 ether
-        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
-        _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
+        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = (0, 0, 0, 0);
+        if (stakingRewardsSplit.tnft == SCALE) {
+            // As of 2025-03-09, `stakingRewardsSplit.tnft` is already set to `SCALE` (100%); stakingRewardsSplit.{treasury, nodeOperator, bnft} are 0
+            // which means that all ETH in (EtherFiNode) contracts belongs to the T-NFT holder (= LiquidityPool)
+            // ether.fi wont' update the parameter anymore and is planning to remove these mechanisms as a part of the future work
+            // 
+            // For now, because: 
+            // - 32 ETH to spin-up a validator is covered by the {T, B}-NFT holder (= LiquidityPool)
+            // - the rewards distribution to the (T-NFT, B-NFT) holder is managed by the Oracle via eETH Rebase
+            // - the rewards distribution to (Treasury, NodeOperator) is managed by Oracle via eETH mint, separately
+            // 
+            // Therefore, we don't need to perform the sanity check on the safe's balance in `_getTotalRewardsPayoutsFromSafe`
+            // when distributing the rewards to the (T-NFT, B-NFT) holder to send ETH to the LiquidityPool
+            (toOperator, toTnft, toBnft, toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, false);
+        } else {
+            // Note that this flow is deprecated, we keep it for backward compatibility
+            (toOperator, toTnft, toBnft, toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
+        }
 
         emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
     }
