@@ -244,17 +244,20 @@ contract EtherFiNodesManager is
 
         (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = (0, 0, 0, 0);
         if (stakingRewardsSplit.tnft == SCALE) {
-            // As of 2025-03-09, `stakingRewardsSplit.tnft` is already set to `SCALE` (100%); stakingRewardsSplit.{treasury, nodeOperator, bnft} are 0
-            // which means that all ETH in (EtherFiNode) contracts belongs to the T-NFT holder (= LiquidityPool)
-            // ether.fi wont' update the parameter anymore and is planning to remove these mechanisms as a part of the future work
-            // 
-            // For now, because: 
-            // - 32 ETH to spin-up a validator is covered by the {T, B}-NFT holder (= LiquidityPool)
-            // - the rewards distribution to the (T-NFT, B-NFT) holder is managed by the Oracle via eETH Rebase
-            // - the rewards distribution to (Treasury, NodeOperator) is managed by Oracle via eETH mint, separately
-            // 
-            // Therefore, we don't need to perform the sanity check on the safe's balance in `_getTotalRewardsPayoutsFromSafe`
-            // when distributing the rewards to the (T-NFT, B-NFT) holder to send ETH to the LiquidityPool
+            // the ETH validators earn the staking rewards and they are sent to the `EtherFiNode` contracts. 
+            // Process of sweeping those ETH is called `partialWithdraw`.
+
+            // Currently, `EtherFiNodesManager.partialWithdraw` can't process the withdrawal beyond 16 ETH 
+            // because the `EtherFiNodesManager._getTotalRewardsPayoutsFromSafe` reverts if the contract's balance >= 16 ETH.
+            // This constraint was added in the past due to the complexity in handling the distribution of staking rewards and principal (= 32 ETH); 
+            // while the earned staking rewards were distributed to (T-NFT, B-NFT, NodeOperator, Treasury), the principal (32 ETH) were sent to (B-NFT, T-NFT).
+
+            // This complexity was removed while ago and now the below constraints are true:
+            // - for all validators, its T-NFT holder == B-NFT holder
+            // - `stakingRewardsSplit.tnft` is set to `SCALE` (100%); stakingRewardsSplit.{treasury, nodeOperator, bnft} are 0. 
+            
+            // Therefore, all ETH in (EtherFiNode) contracts belongs to the T-NFT holder (= LiquidityPool). 
+            // This allows us to remove the constraint on the withdrawal amount.
             (toOperator, toTnft, toBnft, toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, false);
         } else {
             // Note that this flow is deprecated, we keep it for backward compatibility
