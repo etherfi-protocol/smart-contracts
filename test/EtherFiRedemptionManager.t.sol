@@ -55,7 +55,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.prank(user);
         liquidityPoolInstance.deposit{value: 100 ether}();
 
-        vm.startPrank(etherFiRedemptionManagerInstance.owner());
+        vm.startPrank(owner);
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(1_00); // 1%
         assertEq(etherFiRedemptionManagerInstance.lowWatermarkInETH(), 1 ether);
 

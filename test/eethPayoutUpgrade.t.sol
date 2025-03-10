@@ -47,7 +47,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         vm.startPrank(admin);
         liquidityPoolInstance.upgradeTo(address(newLiquidityImplementation));
         etherFiAdminInstance.upgradeTo(address(newEtherFiAdminImplementation));
-        liquidityPoolInstance.setTreasury(alice);  
+        liquidityPoolInstance.setFeeRecipient(alice);  
         vm.stopPrank();
         vm.startPrank(owner);
         etherFiOracleInstance.upgradeTo(address(newEtherFiOracleImplementation));

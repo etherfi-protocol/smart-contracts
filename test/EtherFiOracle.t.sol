@@ -665,7 +665,7 @@ contract EtherFiOracleTest is TestSetup {
         vm.startPrank(owner);
         etherFiOracleInstance.addCommitteeMember(chad);
         etherFiOracleInstance.setQuorumSize(2);
-        liquidityPoolInstance.setTreasury(address(owner));
+        liquidityPoolInstance.setFeeRecipient(address(owner));
         vm.stopPrank();
 
         _moveClock(1024 + 2 * slotsPerEpoch);

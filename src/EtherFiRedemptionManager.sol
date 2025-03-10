@@ -8,7 +8,6 @@ import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -27,7 +26,7 @@ import "./RoleRegistry.sol";
     - It has the exit fee as a percentage of the total amount redeemed.
     - It has a rate limiter to limit the total amount that can be redeemed in a given time period.
 */
-contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
@@ -69,7 +68,6 @@ contract EtherFiRedemptionManager is Initializable, OwnableUpgradeable, Pausable
         require(_exitFeeSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
         require(_lowWatermarkInBpsOfTvl <= BASIS_POINT_SCALE, "INVALID");
 
-        __Ownable_init();
         __UUPSUpgradeable_init();
         __Pausable_init();
         __ReentrancyGuard_init();

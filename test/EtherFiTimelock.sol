@@ -297,7 +297,7 @@ contract TimelockTest is TestSetup {
         }
         {
             address target = address(liquidityPoolInstance);
-            bytes memory data = abi.encodeWithSelector(LiquidityPool.setTreasury.selector, 0xf40bcc0845528873784F36e5C105E62a93ff7021);
+            bytes memory data = abi.encodeWithSelector(LiquidityPool.setFeeRecipient.selector, 0xf40bcc0845528873784F36e5C105E62a93ff7021);
             _execute_timelock(target, data, true, true, true, true);
         }
 
@@ -326,7 +326,7 @@ contract TimelockTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         {
             address target = address(liquidityPoolInstance);
-            bytes memory data = abi.encodeWithSelector(LiquidityPool.setTreasury.selector, 0x0c83EAe1FE72c390A02E426572854931EefF93BA);
+            bytes memory data = abi.encodeWithSelector(LiquidityPool.setFeeRecipient.selector, 0x0c83EAe1FE72c390A02E426572854931EefF93BA);
             _execute_timelock(target, data, true, true, true, true);
         }
     }

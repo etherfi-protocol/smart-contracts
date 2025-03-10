@@ -44,7 +44,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     uint128 public totalValueOutOfLp;
     uint128 public totalValueInLp;
 
-    address public treasury;
+    address public feeRecipient;
 
     uint32 public numPendingDeposits; // number of validator deposits, which needs 'registerValidator'
 
@@ -92,7 +92,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     event Deposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
     event Withdraw(address indexed sender, address recipient, uint256 amount, SourceOfFunds source);
     event UpdatedWhitelist(address userAddress, bool value);
-    event UpdatedTreasury(address newTreasury);
+    event UpdatedTreasury(address newTreasury); 
+    event UpdatedFeeRecipient(address newFeeRecipient);
     event BnftHolderDeregistered(address user, uint256 index);
     event BnftHolderRegistered(address user, uint256 index);
     event ValidatorSpawnerRegistered(address user);
@@ -141,7 +142,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         ethAmountLockedForWithdrawal = 0;
         etherFiAdminContract = _etherFiAdminContract;
         withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
-        DEPRECATED_admins[_etherFiAdminContract] = true;
         DEPRECATED_isLpBnftHolder = false;
     }
 
@@ -429,15 +429,15 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function payProtocolFees(uint128 _protocolFees) external {
         if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();   
         emit ProtocolFeePaid(_protocolFees);
-        depositToRecipient(treasury, _protocolFees, address(0));
+        depositToRecipient(feeRecipient, _protocolFees, address(0));
     }
 
-    /// @notice Set the treasury address
-    /// @param _treasury The address to set as the treasury
-    function setTreasury(address _treasury) external {
+    /// @notice Set the fee recipient address
+    /// @param _feeRecipient The address to set as the fee recipient
+    function setFeeRecipient(address _feeRecipient) external {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        treasury = _treasury;
-        emit UpdatedTreasury(_treasury);
+        feeRecipient = _feeRecipient;
+        emit UpdatedFeeRecipient(_feeRecipient);
     }
 
     /// @notice Whether or not nodes created via bNFT deposits should be restaked
