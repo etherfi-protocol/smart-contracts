@@ -2454,7 +2454,9 @@ contract EtherFiNodeTest is TestSetup {
         address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
         IEigenPod eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
         IDelegationManager mgr = managerInstance.delegationManager();
-        IEigenPodManager eigenPodManager = managerInstance.eigenPodManager();
+
+        uint256 etherFiNodeBalance = address(nodeAddress).balance;
+        uint256 liquidityPoolBalance = address(liquidityPoolInstance).balance;
 
         // 1. Prepare for Params for `queueWithdrawals`
         IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
@@ -2499,9 +2501,14 @@ contract EtherFiNodeTest is TestSetup {
         withdrawals[0] = withdrawal;
         _completeQueuedWithdrawals(validatorIds, withdrawals);
 
+        assertEq(address(nodeAddress).balance, etherFiNodeBalance + shares[0]);
+        assertEq(address(liquidityPoolInstance).balance, liquidityPoolBalance);
+
         // Success
         vm.prank(managerInstance.owner());
         managerInstance.partialWithdraw(validatorId);
+
+        assertEq(address(liquidityPoolInstance).balance, liquidityPoolBalance + etherFiNodeBalance + shares[0]);
     }
 
     function _whitelist_completeQueuedWithdrawals() internal {

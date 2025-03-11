@@ -263,7 +263,8 @@ contract EtherFiNodesManager is
             // Note that this flow is deprecated, we keep it for backward compatibility
             (toOperator, toTnft, toBnft, toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
         }
-
+        _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
+        
         emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
     }
 
