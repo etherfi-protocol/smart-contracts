@@ -235,9 +235,11 @@ contract EtherFiNodesManager is
     //  1. validator is exited & fund is withdrawn from the beacon chain
     //  2. perform `EigenPod.startCheckpoint()`
     //  3. perform `EigenPod.verifyCheckpointProofs()`
-    //  4. wait for 'withdrawalDelayBlocks' (= 7 days) delay to be passed
-    //  5. Finally, perform `EtherFiNodesManager.partialWithdraw` for the validator
-    /// @dev This function is will be deprecated in the future for simpler operations using the advanced rewards distribution
+    //  4. perform `DelegationManager.queueWithdrawals`
+    //  5. wait for 'withdrawalDelayBlocks' (= 7 days) delay to be passed
+    //  6. perform `DelegationManager.completeQueuedWithdrawals`
+    //  7. Finally, perform `EtherFiNodesManager.partialWithdraw` for the validator
+    /// @dev This function will be re-considered in the future for simpler operations using the advanced rewards distribution mechanisms
     function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused onlyAdmin {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
@@ -264,7 +266,7 @@ contract EtherFiNodesManager is
             (toOperator, toTnft, toBnft, toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
         }
         _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
-        
+
         emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);
     }
 
