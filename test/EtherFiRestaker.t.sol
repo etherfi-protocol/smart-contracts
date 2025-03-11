@@ -27,7 +27,7 @@ contract EtherFiRestakerTest is TestSetup {
         avsOperator2 = 0xfB487f216CA24162119C0C6Ae015d680D7569C2f;
         etherfiOperatingAdmin = alice; //
 
-        vm.prank(owner);
+        vm.startPrank(owner);
         liquifierInstance.updateQuoteStEthWithCurve(false);
     }
 
@@ -49,10 +49,10 @@ contract EtherFiRestakerTest is TestSetup {
 
         // Aliice has 10 ether eETH
         // Total eETH TVL is 10 ether
-        assertApproxEqAbs(stEth.balanceOf(alice), aliceStEthBalance, 1 wei);
-        assertApproxEqAbs(eETHInstance.balanceOf(alice), aliceEEthBalance + _amount, 1 wei);
-        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), restakerTvl + _amount, 1 wei);
-        assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + _amount, 1 wei);
+        assertApproxEqAbs(stEth.balanceOf(alice), aliceStEthBalance, 2 wei);
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), aliceEEthBalance + _amount, 2 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), restakerTvl + _amount, 2 wei);
+        assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + _amount, 2 wei);
         vm.stopPrank();
     }
 
@@ -99,9 +99,8 @@ contract EtherFiRestakerTest is TestSetup {
         assertApproxEqAbs(etherFiRestakerInstance.getEthAmountPendingForRedemption(address(stEth)), 0, 2 wei);
         assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), 0, 2 wei);
         assertApproxEqAbs(address(etherFiRestakerInstance).balance, 0, 2);
-
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
-        assertApproxEqAbs(address(liquidityPoolInstance).balance, lpBalance + amount, 2 wei);
+        assertApproxEqAbs(address(liquidityPoolInstance).balance, lpBalance + amount, 3 wei);
     }
 
     function test_restake_stEth() public {

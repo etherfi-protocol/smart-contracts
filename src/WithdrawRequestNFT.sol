@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
-
 import "@openzeppelin-upgradeable/contracts/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -10,28 +9,61 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IMembershipManager.sol";
 
+import "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./RoleRegistry.sol";
+
+
 
 contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IWithdrawRequestNFT {
+    using Math for uint256;
+    using SafeERC20 for IERC20;
 
+    uint256 private constant BASIS_POINT_SCALE = 1e4;
+    address public immutable treasury;
+    
     ILiquidityPool public liquidityPool;
     IeETH public eETH; 
     IMembershipManager public membershipManager;
 
     mapping(uint256 => IWithdrawRequestNFT.WithdrawRequest) private _requests;
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
 
     uint32 public nextRequestId;
     uint32 public lastFinalizedRequestId;
-    uint96 public accumulatedDustEEthShares; // to be burned or used to cover the validator churn cost
+    uint16 public shareRemainderSplitToTreasuryInBps;
+    uint16 public _unused_gap;
+
+    // inclusive
+    uint32 public currentRequestIdToScanFromForShareRemainder;
+    uint32 public lastRequestIdToScanUntilForShareRemainder;
+    uint256 public aggregateSumOfEEthShare;
+
+    uint256 public totalRemainderEEthShares;
+
+    bool public paused;
+    RoleRegistry public roleRegistry;
+
+
+    bytes32 public constant WITHDRAWAL_ADMIN_ROLE = keccak256("WITHDRAWAL_ADMIN_ROLE");
+    
 
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
     event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
     event WithdrawRequestInvalidated(uint32 indexed requestId);
     event WithdrawRequestValidated(uint32 indexed requestId);
     event WithdrawRequestSeized(uint32 indexed requestId);
+    event HandledRemainderOfClaimedWithdrawRequests(uint256 eEthAmountToTreasury, uint256 eEthAmountBurnt);
+
+    event Paused(address account);
+    event Unpaused(address account);
+
+    error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _treasury) {
+        treasury = _treasury;
+        
         _disableInitializers();
     }
 
@@ -48,6 +80,24 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         nextRequestId = 1;
     }
 
+    function initializeOnUpgrade(address _roleRegistry, uint16 _shareRemainderSplitToTreasuryInBps) external onlyOwner {
+        require(address(roleRegistry) == address(0) && _roleRegistry != address(0), "Already initialized");
+        require(_shareRemainderSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
+
+        paused = true; // make sure the contract is paused after the upgrade
+        roleRegistry = RoleRegistry(_roleRegistry);
+
+        _unused_gap = 0;
+        
+        shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
+
+        currentRequestIdToScanFromForShareRemainder = 1;
+        lastRequestIdToScanUntilForShareRemainder = nextRequestId - 1;
+
+        aggregateSumOfEEthShare = 0;
+        totalRemainderEEthShares = 0;
+    }
+
     /// @notice creates a withdraw request and issues an associated NFT to the recipient
     /// @dev liquidity pool contract will call this function when a user requests withdraw
     /// @param amountOfEEth amount of eETH requested for withdrawal
@@ -55,11 +105,12 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @param recipient address to recieve with WithdrawRequestNFT
     /// @param fee fee to be subtracted from amount when recipient calls claimWithdraw
     /// @return uint256 id of the withdraw request
-    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external payable onlyLiquidtyPool returns (uint256) {
+    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external payable onlyLiquidityPool whenNotPaused returns (uint256) {
         uint256 requestId = nextRequestId++;
         uint32 feeGwei = uint32(fee / 1 gwei);
 
         _requests[requestId] = IWithdrawRequestNFT.WithdrawRequest(amountOfEEth, shareOfEEth, true, feeGwei);
+
         _safeMint(recipient, requestId);
 
         emit WithdrawRequestCreated(uint32(requestId), amountOfEEth, shareOfEEth, recipient, fee);
@@ -67,7 +118,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function getClaimableAmount(uint256 tokenId) public view returns (uint256) {
-        require(tokenId < nextRequestId, "Request does not exist");
         require(tokenId <= lastFinalizedRequestId, "Request is not finalized");
         require(ownerOf(tokenId) != address(0), "Already Claimed");
 
@@ -84,7 +134,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @notice called by the NFT owner to claim their ETH
     /// @dev burns the NFT and transfers ETH from the liquidity pool to the owner minus any fee, withdraw request must be valid and finalized
     /// @param tokenId the id of the withdraw request and associated NFT
-    function claimWithdraw(uint256 tokenId) external {
+    function claimWithdraw(uint256 tokenId) external whenNotPaused {
         return _claimWithdraw(tokenId, ownerOf(tokenId));
     }
     
@@ -93,63 +143,57 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
         require(request.isValid, "Request is not valid");
 
-        uint256 fee = uint256(request.feeGwei) * 1 gwei;
         uint256 amountToWithdraw = getClaimableAmount(tokenId);
+        uint256 shareAmountToBurnForWithdrawal = liquidityPool.sharesForWithdrawalAmount(amountToWithdraw);
 
         // transfer eth to recipient
         _burn(tokenId);
         delete _requests[tokenId];
 
-        if (fee > 0) {
-            // send fee to membership manager
-            liquidityPool.withdraw(address(membershipManager), fee);
-        }
+        // update accounting 
+        totalRemainderEEthShares += request.shareOfEEth - shareAmountToBurnForWithdrawal;
 
         uint256 amountBurnedShare = liquidityPool.withdraw(recipient, amountToWithdraw);
-        uint256 amountUnBurnedShare = request.shareOfEEth - amountBurnedShare;
-        if (amountUnBurnedShare > 0) {
-            accumulatedDustEEthShares += uint96(amountUnBurnedShare);
-        }
+        assert (amountBurnedShare == shareAmountToBurnForWithdrawal);
 
-        emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw + fee, amountBurnedShare, recipient, fee);
+        emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw, amountBurnedShare, recipient, 0);
     }
 
-    function batchClaimWithdraw(uint256[] calldata tokenIds) external {
+    function batchClaimWithdraw(uint256[] calldata tokenIds) external whenNotPaused {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             _claimWithdraw(tokenIds[i], ownerOf(tokenIds[i]));
         }
     }
 
-    // a function to transfer accumulated shares to admin
-    function burnAccumulatedDustEEthShares() external onlyAdmin {
-        require(eETH.totalShares() > accumulatedDustEEthShares, "Inappropriate burn");
-        uint256 amount = accumulatedDustEEthShares;
-        accumulatedDustEEthShares = 0;
+    // This function is used to aggregate the sum of the eEth shares of the requests that have not been claimed yet.
+    // To be triggered during the upgrade to the new version of the contract.
+    function aggregateSumEEthShareAmount(uint256 _numReqsToScan) external {
+        require(!isScanOfShareRemainderCompleted(), "scan is completed");
 
-        eETH.burnShares(address(this), amount);
+        // [scanFrom, scanUntil]
+        uint256 scanFrom = currentRequestIdToScanFromForShareRemainder;
+        uint256 scanUntil = Math.min(lastRequestIdToScanUntilForShareRemainder, scanFrom + _numReqsToScan - 1);
+
+        for (uint256 i = scanFrom; i <= scanUntil; i++) {
+            if (!_exists(i)) continue;
+            aggregateSumOfEEthShare += _requests[i].shareOfEEth;
+        }
+
+        currentRequestIdToScanFromForShareRemainder = uint32(scanUntil + 1);
+        
+        // When the scan is completed, update the `totalRemainderEEthShares` and reset the `aggregateSumOfEEthShare`
+        if (isScanOfShareRemainderCompleted()) {
+            totalRemainderEEthShares = eETH.shares(address(this)) - aggregateSumOfEEthShare;
+            aggregateSumOfEEthShare = 0; // gone
+        }
     }
 
-    // Given an invalidated withdrawal request NFT of ID `requestId`:,
-    // - burn the NFT
-    // - withdraw its ETH to the `recipient`
+    // Seize the request simply by transferring it to another recipient
     function seizeInvalidRequest(uint256 requestId, address recipient) external onlyOwner {
         require(!_requests[requestId].isValid, "Request is valid");
-        require(ownerOf(requestId) != address(0), "Already Claimed");
+        require(_exists(requestId), "Request does not exist");
 
-        // Bring the NFT to the `msg.sender` == contract owner
-        _transfer(ownerOf(requestId), owner(), requestId);
-
-        // Undo its invalidation to claim
-        _requests[requestId].isValid = true;
-
-        // its ETH amount is not locked
-        // - if it was finalized when being invalidated, we revoked it via `reduceEthAmountLockedForWithdrawal`
-        // - if it was not finalized when being invalidated, it was not locked
-        uint256 ethAmount = getClaimableAmount(requestId);
-        liquidityPool.addEthAmountLockedForWithdrawal(uint128(ethAmount));
-
-        // withdraw the ETH to the recipient
-        _claimWithdraw(requestId, recipient);
+        _transfer(ownerOf(requestId), recipient, requestId);
 
         emit WithdrawRequestSeized(uint32(requestId));
     }
@@ -168,35 +212,87 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function finalizeRequests(uint256 requestId) external onlyAdmin {
+        require(requestId >= lastFinalizedRequestId, "Cannot undo finalization");
+        require(requestId < nextRequestId, "Cannot finalize future requests");
         lastFinalizedRequestId = uint32(requestId);
     }
 
     function invalidateRequest(uint256 requestId) external onlyAdmin {
         require(isValid(requestId), "Request is not valid");
-
-        if (isFinalized(requestId)) {
-            uint256 ethAmount = getClaimableAmount(requestId);
-            liquidityPool.reduceEthAmountLockedForWithdrawal(uint128(ethAmount));
-        }
-
         _requests[requestId].isValid = false;
 
         emit WithdrawRequestInvalidated(uint32(requestId));
     }
 
     function validateRequest(uint256 requestId) external onlyAdmin {
+        require(_exists(requestId), "Request does not exist");
         require(!_requests[requestId].isValid, "Request is valid");
         _requests[requestId].isValid = true;
 
         emit WithdrawRequestValidated(uint32(requestId));
     }
 
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        require(_address != address(0), "Cannot be address zero");
-        admins[_address] = _isAdmin;
+    function updateShareRemainderSplitToTreasuryInBps(uint16 _shareRemainderSplitToTreasuryInBps) external onlyOwner {
+        require(_shareRemainderSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
+        shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
     }
 
-    // invalid NFTs is non-transferable except for the case they are being burnt by the owner via `seizeInvalidRequest`
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        if (paused) revert("Pausable: already paused");
+        paused = true;
+        emit Paused(msg.sender);
+    }
+
+    function unPauseContract() external {
+        require(isScanOfShareRemainderCompleted(), "scan is not completed");
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        if (!paused) revert("Pausable: not paused");
+
+
+        paused = false;
+        emit Unpaused(msg.sender);
+    }
+
+    /// @dev Handles the remainder of the eEth shares after the claim of the withdraw request
+    /// the remainder eETH share for a request = request.shareOfEEth - request.amountOfEEth / (eETH amount to eETH shares rate)
+    /// - Splits the remainder into two parts:
+    ///  - Treasury: treasury gets a split of the remainder
+    ///   - Burn: the rest of the remainder is burned
+    /// @param _eEthAmount: the remainder of the eEth amount
+    function handleRemainder(uint256 _eEthAmount) external onlyAdmin {
+        require(_eEthAmount != 0, "EETH amount cannot be 0"); 
+        require(isScanOfShareRemainderCompleted(), "Not all prev requests have been scanned");
+        require(getEEthRemainderAmount() >= _eEthAmount, "Not enough eETH remainder");
+
+        uint256 beforeEEthShares = eETH.shares(address(this));
+
+        uint256 eEthAmountToTreasury = _eEthAmount.mulDiv(shareRemainderSplitToTreasuryInBps, BASIS_POINT_SCALE);
+        uint256 eEthAmountToBurn = _eEthAmount - eEthAmountToTreasury;
+        uint256 eEthSharesToBurn = liquidityPool.sharesForAmount(eEthAmountToBurn);
+        uint256 eEthSharesToMoved = eEthSharesToBurn + liquidityPool.sharesForAmount(eEthAmountToTreasury);
+
+        totalRemainderEEthShares -= eEthSharesToMoved;
+
+        if (eEthAmountToTreasury > 0) IERC20(address(eETH)).safeTransfer(treasury, eEthAmountToTreasury);
+        if (eEthSharesToBurn > 0) liquidityPool.burnEEthShares(eEthSharesToBurn);
+
+        require (beforeEEthShares - eEthSharesToMoved == eETH.shares(address(this)), "Invalid eETH shares after remainder handling");
+
+        emit HandledRemainderOfClaimedWithdrawRequests(eEthAmountToTreasury, liquidityPool.amountForShare(eEthSharesToBurn));
+    }
+
+    function getEEthRemainderAmount() public view returns (uint256) {
+        return liquidityPool.amountForShare(totalRemainderEEthShares);
+    }
+
+    function isScanOfShareRemainderCompleted() public view returns (bool) {
+        return currentRequestIdToScanFromForShareRemainder == (lastRequestIdToScanUntilForShareRemainder + 1);
+    }
+
+    // the withdraw request NFT is transferrable
+    // - if the request is valid, it can be transferred by the owner of the NFT
+    // - if the request is invalid, it can be transferred only by the owner of the WithdarwRequestNFT contract
     function _beforeTokenTransfer(address from, address to, uint256 firstTokenId, uint256 batchSize) internal override {
         for (uint256 i = 0; i < batchSize; i++) {
             uint256 tokenId = firstTokenId + i;
@@ -210,13 +306,22 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return _getImplementation();
     }
 
+    function _requireNotPaused() internal view virtual {
+        require(!paused, "Pausable: paused");
+    }
+
     modifier onlyAdmin() {
-        require(admins[msg.sender], "Caller is not the admin");
+        require(roleRegistry.hasRole(WITHDRAWAL_ADMIN_ROLE, msg.sender), "Caller is not admin");
         _;
     }
 
-    modifier onlyLiquidtyPool() {
+    modifier onlyLiquidityPool() {
         require(msg.sender == address(liquidityPool), "Caller is not the liquidity pool");
+        _;
+    }
+
+    modifier whenNotPaused() {
+        _requireNotPaused();
         _;
     }
 }
