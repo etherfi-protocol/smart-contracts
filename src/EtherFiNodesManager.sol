@@ -232,7 +232,7 @@ contract EtherFiNodesManager is
     ///         when the safe is being shared by the multiple validatators, it batch process all of their rewards skimming in one shot
     /// @param _validatorId The validator Id
     /// Full Flow of the partial withdrawal for a validator
-    //  1. validator is exited & fund is withdrawn from the beacon chain
+    //  1. ETH is withdrawn from the beacon chain
     //  2. perform `EigenPod.startCheckpoint()`
     //  3. perform `EigenPod.verifyCheckpointProofs()`
     //  4. perform `DelegationManager.queueWithdrawals`
