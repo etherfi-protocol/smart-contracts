@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 import "../../src/UUPSProxy.sol";
 import "../../src/EtherFiOracle.sol";
-import "../../src/EtherFiAdmin.sol";
+import "../../src/EtherFiOracleExecutor.sol";
 import "../../src/WithdrawRequestNFT.sol";
 import "../../src/helpers/AddressProvider.sol";
 
@@ -25,8 +25,8 @@ contract DeployPhaseTwoScript is Script {
     EtherFiOracle public etherFiOracleImplementation;
 
     UUPSProxy public etherFiAdminProxy;
-    EtherFiAdmin public etherFiAdminInstance;
-    EtherFiAdmin public etherFiAdminImplementation;
+    EtherFiOracleExecutor public etherFiAdminInstance;
+    EtherFiOracleExecutor public etherFiAdminImplementation;
 
     UUPSProxy public withdrawRequestNftProxy;
     WithdrawRequestNFT public withdrawRequestNftInstance;
@@ -123,14 +123,14 @@ contract DeployPhaseTwoScript is Script {
     }
 
     function deploy_EtherFiAdmin() internal {
-        if (addressProvider.getContractAddress("EtherFiAdmin") != address(0)) {
-            addressProvider.removeContract("EtherFiAdmin");
+        if (addressProvider.getContractAddress("EtherFiOracleExecutor") != address(0)) {
+            addressProvider.removeContract("EtherFiOracleExecutor");
         }
         retrieve_contract_addresses();
 
-        etherFiAdminImplementation = new EtherFiAdmin();
+        etherFiAdminImplementation = new EtherFiOracleExecutor();
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
-        etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
+        etherFiAdminInstance = EtherFiOracleExecutor(payable(etherFiAdminProxy));
 
         int32 acceptableRebaseAprInBps;
         uint16 postReportWaitTimeInSlots;
@@ -170,6 +170,6 @@ contract DeployPhaseTwoScript is Script {
             IEtherFiNodesManager(address(managerAddress)).updateAdmin(admin, true);
         }
 
-        addressProvider.addContract(address(etherFiAdminProxy), "EtherFiAdmin");
+        addressProvider.addContract(address(etherFiAdminProxy), "EtherFiOracleExecutor");
     }
 }

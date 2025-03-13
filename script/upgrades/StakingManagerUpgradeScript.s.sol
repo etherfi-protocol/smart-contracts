@@ -16,11 +16,11 @@ contract StakingManagerUpgrade is Script {
         addressProvider = AddressProvider(addressProviderAddress);
 
         address stakingManagerProxyAddress = addressProvider.getContractAddress("StakingManager");
-        address etherFiAdminAddress = addressProvider.getContractAddress("EtherFiAdmin");
+        address etherFiAdminAddress = addressProvider.getContractAddress("EtherFiOracleExecutor");
         address nodeOperatorManagerAddress = addressProvider.getContractAddress("NodeOperatorManager");
 
         require(stakingManagerProxyAddress != address(0), "StakingManager address not set");
-        require(etherFiAdminAddress != address(0), "EtherFiAdmin address not set");
+        require(etherFiAdminAddress != address(0), "EtherFiOracleExecutor address not set");
         require(nodeOperatorManagerAddress != address(0), "NodeOperatorManager address not set");
 
         vm.startBroadcast(deployerPrivateKey);
@@ -31,7 +31,7 @@ contract StakingManagerUpgrade is Script {
         stakingManagerInstance.upgradeTo(address(stakingManagerV2Implementation));
         stakingManagerInstance.initializeOnUpgrade(nodeOperatorManagerAddress, etherFiAdminAddress);
         
-        require(stakingManagerInstance.admins(etherFiAdminAddress), "EtherFiAdmin should be an admin");
+        require(stakingManagerInstance.admins(etherFiAdminAddress), "EtherFiOracleExecutor should be an admin");
 
         vm.stopBroadcast();
     }

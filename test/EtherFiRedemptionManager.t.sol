@@ -18,7 +18,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
 
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(keccak256("PROTOCOL_ADMIN"), op_admin);
+        roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), op_admin);
         vm.stopPrank();
 
     }
@@ -224,7 +224,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function testFuzz_role_management(address admin, address pauser, address unpauser, address user) public {
         address owner = roleRegistryInstance.owner();
-        bytes32 PROTOCOL_ADMIN = keccak256("PROTOCOL_ADMIN");
+        bytes32 ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE");
         bytes32 PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
         bytes32 PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
 
@@ -235,7 +235,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         // Grant roles to respective addresses
         vm.prank(owner);
-        roleRegistryInstance.grantRole(PROTOCOL_ADMIN, admin);
+        roleRegistryInstance.grantRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE, admin);
         vm.prank(owner);
         roleRegistryInstance.grantRole(PROTOCOL_PAUSER, pauser);
         vm.prank(owner);
@@ -262,9 +262,9 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         assertFalse(etherFiRedemptionManagerInstance.paused());
         vm.stopPrank();
 
-        // Revoke PROTOCOL_ADMIN role from admin
+        // Revoke ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE role from admin
         vm.prank(owner);
-        roleRegistryInstance.revokeRole(PROTOCOL_ADMIN, admin);
+        roleRegistryInstance.revokeRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE, admin);
 
         // Admin attempts admin-only actions after role revocation
         vm.startPrank(admin);

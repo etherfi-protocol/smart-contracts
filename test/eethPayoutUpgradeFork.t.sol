@@ -26,7 +26,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         function upgradeContract() public {
         setupSnapshot = vm.snapshot();
         LiquidityPool newLiquidityImplementation = new LiquidityPool(); 
-        EtherFiAdmin newEtherFiAdminImplementation = new EtherFiAdmin();
+        EtherFiOracleExecutor newEtherFiAdminImplementation = new EtherFiOracleExecutor();
         EtherFiOracle newEtherFiOracleImplementation = new EtherFiOracle();
         vm.startPrank(liquidityPoolInstance.owner());
         liquidityPoolInstance.upgradeTo(address(newLiquidityImplementation));

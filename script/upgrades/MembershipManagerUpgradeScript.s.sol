@@ -16,7 +16,7 @@ contract MembershipManagerUpgrade is Script {
         addressProvider = AddressProvider(addressProviderAddress);
         
         address membershipManagerProxy = addressProvider.getContractAddress("MembershipManager");
-        address etherFiAdminAddress = addressProvider.getContractAddress("EtherFiAdmin");
+        address etherFiAdminAddress = addressProvider.getContractAddress("EtherFiOracleExecutor");
         assert(membershipManagerProxy != address(0));
         assert(etherFiAdminAddress != address(0));
 
@@ -42,7 +42,7 @@ contract MembershipManagerUpgrade is Script {
         require(membershipManagerInstance.treasury() == treasury, "Treasury address should not change");
         require(membershipManagerInstance.pointsGrowthRate() == pointsGrowthRate, "Points growth rate should not change");
         require(membershipManagerInstance.topUpCooltimePeriod() == topUpCooltimePeriod, "Top up cooltime period should not change");
-        require(membershipManagerInstance.admins(etherFiAdminAddress), "EtherFiAdmin should be an admin");
+        require(membershipManagerInstance.admins(etherFiAdminAddress), "EtherFiOracleExecutor should be an admin");
         require(_mintFeeAmount == mintFeeAmount, "Mint fee amount should not change");
         require(_burnFeeAmount == burnFeeAmount, "Burn fee amount should not change");
         require(_upgradeFeeAmount == upgradeFeeAmount, "Upgrade fee amount should not change");

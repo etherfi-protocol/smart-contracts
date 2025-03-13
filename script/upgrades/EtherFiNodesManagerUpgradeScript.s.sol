@@ -16,7 +16,7 @@ contract EtherFiNodesManagerUpgrade is Script {
         addressProvider = AddressProvider(addressProviderAddress);
 
         address EtherFiNodesManagerProxyAddress = addressProvider.getContractAddress("EtherFiNodesManager");
-        address etherFiAdminAddress = addressProvider.getContractAddress("EtherFiAdmin");
+        address etherFiAdminAddress = addressProvider.getContractAddress("EtherFiOracleExecutor");
 
         address eigenPodManager;
         address delayedWithdrawalRouter;
@@ -50,7 +50,7 @@ contract EtherFiNodesManagerUpgrade is Script {
         require(IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).numberOfValidators() == numberOfValidators);
         require(IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).treasuryContract() == treasury);
         // require(IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).maxEigenlayerWithdrawals() == maxEigenlayerWithdrawals);
-        // require(IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).admins(etherFiAdminAddress), "EtherFiAdmin should be an admin");
+        // require(IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).admins(etherFiAdminAddress), "EtherFiOracleExecutor should be an admin");
 
         vm.stopBroadcast();
     }

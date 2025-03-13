@@ -23,7 +23,7 @@ contract LiquidityPoolUpgrade is Script {
         addressProvider = AddressProvider(addressProviderAddress);
         
         address LiquidityPoolProxyAddress = addressProvider.getContractAddress("LiquidityPool");
-        address etherFiAdminAddress = addressProvider.getContractAddress("EtherFiAdmin");
+        address etherFiAdminAddress = addressProvider.getContractAddress("EtherFiOracleExecutor");
         address withdrawRequestNFTAddress = addressProvider.getContractAddress("WithdrawRequestNFT");
         address auctionManager = addressProvider.getContractAddress("AuctionManager");
         address liquifier = addressProvider.getContractAddress("Liquifier");
@@ -64,7 +64,7 @@ contract LiquidityPoolUpgrade is Script {
         // require(numPendingDeposits == LiquidityPoolInstance.numPendingDeposits(), "numPendingDeposits");
         // require(totalValueOutOfLp == LiquidityPoolInstance.totalValueOutOfLp(), "totalValueOutOfLp");
         // require(totalValueInLp == LiquidityPoolInstance.totalValueInLp(), "totalValueInLp");
-        // require(LiquidityPoolInstance.admins(etherFiAdminAddress), "EtherFiAdmin should be an admin");
+        // require(LiquidityPoolInstance.admins(etherFiAdminAddress), "EtherFiOracleExecutor should be an admin");
 
         vm.stopBroadcast();
     }

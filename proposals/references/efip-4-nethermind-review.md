@@ -1,6 +1,6 @@
 # [EFIP-4] Processing staking to {Treasury, Node Operators} in eETH
 
-**File(s)**: [EtherFiAdmin.sol](https://github.com/etherfi-protocol/smart-contracts/blob/9cae955d2e897cb5e8bf5266a0de22da73f1ac99/src/EtherFiAdmin.sol#L20), [EtherFiOracle.sol](https://github.com/etherfi-protocol/smart-contracts/blob/9cae955d2e897cb5e8bf5266a0de22da73f1ac99/src/EtherFiOracle.sol#L14), [LiquidityPool.sol](https://github.com/etherfi-protocol/smart-contracts/blob/9cae955d2e897cb5e8bf5266a0de22da73f1ac99/src/LiquidityPool.sol#L26), 
+**File(s)**: [EtherFiOracleExecutor.sol](https://github.com/etherfi-protocol/smart-contracts/blob/9cae955d2e897cb5e8bf5266a0de22da73f1ac99/src/EtherFiOracleExecutor.sol#L20), [EtherFiOracle.sol](https://github.com/etherfi-protocol/smart-contracts/blob/9cae955d2e897cb5e8bf5266a0de22da73f1ac99/src/EtherFiOracle.sol#L14), [LiquidityPool.sol](https://github.com/etherfi-protocol/smart-contracts/blob/9cae955d2e897cb5e8bf5266a0de22da73f1ac99/src/LiquidityPool.sol#L26), 
 
 ### Summary
 
@@ -26,9 +26,9 @@ To address this, during the rebase operation, instead of minting shares of 90% o
 
 ### [Info] Centralization risk
 
-**File(s)**: [EtherFiAdmin.sol](https://github.com/etherfi-protocol/smart-contracts/blob/9cae955d2e897cb5e8bf5266a0de22da73f1ac99/src/EtherFiAdmin.sol#L154)
+**File(s)**: [EtherFiOracleExecutor.sol](https://github.com/etherfi-protocol/smart-contracts/blob/9cae955d2e897cb5e8bf5266a0de22da73f1ac99/src/EtherFiOracleExecutor.sol#L154)
 
-**Description**: The new `EtherFiAdmin::_handleProtocolFees()` function only checks that `protocolFees` passed inside the `report` are `>=0`. There is no upper limit on how many shares can be minted to the treasury address. The owner is able to mint an indefinite amount of shares to the treasury address through this mechanism.
+**Description**: The new `EtherFiOracleExecutor::_handleProtocolFees()` function only checks that `protocolFees` passed inside the `report` are `>=0`. There is no upper limit on how many shares can be minted to the treasury address. The owner is able to mint an indefinite amount of shares to the treasury address through this mechanism.
 
 This function is part of the `executeTasks()` function which is guarded by an `isAdmin` modifier so we assume that the `Admin` is trusted and will always behave honestly.
 

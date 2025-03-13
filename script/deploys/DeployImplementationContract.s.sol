@@ -6,7 +6,7 @@ import "forge-std/Script.sol";
 // import "../../src/helpers/EtherFiViewer.sol";
 import "../../src/EtherFiNodesManager.sol";
 import "../../src/EtherFiNode.sol";
-import "../../src/EtherFiAdmin.sol";
+import "../../src/EtherFiOracleExecutor.sol";
 import "../../src/EtherFiOracle.sol";
 import "../../src/LiquidityPool.sol";
 import "../../src/Liquifier.sol";

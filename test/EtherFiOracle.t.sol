@@ -452,7 +452,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Change in APR is above 100%, which reverts
         report.accruedRewards = int128(64 ether + 1 ether) / int128(365);
-        _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
+        _executeAdminTasks(report, "EtherFiOracleExecutor: TVL changed too much");
     }
 
     function test_huge_negative_rebaes() public {
@@ -472,7 +472,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Change in APR is above 100%, which reverts
         report.accruedRewards = int128(-65 ether) / int128(365);
-        _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
+        _executeAdminTasks(report, "EtherFiOracleExecutor: TVL changed too much");
     }
 
     function test_SD_5() public {
@@ -538,7 +538,7 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.updatePostReportWaitTimeInSlots(1);
         assertEq(etherFiAdminInstance.canExecuteTasks(reportAtPeriod2A), false);
 
-        vm.expectRevert("EtherFiAdmin: report is too fresh");
+        vm.expectRevert("EtherFiOracleExecutor: report is too fresh");
         vm.prank(alice);
         etherFiAdminInstance.executeTasks(reportAtPeriod2A);
 
@@ -559,7 +559,7 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.pause(true, true, true, true, true, true);
         vm.stopPrank();
 
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
+        vm.expectRevert(EtherFiOracleExecutor.IncorrectRole.selector);
         vm.prank(chad);
         etherFiAdminInstance.unPause(false, false, false, false, false, false);
 

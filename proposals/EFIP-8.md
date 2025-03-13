@@ -15,7 +15,7 @@ Currently, admin tasks are executed synchronously, which can lead to delays in v
 
 ## Proposal
 
-The proposal introduces changes to the EtherFiAdmin contract to enable asynchronous execution of admin tasks. Key features include:
+The proposal introduces changes to the EtherFiOracleExecutor contract to enable asynchronous execution of admin tasks. Key features include:
 
 1. **Task Types**:
     - Definition of various task types such as `ValidatorApproval`, `SendExitRequests`, `ProcessNodeExit`, and `MarkBeingSlashed`.

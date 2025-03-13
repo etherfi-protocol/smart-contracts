@@ -45,7 +45,7 @@ import "./TestERC20.sol";
 
 import "../src/archive/MembershipManagerV0.sol";
 import "../src/EtherFiOracle.sol";
-import "../src/EtherFiAdmin.sol";
+import "../src/EtherFiOracleExecutor.sol";
 import "../src/EtherFiTimelock.sol";
 
 import "../src/BucketRateLimiter.sol";
@@ -184,8 +184,8 @@ contract TestSetup is Test, ContractCodeChecker {
     EtherFiOracle public etherFiOracleImplementation;
     EtherFiOracle public etherFiOracleInstance;
 
-    EtherFiAdmin public etherFiAdminImplementation;
-    EtherFiAdmin public etherFiAdminInstance;
+    EtherFiOracleExecutor public etherFiAdminImplementation;
+    EtherFiOracleExecutor public etherFiAdminInstance;
 
     EtherFiNode public node;
     Treasury public treasuryInstance;
@@ -274,7 +274,8 @@ contract TestSetup is Test, ContractCodeChecker {
     function initializeTestingFork(uint8 forkEnum) public {
 
         if (forkEnum == MAINNET_FORK) {
-            vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+            vm.selectFork(vm.createFork(vm.envString("TENDERLY_VIRTUAL_TESTNET_RPC_URL")));
+            console.log("Fork selected");
 
             cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
             wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
@@ -318,6 +319,7 @@ contract TestSetup is Test, ContractCodeChecker {
         setUpTests();
     }
 
+
     function initializeRealisticFork(uint8 forkEnum) public {
         initializeRealisticForkWithBlock(forkEnum, 0);
     }
@@ -329,10 +331,10 @@ contract TestSetup is Test, ContractCodeChecker {
 
         if (forkEnum == MAINNET_FORK) {
             if (blockNo == 0) {
-                vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+                vm.selectFork(vm.createFork(vm.envString("TENDERLY_VIRTUAL_TESTNET_RPC_URL")));
             }
             else {
-                vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL"), blockNo));
+                vm.selectFork(vm.createFork(vm.envString("TENDERLY_VIRTUAL_TESTNET_RPC_URL"), blockNo));
             }
             addressProviderInstance = AddressProvider(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
             owner = addressProviderInstance.getContractAddress("EtherFiTimelock");
@@ -402,9 +404,9 @@ contract TestSetup is Test, ContractCodeChecker {
         withdrawRequestNFTInstance = WithdrawRequestNFT(addressProviderInstance.getContractAddress("WithdrawRequestNFT"));
         liquifierInstance = Liquifier(payable(addressProviderInstance.getContractAddress("Liquifier")));
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
-        etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
+        etherFiAdminInstance = EtherFiOracleExecutor(payable(addressProviderInstance.getContractAddress("EtherFiOracleExecutor")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
-        setupRoleRegistry();
+        //setupRoleRegistry();
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
@@ -594,9 +596,9 @@ contract TestSetup is Test, ContractCodeChecker {
         membershipManagerProxy = new UUPSProxy(address(membershipManagerImplementation), "");
         membershipManagerInstance = MembershipManagerV0(payable(membershipManagerProxy));
 
-        etherFiAdminImplementation = new EtherFiAdmin();
+        etherFiAdminImplementation = new EtherFiOracleExecutor();
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
-        etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
+        etherFiAdminInstance = EtherFiOracleExecutor(payable(etherFiAdminProxy));
 
         etherFiOracleImplementation = new EtherFiOracle();
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
@@ -610,7 +612,7 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
         etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether);
 
-        roleRegistryInstance.grantRole(keccak256("PROTOCOL_ADMIN"), owner);
+        roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), owner);
         
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
         liquidityPoolInstance.initializeVTwoDotFourNine(address(roleRegistryInstance), address(etherFiRedemptionManagerInstance));
@@ -708,14 +710,14 @@ contract TestSetup is Test, ContractCodeChecker {
         );
         etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_VALIDATOR_MANAGER_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
 
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAWAL_ADMIN_ROLE(), address(alice));
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAWAL_ADMIN_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAWAL_ADMIN_ROLE(), address(admin));
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(alice));
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(admin));
 
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
@@ -802,7 +804,7 @@ contract TestSetup is Test, ContractCodeChecker {
     }
 
     function _upgrade_etherfiAdmin() internal {
-        address newAdminImpl = address(new EtherFiAdmin());
+        address newAdminImpl = address(new EtherFiOracleExecutor());
         vm.prank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
@@ -846,8 +848,8 @@ contract TestSetup is Test, ContractCodeChecker {
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_VALIDATOR_MANAGER_ROLE(), alice);
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         vm.stopPrank();

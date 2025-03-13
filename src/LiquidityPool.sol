@@ -465,7 +465,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit Unpaused(msg.sender);
     }
 
-    // Deprecated, just existing not to touch EtherFiAdmin contract
+    // Deprecated, just existing not to touch EtherFiOracleExecutor contract
     function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external {
     }
 

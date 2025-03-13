@@ -17,7 +17,7 @@ contract AuctionManagerUpgrade is Script {
 
         address AuctionManagerProxyAddress = addressProvider.getContractAddress("AuctionManager");
         address membershipManagerProxyAddress = addressProvider.getContractAddress("MembershipManager");
-        address etherFiAdminAddress = addressProvider.getContractAddress("EtherFiAdmin");
+        address etherFiAdminAddress = addressProvider.getContractAddress("EtherFiOracleExecutor");
         address nodeOperatorManagerAddress = addressProvider.getContractAddress("NodeOperatorManager");
         
         vm.startBroadcast(deployerPrivateKey);
@@ -28,7 +28,7 @@ contract AuctionManagerUpgrade is Script {
         AuctionManagerInstance.upgradeTo(address(AuctionManagerImplementation));
         AuctionManagerInstance.initializeOnUpgrade(membershipManagerProxyAddress, 0.15 ether, etherFiAdminAddress, nodeOperatorManagerAddress);
 
-        require(AuctionManagerInstance.admins(etherFiAdminAddress), "EtherFiAdmin should be an admin");
+        require(AuctionManagerInstance.admins(etherFiAdminAddress), "EtherFiOracleExecutor should be an admin");
 
         vm.stopBroadcast();
     }

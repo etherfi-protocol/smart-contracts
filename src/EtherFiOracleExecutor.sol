@@ -19,7 +19,7 @@ interface IEtherFiPausable {
     function paused() external view returns (bool);
 }
 
-contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract EtherFiOracleExecutor is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     enum TaskType {
         ValidatorApproval,
@@ -60,8 +60,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     RoleRegistry public roleRegistry;
 
-    bytes32 public constant ETHERFI_ADMIN_ADMIN_ROLE = keccak256("ETHERFI_ADMIN_ADMIN_ROLE");
-    bytes32 public constant ETHERFI_ADMIN_TASK_EXECUTOR_ROLE = keccak256("ETHERFI_ADMIN_TASK_EXECUTOR_ROLE");
+    bytes32 public constant ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE");
+    bytes32 public constant ETHERFI_ORACLE_EXECUTOR_VALIDATOR_MANAGER_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_VALIDATOR_MANAGER_ROLE");
 
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
@@ -168,7 +168,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
 
     function setValidatorTaskBatchSize(uint16 _batchSize) external {
-        if(!roleRegistry.hasRole(ETHERFI_ADMIN_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         validatorTaskBatchSize = _batchSize;
     }
 
@@ -184,7 +184,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function executeTasks(IEtherFiOracle.OracleReport calldata _report) external {
-        if (!roleRegistry.hasRole(ETHERFI_ADMIN_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
         bytes32 reportHash = etherFiOracle.generateReportHash(_report);
         uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
@@ -209,7 +209,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     //_timestamp will only be used for TaskType.ProcessNodeExit and pubkeys and signatures will only be used for TaskType.ValidatorApproval
     function executeValidatorManagementTask(bytes32 _reportHash, uint256[] calldata _validators, uint32[] calldata _timestamps, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external {
-        if (!roleRegistry.hasRole(ETHERFI_ADMIN_TASK_EXECUTOR_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_VALIDATOR_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
 
         require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators, _timestamps));
@@ -232,7 +232,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function invalidateValidatorManagementTask(bytes32 _reportHash, uint256[] calldata _validators, uint32[] calldata _timestamps) external {
-        if (!roleRegistry.hasRole(ETHERFI_ADMIN_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators, _timestamps));
         require(validatorManagementTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
@@ -330,12 +330,12 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external {
-        if (!roleRegistry.hasRole(ETHERFI_ADMIN_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
     }
 
     function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external {
-        if (!roleRegistry.hasRole(ETHERFI_ADMIN_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
