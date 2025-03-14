@@ -397,6 +397,14 @@ contract TimelockTest is TestSetup {
         _execute_timelock(target, data, true, true, true, true);
 
     }
+
+    function test_accept_ownership_role_registry() public {
+        initializeRealisticFork(MAINNET_FORK);
+        roleRegistryInstance = RoleRegistry(address(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9));
+        address target = address(roleRegistryInstance);
+        bytes memory data = abi.encodeWithSelector(Ownable2StepUpgradeable.acceptOwnership.selector);
+        _execute_timelock(target, data, true, true, true, true);
+    }
 }
 
 // {"version":"1.0","chainId":"1
