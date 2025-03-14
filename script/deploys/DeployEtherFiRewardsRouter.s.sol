@@ -28,7 +28,7 @@ contract DeployEtherFiRewardsRouter is Script {
         vm.startBroadcast();
 
         RoleRegistry roleRegistryInstance = RoleRegistry(roleRegistryProxyAddress);
-        roleRegistryInstance.grantRole(keccak256("ETHERFI_ROUTER_ADMIN"), etherfiRouterAdmin);
+        roleRegistryInstance.grantRole(keccak256("ETHERFI_REWARDS_ROUTER_ADMIN"), etherfiRouterAdmin);
 
         addressProvider = AddressProvider(addressProviderAddress);
 

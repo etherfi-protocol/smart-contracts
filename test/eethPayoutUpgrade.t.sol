@@ -107,7 +107,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         etherFiOracleInstance.submitReport(report);
         skip(1000);
         vm.startPrank(alice);
-        bool isAdmin = roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
+        bool isAdmin = roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
         etherFiAdminInstance.executeTasks(report);
         uint256 balOfTreasury = eETHInstance.balanceOf(treasury);
         assertApproxEqAbs(balOfTreasury, _protocolFees, 10);
@@ -192,7 +192,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         etherFiOracleInstance.submitReport(report);
         skip(1000);
         vm.startPrank(alice);
-        bool isAdmin = roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
+        bool isAdmin = roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
         vm.expectRevert("EtherFiAdmin: protocol fees exceed 20% total rewards");
         etherFiAdminInstance.executeTasks(report);
         vm.stopPrank(); 

@@ -45,7 +45,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     RoleRegistry public roleRegistry;
 
 
-    bytes32 public constant WITHDRAWAL_ADMIN_ROLE = keccak256("WITHDRAWAL_ADMIN_ROLE");
+    bytes32 public constant WITHDRAW_REQUEST_NFT_ADMIN_ROLE = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
     
 
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
@@ -311,7 +311,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     modifier onlyAdmin() {
-        require(roleRegistry.hasRole(WITHDRAWAL_ADMIN_ROLE, msg.sender), "Caller is not admin");
+        require(roleRegistry.hasRole(WITHDRAW_REQUEST_NFT_ADMIN_ROLE, msg.sender), "Caller is not admin");
         _;
     }
 

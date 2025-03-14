@@ -76,14 +76,14 @@ contract DeployV2Dot49Script is Script {
 
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), liquidityPoolAdmin);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), etherfiOracleAdmin);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), etherfiOracleAdmin);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), etherfiOracleAdmin);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), etherfiOracleAdmin);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), etherfiMultisig); 
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(hypernativeEoa)); 
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherfiMultisig));
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(etherFiRewardsRouterInstance.ETHERFI_ROUTER_ADMIN(), address(etherfiMultisig));
+        roleRegistryInstance.grantRole(etherFiRewardsRouterInstance.ETHERFI_REWARDS_ROUTER_ADMIN(), address(etherfiMultisig));
         roleRegistryInstance.transferOwnership(address(timelockInstance));
         vm.stopBroadcast();
     }
