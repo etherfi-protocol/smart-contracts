@@ -83,7 +83,7 @@ contract DeployV2Dot49Script is Script {
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(hypernativeEoa)); 
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherfiMultisig));
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(etherFiRewardsRouterInstance.ETHERFI_REWARDS_ROUTER_ADMIN(), address(etherfiMultisig));
+        roleRegistryInstance.grantRole(etherFiRewardsRouterInstance.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), address(etherfiMultisig));
         roleRegistryInstance.transferOwnership(address(timelockInstance));
         vm.stopBroadcast();
     }
