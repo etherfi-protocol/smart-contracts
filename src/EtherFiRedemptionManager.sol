@@ -33,9 +33,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     uint256 private constant BUCKET_UNIT_SCALE = 1e12;
     uint256 private constant BASIS_POINT_SCALE = 1e4;
 
-    bytes32 public constant PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
-    bytes32 public constant PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
-    bytes32 public constant PROTOCOL_ADMIN = keccak256("PROTOCOL_ADMIN");
+    bytes32 public constant ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE");
 
     RoleRegistry public immutable roleRegistry;
     address public immutable treasury;
@@ -197,7 +195,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      * @dev Sets the maximum size of the bucket that can be consumed in a given time period.
      * @param capacity The capacity of the bucket.
      */
-    function setCapacity(uint256 capacity) external hasRole(PROTOCOL_ADMIN) {
+    function setCapacity(uint256 capacity) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 bucketUnit = _convertToBucketUnit(capacity, Math.Rounding.Down);
         BucketLimiter.setCapacity(limit, bucketUnit);
@@ -207,7 +205,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      * @dev Sets the rate at which the bucket is refilled per second.
      * @param refillRate The rate at which the bucket is refilled per second.
      */
-    function setRefillRatePerSecond(uint256 refillRate) external hasRole(PROTOCOL_ADMIN) {
+    function setRefillRatePerSecond(uint256 refillRate) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 bucketUnit = _convertToBucketUnit(refillRate, Math.Rounding.Down);
         BucketLimiter.setRefillRate(limit, bucketUnit);
@@ -217,26 +215,26 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      * @dev Sets the exit fee.
      * @param _exitFeeInBps The exit fee.
      */
-    function setExitFeeBasisPoints(uint16 _exitFeeInBps) external hasRole(PROTOCOL_ADMIN) {
+    function setExitFeeBasisPoints(uint16 _exitFeeInBps) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         require(_exitFeeInBps <= BASIS_POINT_SCALE, "INVALID");
         exitFeeInBps = _exitFeeInBps;
     }
 
-    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl) external hasRole(PROTOCOL_ADMIN) {
+    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         require(_lowWatermarkInBpsOfTvl <= BASIS_POINT_SCALE, "INVALID");
         lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
     }
 
-    function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps) external hasRole(PROTOCOL_ADMIN) {
+    function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         require(_exitFeeSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
         exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
     }
 
-    function pauseContract() external hasRole(PROTOCOL_PAUSER) {
+    function pauseContract() external hasRole(roleRegistry.PROTOCOL_PAUSER()) {
         _pause();
     }
 
-    function unPauseContract() external hasRole(PROTOCOL_UNPAUSER) {
+    function unPauseContract() external hasRole(roleRegistry.PROTOCOL_UNPAUSER()) {
         _unpause();
     }
 

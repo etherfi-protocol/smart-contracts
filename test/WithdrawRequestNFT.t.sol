@@ -386,7 +386,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_handleRemainder() public {
         test_aggregateSumEEthShareAmount();
         vm.startPrank(etherfi_admin_wallet);
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAWAL_ADMIN_ROLE(), etherfi_admin_wallet);
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), etherfi_admin_wallet);
         vm.stopPrank();
         vm.prank(etherfi_admin_wallet);
         
@@ -579,7 +579,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Admin invalidates request
         vm.startPrank(address(0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf));
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAWAL_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), admin);
         vm.stopPrank();
         vm.prank(admin);
         withdrawRequestNFTInstance.invalidateRequest(requestId);
