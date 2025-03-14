@@ -5,7 +5,6 @@ contract eethPayoutUpgradeTest is TestSetup {
     address treasury;
     address lpAdmin;
     address oracleAdmin; 
-    address committeeMember;
     uint256 setupSnapshot;
 
     //forge test --match-test 'test_oraclefork' -vv
@@ -33,7 +32,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         liquidityPoolInstance.upgradeTo(address(newLiquidityImplementation));
         etherFiAdminInstance.upgradeTo(address(newEtherFiAdminImplementation));
         etherFiOracleInstance.upgradeTo(address(newEtherFiOracleImplementation));
-        liquidityPoolInstance.setTreasury(alice);  
+        liquidityPoolInstance.setFeeRecipient(alice);  
         treasury = alice;
         vm.stopPrank();
     }
@@ -82,7 +81,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         uint256 oldRate = weEthInstance.getRate();
         uint128 totalValueOutOfLpBefore = liquidityPoolInstance.totalValueOutOfLp();
 
-        etherFiAdminInstance.executeTasks(report, new bytes[](0), new bytes[](0));
+        etherFiAdminInstance.executeTasks(report);
 
         //post state
         uint256 newRate = weEthInstance.getRate();

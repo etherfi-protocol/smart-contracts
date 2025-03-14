@@ -15,10 +15,11 @@ contract LiquidityPoolTest is TestSetup {
     uint256 public testnetFork;
 
     function setUp() public {
-        testnetFork = vm.createFork(vm.envString("TESTNET_RPC_URL"));
+        // testnetFork = vm.createFork(vm.envString("TESTNET_RPC_URL"));
         setUpTests();
+        vm.prank(admin);
+        withdrawRequestNFTInstance.unPauseContract();
         // initializeTestingFork(TESTNET_FORK);
-
         _initBid();
     }
 
@@ -27,7 +28,7 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.startPrank(owner);
         nodeOperatorManagerInstance.updateAdmin(alice, true);
-        liquidityPoolInstance.updateAdmin(alice, true);
+        // liquidityPoolInstance.updateAdmin(alice, true);
         vm.stopPrank();
     
         vm.startPrank(alice);
@@ -61,26 +62,6 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
     }
 
-    function test_DepositWhenNotWhitelisted() public {
-        vm.deal(alice, 1 ether);
-
-        vm.startPrank(alice);
-        liquidityPoolInstance.updateWhitelistStatus(true);
-
-        vm.expectRevert("Invalid User");
-        liquidityPoolInstance.deposit{value: 1 ether}();
-        assertEq(address(liquidityPoolInstance).balance, 0);
-
-        address[] memory addrs = new address[](1);
-        addrs[0] = alice;
-
-        liquidityPoolInstance.updateWhitelistedAddresses(addrs, true);
-        liquidityPoolInstance.deposit{value: 1 ether}();
-
-        assertEq(address(liquidityPoolInstance).balance, 1 ether);
-
-    }
-
     function test_StakingManagerLiquidityPool() public {
 
         startHoax(alice);
@@ -94,9 +75,8 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_StakingManagerLiquidityFails() public {
-
+        vm.deal(owner, 5 ether);
         vm.startPrank(owner);
-        vm.expectRevert();
         liquidityPoolInstance.deposit{value: 2 ether}();
     }
 
@@ -111,8 +91,8 @@ contract LiquidityPoolTest is TestSetup {
         vm.startPrank(alice);
         uint256 aliceNonce = eETHInstance.nonces(alice);
         // create permit with invalid private key (Bob)
-        ILiquidityPool.PermitInput memory permitInput = createPermitInput(3, address(liquidityPoolInstance), 2 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
-        vm.expectRevert("ERC20Permit: invalid signature");
+        ILiquidityPool.PermitInput memory permitInput = createPermitInput(3, address(liquidityPoolInstance), 2 ether, aliceNonce+1, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
+        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE"); //even through the reason was invalid permit to prevent griefing attack the allowance fails
         liquidityPoolInstance.requestWithdrawWithPermit(alice, 2 ether, permitInput);
         vm.stopPrank();
     }
@@ -320,212 +300,48 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(liquidityPoolInstance.totalValueInLp(), 0);
 
         startHoax(bob);
-        liquidityPoolInstance.deposit{value: 60 ether}();
+        liquidityPoolInstance.deposit{value: 64 ether}();
         vm.stopPrank();
 
-        assertEq(address(liquidityPoolInstance).balance, 60 ether);
+        assertEq(address(liquidityPoolInstance).balance, 64 ether);
         assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 60 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 64 ether);
 
         uint256 aliceBalance = address(alice).balance;
         vm.prank(alice);
-        uint256[] memory newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 4 ether}(bidIds, 2);
+        uint256[] memory newValidators = liquidityPoolInstance.batchDeposit(bidIds, 2);
 
         assertEq(newValidators.length, 2);
-        assertEq(address(alice).balance, aliceBalance - 4 ether);
-        assertEq(address(liquidityPoolInstance).balance, 60 ether + 4 ether);
+        assertEq(address(alice).balance, aliceBalance);
+        assertEq(address(liquidityPoolInstance).balance, 64 ether);
         assertEq(address(stakingManagerInstance).balance, 0 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 2);
         assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0 ether);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 60 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 64 ether);
 
         // SD-1 "Anyone can call StakingManager.batchCancelDepositAsBnftHolder to cancel a deposit"
         vm.prank(bob);
         vm.expectRevert("INCORRECT_CALLER");
+        assertEq(address(alice).balance, aliceBalance);
         stakingManagerInstance.batchCancelDepositAsBnftHolder(newValidators, alice);
 
-        vm.prank(alice);
-        vm.expectRevert("Wrong flow");
-        stakingManagerInstance.batchCancelDeposit(newValidators);
-
+        assertEq(address(alice).balance, aliceBalance);
         vm.prank(alice);
         liquidityPoolInstance.batchCancelDeposit(newValidators);
+        assertEq(address(alice).balance, aliceBalance);
         
         assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
         assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 60 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 64 ether);
         assertEq(address(alice).balance, aliceBalance);
         assertEq(address(stakingManagerInstance).balance, 0 ether);
-        assertEq(address(liquidityPoolInstance).balance, 60 ether);
-    }
-
-    function test_batchCancelDepositAsBnftHolderAfterRegistration() public {
-        vm.deal(owner, 100 ether);
-
-        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.numValidatorsToSpinUp = 4;
-        _executeAdminTasks(report);
-
-        setUpBnftHolders();
-
-        vm.warp(976348625856);
-
-        hoax(alice);
-        uint256[] memory bidIds = auctionInstance.createBid{value: 0.2 ether}(2, 0.1 ether);
-        assertEq(bidIds.length, 2);
-
-        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 0);
-
-        startHoax(bob);
-        liquidityPoolInstance.deposit{value: 60 ether}();
-        vm.stopPrank();
-
-        assertEq(address(liquidityPoolInstance).balance, 60 ether);
-        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 60 ether);
-
-        uint256 aliceBalance = address(alice).balance;
-        vm.prank(alice);
-        uint256[] memory newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 4 ether}(bidIds, 2);
-
-        assertEq(newValidators.length, 2);
-        assertEq(address(alice).balance, aliceBalance - 4 ether);
         assertEq(address(liquidityPoolInstance).balance, 64 ether);
-        assertEq(address(stakingManagerInstance).balance, 0 ether);
-        assertEq(liquidityPoolInstance.numPendingDeposits(), 2);
-        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0 ether);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 60 ether);
-
-        (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(newValidators);
-
-        vm.prank(alice);
-        liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
-
-        vm.prank(alice);
-        liquidityPoolInstance.batchCancelDeposit(newValidators);
-
-        assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
-        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 60 ether);
-        assertEq(address(alice).balance, aliceBalance - 2 ether);
-        assertEq(address(stakingManagerInstance).balance, 0 ether);
-        assertEq(address(liquidityPoolInstance).balance, 60 ether);
-        assertEq(stakingManagerInstance.bidIdToStaker(newValidators[0]), address(0));
-        assertEq(stakingManagerInstance.bidIdToStaker(newValidators[1]), address(0));
-
-        _moveClock(7 days);
-
-        vm.deal(henry, 4 ether);
-        // again... should be able to re-deposit
-        vm.prank(henry);
-        newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 4 ether}(bidIds, 2);
-
-        (depositDataArray, depositDataRootsForApproval, sig, pubKey) = _prepareForValidatorRegistration(newValidators);
-
-        vm.prank(henry);
-        liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
-    }
-    
-    function test_batchCancelDepositAsBnftHolderWithDifferentValidatorStages() public {
-        vm.deal(owner, 100 ether);
-
-        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.numValidatorsToSpinUp = 4;
-        _executeAdminTasks(report);
-
-        setUpBnftHolders();
-
-        vm.warp(976348625856);
-
-        hoax(alice);
-        uint256[] memory bidIds = auctionInstance.createBid{value: 0.2 ether}(2, 0.1 ether);
-        assertEq(bidIds.length, 2);
-
-        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 0);
-
-        startHoax(bob);
-        liquidityPoolInstance.deposit{value: 60 ether}();
-        vm.stopPrank();
-
-        assertEq(address(liquidityPoolInstance).balance, 60 ether);
-        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 60 ether);
-
-        uint256 aliceBalance = address(alice).balance;
-        vm.prank(alice);
-        uint256[] memory newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 4 ether}(bidIds, 2);
-
-        assertEq(newValidators.length, 2);
-        assertEq(address(alice).balance, aliceBalance - 4 ether);
-        assertEq(address(liquidityPoolInstance).balance, 64 ether);
-        assertEq(address(stakingManagerInstance).balance, 0 ether);
-        assertEq(liquidityPoolInstance.numPendingDeposits(), 2);
-        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 60 ether);
-
-        IStakingManager.DepositData[]
-            memory depositDataArray = new IStakingManager.DepositData[](1);
-
-        bytes32[] memory depositDataRootsForApproval = new bytes32[](1);
-
-        address etherFiNode = managerInstance.etherfiNodeAddress(
-            newValidators[0]
-        );
-        root = depGen.generateDepositRoot(
-            hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-            hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-            managerInstance.generateWithdrawalCredentials(etherFiNode),
-            1 ether
-        );
-
-        depositDataRootsForApproval[0] = depGen.generateDepositRoot(
-            hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-            hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65",
-            managerInstance.generateWithdrawalCredentials(etherFiNode),
-            31 ether
-        );
-
-        depositDataArray[0] = IStakingManager.DepositData({
-            publicKey: hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-            signature: hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-            depositDataRoot: root,
-            ipfsHashForEncryptedValidatorKey: "test_ipfs"
-        });
-
-        assertEq(uint8(managerInstance.phase(newValidators[0])), uint8(IEtherFiNode.VALIDATOR_PHASE.STAKE_DEPOSITED));
-
-        bytes[] memory pubKey = new bytes[](1);
-        pubKey[0] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-
-        uint256[] memory newValidatorsToRegister = new uint256[](1);
-        newValidatorsToRegister[0] = newValidators[0];
-
-        bytes32 depositRoot = _getDepositRoot();
-        bytes[] memory sig = new bytes[](1);
-        sig[0] = hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65";
-
-        vm.prank(alice);
-        liquidityPoolInstance.batchRegisterAsBnftHolder(depositRoot, newValidatorsToRegister, depositDataArray, depositDataRootsForApproval, sig);
-
-        vm.prank(alice);
-        liquidityPoolInstance.batchCancelDeposit(newValidators);
-
-        assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
-        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 60 ether);
-        assertEq(address(alice).balance, aliceBalance - 1 ether);
-        assertEq(address(stakingManagerInstance).balance, 0 ether);
-        assertEq(address(liquidityPoolInstance).balance, 60 ether);
-        assertEq(stakingManagerInstance.bidIdToStaker(newValidators[0]), address(0));
-        assertEq(stakingManagerInstance.bidIdToStaker(newValidators[1]), address(0));
     }
 
     function test_sendExitRequestFails() public {
         uint256[] memory newValidators = new uint256[](10);
-        vm.expectRevert("Not admin");
-        vm.prank(owner);
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        vm.prank(elvis);
         liquidityPoolInstance.sendExitRequests(newValidators);
     }
 
@@ -535,40 +351,49 @@ contract LiquidityPoolTest is TestSetup {
         vm.deal(alice, 1000 ether);
         vm.startPrank(alice);
 
-        liquidityPoolInstance.updateBnftMode(true);
+        // liquidityPoolInstance.updateBnftMode(true);
 
         uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
 
         liquidityPoolInstance.deposit{value: 32 ether}();
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 32 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
 
-        uint256[] memory validatorIds = liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(bidIds, 1);
+        uint256[] memory validatorIds = liquidityPoolInstance.batchDeposit(bidIds, 1);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 1);
 
         (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(validatorIds);
 
-        vm.expectRevert("IncorrectBnftMode");
-        liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, validatorIds, depositDataArray, depositDataRootsForApproval, sig);
-
-        liquidityPoolInstance.batchRegisterWithLiquidityPoolAsBnftHolder(zeroRoot, validatorIds, depositDataArray, depositDataRootsForApproval, sig);
+        liquidityPoolInstance.batchRegister(zeroRoot, validatorIds, depositDataArray, depositDataRootsForApproval, sig);
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 31 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 1 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
 
         assertEq(BNFTInstance.ownerOf(validatorIds[0]), address(liquidityPoolInstance));
         assertEq(TNFTInstance.ownerOf(validatorIds[0]), address(liquidityPoolInstance));
 
         liquidityPoolInstance.batchApproveRegistration(validatorIds, pubKey, sig);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 0 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 32 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
 
         address etherfiNode = managerInstance.etherfiNodeAddress(validatorIds[0]);
         vm.deal(address(etherfiNode), 1 ether);
         managerInstance.batchPartialWithdraw(validatorIds);
 
+        assertEq(liquidityPoolInstance.totalValueInLp(), 1 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 31 ether);
+
+        vm.startPrank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(1 ether);
         // The liquidity pool receives the rewards as B-NFT holder and T-NFT holder
-        assertEq((address(liquidityPoolInstance).balance), 1 * 0.9 ether);
+        assertEq((address(liquidityPoolInstance).balance), 1 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 1 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 32 ether);
     }
 
     function test_batchPartialWithdrawOptimized() internal {
@@ -604,20 +429,20 @@ contract LiquidityPoolTest is TestSetup {
         uint256[] memory bidIds = auctionInstance.createBid{value: 0.2 ether}(2, 0.1 ether);
 
         startHoax(bob);
-        liquidityPoolInstance.deposit{value: 60 ether}();
+        liquidityPoolInstance.deposit{value: 64 ether}();
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 60 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 64 ether);
         vm.stopPrank();
 
         vm.warp(1681075815 - 35 * 24 * 3600);   // Sun March ...
         vm.prank(henry);
-        uint256[] memory newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 4 ether}(bidIds, 2);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 60 ether);
+        uint256[] memory newValidators = liquidityPoolInstance.batchDeposit(bidIds, 2);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 64 ether);
 
         (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(newValidators);
 
         vm.prank(henry);
-        liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
+        liquidityPoolInstance.batchRegister(zeroRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
 
         for (uint256 i = 0; i < newValidators.length; i++) {
             address etherFiNode = managerInstance.etherfiNodeAddress(
@@ -626,10 +451,11 @@ contract LiquidityPoolTest is TestSetup {
 
             assertEq(uint8(managerInstance.phase(newValidators[i])), uint8(IEtherFiNode.VALIDATOR_PHASE.WAITING_FOR_APPROVAL));
         }
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        liquidityPoolInstance.batchApproveRegistration(newValidators, pubKey, sig);
 
         vm.prank(alice);
         liquidityPoolInstance.batchApproveRegistration(newValidators, pubKey, sig);
-
         for (uint256 i = 0; i < newValidators.length; i++) {
             address etherFiNode = managerInstance.etherfiNodeAddress(
                 newValidators[i]
@@ -638,37 +464,38 @@ contract LiquidityPoolTest is TestSetup {
             assertEq(uint8(managerInstance.phase(newValidators[i])), uint8(IEtherFiNode.VALIDATOR_PHASE.LIVE));
         }
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 60 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 64 ether);
 
         uint256[] memory slashingPenalties = new uint256[](2);
         slashingPenalties[0] = 0.5 ether;
         slashingPenalties[1] = 0.5 ether;
 
-        // The penalties are applied to the B-NFT holders, not T-NFT holders
+        // The penalties are applied to the B-NFT holders which in our case is also the T-NFT holders
         vm.prank(address(membershipManagerInstance));
-        liquidityPoolInstance.rebase(0 ether);
+        liquidityPoolInstance.rebase(-1 ether);
 
         vm.warp(1681075815 - 7 * 24 * 3600);   // Sun Apr 02 2023 21:30:15 UTC
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        liquidityPoolInstance.sendExitRequests(newValidators);
+        
         vm.prank(alice);
         liquidityPoolInstance.sendExitRequests(newValidators);
 
         uint32[] memory exitRequestTimestamps = new uint32[](2);
-        exitRequestTimestamps[0] = 1681351200; // Thu Apr 13 2023 02:00:00 UTC
-        exitRequestTimestamps[1] = 1681075815; // Sun Apr 09 2023 21:30:15 UTC
+        exitRequestTimestamps[0] = uint32(block.timestamp - 1000); 
+        exitRequestTimestamps[1] = uint32(block.timestamp - 10000); 
 
         vm.warp(1681351200 + 12 * 6);
 
         address etherfiNode1 = managerInstance.etherfiNodeAddress(newValidators[0]);
         address etherfiNode2 = managerInstance.etherfiNodeAddress(newValidators[1]);
-
         _transferTo(etherfiNode1, 32 ether - slashingPenalties[0]);
         _transferTo(etherfiNode2, 32 ether - slashingPenalties[1]);
 
         // Process the node exit via nodeManager
         vm.prank(alice);
         managerInstance.processNodeExit(newValidators, exitRequestTimestamps);
-
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 60 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 63 ether);
         assertTrue(managerInstance.phase(newValidators[0]) == IEtherFiNode.VALIDATOR_PHASE.EXITED);
         assertTrue(managerInstance.phase(newValidators[1]) == IEtherFiNode.VALIDATOR_PHASE.EXITED);
         
@@ -676,8 +503,8 @@ contract LiquidityPoolTest is TestSetup {
         vm.prank(henry);
         managerInstance.batchFullWithdraw(newValidators);
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 60 ether);
-        assertEq(address(liquidityPoolInstance).balance, 60 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 63 ether);
+        assertEq(address(liquidityPoolInstance).balance, 63 ether);
     }
 
     function test_fallback() public {
@@ -703,6 +530,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_rebase_withdraw_flow() public {
+
         uint256[] memory validatorIds = launch_validator();
 
         uint256[] memory tvls = new uint256[](4);
@@ -717,10 +545,10 @@ contract LiquidityPoolTest is TestSetup {
             tvls[2] += toBnft;
             tvls[3] += toTreasury;
         }
-        uint256 eEthTVL = tvls[1];
+        uint256 eEthTVL = tvls[1] + tvls[2];
 
         // Reflect the loss in TVL by rebasing
-        int128 lossInTVL = int128(uint128(eEthTVL)) - int128(uint128(60 ether));
+        int128 lossInTVL = int128(uint128(eEthTVL)) - int128(uint128(64 ether));
         vm.prank(address(membershipManagerInstance));
         liquidityPoolInstance.rebase(lossInTVL);
 
@@ -769,16 +597,15 @@ contract LiquidityPoolTest is TestSetup {
         //Move past one week
         vm.warp(804650);
 
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        liquidityPoolInstance.registerValidatorSpawner(alice);
+        
         //Let Alice sign up as a BNFT holder
         vm.startPrank(alice);
         registerAsBnftHolder(alice);
         vm.stopPrank();
-
-        (bool registered, uint32 index) = liquidityPoolInstance.bnftHoldersIndexes(alice);
-        (address bnftHolder, ) = liquidityPoolInstance.bnftHolders(index);
+        bool registered= liquidityPoolInstance.validatorSpawner(alice);
         assertEq(registered, true);
-        assertEq(index, 0);
-        assertEq(bnftHolder, alice);
     }
     
     function test_DepositAsBnftHolderSimple() public {
@@ -805,8 +632,8 @@ contract LiquidityPoolTest is TestSetup {
         vm.prank(elvis);
         //Making sure if a user is assigned they send in the correct amount (This will be updated 
         //as we will allow users to specify how many validator they want to spin up)
-        vm.expectRevert("Not Enough Deposit");
-        liquidityPoolInstance.batchDepositAsBnftHolder{value: 6 ether}(bidIds, 4);
+        vm.expectRevert("Not enough balance");
+        liquidityPoolInstance.batchDeposit(bidIds, 4);
 
         //Move way more in the future
         _moveClock(100000);
@@ -831,7 +658,7 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.prank(shonee);
         //Shonee deposits and her index is 4, allowing her to deposit for 4 validators
-        validators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 8 ether}(bidIds, 4);
+        validators = liquidityPoolInstance.batchDeposit(bidIds, 4);
         assertEq(validators[0], 1);
         assertEq(validators[1], 2);
         assertEq(validators[2], 3);
@@ -841,47 +668,47 @@ contract LiquidityPoolTest is TestSetup {
         vm.prank(dan);
 
         //Dan deposits and his index is 5, allowing him to deposit
-        validators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 4 ether}(bidIds, 2);
+        validators = liquidityPoolInstance.batchDeposit(bidIds, 2);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 6);
 
         assertEq(validators[0], 5);
         assertEq(validators[1], 6);
     }
 
-    function test_DeRegisterBnftHolder() public {
-        setUpBnftHolders();
+    // function test_.unregisterValidatorSpawner() public {
+    //     setUpBnftHolders();
 
-        (address ownerIndexAddress, ) = liquidityPoolInstance.bnftHolders(3);
-        (address henryIndexAddress, ) = liquidityPoolInstance.bnftHolders(7);
-        (address bobIndexAddress, ) = liquidityPoolInstance.bnftHolders(2);
+    //     (address ownerIndexAddress, ) = liquidityPoolInstance.bnftHolders(3);
+    //     (address henryIndexAddress, ) = liquidityPoolInstance.bnftHolders(7);
+    //     (address bobIndexAddress, ) = liquidityPoolInstance.bnftHolders(2);
 
-        assertEq(ownerIndexAddress, owner);
-        assertEq(henryIndexAddress, henry);
-        assertEq(bobIndexAddress, bob);
+    //     assertEq(ownerIndexAddress, owner);
+    //     assertEq(henryIndexAddress, henry);
+    //     assertEq(bobIndexAddress, bob);
 
-        vm.prank(alice);
-        liquidityPoolInstance.deRegisterBnftHolder(owner);
-        (bool registered, ) = liquidityPoolInstance.bnftHoldersIndexes(owner);
-        assertEq(registered, false);
+    //     vm.prank(alice);
+    //     liquidityPoolInstance.unregisterValidatorSpawner(owner);
+    //     (bool registered, ) = liquidityPoolInstance.bnftHoldersIndexes(owner);
+    //     assertEq(registered, false);
 
-        (henryIndexAddress, ) = liquidityPoolInstance.bnftHolders(3);
-        assertEq(henryIndexAddress, henry);
+    //     (henryIndexAddress, ) = liquidityPoolInstance.bnftHolders(3);
+    //     assertEq(henryIndexAddress, henry);
 
-        vm.prank(bob);
-        liquidityPoolInstance.deRegisterBnftHolder(bob);
-        (registered, ) = liquidityPoolInstance.bnftHoldersIndexes(bob);
-        assertEq(registered, false);
+    //     vm.prank(bob);
+    //     liquidityPoolInstance.unregisterValidatorSpawner(bob);
+    //     (registered, ) = liquidityPoolInstance.bnftHoldersIndexes(bob);
+    //     assertEq(registered, false);
 
-        (address elvisIndexAddress, ) = liquidityPoolInstance.bnftHolders(2);
-        assertEq(elvisIndexAddress, elvis);
-    }
+    //     (address elvisIndexAddress, ) = liquidityPoolInstance.bnftHolders(2);
+    //     assertEq(elvisIndexAddress, elvis);
+    // }
 
-    function test_DeRegisterBnftHolderIfIncorrectCaller() public {
+    function test_unregisterValidatorSpawnerIfIncorrectCaller() public {
         setUpBnftHolders();
 
         vm.prank(bob);
         vm.expectRevert("Incorrect Caller");
-        liquidityPoolInstance.deRegisterBnftHolder(owner);
+        liquidityPoolInstance.unregisterValidatorSpawner(owner);
     }
 
     function test_DepositWhenUserDeRegisters() public {
@@ -903,14 +730,20 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.stopPrank();
 
-        vm.startPrank(alice);
-        //Alice deposits and her index is 0 (the last index), allowing her to deposit for 2 validators
-        liquidityPoolInstance.batchDepositAsBnftHolder{value: 8 ether}(bidIds, 4);
-        vm.stopPrank();
 
         vm.startPrank(owner);
         //Owner de registers themselves
-        liquidityPoolInstance.deRegisterBnftHolder(owner);
+     
+        vm.expectEmit(true, true, false, false);
+        emit LiquidityPool.ValidatorSpawnerUnregistered(owner);
+        liquidityPoolInstance.unregisterValidatorSpawner(owner);
+        vm.expectRevert();
+        liquidityPoolInstance.batchDeposit(bidIds, 4);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        //Alice deposits and her index is 0 (the last index), allowing her to deposit for 2 validators
+        liquidityPoolInstance.batchDeposit(bidIds, 4);
         vm.stopPrank();
     }
 
@@ -928,7 +761,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.deal(greg, 100000 ether);
 
         //Alice deposits funds into the LP to allow for validators to be spun and the calculations can work in dutyForWeek
-        liquidityPoolInstance.deposit{value: 120 ether}();
+        liquidityPoolInstance.deposit{value: 128 ether}();
         vm.stopPrank();
 
         //Move forward in time to make sure dutyForWeek runs with an arbitrary timestamp
@@ -941,7 +774,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
         
         startHoax(alice);
-        processedBids = liquidityPoolInstance.batchDepositAsBnftHolder{value: 8 ether}(bidIds, 4);
+        processedBids = liquidityPoolInstance.batchDeposit(bidIds, 4);
 
         assertEq(stakingManagerInstance.bidIdToStaker(11), alice);
         assertEq(stakingManagerInstance.bidIdToStaker(12), alice);
@@ -953,6 +786,9 @@ contract LiquidityPoolTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         _initBid();
 
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        liquidityPoolInstance.setRestakeBnftDeposits(true);
+
         vm.deal(alice, 1000 ether);
         vm.startPrank(alice);
 
@@ -962,7 +798,6 @@ contract LiquidityPoolTest is TestSetup {
         registerAsBnftHolder(alice);
         bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
 
-        liquidityPoolInstance.updateBnftMode(false);
         liquidityPoolInstance.setRestakeBnftDeposits(true);
 
         liquidityPoolInstance.deposit{value: 120 ether}();
@@ -973,7 +808,7 @@ contract LiquidityPoolTest is TestSetup {
 
         address bnftHolder = alice;
         startHoax(bnftHolder);
-        processedBids = liquidityPoolInstance.batchDepositAsBnftHolder{value: 8 ether}(bidIds, 4);
+        processedBids = liquidityPoolInstance.batchDeposit(bidIds, 4);
 
         assertEq(stakingManagerInstance.bidIdToStaker(bidIds[0]), bnftHolder);
         assertEq(stakingManagerInstance.bidIdToStaker(bidIds[1]), bnftHolder);
@@ -1042,10 +877,10 @@ contract LiquidityPoolTest is TestSetup {
         bytes[] memory sig = new bytes[](1);
         sig[0] = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
 
-        liquidityPoolInstance.batchRegisterAsBnftHolder(_getDepositRoot(), validatorArray, depositDataArray, depositDataRootsForApproval, sig);
+        liquidityPoolInstance.batchRegister(_getDepositRoot(), validatorArray, depositDataArray, depositDataRootsForApproval, sig);
 
         assertEq(liquidityPoolInstance.numPendingDeposits(), 3);
-        assertEq(BNFTInstance.balanceOf(alice), 1);
+        assertEq(BNFTInstance.balanceOf(address(liquidityPoolInstance)), 1);
         assertEq(TNFTInstance.balanceOf(address(liquidityPoolInstance)), 1);
     }
 
@@ -1077,7 +912,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
         
         startHoax(alice);
-        processedBids = liquidityPoolInstance.batchDepositAsBnftHolder{value: 8 ether}(bidIds, 4);
+        processedBids = liquidityPoolInstance.batchDeposit(bidIds, 4);
 
         assertEq(stakingManagerInstance.bidIdToStaker(11), alice);
         assertEq(stakingManagerInstance.bidIdToStaker(12), alice);
@@ -1110,13 +945,13 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 0);
 
         startHoax(bob);
-        liquidityPoolInstance.deposit{value: 120 ether}();
+        liquidityPoolInstance.deposit{value: 128 ether}();
         vm.stopPrank();
 
-        assertEq(address(liquidityPoolInstance).balance, 120 ether);
+        assertEq(address(liquidityPoolInstance).balance, 128 ether);
         assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 120 ether);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 120 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 128 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 128 ether);
 
         uint256 aliceBalance = address(alice).balance;
         uint256[] memory bidIdsWithDuplicates = new uint256[](4);
@@ -1125,16 +960,16 @@ contract LiquidityPoolTest is TestSetup {
         bidIdsWithDuplicates[2] = bidIds[1];
         bidIdsWithDuplicates[3] = bidIds[1];
         vm.prank(alice);
-        uint256[] memory newValidators = liquidityPoolInstance.batchDepositAsBnftHolder{value: 4 * 2 ether}(bidIdsWithDuplicates, 4);
+        uint256[] memory newValidators = liquidityPoolInstance.batchDeposit(bidIdsWithDuplicates, 4);
 
         assertEq(newValidators.length, 2);
-        assertEq(address(alice).balance, aliceBalance - 4 ether);
-        assertEq(address(liquidityPoolInstance).balance, 120 ether + 4 ether);
+        assertEq(address(alice).balance, aliceBalance);
+        assertEq(address(liquidityPoolInstance).balance, 128 ether);
         assertEq(address(stakingManagerInstance).balance, 0);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 2);
         assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 120 ether);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 120 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 128 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 128 ether);
     }
 
     function test_goerli_test() internal {
@@ -1166,7 +1001,7 @@ contract LiquidityPoolTest is TestSetup {
         sig[0] = hex"a63be986aaeffbcf4bb641dacc72f2f37638d953b238c9f789afdad3dede41b5cc3a5079be1a32f81edcbec6e059886902bbea00bc40d84865feb89861ddd8e5ebfb359bcfd79baf930613d57b6a1fd854c29fa470596c6dda2153696730b4c1";
 
         assertEq(stakingManagerInstance.bidIdToStaker(149), addr);
-        liquidityPoolInstance.batchRegisterAsBnftHolder(depositRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
+        liquidityPoolInstance.batchRegister(depositRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
 
     }
 
@@ -1182,102 +1017,93 @@ contract LiquidityPoolTest is TestSetup {
         bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
 
         // 1. Deposit -> Cancel
-        liquidityPoolInstance.updateBnftMode(false);
-
-        liquidityPoolInstance.deposit{value: 30 ether}();
-        assertEq(address(stakingManagerInstance).balance, 0);
-        assertEq(address(liquidityPoolInstance).balance, 30 ether);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether);
-        assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
-
-        validatorIds = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(bidIds, 1);
-        assertEq(address(stakingManagerInstance).balance, 0 ether);
-        assertEq(address(liquidityPoolInstance).balance, 32 ether);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether);
-        assertEq(liquidityPoolInstance.numPendingDeposits(), 1);
-
-        liquidityPoolInstance.batchCancelDeposit(bidIds);
-        assertEq(address(stakingManagerInstance).balance, 0);
-        assertEq(address(liquidityPoolInstance).balance, 30 ether);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether);
-        assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
-
-        // 2. Deposit -> Register -> Cancel
-        validatorIds = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(bidIds, 1);
-        assertEq(address(stakingManagerInstance).balance, 0 ether);
-        assertEq(address(liquidityPoolInstance).balance, 32 ether);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether);
-        assertEq(liquidityPoolInstance.numPendingDeposits(), 1);
-
-        (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(bidIds);
-        liquidityPoolInstance.batchRegisterAsBnftHolder(zeroRoot, bidIds, depositDataArray, depositDataRootsForApproval, sig);
-
-        assertEq(address(stakingManagerInstance).balance, 0 ether);
-        assertEq(address(liquidityPoolInstance).balance, 31 ether);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether);
-        assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
-
-        liquidityPoolInstance.batchCancelDeposit(bidIds);
-        assertEq(address(stakingManagerInstance).balance, 0);
-        assertEq(address(liquidityPoolInstance).balance, 30 ether);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether);
-        assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
-    }
-
-    function test_bnftFlowCancel_2() public {
-        setUpBnftHolders();
-
-        vm.deal(alice, 1000 ether);
-        vm.startPrank(alice);
-
-        uint256[] memory bidIds;
-        uint256[] memory validatorIds;
-
-        bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-
-        liquidityPoolInstance.updateBnftMode(true);
-
         liquidityPoolInstance.deposit{value: 32 ether}();
         assertEq(address(stakingManagerInstance).balance, 0);
         assertEq(address(liquidityPoolInstance).balance, 32 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 32 ether);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
 
-        // 1. Deposit -> Cancel
-        validatorIds = liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(bidIds, 1);
+        validatorIds = liquidityPoolInstance.batchDeposit(bidIds, 1);
         assertEq(address(stakingManagerInstance).balance, 0 ether);
         assertEq(address(liquidityPoolInstance).balance, 32 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 32 ether);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 1);
 
         liquidityPoolInstance.batchCancelDeposit(bidIds);
         assertEq(address(stakingManagerInstance).balance, 0);
         assertEq(address(liquidityPoolInstance).balance, 32 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 32 ether);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
 
         // 2. Deposit -> Register -> Cancel
-        validatorIds = liquidityPoolInstance.batchDepositWithLiquidityPoolAsBnftHolder(bidIds, 1);
+        validatorIds = liquidityPoolInstance.batchDeposit(bidIds, 1);
         assertEq(address(stakingManagerInstance).balance, 0 ether);
         assertEq(address(liquidityPoolInstance).balance, 32 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 32 ether);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 1);
 
-        (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(bidIds);
-        liquidityPoolInstance.batchRegisterWithLiquidityPoolAsBnftHolder(zeroRoot, bidIds, depositDataArray, depositDataRootsForApproval, sig);
+        {
+            (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(bidIds);
+            liquidityPoolInstance.batchRegister(zeroRoot, bidIds, depositDataArray, depositDataRootsForApproval, sig);
+        }
 
         assertEq(address(stakingManagerInstance).balance, 0 ether);
         assertEq(address(liquidityPoolInstance).balance, 31 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 1 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 31 ether);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
 
         liquidityPoolInstance.batchCancelDeposit(bidIds);
         assertEq(address(stakingManagerInstance).balance, 0);
         assertEq(address(liquidityPoolInstance).balance, 31 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 31 ether);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 31 ether);
         assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
-    }
 
+        // Deposit 1 eth more
+        liquidityPoolInstance.deposit{value: 1 ether}();
+        assertEq(address(liquidityPoolInstance).balance, 32 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 32 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
+
+        // 3. Deposit -> Register -> Approve
+        validatorIds = liquidityPoolInstance.batchDeposit(bidIds, 1);
+        assertEq(address(stakingManagerInstance).balance, 0 ether);
+        assertEq(address(liquidityPoolInstance).balance, 32 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 32 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
+        assertEq(liquidityPoolInstance.numPendingDeposits(), 1);
+
+        (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(bidIds);
+        liquidityPoolInstance.batchRegister(zeroRoot, bidIds, depositDataArray, depositDataRootsForApproval, sig);
+
+        assertEq(address(stakingManagerInstance).balance, 0 ether);
+        assertEq(address(liquidityPoolInstance).balance, 31 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 1 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 31 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
+        assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
+        
+        liquidityPoolInstance.batchApproveRegistration(validatorIds, pubKey, sig);
+        assertEq(address(stakingManagerInstance).balance, 0 ether);
+        assertEq(address(liquidityPoolInstance).balance, 0 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 32 ether);
+        assertEq(liquidityPoolInstance.totalValueInLp(), 0 ether);
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 32 ether);
+        assertEq(liquidityPoolInstance.numPendingDeposits(), 0);
+    }
 
     function test_any_bnft_staker() public {
         _moveClock(1 days);
@@ -1287,29 +1113,27 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.startPrank(alice);
         registerAsBnftHolder(alice);
+        registerAsBnftHolder(address(liquidityPoolInstance));
         uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-        liquidityPoolInstance.deposit{value: 120 ether}();
+        liquidityPoolInstance.deposit{value: 124 ether}();
         vm.stopPrank();
 
         vm.startPrank(bob);
         vm.expectRevert("Incorrect Caller");
-        liquidityPoolInstance.batchDepositAsBnftHolder{value: 1 * 2 ether}(bidIds, 1);
+        liquidityPoolInstance.batchDeposit(bidIds, 1);
         vm.stopPrank();
 
 
         vm.startPrank(alice);
-        liquidityPoolInstance.batchDepositAsBnftHolder{value: 1 * 2 ether}(bidIds, 1);
+        liquidityPoolInstance.batchDeposit(bidIds, 1);
         vm.stopPrank();
 
-        vm.prank(owner);
-        liquidityPoolInstance.updateAdmin(chad, true);
-
         vm.prank(bob);
-        vm.expectRevert("Not admin");
-        liquidityPoolInstance.batchCancelDepositByAdmin(bidIds, alice);
+        vm.expectRevert("INCORRECT_CALLER");
+        liquidityPoolInstance.batchCancelDeposit(bidIds);
 
-        vm.prank(chad);
-        liquidityPoolInstance.batchCancelDepositByAdmin(bidIds, alice);
+        vm.prank(alice);
+        liquidityPoolInstance.batchCancelDeposit(bidIds);
     }
 
     function test_deopsitToRecipient_by_rando_fails() public {
@@ -1333,7 +1157,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.startPrank(henry);
         uint256[] memory x = new uint256[](1);
         x[0] = bidIds[0];
-        uint256[] memory newValidators1 = liquidityPoolInstance.batchDepositAsBnftHolder{value: 2 ether}(x, 1);
+        uint256[] memory newValidators1 = liquidityPoolInstance.batchDeposit(x, 1);
 
         IStakingManager.DepositData[] memory depositDataArray1 = _prepareForDepositData(newValidators1, 32 ether);
 
@@ -1345,5 +1169,38 @@ contract LiquidityPoolTest is TestSetup {
         stakingManagerInstance.batchRegisterValidators(zeroRoot, newValidators1, depositDataArray1);
 
         vm.stopPrank();
+    }
+
+    function test_Upgrade2_49_pause_unpause() public {
+        // only protocol pauser can pause or unpause
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        liquidityPoolInstance.pauseContract();
+
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+
+        assertTrue(liquidityPoolInstance.paused());
+        
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        liquidityPoolInstance.unPauseContract();
+
+        vm.prank(admin);
+        liquidityPoolInstance.unPauseContract();
+
+        assertFalse(liquidityPoolInstance.paused());
+    }
+
+    function test_Upgrade2_49_onlyRoleRegistryOwnerCanUpgrade() public {
+        liquidityPool = address(new LiquidityPool());
+        vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
+        vm.prank(address(100));
+        liquidityPoolInstance.upgradeTo(liquidityPool);
+
+        vm.prank(roleRegistryInstance.owner());
+        liquidityPoolInstance.upgradeTo(liquidityPool);
+    }
+
+    function test_eeth_view() public {
+        assertEq(address(liquidityPoolInstance.eETH()), address(eETHInstance));
     }
 }

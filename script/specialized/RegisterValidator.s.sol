@@ -66,7 +66,7 @@ contract RegisterValidator is Script {
         // IStakingManager.DepositData[] calldata _registerValidatorDepositData,
         // bytes32[] calldata _depositDataRootApproval,
         // bytes[] calldata _signaturesForApprovalDeposit
-        liquidityPool.batchRegisterWithLiquidityPoolAsBnftHolder(zeroRoot, _validatorIds, depositDataArray, depositDataRootsForApproval, sig);
+        liquidityPool.batchRegister(zeroRoot, _validatorIds, depositDataArray, depositDataRootsForApproval, sig);
 
         vm.stopBroadcast();
     }

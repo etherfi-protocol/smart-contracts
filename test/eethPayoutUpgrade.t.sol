@@ -1,3 +1,5 @@
+pragma solidity ^0.8.13;
+
 import "./TestSetup.sol";
 
     struct OldOracleReport {
@@ -42,12 +44,13 @@ contract eethPayoutUpgradeTest is TestSetup {
         LiquidityPool newLiquidityImplementation = new LiquidityPool(); 
         EtherFiAdmin newEtherFiAdminImplementation = new EtherFiAdmin();
         EtherFiOracle newEtherFiOracleImplementation = new EtherFiOracle();
-        vm.startPrank(liquidityPoolInstance.owner());
+        vm.startPrank(admin);
         liquidityPoolInstance.upgradeTo(address(newLiquidityImplementation));
         etherFiAdminInstance.upgradeTo(address(newEtherFiAdminImplementation));
-        etherFiOracleInstance.upgradeTo(address(newEtherFiOracleImplementation));
-        liquidityPoolInstance.setTreasury(alice);  
+        liquidityPoolInstance.setFeeRecipient(alice);  
         vm.stopPrank();
+        vm.startPrank(owner);
+        etherFiOracleInstance.upgradeTo(address(newEtherFiOracleImplementation));
     }
 
     function generateReport() public returns (IEtherFiOracle.OracleReport memory) {
@@ -103,7 +106,9 @@ contract eethPayoutUpgradeTest is TestSetup {
         vm.startPrank(oracleAdmin);
         etherFiOracleInstance.submitReport(report);
         skip(1000);
-        etherFiAdminInstance.executeTasks(report, new bytes[](0), new bytes[](0));
+        vm.startPrank(alice);
+        bool isAdmin = roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
+        etherFiAdminInstance.executeTasks(report);
         uint256 balOfTreasury = eETHInstance.balanceOf(treasury);
         assertApproxEqAbs(balOfTreasury, _protocolFees, 10);
         vm.stopPrank(); 
@@ -120,7 +125,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         vm.startPrank(oracleAdmin);
         etherFiOracleInstance.submitReport(new_report);
         skip(1000);
-        etherFiAdminInstance.executeTasks(new_report, new bytes[](0), new bytes[](0));
+        etherFiAdminInstance.executeTasks(new_report);
         uint256 total_pooled_eth_upgraded_after = liquidityPoolInstance.getTotalPooledEther();
         vm.stopPrank();
 
@@ -147,26 +152,26 @@ contract eethPayoutUpgradeTest is TestSetup {
 
         // share price after executing adminTask upgraded contract
         uint256 share_price_upgraded_before = weEthInstance.getWeETHByeETH(1 ether);
-        vm.startPrank(oracleAdmin);
+        vm.prank(oracleAdmin);
         etherFiOracleInstance.submitReport(new_report);
         skip(1000);
-        etherFiAdminInstance.executeTasks(new_report, new bytes[](0), new bytes[](0));
+        vm.prank(alice);
+        etherFiAdminInstance.executeTasks(new_report);
         uint256 share_price_upgraded_after = weEthInstance.getWeETHByeETH(1 ether);
-        vm.stopPrank();
 
         //go back in time before executing adminTask 
         vm.revertTo(setupSnapshot);
 
         // share price after executing adminTask in old contract
-        UUPSProxy oldEtherFiAdmin = UUPSProxy(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
+
         UUPSProxy oldEtherFiOracle = UUPSProxy(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
-        vm.startPrank(oracleAdmin);
+        UUPSProxy oldEtherFiAdmin = UUPSProxy(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         uint256 share_price_not_upgrade_before = weEthInstance.getWeETHByeETH(1 ether);
+        vm.prank(oracleAdmin);
         (bool success1, bytes memory res1) = address(oldEtherFiOracle).call(abi.encodeWithSignature("submitReport((uint32,uint32,uint32,uint32,uint32,int128,uint256[],uint256[],uint256[],uint32[],uint256[],uint256[],uint32,uint32,uint32,uint128,uint32))", old_report));
         skip(1000);
         (bool success2, bytes memory res2) = address(oldEtherFiAdmin).call(abi.encodeWithSignature("executeTasks((uint32,uint32,uint32,uint32,uint32,int128,uint256[],uint256[],uint256[],uint32[],uint256[],uint256[],uint32,uint32,uint32,uint128,uint32),bytes[],bytes[])", old_report, new bytes[](0), new bytes[](0)));
         uint256 share_price_not_upgrade_after = weEthInstance.getWeETHByeETH(1 ether);
-        vm.stopPrank();
 
         //share price should remain the same after paying protocolFees
         assertTrue(success1);
@@ -180,7 +185,17 @@ contract eethPayoutUpgradeTest is TestSetup {
     }
 
     function test_highProtocolFees() public {
-        helperSubmitReport(1000 ether);
+        int128 protocolFees = 1000 ether;
+        IEtherFiOracle.OracleReport memory report = generateReport();
+        report.protocolFees = int128(protocolFees);
+        vm.startPrank(oracleAdmin);
+        etherFiOracleInstance.submitReport(report);
+        skip(1000);
+        vm.startPrank(alice);
+        bool isAdmin = roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
+        vm.expectRevert("EtherFiAdmin: protocol fees exceed 20% total rewards");
+        etherFiAdminInstance.executeTasks(report);
+        vm.stopPrank(); 
     }
 
     function test_negativeFees() public {
@@ -190,7 +205,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         etherFiOracleInstance.submitReport(report);
         skip(1000);
         vm.expectRevert();
-        etherFiAdminInstance.executeTasks(report, new bytes[](0), new bytes[](0));
+        etherFiAdminInstance.executeTasks(report);
         vm.stopPrank();
     }
 
