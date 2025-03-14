@@ -97,6 +97,24 @@ contract DeployV2Dot49Script is Script {
         vm.stopBroadcast();
     }
 
+    function renamingEtherAdminRoles() internal {
+        vm.startBroadcast();
+        address etherfiMultisig = address(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC);
+        address oracleEOA = address(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
+        bytes32 taskManagerRole = keccak256("ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE");
+        bytes32 adminRole = keccak256("ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE");
+        bytes32 validatorManagerRole = keccak256("ETHERFI_ORACLE_EXECUTOR_VALIDATOR_MANAGER_ROLE");
+        RoleRegistry roleRegistry = RoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
+
+        roleRegistry.revokeRole(adminRole, oracleEOA);
+        roleRegistry.revokeRole(validatorManagerRole, oracleEOA);
+
+        roleRegistry.grantRole(taskManagerRole, oracleEOA);
+        roleRegistry.grantRole(taskManagerRole, etherfiMultisig);
+        roleRegistry.grantRole(adminRole, etherfiMultisig);
+        vm.stopBroadcast();
+    }
+
     function upgradeContracts() internal {
         //behind timelock
         vm.startBroadcast(address(timelockInstance));
@@ -119,9 +137,10 @@ contract DeployV2Dot49Script is Script {
 
     function run() external {
         init();
-        deployImplementationContracts();
+        //deployImplementationContracts();
         //only for tenderly test will be done through timelock in prod
-        upgradeContracts();
+        //upgradeContracts();
+        renamingEtherAdminRoles();
 
         //grantRoles();           
         //completeRoleRegistrySetup();
