@@ -1,0 +1,10 @@
+{
+  "EtherFiRedemptionManagerImplementation": "0xe6f40295A7500509faD08E924c91b0F050a7b84b",
+  "EtherFiRedemptionManagerInstance": "0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0",
+  "EtherFiAdminImplementation": "0x683583979C8be7Bcfa41E788Ab38857dfF792f49",
+  "EtherFiRewardsRouterImplementation": "0xe94bF0DF71002ff0165CF4daB461dEBC3978B0fa",
+  "LiquidityPoolImplementation": "0xA6099d83A67a2c653feB5e4e48ec24C5aeE1C515",
+  "WeETHImplementation": "0x353E98F34b6E5a8D9d1876Bf6dF01284d05837cB",
+  "WithdrawRequestNFTImplementation": "0x685870a508b56c7f1002EEF5eFCFa01304474F61",
+  "EtherFiNodesManagerImplementation": "0x572E25fD70b6eB9a3CaD1CE1D48E3CfB938767F1"
+}
