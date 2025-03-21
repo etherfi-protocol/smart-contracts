@@ -17,7 +17,7 @@ contract VTwoDotFourEndToEndTest is TestSetup {
     EtherFiRewardsRouter public etherFiRewardsRouterImplementation;
 
     
-    EtherFiRewardsRouter public etherFiRewardsRouterInstance = EtherFiRewardsRouter(payable(0x73f7b1184B5cD361cC0f7654998953E2a251dd58));
+    //EtherFiRewardsRouter public etherFiRewardsRouterInstance = EtherFiRewardsRouter(payable(0x73f7b1184B5cD361cC0f7654998953E2a251dd58));
     uint256 public balOldTreasury;
 
     //steps to upgrade to v2.49

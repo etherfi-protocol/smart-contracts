@@ -73,7 +73,7 @@ contract DeployV2Dot49Script is Script {
         liquidityPoolInstance = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));
         weETHInstance = WeETH(addressProvider.getContractAddress("WeETH"));
         withdrawRequestNFTInstance = WithdrawRequestNFT(addressProvider.getContractAddress("WithdrawRequestNFT"));
-        //etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(addressProvider.getContractAddress("EtherFiRedemptionManager")));
+        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(address(0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0)));
         eETHInstance = EETH(addressProvider.getContractAddress("EETH"));
         
 
@@ -89,7 +89,7 @@ contract DeployV2Dot49Script is Script {
         console2.log('LiquidityPool: ', address(liquidityPoolInstance));
         console2.log('WeETH: ', address(weETHInstance));
         console2.log('WithdrawRequestNFT: ', address(withdrawRequestNFTInstance));
-        //console2.log('EtherFiRedemptionManager: ', address(etherFiRedemptionManagerInstance));
+        console2.log('EtherFiRedemptionManager: ', address(etherFiRedemptionManagerInstance));
         console2.log('EETH: ', address(eETHInstance));
         console2.log('Treasury: ', address(treasuryAddress));
         
@@ -246,7 +246,9 @@ function writeDeployedContractsToFile() internal {
     }
 
     function initContracts() internal {
+        vm.startBroadcast();
         etherFiRedemptionManagerInstance.initialize(10_00, 30, 1_00, 1000 ether, 0.01157407407 ether);
+        vm.stopBroadcast();
     }
 
     //////////////////////////// OPERATING TIMELOCK SETUP ////////////////////////////
@@ -280,8 +282,8 @@ function writeDeployedContractsToFile() internal {
 
         //deployImplementationContracts();
         //writeDeployedContractsToFile();
-        //initContracts();
-        deployNodesManager();
+        initContracts();
+        //deployNodesManager();
     }
 
 }
