@@ -487,17 +487,18 @@ function setUint32InSlot(uint256 slotNumber, uint256 position, uint32 value) pub
         verifyContractByteCodeMatch(address(withdrawRequestNFTImplementation), address(new WithdrawRequestNFT(treasuryAddress)));
         console2.log("roleRegistryImplementation: ", address(roleRegistryImplementation));
         verifyContractByteCodeMatch(address(roleRegistryImplementation), address(new RoleRegistry()));
-        console2.log("------------------------------------------------------------------------------------------------");
-        console2.log("etherFiTimelockImplementation: ", address(etherFiTimelockImplementation));
-        verifyContractByteCodeMatch(address(etherFiTimelockImplementation), address(new EtherFiTimelock(60 * 60 * 8, proposers, proposers, admin)));
-        console2.log("------------------------------------------------------------------------------------------------");
-
         ///////////////////// IMPORTANT /////////////////////
         // need to change optimization to make length work
         console2.log("------------------------------------------------------------------------------------------------");
         console2.log("etherFiNodesManagerImplementation: ", address(etherFiNodesManagerImplementation));
         verifyContractByteCodeMatch(address(etherFiNodesManagerImplementation), address(new EtherFiNodesManager()));
         console2.log("------------------------------------------------------------------------------------------------");
+
+        //deployed using version 0.8.25 instead of 0.8.24
+        console2.log("etherFiTimelockImplementation: ", address(etherFiTimelockImplementation));
+        verifyContractByteCodeMatch(address(etherFiTimelockImplementation), address(new EtherFiTimelock(60 * 60 * 8, proposers, proposers, admin)));
+        console2.log("------------------------------------------------------------------------------------------------");
+
         
     }
 }
