@@ -2457,6 +2457,43 @@ contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
             uint256[] memory shares = new uint256[](1);
             shares[0] = uint256(eigenPod.withdrawableRestakedExecutionLayerGwei()) * 1 gwei;
             withdrawal = IDelegationManagerTypes.Withdrawal({
+
+    function test_mainnet_70300_queueWithdrawals() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        _whitelist_completeQueuedWithdrawals();
+        _upgrade_etherfi_nodes_manager_contract();
+
+        uint256 validatorId = 70300;
+        _perform_withdrawals(validatorId);
+    }
+
+    function _perform_withdrawals(uint256 validatorId) internal {
+        uint256[] memory validatorIds = new uint256[](1);
+        validatorIds[0] = validatorId;
+
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
+        IEigenPod eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
+        IDelegationManager mgr = managerInstance.delegationManager();
+
+        uint256 etherFiNodeBalance = address(nodeAddress).balance;
+        uint256 liquidityPoolBalance = address(liquidityPoolInstance).balance;
+
+        // 1. Prepare for Params for `queueWithdrawals`
+        IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
+        IStrategy[] memory strategies = new IStrategy[](1);
+        uint256[] memory shares = new uint256[](1);
+        strategies[0] = mgr.beaconChainETHStrategy();
+        shares[0] = uint256(eigenPod.withdrawableRestakedExecutionLayerGwei()) * uint256(1 gwei);
+        params[0] = IDelegationManager.QueuedWithdrawalParams({
+            strategies: strategies,
+            shares: shares,
+            withdrawer: nodeAddress
+        });
+
+        // 2. Prepare for `completeQueuedWithdrawals`
+        IDelegationManager.Withdrawal memory withdrawal = 
+            IDelegationManager.Withdrawal({
                 staker: nodeAddress,
                 delegatedTo: mgr.delegatedTo(nodeAddress),
                 withdrawer: nodeAddress,
@@ -2468,6 +2505,7 @@ contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
 
             bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
         }
+
 
         // 2. call `ProcessNodeExit` to initiate the queued withdrawal
         uint256[] memory validatorIds = new uint256[](1);
@@ -2576,5 +2614,34 @@ contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
         assertEq(IEtherFiNode(nodeAddress).numAssociatedValidators(), 1); // the new validator is registered but not approved yet
     }
     */
+
+
+    function _whitelist_completeQueuedWithdrawals() internal {
+        address target = address(managerInstance);
+        bytes4[] memory selectors = new bytes4[](1);
+
+        // https://etherscan.io/address/0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A#writeProxyContract
+        selectors[0] = 0x33404396; // completeQueuedWithdrawals
+
+        bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector, selectors[0], 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, true);
+        _execute_timelock(target, data, true, false, true, false);
+    }
+
+    function _completeQueuedWithdrawals(uint256[] memory validatorIds, IDelegationManager.Withdrawal[] memory withdrawals) internal {
+        IDelegationManager delegationMgr = managerInstance.delegationManager();
+        IERC20[][] memory tokens = new IERC20[][](1);
+        tokens[0] = new IERC20[](1);
+        uint256[] memory middlewareTimesIndexes = new uint256[](1);
+        bool[] memory receiveAsTokens = new bool[](1);
+        middlewareTimesIndexes[0] = 0;
+        receiveAsTokens[0] = true;
+        tokens[0][0] = IERC20(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE);
+
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(IDelegationManager.completeQueuedWithdrawals.selector, withdrawals, tokens, middlewareTimesIndexes, receiveAsTokens);
+
+        vm.prank(0x7835fB36A8143a014A2c381363cD1A4DeE586d2A);
+        managerInstance.forwardExternalCall(validatorIds, data, address(delegationMgr));
+    }
 
 }

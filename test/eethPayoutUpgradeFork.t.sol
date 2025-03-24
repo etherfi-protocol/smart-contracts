@@ -32,7 +32,7 @@ contract eethPayoutUpgradeTest is TestSetup {
         liquidityPoolInstance.upgradeTo(address(newLiquidityImplementation));
         etherFiAdminInstance.upgradeTo(address(newEtherFiAdminImplementation));
         etherFiOracleInstance.upgradeTo(address(newEtherFiOracleImplementation));
-        liquidityPoolInstance.setTreasury(alice);  
+        liquidityPoolInstance.setFeeRecipient(alice);  
         treasury = alice;
         vm.stopPrank();
     }

@@ -297,7 +297,7 @@ contract TimelockTest is TestSetup {
         }
         {
             address target = address(liquidityPoolInstance);
-            bytes memory data = abi.encodeWithSelector(LiquidityPool.setTreasury.selector, 0xf40bcc0845528873784F36e5C105E62a93ff7021);
+            bytes memory data = abi.encodeWithSelector(LiquidityPool.setFeeRecipient.selector, 0xf40bcc0845528873784F36e5C105E62a93ff7021);
             _execute_timelock(target, data, true, true, true, true);
         }
 
@@ -326,7 +326,7 @@ contract TimelockTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         {
             address target = address(liquidityPoolInstance);
-            bytes memory data = abi.encodeWithSelector(LiquidityPool.setTreasury.selector, 0x0c83EAe1FE72c390A02E426572854931EefF93BA);
+            bytes memory data = abi.encodeWithSelector(LiquidityPool.setFeeRecipient.selector, 0x0c83EAe1FE72c390A02E426572854931EefF93BA);
             _execute_timelock(target, data, true, true, true, true);
         }
     }
@@ -378,6 +378,92 @@ contract TimelockTest is TestSetup {
         address target = address(liquifierInstance);
         bytes memory data = abi.encodeWithSelector(Liquifier.unPauseContract.selector);
         _execute_timelock(target, data, true, true, true, true);
+    }
+
+        function test_update_committee_members() public {
+        initializeRealisticFork(MAINNET_FORK);
+        address etherfi_oracle1 = address(0x6d850af8e7AB3361CfF28b31C701647414b9C92b);
+        address etherfi_oracle2 = address(0x1a9AC2a6fC85A7234f9E21697C75D06B2b350864);
+        address avs_etherfi_oracle1 = address(0xDd777e5158Cb11DB71B4AF93C75A96eA11A2A615);
+        address avs_etherfi_oracle2 = address(0x2c7cB7d5dC4aF9caEE654553a144C76F10D4b320);
+        address target = address(etherFiOracleInstance);
+        bytes memory data = abi.encodeWithSelector(EtherFiOracle.removeCommitteeMember.selector, etherfi_oracle1);
+        _execute_timelock(target, data, true, true, true, true);
+       data = abi.encodeWithSelector(EtherFiOracle.removeCommitteeMember.selector, etherfi_oracle2);
+        _execute_timelock(target, data, true, true, true, true);
+        data = abi.encodeWithSelector(EtherFiOracle.addCommitteeMember.selector, avs_etherfi_oracle1);
+        _execute_timelock(target, data, true, true, true, true);
+        data = abi.encodeWithSelector(EtherFiOracle.addCommitteeMember.selector, avs_etherfi_oracle2);
+        _execute_timelock(target, data, true, true, true, true);
+
+    }
+
+    function test_accept_ownership_role_registry() public {
+        initializeRealisticFork(MAINNET_FORK);
+        roleRegistryInstance = RoleRegistry(address(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9));
+        address target = address(roleRegistryInstance);
+        bytes memory data = abi.encodeWithSelector(Ownable2StepUpgradeable.acceptOwnership.selector);
+        _execute_timelock(target, data, true, true, true, true);
+    }
+
+    function test_v2_dot_49() public {
+        shouldSetupRoleRegistry = false;
+        //upgrade contracts
+        initializeRealisticFork(MAINNET_FORK);
+        address[] memory _targets = new address[](15);
+        bytes[] memory _data = new bytes[](15);
+        uint256[] memory _values = new uint256[](15);
+        address timelockAddress = address(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761);
+        address operatingTimelockAddress = address(0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a);
+        address treasuryAddress = address(0x0c83EAe1FE72c390A02E426572854931EefF93BA);
+        address etherFiRedemptionManagerAddress = address(0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0);
+        vm.startPrank(timelockAddress);
+        roleRegistryInstance = RoleRegistry(address(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9));
+        roleRegistryInstance.acceptOwnership();
+        roleRegistryInstance.onlyProtocolUpgrader(timelockAddress);
+        vm.stopPrank();
+        uint256 balOldTreasury = weEthInstance.balanceOf(address(treasuryInstance));
+        
+
+        _targets[0] = address(managerInstance);
+        _targets[1] = address(etherFiAdminInstance);
+        _targets[2] = address(etherFiRewardsRouterInstance);
+        _targets[3] = address(liquidityPoolInstance);
+        _targets[4] = address(weEthInstance);
+        _targets[5] = address(withdrawRequestNFTInstance);
+        _targets[6] = address(etherFiAdminInstance);
+        _targets[7] = address(liquidityPoolInstance);
+        _targets[8] = address(withdrawRequestNFTInstance);
+        _targets[9] = address(weEthInstance);
+        _targets[10] = address(weEthInstance);
+        _targets[11] = address(addressProviderInstance);
+        _targets[12] = address(addressProviderInstance);
+        _targets[13] = address(addressProviderInstance);
+        _targets[14] = address(addressProviderInstance);
+
+        //upgrade contracts
+        _data[0] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0x572E25fD70b6eB9a3CaD1CE1D48E3CfB938767F1);
+        _data[1] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0x683583979C8be7Bcfa41E788Ab38857dfF792f49);
+        _data[2] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0xe94bF0DF71002ff0165CF4daB461dEBC3978B0fa);
+        _data[3] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0xA6099d83A67a2c653feB5e4e48ec24C5aeE1C515);
+        _data[4] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0x353E98F34b6E5a8D9d1876Bf6dF01284d05837cB);
+        _data[5] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, 0x685870a508b56c7f1002EEF5eFCFa01304474F61);
+
+        //initialize contracts
+        _data[6] = abi.encodeWithSelector(EtherFiAdmin.initializeRoleRegistry.selector, address(roleRegistryInstance));
+        _data[7] = abi.encodeWithSelector(LiquidityPool.initializeVTwoDotFourNine.selector, address(roleRegistryInstance), etherFiRedemptionManagerAddress);
+        _data[8] = abi.encodeWithSelector(WithdrawRequestNFT.initializeOnUpgrade.selector, address(roleRegistryInstance), 10000);
+        _data[9] = abi.encodeWithSelector(weEthInstance.rescueTreasuryWeeth.selector);
+        _data[10] = abi.encodeWithSelector(weEthInstance.transfer.selector, treasuryAddress, balOldTreasury);
+
+        //add to addressProvider
+        _data[11] = abi.encodeWithSelector(AddressProvider.addContract.selector, etherFiRedemptionManagerAddress, "EtherFiRedemptionManager");
+        _data[12] = abi.encodeWithSelector(AddressProvider.addContract.selector, address(etherFiRewardsRouterInstance), "EtherFiRewardsRouter");
+        _data[13] = abi.encodeWithSelector(AddressProvider.addContract.selector, operatingTimelockAddress, "OperatingTimelock");
+        _data[14] = abi.encodeWithSelector(AddressProvider.addContract.selector, address(roleRegistryInstance), "RoleRegistry");
+
+
+        _batch_execute_timelock(_targets, _data, _values, true, true, true, true);
     }
 }
 

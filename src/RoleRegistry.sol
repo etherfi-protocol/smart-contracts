@@ -15,6 +15,13 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
 
     error OnlyProtocolUpgrader();
 
+    /// @notice Returns the maximum allowed role value
+    /// @dev This is used by EnumerableRoles._validateRole to ensure roles are within valid range
+    /// @return uint256 The maximum role value
+    function MAX_ROLE() public pure returns (uint256) {
+        return type(uint256).max;
+    }
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();

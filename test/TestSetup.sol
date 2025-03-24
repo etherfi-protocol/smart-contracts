@@ -55,7 +55,7 @@ import "../src/EtherFiRedemptionManager.sol";
 import "../script/ContractCodeChecker.sol";
 import "../script/Create2Factory.sol";
 import "../src/RoleRegistry.sol";
-
+import "../src/EtherFiRewardsRouter.sol";
 contract TestSetup is Test, ContractCodeChecker {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
@@ -190,6 +190,8 @@ contract TestSetup is Test, ContractCodeChecker {
     EtherFiAdmin public etherFiAdminImplementation;
     EtherFiAdmin public etherFiAdminInstance;
 
+    EtherFiRewardsRouter public etherFiRewardsRouterInstance = EtherFiRewardsRouter(payable(0x73f7b1184B5cD361cC0f7654998953E2a251dd58));
+
     EtherFiNode public node;
     Treasury public treasuryInstance;
 
@@ -202,6 +204,8 @@ contract TestSetup is Test, ContractCodeChecker {
 
     EtherFiTimelock public etherFiTimelockInstance;
     BucketRateLimiter public bucketRateLimiter;
+
+    bool public shouldSetupRoleRegistry = true;
 
     bytes32 root;
     bytes32 rootMigration;
@@ -322,6 +326,7 @@ contract TestSetup is Test, ContractCodeChecker {
     }
 
     function initializeRealisticFork(uint8 forkEnum) public {
+        console.log("initializeRealisticFork");
         initializeRealisticForkWithBlock(forkEnum, 0);
     }
 
@@ -410,7 +415,13 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
-        setupRoleRegistry();
+        if (shouldSetupRoleRegistry) {
+            setupRoleRegistry();
+        }
+    }
+
+    function updateShouldSetRoleRegistry(bool shouldSetup) public {
+        shouldSetupRoleRegistry = shouldSetup;
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
@@ -619,7 +630,7 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
         etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether);
 
-        roleRegistryInstance.grantRole(keccak256("PROTOCOL_ADMIN"), owner);
+        roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), owner);
         
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
         liquidityPoolInstance.initializeVTwoDotFourNine(address(roleRegistryInstance), address(etherFiRedemptionManagerInstance));
@@ -717,14 +728,14 @@ contract TestSetup is Test, ContractCodeChecker {
         );
         etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
 
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAWAL_ADMIN_ROLE(), address(alice));
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAWAL_ADMIN_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAWAL_ADMIN_ROLE(), address(admin));
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(alice));
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(admin));
 
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
@@ -855,8 +866,8 @@ contract TestSetup is Test, ContractCodeChecker {
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), alice);
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         vm.stopPrank();
@@ -1601,6 +1612,25 @@ contract TestSetup is Test, ContractCodeChecker {
         vm.stopPrank();
     }
 
+    function _batch_execute_timelock(address[] memory targets, bytes[] memory data, uint256[] memory values, bool _schedule, bool _log_schedule, bool _execute, bool _log_execute) internal {
+        vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+
+        bytes32 salt = keccak256(abi.encode(targets, data, block.number));
+        if (_schedule) etherFiTimelockInstance.scheduleBatch(targets, values, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
+        if (_log_schedule) _batch_output_schedule_txn(targets, data, values, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
+
+        vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
+
+        if (_execute) etherFiTimelockInstance.executeBatch(targets, values, data, bytes32(0), salt);
+        if (_log_execute) _batch_output_execute_timelock_txn(targets, data, values, bytes32(0), salt);
+
+        vm.warp(block.timestamp + 1);
+        vm.stopPrank();
+    }
+
+
+
+
     function _20240428_updateDepositCap() internal {
         {
             _execute_timelock(
@@ -1639,8 +1669,36 @@ contract TestSetup is Test, ContractCodeChecker {
         stdJson.write(output, output_path);
     }
 
+    function _batch_output_schedule_txn(address[] memory targets, bytes[] memory data, uint256[] memory values, bytes32 predecessor, bytes32 salt, uint256 delay) internal {
+        bytes memory txn_data = abi.encodeWithSelector(TimelockController.scheduleBatch.selector, targets, values, data, predecessor, salt, delay);
+        emit Transaction(address(etherFiTimelockInstance), 0, txn_data);
+
+        string memory obj_k = "timelock_txn";
+        stdJson.serialize(obj_k, "to", address(etherFiTimelockInstance));
+        stdJson.serialize(obj_k, "value", uint256(0));
+        string memory output = stdJson.serialize(obj_k, "data", txn_data);
+
+        string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
+        string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        stdJson.write(output, output_path);
+    }
+
     function _output_execute_timelock_txn(address target, bytes memory data, bytes32 predecessor, bytes32 salt) internal {
         bytes memory txn_data = abi.encodeWithSelector(TimelockController.execute.selector, target, 0, data, predecessor, salt);
+        emit Transaction(address(etherFiTimelockInstance), 0, txn_data);
+
+        string memory obj_k = "timelock_txn";
+        stdJson.serialize(obj_k, "to", address(etherFiTimelockInstance));
+        stdJson.serialize(obj_k, "value", uint256(0));
+        string memory output = stdJson.serialize(obj_k, "data", txn_data);
+
+        string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
+        string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        stdJson.write(output, output_path);
+    }
+
+    function _batch_output_execute_timelock_txn(address[] memory targets, bytes[] memory data, uint256[] memory values,bytes32 predecessor, bytes32 salt) internal {
+        bytes memory txn_data = abi.encodeWithSelector(TimelockController.executeBatch.selector, targets, values, data, predecessor, salt);
         emit Transaction(address(etherFiTimelockInstance), 0, txn_data);
 
         string memory obj_k = "timelock_txn";
