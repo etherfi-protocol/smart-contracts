@@ -15,7 +15,7 @@ using SafeERC20 for IERC20;
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    mapping(address token => uint256 blockNo) public lastPendingMerkleUpdatedToTimestamp;
+    mapping(address token => uint256 timestamp) public lastPendingMerkleUpdatedToTimestamp;
     mapping(address token => uint256 blockNo) public lastRewardsCalculatedToBlock;
     mapping(address token => bytes32 merkleRoot) public claimableMerkleRoots;
     mapping(address token => bytes32 merkleRoot) public pendingMerkleRoots;
