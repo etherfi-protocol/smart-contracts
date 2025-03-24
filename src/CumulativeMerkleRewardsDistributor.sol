@@ -31,7 +31,7 @@ using SafeERC20 for IERC20;
     //--------------------------------------------------------------------------------------
 
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
-    bytes32 public constant REWARDS_MANAGER_ADMIN = keccak256("REWARD_MANAGER_ADMIN");
+    bytes32 public constant CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE = keccak256("CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE");
     RoleRegistry public immutable roleRegistry;
 
 //--------------------------------------------------------------------------------------
@@ -51,18 +51,18 @@ using SafeERC20 for IERC20;
     }
 
     function setClaimDelay(uint256 _claimDelay) external {
-        if(!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         claimDelay = _claimDelay;
     }
 /**
 * @notice Sets a new pending Merkle root for token rewards distribution
-* @dev Only callable by accounts with REWARDS_MANAGER_ADMIN role
+* @dev Only callable by accounts with CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE role
 * @dev The pending root must be finalized after CLAIM_DELAY blocks before it becomes active
 * @param _token Address of the reward token (use ETH_ADDRESS for ETH rewards)
 * @param _merkleRoot New Merkle root containing the reward data
 **/
     function setPendingMerkleRoot(address _token, bytes32 _merkleRoot) external whenNotPaused {
-        if(!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         pendingMerkleRoots[_token] = _merkleRoot;
         lastPendingMerkleUpdatedToTimestamp[_token] = block.timestamp;
         emit PendingMerkleRootUpdated(_token, _merkleRoot);
@@ -70,13 +70,13 @@ using SafeERC20 for IERC20;
 
 /**
 * @notice Finalizes a pending Merkle root after the required delay period
-* @dev Only callable by accounts with REWARDS_MANAGER_ADMIN role
+* @dev Only callable by accounts with CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE role
 * @dev Must wait CLAIM_DELAY blocks after setPendingMerkleRoot before finalizing
 * @param _token Address of the reward token (use ETH_ADDRESS for ETH rewards)
 * @param _finalizedBlock Block number up to which rewards are calculated
 */
     function finalizeMerkleRoot(address _token, uint256 _finalizedBlock) external whenNotPaused {
-        if(!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if(!(block.timestamp >= lastPendingMerkleUpdatedToTimestamp[_token] + claimDelay)) revert InsufficentDelay();
         if(_finalizedBlock < lastRewardsCalculatedToBlock[_token] || _finalizedBlock > block.number) revert InvalidFinalizedBlock();
         bytes32 oldClaimableMerkleRoot = claimableMerkleRoots[_token];
@@ -129,7 +129,7 @@ using SafeERC20 for IERC20;
     }
 
     function updateWhitelistedRecipient(address user, bool isWhitelisted) external {
-        if(!roleRegistry.hasRole(REWARDS_MANAGER_ADMIN, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         whitelistedRecipient[user] = isWhitelisted;
         emit RecipientStatusUpdated(user, isWhitelisted);
     }
