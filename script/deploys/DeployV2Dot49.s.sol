@@ -16,7 +16,7 @@ import "../../src/WithdrawRequestNFT.sol";
 import "forge-std/console.sol";
 import "forge-std/console2.sol";
 
-import "../../src/eETH.sol";
+import "../../src/EETH.sol";
 
 contract DeployV2Dot49Script is Script {
 

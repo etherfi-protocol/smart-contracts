@@ -177,22 +177,22 @@ function setUint32InSlot(uint256 slotNumber, uint256 position, uint32 value) pub
         uint256[] memory shares = new uint256[](1);
         strategies[0] = mgr.beaconChainETHStrategy();
         shares[0] = uint256(eigenPod.withdrawableRestakedExecutionLayerGwei()) * uint256(1 gwei);
-        params[0] = IDelegationManager.QueuedWithdrawalParams({
+        params[0] = IDelegationManagerTypes.QueuedWithdrawalParams({
             strategies: strategies,
-            shares: shares,
-            withdrawer: nodeAddress
+            depositShares: shares,
+            __deprecated_withdrawer: nodeAddress
         });
 
         // 2. Prepare for `completeQueuedWithdrawals`
-        IDelegationManager.Withdrawal memory withdrawal = 
-            IDelegationManager.Withdrawal({
+        IDelegationManagerTypes.Withdrawal memory withdrawal = 
+            IDelegationManagerTypes.Withdrawal({
                 staker: nodeAddress,
                 delegatedTo: mgr.delegatedTo(nodeAddress),
                 withdrawer: nodeAddress,
                 nonce: mgr.cumulativeWithdrawalsQueued(nodeAddress),
                 startBlock: uint32(block.number),
                 strategies: strategies,
-                shares: shares
+                scaledShares: shares
             });
         bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
 
@@ -204,7 +204,10 @@ function setUint32InSlot(uint256 slotNumber, uint256 position, uint32 value) pub
 
         vm.prank(0x7835fB36A8143a014A2c381363cD1A4DeE586d2A);
         managerInstance.forwardExternalCall(validatorIds, data, address(mgr));
-        assertTrue(mgr.pendingWithdrawals(withdrawalRoot));
+        {
+            (IDelegationManagerTypes.Withdrawal memory fetchedWithdrawal, ) = mgr.getQueuedWithdrawal(withdrawalRoot);
+            assertTrue(fetchedWithdrawal.staker == nodeAddress);
+        }
 
         // 4. Wait for the withdrawal to be processed
         _moveClock(7 * 7200);

@@ -6,7 +6,7 @@ import {Test} from "forge-std/Test.sol";
 import "forge-std/Test.sol";
 import {TestSetup} from "./TestSetup.sol";
 import {EtherFiRedemptionManager} from "../src/EtherFiRedemptionManager.sol";
-import {EETH} from "../src/eETH.sol";
+import {EETH} from "../src/EETH.sol";
 import {EtherFiAdmin} from "../src/EtherFiAdmin.sol";
 import {LiquidityPool} from "../src/LiquidityPool.sol";
 import {AuctionManager} from "../src/AuctionManager.sol";
