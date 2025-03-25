@@ -234,7 +234,7 @@ contract EtherFiNodesManager is
     //  6. perform `DelegationManager.completeQueuedWithdrawals`
     //  7. Finally, perform `EtherFiNodesManager.partialWithdraw` for the validator
     /// @dev This function will be re-considered in the future for simpler operations using the advanced rewards distribution mechanisms
-    function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused onlyAdmin {
+    function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused onlyOperatingAdmin {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
 
