@@ -18,6 +18,10 @@ contract MembershipManagerV0Test is TestSetup {
         vm.startPrank(bob);
         eETHInstance.approve(address(membershipManagerInstance), 1_000_000_000 ether);
         vm.stopPrank();
+
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.unPauseContract();
     }
 
     function test_wrapEthBatch() public {
@@ -489,8 +493,8 @@ contract MembershipManagerV0Test is TestSetup {
         vm.deal(henry, 12 ether);
         vm.deal(alice, 12 ether);
 
-        vm.prank(alice);
-        liquidityPoolInstance.updateWhitelistStatus(true);
+        // vm.prank(alice);
+        // liquidityPoolInstance.updateWhitelistStatus(true);
 
         vm.prank(henry);
 

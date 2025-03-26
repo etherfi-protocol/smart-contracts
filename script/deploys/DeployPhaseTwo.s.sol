@@ -81,7 +81,7 @@ contract DeployPhaseTwoScript is Script {
         }
         retrieve_contract_addresses();
 
-        withdrawRequestNftImplementation = new WithdrawRequestNFT();
+        withdrawRequestNftImplementation = new WithdrawRequestNFT(address(0));
         withdrawRequestNftProxy = new UUPSProxy(address(withdrawRequestNftImplementation), "");
         withdrawRequestNftInstance = WithdrawRequestNFT(payable(withdrawRequestNftProxy));
 
@@ -156,18 +156,16 @@ contract DeployPhaseTwoScript is Script {
             acceptableRebaseAprInBps,
             postReportWaitTimeInSlots
         );
-
-        etherFiAdminInstance.updateAdmin(oracleAdminAddress, true);
-
+        // etherFiAdminInstance.updateAdmin(oracleAdminAddress, true);
         IEtherFiOracle(address(etherFiOracleAddress)).setEtherFiAdmin(address(etherFiAdminInstance));
-        IWithdrawRequestNFT(address(withdrawRequestNFTAddress)).updateAdmin(address(etherFiAdminInstance), true);
+        //IWithdrawRequestNFT(address(withdrawRequestNFTAddress)).updateAdmin(address(etherFiAdminInstance), true);
 
         // Used only for development
         if (false) {
             address admin = address(etherFiAdminInstance);
             IAuctionManager(address(auctionAddress)).updateAdmin(admin, true);
             IStakingManager(address(stakingManagerAddress)).updateAdmin(admin, true);
-            ILiquidityPool(address(liquidityPoolAddress)).updateAdmin(admin, true);
+            // ILiquidityPool(address(liquidityPoolAddress)).updateAdmin(admin, true);
             IMembershipManager(address(membershipManagerAddress)).updateAdmin(admin, true);
             IEtherFiNodesManager(address(managerAddress)).updateAdmin(admin, true);
         }

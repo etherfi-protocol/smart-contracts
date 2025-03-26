@@ -512,7 +512,7 @@
   },
   {
     "type": "function",
-    "name": "deRegisterBnftHolder",
+    "name": ".unregisterValidatorSpawner",
     "inputs": [
       {
         "name": "_bNftHolder",

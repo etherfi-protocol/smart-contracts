@@ -71,6 +71,11 @@ library BucketLimiter {
         return limit.remaining >= amount;
     }
 
+    function consumable(Limit memory limit) external view returns (uint64) {
+        _refill(limit);
+        return limit.remaining;
+    }
+
     /*
      * Consumes the given amount from the bucket, if there is sufficient capacity, and returns
      * whether the bucket had enough remaining capacity to consume the amount.
@@ -104,18 +109,22 @@ library BucketLimiter {
     }
 
     function _refill(Limit memory limit) internal view {
-        // We allow for overflow here, as the delta is resilient against it.
         uint64 now_ = uint64(block.timestamp);
-        uint64 delta;
+
+        if (now_ == limit.lastRefill) {
+            return;
+        }
+
+        uint256 delta;
         unchecked {
             delta = now_ - limit.lastRefill;
         }
-        uint64 tokens = delta * limit.refillRate;
-        uint64 newRemaining = limit.remaining + tokens;
+        uint256 tokens = delta * uint256(limit.refillRate);
+        uint256 newRemaining = uint256(limit.remaining) + tokens;
         if (newRemaining > limit.capacity) {
             limit.remaining = limit.capacity;
         } else {
-            limit.remaining = newRemaining;
+            limit.remaining = uint64(newRemaining);
         }
         limit.lastRefill = now_;
     }

@@ -65,8 +65,8 @@ contract StakingManagerTest is TestSetup {
         _executeAdminTasks(report);
 
         vm.startPrank(alice);
-        liquidityPoolInstance.registerAsBnftHolder(alice);
-        liquidityPoolInstance.registerAsBnftHolder(greg);
+        liquidityPoolInstance.registerValidatorSpawner(alice);
+        liquidityPoolInstance.registerValidatorSpawner(greg);
 
         vm.deal(alice, 100000 ether);
         vm.deal(greg, 100000 ether);
@@ -87,7 +87,7 @@ contract StakingManagerTest is TestSetup {
         vm.stopPrank();
         
         startHoax(alice);
-        processedBids = liquidityPoolInstance.batchDepositAsBnftHolder{value: 8 ether}(bidIds, 4);
+        processedBids = liquidityPoolInstance.batchDeposit(bidIds, 4);
 
         IStakingManager.DepositData[]
             memory depositDataArray = new IStakingManager.DepositData[](1);
@@ -126,7 +126,7 @@ contract StakingManagerTest is TestSetup {
         sig = new bytes[](1);
         sig[0] = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
 
-        liquidityPoolInstance.batchRegisterAsBnftHolder(_getDepositRoot(), validatorArray, depositDataArray, depositDataRootsForApproval, sig);
+        liquidityPoolInstance.batchRegister(_getDepositRoot(), validatorArray, depositDataArray, depositDataRootsForApproval, sig);
         vm.stopPrank();
 
         bytes[] memory pubKey = new bytes[](1);
