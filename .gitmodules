@@ -25,3 +25,6 @@
 [submodule "lib/solady"]
 	path = lib/solady
 	url = https://github.com/Vectorized/solady
+[submodule "lib/ironblocks/firewall-consumer-v2"]
+	path = lib/ironblocks/firewall-consumer-v2
+	url = https://github.com/ironblocks/firewall-consumer-v2

@@ -7,3 +7,6 @@ forge-std/=lib/forge-std/src/
 @layerzerolabs/lz-evm-protocol-v2/contracts/=lib/Etherfi-SyncPools/node_modules/@layerzerolabs/lz-evm-protocol-v2/contracts/
 @layerzerolabs/lz-evm-messagelib-v2/contracts/=lib/Etherfi-SyncPools/node_modules/@layerzerolabs/lz-evm-messagelib-v2/contracts/
 @layerzerolabs/lz-evm-oapp-v2/contracts-upgradeable/=lib/Etherfi-SyncPools/node_modules/layerzero-v2/oapp/contracts/
+
+@ironblocks/contracts=lib/ironblocks/firewall-consumer-v2/contracts
+@openzeppelin/contracts-upgradeable=lib/openzeppelin-contracts-upgradeable/
