@@ -6,14 +6,16 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/utils/cryptography/EIP712Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/utils/CountersUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.sol";
+import "@ironblocks/contracts/consumers/presets/proxy/ProxyVennFirewallConsumer.sol";
 
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 
+import "./interfaces/IERC20UpgradeablePayable.sol";
+import "./interfaces/draft-IERC20PermitUpgradeablePayable.sol";
 
-contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20PermitUpgradeable, IeETH {
+contract EETH is ProxyVennFirewallConsumer, IERC20UpgradeablePayable, UUPSUpgradeable, OwnableUpgradeable, IERC20PermitUpgradeablePayable, IeETH {
     using CountersUpgradeable for CountersUpgradeable.Counter;
     ILiquidityPool public liquidityPool;
 
@@ -77,7 +79,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         emit TransferShares(_user, address(0), _share);
     }
 
-    function transfer(address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
+    function transfer(address _recipient, uint256 _amount) external override(IeETH, IERC20UpgradeablePayable) returns (bool) {
         _transfer(msg.sender, _recipient, _amount);
         return true;
     }
@@ -86,7 +88,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         return allowances[_owner][_spender];
     }
 
-    function approve(address _spender, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
+    function approve(address _spender, uint256 _amount) external payable override(IeETH, IERC20UpgradeablePayable) firewallProtected returns (bool) {
         _approve(msg.sender, _spender, _amount);
         return true;
     }
@@ -108,7 +110,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         return true;
     }
 
-    function transferFrom(address _sender, address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
+    function transferFrom(address _sender, address _recipient, uint256 _amount) external override(IeETH, IERC20UpgradeablePayable) returns (bool) {
         uint256 currentAllowance = allowances[_sender][msg.sender];
         require(currentAllowance >= _amount, "TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
         unchecked {
@@ -126,7 +128,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) public virtual override(IeETH, IERC20PermitUpgradeable) {
+    ) public virtual payable override(IeETH, IERC20PermitUpgradeablePayable) firewallProtected {
         require(block.timestamp <= deadline, "ERC20Permit: expired deadline");
 
         bytes32 structHash = keccak256(abi.encode(_PERMIT_TYPEHASH, owner, spender, value, _useNonce(owner), deadline));
@@ -137,6 +139,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         require(signer == owner, "ERC20Permit: invalid signature");
 
         _approve(owner, spender, value);
+    }
+
+    function initializeFirewallAdmin(address _firewallAdmin) external onlyOwner {
+        _initializeFirewallAdmin(_firewallAdmin);
     }
 
     // [INTERNAL FUNCTIONS] 
@@ -184,7 +190,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         return liquidityPool.getTotalPooledEther();
     }
 
-    function balanceOf(address _user) public view override(IeETH, IERC20Upgradeable) returns (uint256) {
+    function balanceOf(address _user) public view override(IeETH, IERC20UpgradeablePayable) returns (uint256) {
         return liquidityPool.getTotalEtherClaimOf(_user);
     }
 

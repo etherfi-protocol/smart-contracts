@@ -7,7 +7,7 @@ gas_reports = ["*"]
 optimizer_runs = 2000
 extra_output = ["storageLayout"]
 bytecode_hash = 'none'
-solc-version = '0.8.24'
+solc-version = '0.8.25'
 
 [fuzz]
 max_shrink_iters = 100
