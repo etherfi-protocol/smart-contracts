@@ -296,6 +296,12 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     function test_mainnet_redeem_eEth() public {
         setUp_Fork();
 
+
+        vm.startPrank(address(etherFiTimelockInstance));
+        etherFiRedemptionManagerInstance.upgradeTo(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(etherFiRedemptionManagerInstance.treasury()), address(roleRegistryInstance))));
+        roleRegistryInstance.grantRole(etherFiRedemptionManagerInstance.ETHERFI_REDEMPTION_MANAGER_HANDLE_REMAINDER_ROLE(), admin);
+        vm.stopPrank();
+
         vm.deal(alice, 100000 ether);
         vm.prank(alice);
         liquidityPoolInstance.deposit{value: 100000 ether}();
@@ -310,19 +316,28 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 treasuryBalance = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
 
         eETHInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
+        uint256 eethBalanceUserBefore = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance));
         etherFiRedemptionManagerInstance.redeemEEth(1 ether, user);
 
-        uint256 totalFee = (1 ether * 1e2) / 1e4;
-        uint256 treasuryFee = (totalFee * 1e3) / 1e4;
+        uint256 totalFee = (1 ether * 30) / 1e4;
+        uint256 treasuryFee = totalFee * 10 / 100;
         uint256 userReceives = 1 ether - totalFee;
-
-        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury())), treasuryBalance + treasuryFee, 1e1);
+        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance)) - eethBalanceUserBefore, totalFee, 1e1);
         assertApproxEqAbs(address(user).balance, userBalance + userReceives, 1e1);
 
-        eETHInstance.approve(address(etherFiRedemptionManagerInstance), 5 ether);
-        vm.expectRevert("EtherFiRedemptionManager: Exceeded total redeemable amount");
-        etherFiRedemptionManagerInstance.redeemEEth(5 ether, user);
-
+        uint256 lpBalanceBefore = address(liquidityPoolInstance).balance;
+        uint256 totalSupplyBefore = eETHInstance.totalSupply();
+        uint256 eethBalanceTreasuryBefore = eETHInstance.balanceOf(etherFiRedemptionManagerInstance.treasury());
+        vm.startPrank(admin);
+        etherFiRedemptionManagerInstance.handleRemainder(totalFee);
+        vm.stopPrank();
+        uint256 lpBalanceAfter = address(liquidityPoolInstance).balance;
+        uint256 totalSupplyAfter = eETHInstance.totalSupply();
+        uint256 eethBalanceTreasuryAfter = eETHInstance.balanceOf(etherFiRedemptionManagerInstance.treasury());
+        assertApproxEqAbs(treasuryFee, eethBalanceTreasuryAfter - eethBalanceTreasuryBefore, 1e1);
+        assertApproxEqAbs(address(etherFiRedemptionManagerInstance).balance, 0, 1e1);
+        assertEq(lpBalanceAfter, lpBalanceBefore, "LP balance should be unchanged");
+        assertApproxEqAbs(totalSupplyBefore - totalSupplyAfter, totalFee - treasuryFee, 1, "eETH total supply should be 90% of remainder amount less");
         vm.stopPrank();
     }
 

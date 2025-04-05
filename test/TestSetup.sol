@@ -410,6 +410,7 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
         roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
+        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(addressProviderInstance.getContractAddress("EtherFiRedemptionManager")));
         
     }
 
