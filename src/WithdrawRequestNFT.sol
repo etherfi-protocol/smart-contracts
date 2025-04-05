@@ -46,6 +46,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
 
     bytes32 public constant WITHDRAW_REQUEST_NFT_ADMIN_ROLE = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
+    bytes32 public constant HANDLE_REMAINDER_ROLE = keccak256("WITHDRAW_REQUEST_NFT_HANDLE_REMAINDER_ROLE"); 
     
 
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
@@ -66,6 +67,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         
         _disableInitializers();
     }
+
+    receive() external payable {}
 
     function initialize(address _liquidityPoolAddress, address _eEthAddress, address _membershipManagerAddress) initializer external {
         require(_liquidityPoolAddress != address(0), "No zero addresses");
@@ -258,9 +261,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// the remainder eETH share for a request = request.shareOfEEth - request.amountOfEEth / (eETH amount to eETH shares rate)
     /// - Splits the remainder into two parts:
     ///  - Treasury: treasury gets a split of the remainder
-    ///   - Burn: the rest of the remainder is burned
+    ///   - Liquidity Pool: the rest of the remainder is sent to the liquidity pool
     /// @param _eEthAmount: the remainder of the eEth amount
-    function handleRemainder(uint256 _eEthAmount) external onlyAdmin {
+    function handleRemainder(uint256 _eEthAmount) external {
+        if(!roleRegistry.hasRole(HANDLE_REMAINDER_ROLE, msg.sender)) revert IncorrectRole();
         require(_eEthAmount != 0, "EETH amount cannot be 0"); 
         require(isScanOfShareRemainderCompleted(), "Not all prev requests have been scanned");
         require(getEEthRemainderAmount() >= _eEthAmount, "Not enough eETH remainder");
@@ -268,18 +272,22 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         uint256 beforeEEthShares = eETH.shares(address(this));
 
         uint256 eEthAmountToTreasury = _eEthAmount.mulDiv(shareRemainderSplitToTreasuryInBps, BASIS_POINT_SCALE);
-        uint256 eEthAmountToBurn = _eEthAmount - eEthAmountToTreasury;
-        uint256 eEthSharesToBurn = liquidityPool.sharesForAmount(eEthAmountToBurn);
-        uint256 eEthSharesToMoved = eEthSharesToBurn + liquidityPool.sharesForAmount(eEthAmountToTreasury);
+        uint256 ethAmountToLiquidityPool = _eEthAmount - eEthAmountToTreasury;
+        uint256 eEthSharesToLiquidityPool = liquidityPool.sharesForAmount(ethAmountToLiquidityPool);
+        uint256 eEthSharesToMoved = eEthSharesToLiquidityPool + liquidityPool.sharesForAmount(eEthAmountToTreasury);
 
         totalRemainderEEthShares -= eEthSharesToMoved;
 
         if (eEthAmountToTreasury > 0) IERC20(address(eETH)).safeTransfer(treasury, eEthAmountToTreasury);
-        if (eEthSharesToBurn > 0) liquidityPool.burnEEthShares(eEthSharesToBurn);
+        if (eEthSharesToLiquidityPool > 0) {
+            uint256 sharesBurned = liquidityPool.withdraw(address(this), liquidityPool.amountForShare(eEthSharesToLiquidityPool));
+            (bool success, ) = address(liquidityPool).call{value: liquidityPool.amountForShare(sharesBurned)}("");
+            require(success, "Send failed");
+        }
 
         require (beforeEEthShares - eEthSharesToMoved == eETH.shares(address(this)), "Invalid eETH shares after remainder handling");
 
-        emit HandledRemainderOfClaimedWithdrawRequests(eEthAmountToTreasury, liquidityPool.amountForShare(eEthSharesToBurn));
+        emit HandledRemainderOfClaimedWithdrawRequests(eEthAmountToTreasury, liquidityPool.amountForShare(eEthSharesToLiquidityPool));
     }
 
     function getEEthRemainderAmount() public view returns (uint256) {

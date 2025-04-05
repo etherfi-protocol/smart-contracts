@@ -134,7 +134,7 @@ contract TenderlyExecute is Script {
         nodeOperatorManagerInstance = NodeOperatorManager(addressProviderInstance.getContractAddress("NodeOperatorManager"));
         node = EtherFiNode(payable(addressProviderInstance.getContractAddress("EtherFiNode")));
         earlyAdopterPoolInstance = EarlyAdopterPool(payable(addressProviderInstance.getContractAddress("EarlyAdopterPool")));
-        withdrawRequestNFTInstance = WithdrawRequestNFT(addressProviderInstance.getContractAddress("WithdrawRequestNFT"));
+        withdrawRequestNFTInstance = WithdrawRequestNFT(payable(addressProviderInstance.getContractAddress("WithdrawRequestNFT")));
         liquifierInstance = Liquifier(payable(addressProviderInstance.getContractAddress("Liquifier")));
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
