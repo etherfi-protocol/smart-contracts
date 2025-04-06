@@ -72,7 +72,7 @@ contract DeployV2Dot49Script is Script {
         etherFiRewardsRouterInstance = EtherFiRewardsRouter(payable(address(0x73f7b1184B5cD361cC0f7654998953E2a251dd58)));
         liquidityPoolInstance = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));
         weETHInstance = WeETH(addressProvider.getContractAddress("WeETH"));
-        withdrawRequestNFTInstance = WithdrawRequestNFT(addressProvider.getContractAddress("WithdrawRequestNFT"));
+        withdrawRequestNFTInstance = WithdrawRequestNFT(payable(addressProvider.getContractAddress("WithdrawRequestNFT")));
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(address(0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0)));
         eETHInstance = EETH(addressProvider.getContractAddress("EETH"));
         
