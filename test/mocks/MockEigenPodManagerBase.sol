@@ -94,4 +94,20 @@ contract MockEigenPodManagerBase is IEigenPodManager, MockShareManagerBase, Mock
 
     /// @notice Returns the accumulated amount of beacon chain ETH Strategy shares
     function burnableETHShares() external virtual view returns (uint256) {}
+
+    /// @notice Sets the address that can set proof timestamps
+    function setProofTimestampSetter(
+        address newProofTimestampSetter
+    ) external {}
+
+    /// @notice Sets the Pectra fork timestamp, only callable by `proofTimestampSetter`
+    function setPectraForkTimestamp(
+        uint64 timestamp
+    ) external {}
+
+    /// @notice Returns the timestamp of the Pectra hard fork
+    /// @dev Specifically, this returns the timestamp of the first non-missed slot at or after the Pectra hard fork
+    function pectraForkTimestamp() external view returns (uint64) {}
+
+
 }

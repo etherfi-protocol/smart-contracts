@@ -472,6 +472,15 @@ interface IDelegationManager is ISignatureUtilsMixin, IDelegationManagerErrors, 
     function depositScalingFactor(address staker, IStrategy strategy) external view returns (uint256);
 
     /**
+     * @notice Returns the Withdrawal associated with a `withdrawalRoot`.
+     * @param withdrawalRoot The hash identifying the queued withdrawal.
+     * @return withdrawal The withdrawal details.
+     */
+    function queuedWithdrawals(
+        bytes32 withdrawalRoot
+    ) external view returns (Withdrawal memory withdrawal);
+
+    /**
      * @notice Returns the Withdrawal and corresponding shares associated with a `withdrawalRoot`
      * @param withdrawalRoot The hash identifying the queued withdrawal
      * @return withdrawal The withdrawal details
@@ -501,7 +510,8 @@ interface IDelegationManager is ISignatureUtilsMixin, IDelegationManagerErrors, 
     ) external view returns (bytes32[] memory);
 
     /**
-     * @notice Converts shares for a set of strategies to deposit shares, likely in order to input into `queueWithdrawals`
+     * @notice Converts shares for a set of strategies to deposit shares, likely in order to input into `queueWithdrawals`.
+     * This function will revert from a division by 0 error if any of the staker's strategies have a slashing factor of 0.
      * @param staker the staker to convert shares for
      * @param strategies the strategies to convert shares for
      * @param withdrawableShares the shares to convert
