@@ -32,6 +32,7 @@ using SafeERC20 for IERC20;
 
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     bytes32 public constant CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE = keccak256("CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE");
+    bytes32 public constant CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE = keccak256("CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE");
     RoleRegistry public immutable roleRegistry;
 
 //--------------------------------------------------------------------------------------
@@ -51,7 +52,7 @@ using SafeERC20 for IERC20;
     }
 
     function setClaimDelay(uint256 _claimDelay) external {
-        if(!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE, msg.sender)) revert IncorrectRole();
         claimDelay = _claimDelay;
     }
 /**
