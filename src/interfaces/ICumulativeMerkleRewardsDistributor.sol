@@ -9,6 +9,7 @@ interface ICumulativeMerkleRewardsDistributor {
     event PendingMerkleRootUpdated(address indexed token, bytes32 merkleRoot);
     event ClaimableMerkleRootUpdated(address indexed token, bytes32 oldMerkleRoot, bytes32 newMerkleRoot, uint256 rewardsCalculatedToBlock);
     event RecipientStatusUpdated(address user, bool isWhitelisted);
+    event ClaimDelayUpdated(uint256 newClaimDelay);
     event Paused(address account);
     event UnPaused(address account);
 

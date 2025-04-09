@@ -54,6 +54,7 @@ using SafeERC20 for IERC20;
     function setClaimDelay(uint256 _claimDelay) external {
         if(!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE, msg.sender)) revert IncorrectRole();
         claimDelay = _claimDelay;
+        emit ClaimDelayUpdated(claimDelay);
     }
 /**
 * @notice Sets a new pending Merkle root for token rewards distribution
