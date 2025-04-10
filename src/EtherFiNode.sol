@@ -615,8 +615,7 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
             require(IEigenPod(eigenPod).activeValidatorCount() == 0, "ACTIVE_VALIDATOR_EXISTS");
             depositSharesToWithdraw = depositShares[0];
         } else {
-            uint256 eigenLayerBeaconStrategyShare = delegationManager.beaconChainETHStrategy().underlyingToShares(32 ether);
-            depositSharesToWithdraw = Math.min(depositShares[0], eigenLayerBeaconStrategyShare);
+            depositSharesToWithdraw = 32 ether;
         }
 
         // Queue the withdrawal
