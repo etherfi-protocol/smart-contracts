@@ -48,8 +48,8 @@ contract EtherFiAdminUpgradeTest is TestSetup {
         vm.startPrank(roleRegistryInstance.owner());
         
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), committeeMember);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), committeeMember);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), committeeMember);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), committeeMember);
         vm.startPrank(committeeMember);
         etherFiAdminInstance.setValidatorTaskBatchSize(batchSize);
         vm.stopPrank();
@@ -71,7 +71,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
                 refBlockTo: 21796145,
                 accruedRewards: 12865299762487754752,
                 protocolFees: 1438401262268165688,
-                validatorsToApprove: new uint256[](100),
+                validatorsToApprove: new uint256[](10),
                 liquidityPoolValidatorsToExit: new uint256[](0),
                 exitedValidators: new uint256[](0),
                 exitedValidatorsExitTimestamps: new uint32[](0),
@@ -138,7 +138,7 @@ contract EtherFiAdminUpgradeTest is TestSetup {
     }
 
     function test_changingBatchSize() public {
-        vm.startPrank(alice);
+        vm.startPrank(chad);
         vm.expectRevert();
         etherFiAdminInstance.setValidatorTaskBatchSize(alternativeBatchSize);
         vm.startPrank(committeeMember);

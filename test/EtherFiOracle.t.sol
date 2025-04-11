@@ -194,6 +194,7 @@ contract EtherFiOracleTest is TestSetup {
         // Now it's period 3
         _moveClock(1024);
 
+        reportAtPeriod3.lastFinalizedWithdrawalRequestId = reportAtPeriod4.lastFinalizedWithdrawalRequestId = 0;
         _executeAdminTasks(reportAtPeriod3);
 
 
@@ -527,6 +528,7 @@ contract EtherFiOracleTest is TestSetup {
         _moveClock(1024 + 2 * slotsPerEpoch);
 
         vm.prank(alice);
+        reportAtPeriod2A.lastFinalizedWithdrawalRequestId = 0;
         bool consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod2A);
         assertEq(consensusReached, true);
 
@@ -557,7 +559,7 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.pause(true, true, true, true, true, true);
         vm.stopPrank();
 
-        vm.expectRevert("Caller is not an unpauser");
+        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
         vm.prank(chad);
         etherFiAdminInstance.unPause(false, false, false, false, false, false);
 
@@ -663,7 +665,7 @@ contract EtherFiOracleTest is TestSetup {
         vm.startPrank(owner);
         etherFiOracleInstance.addCommitteeMember(chad);
         etherFiOracleInstance.setQuorumSize(2);
-        liquidityPoolInstance.setTreasury(address(owner));
+        liquidityPoolInstance.setFeeRecipient(address(owner));
         vm.stopPrank();
 
         _moveClock(1024 + 2 * slotsPerEpoch);

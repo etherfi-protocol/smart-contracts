@@ -49,10 +49,12 @@ import "../src/EtherFiAdmin.sol";
 import "../src/EtherFiTimelock.sol";
 
 import "../src/BucketRateLimiter.sol";
+import "../src/EtherFiRedemptionManager.sol";
 
 import "../script/ContractCodeChecker.sol";
 import "../script/Create2Factory.sol";
 import "../src/RoleRegistry.sol";
+import "../src/EtherFiRewardsRouter.sol";
 import "../src/CumulativeMerkleRewardsDistributor.sol";
 
 contract TestSetup is Test, ContractCodeChecker {
@@ -109,6 +111,7 @@ contract TestSetup is Test, ContractCodeChecker {
     UUPSProxy public membershipNftProxy;
     UUPSProxy public nftExchangeProxy;
     UUPSProxy public withdrawRequestNFTProxy;
+    UUPSProxy public etherFiRedemptionManagerProxy;
     UUPSProxy public etherFiOracleProxy;
     UUPSProxy public etherFiAdminProxy;
     UUPSProxy public cumulativeMerkleRewardsDistributorProxy;
@@ -154,6 +157,9 @@ contract TestSetup is Test, ContractCodeChecker {
     EtherFiRestaker public etherFiRestakerImplementation;
     EtherFiRestaker public etherFiRestakerInstance;
 
+    CumulativeMerkleRewardsDistributor public cumulativeMerkleRewardsDistributorImplementation;
+    CumulativeMerkleRewardsDistributor public cumulativeMerkleRewardsDistributorInstance;
+
     EETH public eETHImplementation;
     EETH public eETHInstance;
 
@@ -172,6 +178,8 @@ contract TestSetup is Test, ContractCodeChecker {
     WithdrawRequestNFT public withdrawRequestNFTImplementation;
     WithdrawRequestNFT public withdrawRequestNFTInstance;
 
+    EtherFiRedemptionManager public etherFiRedemptionManagerInstance;
+
     NFTExchange public nftExchangeImplementation;
     NFTExchange public nftExchangeInstance;
 
@@ -184,8 +192,7 @@ contract TestSetup is Test, ContractCodeChecker {
     EtherFiAdmin public etherFiAdminImplementation;
     EtherFiAdmin public etherFiAdminInstance;
 
-    CumulativeMerkleRewardsDistributor public cumulativeMerkleRewardsDistributorImplementation;
-    CumulativeMerkleRewardsDistributor public cumulativeMerkleRewardsDistributorInstance;
+    EtherFiRewardsRouter public etherFiRewardsRouterInstance = EtherFiRewardsRouter(payable(0x73f7b1184B5cD361cC0f7654998953E2a251dd58));
 
     EtherFiNode public node;
     Treasury public treasuryInstance;
@@ -199,6 +206,8 @@ contract TestSetup is Test, ContractCodeChecker {
 
     EtherFiTimelock public etherFiTimelockInstance;
     BucketRateLimiter public bucketRateLimiter;
+
+    bool public shouldSetupRoleRegistry = true;
 
     bytes32 root;
     bytes32 rootMigration;
@@ -319,6 +328,7 @@ contract TestSetup is Test, ContractCodeChecker {
     }
 
     function initializeRealisticFork(uint8 forkEnum) public {
+        console.log("initializeRealisticFork");
         initializeRealisticForkWithBlock(forkEnum, 0);
     }
 
@@ -404,7 +414,13 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
-        //setupRoleRegistry();
+        if (shouldSetupRoleRegistry) {
+            setupRoleRegistry();
+        }
+    }
+
+    function updateShouldSetRoleRegistry(bool shouldSetup) public {
+        shouldSetupRoleRegistry = shouldSetup;
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
@@ -428,9 +444,9 @@ contract TestSetup is Test, ContractCodeChecker {
         // liquifierInstance.initializeRateLimiter(address(bucketRateLimiter));
 
         deployEtherFiRestaker();
+        vm.stopPrank();
         _upgrade_weETH();
 
-        vm.stopPrank();
     }
 
     function deployEtherFiRestaker() internal {
@@ -585,7 +601,7 @@ contract TestSetup is Test, ContractCodeChecker {
         membershipNftProxy = new UUPSProxy(address(membershipNftImplementation), "");
         membershipNftInstance = MembershipNFT(payable(membershipNftProxy));
 
-        withdrawRequestNFTImplementation = new WithdrawRequestNFT();
+        withdrawRequestNFTImplementation = new WithdrawRequestNFT(address(treasuryInstance));
         withdrawRequestNFTProxy = new UUPSProxy(address(withdrawRequestNFTImplementation), "");
         withdrawRequestNFTInstance = WithdrawRequestNFT(payable(withdrawRequestNFTProxy));
 
@@ -615,10 +631,18 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
+        etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance))), "");
+        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
+        etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether);
+
+        roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), owner);
+        
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
-        liquidityPoolInstance.initializeRoleRegistry(address(roleRegistryInstance));
+        liquidityPoolInstance.initializeVTwoDotFourNine(address(roleRegistryInstance), address(etherFiRedemptionManagerInstance));
+
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
         withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolInstance)), payable(address(eETHInstance)), payable(address(membershipManagerInstance)));
+        withdrawRequestNFTInstance.initializeOnUpgrade(address(roleRegistryInstance), 1000);
         membershipManagerInstance.initialize(
             address(eETHInstance),
             address(liquidityPoolInstance),
@@ -656,7 +680,6 @@ contract TestSetup is Test, ContractCodeChecker {
 
         membershipManagerInstance.updateAdmin(alice, true);
         membershipNftInstance.updateAdmin(alice, true);
-        withdrawRequestNFTInstance.updateAdmin(alice, true);
         // liquidityPoolInstance.updateAdmin(alice, true);
         // liquifierInstance.updateAdmin(alice, true);
 
@@ -720,11 +743,15 @@ contract TestSetup is Test, ContractCodeChecker {
 
         etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(cumulativeMerkleRewardsDistributorInstance.CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE(), admin);
+
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(alice));
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(admin));
+
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         vm.stopPrank();	
@@ -828,9 +855,15 @@ contract TestSetup is Test, ContractCodeChecker {
             roleRegistryInstance = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
             superAdmin = admin;
 
+
             // upgrade our existing contracts to utilize `roleRegistry`
+            vm.stopPrank();
             vm.startPrank(owner);
-            liquidityPoolInstance.initializeRoleRegistry(address(roleRegistryInstance));    
+            EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance));
+            etherFiRedemptionManagerProxy = new UUPSProxy(address(etherFiRedemptionManagerImplementation), "");
+            etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
+            etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark
+            liquidityPoolInstance.initializeVTwoDotFourNine(address(roleRegistryInstance), address(etherFiRedemptionManagerInstance));  
         } 
         if (address(etherFiAdminInstance.roleRegistry()) == address(0x0)) {
             vm.startPrank(owner);
@@ -847,8 +880,8 @@ contract TestSetup is Test, ContractCodeChecker {
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ADMIN_TASK_EXECUTOR_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), alice);
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         vm.stopPrank();
@@ -1007,7 +1040,6 @@ contract TestSetup is Test, ContractCodeChecker {
         stakingManagerInstance.updateAdmin(admin, true); 
         // liquidityPoolInstance.updateAdmin(admin, true);
         membershipManagerInstance.updateAdmin(admin, true);
-        withdrawRequestNFTInstance.updateAdmin(admin, true);
         etherFiOracleInstance.updateAdmin(admin, true);
 
         vm.stopPrank();
@@ -1130,9 +1162,40 @@ contract TestSetup is Test, ContractCodeChecker {
         return permitInput;
     }
 
+    function eEth_createPermitInput(uint256 privKey, address spender, uint256 value, uint256 nonce, uint256 deadline, bytes32 domianSeparator) public returns (IeETH.PermitInput memory) {
+        address _owner = vm.addr(privKey);
+        bytes32 digest = calculatePermitDigest(_owner, spender, value, nonce, deadline, domianSeparator);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privKey, digest);
+        IeETH.PermitInput memory permitInput = IeETH.PermitInput({
+            value: value,
+            deadline: deadline,
+            v: v,
+            r: r,
+            s: s
+        });
+        return permitInput;
+    }
+
+    function weEth_createPermitInput(uint256 privKey, address spender, uint256 value, uint256 nonce, uint256 deadline, bytes32 domianSeparator) public returns (IWeETH.PermitInput memory) {
+        address _owner = vm.addr(privKey);
+        bytes32 digest = calculatePermitDigest(_owner, spender, value, nonce, deadline, domianSeparator);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privKey, digest);
+        IWeETH.PermitInput memory permitInput = IWeETH.PermitInput({
+            value: value,
+            deadline: deadline,
+            v: v,
+            r: r,
+            s: s
+        });
+        return permitInput;
+    }
+
     function registerAsBnftHolder(address _user) internal {
         bool registered = liquidityPoolInstance.validatorSpawner(_user);
-        if (!registered) liquidityPoolInstance.registerAsBnftHolder(_user);
+
+        vm.expectEmit(true, true, false, true);
+        emit LiquidityPool.ValidatorSpawnerRegistered(_user);
+        if (!registered) liquidityPoolInstance.registerValidatorSpawner(_user);
     }
 
     function setUpBnftHolders() internal {
@@ -1437,8 +1500,9 @@ contract TestSetup is Test, ContractCodeChecker {
 
     function _upgrade_liquidity_pool_contract() internal {
         address newImpl = address(new LiquidityPool());
-        vm.prank(liquidityPoolInstance.owner());
+        vm.startPrank(liquidityPoolInstance.owner());
         liquidityPoolInstance.upgradeTo(newImpl);
+        vm.stopPrank();
     }
 
     function _upgrade_liquifier() internal {
@@ -1562,6 +1626,25 @@ contract TestSetup is Test, ContractCodeChecker {
         vm.stopPrank();
     }
 
+    function _batch_execute_timelock(address[] memory targets, bytes[] memory data, uint256[] memory values, bool _schedule, bool _log_schedule, bool _execute, bool _log_execute) internal {
+        vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+
+        bytes32 salt = keccak256(abi.encode(targets, data, block.number));
+        if (_schedule) etherFiTimelockInstance.scheduleBatch(targets, values, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
+        if (_log_schedule) _batch_output_schedule_txn(targets, data, values, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
+
+        vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
+
+        if (_execute) etherFiTimelockInstance.executeBatch(targets, values, data, bytes32(0), salt);
+        if (_log_execute) _batch_output_execute_timelock_txn(targets, data, values, bytes32(0), salt);
+
+        vm.warp(block.timestamp + 1);
+        vm.stopPrank();
+    }
+
+
+
+
     function _20240428_updateDepositCap() internal {
         {
             _execute_timelock(
@@ -1600,8 +1683,36 @@ contract TestSetup is Test, ContractCodeChecker {
         stdJson.write(output, output_path);
     }
 
+    function _batch_output_schedule_txn(address[] memory targets, bytes[] memory data, uint256[] memory values, bytes32 predecessor, bytes32 salt, uint256 delay) internal {
+        bytes memory txn_data = abi.encodeWithSelector(TimelockController.scheduleBatch.selector, targets, values, data, predecessor, salt, delay);
+        emit Transaction(address(etherFiTimelockInstance), 0, txn_data);
+
+        string memory obj_k = "timelock_txn";
+        stdJson.serialize(obj_k, "to", address(etherFiTimelockInstance));
+        stdJson.serialize(obj_k, "value", uint256(0));
+        string memory output = stdJson.serialize(obj_k, "data", txn_data);
+
+        string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
+        string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        stdJson.write(output, output_path);
+    }
+
     function _output_execute_timelock_txn(address target, bytes memory data, bytes32 predecessor, bytes32 salt) internal {
         bytes memory txn_data = abi.encodeWithSelector(TimelockController.execute.selector, target, 0, data, predecessor, salt);
+        emit Transaction(address(etherFiTimelockInstance), 0, txn_data);
+
+        string memory obj_k = "timelock_txn";
+        stdJson.serialize(obj_k, "to", address(etherFiTimelockInstance));
+        stdJson.serialize(obj_k, "value", uint256(0));
+        string memory output = stdJson.serialize(obj_k, "data", txn_data);
+
+        string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
+        string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        stdJson.write(output, output_path);
+    }
+
+    function _batch_output_execute_timelock_txn(address[] memory targets, bytes[] memory data, uint256[] memory values,bytes32 predecessor, bytes32 salt) internal {
+        bytes memory txn_data = abi.encodeWithSelector(TimelockController.executeBatch.selector, targets, values, data, predecessor, salt);
         emit Transaction(address(etherFiTimelockInstance), 0, txn_data);
 
         string memory obj_k = "timelock_txn";

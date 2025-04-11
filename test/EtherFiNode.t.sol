@@ -1339,7 +1339,7 @@ contract EtherFiNodeTest is TestSetup {
         // New Validator Deposit
         // 
         uint256[] memory newValidatorIds = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
-        liquidityPoolInstance.batchDeposit{value: 2 ether}(newValidatorIds, 1, 0);
+        liquidityPoolInstance.batchDeposit(newValidatorIds, 1, 0);
 
         numBnftsHeldByLP = 1;
         numTnftsHeldByLP = 1;
@@ -1487,7 +1487,7 @@ contract EtherFiNodeTest is TestSetup {
         // New Validator Deposit into the same safe
         // 
         uint256[] memory newValidatorIds = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
-        liquidityPoolInstance.batchDeposit{value: 2 ether}(newValidatorIds, 1, validatorId);
+        liquidityPoolInstance.batchDeposit(newValidatorIds, 1, validatorId);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 30 ether + 30 ether);
 
         // Confirm that the num of associated validators still 1
@@ -1940,7 +1940,7 @@ contract EtherFiNodeTest is TestSetup {
         uint256 lp_balance = address(liquidityPoolInstance).balance;
         vm.startPrank(bnftStaker);
         vm.deal(bnftStaker, 2 ether);
-        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDeposit{value: 2 ether}(bidIds, 1, validatorIdToShareSafeWith);
+        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDeposit(bidIds, 1, validatorIdToShareSafeWith);
         (IStakingManager.DepositData[] memory depositDataArray, bytes32[] memory depositDataRootsForApproval, bytes[] memory sig, bytes[] memory pubKey) = _prepareForValidatorRegistration(newValidatorIds);
         liquidityPoolInstance.batchRegister(zeroRoot, newValidatorIds, depositDataArray, depositDataRootsForApproval, sig);
         vm.stopPrank();
@@ -2190,7 +2190,7 @@ contract EtherFiNodeTest is TestSetup {
 
         // launch 1 more validators
         vm.expectRevert("WRONG_BNFT_OWNER");
-        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDeposit{value: 2 ether}(bidIds, 1, validatorId);
+        uint256[] memory newValidatorIds = liquidityPoolInstance.batchDeposit(bidIds, 1, validatorId);
     }
 
     function test_PartialWithdrawalOfPrincipalFails() public {
@@ -2315,7 +2315,7 @@ contract EtherFiNodeTest is TestSetup {
 
         uint256[] memory bidIds = auctionInstance.createBid{value: 0.2 ether}(2, 0.1 ether);
         liquidityPoolInstance.deposit{value: 60 ether}();
-        uint256[] memory newValidators = liquidityPoolInstance.batchDeposit{value: 4 ether}(bidIds, 2);
+        uint256[] memory newValidators = liquidityPoolInstance.batchDeposit(bidIds, 2);
 
         vm.expectRevert("INVALID_PHASE_TRANSITION");
         liquidityPoolInstance.batchCancelDeposit(validatorIds);
@@ -2343,7 +2343,7 @@ contract EtherFiNodeTest is TestSetup {
 
         {
             uint256[] memory bidId1 = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
-            uint256[] memory newValidators = liquidityPoolInstance.batchDeposit{value: 2 ether}(bidId1, 1);
+            uint256[] memory newValidators = liquidityPoolInstance.batchDeposit(bidId1, 1);
         }
 
         uint256[] memory bidId1 = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
@@ -2367,7 +2367,7 @@ contract EtherFiNodeTest is TestSetup {
         nodeOperatorManagerInstance.registerNodeOperator(aliceIPFSHash, 5);
 
         uint256[] memory bidId1 = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
-        liquidityPoolInstance.batchDeposit{value: 2 ether}(bidId1, 1);
+        liquidityPoolInstance.batchDeposit(bidId1, 1);
 
         uint256[] memory bidId2 = auctionInstance.createBid{value: 0.4 ether}(1, 0.4 ether);
         stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(bidId2, false);
@@ -2429,4 +2429,107 @@ contract EtherFiNodeTest is TestSetup {
         // _transferTo(eigenPod, 32 ether);
         // (toOperator, toTnft, toBnft, toTreasury) = managerInstance.calculateTVL(validatorId, 0 ether);
     }
+
+    function test_mainnet_70300_queueWithdrawals() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        _whitelist_completeQueuedWithdrawals();
+        _upgrade_etherfi_nodes_manager_contract();
+
+        uint256 validatorId = 70300;
+        _perform_withdrawals(validatorId);
+    }
+
+    function _perform_withdrawals(uint256 validatorId) internal {
+        uint256[] memory validatorIds = new uint256[](1);
+        validatorIds[0] = validatorId;
+
+        address nodeAddress = managerInstance.etherfiNodeAddress(validatorId);
+        IEigenPod eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
+        IDelegationManager mgr = managerInstance.delegationManager();
+
+        uint256 etherFiNodeBalance = address(nodeAddress).balance;
+        uint256 liquidityPoolBalance = address(liquidityPoolInstance).balance;
+
+        // 1. Prepare for Params for `queueWithdrawals`
+        IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
+        IStrategy[] memory strategies = new IStrategy[](1);
+        uint256[] memory shares = new uint256[](1);
+        strategies[0] = mgr.beaconChainETHStrategy();
+        shares[0] = uint256(eigenPod.withdrawableRestakedExecutionLayerGwei()) * uint256(1 gwei);
+        params[0] = IDelegationManager.QueuedWithdrawalParams({
+            strategies: strategies,
+            shares: shares,
+            withdrawer: nodeAddress
+        });
+
+        // 2. Prepare for `completeQueuedWithdrawals`
+        IDelegationManager.Withdrawal memory withdrawal = 
+            IDelegationManager.Withdrawal({
+                staker: nodeAddress,
+                delegatedTo: mgr.delegatedTo(nodeAddress),
+                withdrawer: nodeAddress,
+                nonce: mgr.cumulativeWithdrawalsQueued(nodeAddress),
+                startBlock: uint32(block.number),
+                strategies: strategies,
+                shares: shares
+            });
+        bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
+
+        // 3. Perform `queueWithdrawals`
+        // https://etherscan.io/address/0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A#writeProxyContract
+        // bytes4 selector = 0x0dd8dd02; // queueWithdrawals
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(0x0dd8dd02, params); // queueWithdrawals
+
+        vm.prank(0x7835fB36A8143a014A2c381363cD1A4DeE586d2A);
+        managerInstance.forwardExternalCall(validatorIds, data, address(mgr));
+        assertTrue(mgr.pendingWithdrawals(withdrawalRoot));
+
+        // 4. Wait for the withdrawal to be processed
+        _moveClock(7 * 7200);
+
+        // 5. Perform `completeQueuedWithdrawals`
+        IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+        withdrawals[0] = withdrawal;
+        _completeQueuedWithdrawals(validatorIds, withdrawals);
+
+        assertEq(address(nodeAddress).balance, etherFiNodeBalance + shares[0]);
+        assertEq(address(liquidityPoolInstance).balance, liquidityPoolBalance);
+
+        // Success
+        vm.prank(managerInstance.owner());
+        managerInstance.partialWithdraw(validatorId);
+
+        assertEq(address(liquidityPoolInstance).balance, liquidityPoolBalance + etherFiNodeBalance + shares[0]);
+    }
+
+    function _whitelist_completeQueuedWithdrawals() internal {
+        address target = address(managerInstance);
+        bytes4[] memory selectors = new bytes4[](1);
+
+        // https://etherscan.io/address/0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A#writeProxyContract
+        selectors[0] = 0x33404396; // completeQueuedWithdrawals
+
+        bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector, selectors[0], 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, true);
+        _execute_timelock(target, data, true, false, true, false);
+    }
+
+    function _completeQueuedWithdrawals(uint256[] memory validatorIds, IDelegationManager.Withdrawal[] memory withdrawals) internal {
+        IDelegationManager delegationMgr = managerInstance.delegationManager();
+        IERC20[][] memory tokens = new IERC20[][](1);
+        tokens[0] = new IERC20[](1);
+        uint256[] memory middlewareTimesIndexes = new uint256[](1);
+        bool[] memory receiveAsTokens = new bool[](1);
+        middlewareTimesIndexes[0] = 0;
+        receiveAsTokens[0] = true;
+        tokens[0][0] = IERC20(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE);
+
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(IDelegationManager.completeQueuedWithdrawals.selector, withdrawals, tokens, middlewareTimesIndexes, receiveAsTokens);
+
+        vm.prank(0x7835fB36A8143a014A2c381363cD1A4DeE586d2A);
+        managerInstance.forwardExternalCall(validatorIds, data, address(delegationMgr));
+    }
+
 }

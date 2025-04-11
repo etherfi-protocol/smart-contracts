@@ -49,7 +49,7 @@ contract UpdateAdmins is Script {
         MembershipManager(payable(membershipManager)).updateAdmin(admin, true);
         MembershipNFT(membershipNFT).updateAdmin(admin, true);
         // NFTExchange(nftExchange).updateAdmin(admin); // Not in the scope of Phase 2 upgrade
-        WithdrawRequestNFT(payable(withdrawRequestNFTAddress)).updateAdmin(admin, true);
+        //WithdrawRequestNFT(payable(withdrawRequestNFTAddress)).updateAdmin(admin, true);
 
         vm.stopBroadcast();
     }
