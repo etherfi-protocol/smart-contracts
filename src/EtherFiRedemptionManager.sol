@@ -48,7 +48,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     uint16 public lowWatermarkInBpsOfTvl; // bps of TVL
 
     event Redeemed(address indexed receiver, uint256 redemptionAmount, uint256 feeAmountToTreasury, uint256 feeAmountToStakers);
-
+    event HandledRedemptionFee(uint256 ethToLiquidityPool, uint256 feeEEthToTreasury);
     error IncorrectRole();
 
     receive() external payable {}
@@ -148,11 +148,11 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         require(address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiRedemptionManager: Invalid liquidity pool balance");
         // require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
 
-        emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver);
+        emit Redeemed(receiver, ethAmount, eEthAmountToReceiver);
 
     }
 
-    function handleRemainder(uint256 _eEthAmount) external {
+    function handleRedemptionFee(uint256 _eEthAmount) external {
         if(!roleRegistry.hasRole(ETHERFI_REDEMPTION_MANAGER_HANDLE_REMAINDER_ROLE, msg.sender)) revert IncorrectRole();
         require(_eEthAmount <= eEth.balanceOf(address(this)), "EtherFiRedemptionManager: Insufficient balance");
         if (_eEthAmount > 0) {
@@ -162,6 +162,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
             uint256 sharesBurned = liquidityPool.withdraw(address(this), ethToLiquidityPool);
             (bool success, ) = address(liquidityPool).call{value: liquidityPool.amountForShare(sharesBurned)}("");
             require(success, "Send failed");
+            emit HandledRedemptionFee(ethToLiquidityPool, feeEEthToTreasury);
         }
     }
 

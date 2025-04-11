@@ -329,7 +329,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 totalSupplyBefore = eETHInstance.totalSupply();
         uint256 eethBalanceTreasuryBefore = eETHInstance.balanceOf(etherFiRedemptionManagerInstance.treasury());
         vm.startPrank(admin);
-        etherFiRedemptionManagerInstance.handleRemainder(totalFee);
+        etherFiRedemptionManagerInstance.handleRedemptionFee(totalFee);
         vm.stopPrank();
         uint256 lpBalanceAfter = address(liquidityPoolInstance).balance;
         uint256 totalSupplyAfter = eETHInstance.totalSupply();
