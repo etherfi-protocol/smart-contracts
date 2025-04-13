@@ -2103,7 +2103,6 @@ contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
         // set back to original value
         updateShouldSetRoleRegistry(originalSetting);
 
-
         // simulate executing eigenlayers slashing upgrade from their timelock
         vm.warp(block.timestamp + 12 days);
         IEigenlayerTimelock eigenLayerTimelock = IEigenlayerTimelock(0xC06Fd4F821eaC1fF1ae8067b36342899b57BAa2d);

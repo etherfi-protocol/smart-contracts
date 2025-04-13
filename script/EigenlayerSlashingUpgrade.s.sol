@@ -114,29 +114,3 @@ contract Upgrade is Script, GnosisHelpers {
 
 
 }
-
-/*
- contract TestUpgrade is Test, Upgrade {
-     function setUp() public {
-         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
-
-         withdrawRequestNFTInstance = WithdrawRequestNFT(payable(addressProvider.getContractAddress("WithdrawRequestNFT")));
-         liquidityPoolInstance = LiquidityPool(payable(addressProvider.getContractAddress("LiquidityPool")));     
-         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(0xD5fd46F4df70a63d60a8563CaD0444Fcc25dcE7f));   
-     }
-    
-     function test_UpgradeWeETHInstantWithdrawal() public {
-         string memory path = "./operations/20250128_upgrade_instant_withdrawal_schedule.json";
-         executeGnosisTransactionBundle(path, 0xcdd57D11476c22d265722F68390b036f3DA48c21);
-        
-         vm.warp(block.timestamp + 3 days + 1);
-
-         path = "./operations/20250128_upgrade_instant_withdrawal_execute.json";
-         executeGnosisTransactionBundle(path, 0xcdd57D11476c22d265722F68390b036f3DA48c21);
-
-         assert(withdrawRequestNFTInstance.pauser() == pauser);
-         assert(address(liquidityPoolInstance.etherFiRedemptionManager()) == address(etherFiRedemptionManagerInstance));
-     }
- }
- */
-
