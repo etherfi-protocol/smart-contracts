@@ -496,4 +496,20 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         managerInstance.forwardExternalCall(validatorIds, data, delayedWithdrawalRouter);
     }
 
+    function test_deployment_bytecode() public {
+        initializeRealisticFork(MAINNET_FORK);
+        EtherFiNodesManager etherFiNodesManagerImplementation = new EtherFiNodesManager();
+        address etherFiNodesManagerImplAddress = address(0xE9EE6923D41Cf5F964F11065436BD90D4577B5e4);
+
+        EtherFiNode etherFiNodeImplementation = new EtherFiNode();
+        address etherFiNodeImplAddress = address(0xc5F2764383f93259Fba1D820b894B1DE0d47937e);
+
+        EtherFiRestaker etherFiRestakerImplementation = new EtherFiRestaker(address(0x7750d328b314EfFa365A0402CcfD489B80B0adda));
+        address etherFiRestakerImplAddress = address(0x0052F731a6BEA541843385ffBA408F52B74Cb624);
+
+        verifyContractByteCodeMatch(etherFiNodesManagerImplAddress, address(etherFiNodesManagerImplementation));
+        verifyContractByteCodeMatch(etherFiNodeImplAddress, address(etherFiNodeImplementation));
+        verifyContractByteCodeMatch(etherFiRestakerImplAddress, address(etherFiRestakerImplementation));
+   }
+
 }

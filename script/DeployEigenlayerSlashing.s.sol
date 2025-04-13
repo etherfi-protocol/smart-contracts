@@ -28,9 +28,8 @@ contract DeployEigenlayerSlashingScript is Script {
     address rewardsCoordinator = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
 
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
 
         etherFiNodeImplementation = new EtherFiNode();
         etherFiNodesManagerImplementation = new EtherFiNodesManager();
