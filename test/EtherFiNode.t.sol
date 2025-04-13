@@ -2151,7 +2151,7 @@ contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
         withdrawal.staker = address(etherfiNode);
         withdrawal.delegatedTo = address(0x17C5F0CC30Bd57B308b7f62600B415fD1335E1FE);
         withdrawal.withdrawer = address(etherfiNode);
-        withdrawal.nonce = 3;
+        withdrawal.nonce = 4;
         withdrawal.startBlock = uint32(queueBlock);
         withdrawal.strategies = strategies;
         withdrawal.scaledShares = toArray_u256(32 ether); // determines amount of eth withdrawn by mock
