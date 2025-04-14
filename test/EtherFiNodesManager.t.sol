@@ -409,7 +409,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         timeStamps[0] = uint32(block.timestamp);
         uint256 validatorId = validatorsToReset[0];
 
-        // need to put the node in a terminal state before it can be unregistered
+        // the oracle calls processNodeExit before its 32ETH is withdrawn
         vm.prank(alice);
         managerInstance.processNodeExit(validatorsToReset, timeStamps);
 
@@ -423,6 +423,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         assertEq(IEtherFiNode(node).isRestakingEnabled(), false);
 
         _moveClock(100000);
+        // now 32 ETH is withdrawn
         _transferTo(managerInstance.etherfiNodeAddress(validatorsToReset[0]), 32 ether);
         managerInstance.batchFullWithdraw(validatorsToReset);
 
