@@ -10,7 +10,7 @@ import "../../src/UUPSProxy.sol";
 import "../../src/interfaces/IStakingManager.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
-import "../../test/DepositDataGeneration.sol";
+import "../../test/common/DepositDataGeneration.sol";
 
 contract RegisterValidator is Script {
     using Strings for string;
