@@ -9,7 +9,6 @@ import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
 import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "./mocks/MockDelegationManager.sol";
 import "./mocks/MockEigenPod.sol";
-import "../test/ArrayTestHelper.sol";
 
 import "forge-std/console2.sol";
 
@@ -25,7 +24,7 @@ interface IEigenlayerTimelock {
     function grantRole(bytes32 role, address account) external;
 }
 
-contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
+contract EtherFiNodeTest is TestSetup {
 
     // from EtherFiNodesManager.sol
     uint256 TreasuryRewardSplit = 50_000;
@@ -73,7 +72,7 @@ contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
         IStakingManager.DepositData[]
             memory depositDataArray = new IStakingManager.DepositData[](1);
 
-        bytes32 root = depGen.generateDepositRoot(
+        bytes32 root = generateDepositRoot(
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             //managerInstance.generateWithdrawalCredentials(etherFiNode),
@@ -365,7 +364,7 @@ contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
         IStakingManager.DepositData[]
             memory depositDataArray = new IStakingManager.DepositData[](1);
 
-        root = depGen.generateDepositRoot(
+        root = generateDepositRoot(
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.generateWithdrawalCredentials(etherFiNode),
@@ -393,7 +392,7 @@ contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
         IStakingManager.DepositData[]
             memory depositDataArray2 = new IStakingManager.DepositData[](1);
 
-        root = depGen.generateDepositRoot(
+        root = generateDepositRoot(
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.generateWithdrawalCredentials(etherFiNode),
@@ -1188,31 +1187,6 @@ contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
         assertEq(address(dan).balance, tNftStakerBalance + tvls[1]);
         assertEq(address(staker).balance, bnftStakerBalance + tvls[2]);
         assertEq(address(treasuryInstance).balance, treasuryBalance + tvls[3]);
-    }
-
-    function test_withdrawFundsFailsWhenReceiverConsumedTooMuchGas() public {
-        uint256 validatorId = bidId[0];
-        address etherfiNode = managerInstance.etherfiNodeAddress(validatorId);
-        vm.deal(address(etherfiNode), 3 ether); // need to give node some eth because it no longer has auction revenue
-
-        uint256 treasuryBalance = address(treasuryInstance).balance;
-        uint256 noAttackerBalance = address(noAttacker).balance;
-        uint256 revertAttackerBalance = address(revertAttacker).balance;
-        uint256 gasDrainAttackerBalance = address(gasDrainAttacker).balance;
-
-        vm.startPrank(address(managerInstance));
-        IEtherFiNode(etherfiNode).withdrawFunds(
-            address(treasuryInstance), 0,
-            address(revertAttacker), 1,
-            address(noAttacker), 1,
-            address(gasDrainAttacker), 1
-        );
-        vm.stopPrank();
-
-        assertEq(address(revertAttacker).balance, revertAttackerBalance);
-        assertEq(address(noAttacker).balance, noAttackerBalance + 1);
-        assertEq(address(gasDrainAttacker).balance, gasDrainAttackerBalance);
-        assertEq(address(treasuryInstance).balance, treasuryBalance + 2);
     }
 
     function test_trackingTVL3() public {

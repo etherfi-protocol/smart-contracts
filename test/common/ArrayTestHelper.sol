@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.27;
 
-import "../src/eigenlayer-interfaces/IDelegationManager.sol";
+import "../../src/eigenlayer-interfaces/IDelegationManager.sol";
 
 contract ArrayTestHelper {
     // Common types used throughout our and eigenlayers protocol
