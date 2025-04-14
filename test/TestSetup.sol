@@ -416,9 +416,6 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
-        if (shouldSetupRoleRegistry) {
-            setupRoleRegistry();
-        }
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
