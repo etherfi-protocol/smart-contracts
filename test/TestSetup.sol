@@ -207,7 +207,7 @@ contract TestSetup is Test, ContractCodeChecker {
     EtherFiTimelock public etherFiTimelockInstance;
     BucketRateLimiter public bucketRateLimiter;
 
-    bool public shouldSetupRoleRegistry = true;
+    bool public shouldSetupRoleRegistry = false;
 
     bytes32 root;
     bytes32 rootMigration;
@@ -409,14 +409,14 @@ contract TestSetup is Test, ContractCodeChecker {
         nodeOperatorManagerInstance = NodeOperatorManager(addressProviderInstance.getContractAddress("NodeOperatorManager"));
         node = EtherFiNode(payable(addressProviderInstance.getContractAddress("EtherFiNode")));
         earlyAdopterPoolInstance = EarlyAdopterPool(payable(addressProviderInstance.getContractAddress("EarlyAdopterPool")));
-        withdrawRequestNFTInstance = WithdrawRequestNFT(addressProviderInstance.getContractAddress("WithdrawRequestNFT"));
+        withdrawRequestNFTInstance = WithdrawRequestNFT(payable(addressProviderInstance.getContractAddress("WithdrawRequestNFT")));
         liquifierInstance = Liquifier(payable(addressProviderInstance.getContractAddress("Liquifier")));
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
-        if (shouldSetupRoleRegistry) {
-            setupRoleRegistry();
-        }
+        roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
+        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(addressProviderInstance.getContractAddress("EtherFiRedemptionManager")));
+        
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {

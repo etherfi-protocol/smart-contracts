@@ -34,6 +34,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     uint256 private constant BASIS_POINT_SCALE = 1e4;
 
     bytes32 public constant ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE");
+    bytes32 public constant ETHERFI_REDEMPTION_MANAGER_HANDLE_REMAINDER_ROLE = keccak256("ETHERFI_REDEMPTION_MANAGER_HANDLE_REMAINDER_ROLE");
 
     RoleRegistry public immutable roleRegistry;
     address public immutable treasury;
@@ -47,6 +48,8 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     uint16 public lowWatermarkInBpsOfTvl; // bps of TVL
 
     event Redeemed(address indexed receiver, uint256 redemptionAmount, uint256 feeAmountToTreasury, uint256 feeAmountToStakers);
+    event HandledRedemptionFee(uint256 ethToLiquidityPool, uint256 feeEEthToTreasury);
+    error IncorrectRole();
 
     receive() external payable {}
 
@@ -137,15 +140,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         require(liquidityPool.withdraw(address(this), eEthAmountToReceiver) == sharesToBurn, "invalid num shares burnt");
         uint256 ethReceived = address(this).balance - prevBalance;
 
-        // To Stakers by burning shares
-        liquidityPool.burnEEthShares(feeShareToStakers);
-
-        // To Treasury by transferring eETH
-        IERC20(address(eEth)).safeTransfer(treasury, eEthFeeAmountToTreasury);
-        
-        // uint256 totalShares = eEth.totalShares();
-        require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
-
         // To Receiver by transferring ETH, using gas 10k for additional safety
         (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
         require(success, "EtherFiRedemptionManager: Transfer failed");
@@ -154,7 +148,22 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         require(address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiRedemptionManager: Invalid liquidity pool balance");
         // require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
 
-        emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver);
+        emit Redeemed(receiver, ethAmount, eEthAmountToReceiver);
+
+    }
+
+    function handleRedemptionFee(uint256 _eEthAmount) external {
+        if(!roleRegistry.hasRole(ETHERFI_REDEMPTION_MANAGER_HANDLE_REMAINDER_ROLE, msg.sender)) revert IncorrectRole();
+        require(_eEthAmount <= eEth.balanceOf(address(this)), "EtherFiRedemptionManager: Insufficient balance");
+        if (_eEthAmount > 0) {
+            uint256 feeEEthToTreasury = _eEthAmount.mulDiv(exitFeeSplitToTreasuryInBps, BASIS_POINT_SCALE);
+            IERC20(address(eEth)).safeTransfer(treasury, feeEEthToTreasury);
+            uint256 ethToLiquidityPool = _eEthAmount - feeEEthToTreasury;
+            uint256 sharesBurned = liquidityPool.withdraw(address(this), ethToLiquidityPool);
+            (bool success, ) = address(liquidityPool).call{value: liquidityPool.amountForShare(sharesBurned)}("");
+            require(success, "Send failed");
+            emit HandledRedemptionFee(ethToLiquidityPool, feeEEthToTreasury);
+        }
     }
 
     /**

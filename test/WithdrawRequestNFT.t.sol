@@ -33,7 +33,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         address cur_impl = withdrawRequestNFTInstance.getImplementation();
         address new_impl = address(new WithdrawRequestNFTIntrusive());
         withdrawRequestNFTInstance.upgradeTo(new_impl);
-        WithdrawRequestNFTIntrusive(address(withdrawRequestNFTInstance)).updateParam(_currentRequestIdToScanFromForShareRemainder, _lastRequestIdToScanUntilForShareRemainder);
+        WithdrawRequestNFTIntrusive(payable(address(withdrawRequestNFTInstance))).updateParam(_currentRequestIdToScanFromForShareRemainder, _lastRequestIdToScanUntilForShareRemainder);
         withdrawRequestNFTInstance.upgradeTo(cur_impl);
     }
 
@@ -341,56 +341,33 @@ contract WithdrawRequestNFTTest is TestSetup {
         _finalizeWithdrawalRequest(requestId);
     }
 
-    function test_aggregateSumEEthShareAmount() public {
-        initializeRealisticFork(MAINNET_FORK);
-
-        vm.startPrank(withdrawRequestNFTInstance.owner());
-        // 1. Upgrade
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(owner))));
-        withdrawRequestNFTInstance.initializeOnUpgrade(address(roleRegistryInstance), 50_00);
-
-        // 2. (For test) update the scan range
-        updateParam(1, 200);
-        vm.stopPrank();
-
-        // 2. Confirm Paused & Can't Unpause
-        assertTrue(withdrawRequestNFTInstance.paused(), "Contract should be paused");
-        vm.prank(admin);
-        vm.expectRevert("scan is not completed");
-        withdrawRequestNFTInstance.unPauseContract();
-        vm.stopPrank();
-        // 3. AggSum
-        // - Can't Unpause untill the scan is not completed
-        // - Can't aggregateSumEEthShareAmount after the scan is completed
-        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(128);
-        assertFalse(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should be completed");
-
-        vm.prank(admin);
-        vm.expectRevert("scan is not completed");
-        withdrawRequestNFTInstance.unPauseContract();
-
-        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(128);
-        assertTrue(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should be completed");
-
-        vm.expectRevert("scan is completed");
-        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(128);
-
-        // 4. Can Unpause
-        vm.startPrank(admin);
-        withdrawRequestNFTInstance.unPauseContract();
-        vm.stopPrank();
-
-        // we will run the test on the forked mainnet to perform the full scan and confirm we can unpause
-    }
-
     function test_handleRemainder() public {
-        test_aggregateSumEEthShareAmount();
         vm.startPrank(etherfi_admin_wallet);
         roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), etherfi_admin_wallet);
         vm.stopPrank();
         vm.prank(etherfi_admin_wallet);
         
         //withdrawRequestNFTInstance.handleRemainder(0.01 ether);
+        vm.stopPrank();
+    }
+
+    function test_handleRemainder_fork_test() public {
+        initializeRealisticForkWithBlock(MAINNET_FORK, 22204960);
+        vm.startPrank(address(etherFiTimelockInstance));
+        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(10 * 100);
+        WithdrawRequestNFT withdrawRequestNFTImpl = new WithdrawRequestNFT(withdrawRequestNFTInstance.treasury());
+        withdrawRequestNFTInstance.upgradeTo(address(withdrawRequestNFTImpl));
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.HANDLE_REMAINDER_ROLE(), admin);
+        vm.stopPrank();
+        uint256 totalSupplyBefore = eETHInstance.totalSupply();
+        uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
+        console2.log(remainderAmount);
+        vm.prank(admin);
+        uint256 lpBalanceBefore = address(liquidityPoolInstance).balance;
+        withdrawRequestNFTInstance.handleRemainder(remainderAmount);
+        uint256 lpBalanceAfter = address(liquidityPoolInstance).balance;
+        assertEq(lpBalanceAfter, lpBalanceBefore, "LP balance should be unchanged");
+        assertApproxEqAbs(eETHInstance.totalSupply() + remainderAmount * 90 / 100, totalSupplyBefore, 1, "eETH total supply should be 90% of remainder amount less");
         vm.stopPrank();
     }
 

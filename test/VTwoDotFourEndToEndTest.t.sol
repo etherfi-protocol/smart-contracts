@@ -69,7 +69,7 @@ contract VTwoDotFourEndToEndTest is TestSetup {
         etherFiRewardsRouterImplementation = EtherFiRewardsRouter(payable(0xe94bF0DF71002ff0165CF4daB461dEBC3978B0fa));
         liquidityPoolImplementation = LiquidityPool(payable(0xA6099d83A67a2c653feB5e4e48ec24C5aeE1C515));
         weEthImplementation = WeETH(0x353E98F34b6E5a8D9d1876Bf6dF01284d05837cB);
-        withdrawRequestNFTImplementation = WithdrawRequestNFT(0x685870a508b56c7f1002EEF5eFCFa01304474F61);
+        withdrawRequestNFTImplementation = WithdrawRequestNFT(payable(0x685870a508b56c7f1002EEF5eFCFa01304474F61));
         etherFiNodesManagerImplementation = EtherFiNodesManager(payable(0x572E25fD70b6eB9a3CaD1CE1D48E3CfB938767F1));
     }
     
