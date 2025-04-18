@@ -309,31 +309,22 @@ contract EtherFiNode is IEtherFiNode, IERC1271 {
     /// @notice total balance (in the execution layer) of this withdrawal safe split into its component parts.
     ///   1. the withdrawal safe balance
     ///   2. the EigenPod balance
-    ///   3. the withdrawals pending in the DelegationManager
-    function splitBalanceInExecutionLayer() public view returns (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _withdrawal_queue) {
+    ///   3. (DEPRECATED) the withdrawals pending in the DelayedWithdrawalRouter
+    function splitBalanceInExecutionLayer() public view returns (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _withdrawalQueue) {
         _withdrawalSafe = address(this).balance;
 
         if (isRestakingEnabled) {
-            IDelegationManager delegationManager = IEtherFiNodesManager(etherFiNodesManager).delegationManager();
-            IStrategy beaconStrategy = delegationManager.beaconChainETHStrategy();
-
-            // get the shares locked in the EigenPod
-            // - `withdrawableShares` reflects the slashing on 'depositShares'
-            (uint256[] memory withdrawableShares, uint256[] memory depositShares) = delegationManager.getWithdrawableShares(address(this), getStrategies());
-            _eigenPod = beaconStrategy.sharesToUnderlyingView(withdrawableShares[0]);
-
-            // get the shares locked in the DelegationManager
-            // - `shares` reflects the slashing. but it can change over time while in the queue until the slashing completion
-            (IDelegationManager.Withdrawal[] memory withdrawals, uint256[][] memory shares) = delegationManager.getQueuedWithdrawals(address(this));
-            for (uint256 i = 0; i < withdrawals.length; i++) {
-                assert (withdrawals[i].strategies.length == 1); // only BeaconETH strategy is used
-                for (uint256 j = 0; j < shares[i].length; j++) {
-                    _withdrawal_queue += shares[i][j];
-                }
-            }
-            _withdrawal_queue = beaconStrategy.sharesToUnderlyingView(_withdrawal_queue);
+            // because eigenlayer locks slashed eth in the pod instead of burning it
+            // this balance will have a slightly different meaning in the presence of slashing.
+            // We are not currently allocated to any slashing AVS so this is fine for now and
+            // we will have a more holistic solution in the next upgrade
+            _eigenPod = eigenPod.balance;
         }
-        return (_withdrawalSafe, _eigenPod, _withdrawal_queue);
+
+        // eth no longer actually moves to the withdrawal queue unlike the old delayedWithdrawalRouter
+        _withdrawalQueue = 0;
+
+        return (_withdrawalSafe, _eigenPod, _withdrawalQueue);
     }
 
     /// @notice total balance (wei) of this safe currently in the execution layer.
