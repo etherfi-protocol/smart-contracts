@@ -118,7 +118,9 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         _delayedWithdrawalRouter = new uint256[](_validatorIds.length);
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            (_withdrawalSafe[i], _eigenPod[i], _delayedWithdrawalRouter[i]) = _getEtherFiNode(_validatorIds[i]).splitBalanceInExecutionLayer();
+            _withdrawalSafe[i] = address(_getEtherFiNode(_validatorIds[i])).balance;
+            _eigenPod[i] = address(_getEigenPod(_validatorIds[i])).balance;
+            _delayedWithdrawalRouter[i] = 0;
         }
     }
 
