@@ -1,6 +1,6 @@
 pragma solidity ^0.8.13;
 
-import "../src/interfaces/IDepositContract.sol";
+import "src/interfaces/IDepositContract.sol";
 
 // https://github.com/lidofinance/lido-dao/blob/master/contracts/0.6.11/deposit_contract.sol#L64
 // This is a rewrite of the Vyper Eth2.0 deposit contract in Solidity.

@@ -15,8 +15,6 @@ import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
 import "./TNFT.sol";
 import "./BNFT.sol";
-import "forge-std/console.sol";
-
 
 contract EtherFiNodesManager is
     Initializable,
@@ -76,11 +74,8 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    event FundsWithdrawn(uint256 indexed _validatorId, uint256 amount);
     event NodeExitRequested(uint256 _validatorId);
-    event NodeExitRequestReverted(uint256 _validatorId);
     event NodeExitProcessed(uint256 _validatorId);
-    event NodeEvicted(uint256 _validatorId);
     event PhaseChanged(uint256 indexed _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
 
     event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
@@ -102,7 +97,6 @@ contract EtherFiNodesManager is
     receive() external payable {}
 
     error InvalidParams();
-    error NonZeroAddress();
     error ForwardedCallNotAllowed();
     error InvalidForwardedCall();
 
@@ -217,10 +211,10 @@ contract EtherFiNodesManager is
         }
     }
 
-    function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes, bool _receiveAsTokens) external onlyOperatingAdmin {
+    function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[] memory withdrawals, bool _receiveAsTokens) external onlyOperatingAdmin {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address etherfiNode = etherfiNodeAddress[_validatorIds[i]];
-            IEtherFiNode(etherfiNode).completeQueuedWithdrawal(withdrawals[i], middlewareTimesIndexes[i], _receiveAsTokens);
+            IEtherFiNode(etherfiNode).completeQueuedWithdrawal(withdrawals[i], _receiveAsTokens);
         }
     }
 
@@ -240,7 +234,7 @@ contract EtherFiNodesManager is
     //  6. perform `DelegationManager.completeQueuedWithdrawals`
     //  7. Finally, perform `EtherFiNodesManager.partialWithdraw` for the validator
     /// @dev This function will be re-considered in the future for simpler operations using the advanced rewards distribution mechanisms
-    function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused onlyAdmin {
+    function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused onlyOperatingAdmin {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
 

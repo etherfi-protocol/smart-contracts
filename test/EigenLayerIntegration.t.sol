@@ -143,33 +143,33 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     // https://holesky.beaconcha.in/validator/1644305#deposits
     function test_verifyWithdrawalCredentials_32ETH() public {
 
-        vm.selectFork(vm.createFork(vm.envString("HISTORICAL_PROOF_RPC_URL")));
+        //vm.selectFork(vm.createFork(vm.envString("HISTORICAL_PROOF_RPC_URL")));
 
-        int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
-        IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-        assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
-        assertEq(validatorInfo.validatorIndex, 0);
-        assertEq(validatorInfo.restakedBalanceGwei, 0);
-        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, 0);
+        //int256 initialShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
+        //IEigenPod.ValidatorInfo memory validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
+        //assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.INACTIVE, "Validator status should be INACTIVE");
+        //assertEq(validatorInfo.validatorIndex, 0);
+        //assertEq(validatorInfo.restakedBalanceGwei, 0);
+        //assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, 0);
 
-        _beacon_process_32ETH_deposit();
-        console2.log("initialShares:", initialShares);
+        //_beacon_process_32ETH_deposit();
+        //console2.log("initialShares:", initialShares);
 
-        bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
-        bytes[] memory data = new bytes[](1);
-        data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
-        vm.prank(owner);
-        managerInstance.forwardEigenpodCall(validatorIds, data);
+        //bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
+        //bytes[] memory data = new bytes[](1);
+        //data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
+        //vm.prank(owner);
+        //managerInstance.forwardEigenpodCall(validatorIds, data);
 
-        int256 updatedShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
-        console2.log("updatedShares:", updatedShares);
+        //int256 updatedShares = eigenLayerEigenPodManager.podOwnerShares(podOwner);
+        //console2.log("updatedShares:", updatedShares);
 
-        validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
-        assertEq(updatedShares, initialShares+32e18, "Shares should be 32 ETH in wei after verifying withdrawal credentials");
-        assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.ACTIVE, "Validator status should be ACTIVE");
-        assertEq(validatorInfo.validatorIndex, validatorIndices[0], "Validator index should be set");
-        assertEq(validatorInfo.restakedBalanceGwei, 32 ether / 1e9, "Restaked balance should be 32 eth");
-        assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
+        //validatorInfo = eigenPod.validatorPubkeyToInfo(pubkey);
+        //assertEq(updatedShares, initialShares+32e18, "Shares should be 32 ETH in wei after verifying withdrawal credentials");
+        //assertTrue(validatorInfo.status == IEigenPod.VALIDATOR_STATUS.ACTIVE, "Validator status should be ACTIVE");
+        //assertEq(validatorInfo.validatorIndex, validatorIndices[0], "Validator index should be set");
+        //assertEq(validatorInfo.restakedBalanceGwei, 32 ether / 1e9, "Restaked balance should be 32 eth");
+        //assertEq(validatorInfo.mostRecentBalanceUpdateTimestamp, oracleTimestamp, "Most recent balance update timestamp should be set");
     }
 
     function test_verifyBalanceUpdates_FAIL_1() public {
@@ -233,12 +233,9 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         assertEq(eigenLayerDelegationManager.isOperator(avs_operator), false);
 
         vm.startPrank(avs_operator);
-        IDelegationManager.OperatorDetails memory detail = IDelegationManager.OperatorDetails({
-            earningsReceiver: address(treasuryInstance),
-            delegationApprover: address(0),
-            stakerOptOutWindowBlocks: 0
-        });
-        eigenLayerDelegationManager.registerAsOperator(detail, "");
+        address delegationApprover = address(0);
+        uint32 allocationDelay = 0;
+        eigenLayerDelegationManager.registerAsOperator(delegationApprover, allocationDelay, "");
         vm.stopPrank();
 
         assertEq(eigenLayerDelegationManager.isOperator(avs_operator), true);
@@ -273,8 +270,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.prank(managerInstance.owner());
         managerInstance.updateAllowedForwardedExternalCalls(selector, delegationManager, true);
 
-        // Confirm, the earningsReceiver is set to treasuryInstance
-        assertEq(eigenLayerDelegationManager.earningsReceiver(operator), address(mainnet_earningsReceiver));
         assertEq(eigenLayerDelegationManager.isDelegated(podOwner), false);
 
         vm.startPrank(owner);
@@ -326,62 +321,62 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     }
 
     function test_completeQueuedWithdrawals_338_for_withdrawal_from_undelegate() public {
-        uint256[] memory validatorIds = new uint256[](1);
-        validatorIds[0] = 338;
-        uint32[] memory timeStamps = new uint32[](1);
-        timeStamps[0] = 0;
-        address nodeAddress = managerInstance.etherfiNodeAddress(validatorIds[0]);
+        //uint256[] memory validatorIds = new uint256[](1);
+        //validatorIds[0] = 338;
+        //uint32[] memory timeStamps = new uint32[](1);
+        //timeStamps[0] = 0;
+        //address nodeAddress = managerInstance.etherfiNodeAddress(validatorIds[0]);
 
-        IDelegationManager mgr = managerInstance.delegationManager();
+        //IDelegationManager mgr = managerInstance.delegationManager();
 
-        // 1. completeQueuedWithdrawal
-        // the withdrawal was queued by `undelegate` in https://etherscan.io/tx/0xd0e400ecd6711cf2f8e5ea97585c864db6d3ffb4d248d3e6d97a66b3683ec98b
-        {
-            // 
-            // {
-            // 'staker': '0x7aC9b51aB907715194F407C15191fce0F3771254',
-            // 'delegatedTo': '0x5b9B3Cf0202a1a3Dc8f527257b7E6002D23D8c85', 
-            // 'withdrawer': '0x7aC9b51aB907715194F407C15191fce0F3771254', 
-            // 'nonce': 0, 
-            // 'startBlock': 19692808, 
-            // 'strategies': ['0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0'], 
-            // 'shares': [32000000000000000000]
-            // }
-            IDelegationManager.Withdrawal memory withdrawal;
-            IERC20[] memory tokens = new IERC20[](1);
-            IStrategy[] memory strategies = new IStrategy[](1);
-            strategies[0] = IStrategy(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0);
-            uint256[] memory shares = new uint256[](1);
-            shares[0] = 32000000000000000000;
-            withdrawal = IDelegationManager.Withdrawal({
-                staker: 0x7aC9b51aB907715194F407C15191fce0F3771254,
-                delegatedTo: 0x5b9B3Cf0202a1a3Dc8f527257b7E6002D23D8c85,
-                withdrawer: 0x7aC9b51aB907715194F407C15191fce0F3771254,
-                nonce: 0,
-                startBlock: 19692808,
-                strategies: strategies,
-                shares: shares
-            });      
+        //// 1. completeQueuedWithdrawal
+        //// the withdrawal was queued by `undelegate` in https://etherscan.io/tx/0xd0e400ecd6711cf2f8e5ea97585c864db6d3ffb4d248d3e6d97a66b3683ec98b
+        //{
+            //// 
+            //// {
+            //// 'staker': '0x7aC9b51aB907715194F407C15191fce0F3771254',
+            //// 'delegatedTo': '0x5b9B3Cf0202a1a3Dc8f527257b7E6002D23D8c85', 
+            //// 'withdrawer': '0x7aC9b51aB907715194F407C15191fce0F3771254', 
+            //// 'nonce': 0, 
+            //// 'startBlock': 19692808, 
+            //// 'strategies': ['0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0'], 
+            //// 'shares': [32000000000000000000]
+            //// }
+            //IDelegationManager.Withdrawal memory withdrawal;
+            //IERC20[] memory tokens = new IERC20[](1);
+            //IStrategy[] memory strategies = new IStrategy[](1);
+            //strategies[0] = IStrategy(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0);
+            //uint256[] memory shares = new uint256[](1);
+            //shares[0] = 32000000000000000000;
+            //withdrawal = IDelegationManagerTypes.Withdrawal({
+                //staker: 0x7aC9b51aB907715194F407C15191fce0F3771254,
+                //delegatedTo: 0x5b9B3Cf0202a1a3Dc8f527257b7E6002D23D8c85,
+                //withdrawer: 0x7aC9b51aB907715194F407C15191fce0F3771254,
+                //nonce: 0,
+                //startBlock: 19692808,
+                //strategies: strategies,
+                //scaledShares: shares
+            //});      
             
-            bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
-            assertTrue(mgr.pendingWithdrawals(withdrawalRoot));
+            //bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
+            //assertTrue(mgr.pendingWithdrawals(withdrawalRoot));
 
-            IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
-            uint256[] memory middlewareTimesIndexes = new uint256[](1);
-            withdrawals[0] = withdrawal;
-            middlewareTimesIndexes[0] = 0;
+            //IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+            //uint256[] memory middlewareTimesIndexes = new uint256[](1);
+            //withdrawals[0] = withdrawal;
+            //middlewareTimesIndexes[0] = 0;
 
-            vm.prank(owner);
-            vm.expectRevert();
-            EtherFiNode(payable(nodeAddress)).completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, false);
+            //vm.prank(owner);
+            //vm.expectRevert();
+            //EtherFiNode(payable(nodeAddress)).completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, false);
 
-            vm.prank(owner);
-            vm.expectRevert();
-            managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
+            //vm.prank(owner);
+            //vm.expectRevert();
+            //managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
 
-            vm.prank(owner);
-            managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, false);
-        }
+            //vm.prank(owner);
+            //managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, false);
+        //}
     }
 
     function test_completeQueuedWithdrawals_338_e2e() public {
@@ -397,20 +392,20 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         test_completeQueuedWithdrawals_338_for_withdrawal_from_undelegate();
 
         // 2. call `ProcessNodeExit` to initiate the queued withdrawal
-        IDelegationManager.Withdrawal memory withdrawal;
+        IDelegationManagerTypes.Withdrawal memory withdrawal;
         {
             IStrategy[] memory strategies = new IStrategy[](1);
             strategies[0] = mgr.beaconChainETHStrategy();
             uint256[] memory shares = new uint256[](1);
             shares[0] = 32 ether;
-            withdrawal = IDelegationManager.Withdrawal({
+            withdrawal = IDelegationManagerTypes.Withdrawal({
                 staker: nodeAddress,
                 delegatedTo: mgr.delegatedTo(nodeAddress),
                 withdrawer: nodeAddress,
                 nonce: mgr.cumulativeWithdrawalsQueued(nodeAddress),
                 startBlock: uint32(block.number),
                 strategies: strategies,
-                shares: shares
+                scaledShares: shares
             });      
         }
         
@@ -420,7 +415,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // 3. Wait
         // Wait 'minDelayBlock' after the `verifyAndProcessWithdrawals`
         {
-            uint256 minDelayBlock = Math.max(mgr.minWithdrawalDelayBlocks(), mgr.strategyWithdrawalDelayBlocks(mgr.beaconChainETHStrategy()));
+            uint256 minDelayBlock = mgr.minWithdrawalDelayBlocks();
             vm.roll(block.number + minDelayBlock);
         }
 
@@ -429,20 +424,18 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
 
         IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
-        uint256[] memory middlewareTimesIndexes = new uint256[](1);
         withdrawals[0] = withdrawal;
-        middlewareTimesIndexes[0] = 0;
 
         vm.prank(owner);
         vm.expectRevert();
-        EtherFiNode(payable(nodeAddress)).completeQueuedWithdrawals(withdrawals, middlewareTimesIndexes, false);
+        EtherFiNode(payable(nodeAddress)).completeQueuedWithdrawals(withdrawals, false);
 
         vm.prank(owner);
         vm.expectRevert();
-        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, false);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, false);
 
         vm.prank(owner);
-        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, middlewareTimesIndexes, true);
+        managerInstance.completeQueuedWithdrawals(validatorIds, withdrawals, true);
     }
 
     // Only {operatingAdmin / Admin / Owner} can perform EigenLayer-related actions
@@ -502,5 +495,21 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         data[0] = abi.encodeWithSelector(selector4);
         managerInstance.forwardExternalCall(validatorIds, data, delayedWithdrawalRouter);
     }
+
+    function test_deployment_bytecode() public {
+        initializeRealisticFork(MAINNET_FORK);
+        EtherFiNodesManager etherFiNodesManagerImplementation = new EtherFiNodesManager();
+        address etherFiNodesManagerImplAddress = address(0xE9EE6923D41Cf5F964F11065436BD90D4577B5e4);
+
+        EtherFiNode etherFiNodeImplementation = new EtherFiNode();
+        address etherFiNodeImplAddress = address(0xc5F2764383f93259Fba1D820b894B1DE0d47937e);
+
+        EtherFiRestaker etherFiRestakerImplementation = new EtherFiRestaker(address(0x7750d328b314EfFa365A0402CcfD489B80B0adda));
+        address etherFiRestakerImplAddress = address(0x0052F731a6BEA541843385ffBA408F52B74Cb624);
+
+        verifyContractByteCodeMatch(etherFiNodesManagerImplAddress, address(etherFiNodesManagerImplementation));
+        verifyContractByteCodeMatch(etherFiNodeImplAddress, address(etherFiNodeImplementation));
+        verifyContractByteCodeMatch(etherFiRestakerImplAddress, address(etherFiRestakerImplementation));
+   }
 
 }

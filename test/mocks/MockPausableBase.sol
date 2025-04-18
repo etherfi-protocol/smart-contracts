@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "../eigenlayer-interfaces/IPauserRegistry.sol";
+import "../../src/eigenlayer-interfaces/IPauserRegistry.sol";
+import "../../src/eigenlayer-interfaces/IPausable.sol";
 
 /**
  * @title Adds pausability to a contract, with pausing & unpausing controlled by the `pauser` and `unpauser` of a PauserRegistry contract.
@@ -19,26 +20,12 @@ import "../eigenlayer-interfaces/IPauserRegistry.sol";
  * @dev We note as well that we have chosen to identify flags by their *bit index* as opposed to their numerical value, so, e.g. defining `DEPOSITS_PAUSED = 3`
  * indicates specifically that if the *third bit* of `_paused` is flipped -- i.e. it is a '1' -- then deposits should be paused
  */
-interface IPausable {
-    /// @dev Thrown when caller is not pauser.
-    error OnlyPauser();
-    /// @dev Thrown when caller is not unpauser.
-    error OnlyUnpauser();
-    /// @dev Thrown when currently paused.
-    error CurrentlyPaused();
-    /// @dev Thrown when invalid `newPausedStatus` is provided.
-    error InvalidNewPausedStatus();
-    /// @dev Thrown when a null address input is provided.
-    error InputAddressZero();
 
-    /// @notice Emitted when the pause is triggered by `account`, and changed to `newPausedStatus`.
-    event Paused(address indexed account, uint256 newPausedStatus);
-
-    /// @notice Emitted when the pause is lifted by `account`, and changed to `newPausedStatus`.
-    event Unpaused(address indexed account, uint256 newPausedStatus);
+// IPausible but all functions are virtual
+contract MockPausableBase is IPausable {
 
     /// @notice Address of the `PauserRegistry` contract that this contract defers to for determining access control (for pausing).
-    function pauserRegistry() external view returns (IPauserRegistry);
+    function pauserRegistry() external virtual view returns (IPauserRegistry) {}
 
     /**
      * @notice This function is used to pause an EigenLayer contract's functionality.
@@ -48,12 +35,12 @@ interface IPausable {
      */
     function pause(
         uint256 newPausedStatus
-    ) external;
+    ) external virtual {}
 
     /**
      * @notice Alias for `pause(type(uint256).max)`.
      */
-    function pauseAll() external;
+    function pauseAll() external virtual {}
 
     /**
      * @notice This function is used to unpause an EigenLayer contract's functionality.
@@ -63,13 +50,13 @@ interface IPausable {
      */
     function unpause(
         uint256 newPausedStatus
-    ) external;
+    ) external virtual {}
 
     /// @notice Returns the current paused status as a uint256.
-    function paused() external view returns (uint256);
+    function paused() external virtual view returns (uint256) {}
 
     /// @notice Returns 'true' if the `indexed`th bit of `_paused` is 1, and 'false' otherwise
     function paused(
         uint8 index
-    ) external view returns (bool);
+    ) external virtual view returns (bool) {}
 }
