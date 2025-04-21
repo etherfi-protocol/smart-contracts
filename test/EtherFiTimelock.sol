@@ -465,6 +465,30 @@ contract TimelockTest is TestSetup {
 
         _batch_execute_timelock(_targets, _data, _values, true, true, true, true);
     }
+
+    function test_timelock_invalidate_request(uint256 requestId) public {
+        initializeRealisticFork(MAINNET_FORK);
+        address operatingTimelockAddress = address(0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a);
+        etherFiTimelockInstance = EtherFiTimelock(payable(operatingTimelockAddress));
+        address[] memory _targets = new address[](3);
+        bytes[] memory _data = new bytes[](3);
+        uint256[] memory _values = new uint256[](3);
+
+        _targets[0] = address(withdrawRequestNFTInstance);
+        _targets[1] = address(withdrawRequestNFTInstance);
+        _targets[2] = address(etherFiAdminInstance);
+
+        //upgrade contracts
+        _data[0] = abi.encodeWithSelector(WithdrawRequestNFT.invalidateRequest.selector, 62222);
+        _data[1] = abi.encodeWithSelector(WithdrawRequestNFT.invalidateRequest.selector, 62223);
+        _data[2] = abi.encodeWithSelector(EtherFiAdmin.setValidatorTaskBatchSize.selector, 30);
+
+        _values[0] = 0;
+        _values[1] = 0;
+        _values[2] = 0;
+
+        _batch_execute_timelock(_targets, _data, _values, true, true, true, true);
+    }
 }
 
 // {"version":"1.0","chainId":"1
