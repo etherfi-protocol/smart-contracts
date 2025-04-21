@@ -368,7 +368,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(amount);
         vm.stopPrank();
 
-        //verify Justin 
+        //verify 62222 and 62223 should not be claimable
         vm.startPrank(withdrawRequestNFTInstance.ownerOf(62222));
         vm.expectRevert("Request is not valid");
         withdrawRequestNFTInstance.claimWithdraw(62222);
