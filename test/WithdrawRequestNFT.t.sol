@@ -341,6 +341,66 @@ contract WithdrawRequestNFTTest is TestSetup {
         _finalizeWithdrawalRequest(requestId);
     }
 
+    function getAllWithdrawalAmount(uint256 lastRequestId) internal returns (uint128) {
+        uint256 requestId = lastRequestId+1;
+        uint128 amount = 0;
+
+        // this takes too long to run so hard code it 
+        // while (requestId <= 62515) {
+        //     WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
+        //     amount += request.amountOfEEth;
+        //     requestId++;
+        // }
+        // console2.log("amount", amount);
+        // return amount;
+        return 91981992168660066831075;
+    }
+
+    function test_processLargeWithdrawal() public {
+        initializeRealisticFork(MAINNET_FORK);
+        uint256 lastRequestId = withdrawRequestNFTInstance.lastFinalizedRequestId();
+        uint128 amount = getAllWithdrawalAmount(lastRequestId);
+        //recreate handleWithdrawal function in etherfiadmin contract
+        vm.startPrank(address(etherFiAdminInstance));
+        withdrawRequestNFTInstance.invalidateRequest(62222);
+        withdrawRequestNFTInstance.invalidateRequest(62223);
+        withdrawRequestNFTInstance.finalizeRequests(62515);
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(amount);
+        vm.stopPrank();
+
+        //verify Justin 
+        vm.startPrank(withdrawRequestNFTInstance.ownerOf(62222));
+        vm.expectRevert("Request is not valid");
+        withdrawRequestNFTInstance.claimWithdraw(62222);
+        vm.stopPrank();
+        vm.startPrank(withdrawRequestNFTInstance.ownerOf(62223));
+        vm.expectRevert("Request is not valid");
+        withdrawRequestNFTInstance.claimWithdraw(62223);
+        vm.stopPrank();
+
+        //verify people after and before can claim
+        vm.startPrank(withdrawRequestNFTInstance.ownerOf(62229));
+        address ownerOf62229 = withdrawRequestNFTInstance.ownerOf(62229);
+        uint256 balanceBefore = ownerOf62229.balance;
+        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(62229);
+        uint256 amountToClaim = request.amountOfEEth;
+        withdrawRequestNFTInstance.claimWithdraw(62229);
+        uint256 balanceAfter = ownerOf62229.balance;
+        assertApproxEqAbs(balanceAfter, balanceBefore + amountToClaim, 100, 'not enough eth claimed');
+        vm.stopPrank();
+
+        vm.startPrank(withdrawRequestNFTInstance.ownerOf(62219));
+        address ownerOf62219 = withdrawRequestNFTInstance.ownerOf(62219);
+       uint256 balanceBefore2 = ownerOf62219.balance;
+       
+       WithdrawRequestNFT.WithdrawRequest memory request2 = withdrawRequestNFTInstance.getRequest(62219);
+       uint256 amountToClaim2 = request2.amountOfEEth;
+        withdrawRequestNFTInstance.claimWithdraw(62219);
+        uint256 balanceAfter2 = ownerOf62219.balance;
+        assertApproxEqAbs(balanceAfter2, balanceBefore2 + amountToClaim2, 100, 'not enough eth claimed');
+        vm.stopPrank();
+    }
+
     function test_aggregateSumEEthShareAmount() public {
         initializeRealisticFork(MAINNET_FORK);
 

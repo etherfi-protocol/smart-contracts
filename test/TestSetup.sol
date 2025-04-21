@@ -207,7 +207,7 @@ contract TestSetup is Test, ContractCodeChecker {
     EtherFiTimelock public etherFiTimelockInstance;
     BucketRateLimiter public bucketRateLimiter;
 
-    bool public shouldSetupRoleRegistry = true;
+    bool public shouldSetupRoleRegistry = false;
 
     bytes32 root;
     bytes32 rootMigration;
