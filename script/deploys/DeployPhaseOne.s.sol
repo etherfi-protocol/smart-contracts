@@ -127,10 +127,12 @@ contract DeployPhaseOne is Script {
         protocolRevenueManager.setAuctionManagerAddress(address(auctionManager));
         protocolRevenueManager.setEtherFiNodesManagerAddress(address(etherFiNodesManager));
 
+        /*
         stakingManager.setEtherFiNodesManagerAddress(address(etherFiNodesManager));
         stakingManager.registerEtherFiNodeImplementationContract(address(etherFiNode));
         stakingManager.registerTNFTContract(address(TNFTInstance));
         stakingManager.registerBNFTContract(address(BNFTInstance));
+        */
 
         vm.stopBroadcast();
 

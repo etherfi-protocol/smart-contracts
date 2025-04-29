@@ -741,6 +741,7 @@ contract MembershipManagerV0Test is TestSetup {
         assertEq(tier2_apr_bp, 0); // 00.00% for tier 2 with weight 3, because there is no deposited ETH in tier 2
     }
 
+/*
     function calculateAggregatedTVL(uint256[] memory _validatorIds) internal view returns (uint256[] memory) {
         uint256[] memory tvls = new uint256[](4);
 
@@ -756,6 +757,7 @@ contract MembershipManagerV0Test is TestSetup {
 
         return tvls;
     }
+    */
 
     function test_Pausable() public {
         assertEq(membershipManagerInstance.paused(), false);

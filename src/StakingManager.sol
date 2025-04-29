@@ -93,6 +93,8 @@ contract StakingManager is
         _disableInitializers();
     }
 
+    function _authorizeUpgrade(address newImplementation) internal override {}
+
     // TODO(dave): are we using a slightly different proxy for this contract?
 
     /// @notice Fetches the address of the implementation contract currently being used by the proxy
@@ -188,8 +190,6 @@ contract StakingManager is
     // TODO(dave): reimplement pausing with role registry
     function pauseContract() external { _pause(); }
     function unPauseContract() external { _unpause(); }
-    /*
-    */
 
 
     //--------------------------------------------------------------------------------------
@@ -203,7 +203,7 @@ contract StakingManager is
 
     /// @notice Fetches the address of the implementation contract currently being used by the beacon proxy
     /// @return the address of the currently used implementation contract
-    function getEtherFiNodeImplementation() public view override returns (address) {
+    function getEtherFiNodeImplementation() public view returns (address) {
         return upgradableBeacon.implementation();
     }
 }

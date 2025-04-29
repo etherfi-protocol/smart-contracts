@@ -167,7 +167,7 @@ contract DeployPhaseTwoScript is Script {
             IStakingManager(address(stakingManagerAddress)).updateAdmin(admin, true);
             // ILiquidityPool(address(liquidityPoolAddress)).updateAdmin(admin, true);
             IMembershipManager(address(membershipManagerAddress)).updateAdmin(admin, true);
-            IEtherFiNodesManager(address(managerAddress)).updateAdmin(admin, true);
+            //IEtherFiNodesManager(address(managerAddress)).updateAdmin(admin, true);
         }
 
         addressProvider.addContract(address(etherFiAdminProxy), "EtherFiAdmin");

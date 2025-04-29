@@ -124,6 +124,7 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
     */
 
+    /*
     function EtherFiNodesManager_aggregatedBalanceOfUnusedSafes() external view returns (uint256 total) {
         uint256 n = nodesManager.getUnusedWithdrawalSafesLength();
 
@@ -133,6 +134,7 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             total += safe.balance + eigenpod.balance;
         }
     }
+    */
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 

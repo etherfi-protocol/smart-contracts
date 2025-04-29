@@ -52,7 +52,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
         // {EigenPod, EigenPodOwner} used in EigenLayer's unit test
         eigenPod = IEigenPod(managerInstance.getEigenPod(validatorId));
-        podOwner = managerInstance.etherfiNodeAddress(validatorId);
+        podOwner = managerInstance.etherFiNodeFromId(validatorId);
         validatorIds = new uint256[](1);
         validatorIds[0] = validatorId;
         ws = EtherFiNode(payable(podOwner));
@@ -121,7 +121,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     function create_validator() public returns (uint256, address, EtherFiNode) {        
         uint256[] memory validatorIds = launch_validator(1, 0, true);
-        address nodeAddress = managerInstance.etherfiNodeAddress(validatorIds[0]);
+        address nodeAddress = managerInstance.etherFiNodeFromId(validatorIds[0]);
         EtherFiNode node = EtherFiNode(payable(nodeAddress));
 
         return (validatorIds[0], nodeAddress, node);
@@ -295,7 +295,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         validatorIds[0] = 338;
         uint32[] memory timeStamps = new uint32[](1);
         timeStamps[0] = 0;
-        address nodeAddress = managerInstance.etherfiNodeAddress(validatorIds[0]);
+        address nodeAddress = managerInstance.etherFiNodeFromId(validatorIds[0]);
 
         IDelegationManager mgr = managerInstance.delegationManager();
 

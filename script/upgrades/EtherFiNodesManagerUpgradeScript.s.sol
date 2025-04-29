@@ -36,8 +36,8 @@ contract EtherFiNodesManagerUpgrade is Script {
             require(false);
         }
 
-        uint64 numberOfValidators = IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).numberOfValidators();
-        address treasury = IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).treasuryContract();
+        //uint64 numberOfValidators = IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).numberOfValidators();
+        //address treasury = IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).treasuryContract();
 
         vm.startBroadcast(deployerPrivateKey);
 
@@ -47,8 +47,8 @@ contract EtherFiNodesManagerUpgrade is Script {
         // EtherFiNodesManagerInstance.initializeOnUpgrade(etherFiAdminAddress, eigenPodManager, delayedWithdrawalRouter, maxEigenlayerWithdrawals);
         // EtherFiNodesManagerInstance.initializeOnUpgrade2(delegationManager);
 
-        require(IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).numberOfValidators() == numberOfValidators);
-        require(IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).treasuryContract() == treasury);
+        //require(IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).numberOfValidators() == numberOfValidators);
+        //require(IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).treasuryContract() == treasury);
         // require(IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).maxEigenlayerWithdrawals() == maxEigenlayerWithdrawals);
         // require(IEtherFiNodesManager(EtherFiNodesManagerProxyAddress).admins(etherFiAdminAddress), "EtherFiAdmin should be an admin");
 

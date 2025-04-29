@@ -84,7 +84,7 @@ interface IEtherFiNodesManager {
 
     function getEigenPod(uint256 id) external view returns (address);
 
-    function etherFiNodeFromId(uint256 id) public view returns (address);
+    function etherFiNodeFromId(uint256 id) external view returns (address);
 
 
     function eigenPodManager() external view returns (address);

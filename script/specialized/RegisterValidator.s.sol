@@ -45,7 +45,7 @@ contract RegisterValidator is Script {
 
         _validatorIds[0] = 1;
 
-        address etherFiNode = managerInstance.etherfiNodeAddress(_validatorIds[0]);
+        address etherFiNode = managerInstance.etherFiNodeFromId(_validatorIds[0]);
 
         depositDataArray[0] = IStakingManager.DepositData({
             publicKey: hex"ad85894db60881bcee956116beae6bc6934d7eca8317dc3084adf665be426a21a1855b5196a7515fd791bf0b6e3727c5",
