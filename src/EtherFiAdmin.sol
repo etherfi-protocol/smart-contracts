@@ -224,9 +224,11 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         } else if (taskType == TaskType.SendExitRequests) {
             liquidityPool.sendExitRequests(_validators);
         } else if (taskType == TaskType.ProcessNodeExit) {
-            etherFiNodesManager.processNodeExit(_validators, _timestamps);
+            // TODO(dave): re-implement for V3
+            // etherFiNodesManager.processNodeExit(_validators, _timestamps);
         } else if (taskType == TaskType.MarkBeingSlashed) {
-            etherFiNodesManager.markBeingSlashed(_validators);
+            // TODO(dave): re-imprement for V3
+            //etherFiNodesManager.markBeingSlashed(_validators);
         }
         emit ValidatorManagementTaskCompleted(taskHash, _reportHash, _validators, _timestamps, taskType);
     }

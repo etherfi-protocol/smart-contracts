@@ -7,9 +7,61 @@ import "./IEtherFiNode.sol";
 import "../eigenlayer-interfaces/IEigenPodManager.sol";
 import "../eigenlayer-interfaces/IDelegationManager.sol";
 import "../eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
+import "../interfaces/IAuctionManager.sol";
+import "../interfaces/IEtherFiNode.sol";
+import "../interfaces/IEtherFiNodesManager.sol";
+import "../interfaces/IProtocolRevenueManager.sol";
+import "../interfaces/IStakingManager.sol";
+
 
 
 interface IEtherFiNodesManager {
+
+    struct LegacyManagerState {
+        uint64 numberOfValidators; // # of validators in LIVE or WAITING_FOR_APPROVAL phases
+        uint64 nonExitPenaltyPrincipal;
+        uint64 nonExitPenaltyDailyRate; // in basis points
+        uint64 SCALE;
+
+        address treasuryContract;
+        address stakingManagerContract;
+        address DEPRECATED_protocolRevenueManagerContract;
+
+        // validatorId == bidId -> withdrawalSafeAddress
+        mapping(uint256 => address) etherfiNodeAddress;
+
+        address tnft;
+        address bnft;
+        IAuctionManager auctionManager;
+        IProtocolRevenueManager DEPRECATED_protocolRevenueManager;
+
+        RewardsSplit stakingRewardsSplit;
+        RewardsSplit DEPRECATED_protocolRewardsSplit;
+
+        address DEPRECATED_admin;
+        mapping(address => bool) admins;
+
+        IEigenPodManager eigenPodManager;
+        IDelayedWithdrawalRouter delayedWithdrawalRouter;
+        // max number of queued eigenlayer withdrawals to attempt to claim in a single tx
+        uint8 maxEigenlayerWithdrawals;
+
+        // stack of re-usable withdrawal safes to save gas
+        address[] unusedWithdrawalSafes;
+
+        bool DEPRECATED_enableNodeRecycling;
+
+        mapping(uint256 => ValidatorInfo) validatorInfos;
+
+        IDelegationManager delegationManager;
+
+        mapping(address => bool) operatingAdmin;
+
+        // function -> allowed
+        mapping(bytes4 => bool) allowedForwardedEigenpodCalls;
+        // function -> target_address -> allowed
+        mapping(bytes4 => mapping(address => bool)) allowedForwardedExternalCalls;
+    }
 
     struct ValidatorInfo {
         uint32 validatorIndex;
@@ -25,7 +77,26 @@ interface IEtherFiNodesManager {
         uint64 bnft;
     }
 
+    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external returns (bytes[] memory returnData);
+    function addressToWithdrawalCredentials(address addr) external pure returns (bytes memory);
+    function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external;
+    function etherFiNodeFromPubkeyHash(bytes32 pubkeyHash) external view returns (IEtherFiNode);
+
+    function getEigenPod(uint256 id) external view returns (address);
+
+    function etherFiNodeFromId(uint256 id) public view returns (address);
+
+
+    function eigenPodManager() external view returns (address);
+    function delegationManager() external view returns (address);
+
+    function pauseContract() external;
+    function unPauseContract() external;
+
+
+
     // VIEW functions
+    /*
     function delayedWithdrawalRouter() external view returns (IDelayedWithdrawalRouter);
     function eigenPodManager() external view returns (IEigenPodManager);
     function delegationManager() external view returns (IDelegationManager);
@@ -41,6 +112,7 @@ interface IEtherFiNodesManager {
     function getValidatorInfo(uint256 _validatorId) external view returns (ValidatorInfo memory);
     function numAssociatedValidators(uint256 _validatorId) external view returns (uint256);
     function phase(uint256 _validatorId) external view returns (IEtherFiNode.VALIDATOR_PHASE phase);
+    function getEigenPod(uint256 _validatorId) external view returns (IEigenPod);
 
     function generateWithdrawalCredentials(address _address) external view returns (bytes memory);
     function nonExitPenaltyDailyRate() external view returns (uint64);
@@ -74,4 +146,5 @@ interface IEtherFiNodesManager {
     function updateAdmin(address _address, bool _isAdmin) external;
     function pauseContract() external;
     function unPauseContract() external;
+    */
 }

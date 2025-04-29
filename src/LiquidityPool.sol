@@ -374,6 +374,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// Until then the 1 ETH is considered as a loss
     /// Be careful not to cancel the registration after the approval phase
     function batchCancelDeposit(uint256[] calldata _validatorIds) external whenNotPaused {
+
+        // TODO(dave): how should we change cancel with new lifecycle changes
+        /*
         address bnftHolder = address(this);
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
@@ -384,6 +387,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
             }
             else numPendingDeposits -= 1;
         }
+        */
 
         stakingManager.batchCancelDepositAsBnftHolder(_validatorIds, msg.sender);
     }
@@ -410,11 +414,16 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit ValidatorSpawnerUnregistered(_user);
     }
 
+    // TODO(dave): convert to pubkeyHash?
+    event ValidatorExitRequested(uint256 indexed validatorId);
+
     /// @notice Send the exit requests as the T-NFT holder of the LiquidityPool validators
     function sendExitRequests(uint256[] calldata _validatorIds) external {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        
-        nodesManager.batchSendExitRequest(_validatorIds);
+
+        for (uint256 i = 0; i < _validatorIds.length; i++) {
+            emit ValidatorExitRequested(_validatorIds[i]);
+        }
     }
 
     /// @notice Rebase by ether.fi

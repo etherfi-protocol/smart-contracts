@@ -46,6 +46,14 @@ interface IEtherFiNode {
         DEPRECATED_READY_FOR_DEPOSIT
     }
 
+    function startCheckpoint() external;
+    function setProofSubmitter(address _newProofSubmitter) external;
+    function createEigenPod() external;
+    function getEigenPod() external view returns (IEigenPod);
+    function callEigenPod(bytes memory data) external returns (bytes memory);
+    function forwardExternalCall(address to, bytes memory data) external returns (bytes memory);
+
+    /*
     // VIEW functions
     function numAssociatedValidators() external view returns (uint256);
     function numExitRequestsByTnft() external view returns (uint16);
@@ -100,4 +108,5 @@ interface IEtherFiNode {
     ) external;
 
     function moveFundsToManager(uint256 _amount) external;
+    */
 }

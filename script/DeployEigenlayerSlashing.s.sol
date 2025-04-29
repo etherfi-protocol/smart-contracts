@@ -31,7 +31,7 @@ contract DeployEigenlayerSlashingScript is Script {
 
         vm.startBroadcast();
 
-        etherFiNodeImplementation = new EtherFiNode();
+        etherFiNodeImplementation = new EtherFiNode(address(0),address(0),address(0),address(0));
         etherFiNodesManagerImplementation = new EtherFiNodesManager();
         etherFiRestakerImplementation = new EtherFiRestaker(rewardsCoordinator);
 

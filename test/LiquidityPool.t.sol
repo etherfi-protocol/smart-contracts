@@ -796,13 +796,13 @@ contract LiquidityPoolTest is TestSetup {
 
         // verify that created nodes have associated eigenPods
         IEtherFiNode node = IEtherFiNode(managerInstance.etherfiNodeAddress(bidIds[0]));
-        assertFalse(address(node.eigenPod()) == address(0x0));
+        assertFalse(address(node.getEigenPod()) == address(0x0));
         node = IEtherFiNode(managerInstance.etherfiNodeAddress(bidIds[1]));
-        assertFalse(address(node.eigenPod()) == address(0x0));
+        assertFalse(address(node.getEigenPod()) == address(0x0));
         node = IEtherFiNode(managerInstance.etherfiNodeAddress(bidIds[2]));
-        assertFalse(address(node.eigenPod()) == address(0x0));
+        assertFalse(address(node.getEigenPod()) == address(0x0));
         node = IEtherFiNode(managerInstance.etherfiNodeAddress(bidIds[3]));
-        assertFalse(address(node.eigenPod()) == address(0x0));
+        assertFalse(address(node.getEigenPod()) == address(0x0));
     }
 
     function test_RegisterAsBNFTHolder() public {

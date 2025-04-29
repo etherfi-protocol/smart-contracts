@@ -18,11 +18,17 @@ contract EtherFiNodeUpgrade is Script {
 
         address stakingManagerProxyAddress = addressProvider.getContractAddress("StakingManager");
 
+        revert("FILL IN ADDRESSES");
+        address eigenPodManager;
+        address delegationManager;
+        address liquidityPool;
+        address etherFiNodesManager;
+
         StakingManager stakingManager = StakingManager(stakingManagerProxyAddress);
 
         vm.startBroadcast(deployerPrivateKey);
 
-        EtherFiNode etherFiNode = new EtherFiNode();
+        EtherFiNode etherFiNode = new EtherFiNode(eigenPodManager, delegationManager, liquidityPool, etherFiNodesManager);
         stakingManager.upgradeEtherFiNode(address(etherFiNode));
 
         vm.stopBroadcast();

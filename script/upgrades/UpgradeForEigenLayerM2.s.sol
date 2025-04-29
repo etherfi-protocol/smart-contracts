@@ -52,7 +52,7 @@ contract UpgradeForEigenLayerM2 is Script {
 
         // Liquifier LiquifierNewImpl = new Liquifier();
         EtherFiNodesManager EtherFiNodesManagerNewImpl = new EtherFiNodesManager();
-        EtherFiNode EtherFiNodeNewImpl = new EtherFiNode();
+        EtherFiNode EtherFiNodeNewImpl = new EtherFiNode(address(0x0),address(0x0),address(0x0),address(0x0));
 
         address el_delegationManager;
         address pancakeRouter;

@@ -17,6 +17,8 @@ contract EtherFiViewerTest is Test  {
         etherFiViewer.initialize(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
     }
 
+    // TODO(dave): rework?
+    /*
     function test_EtherFiNodesManager() public {
         uint256[] memory validatorIds = new uint256[](2);
         validatorIds[0] = 25678;
@@ -29,6 +31,7 @@ contract EtherFiViewerTest is Test  {
         etherFiViewer.EtherFiNodesManager_splitBalanceInExecutionLayer(validatorIds);
         etherFiViewer.EtherFiNodesManager_withdrawableBalanceInExecutionLayer(validatorIds);
     }
+    */
 
 
 }

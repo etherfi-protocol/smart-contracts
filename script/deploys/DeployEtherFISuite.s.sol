@@ -137,6 +137,7 @@ contract DeployEtherFiSuiteScript is Script {
         etherFiNodesManagerImplementation = new EtherFiNodesManager();
         etherFiNodeManagerProxy = new UUPSProxy(address(etherFiNodesManagerImplementation),"");
         etherFiNodesManager = EtherFiNodesManager(payable(address(etherFiNodeManagerProxy)));
+        /*
         etherFiNodesManager.initialize(
             address(treasury),
             address(auctionManager),
@@ -147,13 +148,15 @@ contract DeployEtherFiSuiteScript is Script {
             address(0),
             address(0)
         );
+        */
 
         regulationsManagerImplementation = new RegulationsManager();
         regulationsManagerProxy = new UUPSProxy(address(regulationsManagerImplementation), "");
         regulationsManagerInstance = RegulationsManager(address(regulationsManagerProxy));
         regulationsManagerInstance.initialize();
 
-        EtherFiNode etherFiNode = new EtherFiNode();
+        // TODO
+        EtherFiNode etherFiNode = new EtherFiNode(address(0), address(0), address(0), address(0));
 
         // Mainnet Addresses
         // address private immutable rETH = 0xae78736Cd615f374D3085123A210448E74Fc6393;
@@ -187,11 +190,13 @@ contract DeployEtherFiSuiteScript is Script {
         protocolRevenueManager.setAuctionManagerAddress(address(auctionManager));
         protocolRevenueManager.setEtherFiNodesManagerAddress(address(etherFiNodesManager));
 
+        /*
         stakingManager.setEtherFiNodesManagerAddress(address(etherFiNodesManager));
         stakingManager.setLiquidityPoolAddress(address(liquidityPool));
         stakingManager.registerEtherFiNodeImplementationContract(address(etherFiNode));
         stakingManager.registerTNFTContract(address(TNFTInstance));
         stakingManager.registerBNFTContract(address(BNFTInstance));
+        */
 
         liquidityPool.initialize(address(eETHInstance), address(stakingManager), address(etherFiNodesManager), address(0), address(0), address(0), address(0));
 

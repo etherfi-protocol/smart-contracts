@@ -104,6 +104,7 @@ contract DeployPhaseOne is Script {
         etherFiNodesManagerImplementation = new EtherFiNodesManager();
         etherFiNodeManagerProxy = new UUPSProxy(address(etherFiNodesManagerImplementation),"");
         etherFiNodesManager = EtherFiNodesManager(payable(address(etherFiNodeManagerProxy)));
+        /*
         etherFiNodesManager.initialize(
             address(treasury),
             address(auctionManager),
@@ -114,8 +115,9 @@ contract DeployPhaseOne is Script {
             address(0),
             address(0)
         );
+        */
 
-        EtherFiNode etherFiNode = new EtherFiNode();
+        EtherFiNode etherFiNode = new EtherFiNode(address(0x0), address(0x0), address(0x0), address(0x0));
 
         // Setup dependencies
         nodeOperatorManager.setAuctionContractAddress(address(auctionManager));

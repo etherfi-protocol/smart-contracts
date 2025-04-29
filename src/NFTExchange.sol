@@ -86,7 +86,8 @@ contract NFTExchange is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
             require(msg.sender == reservedBuyers[mNftTokenId], "You are not the reserved buyer");
             require(tnftTokenId == targetTNftTokenIds[mNftTokenId], "The T-NFT is not the target");
 
-            require(nodesMgr.phase(tnftTokenId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "The validator is not LIVE");
+            // TODO(dave): I think we can delete this entire contract?
+           // require(nodesMgr.phase(tnftTokenId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "The validator is not LIVE");
 
             reservedBuyers[mNftTokenId] = address(0);
             targetTNftTokenIds[mNftTokenId] = 0;

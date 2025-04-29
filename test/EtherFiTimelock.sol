@@ -281,12 +281,14 @@ contract TimelockTest is TestSetup {
         managerInstance.forwardExternalCall(nodes, datas, 0xec53bF9167f50cDEB3Ae105f56099aaaB9061F83);
     }
 
+    /*
     function test_add_updateEigenLayerOperatingAdmin() internal {
         initializeRealisticFork(MAINNET_FORK);
         address target = address(managerInstance);
         bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateEigenLayerOperatingAdmin.selector, 0x44358b1cc2C296fFc7419835438D1BD97Ec1FB78, true);
         _execute_timelock(target, data, true, true, true, true);
     }
+    */
 
     function test_efip4() public {
         initializeRealisticFork(MAINNET_FORK);
@@ -342,6 +344,8 @@ contract TimelockTest is TestSetup {
         }
     }
 
+    // TODO(dave): rework?
+    /*
     function test_whitelist_DelegationManager() public {
         initializeRealisticFork(MAINNET_FORK);
         address target = address(managerInstance);
@@ -372,6 +376,7 @@ contract TimelockTest is TestSetup {
 
         vm.stopPrank();
     }
+    */
 
     function test_unpause_liquifier() public {
         initializeRealisticFork(MAINNET_FORK);

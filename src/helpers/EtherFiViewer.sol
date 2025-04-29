@@ -27,27 +27,19 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _getDelegationManager() internal view returns (IDelegationManager) {
-        return nodesManager.delegationManager();
+        return IDelegationManager(nodesManager.delegationManager());
     }
 
     function _getEigenPodManager() internal view returns (IEigenPodManager) {
-        return nodesManager.eigenPodManager();
+        return IEigenPodManager(nodesManager.eigenPodManager());
     }
 
     function _getEtherFiNode(uint256 _validatorId) internal view returns (IEtherFiNode) {
-        return IEtherFiNode(nodesManager.etherfiNodeAddress(_validatorId));
+        return IEtherFiNode(nodesManager.etherFiNodeFromId(_validatorId));
     }
 
     function _getEigenPod(uint256 _validatorId) internal view returns (IEigenPod) {
-        return IEigenPod(_getEtherFiNode(_validatorId).eigenPod());
-    }
-
-    function EigenPod_hasRestaked(uint256[] memory _validatorIds) external view returns (bool[] memory _hasRestaked) {
-        _hasRestaked = new bool[](_validatorIds.length);
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            // now every validator within eigenlayer is guaranteed to have this flag set
-            _hasRestaked[i] = _getEtherFiNode(_validatorIds[i]).isRestakingEnabled();
-        }
+        return IEigenPod(_getEtherFiNode(_validatorId).getEigenPod());
     }
 
     function EigenPod_withdrawableRestakedExecutionLayerGwei(uint256[] memory _validatorIds) external view returns (uint256[] memory _withdrawableRestakedExecutionLayerGwei) {
@@ -112,6 +104,7 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
+    /*
     function EtherFiNodesManager_splitBalanceInExecutionLayer(uint256[] memory _validatorIds) external view returns (uint256[] memory _withdrawalSafe, uint256[] memory _eigenPod, uint256[] memory _delayedWithdrawalRouter) {
         _withdrawalSafe = new uint256[](_validatorIds.length);
         _eigenPod = new uint256[](_validatorIds.length);
@@ -129,13 +122,14 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             _withdrawableBalance[i] = _getEtherFiNode(_validatorIds[i]).withdrawableBalanceInExecutionLayer();
         }
     }
+    */
 
     function EtherFiNodesManager_aggregatedBalanceOfUnusedSafes() external view returns (uint256 total) {
         uint256 n = nodesManager.getUnusedWithdrawalSafesLength();
 
         for (uint256 i = 0; i < n; i++) {
             address safe = nodesManager.unusedWithdrawalSafes(i);
-            address eigenpod = IEtherFiNode(safe).eigenPod();
+            address eigenpod = address(IEtherFiNode(safe).getEigenPod());
             total += safe.balance + eigenpod.balance;
         }
     }

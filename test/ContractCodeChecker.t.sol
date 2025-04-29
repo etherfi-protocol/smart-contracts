@@ -21,7 +21,7 @@ contract ContractCodeCheckerTest is TestSetup {
         EtherFiNodesManager etherFiNodesManagerImplementation = new EtherFiNodesManager();
         address etherFiNodesManagerImplAddress = address(0xE9EE6923D41Cf5F964F11065436BD90D4577B5e4);
 
-        EtherFiNode etherFiNodeImplementation = new EtherFiNode();
+        EtherFiNode etherFiNodeImplementation = new EtherFiNode(address(0x0), address(0x0), address(0x0), address(0x0));
         address etherFiNodeImplAddress = address(0xc5F2764383f93259Fba1D820b894B1DE0d47937e);
 
         EtherFiRestaker etherFiRestakerImplementation = new EtherFiRestaker(address(0x7750d328b314EfFa365A0402CcfD489B80B0adda));
