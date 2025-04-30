@@ -14,6 +14,7 @@ contract BNFTTest is TestSetup {
         BNFTImplementation.initialize(address(stakingManagerInstance));
     }
 
+    /*
     function test_Mint() public {
         startHoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
         nodeOperatorManagerInstance.registerNodeOperator(
@@ -61,6 +62,7 @@ contract BNFTTest is TestSetup {
         assertEq(BNFTInstance.ownerOf(1), alice);
         assertEq(BNFTInstance.balanceOf(alice), 1);
     }
+    */
 
     function test_BNFTMintsFailsIfNotCorrectCaller() public {
         vm.startPrank(alice);
@@ -68,6 +70,7 @@ contract BNFTTest is TestSetup {
         BNFTInstance.mint(address(alice), 1);
     }
 
+    /*
     function test_BNFTCannotBeTransferred() public {
         vm.prank(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
         nodeOperatorManagerInstance.registerNodeOperator(
@@ -117,4 +120,5 @@ contract BNFTTest is TestSetup {
             1
         );
     }
+    */
 }

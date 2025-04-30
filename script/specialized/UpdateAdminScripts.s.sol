@@ -43,7 +43,7 @@ contract UpdateAdmins is Script {
         //EtherFiNodesManager(payable(etherFiNodesManager)).updateAdmin(admin, true); 
         // ProtocolRevenueManager(payable(protocolRevenueManager)).updateAdmin(admin);  // DEPRECATED
         AuctionManager(auctionManager).updateAdmin(admin, true); 
-        StakingManager(stakingManager).updateAdmin(admin, true); 
+        //StakingManager(stakingManager).updateAdmin(admin, true); 
         // LiquidityPool(payable(liquidityPool)).updateAdmin(admin, true);
         // RegulationsManager(regulationsManager).updateAdmin(admin, true);
         MembershipManager(payable(membershipManager)).updateAdmin(admin, true);

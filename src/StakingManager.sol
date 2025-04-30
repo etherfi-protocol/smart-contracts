@@ -63,6 +63,7 @@ contract StakingManager is
     UpgradeableBeacon private upgradableBeacon;
     address public etherFiNodeImplementation;
 
+    address public immutable liquidityPool;
     IEtherFiNodesManager public immutable etherFiNodesManager;
     IDepositContract public immutable depositContractEth2;
     IAuctionManager public immutable auctionManager;
@@ -78,10 +79,16 @@ contract StakingManager is
     error InactiveBid();
     error IncorrectValidatorFunds();
     error InvalidEtherFiNode();
+    error InvalidValidatorSize();
+    error InvalidUpgrade();
 
     event validatorCreated(bytes32 indexed pubkeyHash, address indexed etherFiNode, bytes pubkey);
     event validatorConfirmed(bytes32 indexed pubkeyHash, address indexed bnftRecipient, address indexed tnftRecipient, bytes pubkey);
     event linkLegacyValidatorId(bytes32 indexed pubkeyHash, uint256 indexed legacyId);
+
+    // legacy event still being emitted in its original form to play nice with existing external tooling
+    event ValidatorRegistered(address indexed operator, address indexed bNftOwner, address indexed tNftOwner, 
+                              uint256 validatorId, bytes validatorPubKey, string ipfsHashForEncryptedValidatorKey);
 
 
     //--------------------------------------------------------------------------------------
@@ -93,23 +100,16 @@ contract StakingManager is
         _disableInitializers();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {}
-
-    // TODO(dave): are we using a slightly different proxy for this contract?
-
-    /// @notice Fetches the address of the implementation contract currently being used by the proxy
-    /// @return the address of the currently used implementation contract
-    function getImplementation() external view returns (address) {
-        return _getImplementation();
+    // TODO(dave): implement
+    function initialize() external {
+        
     }
 
-
-     /// @notice send 1 eth to deposit contract to create the validator.
+    /// @notice send 1 eth to deposit contract to create the validator.
     ///    The rest of the eth will not be sent until the oracle confirms the withdrawal credentials
-    function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode, address nodeOperator) external payable {
-        if (msg.sender != etherfiOracle) revert InvalidCaller();
+    function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external payable {
+        if (msg.sender != liquidityPool) revert InvalidCaller();
         if (depositData.length != bidIds.length) revert InvalidDepositData();
-        if (msg.value != 1 ether * depositData.length) revert IncorrectValidatorFunds();
         if (address(IEtherFiNode(etherFiNode).getEigenPod()) == address(0)) revert InvalidEtherFiNode();
 
         // process each 1 eth deposit to create validators for later verification from oracle
@@ -120,7 +120,7 @@ contract StakingManager is
             auctionManager.updateSelectedBidInformation(bidIds[i]);
 
             // verify deposit root
-            bytes memory withdrawalCredentials = etherFiNodesManager.addressToWithdrawalCredentials(etherFiNode);
+            bytes memory withdrawalCredentials = etherFiNodesManager.addressToWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
             bytes32 computedDataRoot = depositRootGenerator.generateDepositRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, 1 ether);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
@@ -136,10 +136,11 @@ contract StakingManager is
         }
     }
 
-    /// @notice send 31 eth to activate validators created by "createBeaconValidators"
+    /// @notice send remaining eth to activate validators created by "createBeaconValidators"
     ///    The oracle is expected to have confirmed the withdrawal credentials
-    function confirmAndFundBeaconValidators(DepositData[] calldata depositData, address BnftRecipient, address TnftRecipient) external payable {
+    function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable {
         if (msg.sender != etherfiOracle) revert InvalidCaller();
+        if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
 
         for (uint256 i = 0; i < depositData.length; i++) {
 
@@ -154,18 +155,16 @@ contract StakingManager is
             bytes32 computedDataRoot = depositRootGenerator.generateDepositRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, 31 ether);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
-            // Deposit the remaining 31 eth to activate validator
-            depositContractEth2.deposit{value: 31 ether}(depositData[i].publicKey, withdrawalCredentials, depositData[i].signature, computedDataRoot);
+            // Deposit the remaining eth to the validator
+            uint256 amountToDeposit = validatorSizeWei - 1 ether; // already did 1 eth deposit
+            depositContractEth2.deposit{value: amountToDeposit}(depositData[i].publicKey, withdrawalCredentials, depositData[i].signature, computedDataRoot);
 
             // Use pubkey hash as the minted token ID
-            tnft.mint(BnftRecipient, uint256(pubkeyHash));
-            bnft.mint(TnftRecipient, uint256(pubkeyHash));
+            tnft.mint(liquidityPool, uint256(pubkeyHash));
+            bnft.mint(liquidityPool, uint256(pubkeyHash));
 
-            emit validatorConfirmed(pubkeyHash, BnftRecipient, TnftRecipient, depositData[i].publicKey);
+            emit validatorConfirmed(pubkeyHash, liquidityPool, liquidityPool, depositData[i].publicKey);
         }
-
-        // TODO: emission of the ipfs key has been left out to await the decisions
-        // around validator key management changes, as they will effect this.
     }
 
     ///@notice Calculates the pubkey hash of a validator's pubkey as per SSZ spec
@@ -174,27 +173,24 @@ contract StakingManager is
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
     }
 
-
-
-    ///////////////////////////////////////////////////////////////////////////////////////
-
-    /// @notice Upgrades the etherfi node
-    /// @param _newImplementation The new address of the etherfi node
-    function upgradeEtherFiNode(address _newImplementation) public onlyOwner {
-        require(_newImplementation != address(0), "ZERO_ADDRESS");
-        
-        upgradableBeacon.upgradeTo(_newImplementation);
-        etherFiNodeImplementation = _newImplementation;
-    }
-
     // TODO(dave): reimplement pausing with role registry
     function pauseContract() external { _pause(); }
     function unPauseContract() external { _unpause(); }
 
-
     //--------------------------------------------------------------------------------------
     //--------------------- EtherFiNode Beacon Proxy ----------------------------------
     //--------------------------------------------------------------------------------------
+
+    /// @notice Upgrades the etherfi node
+    /// @param _newImplementation The new address of the etherfi node
+    function upgradeEtherFiNode(address _newImplementation) public onlyOwner {
+        if (_newImplementation == address(0)) revert InvalidUpgrade();
+
+        upgradableBeacon.upgradeTo(_newImplementation);
+        etherFiNodeImplementation = _newImplementation;
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override {}
 
     /// @notice Fetches the address of the beacon contract for future EtherFiNodes (withdrawal safes)
     function getEtherFiNodeBeacon() external view returns (address) {
@@ -203,7 +199,8 @@ contract StakingManager is
 
     /// @notice Fetches the address of the implementation contract currently being used by the beacon proxy
     /// @return the address of the currently used implementation contract
-    function getEtherFiNodeImplementation() public view returns (address) {
+    function implementation() public view override returns (address) {
         return upgradableBeacon.implementation();
     }
+
 }

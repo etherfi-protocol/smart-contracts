@@ -277,12 +277,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     // [Liquidty Pool Staking flow]
-    // Step 1: [Deposit] initiate spinning up the validators & allocate withdrawal safe contracts
-    // Step 2: (Off-chain) create the keys using the desktop app
-    // Step 3: [Register] register the validator keys sending 1 ETH to the eth deposit contract
-    // Step 4: wait for the oracle to approve and send the rest 31 ETH to the eth deposit contract
+    // Step 1: (Off-chain) create the keys using the desktop app
+    // Step 2: create validators with 1 eth deposits to official deposit contract
+    // Step 3: oracle approves and funds the remaining balance for the validator
 
-    /// Step 1. [Deposit]
+    /// Step 2. createValidators sending 1 eth deposits for each
     /// @param _candidateBidIds validator IDs that have been matched with the BNFT holder on the FE
     /// @param _numberOfValidators how many validators the user wants to spin up. This can be less than the candidateBidIds length. 
     function batchDeposit(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators) external whenNotPaused returns (uint256[] memory) {
@@ -300,9 +299,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         require(validatorSpawner[msg.sender].registered, "Incorrect Caller");        
         require(totalValueInLp  >= 32 ether * _numberOfValidators, "Not enough balance");
 
+        /*
         uint256[] memory newValidators = stakingManager.batchDepositWithBidIds(_candidateBidIds, _numberOfValidators, msg.sender, tnftHolder, bnftHolder, SourceOfFunds.EETH, restakeBnftDeposits, _validatorIdToShareSafeWith);
         numPendingDeposits += uint32(newValidators.length);
         
+        return newValidators;
+        */
+        uint256[] memory newValidators = new uint256[](_candidateBidIds.length);
         return newValidators;
     }
 
@@ -319,6 +322,18 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         bytes32[] calldata _depositDataRootApproval,
         bytes[] calldata _signaturesForApprovalDeposit
     ) external whenNotPaused {
+        require(validatorSpawner[msg.sender].registered, "Incorrect Caller");
+
+        // TODO(dave): add as param. 
+        address DebugNodeAddress = address(0x1234);
+
+        // As the LP is the B-nft holder, the 1 ether (for each validator) is taken from the LP
+        uint256 outboundEthAmountFromLp = 1 ether * _validatorIds.length;
+        _accountForEthSentOut(outboundEthAmountFromLp);
+
+        stakingManager.createBeaconValidators{value: outboundEthAmountFromLp}(_registerValidatorDepositData, _validatorIds, DebugNodeAddress);
+
+        /*
         address _bnftRecipient = address(this);
 
         require(validatorSpawner[msg.sender].registered, "Incorrect Caller");        
@@ -336,6 +351,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
             depositDataRootForApprovalDeposits[_validatorIds[i]] = _depositDataRootApproval[i];
             emit ValidatorRegistered(_validatorIds[i], _signaturesForApprovalDeposit[i], _registerValidatorDepositData[i].publicKey, _depositDataRootApproval[i]);
         }
+        */
     }
 
     //. Step 4. [Approve]
@@ -351,6 +367,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         bytes[] calldata _signature
     ) external whenNotPaused {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+
+        /*
         require(_validatorIds.length == _pubKey.length && _validatorIds.length == _signature.length, "lengths differ");
 
         bytes32[] memory depositDataRootApproval = new bytes32[](_validatorIds.length);
@@ -366,6 +384,16 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         _accountForEthSentOut(outboundEthAmountFromLp);
 
         stakingManager.batchApproveRegistration{value: outboundEthAmountFromLp}(_validatorIds, _pubKey, _signature, depositDataRootApproval);
+        */
+
+        // TODO(dave): need to update params. to take deposit data + validatorSize
+        uint256 outboundEthAmountFromLp = 31 ether * _validatorIds.length;
+        _accountForEthSentOut(outboundEthAmountFromLp);
+
+        IStakingManager.DepositData[] memory debugDepositData = new IStakingManager.DepositData[](_validatorIds.length);
+        //stakingManager.confirmAndFundBeaconValidators(debugDepositData, _validatorIds, 32 ether);
+        stakingManager.confirmAndFundBeaconValidators(debugDepositData, 32 ether);
+
     }
 
     /// @notice Cancels the process
@@ -389,7 +417,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         }
         */
 
-        stakingManager.batchCancelDepositAsBnftHolder(_validatorIds, msg.sender);
+        //stakingManager.batchCancelDepositAsBnftHolder(_validatorIds, msg.sender);
     }
 
     /// @notice The admin can register an address to become a BNFT holder

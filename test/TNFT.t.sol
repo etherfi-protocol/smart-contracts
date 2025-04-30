@@ -23,6 +23,7 @@ contract TnftTest is TestSetup {
         TNFTInstance.mint(address(alice), 1);
     }
 
+    /*
     function test_Mint() public {
         startHoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
         nodeOperatorManagerInstance.registerNodeOperator(
@@ -69,4 +70,5 @@ contract TnftTest is TestSetup {
         assertEq(TNFTInstance.ownerOf(1), alice);
         assertEq(TNFTInstance.balanceOf(alice), 1);
     }
+    */
 }

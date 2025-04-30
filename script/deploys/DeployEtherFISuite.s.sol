@@ -117,7 +117,7 @@ contract DeployEtherFiSuiteScript is Script {
         stakingManagerImplementation = new StakingManager();
         stakingManagerProxy = new UUPSProxy(address(stakingManagerImplementation),"");
         stakingManager = StakingManager(address(stakingManagerProxy));
-        stakingManager.initialize(address(auctionManager), ethDepositContractAddress);
+        //stakingManager.initialize(address(auctionManager), ethDepositContractAddress);
 
         BNFTImplementation = new BNFT();
         BNFTProxy = new UUPSProxy(address(BNFTImplementation),"");

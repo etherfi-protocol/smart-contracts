@@ -11,6 +11,21 @@ interface IStakingManager {
         string ipfsHashForEncryptedValidatorKey;
     }
 
+    function pauseContract() external;
+    function unPauseContract() external;
+
+    function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external payable;
+    function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable;
+
+    function calculateValidatorPubkeyHash(bytes memory pubkey) external pure returns (bytes32);
+    function upgradeEtherFiNode(address _newImplementation) external;
+
+    function getEtherFiNodeBeacon() external view returns (address);
+
+    // this is implementation for the etherFiNode as the staking manager serves as the beacon
+    //function implementation() external view returns (address);
+
+    /*
     struct StakerInfo {
         address staker;
         ILiquidityPool.SourceOfFunds sourceOfFund;
@@ -41,4 +56,5 @@ interface IStakingManager {
     function updateAdmin(address _address, bool _isAdmin) external;
     function pauseContract() external;
     function unPauseContract() external;
+    */
 }

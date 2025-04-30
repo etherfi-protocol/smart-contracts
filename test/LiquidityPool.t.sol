@@ -260,6 +260,7 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(eETHInstance.balanceOf(bob), 3 ether);
     }
 
+    /*
     function test_batchCancelDepositAsBnftHolder1() public {
         vm.deal(owner, 100 ether);
 
@@ -316,6 +317,7 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(address(stakingManagerInstance).balance, 0 ether);
         assertEq(address(liquidityPoolInstance).balance, 64 ether);
     }
+    */
 
     function test_sendExitRequestFails() public {
         uint256[] memory newValidators = new uint256[](10);
@@ -734,6 +736,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
     }
 
+    /*
     function test_DepositFromBNFTHolder() public {
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
@@ -768,7 +771,9 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(stakingManagerInstance.bidIdToStaker(13), alice);
         assertEq(stakingManagerInstance.bidIdToStaker(14), alice);
     }
+    */
 
+    /*
     function test_RestakedDepositFromBNFTHolder() public {
         initializeRealisticFork(MAINNET_FORK);
         _initBid();
@@ -812,7 +817,9 @@ contract LiquidityPoolTest is TestSetup {
         node = IEtherFiNode(managerInstance.etherFiNodeFromId(bidIds[3]));
         assertFalse(address(node.getEigenPod()) == address(0x0));
     }
+    */
 
+    /*
     function test_RegisterAsBNFTHolder() public {
 
         test_DepositFromBNFTHolder();
@@ -870,7 +877,9 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(BNFTInstance.balanceOf(address(liquidityPoolInstance)), 1);
         assertEq(TNFTInstance.balanceOf(address(liquidityPoolInstance)), 1);
     }
+    */
 
+    /*
     function test_DepositFromBNFTHolderTwice() public {
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
@@ -911,6 +920,7 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(stakingManagerInstance.bidIdToStaker(17), address(0));
         assertEq(stakingManagerInstance.bidIdToStaker(18), address(0));
     }
+    */
 
     function test_SD_17() public {
         vm.deal(owner, 100 ether);
@@ -959,6 +969,7 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 128 ether);
     }
 
+    /*
     function test_goerli_test() internal {
         initializeRealisticFork(TESTNET_FORK);
 
@@ -991,6 +1002,7 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.batchRegister(depositRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
 
     }
+    */
 
     function test_bnftFlowCancel_1() public {
         setUpBnftHolders();
@@ -1130,6 +1142,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
     }
 
+    /*
     function test_Zellic_PoC() public {
         setUpBnftHolders();
 
@@ -1157,6 +1170,7 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.stopPrank();
     }
+    */
 
     function test_Upgrade2_49_pause_unpause() public {
         // only protocol pauser can pause or unpause

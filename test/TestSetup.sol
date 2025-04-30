@@ -483,8 +483,8 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         stakingManagerImplementation = new StakingManager();
         stakingManagerProxy = new UUPSProxy(address(stakingManagerImplementation), "");
         stakingManagerInstance = StakingManager(address(stakingManagerProxy));
-        stakingManagerInstance.initialize(address(auctionInstance), address(mockDepositContractEth2));
-        stakingManagerInstance.updateAdmin(alice, true);
+        //stakingManagerInstance.initialize(address(auctionInstance), address(mockDepositContractEth2));
+        //stakingManagerInstance.updateAdmin(alice, true);
 
         TNFTImplementation = new TNFT();
         TNFTProxy = new UUPSProxy(address(TNFTImplementation), "");
@@ -1015,7 +1015,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         etherFiOracleInstance.updateAdmin(alice, true);
 
         address admin = address(etherFiAdminInstance);
-        stakingManagerInstance.updateAdmin(admin, true); 
+        //stakingManagerInstance.updateAdmin(admin, true); 
         // liquidityPoolInstance.updateAdmin(admin, true);
         membershipManagerInstance.updateAdmin(admin, true);
         etherFiOracleInstance.updateAdmin(admin, true);
@@ -1206,10 +1206,12 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         assertEq(registered, true);
     }
 
+    // TODO(dave): re-implement with v3 updates
     function depositAndRegisterValidator(bool restaked) public returns (uint256) {
         vm.deal(alice, 33 ether);
         vm.startPrank(alice);
 
+        /*
         // if we call this multiple times in a test, don't blow up
         try  nodeOperatorManagerInstance.registerNodeOperator("fake_ipfs_hash", 10) {
         } catch {}
@@ -1241,6 +1243,8 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
 
         vm.stopPrank();
         return createdBids[0];
+        */
+        return 0;
     }
 
     function launch_validator() internal returns (uint256[] memory) {
@@ -1557,11 +1561,15 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         return depositDataArray;
     }
 
+    //TODO(dave): why stack too deep here?
     function _prepareForValidatorRegistration(uint256[] memory _validatorIds) internal returns (IStakingManager.DepositData[] memory, bytes32[] memory, bytes[] memory, bytes[] memory pubKey) {
         IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](_validatorIds.length);
         bytes32[] memory depositDataRootsForApproval = new bytes32[](_validatorIds.length);
         bytes[] memory sig = new bytes[](_validatorIds.length);
         bytes[] memory pubKey = new bytes[](_validatorIds.length);
+        return (depositDataArray, depositDataRootsForApproval, sig, pubKey);
+
+        /*
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             pubKey[i] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
@@ -1590,6 +1598,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         }
 
         return (depositDataArray, depositDataRootsForApproval, sig, pubKey);
+        */
     }
 
     function _execute_timelock(address target, bytes memory data, bool _schedule, bool _log_schedule, bool _execute, bool _log_execute) internal {

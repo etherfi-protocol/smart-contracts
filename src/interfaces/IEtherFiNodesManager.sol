@@ -18,6 +18,9 @@ import "../interfaces/IStakingManager.sol";
 interface IEtherFiNodesManager {
 
     struct LegacyManagerState {
+        uint64 test;
+        mapping(uint256 => address) etherfiNodeAddress;
+        /*
         uint64 numberOfValidators; // # of validators in LIVE or WAITING_FOR_APPROVAL phases
         uint64 nonExitPenaltyPrincipal;
         uint64 nonExitPenaltyDailyRate; // in basis points
@@ -28,8 +31,9 @@ interface IEtherFiNodesManager {
         address DEPRECATED_protocolRevenueManagerContract;
 
         // validatorId == bidId -> withdrawalSafeAddress
-        mapping(uint256 => address) etherfiNodeAddress;
+        */
 
+        /*
         address tnft;
         address bnft;
         IAuctionManager auctionManager;
@@ -61,6 +65,7 @@ interface IEtherFiNodesManager {
         mapping(bytes4 => bool) allowedForwardedEigenpodCalls;
         // function -> target_address -> allowed
         mapping(bytes4 => mapping(address => bool)) allowedForwardedExternalCalls;
+        */
     }
 
     struct ValidatorInfo {
