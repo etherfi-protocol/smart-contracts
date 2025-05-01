@@ -265,7 +265,6 @@ contract LiquidityPoolTest is TestSetup {
         vm.deal(owner, 100 ether);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.numValidatorsToSpinUp = 4;
         _executeAdminTasks(report);
 
         setUpBnftHolders();
@@ -401,7 +400,6 @@ contract LiquidityPoolTest is TestSetup {
         vm.deal(owner, 100 ether);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.numValidatorsToSpinUp = 4;
         _executeAdminTasks(report);
 
         setUpBnftHolders();
@@ -604,7 +602,6 @@ contract LiquidityPoolTest is TestSetup {
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
 
-        report.numValidatorsToSpinUp = 4;
         _initReportBlockStamp(report);
         _executeAdminTasks(report);
 
@@ -640,7 +637,6 @@ contract LiquidityPoolTest is TestSetup {
 
         IEtherFiOracle.OracleReport memory report2 = _emptyOracleReport();
 
-        report2.numValidatorsToSpinUp = 14;
         _initReportBlockStamp(report2);
         _executeAdminTasks(report2);
 
@@ -703,7 +699,6 @@ contract LiquidityPoolTest is TestSetup {
     function test_DepositWhenUserDeRegisters() public {
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.numValidatorsToSpinUp = 21;
         _executeAdminTasks(report);
         
         //Sets up the list of BNFT holders
@@ -740,7 +735,6 @@ contract LiquidityPoolTest is TestSetup {
     function test_DepositFromBNFTHolder() public {
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.numValidatorsToSpinUp = 4;
         _executeAdminTasks(report);
 
         vm.startPrank(alice);
@@ -883,7 +877,6 @@ contract LiquidityPoolTest is TestSetup {
     function test_DepositFromBNFTHolderTwice() public {
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.numValidatorsToSpinUp = 8;
         _executeAdminTasks(report);
 
         vm.startPrank(alice);
@@ -921,53 +914,6 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(stakingManagerInstance.bidIdToStaker(18), address(0));
     }
     */
-
-    function test_SD_17() public {
-        vm.deal(owner, 100 ether);
-
-        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.numValidatorsToSpinUp = 4;
-        _executeAdminTasks(report);
-
-        setUpBnftHolders();
-
-        vm.warp(976348625856);
-
-        hoax(alice);
-        uint256[] memory bidIds = auctionInstance.createBid{value: 0.2 ether}(2, 0.1 ether);
-        assertEq(bidIds.length, 2);
-
-        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 0);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 0);
-
-        startHoax(bob);
-        liquidityPoolInstance.deposit{value: 128 ether}();
-        vm.stopPrank();
-
-        assertEq(address(liquidityPoolInstance).balance, 128 ether);
-        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 128 ether);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 128 ether);
-
-        uint256 aliceBalance = address(alice).balance;
-        uint256[] memory bidIdsWithDuplicates = new uint256[](4);
-        bidIdsWithDuplicates[0] = bidIds[0];
-        bidIdsWithDuplicates[1] = bidIds[0];
-        bidIdsWithDuplicates[2] = bidIds[1];
-        bidIdsWithDuplicates[3] = bidIds[1];
-        vm.prank(alice);
-        uint256[] memory newValidators = liquidityPoolInstance.batchDeposit(bidIdsWithDuplicates, 4);
-
-        assertEq(newValidators.length, 2);
-        assertEq(address(alice).balance, aliceBalance);
-        assertEq(address(liquidityPoolInstance).balance, 128 ether);
-        assertEq(address(stakingManagerInstance).balance, 0);
-        assertEq(liquidityPoolInstance.numPendingDeposits(), 2);
-        assertEq(liquidityPoolInstance.totalValueOutOfLp(), 0);
-        assertEq(liquidityPoolInstance.totalValueInLp(), 128 ether);
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 128 ether);
-    }
 
     /*
     function test_goerli_test() internal {

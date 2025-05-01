@@ -11,16 +11,11 @@ interface IEtherFiOracle {
         int128 accruedRewards;
         int128 protocolFees;
         uint256[] validatorsToApprove;
-        uint256[] liquidityPoolValidatorsToExit;
         uint256[] exitedValidators;
         uint32[]  exitedValidatorsExitTimestamps;
-        uint256[] slashedValidators;
         uint256[] withdrawalRequestsToInvalidate;
         uint32 lastFinalizedWithdrawalRequestId;
-        uint32 eEthTargetAllocationWeight;
-        uint32 etherFanTargetAllocationWeight;
         uint128 finalizedWithdrawalAmount;
-        uint32 numValidatorsToSpinUp;
     }
 
     struct CommitteeMemberState {
