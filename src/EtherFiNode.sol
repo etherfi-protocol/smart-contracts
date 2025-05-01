@@ -1,18 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-//import "../lib/eigenlayer-contracts/src/contracts/interfaces/IEigenPodManager.sol";
-//import "../lib/eigenlayer-contracts/src/contracts/interfaces/IDelegationManager.sol";
 import {IDelegationManager} from "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import {IEigenPodManager} from "../src/eigenlayer-interfaces/IEigenPodManager.sol";
 import {IEigenPod} from "../src/eigenlayer-interfaces/IEigenPod.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
-//import {IPodOwner} from "../src/iEtherFiNode/IPodOwner.sol";
 import {IEtherFiNode} from "../src/interfaces/IEtherFiNode.sol";
 import {IEtherFiNodesManager} from "../src/interfaces/IEtherFiNodesManager.sol";
 import {ILiquidityPool} from "../src/interfaces/ILiquidityPool.sol";
-//import {IRewardsManager} from "../src/RewardsManager.sol";
 import {LibCall} from "../lib/solady/src/utils/LibCall.sol";
 
 contract EtherFiNode is IEtherFiNode {
@@ -90,7 +86,7 @@ contract EtherFiNode is IEtherFiNode {
 
     // TODO(dave): Permissions
 
-    function callEigenPod(bytes calldata data) external returns (bytes memory) {
+    function forwardEigenPodCall(bytes calldata data) external returns (bytes memory) {
         // callContract will revert if targeting an EOA so it is safe if getEigenPod() returns the zero address
         return LibCall.callContract(address(getEigenPod()), 0, data);
     }

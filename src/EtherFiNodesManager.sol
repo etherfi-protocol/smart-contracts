@@ -76,7 +76,7 @@ contract EtherFiNodesManager is
 
     address public immutable eigenPodManager;
     address  public immutable delegationManager;
-    IStakingManager public immutable stakingManager;
+    address public immutable stakingManager;
 
     //-----------------------------------------------------------------
     //-----------------------  Storage  -------------------------------
@@ -94,7 +94,7 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
     event NodeExitRequested(uint256 _validatorId);
     event NodeExitProcessed(uint256 _validatorId);
-    event PhaseChanged(uint256 indexed _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
+    //event PhaseChanged(uint256 indexed _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
 
     event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
     event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
@@ -118,9 +118,21 @@ contract EtherFiNodesManager is
 
     error InvalidParams();
 
+    function setProofSubmitter(uint256 id, address proofSubmitter) external {
+        // TODO(dave): implement
+    }
+    function startCheckpoint(uint256 id) external {
+        // TODO(dave): implement
+    }
+
     // TODO(dave): reimplement pausing with role registry
     function pauseContract() external { _pause(); }
     function unPauseContract() external { _unpause(); }
+
+    function etherfiNodeAddress(uint256) public view returns (address) {
+        // TODO(dave): implement
+        return address(0);
+    }
 
     function etherFiNodeFromId(uint256 id) public view returns (address) {
         // if the ID is a legacy validatorID use the old storage array
@@ -133,7 +145,7 @@ contract EtherFiNodesManager is
         if (mask & id > 0) {
             return address(etherFiNodeFromPubkeyHash[bytes32(id)]);
         } else {
-            return legacyState.etherfiNodeAddress[id];
+            return legacyState.DEPRECATED_etherfiNodeAddress[id];
         }
     }
 
@@ -162,10 +174,10 @@ contract EtherFiNodesManager is
         if (msg.sender != address(stakingManager)) revert InvalidCaller();
         bytes32 pubkeyHash = calculateValidatorPubkeyHash(pubkey);
         if (address(etherFiNodeFromPubkeyHash[pubkeyHash]) != address(0)) revert AlreadyLinked();
-        if (legacyState.etherfiNodeAddress[legacyId] != address(0)) revert AlreadyLinked();
+        if (legacyState.DEPRECATED_etherfiNodeAddress[legacyId] != address(0)) revert AlreadyLinked();
 
         // link legacyId for now. We can remove this in a future upgrade
-        legacyState.etherfiNodeAddress[legacyId] = nodeAddress;
+        legacyState.DEPRECATED_etherfiNodeAddress[legacyId] = nodeAddress;
 
         etherFiNodeFromPubkeyHash[pubkeyHash] = IEtherFiNode(nodeAddress);
         emit PubkeyLinked(pubkeyHash, nodeAddress, pubkey);
@@ -207,7 +219,7 @@ contract EtherFiNodesManager is
             bytes4 selector = bytes4(data[i][:4]);
             if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
 
-            returnData[i] = etherFiNodeFromPubkeyHash[pubkeys[i]].callEigenPod(data[i]);
+            returnData[i] = etherFiNodeFromPubkeyHash[pubkeys[i]].forwardEigenPodCall(data[i]);
         }
     }
 
@@ -235,6 +247,10 @@ contract EtherFiNodesManager is
 
             returnData[i] = etherFiNodeFromPubkeyHash[pubkeys[i]].forwardExternalCall(target, data[i]);
         }
+    }
+
+    function forwardEigenPodCall(uint256[] calldata ids, bytes[] calldata data) external returns (bytes memory) {
+        // TODO(dave): implement
     }
 
 }
