@@ -30,5 +30,13 @@ contract EtherFiViewerTest is Test  {
         etherFiViewer.EtherFiNodesManager_withdrawableBalanceInExecutionLayer(validatorIds);
     }
 
+    function test_EigenPodManager_podOwnerDepositShares() public {
+        uint256[] memory validatorIds = new uint256[](2);
+        validatorIds[0] = 25678;
+        validatorIds[1] = 29208;
+
+        etherFiViewer.EigenPodManager_podOwnerDepositShares(validatorIds);
+    }
+
 
 }
