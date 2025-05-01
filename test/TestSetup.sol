@@ -57,7 +57,9 @@ import "../script/Create2Factory.sol";
 import "../src/RoleRegistry.sol";
 import "../src/EtherFiRewardsRouter.sol";
 
-contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGeneration {
+import "../src/CumulativeMerkleRewardsDistributor.sol";
+
+contract TestSetup is Test, ContractCodeChecker {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
     event Execute(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt);
@@ -116,6 +118,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
     UUPSProxy public etherFiRedemptionManagerProxy;
     UUPSProxy public etherFiOracleProxy;
     UUPSProxy public etherFiAdminProxy;
+    UUPSProxy public cumulativeMerkleRewardsDistributorProxy;
     UUPSProxy public roleRegistryProxy;
 
     IDepositContract public depositContractEth2;
@@ -157,6 +160,9 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
 
     EtherFiRestaker public etherFiRestakerImplementation;
     EtherFiRestaker public etherFiRestakerInstance;
+
+    CumulativeMerkleRewardsDistributor public cumulativeMerkleRewardsDistributorImplementation;
+    CumulativeMerkleRewardsDistributor public cumulativeMerkleRewardsDistributorInstance;
 
     EETH public eETHImplementation;
     EETH public eETHInstance;
@@ -609,6 +615,15 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
 
+
+        cumulativeMerkleRewardsDistributorImplementation = new CumulativeMerkleRewardsDistributor(address(roleRegistryInstance));
+        cumulativeMerkleRewardsDistributorProxy = new UUPSProxy(address(cumulativeMerkleRewardsDistributorImplementation), "");
+        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(address(cumulativeMerkleRewardsDistributorProxy));
+        cumulativeMerkleRewardsDistributorInstance.initialize();
+
+        etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
+        etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
+
         etherFiOracleImplementation = new EtherFiOracle();
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
@@ -706,7 +721,8 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         nftExchangeInstance.initialize(address(TNFTInstance), address(membershipNftInstance), address(managerInstance));
         nftExchangeInstance.updateAdmin(alice);
 
-        etherFiAdminInstance.initialize(
+        
+            etherFiAdminInstance.initialize(
             address(etherFiOracleInstance),
             address(stakingManagerInstance),
             address(auctionInstance),
@@ -717,6 +733,15 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
             10000,
             0
         );
+        uint256 BLOCKS_IN_DAY = 7200;
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE); //eth
+        tokens[1] = address(eETHInstance);
+        uint256[] memory lastProcessedAtBlocks = new uint256[](2);
+        lastProcessedAtBlocks[0] = lastProcessedAtBlocks[1] = 0;
+
+        vm.startPrank(owner);
+
         etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
@@ -730,10 +755,9 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
 
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
-        vm.stopPrank();
+        vm.stopPrank();	
         vm.startPrank(owner);
         // etherFiAdminInstance.updateAdmin(alice, true);
-
         etherFiOracleInstance.setEtherFiAdmin(address(etherFiAdminInstance));
         liquidityPoolInstance.initializeOnUpgrade(address(auctionManagerProxy), address(liquifierInstance));
         stakingManagerInstance.initializeOnUpgrade(address(nodeOperatorManagerInstance), address(etherFiAdminInstance));
