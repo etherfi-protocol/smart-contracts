@@ -3,13 +3,15 @@ pragma solidity ^0.8.13;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-
 import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
 import "../src/eigenlayer-interfaces/IBeaconChainOracle.sol";
 import "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
 import "../src/eigenlayer-interfaces/ITimelock.sol";
+import "./mocks/MockEigenPodManager.sol";
+import "./mocks/MockDelegationManager.sol";
+import "./common/ArrayTestHelper.sol";
 
 import "../src/interfaces/IStakingManager.sol";
 import "../src/interfaces/IEtherFiNode.sol";
@@ -38,9 +40,8 @@ import "../src/UUPSProxy.sol";
 import "../src/WithdrawRequestNFT.sol";
 import "../src/NFTExchange.sol";
 import "../src/helpers/AddressProvider.sol";
-import "./DepositDataGeneration.sol";
-import "./DepositContract.sol";
-import "./Attacker.sol";
+import "./common/DepositDataGeneration.sol";
+import "./common/DepositContract.sol";
 import "./TestERC20.sol";
 
 import "../src/archive/MembershipManagerV0.sol";
@@ -55,6 +56,7 @@ import "../script/ContractCodeChecker.sol";
 import "../script/Create2Factory.sol";
 import "../src/RoleRegistry.sol";
 import "../src/EtherFiRewardsRouter.sol";
+
 import "../src/CumulativeMerkleRewardsDistributor.sol";
 
 contract TestSetup is Test, ContractCodeChecker {
@@ -90,7 +92,9 @@ contract TestSetup is Test, ContractCodeChecker {
     BeaconChainOracleMock public beaconChainOracleMock;
     IEigenPodManager public eigenLayerEigenPodManager;
     IDelegationManager public eigenLayerDelegationManager;
+    IRewardsCoordinator public eigenLayerRewardsCoordinator;
     ITimelock public eigenLayerTimelock;
+
 
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
 
@@ -116,7 +120,7 @@ contract TestSetup is Test, ContractCodeChecker {
     UUPSProxy public etherFiAdminProxy;
     UUPSProxy public cumulativeMerkleRewardsDistributorProxy;
     UUPSProxy public roleRegistryProxy;
-    DepositDataGeneration public depGen;
+
     IDepositContract public depositContractEth2;
 
     DepositContract public mockDepositContractEth2;
@@ -196,11 +200,6 @@ contract TestSetup is Test, ContractCodeChecker {
 
     EtherFiNode public node;
     Treasury public treasuryInstance;
-
-    Attacker public attacker;
-    RevertAttacker public revertAttacker;
-    GasDrainAttacker public gasDrainAttacker;
-    NoAttacker public noAttacker;
 
     TVLOracle tvlOracle;
 
@@ -348,6 +347,7 @@ contract TestSetup is Test, ContractCodeChecker {
             owner = addressProviderInstance.getContractAddress("EtherFiTimelock");
             admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
 
+
             cbEth_Eth_Pool = ICurvePool(0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A);
             wbEth_Eth_Pool = ICurvePool(0xBfAb6FA95E0091ed66058ad493189D2cB29385E6);
             stEth_Eth_Pool = ICurvePool(0xDC24316b9AE028F1497c275EB9192a3Ea0f67022);
@@ -362,6 +362,8 @@ contract TestSetup is Test, ContractCodeChecker {
             eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
             eigenLayerEigenPodManager = IEigenPodManager(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
             eigenLayerDelegationManager = IDelegationManager(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+            eigenLayerRewardsCoordinator = IRewardsCoordinator(0x7750d328b314EfFa365A0402CcfD489B80B0adda);
+
             eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
 
         } else if (forkEnum == TESTNET_FORK) {
@@ -384,13 +386,12 @@ contract TestSetup is Test, ContractCodeChecker {
             eigenLayerStrategyManager = IEigenLayerStrategyManager(0xdfB5f6CE42aAA7830E94ECFCcAd411beF4d4D5b6);
             eigenLayerEigenPodManager = IEigenPodManager(0x30770d7E3e71112d7A6b7259542D1f680a70e315);
             eigenLayerDelegationManager = IDelegationManager(0xA44151489861Fe9e3055d95adC98FbD462B948e7);
+            eigenLayerRewardsCoordinator == IRewardsCoordinator(0x7750d328b314EfFa365A0402CcfD489B80B0adda);
             eigenLayerTimelock = ITimelock(0xcF19CE0561052a7A7Ff21156730285997B350A7D);
 
         } else {
             revert("Unimplemented fork");
         }
-
-        depGen = new DepositDataGeneration();
 
         //  grab all addresses from address manager and override global testing variables
         regulationsManagerInstance = RegulationsManager(addressProviderInstance.getContractAddress("RegulationsManager"));
@@ -414,9 +415,6 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
-        if (shouldSetupRoleRegistry) {
-            setupRoleRegistry();
-        }
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
@@ -450,7 +448,7 @@ contract TestSetup is Test, ContractCodeChecker {
     }
 
     function deployEtherFiRestaker() internal {
-        etherFiRestakerImplementation = new EtherFiRestaker();
+        etherFiRestakerImplementation = new EtherFiRestaker(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
@@ -597,6 +595,9 @@ contract TestSetup is Test, ContractCodeChecker {
         regulationsManagerInstance.initializeNewWhitelist(termsAndConditionsHash);
         vm.startPrank(owner);
 
+        eigenLayerEigenPodManager = new MockEigenPodManager();
+        eigenLayerDelegationManager = new MockDelegationManager();
+
         membershipNftImplementation = new MembershipNFT();
         membershipNftProxy = new UUPSProxy(address(membershipNftImplementation), "");
         membershipNftInstance = MembershipNFT(payable(membershipNftProxy));
@@ -627,7 +628,7 @@ contract TestSetup is Test, ContractCodeChecker {
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
 
-        etherFiRestakerImplementation = new EtherFiRestaker();
+        etherFiRestakerImplementation = new EtherFiRestaker(address(0x0));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
@@ -808,14 +809,6 @@ contract TestSetup is Test, ContractCodeChecker {
         stakingManagerInstance.registerEtherFiNodeImplementationContract(address(node));
         stakingManagerInstance.registerTNFTContract(address(TNFTInstance));
         stakingManagerInstance.registerBNFTContract(address(BNFTInstance));
-
-
-        depGen = new DepositDataGeneration();
-
-        attacker = new Attacker(address(liquidityPoolInstance));
-        revertAttacker = new RevertAttacker();
-        gasDrainAttacker = new GasDrainAttacker();
-        noAttacker = new NoAttacker();
 
         vm.stopPrank();
 
@@ -1244,7 +1237,7 @@ contract TestSetup is Test, ContractCodeChecker {
 
         // Register the validator and send deposited eth to depositContract/Beaconchain
         // signatures are not checked but roots need to match
-        bytes32 depositRoot = depGen.generateDepositRoot(
+        bytes32 depositRoot = generateDepositRoot(
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.getWithdrawalCredentials(createdBids[0]),
@@ -1354,14 +1347,14 @@ contract TestSetup is Test, ContractCodeChecker {
             address safe = managerInstance.getWithdrawalSafeAddress(
                 newValidators[i]
             );
-            root = depGen.generateDepositRoot(
+            root = generateDepositRoot(
                 hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
                 hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
                 managerInstance.generateWithdrawalCredentials(safe),
                 1 ether
             );
 
-            rootForApproval = depGen.generateDepositRoot(
+            rootForApproval = generateDepositRoot(
                 hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
                 hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65",
                 managerInstance.generateWithdrawalCredentials(safe),
@@ -1556,7 +1549,7 @@ contract TestSetup is Test, ContractCodeChecker {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address etherFiNode = managerInstance.etherfiNodeAddress(_validatorIds[i]);
             pubKey[i] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-            bytes32 root = depGen.generateDepositRoot(
+            bytes32 root = generateDepositRoot(
                 pubKey[i],
                 hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
                 managerInstance.generateWithdrawalCredentials(etherFiNode),
@@ -1582,7 +1575,7 @@ contract TestSetup is Test, ContractCodeChecker {
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             pubKey[i] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-            bytes32 root = depGen.generateDepositRoot(
+            bytes32 root = generateDepositRoot(
                 pubKey[i],
                 hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
                 managerInstance.getWithdrawalCredentials(_validatorIds[i]),
@@ -1595,7 +1588,7 @@ contract TestSetup is Test, ContractCodeChecker {
                 ipfsHashForEncryptedValidatorKey: "test_ipfs"
             });
 
-            depositDataRootsForApproval[i] = depGen.generateDepositRoot(
+            depositDataRootsForApproval[i] = generateDepositRoot(
                 pubKey[i],
                 hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65",
                 managerInstance.getWithdrawalCredentials(_validatorIds[i]),

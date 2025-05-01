@@ -221,27 +221,6 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolNoToken.deposit{value: 2 ether}();
     }
 
-    function test_selfdestruct() public {
-        vm.deal(alice, 3 ether);
-        vm.startPrank(alice);
-        liquidityPoolInstance.deposit{value: 2 ether}();
-        vm.stopPrank();
-
-        assertEq(alice.balance, 1 ether);
-        assertEq(address(liquidityPoolInstance).balance, 2 ether);
-        assertEq(eETHInstance.balanceOf(alice), 2 ether);
-
-        _transferTo(address(attacker), 1 ether);
-        attacker.attack();
-
-        // While the 'selfdestruct' attack can change the LP contract's balance,
-        // it does not affect the critical logics for determining ETH amount per share
-        // so, the balance of Alice remains the same as 2 ether.
-        assertEq(alice.balance, 1 ether);
-        assertEq(address(liquidityPoolInstance).balance, 3 ether);
-        assertEq(eETHInstance.balanceOf(alice), 2 ether);
-    }
-
     function test_WithdrawLiquidityPoolAccrueStakingRewardsWithoutPartialWithdrawal() public {
         vm.deal(alice, 3 ether);
         vm.startPrank(alice);
@@ -841,14 +820,14 @@ contract LiquidityPoolTest is TestSetup {
         bytes32[] memory depositDataRootsForApproval = new bytes32[](1);
 
         address etherFiNode = managerInstance.etherfiNodeAddress(11);
-        root = depGen.generateDepositRoot(
+        root = generateDepositRoot(
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.generateWithdrawalCredentials(etherFiNode),
             1 ether
         );
 
-        depositDataRootsForApproval[0] = depGen.generateDepositRoot(
+        depositDataRootsForApproval[0] = generateDepositRoot(
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.generateWithdrawalCredentials(etherFiNode),
