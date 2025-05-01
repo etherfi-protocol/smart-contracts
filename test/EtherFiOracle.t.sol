@@ -425,13 +425,6 @@ contract EtherFiOracleTest is TestSetup {
     function test_admin_task() public {
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
 
-        // When we want Oracle to allow to spin up one validator
-        report.numValidatorsToSpinUp = 1;
-        _executeAdminTasks(report);
-        assertEq(etherFiAdminInstance.numValidatorsToSpinUp(), 1);
-
-        report.eEthTargetAllocationWeight = 80;
-        report.etherFanTargetAllocationWeight = 20;
         _executeAdminTasks(report);
     }
 

@@ -211,10 +211,8 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         bytes32 chunk2 = keccak256(
             abi.encode(
                 _report.validatorsToApprove,
-                _report.liquidityPoolValidatorsToExit,
                 _report.exitedValidators,
-                _report.exitedValidatorsExitTimestamps,
-                _report.slashedValidators
+                _report.exitedValidatorsExitTimestamps
             )
         );
 
@@ -222,10 +220,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
             abi.encode(
                 _report.withdrawalRequestsToInvalidate,
                 _report.lastFinalizedWithdrawalRequestId,
-                _report.eEthTargetAllocationWeight,
-                _report.etherFanTargetAllocationWeight,
-                _report.finalizedWithdrawalAmount,
-                _report.numValidatorsToSpinUp
+                _report.finalizedWithdrawalAmount
             )
         );
         return keccak256(abi.encode(chunk1, chunk2, chunk3));

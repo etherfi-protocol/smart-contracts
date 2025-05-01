@@ -25,7 +25,6 @@ import "../src/AuctionManager.sol";
 import "../src/archive/ProtocolRevenueManager.sol";
 import "../src/BNFT.sol";
 import "../src/TNFT.sol";
-import "../src/Treasury.sol";
 import "../src/EtherFiNode.sol";
 import "../src/LiquidityPool.sol";
 import "../src/Liquifier.sol";
@@ -38,7 +37,6 @@ import "../src/EarlyAdopterPool.sol";
 import "../src/TVLOracle.sol";
 import "../src/UUPSProxy.sol";
 import "../src/WithdrawRequestNFT.sol";
-import "../src/NFTExchange.sol";
 import "../src/helpers/AddressProvider.sol";
 import "./common/DepositDataGeneration.sol";
 import "./common/DepositContract.sol";
@@ -67,7 +65,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
     uint256 public constant kwei = 10 ** 3;
     uint256 public slippageLimit = 50;
 
-    Create2Factory immutable create2factory = Create2Factory(0x6521991A0BC180a5df7F42b27F4eE8f3B192BA62);
+    Create2Factory immutable create2factory = Create2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
 
     TestERC20 public rETH;
     TestERC20 public wstETH;
@@ -111,7 +109,6 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
     UUPSProxy public nodeOperatorManagerProxy;
     UUPSProxy public membershipManagerProxy;
     UUPSProxy public membershipNftProxy;
-    UUPSProxy public nftExchangeProxy;
     UUPSProxy public withdrawRequestNFTProxy;
     UUPSProxy public etherFiRedemptionManagerProxy;
     UUPSProxy public etherFiOracleProxy;
@@ -178,9 +175,6 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
 
     EtherFiRedemptionManager public etherFiRedemptionManagerInstance;
 
-    NFTExchange public nftExchangeImplementation;
-    NFTExchange public nftExchangeInstance;
-
     NodeOperatorManager public nodeOperatorManagerImplementation;
     NodeOperatorManager public nodeOperatorManagerInstance;
 
@@ -193,7 +187,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
     EtherFiRewardsRouter public etherFiRewardsRouterInstance = EtherFiRewardsRouter(payable(0x73f7b1184B5cD361cC0f7654998953E2a251dd58));
 
     EtherFiNode public node;
-    Treasury public treasuryInstance;
+    address public treasuryInstance;
 
     TVLOracle tvlOracle;
 
@@ -395,12 +389,10 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         weEthInstance = WeETH(addressProviderInstance.getContractAddress("WeETH"));
         membershipManagerV1Instance = MembershipManager(payable(addressProviderInstance.getContractAddress("MembershipManager")));
         membershipNftInstance = MembershipNFT(addressProviderInstance.getContractAddress("MembershipNFT"));
-        nftExchangeInstance = NFTExchange(addressProviderInstance.getContractAddress("NFTExchange"));
         auctionInstance = AuctionManager(addressProviderInstance.getContractAddress("AuctionManager"));
         stakingManagerInstance = StakingManager(addressProviderInstance.getContractAddress("StakingManager"));
         TNFTInstance = TNFT(addressProviderInstance.getContractAddress("TNFT"));
         BNFTInstance = BNFT(addressProviderInstance.getContractAddress("BNFT"));
-        treasuryInstance = Treasury(payable(addressProviderInstance.getContractAddress("Treasury")));
         nodeOperatorManagerInstance = NodeOperatorManager(addressProviderInstance.getContractAddress("NodeOperatorManager"));
         node = EtherFiNode(payable(addressProviderInstance.getContractAddress("EtherFiNode")));
         earlyAdopterPoolInstance = EarlyAdopterPool(payable(addressProviderInstance.getContractAddress("EarlyAdopterPool")));
@@ -462,7 +454,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         depositContractEth2 = IDepositContract(address(mockDepositContractEth2));
 
         // Deploy Contracts and Proxies
-        treasuryInstance = new Treasury();
+        treasuryInstance = vm.addr(999999999);
 
         roleRegistryImplementation = new RoleRegistry();
         roleRegistryProxy = new UUPSProxy(address(roleRegistryImplementation), abi.encodeWithSelector(RoleRegistry.initialize.selector, owner));
@@ -540,13 +532,6 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         sfrxEth = new TestERC20("Frax ETH", "sfrxEth");
         sfrxEth.mint(alice, 10e18);
         sfrxEth.mint(bob, 10e18);
-
-        earlyAdopterPoolInstance = new EarlyAdopterPool(
-            address(rETH),
-            address(wstETH),
-            address(sfrxEth),
-            address(cbEthTestERC)
-        );
 
         addressProviderInstance = new AddressProvider(address(owner));
 
@@ -709,12 +694,6 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
 
         tvlOracle = new TVLOracle(alice);
 
-        nftExchangeImplementation = new NFTExchange();
-        nftExchangeProxy = new UUPSProxy(address(nftExchangeImplementation), "");
-        nftExchangeInstance = NFTExchange(payable(nftExchangeProxy));
-        nftExchangeInstance.initialize(address(TNFTInstance), address(membershipNftInstance), address(managerInstance));
-        nftExchangeInstance.updateAdmin(alice);
-
         etherFiAdminInstance.initialize(
             address(etherFiOracleInstance),
             address(stakingManagerInstance),
@@ -870,17 +849,16 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         uint256[] memory validatorsToExit = new uint256[](0);
         uint256[] memory exitedValidators = new uint256[](0);
         uint32[] memory  exitTimestamps = new uint32[](0);
-        uint256[] memory slashedValidators = new uint256[](0);
         uint256[] memory withdrawalRequestsToInvalidate = new uint256[](0);
-        reportAtPeriod2A = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, validatorsToExit, exitedValidators, exitTimestamps, slashedValidators, withdrawalRequestsToInvalidate, 1, 80, 20, 0, 0);
-        reportAtPeriod2B = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, validatorsToExit, exitedValidators, exitTimestamps, slashedValidators, withdrawalRequestsToInvalidate, 1, 81, 19, 0, 0);
-        reportAtPeriod2C = IEtherFiOracle.OracleReport(2, 0, 1024 - 1, 0, 1024 - 1, 1, 0, validatorsToApprove, validatorsToExit, exitedValidators, exitTimestamps, slashedValidators, withdrawalRequestsToInvalidate, 1, 79, 21, 0, 0);
-        reportAtPeriod3 = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 0, 2048 - 1, 1, 0, validatorsToApprove, validatorsToExit, exitedValidators, exitTimestamps, slashedValidators, withdrawalRequestsToInvalidate, 1, 80, 20, 0, 0);
-        reportAtPeriod3A = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 0, 3 * 1024 - 1, 1, 0, validatorsToApprove, validatorsToExit, exitedValidators, exitTimestamps, slashedValidators, withdrawalRequestsToInvalidate, 1, 80, 20, 0, 0);
-        reportAtPeriod3B = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 1, 2 * 1024 - 1, 1, 0, validatorsToApprove, validatorsToExit, exitedValidators, exitTimestamps, slashedValidators, withdrawalRequestsToInvalidate, 1, 80, 20, 0, 0);
-        reportAtPeriod4 = IEtherFiOracle.OracleReport(1, 2 * 1024, 1024 * 3 - 1, 2 * 1024, 3 * 1024 - 1, 0, 0, validatorsToApprove, validatorsToExit, exitedValidators, exitTimestamps, slashedValidators, withdrawalRequestsToInvalidate, 1, 80, 20, 0, 0);
-        reportAtSlot3071 = IEtherFiOracle.OracleReport(1, 2048, 3072 - 1, 2048, 3072 - 1, 1, 0, validatorsToApprove, validatorsToExit, exitedValidators, exitTimestamps, slashedValidators, withdrawalRequestsToInvalidate, 1, 80, 20, 0, 0);
-        reportAtSlot4287 = IEtherFiOracle.OracleReport(1, 3264, 4288 - 1, 3264, 4288 - 1, 1, 0, validatorsToApprove, validatorsToExit, exitedValidators, exitTimestamps, slashedValidators, withdrawalRequestsToInvalidate, 1, 80, 20, 0, 0);
+        reportAtPeriod2A = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, exitedValidators, exitTimestamps, withdrawalRequestsToInvalidate, 1, 0);
+        reportAtPeriod2B = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, exitedValidators, exitTimestamps, withdrawalRequestsToInvalidate, 1, 0);
+        reportAtPeriod2C = IEtherFiOracle.OracleReport(2, 0, 1024 - 1, 0, 1024 - 1, 1, 0, validatorsToApprove, exitedValidators, exitTimestamps, withdrawalRequestsToInvalidate, 1, 0);
+        reportAtPeriod3 = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 0, 2048 - 1, 1, 0, validatorsToApprove, exitedValidators, exitTimestamps, withdrawalRequestsToInvalidate, 1, 0);
+        reportAtPeriod3A = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 0, 3 * 1024 - 1, 1, 0, validatorsToApprove, exitedValidators, exitTimestamps, withdrawalRequestsToInvalidate, 1, 0);
+        reportAtPeriod3B = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 1, 2 * 1024 - 1, 1, 0, validatorsToApprove, exitedValidators, exitTimestamps, withdrawalRequestsToInvalidate, 1, 0);
+        reportAtPeriod4 = IEtherFiOracle.OracleReport(1, 2 * 1024, 1024 * 3 - 1, 2 * 1024, 3 * 1024 - 1, 0, 0, validatorsToApprove, exitedValidators, exitTimestamps, withdrawalRequestsToInvalidate, 1, 0);
+        reportAtSlot3071 = IEtherFiOracle.OracleReport(1, 2048, 3072 - 1, 2048, 3072 - 1, 1, 0, validatorsToApprove, exitedValidators, exitTimestamps, withdrawalRequestsToInvalidate, 1, 0);
+        reportAtSlot4287 = IEtherFiOracle.OracleReport(1, 3264, 4288 - 1, 3264, 4288 - 1, 1, 0, validatorsToApprove, exitedValidators, exitTimestamps, withdrawalRequestsToInvalidate, 1, 0);
     }
 
     function _merkleSetup() internal {
@@ -1111,7 +1089,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         uint256[] memory emptyVals = new uint256[](0);
         uint32[] memory emptyVals32 = new uint32[](0);
         uint32 consensusVersion = etherFiOracleInstance.consensusVersion();
-        report = IEtherFiOracle.OracleReport(consensusVersion, 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, emptyVals, emptyVals32, emptyVals, emptyVals, 0, 0, 0, 0, 0);
+        report = IEtherFiOracle.OracleReport(consensusVersion, 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, emptyVals32, emptyVals, 0, 0);
     }
 
     function calculatePermitDigest(address _owner, address spender, uint256 value, uint256 nonce, uint256 deadline, bytes32 domainSeparator) public pure returns (bytes32) {
@@ -1261,10 +1239,6 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
 
     function launch_validator(uint256 _numValidators, uint256 _validatorIdToCoUseWithdrawalSafe, bool _isLpBnftHolder, address _bnftStaker, address _nodeOperator) internal returns (uint256[] memory) {
         bytes32 rootForApproval;
-
-        // IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        // report.numValidatorsToSpinUp = uint32(_numValidators);
-        // _executeAdminTasks(report);
 
         vm.deal(owner, 10000 ether);
         vm.deal(alice, 10000 ether);

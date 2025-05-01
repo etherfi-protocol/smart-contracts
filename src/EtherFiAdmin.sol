@@ -46,7 +46,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     uint32 public lastHandledReportRefSlot;
     uint32 public lastHandledReportRefBlock;
-    uint32 public numValidatorsToSpinUp;
+    uint32 public __gap_0;
 
     int32 public acceptableRebaseAprInBps;
 
@@ -193,8 +193,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(blockForNextReportToProcess() == _report.refBlockFrom, "EtherFiAdmin: report has wrong `refBlockFrom`");
         require(current_slot >= postReportWaitTimeInSlots + etherFiOracle.getConsensusSlot(reportHash), "EtherFiAdmin: report is too fresh");
 
-        numValidatorsToSpinUp = _report.numValidatorsToSpinUp;
-
         _handleAccruedRewards(_report);
         _handleProtocolFees(_report);
         _handleValidators(reportHash, _report);
@@ -310,9 +308,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function _handleValidators(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report) internal {
             uint32[] memory emptyTimestamps = new uint32[](0);
             _enqueueValidatorManagementTask(_reportHash, _report.validatorsToApprove, emptyTimestamps,  TaskType.ValidatorApproval);
-            _enqueueValidatorManagementTask(_reportHash, _report.liquidityPoolValidatorsToExit, emptyTimestamps,  TaskType.SendExitRequests);
             _enqueueValidatorManagementTask(_reportHash, _report.exitedValidators, _report.exitedValidatorsExitTimestamps, TaskType.ProcessNodeExit);
-            _enqueueValidatorManagementTask(_reportHash, _report.slashedValidators, emptyTimestamps, TaskType.MarkBeingSlashed);
     }
 
     function _handleWithdrawals(IEtherFiOracle.OracleReport calldata _report) internal {

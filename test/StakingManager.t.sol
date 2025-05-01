@@ -52,7 +52,6 @@ contract StakingManagerTest is TestSetup {
     function test_ApproveRegistration() public {
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.numValidatorsToSpinUp = 4;
         _executeAdminTasks(report);
 
         vm.startPrank(alice);

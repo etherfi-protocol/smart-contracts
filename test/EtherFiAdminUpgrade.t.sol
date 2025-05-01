@@ -72,16 +72,11 @@ contract EtherFiAdminUpgradeTest is TestSetup {
                 accruedRewards: 12865299762487754752,
                 protocolFees: 1438401262268165688,
                 validatorsToApprove: new uint256[](10),
-                liquidityPoolValidatorsToExit: new uint256[](0),
                 exitedValidators: new uint256[](0),
                 exitedValidatorsExitTimestamps: new uint32[](0),
-                slashedValidators: new uint256[](0),
                 withdrawalRequestsToInvalidate: new uint256[](0),
                 lastFinalizedWithdrawalRequestId: 57907,
-                eEthTargetAllocationWeight: 0,
-                etherFanTargetAllocationWeight: 0,
-                finalizedWithdrawalAmount: 608440514420670619423,
-                numValidatorsToSpinUp: 100
+                finalizedWithdrawalAmount: 608440514420670619423
             });
         uint256 startId = 80920;
         for (uint i = 0; i < 10; i++) {
