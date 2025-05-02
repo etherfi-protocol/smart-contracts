@@ -59,7 +59,7 @@ import "../src/EtherFiRewardsRouter.sol";
 
 import "../src/CumulativeMerkleRewardsDistributor.sol";
 
-contract TestSetup is Test, ContractCodeChecker {
+contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration, ArrayTestHelper {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
     event Execute(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt);
