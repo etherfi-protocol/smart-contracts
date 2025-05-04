@@ -472,7 +472,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         auctionInstance.initialize(address(nodeOperatorManagerInstance));
         auctionInstance.updateAdmin(alice, true);
 
-        stakingManagerImplementation = new StakingManager();
+        //stakingManagerImplementation = new StakingManager();
         stakingManagerProxy = new UUPSProxy(address(stakingManagerImplementation), "");
         stakingManagerInstance = StakingManager(address(stakingManagerProxy));
         //stakingManagerInstance.initialize(address(auctionInstance), address(mockDepositContractEth2));
@@ -494,7 +494,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         protocolRevenueManagerInstance.initialize();
         protocolRevenueManagerInstance.updateAdmin(alice);
 
-        managerImplementation = new EtherFiNodesManager();
+        managerImplementation = new EtherFiNodesManager(address(stakingManagerInstance));
         etherFiNodeManagerProxy = new UUPSProxy(address(managerImplementation), "");
         managerInstance = EtherFiNodesManager(payable(address(etherFiNodeManagerProxy)));
         
@@ -1448,13 +1448,15 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
     }
 
     function _upgrade_etherfi_nodes_manager_contract() internal {
-        address newImpl = address(new EtherFiNodesManager());
+        address newImpl = address(new EtherFiNodesManager(address(stakingManagerInstance)));
         vm.prank(managerInstance.owner());
         managerInstance.upgradeTo(newImpl);
     }
 
     function _upgrade_staking_manager_contract() internal {
-        address newImpl = address(new StakingManager());
+        // TODO(dave): fix
+        //address newImpl = address(new StakingManager());
+        address newImpl = address(0x0);
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeTo(newImpl);
     }

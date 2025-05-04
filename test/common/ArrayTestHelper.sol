@@ -2,6 +2,7 @@
 pragma solidity ^0.8.27;
 
 import "../../src/eigenlayer-interfaces/IDelegationManager.sol";
+import "../../src/interfaces/IStakingManager.sol";
 
 contract ArrayTestHelper {
     // Common types used throughout our and eigenlayers protocol
@@ -28,6 +29,12 @@ contract ArrayTestHelper {
     function toArray(IDelegationManager.Withdrawal memory withdrawal) public returns (IDelegationManager.Withdrawal[] memory) {
         IDelegationManager.Withdrawal[] memory vals = new IDelegationManager.Withdrawal[](1);
         vals[0] = withdrawal;
+        return vals;
+    }
+
+    function toArray(IStakingManager.DepositData memory deposit) public returns (IStakingManager.DepositData[] memory) {
+        IStakingManager.DepositData[] memory vals = new IStakingManager.DepositData[](1);
+        vals[0] = deposit;
         return vals;
     }
 }

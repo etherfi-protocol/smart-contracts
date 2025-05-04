@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.27;
 
 import "./interfaces/ITNFT.sol";
 import "./interfaces/IBNFT.sol";
@@ -35,11 +35,11 @@ contract StakingManager is
     UUPSUpgradeable
 {
     
-    /*
     uint128 public maxBatchDepositSize;
     uint128 public stakeAmount;
 
-    address public implementationContract;
+    //address public implementationContract;
+    address public etherFiNodeImplementation;
     address public liquidityPoolContract;
 
     bool public isFullStakeEnabled;
@@ -47,21 +47,21 @@ contract StakingManager is
 
     ITNFT public TNFTInterfaceInstance;
     IBNFT public BNFTInterfaceInstance;
-    IAuctionManager public auctionManager;
-    IDepositContract public depositContractEth2;
+    IAuctionManager public DEPRECATED_auctionManager;
+    IDepositContract public DEPRECATED_depositContractEth2;
     IEtherFiNodesManager public nodesManager;
     UpgradeableBeacon private upgradableBeacon;
 
-    mapping(uint256 => StakerInfo) public bidIdToStakerInfo;
+    //mapping(uint256 => StakerInfo) public bidIdToStakerInfo;
+    mapping(uint256 => uint256) public bidIdToStakerInfo;
 
     address public DEPRECATED_admin;
     address public nodeOperatorManager;
     mapping(address => bool) public admins;
-    */
 
     // TODO(dave): fix storage shift
-    UpgradeableBeacon private upgradableBeacon;
-    address public etherFiNodeImplementation;
+    //UpgradeableBeacon private upgradableBeacon;
+    //address public etherFiNodeImplementation;
 
     address public immutable liquidityPool;
     IEtherFiNodesManager public immutable etherFiNodesManager;
@@ -89,14 +89,29 @@ contract StakingManager is
     // legacy event still being emitted in its original form to play nice with existing external tooling
     event ValidatorRegistered(address indexed operator, address indexed bNftOwner, address indexed tNftOwner, 
                               uint256 validatorId, bytes validatorPubKey, string ipfsHashForEncryptedValidatorKey);
-
-
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(
+        address _liquidityPool,
+        address _etherFiNodesManager,
+        address _ethDepositContract,
+        address _auctionManager,
+        address _tnft,
+        address _bnft,
+        address _etherfiOracle
+    ) {
+
+        liquidityPool = _liquidityPool;
+        etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
+        depositContractEth2 = IDepositContract(_ethDepositContract);
+        auctionManager = IAuctionManager(_auctionManager);
+        tnft = ITNFT(_tnft);
+        bnft = IBNFT(_bnft);
+        etherfiOracle = _etherfiOracle;
+
         _disableInitializers();
     }
 

@@ -11,16 +11,23 @@ interface IStakingManager {
         string ipfsHashForEncryptedValidatorKey;
     }
 
-    function pauseContract() external;
-    function unPauseContract() external;
 
+    function calculateValidatorPubkeyHash(bytes memory pubkey) external pure returns (bytes32);
+
+    // deposit flow
     function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external payable;
     function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable;
 
-    function calculateValidatorPubkeyHash(bytes memory pubkey) external pure returns (bytes32);
-    function upgradeEtherFiNode(address _newImplementation) external;
 
+    // EtherFiNode Beacon Proxy
+    function upgradeEtherFiNode(address _newImplementation) external;
     function getEtherFiNodeBeacon() external view returns (address);
+
+    // protocol
+    function pauseContract() external;
+    function unPauseContract() external;
+    //function owner() external returns (address);
+    //function upgradeTo(address _newImplementation) external;
 
     // this is implementation for the etherFiNode as the staking manager serves as the beacon
     //function implementation() external view returns (address);

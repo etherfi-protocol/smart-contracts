@@ -8,7 +8,6 @@ import "../eigenlayer-interfaces/IEigenPod.sol";
 
 interface IEtherFiNode {
 
-
     // eigenlayer
     function createEigenPod() external;
     function getEigenPod() external view returns (IEigenPod);

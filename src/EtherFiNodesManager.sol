@@ -74,8 +74,8 @@ contract EtherFiNodesManager is
     mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls;
     */
 
-    address public immutable eigenPodManager;
-    address  public immutable delegationManager;
+    address public immutable eigenPodManager = address(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
+    address public immutable delegationManager = address(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
     address public immutable stakingManager;
 
     //-----------------------------------------------------------------
@@ -92,10 +92,6 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    event NodeExitRequested(uint256 _validatorId);
-    event NodeExitProcessed(uint256 _validatorId);
-    //event PhaseChanged(uint256 indexed _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
-
     event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
     event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
@@ -108,7 +104,8 @@ contract EtherFiNodesManager is
     event NodeDeployed(address indexed nodeAddress, uint256 indexed nodeNonce);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _stakingManager) {
+        stakingManager = _stakingManager;
         _disableInitializers();
     }
 
@@ -129,9 +126,22 @@ contract EtherFiNodesManager is
     function pauseContract() external { _pause(); }
     function unPauseContract() external { _unpause(); }
 
-    function etherfiNodeAddress(uint256) public view returns (address) {
-        // TODO(dave): implement
-        return address(0);
+    // Note that this ID can either be a a traditional etherfi validatorID or
+    // a validatorPubkeyHash cast as a uint256. This was done maintaint compatibility
+    // with minimal changes as we migrate from our id system to using pubkey hash instead
+    function etherfiNodeAddress(uint256 id) public view returns (address) {
+        // if the ID is a legacy validatorID use the old storage array
+        // otherwise assume it is a pubkey hash.
+        // In a future upgrade we can fully remove the legacy path
+
+        // heuristic that if a pubkey hash, at least 1 bit of higher order bits must be 1
+        // all of the legacy id's were incrementing integers that will not have those bits set
+        uint256 mask = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000;
+        if (mask & id > 0) {
+            return address(etherFiNodeFromPubkeyHash[bytes32(id)]);
+        } else {
+            return legacyState.DEPRECATED_etherfiNodeAddress[id];
+        }
     }
 
     function etherFiNodeFromId(uint256 id) public view returns (address) {

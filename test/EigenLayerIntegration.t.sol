@@ -70,7 +70,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         liquidityPoolInstance.setRestakeBnftDeposits(true);
         vm.stopPrank();
 
-        EtherFiNodesManager newManagerImpl = new EtherFiNodesManager();
+        EtherFiNodesManager newManagerImpl = new EtherFiNodesManager(address(0x0));
         EtherFiNode newNodeImpl = new EtherFiNode(address(0x0), address(0x0), address(0x0), address(0x0));
 
         vm.startPrank(managerInstance.owner());
