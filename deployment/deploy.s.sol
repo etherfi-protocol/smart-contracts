@@ -29,6 +29,7 @@ contract DeployScript is Script {
         // 2. constructor args
         // 3. bytecode
         // 4. commithash_salt
+        // 5. (if verification is desired) deployed address
         // -------------------------------------------------------------------------
 
         // #1. contract name
@@ -61,6 +62,7 @@ contract DeployScript is Script {
         if (to_deploy) {
             deploy(contractName, constructorArgs, bytecode, commithash_salt, true);
         } else {
+            // #5. deployed address
             // For verification, put the address here
             address deployedAddress = address(0);
             require(verify(deployedAddress, bytecode, commithash_salt), "Deployment verification failed");
