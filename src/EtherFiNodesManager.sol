@@ -115,12 +115,6 @@ contract EtherFiNodesManager is
 
     error InvalidParams();
 
-    function setProofSubmitter(uint256 id, address proofSubmitter) external {
-        // TODO(dave): implement
-    }
-    function startCheckpoint(uint256 id) external {
-        // TODO(dave): implement
-    }
 
     // TODO(dave): reimplement pausing with role registry
     function pauseContract() external { _pause(); }
@@ -159,10 +153,36 @@ contract EtherFiNodesManager is
         }
     }
 
+    //--------------------------------------------------------------------------------------
+    //---------------------------- Eigenlayer Interactions  --------------------------------
+    //--------------------------------------------------------------------------------------
+
+    // TODO(dave): permissions
+
     function getEigenPod(uint256 id) public view returns (address) {
-        IEtherFiNode node = IEtherFiNode(etherFiNodeFromId(id));
-        return address(node.getEigenPod());
+        return address(IEtherFiNode(etherfiNodeAddress(id)).getEigenPod());
     }
+
+    function createEigenPod(uint256 id) public returns (address) {
+        return IEtherFiNode(etherfiNodeAddress(id)).createEigenPod();
+    }
+
+    function startCheckpoint(uint256 id) external {
+        IEtherFiNode(etherfiNodeAddress(id)).startCheckpoint();
+    }
+
+    function setProofSubmitter(uint256 id, address proofSubmitter) external {
+        IEtherFiNode(etherfiNodeAddress(id)).setProofSubmitter(proofSubmitter);
+    }
+
+    function queueWithdrawal(uint256 id, IDelegationManager.QueuedWithdrawalParams calldata params) external returns (bytes32 withdrawalRoot) {
+        return IEtherFiNode(etherfiNodeAddress(id)).queueWithdrawal(params);
+    }
+
+    function completeQueuedWithdrawals(uint256 id, bool receiveAsTokens) external {
+        IEtherFiNode(etherfiNodeAddress(id)).completeQueuedWithdrawals(receiveAsTokens);
+    }
+
 
     //-------------------------------------------------------------------
     //---------------------  Key Management  ----------------------------
@@ -220,20 +240,9 @@ contract EtherFiNodesManager is
         emit AllowedForwardedEigenpodCallsUpdated(selector, allowed);
     }
 
-    function batchForwardEigenpodCall(bytes32[] calldata pubkeys, bytes[] calldata data) external returns (bytes[] memory returnData) {
-        returnData = new bytes[](pubkeys.length);
-        for (uint256 i = 0; i < pubkeys.length; i++) {
-
-            // validate the call
-            if (data[i].length < 4) revert InvalidForwardedCall();
-            bytes4 selector = bytes4(data[i][:4]);
-            if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
-
-            returnData[i] = etherFiNodeFromPubkeyHash[pubkeys[i]].forwardEigenPodCall(data[i]);
-        }
-    }
-
     function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) public returns (bytes[] memory returnData) {
+        if (nodes.length != data.length) revert InvalidForwardedCall();
+
         returnData = new bytes[](nodes.length);
         for (uint256 i = 0; i < nodes.length; i++) {
 
@@ -246,21 +255,52 @@ contract EtherFiNodesManager is
         }
     }
 
-    function forwardExternalCall(bytes32[] calldata pubkeys, bytes[] calldata data, address target) public returns (bytes[] memory returnData) {
-        returnData = new bytes[](pubkeys.length);
-        for (uint256 i = 0; i < pubkeys.length; i++) {
+    function forwardExternalCall(uint256[] calldata ids, bytes[] calldata data, address target) public returns (bytes[] memory returnData) {
+        if (ids.length != data.length) revert InvalidForwardedCall();
+
+        returnData = new bytes[](ids.length);
+        for (uint256 i = 0; i < ids.length; i++) {
 
             // validate the call
             if (data[i].length < 4) revert InvalidForwardedCall();
             bytes4 selector = bytes4(data[i][:4]);
             if (!allowedForwardedExternalCalls[selector][target]) revert ForwardedCallNotAllowed();
 
-            returnData[i] = etherFiNodeFromPubkeyHash[pubkeys[i]].forwardExternalCall(target, data[i]);
+            IEtherFiNode node = IEtherFiNode(etherfiNodeAddress(ids[i]));
+            returnData[i] = node.forwardExternalCall(target, data[i]);
         }
     }
 
-    function forwardEigenPodCall(uint256[] calldata ids, bytes[] calldata data) external returns (bytes memory) {
-        // TODO(dave): implement
+    function forwardEigenPodCall(address[] calldata etherFiNodes, bytes[] calldata data) external returns (bytes[] memory returnData) {
+        if (etherFiNodes.length != data.length) revert InvalidForwardedCall();
+
+        returnData = new bytes[](etherFiNodes.length);
+        for (uint256 i = 0; i < etherFiNodes.length; i++) {
+
+            // validate the call
+            if (data[i].length < 4) revert InvalidForwardedCall();
+            bytes4 selector = bytes4(data[i][:4]);
+            if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
+
+            IEtherFiNode node = IEtherFiNode(etherFiNodes[i]);
+            returnData[i] = node.forwardEigenPodCall(data[i]);
+        }
+    }
+
+    function forwardEigenPodCall(uint256[] calldata ids, bytes[] calldata data) external returns (bytes[] memory returnData) {
+        if (ids.length != data.length) revert InvalidForwardedCall();
+
+        returnData = new bytes[](ids.length);
+        for (uint256 i = 0; i < ids.length; i++) {
+
+            // validate the call
+            if (data[i].length < 4) revert InvalidForwardedCall();
+            bytes4 selector = bytes4(data[i][:4]);
+            if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
+
+            IEtherFiNode node = IEtherFiNode(etherFiNodeFromId(ids[i]));
+            returnData[i] = node.forwardEigenPodCall(data[i]);
+        }
     }
 
 }

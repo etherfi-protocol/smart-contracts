@@ -95,7 +95,6 @@ contract StakingManager is
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
         address _liquidityPool,
         address _etherFiNodesManager,

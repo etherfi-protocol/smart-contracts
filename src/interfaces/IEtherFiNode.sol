@@ -9,7 +9,7 @@ import "../eigenlayer-interfaces/IEigenPod.sol";
 interface IEtherFiNode {
 
     // eigenlayer
-    function createEigenPod() external;
+    function createEigenPod() external returns (address);
     function getEigenPod() external view returns (IEigenPod);
     function startCheckpoint() external;
     function setProofSubmitter(address _newProofSubmitter) external;

@@ -80,10 +80,6 @@ interface IEtherFiNodesManager {
     }
     */
 
-    //function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external;
-    //function etherFiNodeFromPubkeyHash(bytes32 pubkeyHash) external view returns (IEtherFiNode);
-    //function etherFiNodeFromId(uint256 id) external view returns (address);
-
     function addressToWithdrawalCredentials(address addr) external pure returns (bytes memory);
     function etherfiNodeAddress(uint256 id) external view returns(address);
     function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external;
@@ -100,8 +96,10 @@ interface IEtherFiNodesManager {
     // call forwarding
     function updateAllowedForwardedExternalCalls(bytes4 selector, address target, bool allowed) external;
     function updateAllowedForwardedEigenpodCalls(bytes4 selector, bool allowed) external;
-    function forwardEigenPodCall(uint256[] calldata ids, bytes[] calldata data) external returns (bytes memory);
     function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external returns (bytes[] memory returnData);
+    function forwardExternalCall(uint256[] calldata ids, bytes[] calldata data, address target) external returns (bytes[] memory returnData);
+    function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external returns (bytes[] memory returnData);
+    function forwardEigenPodCall(uint256[] calldata ids, bytes[] calldata data) external returns (bytes[] memory returnData);
 
     // protocol
     function pauseContract() external;
