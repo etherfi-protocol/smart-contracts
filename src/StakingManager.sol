@@ -71,6 +71,8 @@ contract StakingManager is
     IBNFT public immutable bnft;
     address public immutable etherfiOracle;
 
+    uint256 public constant initialDepositAmount = 1 ether;
+
     error InvalidCaller();
     error UnlinkedPubkey();
     error IncorrectBeaconRoot();
@@ -136,14 +138,14 @@ contract StakingManager is
 
             // verify deposit root
             bytes memory withdrawalCredentials = etherFiNodesManager.addressToWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
-            bytes32 computedDataRoot = depositRootGenerator.generateDepositRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, 1 ether);
+            bytes32 computedDataRoot = depositRootGenerator.generateDepositRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, initialDepositAmount);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
             // Link the pubkey to a node. Will revert if this pubkey is already registered to a different target
             etherFiNodesManager.linkPubkeyToNode(depositData[i].publicKey, etherFiNode, bidIds[i]);
 
             // Deposit to the Beacon Chain
-            depositContractEth2.deposit{value: 1 ether}(depositData[i].publicKey, withdrawalCredentials, depositData[i].signature, computedDataRoot);
+            depositContractEth2.deposit{value: initialDepositAmount}(depositData[i].publicKey, withdrawalCredentials, depositData[i].signature, computedDataRoot);
 
             bytes32 pubkeyHash = calculateValidatorPubkeyHash(depositData[i].publicKey);
             emit validatorCreated(pubkeyHash, etherFiNode, depositData[i].publicKey);
@@ -154,25 +156,27 @@ contract StakingManager is
     /// @notice send remaining eth to activate validators created by "createBeaconValidators"
     ///    The oracle is expected to have confirmed the withdrawal credentials
     function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable {
-        if (msg.sender != etherfiOracle) revert InvalidCaller();
+        if (msg.sender != liquidityPool) revert InvalidCaller();
         if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
+
+        // we already deposited the initial amount to create the validators in createBeaconValidators()
+        uint256 remainingDeposit = validatorSizeWei - initialDepositAmount;
 
         for (uint256 i = 0; i < depositData.length; i++) {
 
             // check that withdrawal credentials for pubkey match what we originally intended
-            // It is expected that the oracle will not call the function for any key that was front-run
+            // It is expected that the oracle will not call the function for any key that was front-run by a malicious operator
             bytes32 pubkeyHash = calculateValidatorPubkeyHash(depositData[i].publicKey);
             IEtherFiNode etherFiNode = etherFiNodesManager.etherFiNodeFromPubkeyHash(pubkeyHash);
             if (address(etherFiNode) == address(0x0)) revert UnlinkedPubkey();
 
             // verify deposit root
             bytes memory withdrawalCredentials = etherFiNodesManager.addressToWithdrawalCredentials(address(etherFiNode.getEigenPod()));
-            bytes32 computedDataRoot = depositRootGenerator.generateDepositRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, 31 ether);
+            bytes32 computedDataRoot = depositRootGenerator.generateDepositRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, remainingDeposit);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
             // Deposit the remaining eth to the validator
-            uint256 amountToDeposit = validatorSizeWei - 1 ether; // already did 1 eth deposit
-            depositContractEth2.deposit{value: amountToDeposit}(depositData[i].publicKey, withdrawalCredentials, depositData[i].signature, computedDataRoot);
+            depositContractEth2.deposit{value: remainingDeposit}(depositData[i].publicKey, withdrawalCredentials, depositData[i].signature, computedDataRoot);
 
             // Use pubkey hash as the minted token ID
             tnft.mint(liquidityPool, uint256(pubkeyHash));
@@ -205,7 +209,7 @@ contract StakingManager is
         etherFiNodeImplementation = _newImplementation;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {}
+    function _authorizeUpgrade(address _newImplementation) internal override {}
 
     /// @notice Fetches the address of the beacon contract for future EtherFiNodes (withdrawal safes)
     function getEtherFiNodeBeacon() external view returns (address) {
@@ -216,6 +220,22 @@ contract StakingManager is
     /// @return the address of the currently used implementation contract
     function implementation() public view override returns (address) {
         return upgradableBeacon.implementation();
+    }
+
+    // TODO(dave): Permissions
+
+    /// @dev create a new proxy instance of the etherFiNode withdrawal safe contract.
+    /// @param _createEigenPod whether or not to create an associated eigenPod contract.
+    function instantiateEtherFiNode(bool _createEigenPod) external returns (address) {
+        // TODO(dave): Permissions
+        //if (msg.sender != address(nodesManager), "INCORRECT_CALLER");
+
+        BeaconProxy proxy = new BeaconProxy(address(upgradableBeacon), "");
+        address node = address(proxy);
+        if (_createEigenPod) {
+            IEtherFiNode(node).createEigenPod();
+        }
+        return node;
     }
 
 }
