@@ -20,12 +20,22 @@ contract DeployScript is Script {
     using stdJson for string;
 
     ICreate2Factory constant factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
-    bytes32 constant SALT = keccak256("ether.fi");
 
     function run() external {
+        // -------------------------------------------------------------------------
+        // INPUT
+        // -------------------------------------------------------------------------
+        // 1. contract name
+        // 2. constructor args
+        // 3. bytecode
+        // 4. commithash_salt
+        // -------------------------------------------------------------------------
+
+        // #1. contract name
         string memory contractName = "EtherFiRedemptionManager";
-        
-        // Prepare bytecode with constructor params (example below)
+
+        // #2. constructor args
+        // Prepare bytecode with constructor params
         bytes memory constructorArgs = abi.encode(
             address(0), // liquidityPool
             address(0), // eEth
@@ -33,27 +43,35 @@ contract DeployScript is Script {
             address(0), // treasury
             address(0)  // roleRegistry
         );
+
+        // #3. bytecode
         bytes memory bytecode = abi.encodePacked(
             type(EtherFiRedemptionManager).creationCode,
             constructorArgs
         );
 
+        // #4. commithash_salt
+        // put the commit hash used for the deployment here
+        // since the git commit hash is 20 bytes, we add right padding to make it 32 bytes
+        bytes32 commithash_salt = bytes32(bytes20(hex"46a81769b944c166e46b4e02c4e78fade102d288"));
+
+
         // Deploy using Create2Factory
         bool to_deploy = true;
         if (to_deploy) {
-            deploy(contractName, constructorArgs, bytecode, true);
+            deploy(contractName, constructorArgs, bytecode, commithash_salt, true);
         } else {
             // For verification, put the address here
             address deployedAddress = address(0);
-            require(verify(deployedAddress, bytecode), "Deployment verification failed");
+            require(verify(deployedAddress, bytecode, commithash_salt), "Deployment verification failed");
         }
     }
 
-    function deploy(string memory contractName, bytes memory constructorArgs, bytes memory bytecode, bool logging) internal returns (address) {
+    function deploy(string memory contractName, bytes memory constructorArgs, bytes memory bytecode, bytes32 salt, bool logging) internal returns (address) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address predictedAddress = factory.computeAddress(SALT, bytecode);
+        address predictedAddress = factory.computeAddress(salt, bytecode);
         vm.startBroadcast(deployerPrivateKey);
-        address deployedAddress = factory.deploy(bytecode, SALT);
+        address deployedAddress = factory.deploy(bytecode, salt);
         require(deployedAddress == predictedAddress, "Deployment address mismatch");
         vm.stopBroadcast();
 
@@ -65,7 +83,7 @@ contract DeployScript is Script {
                 '  "contractName": "', contractName, '",\n',
                 '  "deploymentParameters": {\n',
                 '    "factory": "', vm.toString(address(factory)), '",\n',
-                '    "salt": "', vm.toString(SALT), '",\n',
+                '    "salt": "', vm.toString(salt), '",\n',
                 formatConstructorArgs(constructorArgs, contractName), '\n',
                 '  },\n',
                 '  "deployedAddress": "', vm.toString(deployedAddress), '"\n',
@@ -94,8 +112,8 @@ contract DeployScript is Script {
         }
     }
 
-    function verify(address addr, bytes memory bytecode) internal view returns (bool) {
-        return factory.verify(addr, SALT, bytecode);
+    function verify(address addr, bytes memory bytecode, bytes32 salt) internal view returns (bool) {
+        return factory.verify(addr, salt, bytecode);
     }
 
     //-------------------------------------------------------------------------
