@@ -102,6 +102,10 @@ contract EtherFiNodesManager is
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _stakingManager) {
         stakingManager = _stakingManager;
+
+        // TODO(dave): add to constructor
+        roleRegistry = IRoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
+
         _disableInitializers();
     }
 
@@ -110,8 +114,14 @@ contract EtherFiNodesManager is
     receive() external payable {}
 
     // TODO(dave): reimplement pausing with role registry
-    function pauseContract() external { _pause(); }
-    function unPauseContract() external { _unpause(); }
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        _pause();
+    }
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        _unpause();
+    }
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
@@ -120,8 +130,6 @@ contract EtherFiNodesManager is
 
     bytes32 public constant ETHERFI_NODES_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
-
-
 
     function etherFiNodeFromId(uint256 id) public view returns (address) {
         // if the ID is a legacy validatorID use the old storage array
@@ -148,26 +156,25 @@ contract EtherFiNodesManager is
         return address(IEtherFiNode(etherfiNodeAddress(id)).getEigenPod());
     }
 
-    function createEigenPod(uint256 id) public returns (address) {
+    function createEigenPod(uint256 id) public onlyAdmin returns (address) {
         return IEtherFiNode(etherfiNodeAddress(id)).createEigenPod();
     }
 
-    function startCheckpoint(uint256 id) external {
+    function startCheckpoint(uint256 id) external onlyAdmin {
         IEtherFiNode(etherfiNodeAddress(id)).startCheckpoint();
     }
 
-    function setProofSubmitter(uint256 id, address proofSubmitter) external {
+    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyAdmin {
         IEtherFiNode(etherfiNodeAddress(id)).setProofSubmitter(proofSubmitter);
     }
 
-    function queueWithdrawal(uint256 id, IDelegationManager.QueuedWithdrawalParams calldata params) external returns (bytes32 withdrawalRoot) {
+    function queueWithdrawal(uint256 id, IDelegationManager.QueuedWithdrawalParams calldata params) external onlyAdmin returns (bytes32 withdrawalRoot) {
         return IEtherFiNode(etherfiNodeAddress(id)).queueWithdrawal(params);
     }
 
-    function completeQueuedWithdrawals(uint256 id, bool receiveAsTokens) external {
+    function completeQueuedWithdrawals(uint256 id, bool receiveAsTokens) external onlyAdmin {
         IEtherFiNode(etherfiNodeAddress(id)).completeQueuedWithdrawals(receiveAsTokens);
     }
-
 
     //-------------------------------------------------------------------
     //---------------------  Key Management  ----------------------------

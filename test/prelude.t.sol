@@ -26,9 +26,11 @@ contract PreludeTest is Test, ArrayTestHelper {
     IBNFT bnft;
     NodeOperatorManager nodeOperatorManager = NodeOperatorManager(0xd5edf7730ABAd812247F6F54D7bd31a52554e35E);
 
+    address admin = vm.addr(0x9876543210);
     address stakingDepositContract = address(0x00000000219ab540356cBB839Cbe05303d7705Fa);
     address eigenPodManager = address(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
     address delegationManager = address(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+    RoleRegistry roleRegistry = RoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
 
     // i don't think i need this anymore
     address oracle;
@@ -63,14 +65,16 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // upgrade etherFiNode impl
         EtherFiNode etherFiNodeImpl = new EtherFiNode(
-            eigenPodManager,
-            delegationManager,
             address(liquidityPool),
-            address(etherFiNodesManager)
+            address(etherFiNodesManager),
+            eigenPodManager,
+            delegationManager
         );
         vm.prank(stakingManager.owner());
         stakingManager.upgradeEtherFiNode(address(etherFiNodeImpl));
         console2.log("efn upgrade");
+
+        console2.log("epm:", address(etherFiNodeImpl.eigenPodManager()));
 
         // deploy new efnm implementation
         EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager));
@@ -81,6 +85,14 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.prank(auctionManager.owner());
         auctionManager.disableWhitelist();
+
+        // permissions
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_ADMIN_ROLE(), address(etherFiNodesManager));
+        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_ADMIN_ROLE(), address(stakingManager));
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
+        vm.stopPrank();
 
     }
 
@@ -126,10 +138,10 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
         bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
-        //uint256 validatorID = 5;
 
-        // TODO: fix
+        vm.prank(admin);
         address etherFiNode = stakingManager.instantiateEtherFiNode(true);
+
         address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
         bytes32 initialDepositRoot = depositRootGenerator.generateDepositRoot(
             pubkey,
@@ -167,12 +179,8 @@ contract PreludeTest is Test, ArrayTestHelper {
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
 
-
-
         vm.prank(address(liquidityPool));
         stakingManager.confirmAndFundBeaconValidators{value: confirmAmount}(toArray(confirmDepositData), validatorSize);
-
-
 
     }
 }

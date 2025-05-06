@@ -69,17 +69,18 @@ contract StakingManager is
     IAuctionManager public immutable auctionManager;
     ITNFT public immutable tnft;
     IBNFT public immutable bnft;
+    IRoleRegistry public immutable roleRegistry;
     address public immutable etherfiOracle;
 
     uint256 public constant initialDepositAmount = 1 ether;
 
     error InvalidCaller();
+    error IncorrectRole();
     error UnlinkedPubkey();
     error IncorrectBeaconRoot();
     error InvalidPubKeyLength();
     error InvalidDepositData();
     error InactiveBid();
-    error IncorrectValidatorFunds();
     error InvalidEtherFiNode();
     error InvalidValidatorSize();
     error InvalidUpgrade();
@@ -91,9 +92,6 @@ contract StakingManager is
     // legacy event still being emitted in its original form to play nice with existing external tooling
     event ValidatorRegistered(address indexed operator, address indexed bNftOwner, address indexed tNftOwner, 
                               uint256 validatorId, bytes validatorPubKey, string ipfsHashForEncryptedValidatorKey);
-    //--------------------------------------------------------------------------------------
-    //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
-    //--------------------------------------------------------------------------------------
 
     constructor(
         address _liquidityPool,
@@ -113,13 +111,37 @@ contract StakingManager is
         bnft = IBNFT(_bnft);
         etherfiOracle = _etherfiOracle;
 
+        // TODO(dave): add to constructor
+        roleRegistry = IRoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
+
         _disableInitializers();
     }
 
     // TODO(dave): implement
     function initialize() external {
-        
+
     }
+
+    function _authorizeUpgrade(address _newImplementation) internal override {}
+
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        _pause();
+    }
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        _unpause();
+    }
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ROLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 public constant STAKING_MANAGER_NODE_CREATOR_ROLE = keccak256("STAKING_MANAGER_NODE_CREATOR_ROLE");
+
+    //--------------------------------------------------------------------------------------
+    //------------------------- Deposit Flow -----------------------------------------------
+    //--------------------------------------------------------------------------------------
 
     /// @notice send 1 eth to deposit contract to create the validator.
     ///    The rest of the eth will not be sent until the oracle confirms the withdrawal credentials
@@ -178,8 +200,8 @@ contract StakingManager is
             depositContractEth2.deposit{value: remainingDeposit}(depositData[i].publicKey, withdrawalCredentials, depositData[i].signature, computedDataRoot);
 
             // Use pubkey hash as the minted token ID
-            tnft.mint(liquidityPool, uint256(pubkeyHash));
-            bnft.mint(liquidityPool, uint256(pubkeyHash));
+            //tnft.mint(liquidityPool, uint256(pubkeyHash));
+            //bnft.mint(liquidityPool, uint256(pubkeyHash));
 
             emit validatorConfirmed(pubkeyHash, liquidityPool, liquidityPool, depositData[i].publicKey);
         }
@@ -191,9 +213,6 @@ contract StakingManager is
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
     }
 
-    // TODO(dave): reimplement pausing with role registry
-    function pauseContract() external { _pause(); }
-    function unPauseContract() external { _unpause(); }
 
     //--------------------------------------------------------------------------------------
     //--------------------- EtherFiNode Beacon Proxy ----------------------------------
@@ -208,8 +227,6 @@ contract StakingManager is
         etherFiNodeImplementation = _newImplementation;
     }
 
-    function _authorizeUpgrade(address _newImplementation) internal override {}
-
     /// @notice Fetches the address of the beacon contract for future EtherFiNodes (withdrawal safes)
     function getEtherFiNodeBeacon() external view returns (address) {
         return address(upgradableBeacon);
@@ -221,13 +238,10 @@ contract StakingManager is
         return upgradableBeacon.implementation();
     }
 
-    // TODO(dave): Permissions
-
     /// @dev create a new proxy instance of the etherFiNode withdrawal safe contract.
     /// @param _createEigenPod whether or not to create an associated eigenPod contract.
     function instantiateEtherFiNode(bool _createEigenPod) external returns (address) {
-        // TODO(dave): Permissions
-        //if (msg.sender != address(nodesManager), "INCORRECT_CALLER");
+        if (!roleRegistry.hasRole(STAKING_MANAGER_NODE_CREATOR_ROLE, msg.sender)) revert IncorrectRole();
 
         BeaconProxy proxy = new BeaconProxy(address(upgradableBeacon), "");
         address node = address(proxy);
