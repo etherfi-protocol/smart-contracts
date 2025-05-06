@@ -34,7 +34,6 @@ contract EtherFiNode is IEtherFiNode {
 
         // TODO(dave): add to constructor
         roleRegistry = IRoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
-
     }
 
     //--------------------------------------------------------------------------------------
@@ -53,19 +52,24 @@ contract EtherFiNode is IEtherFiNode {
         return eigenPodManager.ownerToPod(address(this));
     }
 
+    /// @dev creates a new eigenpod and returns its address. Reverts if a pod already exists for this node.
+    ///      This address is deterministic and you can pre-compute it if necessary.
     function createEigenPod() external onlyAdmin returns (address) {
         return eigenPodManager.createPod();
     }
 
+    /// @dev specify another address with permissions to submit checkpoint and withdrawal credential proofs
     function setProofSubmitter(address _newProofSubmitter) external onlyAdmin {
         getEigenPod().setProofSubmitter(_newProofSubmitter);
     }
 
+    /// @dev start an eigenlayer checkpoint proof. Once a checkpoint is started, it must be completed
     function startCheckpoint() external onlyAdmin {
         bool revertIfNoBalance = true; // protect from wasting gas if checkpoint will not increase shares
         getEigenPod().startCheckpoint(revertIfNoBalance);
     }
 
+    /// @dev queue a withdrawal from eigenlayer
     function queueWithdrawal(IDelegationManager.QueuedWithdrawalParams calldata params) external onlyAdmin returns (bytes32 withdrawalRoot) {
         // Implemented this way because we almost never queue multiple withdrawals at the same time
         // so I chose to improve our internal interface and simplify testing
