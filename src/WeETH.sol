@@ -22,7 +22,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
 
     IRoleRegistry public roleRegistry;
 
-    bytes32 public constant WE_ETH_OPERATING_ADMIN_ROLE = keccak256("EETH_OPERATING_ADMIN_ROLE");
+    bytes32 public constant WE_ETH_OPERATING_ADMIN_ROLE = keccak256("WE_ETH_OPERATING_ADMIN_ROLE");
 
     error IncorrectRole();
     error CannotRecoverEETH();
