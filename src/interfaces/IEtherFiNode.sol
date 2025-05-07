@@ -8,6 +8,7 @@ import "../eigenlayer-interfaces/IEigenPod.sol";
 
 interface IEtherFiNode {
 
+
     // eigenlayer
     function createEigenPod() external returns (address);
     function getEigenPod() external view returns (IEigenPod);
@@ -19,4 +20,12 @@ interface IEtherFiNode {
     // call forwarding
     function forwardEigenPodCall(bytes memory data) external returns (bytes memory);
     function forwardExternalCall(address to, bytes memory data) external returns (bytes memory);
+
+    //--------------------------------------------------------------------------
+    //-----------------------------  Errors  -----------------------------------
+    //--------------------------------------------------------------------------
+
+    error TransferFailed();
+    error IncorrectRole();
+
 }

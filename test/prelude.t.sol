@@ -9,6 +9,7 @@ import "../src/StakingManager.sol";
 import "../src/interfaces/IEtherFiNodesManager.sol";
 import "../src/EtherFiNodesManager.sol";
 import "../src/interfaces/IEtherFiNode.sol";
+import "../src/EtherFiNode.sol";
 import "../src/NodeOperatorManager.sol";
 import "../src/interfaces/ITNFT.sol";
 import "../src/interfaces/IBNFT.sol";

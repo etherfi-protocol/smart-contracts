@@ -23,14 +23,12 @@ contract EtherFiNode is IEtherFiNode {
     IDelegationManager public immutable delegationManager;
     uint32 public constant EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS = 100800;
 
-    error TransferFailed();
-    error IncorrectRole();
 
     constructor(address _liquidityPool, address _etherFiNodesManager, address _eigenPodManager, address _delegationManager) {
-        eigenPodManager = IEigenPodManager(_eigenPodManager);
-        delegationManager = IDelegationManager(_delegationManager);
         liquidityPool = ILiquidityPool(_liquidityPool);
         etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
+        eigenPodManager = IEigenPodManager(_eigenPodManager);
+        delegationManager = IDelegationManager(_delegationManager);
 
         // TODO(dave): add to constructor
         roleRegistry = IRoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
@@ -69,16 +67,20 @@ contract EtherFiNode is IEtherFiNode {
         getEigenPod().startCheckpoint(revertIfNoBalance);
     }
 
-    /// @dev queue a withdrawal from eigenlayer
+    /// @dev queue a withdrawal from eigenlayer. You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
+    ///   It is fine to queue a withdrawal before validators have finished exiting on the beacon chain.
     function queueWithdrawal(IDelegationManager.QueuedWithdrawalParams calldata params) external onlyAdmin returns (bytes32 withdrawalRoot) {
-        // Implemented this way because we almost never queue multiple withdrawals at the same time
-        // so I chose to improve our internal interface and simplify testing
+
+        // Implemented this way for convenience because we almost never queue multiple withdrawals at the same time
         IDelegationManager.QueuedWithdrawalParams[] memory paramsArray = new IDelegationManager.QueuedWithdrawalParams[](1);
         paramsArray[0] = params;
         return delegationManager.queueWithdrawals(paramsArray)[0];
     }
 
-    /// @dev completes all queued withdrawals that are currently claimable
+    /// @dev completes all queued withdrawals that are currently claimable.
+    ///   Note that since the node is usually delegated to an operator,
+    ///   most of the time this should be called with "receiveAsTokens" = true because
+    ///   receiving shares while delegated will simply redelegate the shares.
     function completeQueuedWithdrawals(bool receiveAsTokens) external onlyAdmin {
 
         // because we are just dealing with beacon eth we don't need to populate the tokens[] array

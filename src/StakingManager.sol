@@ -3,17 +3,14 @@ pragma solidity ^0.8.27;
 
 import "./interfaces/ITNFT.sol";
 import "./interfaces/IBNFT.sol";
+import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/IStakingManager.sol";
 import "./interfaces/IDepositContract.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
-import "./interfaces/INodeOperatorManager.sol";
-import "./interfaces/ILiquidityPool.sol";
-import "./TNFT.sol";
-import "./BNFT.sol";
-import "./EtherFiNode.sol";
-import "./LiquidityPool.sol";
+import "./libraries/DepositRootGenerator.sol";
+
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/beacon/IBeaconUpgradeable.sol";
@@ -22,7 +19,6 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "./libraries/DepositRootGenerator.sol";
 
 
 contract StakingManager is
@@ -34,64 +30,19 @@ contract StakingManager is
     ReentrancyGuardUpgradeable,
     UUPSUpgradeable
 {
-    
-    uint128 public maxBatchDepositSize;
-    uint128 public stakeAmount;
 
-    //address public implementationContract;
-    address public etherFiNodeImplementation;
-    address public liquidityPoolContract;
-
-    bool public isFullStakeEnabled;
-    bytes32 public merkleRoot;
-
-    ITNFT public TNFTInterfaceInstance;
-    IBNFT public BNFTInterfaceInstance;
-    IAuctionManager public DEPRECATED_auctionManager;
-    IDepositContract public DEPRECATED_depositContractEth2;
-    IEtherFiNodesManager public nodesManager;
     UpgradeableBeacon private upgradableBeacon;
-
-    //mapping(uint256 => StakerInfo) public bidIdToStakerInfo;
-    mapping(uint256 => uint256) public bidIdToStakerInfo;
-
-    address public DEPRECATED_admin;
-    address public nodeOperatorManager;
-    mapping(address => bool) public admins;
-
-    // TODO(dave): fix storage shift
-    //UpgradeableBeacon private upgradableBeacon;
-    //address public etherFiNodeImplementation;
-
     address public immutable liquidityPool;
+    uint256 public constant initialDepositAmount = 1 ether;
     IEtherFiNodesManager public immutable etherFiNodesManager;
     IDepositContract public immutable depositContractEth2;
     IAuctionManager public immutable auctionManager;
     ITNFT public immutable tnft;
     IBNFT public immutable bnft;
     IRoleRegistry public immutable roleRegistry;
-    address public immutable etherfiOracle;
 
-    uint256 public constant initialDepositAmount = 1 ether;
-
-    error InvalidCaller();
-    error IncorrectRole();
-    error UnlinkedPubkey();
-    error IncorrectBeaconRoot();
-    error InvalidPubKeyLength();
-    error InvalidDepositData();
-    error InactiveBid();
-    error InvalidEtherFiNode();
-    error InvalidValidatorSize();
-    error InvalidUpgrade();
-
-    event validatorCreated(bytes32 indexed pubkeyHash, address indexed etherFiNode, bytes pubkey);
-    event validatorConfirmed(bytes32 indexed pubkeyHash, address indexed bnftRecipient, address indexed tnftRecipient, bytes pubkey);
-    event linkLegacyValidatorId(bytes32 indexed pubkeyHash, uint256 indexed legacyId);
-
-    // legacy event still being emitted in its original form to play nice with existing external tooling
-    event ValidatorRegistered(address indexed operator, address indexed bNftOwner, address indexed tNftOwner, 
-                              uint256 validatorId, bytes validatorPubKey, string ipfsHashForEncryptedValidatorKey);
+    // Storage
+    LegacyStakingManagerState legacyState;
 
     constructor(
         address _liquidityPool,
@@ -102,24 +53,19 @@ contract StakingManager is
         address _bnft,
         address _etherfiOracle
     ) {
-
         liquidityPool = _liquidityPool;
         etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
         depositContractEth2 = IDepositContract(_ethDepositContract);
         auctionManager = IAuctionManager(_auctionManager);
         tnft = ITNFT(_tnft);
         bnft = IBNFT(_bnft);
-        etherfiOracle = _etherfiOracle;
 
+        // TODO(dave): add to constructor
+        upgradableBeacon = UpgradeableBeacon(address(0x01));
         // TODO(dave): add to constructor
         roleRegistry = IRoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
 
         _disableInitializers();
-    }
-
-    // TODO(dave): implement
-    function initialize() external {
-
     }
 
     function _authorizeUpgrade(address _newImplementation) internal override {}
@@ -133,15 +79,15 @@ contract StakingManager is
         _unpause();
     }
 
-    //--------------------------------------------------------------------------------------
-    //-------------------------------------  ROLES  ---------------------------------------
-    //--------------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------
+    //---------------------------  ROLES  ---------------------------------------
+    //---------------------------------------------------------------------------
 
     bytes32 public constant STAKING_MANAGER_NODE_CREATOR_ROLE = keccak256("STAKING_MANAGER_NODE_CREATOR_ROLE");
 
-    //--------------------------------------------------------------------------------------
-    //------------------------- Deposit Flow -----------------------------------------------
-    //--------------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------
+    //------------------------- Deposit Flow ------------------------------------
+    //---------------------------------------------------------------------------
 
     /// @notice send 1 eth to deposit contract to create the validator.
     ///    The rest of the eth will not be sent until the oracle confirms the withdrawal credentials
@@ -213,10 +159,9 @@ contract StakingManager is
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
     }
 
-
-    //--------------------------------------------------------------------------------------
-    //--------------------- EtherFiNode Beacon Proxy ----------------------------------
-    //--------------------------------------------------------------------------------------
+    //---------------------------------------------------------------------------
+    //--------------------- EtherFiNode Beacon Proxy ----------------------------
+    //---------------------------------------------------------------------------
 
     /// @notice Upgrades the etherfi node
     /// @param _newImplementation The new address of the etherfi node
@@ -224,7 +169,6 @@ contract StakingManager is
         if (_newImplementation == address(0)) revert InvalidUpgrade();
 
         upgradableBeacon.upgradeTo(_newImplementation);
-        etherFiNodeImplementation = _newImplementation;
     }
 
     /// @notice Fetches the address of the beacon contract for future EtherFiNodes (withdrawal safes)

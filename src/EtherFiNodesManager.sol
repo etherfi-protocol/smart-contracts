@@ -25,55 +25,6 @@ contract EtherFiNodesManager is
     ReentrancyGuardUpgradeable,
     UUPSUpgradeable
 {
-    //--------------------------------------------------------------------------------------
-    //---------------------------------  STATE-VARIABLES  ----------------------------------
-    //--------------------------------------------------------------------------------------
-    LegacyManagerState public legacyState;
-    /*
-    uint64 public numberOfValidators; // # of validators in LIVE or WAITING_FOR_APPROVAL phases
-    uint64 public nonExitPenaltyPrincipal;
-    uint64 public nonExitPenaltyDailyRate; // in basis points
-    uint64 public SCALE;
-
-    address public treasuryContract;
-    address public stakingManagerContract;
-    address public DEPRECATED_protocolRevenueManagerContract;
-
-    // validatorId == bidId -> withdrawalSafeAddress
-    mapping(uint256 => address) public etherfiNodeAddress;
-
-    TNFT public tnft;
-    BNFT public bnft;
-    IAuctionManager public auctionManager;
-    IProtocolRevenueManager public DEPRECATED_protocolRevenueManager;
-
-    RewardsSplit public stakingRewardsSplit;
-    RewardsSplit public DEPRECATED_protocolRewardsSplit;
-
-    address public DEPRECATED_admin;
-    mapping(address => bool) public admins;
-
-    IEigenPodManager public eigenPodManager;
-    IDelayedWithdrawalRouter public delayedWithdrawalRouter;
-    // max number of queued eigenlayer withdrawals to attempt to claim in a single tx
-    uint8 public maxEigenlayerWithdrawals;
-
-    // stack of re-usable withdrawal safes to save gas
-    address[] public unusedWithdrawalSafes;
-
-    bool public DEPRECATED_enableNodeRecycling;
-
-    mapping(uint256 => ValidatorInfo) private validatorInfos;
-
-    IDelegationManager public delegationManager;
-
-    mapping(address => bool) public operatingAdmin;
-
-    // function -> allowed
-    mapping(bytes4 => bool) public allowedForwardedEigenpodCalls;
-    // function -> target_address -> allowed
-    mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls;
-    */
 
     // TODO(dave): these are only used by viewer so we should just move them there
     address public immutable eigenPodManager = address(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
@@ -82,22 +33,18 @@ contract EtherFiNodesManager is
     address public immutable stakingManager;
     IRoleRegistry public immutable roleRegistry;
 
-    mapping(bytes32 => IEtherFiNode) public etherFiNodeFromPubkeyHash;
+    //---------------------------------------------------------------------------
+    //-----------------------------  Storage  -----------------------------------
+    //---------------------------------------------------------------------------
 
-    // Call Forwarding: functionSignature -> allowed
+    LegacyNodesManagerState private legacyState;
+    // Call Forwarding: functionSelector -> allowed
     mapping(bytes4 => bool) public allowedForwardedEigenpodCalls;
-    // Call Forwarding: functionSignature -> targetAddress -> allowed
+    // Call Forwarding: functionSelector -> targetAddress -> allowed
     mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls;
 
-    event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
-    event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
-    event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
+    mapping(bytes32 => IEtherFiNode) public etherFiNodeFromPubkeyHash;
 
-    error AlreadyLinked();
-    error InvalidPubKeyLength();
-    error InvalidCaller();
-    event PubkeyLinked(bytes32 indexed pubkeyHash, address indexed nodeAddress, bytes pubkey);
-    event NodeDeployed(address indexed nodeAddress, uint256 indexed nodeNonce);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _stakingManager) {
@@ -126,7 +73,6 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    error IncorrectRole();
 
     bytes32 public constant ETHERFI_NODES_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
@@ -230,8 +176,6 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------- CALL FORWARDING  ------------------------------------
     //--------------------------------------------------------------------------------------
-    event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
-    event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
 
     error ForwardedCallNotAllowed();
     error InvalidForwardedCall();

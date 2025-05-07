@@ -20,65 +20,63 @@ interface IEtherFiNodesManager {
     function etherFiNodeFromPubkeyHash(bytes32 pubkeyHash) external view returns (IEtherFiNode);
     function etherFiNodeFromId(uint256 id) external view returns (address);
 
-    struct LegacyManagerState {
-        uint64 test;
+    struct LegacyNodesManagerState {
+        uint256[4] legacyPadding1;
+        // we are continuing to use this field in the short term before we fully transition to using pubkeyhash
         mapping(uint256 => address) DEPRECATED_etherfiNodeAddress;
+        uint256[15] legacyPadding2;
         /*
-        uint64 numberOfValidators; // # of validators in LIVE or WAITING_FOR_APPROVAL phases
-        uint64 nonExitPenaltyPrincipal;
-        uint64 nonExitPenaltyDailyRate; // in basis points
-        uint64 SCALE;
-
-        address treasuryContract;
-        address stakingManagerContract;
-        address DEPRECATED_protocolRevenueManagerContract;
-
-        // validatorId == bidId -> withdrawalSafeAddress
-        */
-
-        /*
-        address tnft;
-        address bnft;
-        IAuctionManager auctionManager;
-        IProtocolRevenueManager DEPRECATED_protocolRevenueManager;
-
-        RewardsSplit stakingRewardsSplit;
-        RewardsSplit DEPRECATED_protocolRewardsSplit;
-
-        address DEPRECATED_admin;
-        mapping(address => bool) admins;
-
-        IEigenPodManager eigenPodManager;
-        IDelayedWithdrawalRouter delayedWithdrawalRouter;
-        // max number of queued eigenlayer withdrawals to attempt to claim in a single tx
-        uint8 maxEigenlayerWithdrawals;
-
-        // stack of re-usable withdrawal safes to save gas
-        address[] unusedWithdrawalSafes;
-
-        bool DEPRECATED_enableNodeRecycling;
-
-        mapping(uint256 => ValidatorInfo) validatorInfos;
-
-        IDelegationManager delegationManager;
-
-        mapping(address => bool) operatingAdmin;
-
-        // function -> allowed
-        mapping(bytes4 => bool) allowedForwardedEigenpodCalls;
-        // function -> target_address -> allowed
-        mapping(bytes4 => mapping(address => bool)) allowedForwardedExternalCalls;
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | numberOfValidators                        | uint64                                                        | 301  | 0      | 8     | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | nonExitPenaltyPrincipal                   | uint64                                                        | 301  | 8      | 8     | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | nonExitPenaltyDailyRate                   | uint64                                                        | 301  | 16     | 8     | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | SCALE                                     | uint64                                                        | 301  | 24     | 8     | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | treasuryContract                          | address                                                       | 302  | 0      | 20    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | stakingManagerContract                    | address                                                       | 303  | 0      | 20    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | DEPRECATED_protocolRevenueManagerContract | address                                                       | 304  | 0      | 20    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | etherfiNodeAddress                        | mapping(uint256 => address)                                   | 305  | 0      | 32    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | tnft                                      | contract TNFT                                                 | 306  | 0      | 20    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | bnft                                      | contract BNFT                                                 | 307  | 0      | 20    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | auctionManager                            | contract IAuctionManager                                      | 308  | 0      | 20    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | DEPRECATED_protocolRevenueManager         | contract IProtocolRevenueManager                              | 309  | 0      | 20    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | stakingRewardsSplit                       | struct IEtherFiNodesManager.RewardsSplit                      | 310  | 0      | 32    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | DEPRECATED_protocolRewardsSplit           | struct IEtherFiNodesManager.RewardsSplit                      | 311  | 0      | 32    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | DEPRECATED_admin                          | address                                                       | 312  | 0      | 20    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | admins                                    | mapping(address => bool)                                      | 313  | 0      | 32    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | eigenPodManager                           | contract IEigenPodManager                                     | 314  | 0      | 20    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | delayedWithdrawalRouter                   | contract IDelayedWithdrawalRouter                             | 315  | 0      | 20    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | maxEigenlayerWithdrawals                  | uint8                                                         | 315  | 20     | 1     | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | unusedWithdrawalSafes                     | address[]                                                     | 316  | 0      | 32    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | DEPRECATED_enableNodeRecycling            | bool                                                          | 317  | 0      | 1     | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | validatorInfos                            | mapping(uint256 => struct IEtherFiNodesManager.ValidatorInfo) | 318  | 0      | 32    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | delegationManager                         | contract IDelegationManager                                   | 319  | 0      | 20    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
+            | operatingAdmin                            | mapping(address => bool)                                      | 320  | 0      | 32    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
+            |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
         */
     }
-
-    /*
-    struct ValidatorInfo {
-        uint32 validatorIndex;
-        uint32 exitRequestTimestamp;
-        uint32 exitTimestamp;
-        IEtherFiNode.VALIDATOR_PHASE phase;
-    }
-    */
 
     function addressToWithdrawalCredentials(address addr) external pure returns (bytes memory);
     function etherfiNodeAddress(uint256 id) external view returns(address);
@@ -104,6 +102,23 @@ interface IEtherFiNodesManager {
     // protocol
     function pauseContract() external;
     function unPauseContract() external;
+
+    //---------------------------------------------------------------------------
+    //-----------------------------  Events  -----------------------------------
+    //---------------------------------------------------------------------------
+
+    event PubkeyLinked(bytes32 indexed pubkeyHash, address indexed nodeAddress, bytes pubkey);
+    event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
+    event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
+
+    //--------------------------------------------------------------------------
+    //-----------------------------  Errors  -----------------------------------
+    //--------------------------------------------------------------------------
+
+    error AlreadyLinked();
+    error InvalidPubKeyLength();
+    error InvalidCaller();
+    error IncorrectRole();
 
 
 }
