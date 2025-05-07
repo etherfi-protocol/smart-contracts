@@ -23,6 +23,21 @@ contract EtherFiNode is IEtherFiNode {
     IDelegationManager public immutable delegationManager;
     uint32 public constant EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS = 100800;
 
+    //---------------------------------------------------------------------------
+    //-----------------------------  Storage  -----------------------------------
+    //---------------------------------------------------------------------------
+
+    // TODO: Legacy storage struct
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ROLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 public constant ETHERFI_NODE_ADMIN_ROLE = keccak256("ETHERFI_NODE_ADMIN_ROLE");
+
+    //-------------------------------------------------------------------------
+    //-----------------------------  Admin  -----------------------------------
+    //-------------------------------------------------------------------------
 
     constructor(address _liquidityPool, address _etherFiNodesManager, address _eigenPodManager, address _delegationManager) {
         liquidityPool = ILiquidityPool(_liquidityPool);
@@ -34,11 +49,6 @@ contract EtherFiNode is IEtherFiNode {
         roleRegistry = IRoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
     }
 
-    //--------------------------------------------------------------------------------------
-    //-------------------------------------  ROLES  ---------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    bytes32 public constant ETHERFI_NODE_ADMIN_ROLE = keccak256("ETHERFI_NODE_ADMIN_ROLE");
 
     //--------------------------------------------------------------------------------------
     //---------------------------- Eigenlayer Interactions  --------------------------------

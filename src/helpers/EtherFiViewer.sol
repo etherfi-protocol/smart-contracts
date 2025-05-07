@@ -13,6 +13,10 @@ import "src/helpers/AddressProvider.sol";
 
 contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
+    // TODO(dave): add to constructor?
+    address public immutable eigenPodManager = address(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
+    address public immutable delegationManager = address(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+
     AddressProvider addressProvider;
 
     IEtherFiNodesManager nodesManager;
@@ -27,15 +31,15 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _getDelegationManager() internal view returns (IDelegationManager) {
-        return IDelegationManager(nodesManager.delegationManager());
+        return IDelegationManager(delegationManager);
     }
 
     function _getEigenPodManager() internal view returns (IEigenPodManager) {
-        return IEigenPodManager(nodesManager.eigenPodManager());
+        return IEigenPodManager(eigenPodManager);
     }
 
     function _getEtherFiNode(uint256 _validatorId) internal view returns (IEtherFiNode) {
-        return IEtherFiNode(nodesManager.etherFiNodeFromId(_validatorId));
+        return IEtherFiNode(nodesManager.etherfiNodeAddress(_validatorId));
     }
 
     function _getEigenPod(uint256 _validatorId) internal view returns (IEigenPod) {

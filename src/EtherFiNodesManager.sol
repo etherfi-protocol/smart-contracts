@@ -26,10 +26,6 @@ contract EtherFiNodesManager is
     UUPSUpgradeable
 {
 
-    // TODO(dave): these are only used by viewer so we should just move them there
-    address public immutable eigenPodManager = address(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
-    address public immutable delegationManager = address(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
-
     address public immutable stakingManager;
     IRoleRegistry public immutable roleRegistry;
 
@@ -38,13 +34,20 @@ contract EtherFiNodesManager is
     //---------------------------------------------------------------------------
 
     LegacyNodesManagerState private legacyState;
-    // Call Forwarding: functionSelector -> allowed
-    mapping(bytes4 => bool) public allowedForwardedEigenpodCalls;
-    // Call Forwarding: functionSelector -> targetAddress -> allowed
-    mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls;
-
+    mapping(bytes4 => bool) public allowedForwardedEigenpodCalls; // Call Forwarding: functionSelector -> allowed
+    mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls; // Call Forwarding: functionSelector -> targetAddress -> allowed
     mapping(bytes32 => IEtherFiNode) public etherFiNodeFromPubkeyHash;
 
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ROLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 public constant ETHERFI_NODES_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_ADMIN_ROLE");
+    bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
+
+    //-------------------------------------------------------------------------
+    //-----------------------------  Admin  -----------------------------------
+    //-------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _stakingManager) {
@@ -58,45 +61,19 @@ contract EtherFiNodesManager is
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    receive() external payable {}
-
-    // TODO(dave): reimplement pausing with role registry
     function pauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
+
     function unPauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 
     //--------------------------------------------------------------------------------------
-    //-------------------------------------  ROLES  ---------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    bytes32 public constant ETHERFI_NODES_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_ADMIN_ROLE");
-    bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
-
-    function etherFiNodeFromId(uint256 id) public view returns (address) {
-        // if the ID is a legacy validatorID use the old storage array
-        // otherwise assume it is a pubkey hash.
-        // In a future upgrade we can fully remove the legacy path
-
-        // heuristic that if a pubkey hash, at least 1 bit of higher order bits must be 1
-        // all of the legacy id's were incrementing integers that will not have those bits set
-        uint256 mask = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000;
-        if (mask & id > 0) {
-            return address(etherFiNodeFromPubkeyHash[bytes32(id)]);
-        } else {
-            return legacyState.DEPRECATED_etherfiNodeAddress[id];
-        }
-    }
-
-    //--------------------------------------------------------------------------------------
     //---------------------------- Eigenlayer Interactions  --------------------------------
     //--------------------------------------------------------------------------------------
-
-    // TODO(dave): permissions
 
     function getEigenPod(uint256 id) public view returns (address) {
         return address(IEtherFiNode(etherfiNodeAddress(id)).getEigenPod());
@@ -148,10 +125,8 @@ contract EtherFiNodesManager is
         legacyState.DEPRECATED_etherfiNodeAddress[legacyId] = nodeAddress;
 
         etherFiNodeFromPubkeyHash[pubkeyHash] = IEtherFiNode(nodeAddress);
-        emit PubkeyLinked(pubkeyHash, nodeAddress, pubkey);
+        emit PubkeyLinked(pubkeyHash, nodeAddress, legacyId, pubkey);
     }
-
-    // TODO(dave): is it better to revert if no address exists for provided id?
 
     /// @notice get the etherFiNode instance associated with the provided ID. (Legacy validatorId or pubkeyHash)
     /// @dev Note that this ID can either be a a traditional etherfi validatorID or
@@ -171,7 +146,6 @@ contract EtherFiNodesManager is
             return legacyState.DEPRECATED_etherfiNodeAddress[id];
         }
     }
-
 
     //--------------------------------------------------------------------------------------
     //-------------------------------- CALL FORWARDING  ------------------------------------
@@ -255,7 +229,7 @@ contract EtherFiNodesManager is
             bytes4 selector = bytes4(data[i][:4]);
             if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
 
-            IEtherFiNode node = IEtherFiNode(etherFiNodeFromId(ids[i]));
+            IEtherFiNode node = IEtherFiNode(etherfiNodeAddress(ids[i]));
             returnData[i] = node.forwardEigenPodCall(data[i]);
         }
     }

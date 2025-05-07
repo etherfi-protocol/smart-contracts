@@ -18,7 +18,29 @@ import "../interfaces/IStakingManager.sol";
 interface IEtherFiNodesManager {
 
     function etherFiNodeFromPubkeyHash(bytes32 pubkeyHash) external view returns (IEtherFiNode);
-    function etherFiNodeFromId(uint256 id) external view returns (address);
+
+    function addressToWithdrawalCredentials(address addr) external pure returns (bytes memory);
+    function etherfiNodeAddress(uint256 id) external view returns(address);
+    function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external;
+
+    function stakingManager() external view returns (address);
+
+    // eigenlayer interactions
+    function getEigenPod(uint256 id) external view returns (address);
+    function startCheckpoint(uint256 id) external;
+    function setProofSubmitter(uint256 id, address _newProofSubmitter) external;
+
+    // call forwarding
+    function updateAllowedForwardedExternalCalls(bytes4 selector, address target, bool allowed) external;
+    function updateAllowedForwardedEigenpodCalls(bytes4 selector, bool allowed) external;
+    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external returns (bytes[] memory returnData);
+    function forwardExternalCall(uint256[] calldata ids, bytes[] calldata data, address target) external returns (bytes[] memory returnData);
+    function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external returns (bytes[] memory returnData);
+    function forwardEigenPodCall(uint256[] calldata ids, bytes[] calldata data) external returns (bytes[] memory returnData);
+
+    // protocol
+    function pauseContract() external;
+    function unPauseContract() external;
 
     struct LegacyNodesManagerState {
         uint256[4] legacyPadding1;
@@ -78,36 +100,11 @@ interface IEtherFiNodesManager {
         */
     }
 
-    function addressToWithdrawalCredentials(address addr) external pure returns (bytes memory);
-    function etherfiNodeAddress(uint256 id) external view returns(address);
-    function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external;
-
-    function eigenPodManager() external view returns (address);
-    function delegationManager() external view returns (address);
-    function stakingManager() external view returns (address);
-
-    // eigenlayer interactions
-    function getEigenPod(uint256 id) external view returns (address);
-    function startCheckpoint(uint256 id) external;
-    function setProofSubmitter(uint256 id, address _newProofSubmitter) external;
-
-    // call forwarding
-    function updateAllowedForwardedExternalCalls(bytes4 selector, address target, bool allowed) external;
-    function updateAllowedForwardedEigenpodCalls(bytes4 selector, bool allowed) external;
-    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external returns (bytes[] memory returnData);
-    function forwardExternalCall(uint256[] calldata ids, bytes[] calldata data, address target) external returns (bytes[] memory returnData);
-    function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external returns (bytes[] memory returnData);
-    function forwardEigenPodCall(uint256[] calldata ids, bytes[] calldata data) external returns (bytes[] memory returnData);
-
-    // protocol
-    function pauseContract() external;
-    function unPauseContract() external;
-
     //---------------------------------------------------------------------------
     //-----------------------------  Events  -----------------------------------
     //---------------------------------------------------------------------------
 
-    event PubkeyLinked(bytes32 indexed pubkeyHash, address indexed nodeAddress, bytes pubkey);
+    event PubkeyLinked(bytes32 indexed pubkeyHash, address indexed nodeAddress, uint256 indexed legacyId, bytes pubkey);
     event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
     event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
 
