@@ -8,7 +8,6 @@ import "../eigenlayer-interfaces/IEigenPod.sol";
 
 interface IEtherFiNode {
 
-
     // eigenlayer
     function createEigenPod() external returns (address);
     function getEigenPod() external view returns (IEigenPod);
@@ -20,6 +19,14 @@ interface IEtherFiNode {
     // call forwarding
     function forwardEigenPodCall(bytes memory data) external returns (bytes memory);
     function forwardExternalCall(address to, bytes memory data) external returns (bytes memory);
+
+    //---------------------------------------------------------------------------
+    //-----------------------------  Events  -----------------------------------
+    //---------------------------------------------------------------------------
+
+    event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
+    event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
+    event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
 
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------

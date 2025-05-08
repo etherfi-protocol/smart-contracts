@@ -1,19 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-
-import "./IEtherFiNode.sol";
-
-import "../eigenlayer-interfaces/IEigenPodManager.sol";
-import "../eigenlayer-interfaces/IDelegationManager.sol";
-import "../eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
-import "../interfaces/IAuctionManager.sol";
 import "../interfaces/IEtherFiNode.sol";
-import "../interfaces/IEtherFiNodesManager.sol";
-import "../interfaces/IProtocolRevenueManager.sol";
-import "../interfaces/IStakingManager.sol";
-
-
 
 interface IEtherFiNodesManager {
 
@@ -113,7 +101,9 @@ interface IEtherFiNodesManager {
     //--------------------------------------------------------------------------
 
     error AlreadyLinked();
+    error UnknownNode();
     error InvalidPubKeyLength();
+    error LengthMismatch();
     error InvalidCaller();
     error IncorrectRole();
 

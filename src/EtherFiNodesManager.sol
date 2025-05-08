@@ -13,8 +13,6 @@ import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
-import "./interfaces/ITNFT.sol";
-import "./interfaces/IBNFT.sol";
 import "./interfaces/IRoleRegistry.sol";
 
 contract EtherFiNodesManager is
@@ -144,6 +142,26 @@ contract EtherFiNodesManager is
             return address(etherFiNodeFromPubkeyHash[bytes32(id)]);
         } else {
             return legacyState.DEPRECATED_etherfiNodeAddress[id];
+        }
+    }
+
+
+    /// @dev this method is for linking our old legacy validator ids that were created before
+    ///    we started tracking the pubkeys onchain. We can delete this method once we have linked all of our legacy validators
+    function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyAdmin {
+        if (validatorIds.length != pubkeys.length) revert LengthMismatch();
+        for (uint256 i = 0; i < validatorIds.length; i++) {
+
+            // lookup which node we are linking against
+            address nodeAddress = legacyState.DEPRECATED_etherfiNodeAddress[validatorIds[i]];
+            if (nodeAddress == address(0)) revert UnknownNode();
+
+            // ensure we haven't already linked this pubkey
+            bytes32 pubkeyHash = calculateValidatorPubkeyHash(pubkeys[i]);
+            if (address(etherFiNodeFromPubkeyHash[pubkeyHash]) != address(0)) revert AlreadyLinked();
+
+            etherFiNodeFromPubkeyHash[pubkeyHash] = IEtherFiNode(nodeAddress);
+            emit PubkeyLinked(pubkeyHash, nodeAddress, validatorIds[i], pubkeys[i]);
         }
     }
 
