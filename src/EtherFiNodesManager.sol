@@ -48,11 +48,9 @@ contract EtherFiNodesManager is
     //-------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _stakingManager) {
+    constructor(address _stakingManager, address _roleRegistry) {
         stakingManager = _stakingManager;
-
-        // TODO(dave): add to constructor
-        roleRegistry = IRoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
+        roleRegistry = IRoleRegistry(_roleRegistry);
 
         _disableInitializers();
     }

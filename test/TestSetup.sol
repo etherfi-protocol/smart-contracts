@@ -494,7 +494,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         protocolRevenueManagerInstance.initialize();
         protocolRevenueManagerInstance.updateAdmin(alice);
 
-        managerImplementation = new EtherFiNodesManager(address(stakingManagerInstance));
+        managerImplementation = new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistryInstance));
         etherFiNodeManagerProxy = new UUPSProxy(address(managerImplementation), "");
         managerInstance = EtherFiNodesManager(payable(address(etherFiNodeManagerProxy)));
         
@@ -517,7 +517,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         address delegationManager;
         address liquidityPool;
         address etherFiNodesManager;
-        node = new EtherFiNode(eigenPodManager, delegationManager, liquidityPool, etherFiNodesManager);
+        node = new EtherFiNode(eigenPodManager, delegationManager, liquidityPool, etherFiNodesManager, address(roleRegistryInstance));
 
 
         rETH = new TestERC20("Rocket Pool ETH", "rETH");
@@ -1441,14 +1441,14 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         address liquidityPool;
         address etherFiNodesManager;
 
-        EtherFiNode etherFiNode = new EtherFiNode(eigenPodManager, delegationManager, liquidityPool, etherFiNodesManager);
+        EtherFiNode etherFiNode = new EtherFiNode(eigenPodManager, delegationManager, liquidityPool, etherFiNodesManager, address(roleRegistryInstance));
         address newImpl = address(etherFiNode);
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(newImpl);
     }
 
     function _upgrade_etherfi_nodes_manager_contract() internal {
-        address newImpl = address(new EtherFiNodesManager(address(stakingManagerInstance)));
+        address newImpl = address(new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistryInstance)));
         vm.prank(managerInstance.owner());
         managerInstance.upgradeTo(newImpl);
     }

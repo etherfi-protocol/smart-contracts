@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "./interfaces/ITNFT.sol";
-import "./interfaces/IBNFT.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/IStakingManager.sol";
@@ -31,21 +29,19 @@ contract StakingManager is
     UUPSUpgradeable
 {
 
-    UpgradeableBeacon private upgradableBeacon;
     address public immutable liquidityPool;
     uint256 public constant initialDepositAmount = 1 ether;
     IEtherFiNodesManager public immutable etherFiNodesManager;
     IDepositContract public immutable depositContractEth2;
     IAuctionManager public immutable auctionManager;
-    ITNFT public immutable tnft;
-    IBNFT public immutable bnft;
+    UpgradeableBeacon private etherFiNodeBeacon;
     IRoleRegistry public immutable roleRegistry;
 
     //---------------------------------------------------------------------------
     //-----------------------------  Storage  -----------------------------------
     //---------------------------------------------------------------------------
 
-    LegacyStakingManagerState legacyState;
+    LegacyStakingManagerState legacyState; // all legacy state in this contract has been deprecated
 
     //---------------------------------------------------------------------------
     //---------------------------  ROLES  ---------------------------------------
@@ -62,21 +58,15 @@ contract StakingManager is
         address _etherFiNodesManager,
         address _ethDepositContract,
         address _auctionManager,
-        address _tnft,
-        address _bnft,
-        address _etherfiOracle
+        address _etherFiNodeBeacon,
+        address _roleRegistry
     ) {
         liquidityPool = _liquidityPool;
         etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
         depositContractEth2 = IDepositContract(_ethDepositContract);
         auctionManager = IAuctionManager(_auctionManager);
-        tnft = ITNFT(_tnft);
-        bnft = IBNFT(_bnft);
-
-        // TODO(dave): add to constructor
-        upgradableBeacon = UpgradeableBeacon(address(0x01));
-        // TODO(dave): add to constructor
-        roleRegistry = IRoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
+        etherFiNodeBeacon = UpgradeableBeacon(_etherFiNodeBeacon);
+        roleRegistry = IRoleRegistry(_roleRegistry);
 
         _disableInitializers();
     }
@@ -175,18 +165,18 @@ contract StakingManager is
     function upgradeEtherFiNode(address _newImplementation) public onlyOwner {
         if (_newImplementation == address(0)) revert InvalidUpgrade();
 
-        upgradableBeacon.upgradeTo(_newImplementation);
+        etherFiNodeBeacon.upgradeTo(_newImplementation);
     }
 
     /// @notice Fetches the address of the beacon contract for future EtherFiNodes (withdrawal safes)
     function getEtherFiNodeBeacon() external view returns (address) {
-        return address(upgradableBeacon);
+        return address(etherFiNodeBeacon);
     }
 
     /// @notice Fetches the address of the implementation contract currently being used by the beacon proxy
     /// @return the address of the currently used implementation contract
     function implementation() public view override returns (address) {
-        return upgradableBeacon.implementation();
+        return etherFiNodeBeacon.implementation();
     }
 
     /// @dev create a new proxy instance of the etherFiNode withdrawal safe contract.
@@ -194,7 +184,7 @@ contract StakingManager is
     function instantiateEtherFiNode(bool _createEigenPod) external returns (address) {
         if (!roleRegistry.hasRole(STAKING_MANAGER_NODE_CREATOR_ROLE, msg.sender)) revert IncorrectRole();
 
-        BeaconProxy proxy = new BeaconProxy(address(upgradableBeacon), "");
+        BeaconProxy proxy = new BeaconProxy(address(etherFiNodeBeacon), "");
         address node = address(proxy);
         if (_createEigenPod) {
             IEtherFiNode(node).createEigenPod();

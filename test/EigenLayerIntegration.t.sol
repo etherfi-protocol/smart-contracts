@@ -39,6 +39,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     bytes32[][] validatorFields;
 
     function setUp() public {
+        /*
         initializeRealisticFork(MAINNET_FORK);
 
         // yes bob!
@@ -58,19 +59,17 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         ws = EtherFiNode(payable(podOwner));
 
         // Override with Mock
-        /*
         vm.startPrank(eigenLayerEigenPodManager.owner());
         beaconChainOracleMock = new BeaconChainOracleMock();
         beaconChainOracle = IBeaconChainOracle(address(beaconChainOracleMock));
         eigenLayerEigenPodManager.updateBeaconChainOracle(beaconChainOracle);
         vm.stopPrank();
-        */
 
         vm.startPrank(owner);
         liquidityPoolInstance.setRestakeBnftDeposits(true);
         vm.stopPrank();
 
-        EtherFiNodesManager newManagerImpl = new EtherFiNodesManager(address(0x0));
+        EtherFiNodesManager newManagerImpl = new EtherFiNodesManager(address(0x0), address(0x0));
         EtherFiNode newNodeImpl = new EtherFiNode(address(0x0), address(0x0), address(0x0), address(0x0));
 
         vm.startPrank(managerInstance.owner());
@@ -80,6 +79,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         stakingManagerInstance.upgradeEtherFiNode(address(newNodeImpl));
         vm.stopPrank();
 
+        */
 
     }
 

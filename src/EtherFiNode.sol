@@ -27,7 +27,7 @@ contract EtherFiNode is IEtherFiNode {
     //-----------------------------  Storage  -----------------------------------
     //---------------------------------------------------------------------------
 
-    // TODO: Legacy storage struct
+    LegacyNodeState legacyState; // all legacy state in this contract has been deprecated
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
@@ -39,16 +39,13 @@ contract EtherFiNode is IEtherFiNode {
     //-----------------------------  Admin  -----------------------------------
     //-------------------------------------------------------------------------
 
-    constructor(address _liquidityPool, address _etherFiNodesManager, address _eigenPodManager, address _delegationManager) {
+    constructor(address _liquidityPool, address _etherFiNodesManager, address _eigenPodManager, address _delegationManager, address _roleRegistry) {
         liquidityPool = ILiquidityPool(_liquidityPool);
         etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
         eigenPodManager = IEigenPodManager(_eigenPodManager);
         delegationManager = IDelegationManager(_delegationManager);
-
-        // TODO(dave): add to constructor
-        roleRegistry = IRoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
+        roleRegistry = IRoleRegistry(_roleRegistry);
     }
-
 
     //--------------------------------------------------------------------------------------
     //---------------------------- Eigenlayer Interactions  --------------------------------

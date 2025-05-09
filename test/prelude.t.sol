@@ -31,6 +31,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     address stakingDepositContract = address(0x00000000219ab540356cBB839Cbe05303d7705Fa);
     address eigenPodManager = address(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
     address delegationManager = address(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
+    address etherFiNodeBeacon = address(0x3c55986Cfee455E2533F4D29006634EcF9B7c03F);
     RoleRegistry roleRegistry = RoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
 
     // i don't think i need this anymore
@@ -47,8 +48,8 @@ contract PreludeTest is Test, ArrayTestHelper {
         liquidityPool = ILiquidityPool(0x308861A430be4cce5502d0A12724771Fc6DaF216);
         etherFiNodesManager = EtherFiNodesManager(payable(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F));
         auctionManager = AuctionManager(0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9);
-        tnft = ITNFT(0x7B5ae07E2AF1C861BcC4736D23f5f66A61E0cA5e);
-        bnft = IBNFT(0x6599861e55abd28b91dd9d86A826eC0cC8D72c2c);
+        //tnft = ITNFT(0x7B5ae07E2AF1C861BcC4736D23f5f66A61E0cA5e);
+        //bnft = IBNFT(0x6599861e55abd28b91dd9d86A826eC0cC8D72c2c);
 
         // deploy new staking manager implementation
         StakingManager stakingManagerImpl = new StakingManager(
@@ -56,9 +57,10 @@ contract PreludeTest is Test, ArrayTestHelper {
             address(etherFiNodesManager),
             address(stakingDepositContract),
             address(auctionManager),
-            address(tnft),
-            address(bnft),
-            oracle
+            //address(tnft),
+            //address(bnft),
+            address(etherFiNodeBeacon),
+            address(roleRegistry)
         );
         vm.prank(stakingManager.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
@@ -69,7 +71,8 @@ contract PreludeTest is Test, ArrayTestHelper {
             address(liquidityPool),
             address(etherFiNodesManager),
             eigenPodManager,
-            delegationManager
+            delegationManager,
+            address(roleRegistry)
         );
         vm.prank(stakingManager.owner());
         stakingManager.upgradeEtherFiNode(address(etherFiNodeImpl));
@@ -78,7 +81,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         console2.log("epm:", address(etherFiNodeImpl.eigenPodManager()));
 
         // deploy new efnm implementation
-        EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager));
+        EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry));
         vm.prank(etherFiNodesManager.owner());
         etherFiNodesManager.upgradeTo(address(etherFiNodesManagerImpl));
 
