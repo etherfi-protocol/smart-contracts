@@ -99,6 +99,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     event Rebase(uint256 totalEthLocked, uint256 totalEEthShares);
     event ProtocolFeePaid(uint128 protocolFees);
     event WhitelistStatusUpdated(bool value);
+    event ValidatorExitRequested(uint256 indexed validatorId);
 
     error IncorrectCaller();
     error InvalidAmount();
@@ -392,9 +393,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
         emit ValidatorSpawnerUnregistered(_user);
     }
-
-    // TODO(dave): convert to pubkeyHash?
-    event ValidatorExitRequested(uint256 indexed validatorId);
 
     /// @notice Send the exit requests as the T-NFT holder of the LiquidityPool validators
     function sendExitRequests(uint256[] calldata _validatorIds) external {

@@ -8,18 +8,23 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "src/interfaces/IEtherFiNodesManager.sol";
 import "src/eigenlayer-interfaces/IEigenPod.sol";
 import "src/eigenlayer-interfaces/IEigenPodManager.sol";
+import "src/eigenlayer-interfaces/IDelegationManager.sol";
 
 import "src/helpers/AddressProvider.sol";
 
 contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
-    // TODO(dave): add to constructor?
-    address public immutable eigenPodManager = address(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
-    address public immutable delegationManager = address(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
 
     AddressProvider addressProvider;
-
     IEtherFiNodesManager nodesManager;
+
+    address public immutable eigenPodManager;
+    address public immutable delegationManager;
+
+    constructor(address _eigenPodManager, address _delegationManager) {
+        eigenPodManager = _eigenPodManager;
+        delegationManager = _delegationManager;
+    }
 
     function initialize(address _addressProvider) external initializer {
         __Ownable_init();
@@ -108,38 +113,5 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    /*
-    function EtherFiNodesManager_splitBalanceInExecutionLayer(uint256[] memory _validatorIds) external view returns (uint256[] memory _withdrawalSafe, uint256[] memory _eigenPod, uint256[] memory _delayedWithdrawalRouter) {
-        _withdrawalSafe = new uint256[](_validatorIds.length);
-        _eigenPod = new uint256[](_validatorIds.length);
-        _delayedWithdrawalRouter = new uint256[](_validatorIds.length);
-
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            (_withdrawalSafe[i], _eigenPod[i], _delayedWithdrawalRouter[i]) = _getEtherFiNode(_validatorIds[i]).splitBalanceInExecutionLayer();
-        }
-    }
-
-    function EtherFiNodesManager_withdrawableBalanceInExecutionLayer(uint256[] memory _validatorIds) external view returns (uint256[] memory _withdrawableBalance) {
-        _withdrawableBalance = new uint256[](_validatorIds.length);
-
-        for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _withdrawableBalance[i] = _getEtherFiNode(_validatorIds[i]).withdrawableBalanceInExecutionLayer();
-        }
-    }
-    */
-
-    /*
-    function EtherFiNodesManager_aggregatedBalanceOfUnusedSafes() external view returns (uint256 total) {
-        uint256 n = nodesManager.getUnusedWithdrawalSafesLength();
-
-        for (uint256 i = 0; i < n; i++) {
-            address safe = nodesManager.unusedWithdrawalSafes(i);
-            address eigenpod = address(IEtherFiNode(safe).getEigenPod());
-            total += safe.balance + eigenpod.balance;
-        }
-    }
-    */
-
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
 }
