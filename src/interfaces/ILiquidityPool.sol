@@ -63,7 +63,7 @@ interface ILiquidityPool {
 
     function batchRegister(IStakingManager.DepositData[] calldata _depositData, uint256[] calldata _bidIds, address _etherFiNode) external;
     function batchApproveRegistration(uint256[] memory _validatorIds, bytes[] calldata _pubkeys, bytes[] calldata _signatures) external;
-    function batchApproveRegistration(IStakingManager.DepositData[] calldata depositData, uint256 validatorSizeWei) external;
+    function confirmAndFundBeaconValidators(IStakingManager.DepositData[] calldata depositData, uint256 validatorSizeWei) external;
     function sendExitRequests(uint256[] calldata _validatorIds) external;
 
     function registerValidatorSpawner(address _user) external;

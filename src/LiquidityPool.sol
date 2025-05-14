@@ -165,10 +165,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         if(tvl != getTotalPooledEther()) revert();
     }
 
-    function initializeV3Prelude(uint256 _validatorSizeWei) external onlyOwner {
-        validatorSizeWei = _validatorSizeWei;
-    }
-
     // Used by eETH staking flow
     function deposit() external payable returns (uint256) {
         return deposit(address(0));
@@ -302,18 +298,17 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         stakingManager.createBeaconValidators{value: outboundEthAmountFromLp}(_depositData, _bidIds, _etherFiNode);
     }
 
-    /// @dev step 3 of staking flow
+    /// @dev step 3 of staking flow. This version exists to remain compatible with existing callers.
+    ///   future services should use confirmAndFundBeaconValidators()
      function batchApproveRegistration(
         uint256[] memory _validatorIds,
         bytes[] calldata _pubkeys,
         bytes[] calldata _signatures
     ) external whenNotPaused {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
 
-        // TODO(Dave): set
-        uint256 validatorSizeWei = 32 ether;
-
-        // all validators provided must belong to same node
+        // all validators provided should belong to same node
         IEtherFiNode etherFiNode = IEtherFiNode(nodesManager.etherfiNodeAddress(_validatorIds[0]));
         address eigenPod = address(etherFiNode.getEigenPod());
         bytes memory withdrawalCredentials = nodesManager.addressToWithdrawalCredentials(eigenPod);
@@ -350,11 +345,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     /// @dev step 3 of staking flow
-    function batchApproveRegistration(
+    function confirmAndFundBeaconValidators(
         IStakingManager.DepositData[] calldata _depositData,
         uint256 _validatorSizeWei
     ) external whenNotPaused {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
         uint256 remainingEthPerValidator = _validatorSizeWei - stakingManager.initialDepositAmount();

@@ -1348,7 +1348,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
 
         vm.startPrank(admin);
         // TODO(Dave): fix for new deposit flow
-        liquidityPoolInstance.batchApproveRegistration(depositDataArray, 31 ether);
+        liquidityPoolInstance.confirmAndFundBeaconValidators(depositDataArray, 32 ether);
         vm.stopPrank();
 
         return newValidators;
