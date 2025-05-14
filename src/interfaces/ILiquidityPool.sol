@@ -61,11 +61,9 @@ interface ILiquidityPool {
     function requestWithdrawWithPermit(address _owner, uint256 _amount, PermitInput calldata _permit) external returns (uint256);
     function requestMembershipNFTWithdraw(address recipient, uint256 amount, uint256 fee) external returns (uint256);
 
-    function batchDeposit(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators) external returns (uint256[] memory);
-    function batchDeposit(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, uint256 _validatorIdToCoUseWithdrawalSafe) external returns (uint256[] memory);
-    function batchRegister(bytes32 _depositRoot, uint256[] calldata _validatorIds, IStakingManager.DepositData[] calldata _registerValidatorDepositData, bytes32[] calldata _depositDataRootApproval, bytes[] calldata _signaturesForApprovalDeposit) external;
-    function batchApproveRegistration(uint256[] memory _validatorIds, bytes[] calldata _pubKey, bytes[] calldata _signature) external;
-    function batchCancelDeposit(uint256[] calldata _validatorIds) external;
+    function batchRegister(IStakingManager.DepositData[] calldata _depositData, uint256[] calldata _bidIds, address _etherFiNode) external;
+    function batchApproveRegistration(uint256[] memory _validatorIds, bytes[] calldata _pubkeys, bytes[] calldata _signatures) external;
+    function batchApproveRegistration(IStakingManager.DepositData[] calldata depositData, uint256 validatorSizeWei) external;
     function sendExitRequests(uint256[] calldata _validatorIds) external;
 
     function registerValidatorSpawner(address _user) external;
@@ -74,7 +72,7 @@ interface ILiquidityPool {
     function rebase(int128 _accruedRewards) external;
     function payProtocolFees(uint128 _protocolFees) external;
     function addEthAmountLockedForWithdrawal(uint128 _amount) external;
-    
+
     function pauseContract() external;
     function burnEEthShares(uint256 shares) external;
     function unPauseContract() external; 

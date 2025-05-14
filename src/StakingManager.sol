@@ -142,10 +142,6 @@ contract StakingManager is
             // Deposit the remaining eth to the validator
             depositContractEth2.deposit{value: remainingDeposit}(depositData[i].publicKey, withdrawalCredentials, depositData[i].signature, computedDataRoot);
 
-            // Use pubkey hash as the minted token ID
-            //tnft.mint(liquidityPool, uint256(pubkeyHash));
-            //bnft.mint(liquidityPool, uint256(pubkeyHash));
-
             emit validatorConfirmed(pubkeyHash, liquidityPool, liquidityPool, depositData[i].publicKey);
         }
     }

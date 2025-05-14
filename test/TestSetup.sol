@@ -1297,8 +1297,10 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         }
         vm.stopPrank();
 
-        vm.prank(_bnftStaker);
-        uint256[] memory newValidators = liquidityPoolInstance.batchDeposit(bidIds, _numValidators, _validatorIdToCoUseWithdrawalSafe);
+        // TODO(dave): rework test setup
+        //vm.prank(_bnftStaker);
+        //uint256[] memory newValidators = liquidityPoolInstance.batchDeposit(bidIds, _numValidators, _validatorIdToCoUseWithdrawalSafe);
+        uint256[] memory newValidators = new uint256[](_numValidators);
 
         IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](_numValidators);
 
@@ -1339,13 +1341,16 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
 
         vm.startPrank(_bnftStaker);
         bytes32 depositRoot = zeroRoot;
-        liquidityPoolInstance.batchRegister(depositRoot, newValidators, depositDataArray, depositDataRootsForApproval, sig);
+        // TODO(Dave): fix for new deposit flow
+        address fix_nodeAddress = address(0x1234AABB);
+        liquidityPoolInstance.batchRegister(depositDataArray, newValidators, fix_nodeAddress);
         vm.stopPrank();
 
         vm.startPrank(admin);
-        liquidityPoolInstance.batchApproveRegistration(newValidators, pubKey, sig);
+        // TODO(Dave): fix for new deposit flow
+        liquidityPoolInstance.batchApproveRegistration(depositDataArray, 31 ether);
         vm.stopPrank();
-    
+
         return newValidators;
     }
 

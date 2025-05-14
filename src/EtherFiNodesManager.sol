@@ -79,19 +79,19 @@ contract EtherFiNodesManager is
         return IEtherFiNode(etherfiNodeAddress(id)).createEigenPod();
     }
 
-    function startCheckpoint(uint256 id) external onlyAdmin {
+    function startCheckpoint(uint256 id) external onlyCallForwarder {
         IEtherFiNode(etherfiNodeAddress(id)).startCheckpoint();
     }
 
-    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyAdmin {
+    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyCallForwarder {
         IEtherFiNode(etherfiNodeAddress(id)).setProofSubmitter(proofSubmitter);
     }
 
-    function queueWithdrawal(uint256 id, IDelegationManager.QueuedWithdrawalParams calldata params) external onlyAdmin returns (bytes32 withdrawalRoot) {
+    function queueWithdrawal(uint256 id, IDelegationManager.QueuedWithdrawalParams calldata params) external onlyCallForwarder returns (bytes32 withdrawalRoot) {
         return IEtherFiNode(etherfiNodeAddress(id)).queueWithdrawal(params);
     }
 
-    function completeQueuedWithdrawals(uint256 id, bool receiveAsTokens) external onlyAdmin {
+    function completeQueuedWithdrawals(uint256 id, bool receiveAsTokens) external onlyCallForwarder {
         IEtherFiNode(etherfiNodeAddress(id)).completeQueuedWithdrawals(receiveAsTokens);
     }
 
