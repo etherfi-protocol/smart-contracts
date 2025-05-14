@@ -83,6 +83,10 @@ contract EtherFiNodesManager is
         IEtherFiNode(etherfiNodeAddress(id)).startCheckpoint();
     }
 
+    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyCallForwarder {
+        IEtherFiNode(etherfiNodeAddress(id)).verifyCheckpointProofs(balanceContainerProof, proofs);
+    }
+
     function setProofSubmitter(uint256 id, address proofSubmitter) external onlyCallForwarder {
         IEtherFiNode(etherfiNodeAddress(id)).setProofSubmitter(proofSubmitter);
     }

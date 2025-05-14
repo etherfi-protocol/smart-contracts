@@ -2,6 +2,8 @@
 pragma solidity ^0.8.13;
 
 import "../interfaces/IEtherFiNode.sol";
+import "../eigenlayer-interfaces/IDelegationManager.sol";
+import {BeaconChainProofs} from "../eigenlayer-libraries/BeaconChainProofs.sol";
 
 interface IEtherFiNodesManager {
 
@@ -15,8 +17,12 @@ interface IEtherFiNodesManager {
 
     // eigenlayer interactions
     function getEigenPod(uint256 id) external view returns (address);
+    function createEigenPod(uint256 id) external returns (address);
     function startCheckpoint(uint256 id) external;
+    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
     function setProofSubmitter(uint256 id, address _newProofSubmitter) external;
+    function queueWithdrawal(uint256 id, IDelegationManager.QueuedWithdrawalParams calldata params) external returns (bytes32 withdrawalRoot);
+    function completeQueuedWithdrawals(uint256 id, bool receiveAsTokens) external;
 
     // call forwarding
     function updateAllowedForwardedExternalCalls(bytes4 selector, address target, bool allowed) external;

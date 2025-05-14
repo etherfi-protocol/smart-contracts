@@ -15,6 +15,7 @@ interface IEtherFiNode {
     function setProofSubmitter(address _newProofSubmitter) external;
     function queueWithdrawal(IDelegationManager.QueuedWithdrawalParams calldata params) external returns (bytes32 withdrawalRoot);
     function completeQueuedWithdrawals(bool receiveAsTokens) external;
+    function verifyCheckpointProofs(BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
 
     // call forwarding
     function forwardEigenPodCall(bytes memory data) external returns (bytes memory);

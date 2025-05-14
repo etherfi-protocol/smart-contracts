@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import {IDelegationManager} from "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import {IEigenPodManager} from "../src/eigenlayer-interfaces/IEigenPodManager.sol";
 import {IEigenPod} from "../src/eigenlayer-interfaces/IEigenPod.sol";
+import {BeaconChainProofs} from "../src/eigenlayer-libraries/BeaconChainProofs.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
 import {IEtherFiNode} from "../src/interfaces/IEtherFiNode.sol";
@@ -73,6 +74,12 @@ contract EtherFiNode is IEtherFiNode {
         bool revertIfNoBalance = true; // protect from wasting gas if checkpoint will not increase shares
         getEigenPod().startCheckpoint(revertIfNoBalance);
     }
+
+    /// @dev submit a subset of proofs for the currently active checkpoint
+    function verifyCheckpointProofs(BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyAdmin {
+        getEigenPod().verifyCheckpointProofs(balanceContainerProof, proofs);
+    }
+
 
     /// @dev queue a withdrawal from eigenlayer. You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
     ///   It is fine to queue a withdrawal before validators have finished exiting on the beacon chain.
