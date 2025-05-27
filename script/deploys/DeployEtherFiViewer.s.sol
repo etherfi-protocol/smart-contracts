@@ -36,4 +36,4 @@ contract DeployEtherFiViewer is Script {
         viewer.EigenPod_hasRestaked(validatorIds);
         
     }
-} 
+}
