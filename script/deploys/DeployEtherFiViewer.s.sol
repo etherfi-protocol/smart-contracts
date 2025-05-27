@@ -16,9 +16,9 @@ contract DeployEtherFiViewer is Script {
 
         EtherFiViewer impl = new EtherFiViewer();
 
-        UUPSProxy proxy = new UUPSProxy(address(impl), "");
-        EtherFiViewer viewer = EtherFiViewer(address(proxy));
-        viewer.initialize(addressProviderAddress);
+        // UUPSProxy proxy = new UUPSProxy(address(impl), "");
+        // EtherFiViewer viewer = EtherFiViewer(address(proxy));
+        // viewer.initialize(addressProviderAddress);
 
         EtherFiViewer viewer = EtherFiViewer(address(0x2ecd155405cA52a5ca0e552981fF44A8252FAb81));
         viewer.upgradeTo(address(impl));
@@ -36,4 +36,4 @@ contract DeployEtherFiViewer is Script {
         viewer.EigenPod_hasRestaked(validatorIds);
         
     }
-}
+} 
