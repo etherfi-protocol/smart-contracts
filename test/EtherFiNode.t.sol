@@ -24,7 +24,7 @@ interface IEigenlayerTimelock {
     function grantRole(bytes32 role, address account) external;
 }
 
-contract EtherFiNodeTest is TestSetup {
+contract EtherFiNodeTest is TestSetup, ArrayTestHelper {
 
     // from EtherFiNodesManager.sol
     uint256 TreasuryRewardSplit = 50_000;
