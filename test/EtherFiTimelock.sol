@@ -471,6 +471,8 @@ contract TimelockTest is TestSetup {
         etherFiTimelockInstance = EtherFiTimelock(payable(address(0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a)));
         address target = address(withdrawRequestNFTInstance);
         uint256 remainder = withdrawRequestNFTInstance.getEEthRemainderAmount();
+        console2.log("Claiming remainder amount in ETH is:", remainder);
+
         bytes memory data = abi.encodeWithSelector(WithdrawRequestNFT.handleRemainder.selector, remainder);
         _execute_timelock(target, data, true, true, true, true);
     }
