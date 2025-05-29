@@ -1607,7 +1607,11 @@ contract TestSetup is Test, ContractCodeChecker {
     }
 
     function _execute_timelock(address target, bytes memory data, bool _schedule, bool _log_schedule, bool _execute, bool _log_execute) internal {
-        vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+        if(address(0xcdd57D11476c22d265722F68390b036f3DA48c21) == address(etherFiTimelockInstance)) { // 3 Day Timelock
+            vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+        } else { // 8hr Timelock
+            vm.startPrank(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC);
+        }
 
         bytes32 salt = keccak256(abi.encodePacked(target, data, block.number));
         

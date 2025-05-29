@@ -34,5 +34,13 @@ jobs:
         id: build
 
       - name: Run Forge tests
-        run: make test --match-test test_claim_remainder
+        run: make test --match-test test_handle_remainder
         id: test
+
+      - name: Upload transaction logs
+        uses: actions/upload-artifact@v3
+        if: always()  # This ensures the step runs even if tests fail
+        with:
+          name: transaction-logs
+          path: ./release/logs/txns/
+          retention-days: 7  # Keeps artifacts for 7 days
