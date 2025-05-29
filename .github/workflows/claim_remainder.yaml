@@ -1,0 +1,41 @@
+name: test
+
+on:
+  schedule:
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  check:
+    name: Foundry project
+    runs-on: ubuntu-latest
+
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Create logs directory
+        run: mkdir -p ./release/logs/txns
+
+      - name: Run tests
+        run: forge test --match-test test_handle_remainder
+        env:
+          MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
+
+      - name: Upload transaction logs
+        uses: actions/upload-artifact@v4
+        if: always()  # This ensures the step runs even if tests fail
+        with:
+          name: transaction-logs
+          path: ./release/logs/txns/
+          retention-days: 7  # Keeps artifacts for 7 days
