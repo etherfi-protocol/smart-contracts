@@ -10,16 +10,9 @@ env:
 
 jobs:
   check:
-    strategy:
-      fail-fast: true
-      
-    env:
-      ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
-      RPC_API_KEY: ${{ secrets.RPC_API_KEY }}
-      GOERLI_RPC_URL: ${{ secrets.GOERLI_RPC_URL }}
-
     name: Foundry project
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
         with:
@@ -30,13 +23,10 @@ jobs:
         with:
           version: nightly
 
-      - name: Run Forge build
-        run: make build
-        id: build
-
-      - name: Run Forge tests
-        run: make test --match-test test_handle_remainder
-        id: test
+      - name: Run tests
+        run: forge test --match-test test_handle_remainder
+        env:
+          MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
 
       - name: Upload transaction logs
         uses: actions/upload-artifact@v4
