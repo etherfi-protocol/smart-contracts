@@ -13,6 +13,7 @@ jobs:
     name: Foundry project
     runs-on: ubuntu-latest
 
+
     steps:
       - uses: actions/checkout@v3
         with:
@@ -22,6 +23,9 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
+
+      - name: Create logs directory
+        run: mkdir -p ./release/logs/txns
 
       - name: Run tests
         run: forge test --match-test test_handle_remainder
