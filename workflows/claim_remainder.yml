@@ -1,0 +1,38 @@
+name: test
+
+on:
+  schedule:
+    - cron: "0 0 * * 1"
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  check:
+    strategy:
+      fail-fast: true
+      
+    env:
+      ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+      RPC_API_KEY: ${{ secrets.RPC_API_KEY }}
+      GOERLI_RPC_URL: ${{ secrets.GOERLI_RPC_URL }}
+
+    name: Foundry project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Run Forge build
+        run: make build
+        id: build
+
+      - name: Run Forge tests
+        run: make test --match-test test_claim_remainder
+        id: test

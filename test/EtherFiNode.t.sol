@@ -10,6 +10,7 @@ import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "./mocks/MockDelegationManager.sol";
 import "./mocks/MockEigenPod.sol";
 
+
 import "forge-std/console2.sol";
 
 interface IEigenlayerTimelock {
@@ -72,7 +73,7 @@ contract EtherFiNodeTest is TestSetup {
         IStakingManager.DepositData[]
             memory depositDataArray = new IStakingManager.DepositData[](1);
 
-        bytes32 root = generateDepositRoot(
+        bytes32 root = depGen.generateDepositRoot(
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             //managerInstance.generateWithdrawalCredentials(etherFiNode),
@@ -364,7 +365,7 @@ contract EtherFiNodeTest is TestSetup {
         IStakingManager.DepositData[]
             memory depositDataArray = new IStakingManager.DepositData[](1);
 
-        root = generateDepositRoot(
+        root = depGen.generateDepositRoot(
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.generateWithdrawalCredentials(etherFiNode),
@@ -392,7 +393,7 @@ contract EtherFiNodeTest is TestSetup {
         IStakingManager.DepositData[]
             memory depositDataArray2 = new IStakingManager.DepositData[](1);
 
-        root = generateDepositRoot(
+        root = depGen.generateDepositRoot(
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.generateWithdrawalCredentials(etherFiNode),
@@ -2107,8 +2108,8 @@ contract EtherFiNodeTest is TestSetup {
         uint256 queueBlock = block.number;
         uint256 validatorID = 83199;
         uint32 exitTimestamp = 5; // arbitrary
-        uint256[] memory validators = toArray_u256(validatorID);
-        uint32[] memory timestamps = toArray_u32(exitTimestamp);
+        uint256[] memory validators = ArrayTestHelper.toArray_u256(validatorID);
+        uint32[] memory timestamps = ArrayTestHelper.toArray_u32(exitTimestamp);
         IStrategy[] memory strategies = new IStrategy[](1);
         strategies[0] = delegationManager.beaconChainETHStrategy();
         vm.prank(managerInstance.owner());
@@ -2127,9 +2128,9 @@ contract EtherFiNodeTest is TestSetup {
         withdrawal.nonce = 4;
         withdrawal.startBlock = uint32(queueBlock);
         withdrawal.strategies = strategies;
-        withdrawal.scaledShares = toArray_u256(32 ether); // determines amount of eth withdrawn by mock
+        withdrawal.scaledShares = ArrayTestHelper.toArray_u256(32 ether); // determines amount of eth withdrawn by mock
         vm.prank(managerInstance.owner());
-        managerInstance.completeQueuedWithdrawals(validators, toArray(withdrawal), true);
+        managerInstance.completeQueuedWithdrawals(validators, ArrayTestHelper.toArray(withdrawal), true);
 
         // finalize the full withdrawal in our protocol
         vm.prank(owner);
@@ -2145,8 +2146,8 @@ contract EtherFiNodeTest is TestSetup {
         uint256 validatorID = depositAndRegisterValidator(true);
         uint32 exitTimestamp = 5; // arbitrary
 
-        uint256[] memory validators = toArray_u256(validatorID);
-        uint32[] memory timestamps = toArray_u32(exitTimestamp);
+        uint256[] memory validators = ArrayTestHelper.toArray_u256(validatorID);
+        uint32[] memory timestamps = ArrayTestHelper.toArray_u32(exitTimestamp);
 
         address eigenPod = managerInstance.getEigenPod(validatorID);
         address etherfiNode = managerInstance.etherfiNodeAddress(validatorID);
@@ -2172,11 +2173,11 @@ contract EtherFiNodeTest is TestSetup {
         // complete the withdrawal from eigenlayer
         bool receiveAsTokens = true;
         IDelegationManagerTypes.Withdrawal memory withdrawal;
-        withdrawal.scaledShares = toArray_u256(32 ether); // determines amount of eth withdrawn by mock
+        withdrawal.scaledShares = ArrayTestHelper.toArray_u256(32 ether); // determines amount of eth withdrawn by mock
         withdrawal.withdrawer = etherfiNode; // checked by EtherfiNode.processNodeExit()
         withdrawal.staker = etherfiNode;     // checked by EtherfiNode.processNodeExit()
         vm.prank(owner);
-        managerInstance.completeQueuedWithdrawals(validators, toArray(withdrawal), receiveAsTokens);
+        managerInstance.completeQueuedWithdrawals(validators, ArrayTestHelper.toArray(withdrawal), receiveAsTokens);
 
         // finalize the full withdrawal in our protocol
         vm.prank(owner);
@@ -2199,8 +2200,8 @@ contract EtherFiNodeTest is TestSetup {
         uint256 validatorID = depositAndRegisterValidator(true);
         uint32 exitTimestamp = 5; // arbitrary
 
-        uint256[] memory validators = toArray_u256(validatorID);
-        uint32[] memory timestamps = toArray_u32(exitTimestamp);
+        uint256[] memory validators = ArrayTestHelper.toArray_u256(validatorID);
+        uint32[] memory timestamps = ArrayTestHelper.toArray_u32(exitTimestamp);
 
         address eigenPod = managerInstance.getEigenPod(validatorID);
         address etherfiNode = managerInstance.etherfiNodeAddress(validatorID);
@@ -2228,11 +2229,11 @@ contract EtherFiNodeTest is TestSetup {
         // complete the withdrawal from eigenlayer
         bool receiveAsTokens = true;
         IDelegationManagerTypes.Withdrawal memory withdrawal;
-        withdrawal.scaledShares = toArray_u256(31 ether); // determines amount of eth withdrawn by mock
+        withdrawal.scaledShares = ArrayTestHelper.toArray_u256(31 ether); // determines amount of eth withdrawn by mock
         withdrawal.withdrawer = etherfiNode; // checked by EtherfiNode.processNodeExit()
         withdrawal.staker = etherfiNode;     // checked by EtherfiNode.processNodeExit()
         vm.prank(owner);
-        managerInstance.completeQueuedWithdrawals(validators, toArray(withdrawal), receiveAsTokens);
+        managerInstance.completeQueuedWithdrawals(validators, ArrayTestHelper.toArray(withdrawal), receiveAsTokens);
 
         // finalize the full withdrawal in our protocol
         vm.prank(owner);
@@ -2254,8 +2255,8 @@ contract EtherFiNodeTest is TestSetup {
         uint256 validatorID = depositAndRegisterValidator(true);
         uint32 exitTimestamp = 5; // arbitrary
 
-        uint256[] memory validators = toArray_u256(validatorID);
-        uint32[] memory timestamps = toArray_u32(exitTimestamp);
+        uint256[] memory validators = ArrayTestHelper.toArray_u256(validatorID);
+        uint32[] memory timestamps = ArrayTestHelper.toArray_u32(exitTimestamp);
 
         address eigenPod = managerInstance.getEigenPod(validatorID);
         address etherfiNode = managerInstance.etherfiNodeAddress(validatorID);
@@ -2290,11 +2291,11 @@ contract EtherFiNodeTest is TestSetup {
         // complete the withdrawal from eigenlayer
         bool receiveAsTokens = true;
         IDelegationManagerTypes.Withdrawal memory withdrawal;
-        withdrawal.scaledShares = toArray_u256(31 ether); // determines amount of eth withdrawn by mock
+        withdrawal.scaledShares = ArrayTestHelper.toArray_u256(31 ether); // determines amount of eth withdrawn by mock
         withdrawal.withdrawer = etherfiNode; // checked by EtherfiNode.processNodeExit()
         withdrawal.staker = etherfiNode;     // checked by EtherfiNode.processNodeExit()
         vm.prank(owner);
-        managerInstance.completeQueuedWithdrawals(validators, toArray(withdrawal), receiveAsTokens);
+        managerInstance.completeQueuedWithdrawals(validators, ArrayTestHelper.toArray(withdrawal), receiveAsTokens);
 
         // finalize the full withdrawal in our protocol
         vm.prank(owner);
@@ -2315,8 +2316,8 @@ contract EtherFiNodeTest is TestSetup {
         uint256 validatorID = depositAndRegisterValidator(true);
         uint32 exitTimestamp = 5; // arbitrary
 
-        uint256[] memory validators = toArray_u256(validatorID);
-        uint32[] memory timestamps = toArray_u32(exitTimestamp);
+        uint256[] memory validators = ArrayTestHelper.toArray_u256(validatorID);
+        uint32[] memory timestamps = ArrayTestHelper.toArray_u32(exitTimestamp);
 
         address eigenPod = managerInstance.getEigenPod(validatorID);
         address etherfiNode = managerInstance.etherfiNodeAddress(validatorID);
@@ -2338,11 +2339,11 @@ contract EtherFiNodeTest is TestSetup {
         // complete the withdrawal from eigenlayer
         bool receiveAsTokens = true;
         IDelegationManagerTypes.Withdrawal memory withdrawal;
-        withdrawal.scaledShares = toArray_u256(33 ether); // determines amount of eth withdrawn by mock
+        withdrawal.scaledShares = ArrayTestHelper.toArray_u256(33 ether); // determines amount of eth withdrawn by mock
         withdrawal.withdrawer = etherfiNode; // checked by EtherfiNode.processNodeExit()
         withdrawal.staker = etherfiNode;     // checked by EtherfiNode.processNodeExit()
         vm.prank(owner);
-        managerInstance.completeQueuedWithdrawals(validators, toArray(withdrawal), receiveAsTokens);
+        managerInstance.completeQueuedWithdrawals(validators, ArrayTestHelper.toArray(withdrawal), receiveAsTokens);
 
         // since there are additional staking rewards, expect payouts to tnft + bnft
         // event(validator, node, toOperator, toTnft, toBnft, toTreasury)
@@ -2362,8 +2363,8 @@ contract EtherFiNodeTest is TestSetup {
         uint256 validatorID = depositAndRegisterValidator(true);
         uint32 exitTimestamp = 5; // arbitrary
 
-        uint256[] memory validators = toArray_u256(validatorID);
-        uint32[] memory timestamps = toArray_u32(exitTimestamp);
+        uint256[] memory validators = ArrayTestHelper.toArray_u256(validatorID);
+        uint32[] memory timestamps = ArrayTestHelper.toArray_u32(exitTimestamp);
 
         address eigenPod = managerInstance.getEigenPod(validatorID);
         address etherfiNode = managerInstance.etherfiNodeAddress(validatorID);
@@ -2393,11 +2394,11 @@ contract EtherFiNodeTest is TestSetup {
         // complete the withdrawal from eigenlayer
         bool receiveAsTokens = true;
         IDelegationManagerTypes.Withdrawal memory withdrawal;
-        withdrawal.scaledShares = toArray_u256(32 ether); // determines amount of eth withdrawn by mock
+        withdrawal.scaledShares = ArrayTestHelper.toArray_u256(32 ether); // determines amount of eth withdrawn by mock
         withdrawal.withdrawer = etherfiNode; // checked by EtherfiNode.processNodeExit()
         withdrawal.staker = etherfiNode;     // checked by EtherfiNode.processNodeExit()
         vm.prank(owner);
-        managerInstance.completeQueuedWithdrawals(validators, toArray(withdrawal), receiveAsTokens);
+        managerInstance.completeQueuedWithdrawals(validators, ArrayTestHelper.toArray(withdrawal), receiveAsTokens);
 
         // finalize the full withdrawal in our protocol
         vm.prank(owner);

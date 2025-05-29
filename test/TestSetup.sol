@@ -79,6 +79,7 @@ contract TestSetup is Test, ContractCodeChecker {
     ICurvePool public cbEth_Eth_Pool;
     ICurvePool public wbEth_Eth_Pool;
     ICurvePool public stEth_Eth_Pool;
+    
 
     IcbETH public cbEth;
     IwBETH public wbEth;
@@ -120,6 +121,8 @@ contract TestSetup is Test, ContractCodeChecker {
     UUPSProxy public etherFiAdminProxy;
     UUPSProxy public cumulativeMerkleRewardsDistributorProxy;
     UUPSProxy public roleRegistryProxy;
+
+    DepositDataGeneration public  depGen = new DepositDataGeneration();
 
     IDepositContract public depositContractEth2;
 
@@ -392,6 +395,7 @@ contract TestSetup is Test, ContractCodeChecker {
         } else {
             revert("Unimplemented fork");
         }
+
 
         //  grab all addresses from address manager and override global testing variables
         regulationsManagerInstance = RegulationsManager(addressProviderInstance.getContractAddress("RegulationsManager"));
@@ -1237,7 +1241,7 @@ contract TestSetup is Test, ContractCodeChecker {
 
         // Register the validator and send deposited eth to depositContract/Beaconchain
         // signatures are not checked but roots need to match
-        bytes32 depositRoot = generateDepositRoot(
+        bytes32 depositRoot = depGen.generateDepositRoot(
             hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
             hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
             managerInstance.getWithdrawalCredentials(createdBids[0]),
@@ -1347,14 +1351,14 @@ contract TestSetup is Test, ContractCodeChecker {
             address safe = managerInstance.getWithdrawalSafeAddress(
                 newValidators[i]
             );
-            root = generateDepositRoot(
+            root = depGen.generateDepositRoot(
                 hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
                 hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
                 managerInstance.generateWithdrawalCredentials(safe),
                 1 ether
             );
 
-            rootForApproval = generateDepositRoot(
+            rootForApproval = depGen.generateDepositRoot(
                 hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
                 hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65",
                 managerInstance.generateWithdrawalCredentials(safe),
@@ -1549,7 +1553,7 @@ contract TestSetup is Test, ContractCodeChecker {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address etherFiNode = managerInstance.etherfiNodeAddress(_validatorIds[i]);
             pubKey[i] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-            bytes32 root = generateDepositRoot(
+            bytes32 root = depGen.generateDepositRoot(
                 pubKey[i],
                 hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
                 managerInstance.generateWithdrawalCredentials(etherFiNode),
@@ -1575,7 +1579,7 @@ contract TestSetup is Test, ContractCodeChecker {
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             pubKey[i] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-            bytes32 root = generateDepositRoot(
+            bytes32 root = depGen.generateDepositRoot(
                 pubKey[i],
                 hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
                 managerInstance.getWithdrawalCredentials(_validatorIds[i]),
@@ -1588,7 +1592,7 @@ contract TestSetup is Test, ContractCodeChecker {
                 ipfsHashForEncryptedValidatorKey: "test_ipfs"
             });
 
-            depositDataRootsForApproval[i] = generateDepositRoot(
+            depositDataRootsForApproval[i] = depGen.generateDepositRoot(
                 pubKey[i],
                 hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65",
                 managerInstance.getWithdrawalCredentials(_validatorIds[i]),
