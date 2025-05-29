@@ -39,7 +39,7 @@ jobs:
         id: test
 
       - name: Upload transaction logs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()  # This ensures the step runs even if tests fail
         with:
           name: transaction-logs
