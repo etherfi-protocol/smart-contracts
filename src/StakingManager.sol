@@ -18,7 +18,6 @@ import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
-
 contract StakingManager is
     Initializable,
     IStakingManager,
@@ -34,7 +33,7 @@ contract StakingManager is
     IEtherFiNodesManager public immutable etherFiNodesManager;
     IDepositContract public immutable depositContractEth2;
     IAuctionManager public immutable auctionManager;
-    UpgradeableBeacon private etherFiNodeBeacon;
+    UpgradeableBeacon public immutable etherFiNodeBeacon;
     IRoleRegistry public immutable roleRegistry;
 
     //---------------------------------------------------------------------------
@@ -71,7 +70,7 @@ contract StakingManager is
         _disableInitializers();
     }
 
-    function _authorizeUpgrade(address _newImplementation) internal override {}
+    function _authorizeUpgrade(address _newImplementation) internal override onlyOwner {}
 
     function pauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();

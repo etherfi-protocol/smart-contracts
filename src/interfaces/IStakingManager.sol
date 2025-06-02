@@ -28,7 +28,7 @@ interface IStakingManager {
 
     // prevent storage shift on upgrade
     struct LegacyStakingManagerState {
-        uint256[15] legacyState;
+        uint256[14] legacyState;
         /*
         |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
         | stakeAmount            | uint128                                               | 301  | 16     | 16    | src/StakingManager.sol:StakingManager |

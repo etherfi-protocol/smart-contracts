@@ -512,7 +512,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         regulationsManagerInstance.updateAdmin(alice, true);
 
 
-        revert("FILL IN ADDRESSES");
+        // TODO(Dave): fill in addresses
         address eigenPodManager;
         address delegationManager;
         address liquidityPool;

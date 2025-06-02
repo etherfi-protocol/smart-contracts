@@ -34,22 +34,14 @@ contract PreludeTest is Test, ArrayTestHelper {
     address etherFiNodeBeacon = address(0x3c55986Cfee455E2533F4D29006634EcF9B7c03F);
     RoleRegistry roleRegistry = RoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
 
-    // i don't think i need this anymore
-    address oracle;
-
-
     function setUp() public {
 
-        console2.log("setup start");
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
-        console2.log("post fork");
 
         stakingManager = StakingManager(0x25e821b7197B146F7713C3b89B6A4D83516B912d);
         liquidityPool = ILiquidityPool(0x308861A430be4cce5502d0A12724771Fc6DaF216);
         etherFiNodesManager = EtherFiNodesManager(payable(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F));
         auctionManager = AuctionManager(0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9);
-        //tnft = ITNFT(0x7B5ae07E2AF1C861BcC4736D23f5f66A61E0cA5e);
-        //bnft = IBNFT(0x6599861e55abd28b91dd9d86A826eC0cC8D72c2c);
 
         // deploy new staking manager implementation
         StakingManager stakingManagerImpl = new StakingManager(
@@ -57,14 +49,11 @@ contract PreludeTest is Test, ArrayTestHelper {
             address(etherFiNodesManager),
             address(stakingDepositContract),
             address(auctionManager),
-            //address(tnft),
-            //address(bnft),
             address(etherFiNodeBeacon),
             address(roleRegistry)
         );
         vm.prank(stakingManager.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
-        console2.log("sm upgrade");
 
         // upgrade etherFiNode impl
         EtherFiNode etherFiNodeImpl = new EtherFiNode(
@@ -76,16 +65,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         );
         vm.prank(stakingManager.owner());
         stakingManager.upgradeEtherFiNode(address(etherFiNodeImpl));
-        console2.log("efn upgrade");
-
-        console2.log("epm:", address(etherFiNodeImpl.eigenPodManager()));
 
         // deploy new efnm implementation
         EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry));
         vm.prank(etherFiNodesManager.owner());
         etherFiNodesManager.upgradeTo(address(etherFiNodesManagerImpl));
-
-        console2.log("efnm upgrade");
 
         vm.prank(auctionManager.owner());
         auctionManager.disableWhitelist();
@@ -100,31 +84,27 @@ contract PreludeTest is Test, ArrayTestHelper {
 
     }
 
-    /*
-                address etherFiNode = managerInstance.etherFiNodeFromId(11);
-        root = generateDepositRoot(
-            hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-            hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-            managerInstance.addressToWithdrawalCredentials(etherFiNode),
-            1 ether
+    function test_StakingManagerUpgradePermissions() public {
+
+        // deploy new staking manager implementation
+        StakingManager stakingManagerImpl = new StakingManager(
+            address(liquidityPool),
+            address(etherFiNodesManager),
+            address(stakingDepositContract),
+            address(auctionManager),
+            address(etherFiNodeBeacon),
+            address(roleRegistry)
         );
 
-        depositDataRootsForApproval[0] = generateDepositRoot(
-            hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-            hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-            managerInstance.addressToWithdrawalCredentials(etherFiNode),
-            31 ether
-        );
+        // only owner should be able to upgrade
+        vm.expectRevert("Ownable: caller is not the owner");
+        stakingManager.upgradeTo(address(stakingManagerImpl));
 
-        IStakingManager.DepositData memory depositData = IStakingManager
-            .DepositData({
-                publicKey: hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
-                signature: hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
-                depositDataRoot: root,
-                ipfsHashForEncryptedValidatorKey: "test_ipfs"
-            });
-            */
-
+        // should succeed when called by owner
+        address owner = stakingManager.owner();
+        vm.prank(owner);
+        stakingManager.upgradeTo(address(stakingManagerImpl));
+    }
 
     function test_createBeaconValidators() public {
 
@@ -153,14 +133,12 @@ contract PreludeTest is Test, ArrayTestHelper {
             etherFiNodesManager.addressToWithdrawalCredentials(eigenPod),
             1 ether
         );
-        //uint256[] memory validatorIDs = toArray_u256(validatorID);
         IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({
             publicKey: pubkey,
             signature: signature,
             depositDataRoot: initialDepositRoot,
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
-        //ISta[] memory depositDatas = toArray(depositData);
 
         vm.deal(address(liquidityPool), 100 ether);
         vm.prank(address(liquidityPool));
