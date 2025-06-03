@@ -91,12 +91,24 @@ contract EtherFiNodesManager is
         IEtherFiNode(etherfiNodeAddress(id)).setProofSubmitter(proofSubmitter);
     }
 
-    function queueWithdrawal(uint256 id, IDelegationManager.QueuedWithdrawalParams calldata params) external onlyCallForwarder returns (bytes32 withdrawalRoot) {
-        return IEtherFiNode(etherfiNodeAddress(id)).queueWithdrawal(params);
+    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyCallForwarder returns (bytes32 withdrawalRoot) {
+        return IEtherFiNode(etherfiNodeAddress(id)).queueETHWithdrawal(amount);
     }
 
-    function completeQueuedWithdrawals(uint256 id, bool receiveAsTokens) external onlyCallForwarder {
-        IEtherFiNode(etherfiNodeAddress(id)).completeQueuedWithdrawals(receiveAsTokens);
+    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyCallForwarder {
+        IEtherFiNode(etherfiNodeAddress(id)).completeQueuedETHWithdrawals(receiveAsTokens);
+    }
+
+    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyCallForwarder {
+        IEtherFiNode(etherfiNodeAddress(id)).queueWithdrawals(params);
+    }
+
+    function completeQueuedWithdrawal(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyCallForwarder {
+        IEtherFiNode(etherfiNodeAddress(id)).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+    }
+
+    function sweepFunds(uint256 id) external onlyCallForwarder {
+        IEtherFiNode(etherfiNodeAddress(id)).sweepFunds;
     }
 
     //-------------------------------------------------------------------

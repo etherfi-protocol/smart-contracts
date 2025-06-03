@@ -12,10 +12,13 @@ interface IEtherFiNode {
     function createEigenPod() external returns (address);
     function getEigenPod() external view returns (IEigenPod);
     function startCheckpoint() external;
-    function setProofSubmitter(address _newProofSubmitter) external;
-    function queueWithdrawal(IDelegationManager.QueuedWithdrawalParams calldata params) external returns (bytes32 withdrawalRoot);
-    function completeQueuedWithdrawals(bool receiveAsTokens) external;
+    function setProofSubmitter(address newProofSubmitter) external;
     function verifyCheckpointProofs(BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
+    function queueETHWithdrawal(uint256 amount) external returns (bytes32 withdrawalRoot);
+    function completeQueuedETHWithdrawals(bool receiveAsTokens) external ;
+    function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external returns (bytes32[] memory withdrawalRoot);
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
+    function sweepFunds() external;
 
     // call forwarding
     function forwardEigenPodCall(bytes memory data) external returns (bytes memory);

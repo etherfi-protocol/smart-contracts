@@ -28,6 +28,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     NodeOperatorManager nodeOperatorManager = NodeOperatorManager(0xd5edf7730ABAd812247F6F54D7bd31a52554e35E);
 
     address admin = vm.addr(0x9876543210);
+    address forwarder = vm.addr(0x1234567890);
     address stakingDepositContract = address(0x00000000219ab540356cBB839Cbe05303d7705Fa);
     address eigenPodManager = address(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
     address delegationManager = address(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
@@ -79,6 +80,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_ADMIN_ROLE(), address(etherFiNodesManager));
         roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_ADMIN_ROLE(), address(stakingManager));
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), forwarder);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
         vm.stopPrank();
 
@@ -163,6 +165,27 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.prank(address(liquidityPool));
         stakingManager.confirmAndFundBeaconValidators{value: confirmAmount}(toArray(confirmDepositData), validatorSize);
+    }
 
+    function test_withdrawRestakedValidatorETH() public {
+
+        bytes memory validatorPubkey = hex"892c95f4e93ab042ee39397bff22cc43298ff4b2d6d6dec3f28b8b8ebcb5c65ab5e6fc29301c1faee473ec095f9e4306";
+        bytes32 pubkeyHash = etherFiNodesManager.calculateValidatorPubkeyHash(validatorPubkey);
+        uint256 legacyID = 10885;
+
+        // force link this validator
+        vm.prank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(validatorPubkey));
+
+        vm.prank(forwarder);
+        etherFiNodesManager.queueETHWithdrawal(uint256(pubkeyHash), 1 ether);
+
+        // poke some withdrawable funds into the restakedExecutionLayerGwei storage slot of the eigenpod
+        address eigenpod = etherFiNodesManager.getEigenPod(uint256(pubkeyHash));
+        vm.store(eigenpod, bytes32(uint256(52)) /*slot*/, bytes32(uint256(50 ether / 1 gwei)));
+
+        vm.roll(block.number + (7200 * 15));
+        vm.prank(forwarder);
+        etherFiNodesManager.completeQueuedETHWithdrawals(uint256(pubkeyHash), true);
     }
 }

@@ -26,12 +26,16 @@ contract ArrayTestHelper {
         vals[0] = val;
         return vals;
     }
+    function toArray_bytes(bytes memory val) public pure returns (bytes[] memory) {
+        bytes[] memory vals = new bytes[](1);
+        vals[0] = val;
+        return vals;
+    }
     function toArray(IDelegationManager.Withdrawal memory withdrawal) public pure returns (IDelegationManager.Withdrawal[] memory) {
         IDelegationManager.Withdrawal[] memory vals = new IDelegationManager.Withdrawal[](1);
         vals[0] = withdrawal;
         return vals;
     }
-
     function toArray(IStakingManager.DepositData memory deposit) public pure returns (IStakingManager.DepositData[] memory) {
         IStakingManager.DepositData[] memory vals = new IStakingManager.DepositData[](1);
         vals[0] = deposit;

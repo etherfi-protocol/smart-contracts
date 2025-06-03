@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import {IDelegationManager} from "../src/eigenlayer-interfaces/IDelegationManager.sol";
-import {IEigenPodManager} from "../src/eigenlayer-interfaces/IEigenPodManager.sol";
-import {IEigenPod} from "../src/eigenlayer-interfaces/IEigenPod.sol";
-import {BeaconChainProofs} from "../src/eigenlayer-libraries/BeaconChainProofs.sol";
-import {IERC20} from "../lib/openzeppelin-contracts/contracts/interfaces/IERC20.sol";
-
 import {IEtherFiNode} from "../src/interfaces/IEtherFiNode.sol";
 import {IEtherFiNodesManager} from "../src/interfaces/IEtherFiNodesManager.sol";
 import {IRoleRegistry} from "../src/interfaces/IRoleRegistry.sol";
 import {ILiquidityPool} from "../src/interfaces/ILiquidityPool.sol";
+
+import {IDelegationManager} from "../src/eigenlayer-interfaces/IDelegationManager.sol";
+import {IDelegationManagerTypes} from "../src/eigenlayer-interfaces/IDelegationManager.sol";
+import {IEigenPodManager} from "../src/eigenlayer-interfaces/IEigenPodManager.sol";
+import {IEigenPod} from "../src/eigenlayer-interfaces/IEigenPod.sol";
+import {IStrategy} from "../src/eigenlayer-interfaces/IStrategy.sol";
+import {BeaconChainProofs} from "../src/eigenlayer-libraries/BeaconChainProofs.sol";
+
+import {IERC20} from "../lib/openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 import {LibCall} from "../lib/solady/src/utils/LibCall.sol";
 
 contract EtherFiNode is IEtherFiNode {
@@ -48,6 +51,8 @@ contract EtherFiNode is IEtherFiNode {
         roleRegistry = IRoleRegistry(_roleRegistry);
     }
 
+    fallback() external payable {}
+
     //--------------------------------------------------------------------------------------
     //---------------------------- Eigenlayer Interactions  --------------------------------
     //--------------------------------------------------------------------------------------
@@ -80,32 +85,42 @@ contract EtherFiNode is IEtherFiNode {
         getEigenPod().verifyCheckpointProofs(balanceContainerProof, proofs);
     }
 
-
-    /// @dev queue a withdrawal from eigenlayer. You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
+    /// @dev convenience function to queue a beaconETH withdrawal from eigenlayer. You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
     ///   It is fine to queue a withdrawal before validators have finished exiting on the beacon chain.
-    function queueWithdrawal(IDelegationManager.QueuedWithdrawalParams calldata params) external onlyAdmin returns (bytes32 withdrawalRoot) {
+    function queueETHWithdrawal(uint256 amount) external onlyAdmin returns (bytes32 withdrawalRoot) {
 
-        // Implemented this way for convenience because we almost never queue multiple withdrawals at the same time
-        IDelegationManager.QueuedWithdrawalParams[] memory paramsArray = new IDelegationManager.QueuedWithdrawalParams[](1);
-        paramsArray[0] = params;
+        // beacon eth is always 1 to 1 with deposit shares
+        uint256[] memory depositShares = new uint256[](1);
+        depositShares[0] = amount;
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = IStrategy(address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0));
+
+        IDelegationManagerTypes.QueuedWithdrawalParams[] memory paramsArray = new IDelegationManagerTypes.QueuedWithdrawalParams[](1);
+        paramsArray[0] = IDelegationManagerTypes.QueuedWithdrawalParams({
+            strategies: strategies, // beacon eth
+            depositShares: depositShares,
+            __deprecated_withdrawer: address(this)
+        });
+
         return delegationManager.queueWithdrawals(paramsArray)[0];
     }
 
-    /// @dev completes all queued withdrawals that are currently claimable.
+
+    /// @dev completes all queued beaconETH withdrawals that are currently claimable.
     ///   Note that since the node is usually delegated to an operator,
     ///   most of the time this should be called with "receiveAsTokens" = true because
     ///   receiving shares while delegated will simply redelegate the shares.
-    function completeQueuedWithdrawals(bool receiveAsTokens) external onlyAdmin {
+    function completeQueuedETHWithdrawals(bool receiveAsTokens) external onlyAdmin {
 
         // because we are just dealing with beacon eth we don't need to populate the tokens[] array
-        IERC20[] memory tokens;
+        IERC20[] memory tokens = new IERC20[](1);
 
         (IDelegationManager.Withdrawal[] memory queuedWithdrawals, ) = delegationManager.getQueuedWithdrawals(address(this));
         for (uint256 i = 0; i < queuedWithdrawals.length; i++) {
 
             // skip this withdrawal if not enough time has passed
             uint32 slashableUntil = queuedWithdrawals[i].startBlock + EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS;
-            if (uint32(block.number) > slashableUntil) continue;
+            if (uint32(block.number) < slashableUntil) continue;
 
             delegationManager.completeQueuedWithdrawal(queuedWithdrawals[i], tokens, receiveAsTokens);
         }
@@ -117,9 +132,26 @@ contract EtherFiNode is IEtherFiNode {
         }
     }
 
+    /// @dev queue a withdrawal from eigenlayer. You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
+    ///   For the general case of queuing a beaconETH withdrawal you can use queueETHWithdrawal instead.
+    function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyAdmin returns (bytes32[] memory withdrawalRoots) {
+        return delegationManager.queueWithdrawals(params);
+    }
+
+    /// @dev complete an arbitrary withdrawal from eigenlayer.
+    ///   For the general case of claiming beaconETH withdrawals you can use completeQueuedETHWithdrawals instead.
+    function completeQueuedWithdrawals(
+        IDelegationManager.Withdrawal[] calldata withdrawals,
+        IERC20[][] calldata tokens,
+        bool[] calldata receiveAsTokens
+    ) external onlyAdmin {
+        delegationManager.completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+    }
+
+
     // @notice transfers any funds held by the node to the liquidity pool.
     // @dev under normal operations it is not expected for eth to accumulate in the nodes,
-    //      this is just to handle any exceptional cases such as someone sending directly to the node.
+    //    this is just to handle any exceptional cases such as someone sending directly to the node.
     function sweepFunds() external onlyAdmin {
             (bool sent, ) = payable(address(liquidityPool)).call{value: address(this).balance, gas: 20000}("");
             if (!sent) revert TransferFailed();
