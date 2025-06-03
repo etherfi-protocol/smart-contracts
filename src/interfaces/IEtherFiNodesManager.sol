@@ -17,7 +17,6 @@ interface IEtherFiNodesManager {
 
     // eigenlayer interactions
     function getEigenPod(uint256 id) external view returns (address);
-    function createEigenPod(uint256 id) external returns (address);
     function startCheckpoint(uint256 id) external;
     function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
     function setProofSubmitter(uint256 id, address newProofSubmitter) external;

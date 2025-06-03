@@ -75,10 +75,6 @@ contract EtherFiNodesManager is
         return address(IEtherFiNode(etherfiNodeAddress(id)).getEigenPod());
     }
 
-    function createEigenPod(uint256 id) public onlyAdmin returns (address) {
-        return IEtherFiNode(etherfiNodeAddress(id)).createEigenPod();
-    }
-
     function startCheckpoint(uint256 id) external onlyCallForwarder {
         IEtherFiNode(etherfiNodeAddress(id)).startCheckpoint();
     }
