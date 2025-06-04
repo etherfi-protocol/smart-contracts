@@ -41,6 +41,7 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
 
     bytes32 public constant ETHERFI_NODES_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_ADMIN_ROLE");
+    bytes32 public constant ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
 
     //-------------------------------------------------------------------------
@@ -69,44 +70,51 @@ contract EtherFiNodesManager is
         _unpause();
     }
 
+    /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
+    ///   the eth to the liquidity pool in the event of ETH being accidentally sent there
+    function sweepFunds(uint256 id) external onlyAdmin whenNotPaused {
+        IEtherFiNode(etherfiNodeAddress(id)).sweepFunds;
+    }
+
     //--------------------------------------------------------------------------------------
     //---------------------------- Eigenlayer Interactions  --------------------------------
     //--------------------------------------------------------------------------------------
+
+    // Note that most of these calls are pod-level actions and it is a little awkward to always
+    // provide a specific validator ID. This is to maintain compatibility with much of our existing
+    // tooling which used to operate on a per-validator level instead of per-pod/per-node.
+    // Over time we will migrate to directly calling the associated method on the EtherFiNode contract where applicable.
 
     function getEigenPod(uint256 id) public view returns (address) {
         return address(IEtherFiNode(etherfiNodeAddress(id)).getEigenPod());
     }
 
-    function startCheckpoint(uint256 id) external onlyCallForwarder whenNotPaused {
+    function startCheckpoint(uint256 id) external onlyEigenlayerAdmin whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).startCheckpoint();
     }
 
-    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyCallForwarder whenNotPaused {
+    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyEigenlayerAdmin whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).verifyCheckpointProofs(balanceContainerProof, proofs);
     }
 
-    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyCallForwarder whenNotPaused {
+    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyEigenlayerAdmin whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).setProofSubmitter(proofSubmitter);
     }
 
-    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyCallForwarder whenNotPaused returns (bytes32 withdrawalRoot) {
+    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyEigenlayerAdmin whenNotPaused returns (bytes32 withdrawalRoot) {
         return IEtherFiNode(etherfiNodeAddress(id)).queueETHWithdrawal(amount);
     }
 
-    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyCallForwarder whenNotPaused {
+    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).completeQueuedETHWithdrawals(receiveAsTokens);
     }
 
-    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyCallForwarder whenNotPaused {
+    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).queueWithdrawals(params);
     }
 
-    function completeQueuedWithdrawal(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyCallForwarder whenNotPaused {
+    function completeQueuedWithdrawal(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
-    }
-
-    function sweepFunds(uint256 id) external onlyCallForwarder whenNotPaused {
-        IEtherFiNode(etherfiNodeAddress(id)).sweepFunds;
     }
 
     //-------------------------------------------------------------------
@@ -201,21 +209,7 @@ contract EtherFiNodesManager is
         emit AllowedForwardedEigenpodCallsUpdated(selector, allowed);
     }
 
-    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
-        if (nodes.length != data.length) revert InvalidForwardedCall();
-
-        returnData = new bytes[](nodes.length);
-        for (uint256 i = 0; i < nodes.length; i++) {
-
-            // validate the call
-            if (data[i].length < 4) revert InvalidForwardedCall();
-            bytes4 selector = bytes4(data[i][:4]);
-            if (!allowedForwardedExternalCalls[selector][target]) revert ForwardedCallNotAllowed();
-
-            returnData[i] = IEtherFiNode(nodes[i]).forwardExternalCall(target, data[i]);
-        }
-    }
-
+    /// @notice forward a whitelisted call to a whitelisted external contract with the EtherFiNode as the caller
     function forwardExternalCall(uint256[] calldata ids, bytes[] calldata data, address target) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
         if (ids.length != data.length) revert InvalidForwardedCall();
 
@@ -232,22 +226,8 @@ contract EtherFiNodesManager is
         }
     }
 
-    function forwardEigenPodCall(address[] calldata etherFiNodes, bytes[] calldata data) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
-        if (etherFiNodes.length != data.length) revert InvalidForwardedCall();
-
-        returnData = new bytes[](etherFiNodes.length);
-        for (uint256 i = 0; i < etherFiNodes.length; i++) {
-
-            // validate the call
-            if (data[i].length < 4) revert InvalidForwardedCall();
-            bytes4 selector = bytes4(data[i][:4]);
-            if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
-
-            IEtherFiNode node = IEtherFiNode(etherFiNodes[i]);
-            returnData[i] = node.forwardEigenPodCall(data[i]);
-        }
-    }
-
+    /// @notice forward a whitelisted call to the associated eigenPod of the EtherFiNode with the EtherFiNode as the caller.
+    ///   This serves to allow us to support minor eigenlayer upgrades without needing to immediately upgrade our contracts.
     function forwardEigenPodCall(uint256[] calldata ids, bytes[] calldata data) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
         if (ids.length != data.length) revert InvalidForwardedCall();
 
@@ -270,6 +250,11 @@ contract EtherFiNodesManager is
 
     modifier onlyAdmin() {
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _;
+    }
+
+    modifier onlyEigenlayerAdmin() {
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 

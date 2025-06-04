@@ -77,8 +77,8 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // permissions
         vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_ADMIN_ROLE(), address(etherFiNodesManager));
-        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_ADMIN_ROLE(), address(stakingManager));
+        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE(), address(etherFiNodesManager));
+        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), forwarder);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);

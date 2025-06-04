@@ -37,7 +37,8 @@ contract EtherFiNode is IEtherFiNode {
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
-    bytes32 public constant ETHERFI_NODE_ADMIN_ROLE = keccak256("ETHERFI_NODE_ADMIN_ROLE");
+    bytes32 public constant ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE = keccak256("ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE");
+    bytes32 public constant ETHERFI_NODE_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODE_CALL_FORWARDER_ROLE");
 
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
@@ -65,29 +66,29 @@ contract EtherFiNode is IEtherFiNode {
 
     /// @dev creates a new eigenpod and returns its address. Reverts if a pod already exists for this node.
     ///      This address is deterministic and you can pre-compute it if necessary.
-    function createEigenPod() external onlyAdmin returns (address) {
+    function createEigenPod() external onlyEigenlayerAdmin returns (address) {
         return eigenPodManager.createPod();
     }
 
     /// @dev specify another address with permissions to submit checkpoint and withdrawal credential proofs
-    function setProofSubmitter(address _newProofSubmitter) external onlyAdmin {
+    function setProofSubmitter(address _newProofSubmitter) external onlyEigenlayerAdmin {
         getEigenPod().setProofSubmitter(_newProofSubmitter);
     }
 
     /// @dev start an eigenlayer checkpoint proof. Once a checkpoint is started, it must be completed
-    function startCheckpoint() external onlyAdmin {
+    function startCheckpoint() external onlyEigenlayerAdmin {
         bool revertIfNoBalance = true; // protect from wasting gas if checkpoint will not increase shares
         getEigenPod().startCheckpoint(revertIfNoBalance);
     }
 
     /// @dev submit a subset of proofs for the currently active checkpoint
-    function verifyCheckpointProofs(BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyAdmin {
+    function verifyCheckpointProofs(BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyEigenlayerAdmin {
         getEigenPod().verifyCheckpointProofs(balanceContainerProof, proofs);
     }
 
     /// @dev convenience function to queue a beaconETH withdrawal from eigenlayer. You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
     ///   It is fine to queue a withdrawal before validators have finished exiting on the beacon chain.
-    function queueETHWithdrawal(uint256 amount) external onlyAdmin returns (bytes32 withdrawalRoot) {
+    function queueETHWithdrawal(uint256 amount) external onlyEigenlayerAdmin returns (bytes32 withdrawalRoot) {
 
         // beacon eth is always 1 to 1 with deposit shares
         uint256[] memory depositShares = new uint256[](1);
@@ -110,7 +111,7 @@ contract EtherFiNode is IEtherFiNode {
     ///   Note that since the node is usually delegated to an operator,
     ///   most of the time this should be called with "receiveAsTokens" = true because
     ///   receiving shares while delegated will simply redelegate the shares.
-    function completeQueuedETHWithdrawals(bool receiveAsTokens) external onlyAdmin {
+    function completeQueuedETHWithdrawals(bool receiveAsTokens) external onlyEigenlayerAdmin {
 
         // because we are just dealing with beacon eth we don't need to populate the tokens[] array
         IERC20[] memory tokens = new IERC20[](1);
@@ -134,7 +135,7 @@ contract EtherFiNode is IEtherFiNode {
 
     /// @dev queue a withdrawal from eigenlayer. You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
     ///   For the general case of queuing a beaconETH withdrawal you can use queueETHWithdrawal instead.
-    function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyAdmin returns (bytes32[] memory withdrawalRoots) {
+    function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin returns (bytes32[] memory withdrawalRoots) {
         return delegationManager.queueWithdrawals(params);
     }
 
@@ -144,7 +145,7 @@ contract EtherFiNode is IEtherFiNode {
         IDelegationManager.Withdrawal[] calldata withdrawals,
         IERC20[][] calldata tokens,
         bool[] calldata receiveAsTokens
-    ) external onlyAdmin {
+    ) external onlyEigenlayerAdmin {
         delegationManager.completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
     }
 
@@ -152,7 +153,7 @@ contract EtherFiNode is IEtherFiNode {
     // @notice transfers any funds held by the node to the liquidity pool.
     // @dev under normal operations it is not expected for eth to accumulate in the nodes,
     //    this is just to handle any exceptional cases such as someone sending directly to the node.
-    function sweepFunds() external onlyAdmin {
+    function sweepFunds() external onlyEigenlayerAdmin {
             (bool sent, ) = payable(address(liquidityPool)).call{value: address(this).balance, gas: 20000}("");
             if (!sent) revert TransferFailed();
     }
@@ -161,12 +162,12 @@ contract EtherFiNode is IEtherFiNode {
     //-------------------------------- CALL FORWARDING  ------------------------------------
     //--------------------------------------------------------------------------------------
 
-    function forwardEigenPodCall(bytes calldata data) external onlyAdmin returns (bytes memory) {
+    function forwardEigenPodCall(bytes calldata data) external onlyCallForwarder returns (bytes memory) {
         // callContract will revert if targeting an EOA so it is safe if getEigenPod() returns the zero address
         return LibCall.callContract(address(getEigenPod()), 0, data);
     }
 
-    function forwardExternalCall(address to, bytes calldata data) external onlyAdmin returns (bytes memory) {
+    function forwardExternalCall(address to, bytes calldata data) external onlyCallForwarder returns (bytes memory) {
         return LibCall.callContract(to, 0, data);
     }
 
@@ -174,8 +175,13 @@ contract EtherFiNode is IEtherFiNode {
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
 
-    modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(ETHERFI_NODE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    modifier onlyEigenlayerAdmin() {
+        if (!roleRegistry.hasRole(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _;
+    }
+
+    modifier onlyCallForwarder() {
+        if (!roleRegistry.hasRole(ETHERFI_NODE_CALL_FORWARDER_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 

@@ -271,32 +271,6 @@ contract TimelockTest is TestSetup {
         }
     }
 
-    function test_EIGEN_transfer() internal {
-        initializeRealisticFork(MAINNET_FORK);
-        address target = address(managerInstance);
-        bytes4 selector = bytes4(keccak256("transfer(address,uint256)"));
-
-        bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector, selector, 0xec53bF9167f50cDEB3Ae105f56099aaaB9061F83, true);
-        _execute_timelock(target, data, true, true, true, true);
-        
-        address[] memory nodes = new address[](1);
-        bytes[] memory datas = new bytes[](1);
-        nodes[0] = 0xe8e39aA7E08F13f1Ccd5F38706F9e1D60C661825;
-        datas[0] = abi.encodeWithSelector(selector, 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, 1 ether);
-        
-        vm.prank(0x7835fB36A8143a014A2c381363cD1A4DeE586d2A);
-        managerInstance.forwardExternalCall(nodes, datas, 0xec53bF9167f50cDEB3Ae105f56099aaaB9061F83);
-    }
-
-    /*
-    function test_add_updateEigenLayerOperatingAdmin() internal {
-        initializeRealisticFork(MAINNET_FORK);
-        address target = address(managerInstance);
-        bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateEigenLayerOperatingAdmin.selector, 0x44358b1cc2C296fFc7419835438D1BD97Ec1FB78, true);
-        _execute_timelock(target, data, true, true, true, true);
-    }
-    */
-
     function test_efip4() public {
         initializeRealisticFork(MAINNET_FORK);
         {
