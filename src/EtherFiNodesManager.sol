@@ -75,35 +75,35 @@ contract EtherFiNodesManager is
         return address(IEtherFiNode(etherfiNodeAddress(id)).getEigenPod());
     }
 
-    function startCheckpoint(uint256 id) external onlyCallForwarder {
+    function startCheckpoint(uint256 id) external onlyCallForwarder whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).startCheckpoint();
     }
 
-    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyCallForwarder {
+    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyCallForwarder whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).verifyCheckpointProofs(balanceContainerProof, proofs);
     }
 
-    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyCallForwarder {
+    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyCallForwarder whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).setProofSubmitter(proofSubmitter);
     }
 
-    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyCallForwarder returns (bytes32 withdrawalRoot) {
+    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyCallForwarder whenNotPaused returns (bytes32 withdrawalRoot) {
         return IEtherFiNode(etherfiNodeAddress(id)).queueETHWithdrawal(amount);
     }
 
-    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyCallForwarder {
+    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyCallForwarder whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).completeQueuedETHWithdrawals(receiveAsTokens);
     }
 
-    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyCallForwarder {
+    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyCallForwarder whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).queueWithdrawals(params);
     }
 
-    function completeQueuedWithdrawal(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyCallForwarder {
+    function completeQueuedWithdrawal(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyCallForwarder whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
     }
 
-    function sweepFunds(uint256 id) external onlyCallForwarder {
+    function sweepFunds(uint256 id) external onlyCallForwarder whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).sweepFunds;
     }
 
@@ -199,7 +199,7 @@ contract EtherFiNodesManager is
         emit AllowedForwardedEigenpodCallsUpdated(selector, allowed);
     }
 
-    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external onlyCallForwarder returns (bytes[] memory returnData) {
+    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
         if (nodes.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](nodes.length);
@@ -214,7 +214,7 @@ contract EtherFiNodesManager is
         }
     }
 
-    function forwardExternalCall(uint256[] calldata ids, bytes[] calldata data, address target) external onlyCallForwarder returns (bytes[] memory returnData) {
+    function forwardExternalCall(uint256[] calldata ids, bytes[] calldata data, address target) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
         if (ids.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](ids.length);
@@ -230,7 +230,7 @@ contract EtherFiNodesManager is
         }
     }
 
-    function forwardEigenPodCall(address[] calldata etherFiNodes, bytes[] calldata data) external onlyCallForwarder returns (bytes[] memory returnData) {
+    function forwardEigenPodCall(address[] calldata etherFiNodes, bytes[] calldata data) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
         if (etherFiNodes.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](etherFiNodes.length);
@@ -246,7 +246,7 @@ contract EtherFiNodesManager is
         }
     }
 
-    function forwardEigenPodCall(uint256[] calldata ids, bytes[] calldata data) external onlyCallForwarder returns (bytes[] memory returnData) {
+    function forwardEigenPodCall(uint256[] calldata ids, bytes[] calldata data) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
         if (ids.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](ids.length);
