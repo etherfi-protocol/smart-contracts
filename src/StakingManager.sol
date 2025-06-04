@@ -70,7 +70,9 @@ contract StakingManager is
         _disableInitializers();
     }
 
-    function _authorizeUpgrade(address _newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address _newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     function pauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
