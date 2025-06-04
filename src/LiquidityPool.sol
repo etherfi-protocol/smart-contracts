@@ -395,7 +395,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     /// @notice Send the exit requests as the T-NFT holder of the LiquidityPool validators
-    function sendExitRequests(uint256[] calldata _validatorIds) external {
+    function DEPRECATED_sendExitRequests(uint256[] calldata _validatorIds) external {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {

@@ -220,11 +220,11 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (taskType == TaskType.ValidatorApproval) {
             liquidityPool.batchApproveRegistration(_validators, _pubKeys, _signatures);
         } else if (taskType == TaskType.SendExitRequests) {
-            liquidityPool.sendExitRequests(_validators);
+            liquidityPool.DEPRECATED_sendExitRequests(_validators);
         } else if (taskType == TaskType.ProcessNodeExit) {
-            // nothing to do
+            // nothing to do anymore (v3 prelude upgrade)
         } else if (taskType == TaskType.MarkBeingSlashed) {
-            // nothing to do
+            // nothing to do anymore (v3 prelude upgrade)
         }
         emit ValidatorManagementTaskCompleted(taskHash, _reportHash, _validators, _timestamps, taskType);
     }
@@ -306,7 +306,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function _handleValidators(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report) internal {
             uint32[] memory emptyTimestamps = new uint32[](0);
             _enqueueValidatorManagementTask(_reportHash, _report.validatorsToApprove, emptyTimestamps,  TaskType.ValidatorApproval);
-            _enqueueValidatorManagementTask(_reportHash, _report.exitedValidators, _report.exitedValidatorsExitTimestamps, TaskType.ProcessNodeExit);
+            _enqueueValidatorManagementTask(_reportHash, _report.liquidityPoolValidatorsToExit, emptyTimestamps,  TaskType.SendExitRequests);
     }
 
     function _handleWithdrawals(IEtherFiOracle.OracleReport calldata _report) internal {
