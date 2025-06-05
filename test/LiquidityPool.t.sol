@@ -322,7 +322,7 @@ contract LiquidityPoolTest is TestSetup {
         uint256[] memory newValidators = new uint256[](10);
         vm.expectRevert(LiquidityPool.IncorrectRole.selector);
         vm.prank(elvis);
-        liquidityPoolInstance.sendExitRequests(newValidators);
+        liquidityPoolInstance.DEPRECATED_sendExitRequests(newValidators);
     }
 
     // TODO(dave): update when v3 changes finalized
@@ -459,10 +459,10 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.warp(1681075815 - 7 * 24 * 3600);   // Sun Apr 02 2023 21:30:15 UTC
         vm.expectRevert(LiquidityPool.IncorrectRole.selector);
-        liquidityPoolInstance.sendExitRequests(newValidators);
+        liquidityPoolInstance.DEPRECATED_sendExitRequests(newValidators);
         
         vm.prank(alice);
-        liquidityPoolInstance.sendExitRequests(newValidators);
+        liquidityPoolInstance.DEPRECATED_sendExitRequests(newValidators);
 
         uint32[] memory exitRequestTimestamps = new uint32[](2);
         exitRequestTimestamps[0] = uint32(block.timestamp - 1000); 
