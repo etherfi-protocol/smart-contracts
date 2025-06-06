@@ -159,7 +159,8 @@ contract StakingManager is
 
     /// @notice Upgrades the etherfi node
     /// @param _newImplementation The new address of the etherfi node
-    function upgradeEtherFiNode(address _newImplementation) public onlyOwner {
+    function upgradeEtherFiNode(address _newImplementation) external {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
         if (_newImplementation == address(0)) revert InvalidUpgrade();
 
         etherFiNodeBeacon.upgradeTo(_newImplementation);

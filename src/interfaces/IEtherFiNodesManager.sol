@@ -23,7 +23,7 @@ interface IEtherFiNodesManager {
     function queueETHWithdrawal(uint256 id, uint256 amount) external returns (bytes32 withdrawalRoot);
     function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external;
     function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external;
-    function completeQueuedWithdrawal(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
+    function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
     function sweepFunds(uint256 id) external;
 
     // call forwarding
