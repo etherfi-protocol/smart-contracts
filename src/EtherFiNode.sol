@@ -121,7 +121,7 @@ contract EtherFiNode is IEtherFiNode {
 
             // skip this withdrawal if not enough time has passed
             uint32 slashableUntil = queuedWithdrawals[i].startBlock + EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS;
-            if (uint32(block.number) < slashableUntil) continue;
+            if (uint32(block.number) <= slashableUntil) continue;
 
             delegationManager.completeQueuedWithdrawal(queuedWithdrawals[i], tokens, receiveAsTokens);
         }
