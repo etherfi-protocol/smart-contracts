@@ -119,9 +119,11 @@ contract EtherFiNode is IEtherFiNode {
         (IDelegationManager.Withdrawal[] memory queuedWithdrawals, ) = delegationManager.getQueuedWithdrawals(address(this));
         for (uint256 i = 0; i < queuedWithdrawals.length; i++) {
 
-            // skip this withdrawal if not enough time has passed
+            // skip this withdrawal if not enough time has passed or if it is not a simple beaconETH withdrawal
             uint32 slashableUntil = queuedWithdrawals[i].startBlock + EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS;
             if (uint32(block.number) <= slashableUntil) continue;
+            if (queuedWithdrawals[i].strategies.length != 1) continue;
+            if (queuedWithdrawals[i].strategies[0] != IStrategy(address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0))) continue;
 
             delegationManager.completeQueuedWithdrawal(queuedWithdrawals[i], tokens, receiveAsTokens);
         }
@@ -148,7 +150,6 @@ contract EtherFiNode is IEtherFiNode {
     ) external onlyEigenlayerAdmin {
         delegationManager.completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
     }
-
 
     // @notice transfers any funds held by the node to the liquidity pool.
     // @dev under normal operations it is not expected for eth to accumulate in the nodes,
