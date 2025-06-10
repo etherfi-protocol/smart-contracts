@@ -87,5 +87,7 @@ interface IEtherFiNode {
 
     error TransferFailed();
     error IncorrectRole();
+    error ForwardedCallNotAllowed();
+    error InvalidForwardedCall();
 
 }

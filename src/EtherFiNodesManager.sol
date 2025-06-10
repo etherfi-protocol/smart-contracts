@@ -189,9 +189,6 @@ contract EtherFiNodesManager is
     //-------------------------------- CALL FORWARDING  ------------------------------------
     //--------------------------------------------------------------------------------------
 
-    error ForwardedCallNotAllowed();
-    error InvalidForwardedCall();
-
     /// @notice Update the whitelist for external calls that can be executed by an EtherfiNode
     /// @param selector method selector
     /// @param target call target for forwarded call
@@ -216,11 +213,7 @@ contract EtherFiNodesManager is
         returnData = new bytes[](ids.length);
         for (uint256 i = 0; i < ids.length; i++) {
 
-            // validate the call
-            if (data[i].length < 4) revert InvalidForwardedCall();
-            bytes4 selector = bytes4(data[i][:4]);
-            if (!allowedForwardedExternalCalls[selector][target]) revert ForwardedCallNotAllowed();
-
+            // call validation + whitelist checks performed in node implementation
             IEtherFiNode node = IEtherFiNode(etherfiNodeAddress(ids[i]));
             returnData[i] = node.forwardExternalCall(target, data[i]);
         }
@@ -234,11 +227,7 @@ contract EtherFiNodesManager is
         returnData = new bytes[](ids.length);
         for (uint256 i = 0; i < ids.length; i++) {
 
-            // validate the call
-            if (data[i].length < 4) revert InvalidForwardedCall();
-            bytes4 selector = bytes4(data[i][:4]);
-            if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
-
+            // call validation + whitelist checks performed in node implementation
             IEtherFiNode node = IEtherFiNode(etherfiNodeAddress(ids[i]));
             returnData[i] = node.forwardEigenPodCall(data[i]);
         }

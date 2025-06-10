@@ -86,10 +86,92 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE(), address(etherFiNodesManager));
         roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
         roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
+        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_CALL_FORWARDER_ROLE(), address(etherFiNodesManager));
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), forwarder);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
+        vm.stopPrank();
+
+    }
+
+    function test_forwardingWhitelist() public {
+
+        // create a node + pod
+        vm.prank(admin);
+        IEtherFiNode etherFiNode = IEtherFiNode(stakingManager.instantiateEtherFiNode(true /*createEigenPod*/));
+
+        // link it to an arbitrary id
+        uint256 legacyID = 10885;
+        bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
+        vm.prank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(pubkey));
+
+        // user with no role should not be able to forward calls
+        vm.startPrank(user);
+        {
+            vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
+            etherFiNode.forwardEigenPodCall("");
+
+            vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
+            etherFiNode.forwardExternalCall(address(0), "");
+
+            vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+            etherFiNodesManager.forwardEigenPodCall(toArray_u256(legacyID), toArray_bytes(""));
+
+            vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+            etherFiNodesManager.forwardExternalCall(toArray_u256(legacyID), toArray_bytes(""), address(0));
+
+        }
+        vm.stopPrank();
+
+        // grant roles
+        vm.startPrank(roleRegistry.owner());
+        {
+            roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), user);
+            roleRegistry.grantRole(EtherFiNode(payable(address(etherFiNode))).ETHERFI_NODE_CALL_FORWARDER_ROLE(), user);
+        }
+        vm.stopPrank();
+
+        bytes4 decimalsSelector = hex"313ce567"; // ERC20 decimals()
+        bytes4 checkpointSelector = hex"47d28372"; // eigenpod currentCheckpoint()
+        bytes memory data = hex"313ce567";
+        bytes memory checkpointData = hex"47d28372" ;
+        address target = 0xFe0c30065B384F05761f15d0CC899D4F9F9Cc0eB; // ethfi
+
+        // user should fail due to calls not being whitelisted
+        vm.startPrank(user);
+        {
+            vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
+            etherFiNode.forwardEigenPodCall(checkpointData);
+
+            vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
+            etherFiNode.forwardExternalCall(address(0), data);
+
+            vm.expectRevert(IEtherFiNodesManager.ForwardedCallNotAllowed.selector);
+            etherFiNodesManager.forwardEigenPodCall(toArray_u256(legacyID), toArray_bytes(checkpointData));
+
+            vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
+            etherFiNodesManager.forwardExternalCall(toArray_u256(legacyID), toArray_bytes(data), target);
+        }
+        vm.stopPrank();
+
+        // whitelist calls
+        vm.startPrank(admin);
+        {
+            etherFiNodesManager.updateAllowedForwardedExternalCalls(decimalsSelector, target, true);
+            etherFiNodesManager.updateAllowedForwardedEigenpodCalls(checkpointSelector, true);
+        }
+        vm.stopPrank();
+
+        // calls should succeed after being whitelisted
+        vm.startPrank(user);
+        {
+            etherFiNode.forwardEigenPodCall(checkpointData);
+            etherFiNode.forwardExternalCall(target, data);
+            etherFiNodesManager.forwardEigenPodCall(toArray_u256(legacyID), toArray_bytes(checkpointData));
+            etherFiNodesManager.forwardExternalCall(toArray_u256(legacyID), toArray_bytes(data), target);
+        }
         vm.stopPrank();
 
     }
@@ -134,7 +216,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
 
         vm.prank(admin);
-        address etherFiNode = stakingManager.instantiateEtherFiNode(true);
+        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/);
 
         address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
         bytes32 initialDepositRoot = depositRootGenerator.generateDepositRoot(

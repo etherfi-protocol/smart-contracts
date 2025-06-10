@@ -31,6 +31,8 @@ interface IEtherFiNodesManager {
     function updateAllowedForwardedEigenpodCalls(bytes4 selector, bool allowed) external;
     function forwardExternalCall(uint256[] calldata ids, bytes[] calldata data, address target) external returns (bytes[] memory returnData);
     function forwardEigenPodCall(uint256[] calldata ids, bytes[] calldata data) external returns (bytes[] memory returnData);
+    function allowedForwardedEigenpodCalls(bytes4 selector) external returns (bool);
+    function allowedForwardedExternalCalls(bytes4 selector, address to) external returns (bool);
 
     // protocol
     function pauseContract() external;
@@ -112,6 +114,8 @@ interface IEtherFiNodesManager {
     error LengthMismatch();
     error InvalidCaller();
     error IncorrectRole();
+    error ForwardedCallNotAllowed();
+    error InvalidForwardedCall();
 
 
 }
