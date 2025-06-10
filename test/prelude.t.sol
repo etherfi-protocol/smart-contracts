@@ -189,7 +189,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         );
 
         // only owner should be able to upgrade
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
         // should succeed when called by owner
@@ -267,16 +267,21 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(validatorPubkey));
 
-        vm.prank(forwarder);
+        vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueETHWithdrawal(uint256(pubkeyHash), 1 ether);
 
         // poke some withdrawable funds into the restakedExecutionLayerGwei storage slot of the eigenpod
         address eigenpod = etherFiNodesManager.getEigenPod(uint256(pubkeyHash));
         vm.store(eigenpod, bytes32(uint256(52)) /*slot*/, bytes32(uint256(50 ether / 1 gwei)));
 
+        uint256 startingBalance = address(liquidityPool).balance;
+
         vm.roll(block.number + (7200 * 15));
-        vm.prank(forwarder);
+        vm.prank(eigenlayerAdmin);
         etherFiNodesManager.completeQueuedETHWithdrawals(uint256(pubkeyHash), true);
+
+        // liquidity pool should have received withdrawal
+        assertEq(address(liquidityPool).balance, startingBalance + 1 ether);
     }
 
     function test_EtherFiNodePermissions() public {
@@ -401,37 +406,42 @@ contract PreludeTest is Test, ArrayTestHelper {
 
     function test_StakingManagerPermissions() public {
 
+        bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
+        bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
+
         // only liquidityPool can call createBeaconValidators
-        bytes32 initialDepositRoot = depositRootGenerator.generateDepositRoot("", "", "", 1 ether);
+        bytes32 initialDepositRoot = depositRootGenerator.generateDepositRoot(pubkey, signature, "", 1 ether);
         IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({
-            publicKey: "",
-            signature: "",
+            publicKey: pubkey,
+            signature: signature,
             depositDataRoot: initialDepositRoot,
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
         uint256[] memory bidIds = new uint256[](1);
         vm.prank(admin);
-        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        vm.expectRevert(IStakingManager.InvalidCaller.selector);
         stakingManager.createBeaconValidators(toArray(initialDepositData), bidIds, address(0));
 
         // only liquidityPool can call confirmAndFundBeaconValidators
-        bytes32 confirmDepositRoot = depositRootGenerator.generateDepositRoot("", "", "", 0);
+        bytes32 confirmDepositRoot = depositRootGenerator.generateDepositRoot(pubkey, signature, "", 31 ether);
         IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
-            publicKey: "",
-            signature: "",
+            publicKey: pubkey,
+            signature: signature,
             depositDataRoot: 0,
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
         vm.prank(address(admin));
-        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        vm.expectRevert(IStakingManager.InvalidCaller.selector);
         stakingManager.confirmAndFundBeaconValidators(toArray(confirmDepositData), 32 ether);
 
+
         // only protocolUpgrader can upgrade etherFiNode
+        EtherFiNode nodeImpl = new EtherFiNode(address(0), address(0), address(0), address(0), address(0));
         vm.prank(admin);
         vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
-        stakingManager.upgradeEtherFiNode(address(1));
+        stakingManager.upgradeEtherFiNode(address(nodeImpl));
 
         vm.prank(roleRegistry.owner());
-        stakingManager.upgradeEtherFiNode(address(1));
+        stakingManager.upgradeEtherFiNode(address(nodeImpl));
     }
 }
