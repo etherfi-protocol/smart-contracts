@@ -133,7 +133,7 @@ contract EtherFiNodesManager is
     }
 
     /// @dev associate the provided pubkey with particular EtherFiNode instance.
-    function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external {
+    function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external whenNotPaused {
         if (msg.sender != address(stakingManager)) revert InvalidCaller();
         bytes32 pubkeyHash = calculateValidatorPubkeyHash(pubkey);
         if (address(etherFiNodeFromPubkeyHash[pubkeyHash]) != address(0)) revert AlreadyLinked();
