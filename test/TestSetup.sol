@@ -206,6 +206,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     EtherFiTimelock public etherFiTimelockInstance;
     BucketRateLimiter public bucketRateLimiter;
 
+    IAvsOperatorManager public avsOperatorManager;
+
     bool public shouldSetupRoleRegistry = true;
 
     bytes32 root;
@@ -448,7 +450,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function deployEtherFiRestaker() internal {
-        etherFiRestakerImplementation = new EtherFiRestaker(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf));
+        etherFiRestakerImplementation = new EtherFiRestaker(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf), address(0x2093Bbb221f1d8C7c932c32ee28Be6dEe4a37A6a));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
@@ -628,7 +630,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
 
-        etherFiRestakerImplementation = new EtherFiRestaker(address(0x0));
+        etherFiRestakerImplementation = new EtherFiRestaker(address(0x0), address(0x0));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
@@ -763,6 +765,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         stakingManagerInstance.initializeOnUpgrade(address(nodeOperatorManagerInstance), address(etherFiAdminInstance));
         auctionInstance.initializeOnUpgrade(address(membershipManagerInstance), 1 ether, address(etherFiAdminInstance), address(nodeOperatorManagerInstance));
         membershipNftInstance.initializeOnUpgrade(address(liquidityPoolInstance));
+
+        avsOperatorManager = IAvsOperatorManager(0x2093Bbb221f1d8C7c932c32ee28Be6dEe4a37A6a);
 
 
         // configure eigenlayer dependency differently for mainnet vs testnet because we rely

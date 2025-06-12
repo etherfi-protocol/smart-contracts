@@ -18,6 +18,7 @@ contract Deploy is Script {
 
     AddressProvider public addressProvider;
     address eigenlayerRewardsCoordinator;
+    address avsOperatorManager = 0x2093Bbb221f1d8C7c932c32ee28Be6dEe4a37A6a;
 
     address admin;
 
@@ -29,7 +30,7 @@ contract Deploy is Script {
 
         vm.startBroadcast(deployerPrivateKey);
 
-        EtherFiRestaker restaker = EtherFiRestaker(payable(new UUPSProxy(payable(new EtherFiRestaker(eigenlayerRewardsCoordinator)), "")));
+        EtherFiRestaker restaker = EtherFiRestaker(payable(new UUPSProxy(payable(new EtherFiRestaker(eigenlayerRewardsCoordinator, avsOperatorManager)), "")));
         restaker.initialize(
             addressProvider.getContractAddress("LiquidityPool"),
             addressProvider.getContractAddress("Liquifier")
