@@ -384,14 +384,14 @@ contract WithdrawRequestNFTTest is TestSetup {
     }
 
     function test_handleRemainder() public {
-        test_aggregateSumEEthShareAmount();
-        vm.startPrank(etherfi_admin_wallet);
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), etherfi_admin_wallet);
+        initializeRealisticFork(MAINNET_FORK);
+        vm.startPrank(address(roleRegistryInstance.owner()));
+        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(owner))));
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
         vm.stopPrank();
-        vm.prank(etherfi_admin_wallet);
-        
-        //withdrawRequestNFTInstance.handleRemainder(0.01 ether);
-        vm.stopPrank();
+        uint256 implicitFee = withdrawRequestNFTInstance.getEEthRemainderAmount();
+        vm.prank(alice);
+        withdrawRequestNFTInstance.handleRemainder(implicitFee);
     }
 
     function testFuzz_RequestWithdraw(uint96 depositAmount, uint96 withdrawAmount, address recipient) public {

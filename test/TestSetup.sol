@@ -236,6 +236,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     address jess = vm.addr(1201);
     address committeeMember = address(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
     address timelock = address(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761);
+    address buybackWallet = address(0x2f5301a3D59388c509C65f8698f521377D41Fd0F);
     address admin;
     address superAdmin;
 
@@ -415,6 +416,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
+        roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
