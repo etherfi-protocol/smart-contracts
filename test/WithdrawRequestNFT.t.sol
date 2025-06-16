@@ -386,7 +386,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_handleRemainder() public {
         initializeRealisticFork(MAINNET_FORK);
         vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(owner))));
+        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet))));
         roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
         vm.stopPrank();
         uint256 implicitFee = withdrawRequestNFTInstance.getEEthRemainderAmount();
