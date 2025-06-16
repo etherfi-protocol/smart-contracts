@@ -241,4 +241,21 @@ contract EtherFiRestakerTest is TestSetup {
         assertEq(eigenLayerRewardsCoordinator.claimerFor(address(restaker)), _claimer);
     }
 
+    function test_transferTokenToOperator() public {
+        EtherFiRestaker restaker = EtherFiRestaker(payable(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf));
+        address wstETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
+        address avsOperatorManager = 0x2093Bbb221f1d8C7c932c32ee28Be6dEe4a37A6a;
+
+        // upgrade to new impl
+        address newRestakerImpl = address(new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(avsOperatorManager)));
+        vm.startPrank(restaker.owner());
+        restaker.upgradeTo(newRestakerImpl);
+
+        uint256 startBalance = stEth.balanceOf(address(restaker));
+        restaker.transferTokenToOperator(13, wstETH, 10 ether);
+        uint256 endBalance = stEth.balanceOf(address(restaker));
+
+        console2.log("balances:", startBalance, endBalance);
+    }
+
 }
