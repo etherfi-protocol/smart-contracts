@@ -115,6 +115,9 @@ contract StakingManager is
             bytes32 pubkeyHash = calculateValidatorPubkeyHash(depositData[i].publicKey);
             emit validatorCreated(pubkeyHash, etherFiNode, depositData[i].publicKey);
             emit linkLegacyValidatorId(pubkeyHash, bidIds[i]); // can remove this once we fully transition to pubkeys
+
+            // legacy event for compatibility with existing tooling
+            emit ValidatorRegistered(auctionManager.getBidOwner(bidIds[i]), address(liquidityPool), address(liquidityPool), bidIds[i], depositData[i].publicKey, depositData[i].ipfsHashForEncryptedValidatorKey);
         }
     }
 
