@@ -720,6 +720,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
 
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
+        liquidityPoolInstance.setValidatorSizeWei(32 ether);
         vm.stopPrank();
         vm.startPrank(owner);
         // etherFiAdminInstance.updateAdmin(alice, true);
