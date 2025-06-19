@@ -23,6 +23,5 @@ contract DeployEtherFiViewer is Script {
         EtherFiViewer viewer = EtherFiViewer(address(0x2ecd155405cA52a5ca0e552981fF44A8252FAb81));
         viewer.upgradeTo(address(impl));
         vm.stopBroadcast();
-
     }
 }
