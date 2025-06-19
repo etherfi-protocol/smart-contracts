@@ -159,6 +159,14 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
+    function EtherFiNode_withdrawableBalanceInExecutionLayer(address[] memory _etherFiNodes) external view returns (uint256[] memory _withdrawableBalance) {
+        _withdrawableBalance = new uint256[](_etherFiNodes.length);
+
+        for (uint256 i = 0; i < _etherFiNodes.length; i++) {
+            _withdrawableBalance[i] = IEtherFiNode(_etherFiNodes[i]).withdrawableBalanceInExecutionLayer();
+        }
+    }
+
     function EtherFiNode_numAssociatedValidators(address[] memory _etherFiNodes) external view returns (uint256[] memory _numAssociatedValidators) {
         _numAssociatedValidators = new uint256[](_etherFiNodes.length);
         for (uint256 i = 0; i < _etherFiNodes.length; i++) {
