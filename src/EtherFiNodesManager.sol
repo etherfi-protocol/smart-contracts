@@ -15,8 +15,6 @@ import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
 import "./TNFT.sol";
 import "./BNFT.sol";
-import "forge-std/console.sol";
-
 
 contract EtherFiNodesManager is
     Initializable,
@@ -76,11 +74,8 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    event FundsWithdrawn(uint256 indexed _validatorId, uint256 amount);
     event NodeExitRequested(uint256 _validatorId);
-    event NodeExitRequestReverted(uint256 _validatorId);
     event NodeExitProcessed(uint256 _validatorId);
-    event NodeEvicted(uint256 _validatorId);
     event PhaseChanged(uint256 indexed _validatorId, IEtherFiNode.VALIDATOR_PHASE _phase);
 
     event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
@@ -102,7 +97,6 @@ contract EtherFiNodesManager is
     receive() external payable {}
 
     error InvalidParams();
-    error NonZeroAddress();
     error ForwardedCallNotAllowed();
     error InvalidForwardedCall();
 
@@ -217,10 +211,10 @@ contract EtherFiNodesManager is
         }
     }
 
-    function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[] memory withdrawals, uint256[] calldata middlewareTimesIndexes, bool _receiveAsTokens) external onlyOperatingAdmin {
+    function completeQueuedWithdrawals(uint256[] calldata _validatorIds, IDelegationManager.Withdrawal[] memory withdrawals, bool _receiveAsTokens) external onlyOperatingAdmin {
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             address etherfiNode = etherfiNodeAddress[_validatorIds[i]];
-            IEtherFiNode(etherfiNode).completeQueuedWithdrawal(withdrawals[i], middlewareTimesIndexes[i], _receiveAsTokens);
+            IEtherFiNode(etherfiNode).completeQueuedWithdrawal(withdrawals[i], _receiveAsTokens);
         }
     }
 
@@ -232,18 +226,39 @@ contract EtherFiNodesManager is
     ///         when the safe is being shared by the multiple validatators, it batch process all of their rewards skimming in one shot
     /// @param _validatorId The validator Id
     /// Full Flow of the partial withdrawal for a validator
-    //  1. validator is exited & fund is withdrawn from the beacon chain
+    //  1. ETH is withdrawn from the beacon chain to the EigenPod
     //  2. perform `EigenPod.startCheckpoint()`
     //  3. perform `EigenPod.verifyCheckpointProofs()`
-    //  4. wait for 'withdrawalDelayBlocks' (= 7 days) delay to be passed
-    //  5. Finally, perform `EtherFiNodesManager.partialWithdraw` for the validator
-    function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused onlyAdmin {
-
+    //  4. perform `DelegationManager.queueWithdrawals`
+    //  5. wait for 'withdrawalDelayBlocks' (= 7 days) delay to be passed
+    //  6. perform `DelegationManager.completeQueuedWithdrawals`
+    //  7. Finally, perform `EtherFiNodesManager.partialWithdraw` for the validator
+    /// @dev This function will be re-considered in the future for simpler operations using the advanced rewards distribution mechanisms
+    function partialWithdraw(uint256 _validatorId) public nonReentrant whenNotPaused onlyOperatingAdmin {
         address etherfiNode = etherfiNodeAddress[_validatorId];
         _updateEtherFiNode(_validatorId);
 
-        // distribute the rewards payouts. It reverts if the safe's balance >= 16 ether
-        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
+        (uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury ) = (0, 0, 0, 0);
+        if (stakingRewardsSplit.tnft == SCALE) {
+            // the ETH validators earn the staking rewards and they are sent to the `EtherFiNode` contracts. 
+            // Process of sweeping those ETH is called `partialWithdraw`.
+
+            // Currently, `EtherFiNodesManager.partialWithdraw` can't process the withdrawal beyond 16 ETH 
+            // because the `EtherFiNodesManager._getTotalRewardsPayoutsFromSafe` reverts if the contract's balance >= 16 ETH.
+            // This constraint was added in the past due to the complexity in handling the distribution of staking rewards and principal (= 32 ETH); 
+            // while the earned staking rewards were distributed to (T-NFT, B-NFT, NodeOperator, Treasury), the principal (32 ETH) were sent to (B-NFT, T-NFT).
+
+            // This complexity was removed while ago and now the below constraints are true:
+            // - for all validators, its T-NFT holder == B-NFT holder
+            // - `stakingRewardsSplit.tnft` is set to `SCALE` (100%); stakingRewardsSplit.{treasury, nodeOperator, bnft} are 0. 
+            
+            // Therefore, all ETH in (EtherFiNode) contracts belongs to the T-NFT holder (= LiquidityPool). 
+            // This allows us to remove the constraint on the withdrawal amount.
+            (toOperator, toTnft, toBnft, toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, false);
+        } else {
+            // Note that this flow is deprecated, we keep it for backward compatibility
+            (toOperator, toTnft, toBnft, toTreasury ) = _getTotalRewardsPayoutsFromSafe(_validatorId, true);
+        }
         _distributePayouts(etherfiNode, _validatorId, toTreasury, toOperator, toTnft, toBnft);
 
         emit PartialWithdrawal(_validatorId, etherfiNode, toOperator, toTnft, toBnft, toTreasury);

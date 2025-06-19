@@ -6,6 +6,15 @@ import "./ILiquidityPool.sol";
 import "./IeETH.sol";
 
 interface IWeETH is IERC20Upgradeable {
+
+    struct PermitInput {
+        uint256 value;
+        uint256 deadline;
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+    } 
+    
     // STATE VARIABLES
     function eETH() external view returns (IeETH);
     function liquidityPool() external view returns (ILiquidityPool);
