@@ -26,6 +26,7 @@ contract DeployEigenlayerSlashingScript is Script {
     AddressProvider public addressProvider;
 
     address rewardsCoordinator = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
+    address avsOperatorManager = 0x2093Bbb221f1d8C7c932c32ee28Be6dEe4a37A6a;
 
     function run() external {
 
@@ -33,7 +34,7 @@ contract DeployEigenlayerSlashingScript is Script {
 
         etherFiNodeImplementation = new EtherFiNode();
         etherFiNodesManagerImplementation = new EtherFiNodesManager();
-        etherFiRestakerImplementation = new EtherFiRestaker(rewardsCoordinator);
+        etherFiRestakerImplementation = new EtherFiRestaker(rewardsCoordinator, avsOperatorManager);
 
         console2.log("etherFiNode Impl:", address(etherFiNodeImplementation));
         console2.log("etherFiNodesManager Impl:", address(etherFiNodesManagerImplementation));

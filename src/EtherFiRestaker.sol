@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import "./Liquifier.sol";
 import "./LiquidityPool.sol";
+import "./interfaces/IAvsOperatorManager.sol";
 
 import "./eigenlayer-interfaces/IStrategyManager.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
@@ -44,6 +45,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     EnumerableSet.Bytes32Set private withdrawalRootsSet;
     mapping(bytes32 => IDelegationManager.Withdrawal) public DEPRECATED_withdrawalRootToWithdrawal;
 
+    IAvsOperatorManager public immutable avsOperatorManager;
+
 
     event QueuedStEthWithdrawals(uint256[] _reqIds);
     event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
@@ -57,10 +60,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     error NotRegistered();
     error WrongOutput();
     error IncorrectCaller();
+    error InvalidOperatorContract();
 
      /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _rewardsCoordinator) {
+    constructor(address _rewardsCoordinator, address _avsOperatorManager) {
         rewardsCoordinator = IRewardsCoordinator(_rewardsCoordinator);
+        avsOperatorManager = IAvsOperatorManager(_avsOperatorManager);
         _disableInitializers();
     }
 
@@ -171,6 +176,15 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         uint256 shares = eigenLayerStrategyManager.depositIntoStrategy(strategy, IERC20(token), amount);
 
         return shares;
+    }
+
+    // transfer a token to one of our dedicated AvsOperator contracts
+    function transferTokenToOperator(uint256 operatorId, address token, uint256 amount) external onlyAdmin {
+
+        address operator = avsOperatorManager.avsOperators(operatorId);
+        if (operator == address(0)) revert InvalidOperatorContract();
+
+        IERC20(token).transfer(operator, amount);
     }
 
     /// queue withdrawals for un-restaking the token

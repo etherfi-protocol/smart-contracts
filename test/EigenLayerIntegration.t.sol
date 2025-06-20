@@ -504,7 +504,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         EtherFiNode etherFiNodeImplementation = new EtherFiNode();
         address etherFiNodeImplAddress = address(0xc5F2764383f93259Fba1D820b894B1DE0d47937e);
 
-        EtherFiRestaker etherFiRestakerImplementation = new EtherFiRestaker(address(0x7750d328b314EfFa365A0402CcfD489B80B0adda));
+        EtherFiRestaker etherFiRestakerImplementation = new EtherFiRestaker(address(0x7750d328b314EfFa365A0402CcfD489B80B0adda), address(0x2093Bbb221f1d8C7c932c32ee28Be6dEe4a37A6a));
         address etherFiRestakerImplAddress = address(0x0052F731a6BEA541843385ffBA408F52B74Cb624);
 
         verifyContractByteCodeMatch(etherFiNodesManagerImplAddress, address(etherFiNodesManagerImplementation));
