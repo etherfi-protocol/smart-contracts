@@ -103,6 +103,7 @@ interface IEtherFiNodesManager {
     event PubkeyLinked(bytes32 indexed pubkeyHash, address indexed nodeAddress, uint256 indexed legacyId, bytes pubkey);
     event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
     event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
+    event QueuedWithdrawals(uint256 indexed id);
 
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------

@@ -11,8 +11,6 @@ interface IEtherFiOracle {
         int128 accruedRewards;
         int128 protocolFees;
         uint256[] validatorsToApprove;
-        uint256[] exitedValidators;
-        uint32[]  exitedValidatorsExitTimestamps;
         uint256[] withdrawalRequestsToInvalidate;
         uint32 lastFinalizedWithdrawalRequestId;
         uint128 finalizedWithdrawalAmount;
