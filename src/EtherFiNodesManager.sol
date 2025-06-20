@@ -111,6 +111,7 @@ contract EtherFiNodesManager is
 
     function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).queueWithdrawals(params);
+        emit QueuedWithdrawals(id);
     }
 
     function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
