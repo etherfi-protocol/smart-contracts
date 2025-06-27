@@ -466,6 +466,10 @@ contract EtherFiOracleTest is TestSetup {
         _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
     }
 
+    function test_dave() public {
+        launch_validator();
+    }
+
     function test_huge_negative_rebaes() public {
         // TVL after `launch_validator` is 60 ETH
         // EtherFIAdmin limits the APR per rebase as 100 % == 10000 bps

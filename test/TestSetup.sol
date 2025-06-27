@@ -1288,9 +1288,13 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         }
         vm.stopPrank();
 
+        console2.log("A");
+
         vm.startPrank(_nodeOperator);
         uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether * _numValidators}(_numValidators, 0.1 ether);
         vm.stopPrank();
+
+        console2.log("B");
 
         startHoax(bob);
         if (_isLpBnftHolder) {
@@ -1300,10 +1304,13 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         }
         vm.stopPrank();
 
+        console2.log("C");
         // TODO(dave): rework test setup
         //vm.prank(_bnftStaker);
         //uint256[] memory newValidators = liquidityPoolInstance.batchDeposit(bidIds, _numValidators, _validatorIdToCoUseWithdrawalSafe);
-        uint256[] memory newValidators = new uint256[](_numValidators);
+        //uint256[] memory newValidators = new uint256[](_numValidators);
+        uint256[] memory newValidators = bidIds;
+
 
         IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](_numValidators);
 
@@ -1341,6 +1348,8 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
             sig[i] = hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65";
             pubKey[i] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
         }
+
+        console2.log("D");
 
         vm.startPrank(_bnftStaker);
         bytes32 depositRoot = zeroRoot;
