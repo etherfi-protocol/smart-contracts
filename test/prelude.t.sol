@@ -40,6 +40,8 @@ contract PreludeTest is Test, ArrayTestHelper {
     address callForwarder = vm.addr(0xCDCDCD);
     address user = vm.addr(0xEFEFEF);
 
+    TestValidatorParams defaultTestValidatorParams;
+
     function setUp() public {
 
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
@@ -91,6 +93,14 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
         vm.stopPrank();
+
+        defaultTestValidatorParams = TestValidatorParams({
+            nodeOperator: address(0), // attach to a random node operator
+            etherFiNode: address(0),  // create a new etherfiNode
+            bidId: 0,                 // create and claim a new bid
+            withdrawable: true,       // simulate validator being ready to withdraw from pod
+            validatorSize: 32 ether
+        });
 
     }
 
@@ -497,12 +507,12 @@ contract PreludeTest is Test, ArrayTestHelper {
         address etherFiNode;
         address eigenPod;
         uint256 legacyId;
+        bytes32 pubkeyHash;
         address nodeOperator;
         uint256 validatorSize;
-        uint256 nodeId;
     }
 
-    function helper_createWithdrawableValidator(TestValidatorParams memory params) public returns (TestValidator memory) {
+    function helper_createValidator(TestValidatorParams memory params) public returns (TestValidator memory) {
 
         // configure a new operator if none provided
         if (params.nodeOperator == address(0)) {
@@ -533,9 +543,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes memory pubkey = vm.randomBytes(48);
         bytes memory signature = vm.randomBytes(96);
 
-        //bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2b";
-        //bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3de";
-
         // initial deposit
         address eigenPod = address(IEtherFiNode(params.etherFiNode).getEigenPod());
         bytes32 initialDepositRoot = depositRootGenerator.generateDepositRoot(
@@ -550,7 +557,7 @@ contract PreludeTest is Test, ArrayTestHelper {
             depositDataRoot: initialDepositRoot,
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
-        vm.deal(address(liquidityPool), 100 ether);
+        vm.deal(address(liquidityPool), 10000 ether);
         vm.prank(address(liquidityPool));
         stakingManager.createBeaconValidators{value: 1 ether}(toArray(initialDepositData), toArray_u256(params.bidId), params.etherFiNode);
 
@@ -577,16 +584,62 @@ contract PreludeTest is Test, ArrayTestHelper {
             // This is much easier than trying to do the full proof based workflow which relies on beacon state.
             address eigenpod = etherFiNodesManager.getEigenPod(uint256(params.bidId));
             vm.store(eigenpod, bytes32(uint256(52)) /*slot*/, bytes32(uint256(params.validatorSize / 1 gwei)));
+
+            // give the pod enough eth to fulfill that withdrawal
+            vm.deal(eigenpod, params.validatorSize);
         }
 
-        
+        TestValidator memory out = TestValidator({
+            etherFiNode: params.etherFiNode,
+            eigenPod: eigenPod,
+            legacyId: params.bidId,
+            pubkeyHash: stakingManager.calculateValidatorPubkeyHash(pubkey),
+            nodeOperator: params.nodeOperator,
+            validatorSize: params.validatorSize
+        });
+        return out;
     }
 
-    function test_helper() public {
-        //TestValidatorParams cfg = TestValidatorParams({
-            
-        //});
-        helper_createWithdrawableValidator(TestValidatorParams(address(0),address(0),0,0,false));
+    function test_validatorHelper() public {
+
+        // deploy 2 validators with default settings
+        TestValidator memory val = helper_createValidator(defaultTestValidatorParams);
+        console2.log("------------------------------------");
+        console2.log("etherFiNode:", val.etherFiNode);
+        console2.log("eigenPod:", val.eigenPod);
+        console2.log("legacyId:", val.legacyId);
+        console2.log("pubkeyHash:", uint256(val.pubkeyHash));
+        console2.log("nodeOperator:", val.nodeOperator);
+        console2.log("validatorSize:", val.validatorSize);
+        TestValidator memory val2 = helper_createValidator(defaultTestValidatorParams);
+        console2.log("------------------------------------");
+        console2.log("etherFiNode:", val2.etherFiNode);
+        console2.log("eigenPod:", val2.eigenPod);
+        console2.log("legacyId:", val2.legacyId);
+        console2.log("pubkeyHash:", uint256(val2.pubkeyHash));
+        console2.log("nodeOperator:", val2.nodeOperator);
+        console2.log("validatorSize:", val2.validatorSize);
+
+        // attach to same node as the first one
+        TestValidatorParams memory params = defaultTestValidatorParams;
+        params.etherFiNode = val.etherFiNode;
+        TestValidator memory val3 = helper_createValidator(params);
+        assertEq(val.etherFiNode, val3.etherFiNode);
+        assertEq(val.eigenPod, val3.eigenPod);
+
+        // create big validator
+        params = defaultTestValidatorParams;
+        params.validatorSize = 2000 ether;
+        params.withdrawable = true;
+        TestValidator memory val4 = helper_createValidator(params);
+        assertEq(2000 ether, val4.validatorSize);
+        assertGe(IEigenPod(val4.eigenPod).withdrawableRestakedExecutionLayerGwei(), (2000 ether / 1 gwei));
+
+        // should fail if try to claim already claimed bid
+        params = defaultTestValidatorParams;
+        params.bidId = val.legacyId;
+        vm.expectRevert();
+        TestValidator memory val5 = helper_createValidator(params);
 
     }
 
