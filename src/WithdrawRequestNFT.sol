@@ -20,6 +20,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     using SafeERC20 for IERC20;
 
     uint256 private constant BASIS_POINT_SCALE = 1e4;
+    // this treasury address is set to ethfi buyback wallet address
     address public immutable treasury;
     
     ILiquidityPool public liquidityPool;
@@ -46,7 +47,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
 
     bytes32 public constant WITHDRAW_REQUEST_NFT_ADMIN_ROLE = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
-    
+    bytes32 public constant IMPLICIT_FEE_CLAIMER_ROLE = keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
 
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
     event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
@@ -260,7 +261,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     ///  - Treasury: treasury gets a split of the remainder
     ///   - Burn: the rest of the remainder is burned
     /// @param _eEthAmount: the remainder of the eEth amount
-    function handleRemainder(uint256 _eEthAmount) external onlyAdmin {
+    function handleRemainder(uint256 _eEthAmount) external {
+        if(!roleRegistry.hasRole(IMPLICIT_FEE_CLAIMER_ROLE, msg.sender)) revert IncorrectRole();
         require(_eEthAmount != 0, "EETH amount cannot be 0"); 
         require(isScanOfShareRemainderCompleted(), "Not all prev requests have been scanned");
         require(getEEthRemainderAmount() >= _eEthAmount, "Not enough eETH remainder");
