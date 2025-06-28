@@ -640,6 +640,73 @@ contract PreludeTest is Test, ArrayTestHelper {
         params.bidId = val.legacyId;
         vm.expectRevert();
         TestValidator memory val5 = helper_createValidator(params);
+    }
+
+    function test_pubkeyHashAndLegacyId() public {
+
+        // create a new validator
+        TestValidator memory val = helper_createValidator(defaultTestValidatorParams);
+
+        // both the legacyId and the pubkeyHash should be linked to the same node
+        address a1 = etherFiNodesManager.etherfiNodeAddress(val.legacyId);
+        address a2 = etherFiNodesManager.etherfiNodeAddress(uint256(val.pubkeyHash));
+        assertEq(a1, a2);
+        assert(a1 != address(0));
+    }
+
+    function test_startCheckpoint() public {
+
+        // create a new validator with an eigenpod
+        TestValidator memory val = helper_createValidator(defaultTestValidatorParams);
+
+        // ensure no checkpoint currently active
+        assert(IEigenPod(val.eigenPod).currentCheckpointTimestamp() == 0);
+
+        console2.log("eigenpod:", val.eigenPod);
+        console2.log("balance:", val.eigenPod.balance);
+
+        // need to deal it some additional eth not already accounted for in its
+        // beacon shares or else it will revert since there is no point in checkpointing
+        vm.deal(val.eigenPod, 1 ether);
+
+        // initiate a checkpoint
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.startCheckpoint(uint256(val.pubkeyHash));
+        assert(IEigenPod(val.eigenPod).currentCheckpointTimestamp() != 0);
+    }
+
+    function test_linkLegacyValidatorIds() public {
+
+        // grab some legacyIds that existed before the upgrade
+        uint256[] memory legacyIds = new uint256[](3);
+        legacyIds[0] = 10270;
+        legacyIds[1] = 10271;
+        legacyIds[2] = 26606;
+
+        // random pubkeys to attach
+        bytes[] memory pubkeys = new bytes[](3);
+        pubkeys[0] = vm.randomBytes(48);
+        pubkeys[1] = vm.randomBytes(48);
+        pubkeys[2] = vm.randomBytes(48);
+
+        // should fail if not admin
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+
+        vm.prank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+
+        // should fail if attempt to re-link already linked ids
+        vm.expectRevert(IEtherFiNodesManager.AlreadyLinked.selector);
+        vm.prank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+
+        // should fail if attempt to link unknown node
+        uint256 badId = 9999999;
+        bytes memory badPubkey = vm.randomBytes(48);
+        vm.expectRevert(IEtherFiNodesManager.UnknownNode.selector);
+        vm.prank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(badId), toArray_bytes(badPubkey));
 
     }
 
