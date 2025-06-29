@@ -34,6 +34,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     address delegationManager = address(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
     address etherFiNodeBeacon = address(0x3c55986Cfee455E2533F4D29006634EcF9B7c03F);
     RoleRegistry roleRegistry = RoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
+    IStrategy beaconStrategy = IStrategy(address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0));
 
     // role users
     address eigenlayerAdmin = vm.addr(0xABABAB);
@@ -512,7 +513,10 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 validatorSize;
     }
 
-    function helper_createValidator(TestValidatorParams memory params) public returns (TestValidator memory) {
+    function helper_createValidator(TestValidatorParams memory _params) public returns (TestValidator memory) {
+
+        // create a copy or else successive calls of this method can mutate the input unexpectedly
+        TestValidatorParams memory params = TestValidatorParams(_params.nodeOperator, _params.etherFiNode, _params.bidId, _params.validatorSize, _params.withdrawable);
 
         // configure a new operator if none provided
         if (params.nodeOperator == address(0)) {
@@ -584,6 +588,10 @@ contract PreludeTest is Test, ArrayTestHelper {
             // This is much easier than trying to do the full proof based workflow which relies on beacon state.
             address eigenpod = etherFiNodesManager.getEigenPod(uint256(params.bidId));
             vm.store(eigenpod, bytes32(uint256(52)) /*slot*/, bytes32(uint256(params.validatorSize / 1 gwei)));
+
+            // grant shares via delegation manager so that withdrawals work
+            vm.prank(delegationManager);
+            IEigenPodManager(eigenPodManager).addShares(params.etherFiNode, beaconStrategy, params.validatorSize);
 
             // give the pod enough eth to fulfill that withdrawal
             vm.deal(eigenpod, params.validatorSize);
@@ -708,6 +716,65 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(badId), toArray_bytes(badPubkey));
 
+    }
+
+    function test_withdrawMultipleLargeValidators() public {
+
+        // create a few large validators of different sizes
+        TestValidatorParams memory params = defaultTestValidatorParams;
+        params.validatorSize = 64 ether;
+        TestValidator memory val1 = helper_createValidator(params);
+
+        // attach all of them to the same etherfi node
+        params.etherFiNode = val1.etherFiNode;
+
+        params.validatorSize = 128 ether;
+        TestValidator memory val2 = helper_createValidator(params);
+        params.validatorSize = 1000 ether;
+        TestValidator memory val3 = helper_createValidator(params);
+        params.validatorSize = 2000 ether;
+        TestValidator memory val4 = helper_createValidator(params);
+
+        uint256 startingLPBalance = address(liquidityPool).balance;
+
+        // should be able to withdraw arbitrary amounts not tied to any particular validator
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 1234 ether);
+
+        // need to fast forward so that withdrawal is claimable
+        vm.roll(block.number + (7200 * 15));
+
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.completeQueuedETHWithdrawals(uint256(val1.pubkeyHash), /*receiveAsTokens=*/ true);
+
+        // liquidity pool should have received the withdrawal
+        assertEq(address(liquidityPool).balance, startingLPBalance + 1234 ether);
+
+    }
+
+    function test_withdrawMultipleSimultaneousWithdrawals() public {
+
+        TestValidatorParams memory params = defaultTestValidatorParams;
+        params.validatorSize = 64 ether;
+        TestValidator memory val = helper_createValidator(params);
+
+        // queue up multiple withdrawals
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 1 ether);
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 1 ether);
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 1 ether);
+
+        // need to fast forward so that withdrawal is claimable
+        vm.roll(block.number + (7200 * 15));
+
+        // all outstanding withdrawals should have been completed at once
+        uint256 startingLPBalance = address(liquidityPool).balance;
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.completeQueuedETHWithdrawals(uint256(val.pubkeyHash), /*receiveAsTokens=*/ true);
+
+        assertEq(address(liquidityPool).balance, startingLPBalance + 3 ether);
     }
 
 }
