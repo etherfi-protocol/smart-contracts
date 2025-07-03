@@ -252,10 +252,16 @@ contract PreludeTest is Test, ArrayTestHelper {
         assertEq(2000 ether, val4.validatorSize);
         assertGe(IEigenPod(val4.eigenPod).withdrawableRestakedExecutionLayerGwei(), (2000 ether / 1 gwei));
 
-        // should fail if try to claim already claimed bid
+        // create a specific operator + bid and make validator with that bid ID + operator
         params = defaultTestValidatorParams;
-        params.bidId = val.legacyId;
-        vm.expectRevert();
+        params.nodeOperator = vm.addr(0x12345678);
+        vm.startPrank(params.nodeOperator);
+        {
+            vm.deal(params.nodeOperator, 1 ether);
+            nodeOperatorManager.registerNodeOperator("test_ipfs_hash", 1000);
+            params.bidId = auctionManager.createBid{value: 0.1 ether}(1, 0.1 ether)[0];
+        }
+        vm.stopPrank();
         TestValidator memory val5 = helper_createValidator(params);
     }
 
