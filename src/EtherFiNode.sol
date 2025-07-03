@@ -111,7 +111,7 @@ contract EtherFiNode is IEtherFiNode {
     ///   Note that since the node is usually delegated to an operator,
     ///   most of the time this should be called with "receiveAsTokens" = true because
     ///   receiving shares while delegated will simply redelegate the shares.
-    function completeQueuedETHWithdrawals(bool receiveAsTokens) external onlyEigenlayerAdmin {
+    function completeQueuedETHWithdrawals(bool receiveAsTokens) external onlyEigenlayerAdmin returns (uint256 balance) {
 
         // because we are just dealing with beacon eth we don't need to populate the tokens[] array
         IERC20[] memory tokens = new IERC20[](1);
@@ -129,10 +129,12 @@ contract EtherFiNode is IEtherFiNode {
         }
 
         // if there are available rewards, forward them to the liquidityPool
-        if (address(this).balance > 0) {
-            (bool sent, ) = payable(address(liquidityPool)).call{value: address(this).balance, gas: 20000}("");
+        uint256 balance = address(this).balance;
+        if (balance > 0) {
+            (bool sent, ) = payable(address(liquidityPool)).call{value: balance, gas: 20000}("");
             if (!sent) revert TransferFailed();
         }
+        return balance;
     }
 
     /// @dev queue a withdrawal from eigenlayer. You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
@@ -154,9 +156,13 @@ contract EtherFiNode is IEtherFiNode {
     // @notice transfers any funds held by the node to the liquidity pool.
     // @dev under normal operations it is not expected for eth to accumulate in the nodes,
     //    this is just to handle any exceptional cases such as someone sending directly to the node.
-    function sweepFunds() external onlyEigenlayerAdmin {
-            (bool sent, ) = payable(address(liquidityPool)).call{value: address(this).balance, gas: 20000}("");
+    function sweepFunds() external onlyEigenlayerAdmin returns (uint256 balance) {
+        uint256 balance = address(this).balance;
+        if (balance > 0) {
+            (bool sent, ) = payable(address(liquidityPool)).call{value: balance, gas: 20000}("");
             if (!sent) revert TransferFailed();
+        }
+        return balance;
     }
 
     //--------------------------------------------------------------------------------------

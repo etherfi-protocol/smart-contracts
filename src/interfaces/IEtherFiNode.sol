@@ -15,10 +15,10 @@ interface IEtherFiNode {
     function setProofSubmitter(address newProofSubmitter) external;
     function verifyCheckpointProofs(BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
     function queueETHWithdrawal(uint256 amount) external returns (bytes32 withdrawalRoot);
-    function completeQueuedETHWithdrawals(bool receiveAsTokens) external ;
+    function completeQueuedETHWithdrawals(bool receiveAsTokens) external returns (uint256 balance);
     function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external returns (bytes32[] memory withdrawalRoot);
     function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
-    function sweepFunds() external;
+    function sweepFunds() external returns (uint256 balance);
 
     // call forwarding
     function forwardEigenPodCall(bytes memory data) external returns (bytes memory);
