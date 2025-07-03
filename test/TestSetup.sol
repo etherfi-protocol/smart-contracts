@@ -55,7 +55,9 @@ import "../script/Create2Factory.sol";
 import "../src/RoleRegistry.sol";
 import "../src/EtherFiRewardsRouter.sol";
 
-contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGeneration {
+import "../src/CumulativeMerkleRewardsDistributor.sol";
+
+contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
     event Execute(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt);
@@ -113,6 +115,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
     UUPSProxy public etherFiRedemptionManagerProxy;
     UUPSProxy public etherFiOracleProxy;
     UUPSProxy public etherFiAdminProxy;
+    UUPSProxy public cumulativeMerkleRewardsDistributorProxy;
     UUPSProxy public roleRegistryProxy;
 
     IDepositContract public depositContractEth2;
@@ -154,6 +157,9 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
 
     EtherFiRestaker public etherFiRestakerImplementation;
     EtherFiRestaker public etherFiRestakerInstance;
+
+    CumulativeMerkleRewardsDistributor public cumulativeMerkleRewardsDistributorImplementation;
+    CumulativeMerkleRewardsDistributor public cumulativeMerkleRewardsDistributorInstance;
 
     EETH public eETHImplementation;
     EETH public eETHInstance;
@@ -224,6 +230,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
     address jess = vm.addr(1201);
     address committeeMember = address(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
     address timelock = address(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761);
+    address buybackWallet = address(0x2f5301a3D59388c509C65f8698f521377D41Fd0F);
     address admin;
     address superAdmin;
 
@@ -401,6 +408,7 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
+        roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
@@ -603,6 +611,15 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
 
+
+        cumulativeMerkleRewardsDistributorImplementation = new CumulativeMerkleRewardsDistributor(address(roleRegistryInstance));
+        cumulativeMerkleRewardsDistributorProxy = new UUPSProxy(address(cumulativeMerkleRewardsDistributorImplementation), "");
+        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(address(cumulativeMerkleRewardsDistributorProxy));
+        cumulativeMerkleRewardsDistributorInstance.initialize();
+
+        etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
+        etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
+
         etherFiOracleImplementation = new EtherFiOracle();
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
@@ -707,6 +724,15 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
             10000,
             0
         );
+        uint256 BLOCKS_IN_DAY = 7200;
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE); //eth
+        tokens[1] = address(eETHInstance);
+        uint256[] memory lastProcessedAtBlocks = new uint256[](2);
+        lastProcessedAtBlocks[0] = lastProcessedAtBlocks[1] = 0;
+
+        vm.startPrank(owner);
+
         etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
@@ -722,9 +748,9 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         liquidityPoolInstance.setValidatorSizeWei(32 ether);
         vm.stopPrank();
+
         vm.startPrank(owner);
         // etherFiAdminInstance.updateAdmin(alice, true);
-
         etherFiOracleInstance.setEtherFiAdmin(address(etherFiAdminInstance));
         liquidityPoolInstance.initializeOnUpgrade(address(auctionManagerProxy), address(liquifierInstance));
         //stakingManagerInstance.initializeOnUpgrade(address(nodeOperatorManagerInstance), address(etherFiAdminInstance));
@@ -1586,10 +1612,12 @@ contract TestSetup is Test, ContractCodeChecker, ArrayTestHelper, DepositDataGen
         return (depositDataArray, depositDataRootsForApproval, sig, pubKey);
         */
     }
-
     function _execute_timelock(address target, bytes memory data, bool _schedule, bool _log_schedule, bool _execute, bool _log_execute) internal {
-        vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
-
+        if(address(0xcdd57D11476c22d265722F68390b036f3DA48c21) == address(etherFiTimelockInstance)) { // 3 Day Timelock
+            vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+        } else { // 8hr Timelock
+            vm.startPrank(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC);
+        }
         bytes32 salt = keccak256(abi.encodePacked(target, data, block.number));
         
         if (_schedule) etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
