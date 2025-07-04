@@ -574,7 +574,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         eETHInstance.initialize(payable(address(0)));
         eETHInstance.initialize(payable(address(liquidityPoolInstance)));
 
-        weEthImplementation = new WeETH();
+        weEthImplementation = new WeETH(address(roleRegistryInstance));
         vm.expectRevert("Initializable: contract is already initialized");
         weEthImplementation.initialize(payable(address(liquidityPoolInstance)), address(eETHInstance));
 
@@ -816,7 +816,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_weETH() internal {
-        address newWeETHImpl = address(new WeETH());
+        address newWeETHImpl = address(new WeETH(address(roleRegistryInstance)));
         vm.prank(owner);
         weEthInstance.upgradeTo(newWeETHImpl);
     }

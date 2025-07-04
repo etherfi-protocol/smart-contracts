@@ -13,44 +13,46 @@ import "./AssetRecovery.sol";
 import "./interfaces/IRoleRegistry.sol";
 
 contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
+
+    IRoleRegistry public immutable roleRegistry;
+
+    error IncorrectRole();
+    error CannotRecoverEETH();
+
     //--------------------------------------------------------------------------------------
-    //---------------------------------  STATE-VARIABLES  ----------------------------------
+    //---------------------------------  STORAGE  ----------------------------------
     //--------------------------------------------------------------------------------------
 
     IeETH public eETH;
     ILiquidityPool public liquidityPool;
 
-    IRoleRegistry public roleRegistry;
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ROLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
 
-    bytes32 public constant WE_ETH_OPERATING_ADMIN_ROLE = keccak256("WE_ETH_OPERATING_ADMIN_ROLE");
-
-    error IncorrectRole();
-    error CannotRecoverEETH();
+    bytes32 public constant WEETH_OPERATING_ADMIN_ROLE = keccak256("WEETH_OPERATING_ADMIN_ROLE");
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _roleRegistry) {
+        require(_roleRegistry != address(0), "must set role registry");
+        roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
 
     function initialize(address _liquidityPool, address _eETH) external initializer {
         require(_liquidityPool != address(0), "No zero addresses");
         require(_eETH != address(0), "No zero addresses");
-        
+
         __ERC20_init("Wrapped eETH", "weETH");
         __ERC20Permit_init("Wrapped eETH");
         __UUPSUpgradeable_init();
         __Ownable_init();
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
-    }
-
-    function initializeRoleRegistry(address _roleRegistry) external onlyOwner {
-        require(address(roleRegistry) == address(0x00), "already initialized");
-        roleRegistry = IRoleRegistry(_roleRegistry);
     }
 
     /// @dev name changed from the version initially deployed
@@ -92,18 +94,18 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     }
 
     function recoverETH(address payable to, uint256 amount) external {
-        if(!roleRegistry.hasRole(WE_ETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _recoverETH(to, amount);
     }
 
     function recoverERC20(address token, address to, uint256 amount) external {
-        if(!roleRegistry.hasRole(WE_ETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         if (token == address(eETH)) revert CannotRecoverEETH();
         _recoverERC20(token, to, amount);
     }
 
     function recoverERC721(address token, address to, uint256 tokenId) external {
-        if(!roleRegistry.hasRole(WE_ETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _recoverERC721(token, to, tokenId);
     }
 
@@ -128,7 +130,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     function getWeETHByeETH(uint256 _eETHAmount) external view returns (uint256) {
         return liquidityPool.sharesForAmount(_eETHAmount);
     }
-    
+
     /// @notice Fetches the amount of eEth respective to the amount of weEth sent in
     /// @param _weETHAmount amount sent in
     /// @return The total amount for the number of shares sent in
