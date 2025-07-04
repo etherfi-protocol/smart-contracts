@@ -76,6 +76,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     //--------------------------------------------------------------------------------------
 
     bytes32 public constant LIQUIDITY_POOL_ADMIN_ROLE = keccak256("LIQUIDITY_POOL_ADMIN_ROLE");
+    bytes32 public constant LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE = keccak256("LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE");
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -306,7 +307,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         bytes[] calldata _pubkeys,
         bytes[] calldata _signatures
     ) external whenNotPaused {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, msg.sender)) revert IncorrectRole();
         if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
 
         // all validators provided should belong to same node
@@ -350,8 +351,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         IStakingManager.DepositData[] calldata _depositData,
         uint256 _validatorSizeWei
     ) external whenNotPaused {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, msg.sender)) revert IncorrectRole();
+        if (_validatorSizeWei < 32 ether || _validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
         uint256 remainingEthPerValidator = _validatorSizeWei - stakingManager.initialDepositAmount();
