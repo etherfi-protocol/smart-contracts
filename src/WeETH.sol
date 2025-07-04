@@ -9,27 +9,44 @@ import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRateProvider.sol";
 
-contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider {
+import "./AssetRecovery.sol";
+import "./interfaces/IRoleRegistry.sol";
+
+contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
+
+    IRoleRegistry public immutable roleRegistry;
+
+    error IncorrectRole();
+    error CannotRecoverEETH();
+
     //--------------------------------------------------------------------------------------
-    //---------------------------------  STATE-VARIABLES  ----------------------------------
+    //---------------------------------  STORAGE  ----------------------------------
     //--------------------------------------------------------------------------------------
 
     IeETH public eETH;
     ILiquidityPool public liquidityPool;
 
     //--------------------------------------------------------------------------------------
+    //-------------------------------------  ROLES  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 public constant WEETH_OPERATING_ADMIN_ROLE = keccak256("WEETH_OPERATING_ADMIN_ROLE");
+
+    //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _roleRegistry) {
+        require(_roleRegistry != address(0), "must set role registry");
+        roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
 
     function initialize(address _liquidityPool, address _eETH) external initializer {
         require(_liquidityPool != address(0), "No zero addresses");
         require(_eETH != address(0), "No zero addresses");
-        
+
         __ERC20_init("Wrapped eETH", "weETH");
         __ERC20Permit_init("Wrapped eETH");
         __UUPSUpgradeable_init();
@@ -76,14 +93,20 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         return eETHAmount;
     }
 
-    /// @notice Transfer weEth out of treasury to the owner
-    /// @dev The address 0x6329004E903B7F420245E7aF3f355186f2432466 is EtherFi's deprecated address
-    /// to receive the rewards. Since it doesn't have functionality to transfer out ERC20 tokens, we 
-    /// need a function here to rescue those funds
-    function rescueTreasuryWeeth() public onlyOwner {
-        address treasury = 0x6329004E903B7F420245E7aF3f355186f2432466;
-        uint256 treasuryBal = balanceOf(treasury);
-       _transfer(treasury, msg.sender, treasuryBal);
+    function recoverETH(address payable to, uint256 amount) external {
+        if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _recoverETH(to, amount);
+    }
+
+    function recoverERC20(address token, address to, uint256 amount) external {
+        if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (token == address(eETH)) revert CannotRecoverEETH();
+        _recoverERC20(token, to, amount);
+    }
+
+    function recoverERC721(address token, address to, uint256 tokenId) external {
+        if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _recoverERC721(token, to, tokenId);
     }
 
     //--------------------------------------------------------------------------------------
@@ -91,8 +114,11 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     //--------------------------------------------------------------------------------------
 
     function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyOwner {}
+        address /* newImplementation */
+    ) internal view override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
+
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
@@ -104,7 +130,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     function getWeETHByeETH(uint256 _eETHAmount) external view returns (uint256) {
         return liquidityPool.sharesForAmount(_eETHAmount);
     }
-    
+
     /// @notice Fetches the amount of eEth respective to the amount of weEth sent in
     /// @param _weETHAmount amount sent in
     /// @return The total amount for the number of shares sent in

@@ -60,16 +60,6 @@ contract TNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
         _burn(_validatorId);
     }
 
-    function _transfer(
-        address from,
-        address to,
-        uint256 tokenId
-    ) internal virtual override {
-        uint256 numAssociatedValidators = IEtherFiNodesManager(etherFiNodesManagerAddress).numAssociatedValidators(tokenId);
-        require(numAssociatedValidators == 1, "numAssociatedValidators != 1");
-
-        super._transfer(from, to, tokenId);
-    }
 
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------

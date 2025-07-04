@@ -8,6 +8,7 @@ optimizer_runs = 1500
 extra_output = ["storageLayout"]
 bytecode_hash = 'none'
 solc-version = '0.8.27'
+dynamic_test_linking = true
 
 [fuzz]
 max_shrink_iters = 100

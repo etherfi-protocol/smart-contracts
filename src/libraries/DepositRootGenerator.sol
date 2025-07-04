@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../MembershipManager.sol";
-import "../LiquidityPool.sol";
-
 library depositRootGenerator {
     uint constant GWEI = 1e9;
 

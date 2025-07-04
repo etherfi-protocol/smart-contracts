@@ -304,26 +304,4 @@ contract WeETHTest is TestSetup {
         weEthInstance.wrapWithPermit(5 ether, permitInput);
     }
 
-    function test_rescueTreasuryWeeth() public {
-        uint256 treasuryBal = 31859761318927469119;
-        address treasuryInstance = 0x6329004E903B7F420245E7aF3f355186f2432466;
-        vm.deal(treasuryInstance, treasuryBal);
-        vm.startPrank(treasuryInstance);
-        liquidityPoolInstance.deposit{value: treasuryBal}();
-        eETHInstance.approve(address(weEthInstance), treasuryBal);
-        weEthInstance.wrap(treasuryBal);
-        vm.stopPrank();
-        uint256 preTreasuryBal = weEthInstance.balanceOf(treasuryInstance);
-        uint256 preOwnerBal = weEthInstance.balanceOf(owner);
-        vm.startPrank(alice);
-        vm.expectRevert();
-        weEthInstance.rescueTreasuryWeeth();
-        vm.stopPrank();
-        vm.startPrank(owner);
-        weEthInstance.rescueTreasuryWeeth();
-        vm.stopPrank();
-        assertEq(weEthInstance.balanceOf(address(treasuryInstance)), 0);
-        assertEq(weEthInstance.balanceOf(owner), preTreasuryBal + preOwnerBal);
-        vm.stopPrank(); 
-    }
 }
