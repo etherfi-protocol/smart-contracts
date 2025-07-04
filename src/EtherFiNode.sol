@@ -133,6 +133,7 @@ contract EtherFiNode is IEtherFiNode {
         if (balance > 0) {
             (bool sent, ) = payable(address(liquidityPool)).call{value: balance, gas: 20000}("");
             if (!sent) revert TransferFailed();
+            emit FundsTransferred(address(liquidityPool), balance);
         }
         return balance;
     }
@@ -161,6 +162,7 @@ contract EtherFiNode is IEtherFiNode {
         if (balance > 0) {
             (bool sent, ) = payable(address(liquidityPool)).call{value: balance, gas: 20000}("");
             if (!sent) revert TransferFailed();
+            emit FundsTransferred(address(liquidityPool), balance);
         }
         return balance;
     }
