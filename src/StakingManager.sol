@@ -7,7 +7,7 @@ import "./interfaces/IStakingManager.sol";
 import "./interfaces/IDepositContract.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
-import "./libraries/DepositRootGenerator.sol";
+import "./libraries/DepositDataRootGenerator.sol";
 
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
@@ -103,7 +103,7 @@ contract StakingManager is
 
             // verify deposit root
             bytes memory withdrawalCredentials = etherFiNodesManager.addressToWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
-            bytes32 computedDataRoot = depositRootGenerator.generateDepositRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, initialDepositAmount);
+            bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, initialDepositAmount);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
             // Link the pubkey to a node. Will revert if this pubkey is already registered to a different target
@@ -140,7 +140,7 @@ contract StakingManager is
 
             // verify deposit root
             bytes memory withdrawalCredentials = etherFiNodesManager.addressToWithdrawalCredentials(address(etherFiNode.getEigenPod()));
-            bytes32 computedDataRoot = depositRootGenerator.generateDepositRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, remainingDeposit);
+            bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, remainingDeposit);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
             // Deposit the remaining eth to the validator
@@ -150,10 +150,18 @@ contract StakingManager is
         }
     }
 
-    ///@notice Calculates the pubkey hash of a validator's pubkey as per SSZ spec
+    /// @notice Calculates the pubkey hash of a validator's pubkey as per SSZ spec
     function calculateValidatorPubkeyHash(bytes memory pubkey) public pure returns (bytes32) {
         if (pubkey.length != 48) revert InvalidPubKeyLength();
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
+    }
+
+    /// @notice compute deposit_data_root for the provide deposit data
+    //    The deposit_data_root is essentially a checksum of the provided deposit over the (pubkey, signature, withdrawalCreds, amount)
+    //    and represents the "node" that will be inserted into the beacon deposit merkle tree.
+    //    Note that this is separate from the from the top level beacon deposit_root
+    function generateDepositDataRoot(bytes memory pubkey, bytes memory signature, bytes memory withdrawalCredentials, uint256 amount) public pure returns (bytes32) {
+        return depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, amount);
     }
 
     //---------------------------------------------------------------------------

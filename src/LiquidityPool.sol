@@ -16,9 +16,6 @@ import "./interfaces/ILiquifier.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IRoleRegistry.sol";
-import "./libraries/DepositRootGenerator.sol";
-
-
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
     using SafeERC20 for IERC20;
@@ -285,6 +282,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     // Step 2: create validators with 1 eth deposits to official deposit contract
     // Step 3: oracle approves and funds the remaining balance for the validator
 
+    /// @notice claim bids and send 1 eth deposits to deposit contract to create the provided validators.
     /// @dev step 2 of staking flow
     function batchRegister(
         IStakingManager.DepositData[] calldata _depositData,
@@ -300,6 +298,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         stakingManager.createBeaconValidators{value: outboundEthAmountFromLp}(_depositData, _bidIds, _etherFiNode);
     }
 
+    /// @notice send remaining eth to deposit contract to activate the provided validators
     /// @dev step 3 of staking flow. This version exists to remain compatible with existing callers.
     ///   future services should use confirmAndFundBeaconValidators()
      function batchApproveRegistration(
@@ -325,7 +324,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
             // enforce that all validators are part of same node
             if (address(etherFiNode) != address(nodesManager.etherfiNodeAddress(_validatorIds[i]))) revert InvalidEtherFiNode();
 
-            bytes32 confirmDepositRoot = depositRootGenerator.generateDepositRoot(
+            bytes32 confirmDepositDataRoot = stakingManager.generateDepositDataRoot(
                 _pubkeys[i],
                 _signatures[i],
                 withdrawalCredentials,
@@ -334,7 +333,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
             IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
                 publicKey: _pubkeys[i],
                 signature: _signatures[i],
-                depositDataRoot: confirmDepositRoot,
+                depositDataRoot: confirmDepositDataRoot,
                 ipfsHashForEncryptedValidatorKey: ""
             });
             depositData[i] = confirmDepositData;
@@ -346,6 +345,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         stakingManager.confirmAndFundBeaconValidators{value: outboundEthAmountFromLp}(depositData, validatorSizeWei);
     }
 
+    /// @notice send remaining eth to deposit contract to activate the provided validators
     /// @dev step 3 of staking flow
     function confirmAndFundBeaconValidators(
         IStakingManager.DepositData[] calldata _depositData,

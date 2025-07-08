@@ -14,7 +14,7 @@ import "../src/NodeOperatorManager.sol";
 import "../src/interfaces/ITNFT.sol";
 import "../src/interfaces/IBNFT.sol";
 import "../src/AuctionManager.sol";
-import "../src/libraries/DepositRootGenerator.sol";
+import "../src/libraries/DepositDataRootGenerator.sol";
 
 
 contract PreludeTest is Test, ArrayTestHelper {
@@ -158,7 +158,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // initial deposit
         address eigenPod = address(IEtherFiNode(params.etherFiNode).getEigenPod());
-        bytes32 initialDepositRoot = depositRootGenerator.generateDepositRoot(
+        bytes32 initialDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
             pubkey,
             signature,
             etherFiNodesManager.addressToWithdrawalCredentials(eigenPod),
@@ -177,7 +177,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 confirmAmount = params.validatorSize - 1 ether;
 
         // remaining deposit
-        bytes32 confirmDepositRoot = depositRootGenerator.generateDepositRoot(
+        bytes32 confirmDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
             pubkey,
             signature,
             etherFiNodesManager.addressToWithdrawalCredentials(eigenPod),
@@ -389,7 +389,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/);
 
         address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
-        bytes32 initialDepositRoot = depositRootGenerator.generateDepositRoot(
+        bytes32 initialDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
             pubkey,
             signature,
             etherFiNodesManager.addressToWithdrawalCredentials(eigenPod),
@@ -409,7 +409,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 validatorSize = 32 ether;
         uint256 confirmAmount = validatorSize - 1 ether;
 
-        bytes32 confirmDepositRoot = depositRootGenerator.generateDepositRoot(
+        bytes32 confirmDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
             pubkey,
             signature,
             etherFiNodesManager.addressToWithdrawalCredentials(eigenPod),
@@ -580,11 +580,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
 
         // only liquidityPool can call createBeaconValidators
-        bytes32 initialDepositRoot = depositRootGenerator.generateDepositRoot(pubkey, signature, "", 1 ether);
+        bytes32 initialDepositDataRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, "", 1 ether);
         IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({
             publicKey: pubkey,
             signature: signature,
-            depositDataRoot: initialDepositRoot,
+            depositDataRoot: initialDepositDataRoot,
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
         uint256[] memory bidIds = new uint256[](1);
@@ -593,7 +593,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         stakingManager.createBeaconValidators(toArray(initialDepositData), bidIds, address(0));
 
         // only liquidityPool can call confirmAndFundBeaconValidators
-        bytes32 confirmDepositRoot = depositRootGenerator.generateDepositRoot(pubkey, signature, "", 31 ether);
+        bytes32 confirmDepositDataRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, "", 31 ether);
         IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
             publicKey: pubkey,
             signature: signature,

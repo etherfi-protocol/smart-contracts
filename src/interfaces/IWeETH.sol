@@ -44,4 +44,5 @@ interface IWeETH is IERC20Upgradeable {
     function getEETHByWeETH(uint256 _weETHAmount) external view returns (uint256);
     function getRate() external view returns (uint256);
     function getImplementation() external view returns (address);
+
 }
