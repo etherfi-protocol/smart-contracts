@@ -161,7 +161,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes32 initialDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
             pubkey,
             signature,
-            etherFiNodesManager.addressToWithdrawalCredentials(eigenPod),
+            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod),
             1 ether
         );
         IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({
@@ -180,7 +180,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes32 confirmDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
             pubkey,
             signature,
-            etherFiNodesManager.addressToWithdrawalCredentials(eigenPod),
+            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod),
             confirmAmount
         );
         IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
@@ -392,7 +392,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes32 initialDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
             pubkey,
             signature,
-            etherFiNodesManager.addressToWithdrawalCredentials(eigenPod),
+            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod),
             1 ether
         );
         IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({
@@ -412,7 +412,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes32 confirmDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
             pubkey,
             signature,
-            etherFiNodesManager.addressToWithdrawalCredentials(eigenPod),
+            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod),
             confirmAmount
         );
 

@@ -89,6 +89,7 @@ contract StakingManager is
 
     /// @notice send 1 eth to deposit contract to create the validator.
     ///    The rest of the eth will not be sent until the oracle confirms the withdrawal credentials
+    /// @dev provided deposit data must be for a 0x02 compounding validator
     function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external payable {
         if (msg.sender != liquidityPool) revert InvalidCaller();
         if (depositData.length != bidIds.length) revert InvalidDepositData();
@@ -102,7 +103,7 @@ contract StakingManager is
             auctionManager.updateSelectedBidInformation(bidIds[i]);
 
             // verify deposit root
-            bytes memory withdrawalCredentials = etherFiNodesManager.addressToWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
+            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
             bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, initialDepositAmount);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
@@ -123,6 +124,10 @@ contract StakingManager is
 
     /// @notice send remaining eth to activate validators created by "createBeaconValidators"
     ///    The oracle is expected to have confirmed the withdrawal credentials
+    /// @dev note that since this is considered a "validator top up" by the beacon chain,
+    ///   The signatures are not actually verified by the beacon chain, as key ownership was
+    ///   already proved during the previous deposit. The "deposit data root" i.e. (checksum) however must be valid.
+    ///   The caller can use generateDepositDataRoot() to generate a valid root.
     function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable {
         if (msg.sender != liquidityPool) revert InvalidCaller();
         if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
@@ -139,7 +144,7 @@ contract StakingManager is
             if (address(etherFiNode) == address(0x0)) revert UnlinkedPubkey();
 
             // verify deposit root
-            bytes memory withdrawalCredentials = etherFiNodesManager.addressToWithdrawalCredentials(address(etherFiNode.getEigenPod()));
+            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(etherFiNode.getEigenPod()));
             bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, remainingDeposit);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 

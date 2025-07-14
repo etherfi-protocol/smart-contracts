@@ -8,6 +8,7 @@ import {BeaconChainProofs} from "../eigenlayer-libraries/BeaconChainProofs.sol";
 interface IEtherFiNodesManager {
 
     function addressToWithdrawalCredentials(address addr) external pure returns (bytes memory);
+    function addressToCompoundingWithdrawalCredentials(address addr) external pure returns (bytes memory);
     function etherfiNodeAddress(uint256 id) external view returns(address);
     function etherFiNodeFromPubkeyHash(bytes32 pubkeyHash) external view returns (IEtherFiNode);
     function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external;

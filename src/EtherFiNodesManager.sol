@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -129,9 +128,14 @@ contract EtherFiNodesManager is
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
     }
 
-    /// @notice converts a target address to 0x01 withdrawal credential format
+    /// @notice converts a target address to 0x01 withdrawal credential format for a traditional 32eth validator
     function addressToWithdrawalCredentials(address addr) public pure returns (bytes memory) {
         return abi.encodePacked(bytes1(0x01), bytes11(0x0), addr);
+    }
+
+    /// @notice converts a target address to 0x02 withdrawal credential format for a post Pectra compounding validator
+    function addressToCompoundingWithdrawalCredentials(address addr) public pure returns (bytes memory) {
+        return abi.encodePacked(bytes1(0x02), bytes11(0x0), addr);
     }
 
     /// @dev associate the provided pubkey with particular EtherFiNode instance.

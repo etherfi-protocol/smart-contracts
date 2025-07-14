@@ -274,7 +274,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
 
     //---------------------------------------------------------------------------
-    //------------------------- Deposit Flow ------------------------------------
+    //---------------------- Staking/Deposit Flow -------------------------------
     //---------------------------------------------------------------------------
 
     // [Liquidty Pool Staking flow]
@@ -312,7 +312,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         // all validators provided should belong to same node
         IEtherFiNode etherFiNode = IEtherFiNode(nodesManager.etherfiNodeAddress(_validatorIds[0]));
         address eigenPod = address(etherFiNode.getEigenPod());
-        bytes memory withdrawalCredentials = nodesManager.addressToWithdrawalCredentials(eigenPod);
+        bytes memory withdrawalCredentials = nodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
 
         // we have already deposited the initial amount to create the validator on the beacon chain
         uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.initialDepositAmount();
@@ -363,7 +363,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         stakingManager.confirmAndFundBeaconValidators{value: outboundEthAmountFromLp}(_depositData, _validatorSizeWei);
     }
 
-
     /// @dev set the size of validators created when caling batchApproveRegistration().
     ///   In a future upgrade this will be a parameter to that call but was done like this to
     ///   to limit changes to other dependent contracts
@@ -389,7 +388,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function unregisterValidatorSpawner(address _user) external {
         require(validatorSpawner[_user].registered, "Not registered");
         require(roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender), "Incorrect Caller");
-        
+
         delete validatorSpawner[_user];
 
         emit ValidatorSpawnerUnregistered(_user);
@@ -411,6 +410,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
     }
+
     /// @notice pay protocol fees including 5% to treaury, 5% to node operator and ethfund bnft holders
     /// @param _protocolFees The amount of protocol fees to pay in ether
     function payProtocolFees(uint128 _protocolFees) external {
@@ -438,7 +438,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function pauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         if (paused) revert("Pausable: already paused");
-        
+
         paused = true;
         emit Paused(msg.sender);
     }
