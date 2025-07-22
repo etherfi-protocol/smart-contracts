@@ -3,30 +3,38 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "solady/utils/ReentrancyGuardTransient.sol";
 
 /**
  * @title AssetRecovery
  * @dev A library for recovering ETH, ERC20 tokens, and ERC721 tokens that were
  * mistakenly sent to this contract.
  */
-abstract contract AssetRecovery is ReentrancyGuard {
+abstract contract AssetRecovery is ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
-    
+
     /**
      * @dev Emitted when ETH is recovered
      */
     event ETHRecovered(address indexed to, uint256 amount);
-    
+
     /**
      * @dev Emitted when ERC20 tokens are recovered
      */
-    event ERC20Recovered(address indexed token, address indexed to, uint256 amount);
-    
+    event ERC20Recovered(
+        address indexed token,
+        address indexed to,
+        uint256 amount
+    );
+
     /**
      * @dev Emitted when an ERC721 token is recovered
      */
-    event ERC721Recovered(address indexed token, address indexed to, uint256 tokenId);
+    event ERC721Recovered(
+        address indexed token,
+        address indexed to,
+        uint256 tokenId
+    );
 
     /**
      * @dev Error thrown when address or amount inputs are invalid
@@ -67,13 +75,16 @@ abstract contract AssetRecovery is ReentrancyGuard {
      * @param to Address to send the recovered ETH to
      * @param amount Amount of ETH to recover
      */
-    function _recoverETH(address payable to, uint256 amount) internal nonReentrant {
+    function _recoverETH(
+        address payable to,
+        uint256 amount
+    ) internal nonReentrant {
         if (to == address(0) || amount == 0) revert InvalidInput();
         if (amount > address(this).balance) revert InsufficientBalance();
 
         (bool success, ) = to.call{value: amount}("");
         if (!success) revert EthTransferFailed();
-        
+
         emit ETHRecovered(to, amount);
     }
 
@@ -83,12 +94,18 @@ abstract contract AssetRecovery is ReentrancyGuard {
      * @param to Address to send the recovered tokens to
      * @param amount Amount of tokens to recover
      */
-    function _recoverERC20(address token, address to, uint256 amount) internal nonReentrant {
-        if (token == address(0) || to == address(0) || amount == 0) revert InvalidInput();
-        if (amount > IERC20(token).balanceOf(address(this))) revert InsufficientBalance();
-        
+    function _recoverERC20(
+        address token,
+        address to,
+        uint256 amount
+    ) internal nonReentrant {
+        if (token == address(0) || to == address(0) || amount == 0)
+            revert InvalidInput();
+        if (amount > IERC20(token).balanceOf(address(this)))
+            revert InsufficientBalance();
+
         IERC20(token).safeTransfer(to, amount);
-        
+
         emit ERC20Recovered(token, to, amount);
     }
 
@@ -98,12 +115,17 @@ abstract contract AssetRecovery is ReentrancyGuard {
      * @param to Address to send the recovered token to
      * @param tokenId ID of the token to recover
      */
-    function _recoverERC721(address token, address to, uint256 tokenId) internal nonReentrant {
+    function _recoverERC721(
+        address token,
+        address to,
+        uint256 tokenId
+    ) internal nonReentrant {
         if (token == address(0) || to == address(0)) revert InvalidInput();
-        if (IERC721(token).ownerOf(tokenId) != address(this)) revert ContractIsNotOwnerOfERC721Token();
-        
+        if (IERC721(token).ownerOf(tokenId) != address(this))
+            revert ContractIsNotOwnerOfERC721Token();
+
         IERC721(token).safeTransferFrom(address(this), to, tokenId);
-        
+
         emit ERC721Recovered(token, to, tokenId);
     }
 }
