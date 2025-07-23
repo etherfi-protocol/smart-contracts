@@ -3,14 +3,14 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "./EETHReentrancyGuard.sol";
 
 /**
  * @title AssetRecovery
  * @dev A library for recovering ETH, ERC20 tokens, and ERC721 tokens that were
  * mistakenly sent to this contract.
  */
-abstract contract AssetRecovery is ReentrancyGuard {
+abstract contract AssetRecovery is EETHReentrancyGuard {
     using SafeERC20 for IERC20;
     
     /**
