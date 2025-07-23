@@ -17,7 +17,6 @@ import "forge-std/console2.sol";
 
 contract V3PreludeTransactions is Script, TestSetup {
     
-    // Move constants to contract level to reduce stack usage
     uint256 constant BLOCK_BEFORE_UPGRADE = 22977373;
     address constant STAKER1 = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
     address constant ETHERFI_NODE_BEACON = 0x3c55986Cfee455E2533F4D29006634EcF9B7c03F;
@@ -47,27 +46,22 @@ contract V3PreludeTransactions is Script, TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         console2.log("Role Registry Address:", address(roleRegistryInstance));
 
-        // Execute upgrade in separate function to reduce stack depth
         _executeUpgrade();
         
         console2.log("Upgrade complete - proceeding with rollback test");
         
-        // Execute rollback in separate function
         _executeRollback();
         
         console2.log("Rollback complete - test finished successfully");
     }
 
     function _executeUpgrade() internal {
-        // Create arrays inline to avoid storing as variables
         address[] memory targets = new address[](17);
         bytes[] memory data = new bytes[](17);
         uint256[] memory values = new uint256[](17); // Default to 0
 
-        // Deploy implementations and configure upgrade in one go
         _configureUpgradeTransactions(targets, data);
         
-        // Execute immediately
         _batch_execute_timelock(targets, data, values, true, true, true, true);
     }
 
@@ -78,7 +72,6 @@ contract V3PreludeTransactions is Script, TestSetup {
         bytes[] memory data
     ) internal {
 
-        // Deploy new implementations inline
         address stakingManagerImpl = address(new StakingManager(
             address(liquidityPoolInstance),
             address(nodeOperatorManagerInstance),
@@ -112,7 +105,6 @@ contract V3PreludeTransactions is Script, TestSetup {
             targets[i] = address(roleRegistryInstance);
         }
 
-        // Configure role grants using inline role lookups
         data[0] = _encodeRoleGrant(
             EtherFiNode(payable(etherFiNodeImpl)).ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE(),
             address(managerInstance)
@@ -150,7 +142,6 @@ contract V3PreludeTransactions is Script, TestSetup {
             STAKER1
         );
 
-        // Configure upgrade transactions
         targets[9] = address(eETHInstance);
         data[9] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, eETHImpl);
 
@@ -177,14 +168,11 @@ contract V3PreludeTransactions is Script, TestSetup {
     }
 
     function _executeRollback() internal {
-        // Get original implementations inline
-        UpgradeableBeacon beacon = UpgradeableBeacon(ETHERFI_NODE_BEACON);
         
         address[] memory targets = new address[](8);
         bytes[] memory data = new bytes[](8);
         uint256[] memory values = new uint256[](8); // Default to 0
 
-        // Configure rollback transactions inline
         targets[0] = address(etherFiAdminInstance);
         data[0] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, EtherFiAdminImplBefore);
 
@@ -212,7 +200,6 @@ contract V3PreludeTransactions is Script, TestSetup {
         _batch_execute_timelock(targets, data, values, true, true, true, true);
     }
 
-    // Helper function to reduce repetition and stack usage
     function _encodeRoleGrant(bytes32 role, address account) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(RoleRegistry.grantRole.selector, role, account);
     }
