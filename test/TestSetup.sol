@@ -563,7 +563,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         liquifierInstance = Liquifier(payable(liquifierProxy));
 
         // TODO - not sure what `name` and `versiona` are for
-        eETHImplementation = new EETH();
+        eETHImplementation = new EETH(address(roleRegistryInstance));
         vm.expectRevert("Initializable: contract is already initialized");
         eETHImplementation.initialize(payable(address(liquidityPoolInstance)));
 

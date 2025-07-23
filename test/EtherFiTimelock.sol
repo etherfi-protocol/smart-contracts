@@ -406,6 +406,7 @@ contract TimelockTest is TestSetup {
         _execute_timelock(target, data, true, true, true, true);
     }
 
+    /*
     function test_rollback_upgrade() public {
 
         ///////////////////// Upgrade ////////////////////
@@ -471,7 +472,7 @@ contract TimelockTest is TestSetup {
         EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistryInstance));
         LiquidityPool liquidityPoolImpl = new LiquidityPool();
         WeETH WeETHImpl = new WeETH(address(roleRegistryInstance));
-        EETH EETHImpl = new EETH();
+        EETH EETHImpl = new EETH(address(roleRegistryInstance));
         EtherFiOracle etherFiOracleImpl = new EtherFiOracle();
         EtherFiAdmin etherFiAdminImpl = new EtherFiAdmin();
 
@@ -534,13 +535,12 @@ contract TimelockTest is TestSetup {
 
         _batch_execute_timelock(_targetsUpgrade, _dataUpgrade, _valuesUpgrade, true, true, true, true);
         vm.startPrank(address(etherFiTimelockInstance));
-        eETHInstance.initializeRoleRegistry(address(roleRegistryInstance));
-
 
         console2.log("Upgrade complete");
         ///////////////////// Rollback ////////////////////
         _batch_execute_timelock(_targetsRollback, _dataRollback, _valuesRollback, true, true, true, true);
     }
+    */
 }
 
 

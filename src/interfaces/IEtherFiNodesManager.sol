@@ -12,6 +12,7 @@ interface IEtherFiNodesManager {
     function etherfiNodeAddress(uint256 id) external view returns(address);
     function etherFiNodeFromPubkeyHash(bytes32 pubkeyHash) external view returns (IEtherFiNode);
     function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external;
+    function calculateValidatorPubkeyHash(bytes memory pubkey) external pure returns (bytes32);
 
     function stakingManager() external view returns (address);
 
