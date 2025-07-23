@@ -74,7 +74,7 @@ contract V3PreludeTransactions is Script, TestSetup {
 
         address stakingManagerImpl = address(new StakingManager(
             address(liquidityPoolInstance),
-            address(nodeOperatorManagerInstance),
+            address(managerInstance),
             address(depositContractEth2),
             address(auctionInstance),
             ETHERFI_NODE_BEACON,
