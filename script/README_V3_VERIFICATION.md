@@ -51,9 +51,9 @@ Starting V3 Upgrade Verification
 ========================================
 VERIFICATION SUMMARY
 ========================================
-  Total Checks: 27
-  Passed: 27
-  Failed: 0
+  Total Checks: 60
+  Passed: 56
+  Failed: 4
   
 [PASS] ALL VERIFICATIONS PASSED!
 ```
