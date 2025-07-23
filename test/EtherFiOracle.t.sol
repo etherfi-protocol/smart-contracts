@@ -204,6 +204,24 @@ contract EtherFiOracleTest is TestSetup {
         _executeAdminTasks(reportAtPeriod4);
     }
 
+    function test_approving_validators() public {
+        // Now it's period 2!
+        _moveClock(1024 + 2 * slotsPerEpoch);
+        reportAtPeriod2A.validatorsToApprove = new uint256[](1);
+        bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
+        bytes[] memory emptyPubKeys = new bytes[](1);
+        bytes[] memory emptySignatures = new bytes[](1);
+
+        _executeAdminTasks(reportAtPeriod2A);
+        //execute validator task 
+        vm.prank(alice);
+        etherFiAdminInstance.executeValidatorApprovalTask(reportHash, reportAtPeriod2A.validatorsToApprove, emptyPubKeys, emptySignatures);
+
+        (bool completed, bool exists) = etherFiAdminInstance.validatorApprovalTaskStatus(reportHash);
+        assertEq(completed, true);
+        assertEq(exists, true);
+    }
+
     function test_report_submission_before_processing_last_published_one_fails() public {
         vm.prank(owner);
         etherFiOracleInstance.setQuorumSize(1);
@@ -446,6 +464,10 @@ contract EtherFiOracleTest is TestSetup {
         // Change in APR is above 100%, which reverts
         report.accruedRewards = int128(64 ether + 1 ether) / int128(365);
         _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
+    }
+
+    function test_dave() public {
+        launch_validator();
     }
 
     function test_huge_negative_rebaes() public {

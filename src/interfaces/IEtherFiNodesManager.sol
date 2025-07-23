@@ -7,10 +7,10 @@ import {BeaconChainProofs} from "../eigenlayer-libraries/BeaconChainProofs.sol";
 
 interface IEtherFiNodesManager {
 
-    function etherFiNodeFromPubkeyHash(bytes32 pubkeyHash) external view returns (IEtherFiNode);
-
     function addressToWithdrawalCredentials(address addr) external pure returns (bytes memory);
+    function addressToCompoundingWithdrawalCredentials(address addr) external pure returns (bytes memory);
     function etherfiNodeAddress(uint256 id) external view returns(address);
+    function etherFiNodeFromPubkeyHash(bytes32 pubkeyHash) external view returns (IEtherFiNode);
     function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external;
 
     function stakingManager() external view returns (address);
@@ -103,6 +103,7 @@ interface IEtherFiNodesManager {
     event PubkeyLinked(bytes32 indexed pubkeyHash, address indexed nodeAddress, uint256 indexed legacyId, bytes pubkey);
     event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
     event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
+    event FundsTransferred(address indexed nodeAddress, uint256 amount);
 
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------
@@ -116,6 +117,5 @@ interface IEtherFiNodesManager {
     error IncorrectRole();
     error ForwardedCallNotAllowed();
     error InvalidForwardedCall();
-
 
 }

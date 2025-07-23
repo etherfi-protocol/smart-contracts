@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-library depositRootGenerator {
+library depositDataRootGenerator {
     uint constant GWEI = 1e9;
 
-    function generateDepositRoot(
+    function generateDepositDataRoot(
         bytes calldata pubkey,
         bytes calldata signature,
         bytes calldata withdrawal_credentials,

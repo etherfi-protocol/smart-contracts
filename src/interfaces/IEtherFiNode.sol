@@ -15,10 +15,10 @@ interface IEtherFiNode {
     function setProofSubmitter(address newProofSubmitter) external;
     function verifyCheckpointProofs(BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
     function queueETHWithdrawal(uint256 amount) external returns (bytes32 withdrawalRoot);
-    function completeQueuedETHWithdrawals(bool receiveAsTokens) external ;
+    function completeQueuedETHWithdrawals(bool receiveAsTokens) external returns (uint256 balance);
     function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external returns (bytes32[] memory withdrawalRoot);
     function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
-    function sweepFunds() external;
+    function sweepFunds() external returns (uint256 balance);
 
     // call forwarding
     function forwardEigenPodCall(bytes memory data) external returns (bytes memory);
@@ -80,6 +80,7 @@ interface IEtherFiNode {
     event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
     event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
     event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
+    event FundsTransferred(address indexed recipient, uint256 amount);
 
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------

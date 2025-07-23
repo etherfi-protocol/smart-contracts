@@ -392,6 +392,19 @@ contract TimelockTest is TestSetup {
         _execute_timelock(target, data, true, true, true, true);
     }
 
+    function test_handle_remainder() public {
+        initializeRealisticFork(MAINNET_FORK);
+        etherFiTimelockInstance = EtherFiTimelock(payable(address(0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a)));
+        address target = address(withdrawRequestNFTInstance);
+        uint256 remainder = withdrawRequestNFTInstance.getEEthRemainderAmount();
+
+            // Write remainder to a file
+        string memory remainderStr = vm.toString(remainder);
+        vm.writeFile("./release/logs/txns/remainder.txt", remainderStr);
+
+        bytes memory data = abi.encodeWithSelector(WithdrawRequestNFT.handleRemainder.selector, remainder);
+        _execute_timelock(target, data, true, true, true, true);
+    }
 }
 
 // {"version":"1.0","chainId":"1

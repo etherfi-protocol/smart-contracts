@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -73,7 +72,10 @@ contract EtherFiNodesManager is
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
     ///   the eth to the liquidity pool in the event of ETH being accidentally sent there
     function sweepFunds(uint256 id) external onlyAdmin whenNotPaused {
-        IEtherFiNode(etherfiNodeAddress(id)).sweepFunds;
+        uint256 balance = IEtherFiNode(etherfiNodeAddress(id)).sweepFunds();
+        if(balance > 0) {
+            emit FundsTransferred(etherfiNodeAddress(id), balance);
+        }
     }
 
     //--------------------------------------------------------------------------------------
@@ -106,7 +108,10 @@ contract EtherFiNodesManager is
     }
 
     function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
-        IEtherFiNode(etherfiNodeAddress(id)).completeQueuedETHWithdrawals(receiveAsTokens);
+        uint256 balance = IEtherFiNode(etherfiNodeAddress(id)).completeQueuedETHWithdrawals(receiveAsTokens);
+        if(balance > 0) {
+            emit FundsTransferred(etherfiNodeAddress(id), balance);
+        }
     }
 
     function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin whenNotPaused {
@@ -127,9 +132,14 @@ contract EtherFiNodesManager is
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
     }
 
-    /// @notice converts a target address to 0x01 withdrawal credential format
+    /// @notice converts a target address to 0x01 withdrawal credential format for a traditional 32eth validator
     function addressToWithdrawalCredentials(address addr) public pure returns (bytes memory) {
         return abi.encodePacked(bytes1(0x01), bytes11(0x0), addr);
+    }
+
+    /// @notice converts a target address to 0x02 withdrawal credential format for a post Pectra compounding validator
+    function addressToCompoundingWithdrawalCredentials(address addr) public pure returns (bytes memory) {
+        return abi.encodePacked(bytes1(0x02), bytes11(0x0), addr);
     }
 
     /// @dev associate the provided pubkey with particular EtherFiNode instance.

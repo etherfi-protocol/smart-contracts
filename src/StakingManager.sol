@@ -7,7 +7,7 @@ import "./interfaces/IStakingManager.sol";
 import "./interfaces/IDepositContract.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
-import "./libraries/DepositRootGenerator.sol";
+import "./libraries/DepositDataRootGenerator.sol";
 
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
@@ -89,6 +89,7 @@ contract StakingManager is
 
     /// @notice send 1 eth to deposit contract to create the validator.
     ///    The rest of the eth will not be sent until the oracle confirms the withdrawal credentials
+    /// @dev provided deposit data must be for a 0x02 compounding validator
     function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external payable {
         if (msg.sender != liquidityPool) revert InvalidCaller();
         if (depositData.length != bidIds.length) revert InvalidDepositData();
@@ -102,8 +103,8 @@ contract StakingManager is
             auctionManager.updateSelectedBidInformation(bidIds[i]);
 
             // verify deposit root
-            bytes memory withdrawalCredentials = etherFiNodesManager.addressToWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
-            bytes32 computedDataRoot = depositRootGenerator.generateDepositRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, initialDepositAmount);
+            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
+            bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, initialDepositAmount);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
             // Link the pubkey to a node. Will revert if this pubkey is already registered to a different target
@@ -115,11 +116,18 @@ contract StakingManager is
             bytes32 pubkeyHash = calculateValidatorPubkeyHash(depositData[i].publicKey);
             emit validatorCreated(pubkeyHash, etherFiNode, depositData[i].publicKey);
             emit linkLegacyValidatorId(pubkeyHash, bidIds[i]); // can remove this once we fully transition to pubkeys
+
+            // legacy event for compatibility with existing tooling
+            emit ValidatorRegistered(auctionManager.getBidOwner(bidIds[i]), address(liquidityPool), address(liquidityPool), bidIds[i], depositData[i].publicKey, depositData[i].ipfsHashForEncryptedValidatorKey);
         }
     }
 
     /// @notice send remaining eth to activate validators created by "createBeaconValidators"
     ///    The oracle is expected to have confirmed the withdrawal credentials
+    /// @dev note that since this is considered a "validator top up" by the beacon chain,
+    ///   The signatures are not actually verified by the beacon chain, as key ownership was
+    ///   already proved during the previous deposit. The "deposit data root" i.e. (checksum) however must be valid.
+    ///   The caller can use generateDepositDataRoot() to generate a valid root.
     function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable {
         if (msg.sender != liquidityPool) revert InvalidCaller();
         if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
@@ -136,8 +144,8 @@ contract StakingManager is
             if (address(etherFiNode) == address(0x0)) revert UnlinkedPubkey();
 
             // verify deposit root
-            bytes memory withdrawalCredentials = etherFiNodesManager.addressToWithdrawalCredentials(address(etherFiNode.getEigenPod()));
-            bytes32 computedDataRoot = depositRootGenerator.generateDepositRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, remainingDeposit);
+            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(etherFiNode.getEigenPod()));
+            bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, remainingDeposit);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
             // Deposit the remaining eth to the validator
@@ -147,10 +155,18 @@ contract StakingManager is
         }
     }
 
-    ///@notice Calculates the pubkey hash of a validator's pubkey as per SSZ spec
+    /// @notice Calculates the pubkey hash of a validator's pubkey as per SSZ spec
     function calculateValidatorPubkeyHash(bytes memory pubkey) public pure returns (bytes32) {
         if (pubkey.length != 48) revert InvalidPubKeyLength();
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
+    }
+
+    /// @notice compute deposit_data_root for the provide deposit data
+    //    The deposit_data_root is essentially a checksum of the provided deposit over the (pubkey, signature, withdrawalCreds, amount)
+    //    and represents the "node" that will be inserted into the beacon deposit merkle tree.
+    //    Note that this is separate from the from the top level beacon deposit_root
+    function generateDepositDataRoot(bytes memory pubkey, bytes memory signature, bytes memory withdrawalCredentials, uint256 amount) public pure returns (bytes32) {
+        return depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, amount);
     }
 
     //---------------------------------------------------------------------------

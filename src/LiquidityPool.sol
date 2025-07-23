@@ -16,9 +16,6 @@ import "./interfaces/ILiquifier.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IRoleRegistry.sol";
-import "./libraries/DepositRootGenerator.sol";
-
-
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
     using SafeERC20 for IERC20;
@@ -76,6 +73,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     //--------------------------------------------------------------------------------------
 
     bytes32 public constant LIQUIDITY_POOL_ADMIN_ROLE = keccak256("LIQUIDITY_POOL_ADMIN_ROLE");
+    bytes32 public constant LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE = keccak256("LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE");
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -276,7 +274,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
 
     //---------------------------------------------------------------------------
-    //------------------------- Deposit Flow ------------------------------------
+    //---------------------- Staking/Deposit Flow -------------------------------
     //---------------------------------------------------------------------------
 
     // [Liquidty Pool Staking flow]
@@ -284,6 +282,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     // Step 2: create validators with 1 eth deposits to official deposit contract
     // Step 3: oracle approves and funds the remaining balance for the validator
 
+    /// @notice claim bids and send 1 eth deposits to deposit contract to create the provided validators.
     /// @dev step 2 of staking flow
     function batchRegister(
         IStakingManager.DepositData[] calldata _depositData,
@@ -299,6 +298,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         stakingManager.createBeaconValidators{value: outboundEthAmountFromLp}(_depositData, _bidIds, _etherFiNode);
     }
 
+    /// @notice send remaining eth to deposit contract to activate the provided validators
     /// @dev step 3 of staking flow. This version exists to remain compatible with existing callers.
     ///   future services should use confirmAndFundBeaconValidators()
      function batchApproveRegistration(
@@ -306,13 +306,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         bytes[] calldata _pubkeys,
         bytes[] calldata _signatures
     ) external whenNotPaused {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, msg.sender)) revert IncorrectRole();
         if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
 
         // all validators provided should belong to same node
         IEtherFiNode etherFiNode = IEtherFiNode(nodesManager.etherfiNodeAddress(_validatorIds[0]));
         address eigenPod = address(etherFiNode.getEigenPod());
-        bytes memory withdrawalCredentials = nodesManager.addressToWithdrawalCredentials(eigenPod);
+        bytes memory withdrawalCredentials = nodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
 
         // we have already deposited the initial amount to create the validator on the beacon chain
         uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.initialDepositAmount();
@@ -324,7 +324,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
             // enforce that all validators are part of same node
             if (address(etherFiNode) != address(nodesManager.etherfiNodeAddress(_validatorIds[i]))) revert InvalidEtherFiNode();
 
-            bytes32 confirmDepositRoot = depositRootGenerator.generateDepositRoot(
+            bytes32 confirmDepositDataRoot = stakingManager.generateDepositDataRoot(
                 _pubkeys[i],
                 _signatures[i],
                 withdrawalCredentials,
@@ -333,7 +333,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
             IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
                 publicKey: _pubkeys[i],
                 signature: _signatures[i],
-                depositDataRoot: confirmDepositRoot,
+                depositDataRoot: confirmDepositDataRoot,
                 ipfsHashForEncryptedValidatorKey: ""
             });
             depositData[i] = confirmDepositData;
@@ -345,13 +345,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         stakingManager.confirmAndFundBeaconValidators{value: outboundEthAmountFromLp}(depositData, validatorSizeWei);
     }
 
+    /// @notice send remaining eth to deposit contract to activate the provided validators
     /// @dev step 3 of staking flow
     function confirmAndFundBeaconValidators(
         IStakingManager.DepositData[] calldata _depositData,
         uint256 _validatorSizeWei
     ) external whenNotPaused {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, msg.sender)) revert IncorrectRole();
+        if (_validatorSizeWei < 32 ether || _validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
         uint256 remainingEthPerValidator = _validatorSizeWei - stakingManager.initialDepositAmount();
@@ -361,7 +362,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
         stakingManager.confirmAndFundBeaconValidators{value: outboundEthAmountFromLp}(_depositData, _validatorSizeWei);
     }
-
 
     /// @dev set the size of validators created when caling batchApproveRegistration().
     ///   In a future upgrade this will be a parameter to that call but was done like this to
@@ -388,7 +388,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function unregisterValidatorSpawner(address _user) external {
         require(validatorSpawner[_user].registered, "Not registered");
         require(roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender), "Incorrect Caller");
-        
+
         delete validatorSpawner[_user];
 
         emit ValidatorSpawnerUnregistered(_user);
@@ -410,6 +410,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
     }
+
     /// @notice pay protocol fees including 5% to treaury, 5% to node operator and ethfund bnft holders
     /// @param _protocolFees The amount of protocol fees to pay in ether
     function payProtocolFees(uint128 _protocolFees) external {
@@ -437,7 +438,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function pauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         if (paused) revert("Pausable: already paused");
-        
+
         paused = true;
         emit Paused(msg.sender);
     }
