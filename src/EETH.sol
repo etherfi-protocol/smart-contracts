@@ -35,7 +35,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     bytes32 private immutable _HASHED_VERSION;
     bytes32 private immutable _TYPE_HASH;
 
-    IRoleRegistry public roleRegistry;
+    IRoleRegistry public immutable roleRegistry;
 
     bytes32 public constant EETH_OPERATING_ADMIN_ROLE = keccak256("EETH_OPERATING_ADMIN_ROLE");
 
@@ -44,7 +44,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     error IncorrectRole();
 
     // TODO: Figure our what `name` and `version` are for
-    constructor() { 
+    constructor(address _roleRegistry) {
         bytes32 hashedName = keccak256("EETH");
         bytes32 hashedVersion = keccak256("1");
         bytes32 typeHash = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -55,6 +55,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         _CACHED_THIS = address(this);
         _TYPE_HASH = typeHash;
 
+        require(_roleRegistry != address(0), "must set role registry");
+        roleRegistry = IRoleRegistry(_roleRegistry);
+
         _disableInitializers(); 
     }
 
@@ -64,11 +67,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         __UUPSUpgradeable_init();
         __Ownable_init();
         liquidityPool = ILiquidityPool(_liquidityPool);
-    }
-
-    function initializeRoleRegistry(address _roleRegistry) external onlyOwner {
-        require(address(roleRegistry) == address(0x00), "already initialized");
-        roleRegistry = IRoleRegistry(_roleRegistry);
     }
 
     function mintShares(address _user, uint256 _share) external onlyPoolContract {
