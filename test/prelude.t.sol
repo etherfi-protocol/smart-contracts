@@ -683,8 +683,16 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // need to deal it some additional eth not already accounted for in its
         // beacon shares or else it will revert since there is no point in checkpointing
-        vm.deal(val.eigenPod, 1 ether);
+        // need to deposit 33 eth because the amount since previous checkpoint(restakedExecutionLayerGwei) is 32
+        vm.deal(val.eigenPod, 33 ether);
 
+        //Need to store activeValidatorCount > 0 so that proofsSubmitted isn't 0
+        //If it is 0 then currentCheckpointTimestamp is reset to 0 as no proofs are needed.
+        vm.store(
+            val.eigenPod,
+            bytes32(uint256(57)) /*slot*/,
+            bytes32(uint256(1))
+        );
         // initiate a checkpoint
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.startCheckpoint(uint256(val.pubkeyHash));
@@ -786,4 +794,3 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
 }
-
