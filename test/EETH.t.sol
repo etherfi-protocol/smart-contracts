@@ -15,7 +15,6 @@ contract EETHTest is TestSetup {
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
-    event ETHRecovered(address indexed to, uint256 amount);
 
     function setUp() public {
        
