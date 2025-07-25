@@ -556,9 +556,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
-        
-        
-
 
 
         liquifierImplementation = new Liquifier();
