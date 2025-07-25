@@ -55,14 +55,14 @@ contract EETHTest is TestSetup {
         assertEq(eETHInstance.shares(alice), 75);
         assertEq(eETHInstance.totalShares(), 75);
 
-        vm.prank(alice);
+        vm.prank(address(liquidityPoolInstance));
         eETHInstance.burnShares(alice, 25);
 
         assertEq(eETHInstance.shares(alice), 50);
         assertEq(eETHInstance.totalShares(), 50);
 
         vm.expectRevert("BURN_AMOUNT_EXCEEDS_BALANCE");
-        vm.prank(alice);
+        vm.prank(address(liquidityPoolInstance));
         eETHInstance.burnShares(alice, 100);
 
         vm.expectRevert("Incorrect Caller");
