@@ -556,6 +556,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
+        
+        
+
 
 
         liquifierImplementation = new Liquifier();
@@ -585,6 +588,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.expectRevert("No zero addresses");
         weEthInstance.initialize(payable(address(liquidityPoolInstance)), address(0));
         weEthInstance.initialize(payable(address(liquidityPoolInstance)), address(eETHInstance));
+
+        roleRegistryInstance.grantRole(eETHInstance.EETH_OPERATING_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(weEthInstance.WEETH_OPERATING_ADMIN_ROLE(), admin);
+
         vm.stopPrank();
 
         vm.prank(alice);
