@@ -64,6 +64,10 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(stakingManager.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
+        LiquidityPool liquidityPoolImpl = new LiquidityPool();
+        vm.prank(LiquidityPool(payable(address(liquidityPool))).owner());
+        LiquidityPool(payable(address(liquidityPool))).upgradeTo(address(liquidityPoolImpl));
+
         // upgrade etherFiNode impl
         etherFiNodeImpl = new EtherFiNode(
             address(liquidityPool),
@@ -93,6 +97,8 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), callForwarder);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
+        roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), admin);
+        roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
         vm.stopPrank();
 
         defaultTestValidatorParams = TestValidatorParams({
@@ -263,6 +269,29 @@ contract PreludeTest is Test, ArrayTestHelper {
         }
         vm.stopPrank();
         TestValidator memory val5 = helper_createValidator(params);
+    }
+
+    // After the v3-prelude upgrade is complete and any leftover validators in this state
+    // have been approved, we can delete this test as this state can't happen anymore
+    function test_approveExisting1EthBid() public {
+
+        uint256 bidId = 114850;
+        bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
+        bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
+
+        // need to link because this validator is already past this step from the old flow
+        vm.prank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(bidId), toArray_bytes(pubkey));
+
+        vm.prank(admin);
+        liquidityPool.setValidatorSizeWei(33 ether);
+
+        vm.prank(admin);
+        liquidityPool.batchApproveRegistration(
+            toArray_u256(bidId),
+            toArray_bytes(pubkey),
+            toArray_bytes(signature)
+        );
     }
 
     function test_forwardingWhitelist() public {
