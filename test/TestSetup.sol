@@ -585,6 +585,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.expectRevert("No zero addresses");
         weEthInstance.initialize(payable(address(liquidityPoolInstance)), address(0));
         weEthInstance.initialize(payable(address(liquidityPoolInstance)), address(eETHInstance));
+
+        roleRegistryInstance.grantRole(eETHInstance.EETH_OPERATING_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(weEthInstance.WEETH_OPERATING_ADMIN_ROLE(), admin);
+
         vm.stopPrank();
 
         vm.prank(alice);
