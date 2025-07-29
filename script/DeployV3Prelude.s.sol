@@ -51,7 +51,6 @@ contract DeployScript is Script {
         // 2. constructor args
         // 3. bytecode
         // 4. commithash_salt
-        // 5. (if verification is desired) deployed address
         // -------------------------------------------------------------------------
 
         // EtherFiNode

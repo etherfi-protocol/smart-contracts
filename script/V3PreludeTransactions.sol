@@ -13,14 +13,63 @@ import "../src/EtherFiAdmin.sol";
 import "../src/EETH.sol";
 import "../src/WeETH.sol";
 import "../src/RoleRegistry.sol";
+import "../lib/openzeppelin-contracts/contracts/access/IAccessControl.sol";
 import "forge-std/console2.sol";
 
-contract V3PreludeTransactions is Script, TestSetup {
-    
-    uint256 constant BLOCK_BEFORE_UPGRADE = 22977373;
-    address constant STAKER1 = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
-    address constant ETHERFI_NODE_BEACON = 0x3c55986Cfee455E2533F4D29006634EcF9B7c03F;
+contract V3PreludeTransactions is Script {
 
+    uint256 constant BLOCK_BEFORE_UPGRADE = 22977373;
+
+    EtherFiTimelock etherFiTimelock = EtherFiTimelock(payable(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761));
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------- New Deployments -----------------------------------------
+    //--------------------------------------------------------------------------------------
+    // TODO: update after prod deploy
+    // currenttly is deployments on https://virtual.mainnet.eu.rpc.tenderly.co/0d158367-3563-4395-a24f-96c478e76f49
+
+    address constant stakingManagerImpl = 0xb991a11310227b7B0D56a08FF1e17fbf55Aa85f4;
+    address constant etherFiNodeImpl = 0xcAd2475effd731244dE2692c204b1eC08F8bD77C;
+    address constant etherFiNodesManagerImpl = 0x0f607dF2a145a37A2622e7539fC89821ad28c593;
+    address constant liquidityPoolImpl = 0x2777Fea1e8E1EfcAa27E63a828Da02b573b71867;
+    address constant weETHImpl = 0xdf59da0C9509591FDF23869Ca8c0A561FB942ae3;
+    address constant eETHImpl = 0xAb948dD6bb77728f75724651999067Cde6626825;
+    address constant etherFiOracleImpl = 0xbEb3c9af86dB8D2425d69933F5eECB93Dcf486BC;
+    address constant etherFiAdminImpl = 0x4849C3DfEfC4709365165E9098703eE08c299678;
+
+    //--------------------------------------------------------------------------------------
+    //------------------------- Existing Users/Proxies -------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    address constant etherFiNodesManager = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
+    address constant stakingManager = 0x25e821b7197B146F7713C3b89B6A4D83516B912d;
+    address constant eETH = 0x35fA164735182de50811E8e2E824cFb9B6118ac2;
+    address constant weETH = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
+    address constant etherFiOracle = 0x57AaF0004C716388B21795431CD7D5f9D3Bb6a41;
+    address constant liquidityPool = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
+    address constant proofSubmitter = 0x7835fB36A8143a014A2c381363cD1A4DeE586d2A;
+    address constant operatingTimelock = 0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a;
+    address constant etherFiAdminExecuter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
+    address constant etherFiAdmin = 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705;
+    address constant roleRegistry = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  ROLES  ----------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    //bytes32 ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE = EtherFiNode(payable(etherFiNodeImpl)).ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE();
+    //bytes32 ETHERFI_NODE_CALL_FORWARDER_ROLE = EtherFiNode(payable(etherFiNodeImpl)).ETHERFI_NODE_CALL_FORWARDER_ROLE();
+    //bytes32 STAKING_MANAGER_NODE_CREATOR_ROLE = StakingManager(payable(stakingManagerImpl)).STAKING_MANAGER_NODE_CREATOR_ROLE();
+    //bytes32 ETHERFI_NODES_MANAGER_ADMIN_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_ADMIN_ROLE();
+    //bytes32 ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE();
+    //bytes32 ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE();
+    //bytes32 LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE = LiquidityPool(payable(liquidityPoolImpl)).LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE();
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------- Previous Implementations  ---------------------------
+    //--------------------------------------------------------------------------------------
+
+    address constant etherFiNodeBeacon = 0x3c55986Cfee455E2533F4D29006634EcF9B7c03F;
     address LiquidityPoolImplBefore;
     address StakingManagerImplBefore;
     address EtherFiNodesManagerImplBefore;
@@ -32,7 +81,8 @@ contract V3PreludeTransactions is Script, TestSetup {
 
     function run() public {
         // Get the state of the contracts before the upgrade
-        initializeRealisticForkWithBlock(MAINNET_FORK, BLOCK_BEFORE_UPGRADE);
+//        initializeRealisticForkWithBlock(MAINNET_FORK, BLOCK_BEFORE_UPGRADE);
+/*
         LiquidityPoolImplBefore = addressProviderInstance.getImplementationAddress("LiquidityPool");
         StakingManagerImplBefore = addressProviderInstance.getImplementationAddress("StakingManager");
         EtherFiNodesManagerImplBefore = addressProviderInstance.getImplementationAddress("EtherFiNodesManager");
@@ -40,132 +90,103 @@ contract V3PreludeTransactions is Script, TestSetup {
         EtherFiAdminImplBefore = addressProviderInstance.getImplementationAddress("EtherFiAdmin");
         EETHImplBefore = addressProviderInstance.getImplementationAddress("EETH");
         WeETHImplBefore = addressProviderInstance.getImplementationAddress("WeETH");
-        EtherFiNodeImplBefore = UpgradeableBeacon(ETHERFI_NODE_BEACON).implementation();
+        EtherFiNodeImplBefore = UpgradeableBeacon(etherFiNodeBeacon).implementation();
+        */
+        address testnetOwner = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
+        bytes32 proposerRole = 0xb09aa5aeb3702cfd50b6b62bc4532604938f21248a27a1d5ca736082b6819cc1;
+        bytes32 executorRole = 0xd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e63;
 
-        //create transactions to upgrade
-        initializeRealisticFork(MAINNET_FORK);
-        console2.log("Role Registry Address:", address(roleRegistryInstance));
+        bytes memory testData1 = abi.encodeWithSelector(IAccessControl(address(etherFiTimelock)).grantRole.selector, proposerRole, testnetOwner);
+        bytes memory testData2 = abi.encodeWithSelector(IAccessControl(address(etherFiTimelock)).grantRole.selector, executorRole, testnetOwner);
+        console2.logBytes(testData1);
+        console2.logBytes(testData2);
+        return;
 
+        /*
         _executeUpgrade();
         
         console2.log("Upgrade complete - proceeding with rollback test");
         
-        _executeRollback();
+        //_executeRollback();
         
         console2.log("Rollback complete - test finished successfully");
+        */
     }
 
     function _executeUpgrade() internal {
-        address[] memory targets = new address[](17);
-        bytes[] memory data = new bytes[](17);
-        uint256[] memory values = new uint256[](17); // Default to 0
+        address[] memory targets = new address[](24);
+        bytes[] memory data = new bytes[](24);
+        uint256[] memory values = new uint256[](24); // Default to 0
 
-        _configureUpgradeTransactions(targets, data);
-        
-        _batch_execute_timelock(targets, data, values, true, true, true, true);
-    }
+        //--------------------------------------------------------------------------------------
+        //---------------------------------- Grant Roles ---------------------------------------
+        //--------------------------------------------------------------------------------------
 
-    /////////////////////// FIX: Update with Deployed Contracts not newly constructed contracts ///////////////////////
-    /////////////////////// FIX: Update Role Granting to use the correct roles ///////////////////////
-    function _configureUpgradeTransactions(
-        address[] memory targets, 
-        bytes[] memory data
-    ) internal {
+        /*
+        // etherFiNode
+        data[0] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, address(etherFiNodesManager));
+        data[1] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, address(stakingManager));
+        data[2] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, proofSubmitter);
+        data[3] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, operatingTimelock);
+        data[4] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, etherFiAdminExecuter);
+        data[5] = _encodeRoleGrant(ETHERFI_NODE_CALL_FORWARDER_ROLE, address(etherFiNodesManager));
+        data[6] = _encodeRoleGrant(ETHERFI_NODE_CALL_FORWARDER_ROLE, proofSubmitter);
+        data[7] = _encodeRoleGrant(ETHERFI_NODE_CALL_FORWARDER_ROLE, operatingTimelock);
 
-        address stakingManagerImpl = address(new StakingManager(
-            address(liquidityPoolInstance),
-            address(managerInstance),
-            address(depositContractEth2),
-            address(auctionInstance),
-            ETHERFI_NODE_BEACON,
-            address(roleRegistryInstance)
-        ));
+        // staking manager
+        data[8] = _encodeRoleGrant(STAKING_MANAGER_NODE_CREATOR_ROLE, operatingTimelock);
+        data[9] = _encodeRoleGrant(STAKING_MANAGER_NODE_CREATOR_ROLE, etherFiAdminExecuter);
 
-        address etherFiNodeImpl = address(new EtherFiNode(
-            address(liquidityPoolInstance),
-            address(managerInstance),
-            address(eigenLayerEigenPodManager),
-            address(eigenLayerDelegationManager),
-            address(roleRegistryInstance)
-        ));
+        // etherFiNodesManager
+        data[10] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_ADMIN_ROLE, operatingTimelock);
+        data[11] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE, operatingTimelock);
+        data[12] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE, proofSubmitter);
+        data[13] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE, operatingTimelock);
+        data[14] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE, proofSubmitter);
 
-        address etherFiNodesManagerImpl = address(new EtherFiNodesManager(
-            address(stakingManagerInstance),
-            address(roleRegistryInstance)
-        ));
+        // liquidityPool
+        data[15] = _encodeRoleGrant(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, etherFiAdmin);
 
-        address liquidityPoolImpl = address(new LiquidityPool());
-        address weETHImpl = address(new WeETH(address(roleRegistryInstance)));
-        address eETHImpl = address(new EETH(address(roleRegistryInstance)));
-        address etherFiOracleImpl = address(new EtherFiOracle());
-        address etherFiAdminImpl = address(new EtherFiAdmin());
-
-        // Configure role registry targets (0-8)
-        for (uint256 i = 0; i < 9; i++) {
-            targets[i] = address(roleRegistryInstance);
+        // all role grants have same target
+        for (uint256 i = 0; i <= 15; i++) {
+            targets[i] = address(roleRegistry);
         }
+        */
 
-        data[0] = _encodeRoleGrant(
-            EtherFiNode(payable(etherFiNodeImpl)).ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE(),
-            address(managerInstance)
-        );
-        data[1] = _encodeRoleGrant(
-            EtherFiNode(payable(etherFiNodeImpl)).ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE(),
-            address(stakingManagerInstance)
-        );
-        data[2] = _encodeRoleGrant(
-            EtherFiNode(payable(etherFiNodeImpl)).ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE(),
-            STAKER1
-        );
-        data[3] = _encodeRoleGrant(
-            EtherFiNodesManager(etherFiNodesManagerImpl).ETHERFI_NODES_MANAGER_ADMIN_ROLE(),
-            STAKER1
-        );
-        data[4] = _encodeRoleGrant(
-            EtherFiNodesManager(etherFiNodesManagerImpl).ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(),
-            STAKER1
-        );
-        data[5] = _encodeRoleGrant(
-            EtherFiNodesManager(etherFiNodesManagerImpl).ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(),
-            STAKER1
-        );
-        data[6] = _encodeRoleGrant(
-            StakingManager(stakingManagerImpl).STAKING_MANAGER_NODE_CREATOR_ROLE(),
-            STAKER1
-        );
-        data[7] = _encodeRoleGrant(
-            LiquidityPool(payable(liquidityPoolImpl)).LIQUIDITY_POOL_ADMIN_ROLE(),
-            STAKER1
-        );
-        data[8] = _encodeRoleGrant(
-            LiquidityPool(payable(liquidityPoolImpl)).LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(),
-            STAKER1
-        );
+        //--------------------------------------------------------------------------------------
+        //------------------------------- CONTRACT UPGRADES  -----------------------------------
+        //--------------------------------------------------------------------------------------
 
-        targets[9] = address(eETHInstance);
-        data[9] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, eETHImpl);
+        targets[16] = address(eETH);
+        data[16] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, eETHImpl);
 
-        targets[10] = address(etherFiAdminInstance);
-        data[10] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiAdminImpl);
+        targets[17] = address(etherFiAdmin);
+        data[17] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiAdminImpl);
 
-        targets[11] = address(stakingManagerInstance);
-        data[11] = abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, etherFiNodeImpl);
+        targets[18] = address(stakingManager);
+        data[18] = abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, etherFiNodeImpl);
 
-        targets[12] = address(managerInstance);
-        data[12] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiNodesManagerImpl);
+        targets[19] = address(etherFiNodesManager);
+        data[19] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiNodesManagerImpl);
 
-        targets[13] = address(etherFiOracleInstance);
-        data[13] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiOracleImpl);
+        targets[20] = address(etherFiOracle);
+        data[20] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiOracleImpl);
 
-        targets[14] = address(liquidityPoolInstance);
-        data[14] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, liquidityPoolImpl);
+        targets[21] = address(liquidityPool);
+        data[21] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, liquidityPoolImpl);
 
-        targets[15] = address(stakingManagerInstance);
-        data[15] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, stakingManagerImpl);
+        targets[22] = address(stakingManager);
+        data[22] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, stakingManagerImpl);
 
-        targets[16] = address(weEthInstance);
-        data[16] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, weETHImpl);
+        targets[23] = address(weETH);
+        data[23] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, weETHImpl);
+
+        bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0)/*=predecessor*/, timelockSalt, 259200/*=minDelay*/);
+
+        //_batch_execute_timelock(targets, data, values, true, true, true, true);
     }
+
 
     function _executeRollback() internal {
         
@@ -173,31 +194,31 @@ contract V3PreludeTransactions is Script, TestSetup {
         bytes[] memory data = new bytes[](8);
         uint256[] memory values = new uint256[](8); // Default to 0
 
-        targets[0] = address(etherFiAdminInstance);
+        targets[0] = address(etherFiAdmin);
         data[0] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, EtherFiAdminImplBefore);
 
-        targets[1] = address(eETHInstance);
+        targets[1] = address(eETH);
         data[1] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector,EETHImplBefore);
 
-        targets[2] = address(stakingManagerInstance);
+        targets[2] = address(stakingManager);
         data[2] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector,StakingManagerImplBefore);
 
-        targets[3] = address(managerInstance);
+        targets[3] = address(etherFiNodesManager);
         data[3] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector,EtherFiNodesManagerImplBefore);
 
-        targets[4] = address(etherFiOracleInstance);
+        targets[4] = address(etherFiOracle);
         data[4] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector,EtherFiOracleImplBefore);
 
-        targets[5] = address(liquidityPoolInstance);
+        targets[5] = address(liquidityPool);
         data[5] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector,LiquidityPoolImplBefore);
 
-        targets[6] = address(stakingManagerInstance);
+        targets[6] = address(stakingManager);
         data[6] = abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, EtherFiNodeImplBefore);
 
-        targets[7] = address(weEthInstance);
+        targets[7] = address(weETH);
         data[7] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector,WeETHImplBefore);
     
-        _batch_execute_timelock(targets, data, values, true, true, true, true);
+        //_batch_execute_timelock(targets, data, values, true, true, true, true);
     }
 
     function _encodeRoleGrant(bytes32 role, address account) internal pure returns (bytes memory) {
