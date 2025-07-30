@@ -81,9 +81,9 @@ contract V3PreludeTransactions is Script {
     }
 
     function executeUpgrade() internal {
-        address[] memory targets = new address[](24);
-        bytes[] memory data = new bytes[](24);
-        uint256[] memory values = new uint256[](24); // Default to 0
+        address[] memory targets = new address[](23);
+        bytes[] memory data = new bytes[](23);
+        uint256[] memory values = new uint256[](23); // Default to 0
 
         //--------------------------------------------------------------------------------------
         //---------------------------------- Grant Roles ---------------------------------------
@@ -92,29 +92,28 @@ contract V3PreludeTransactions is Script {
         // etherFiNode
         data[0] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, address(etherFiNodesManager));
         data[1] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, address(stakingManager));
-        data[2] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, proofSubmitter);
-        data[3] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, operatingTimelock);
-        data[4] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, etherFiAdminExecuter);
-        data[5] = _encodeRoleGrant(ETHERFI_NODE_CALL_FORWARDER_ROLE, address(etherFiNodesManager));
-        data[6] = _encodeRoleGrant(ETHERFI_NODE_CALL_FORWARDER_ROLE, proofSubmitter);
-        data[7] = _encodeRoleGrant(ETHERFI_NODE_CALL_FORWARDER_ROLE, operatingTimelock);
+        data[2] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, operatingTimelock);
+        data[3] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, etherFiAdminExecuter);
+        data[4] = _encodeRoleGrant(ETHERFI_NODE_CALL_FORWARDER_ROLE, address(etherFiNodesManager));
+        data[5] = _encodeRoleGrant(ETHERFI_NODE_CALL_FORWARDER_ROLE, proofSubmitter);
+        data[6] = _encodeRoleGrant(ETHERFI_NODE_CALL_FORWARDER_ROLE, operatingTimelock);
 
         // staking manager
-        data[8] = _encodeRoleGrant(STAKING_MANAGER_NODE_CREATOR_ROLE, operatingTimelock);
-        data[9] = _encodeRoleGrant(STAKING_MANAGER_NODE_CREATOR_ROLE, etherFiAdminExecuter);
+        data[7] = _encodeRoleGrant(STAKING_MANAGER_NODE_CREATOR_ROLE, operatingTimelock);
+        data[8] = _encodeRoleGrant(STAKING_MANAGER_NODE_CREATOR_ROLE, etherFiAdminExecuter);
 
         // etherFiNodesManager
-        data[10] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_ADMIN_ROLE, operatingTimelock);
-        data[11] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE, operatingTimelock);
-        data[12] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE, proofSubmitter);
-        data[13] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE, operatingTimelock);
-        data[14] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE, proofSubmitter);
+        data[9] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_ADMIN_ROLE, operatingTimelock);
+        data[10] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE, operatingTimelock);
+        data[11] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE, proofSubmitter);
+        data[12] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE, operatingTimelock);
+        data[13] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE, etherFiAdminExecuter);
 
         // liquidityPool
-        data[15] = _encodeRoleGrant(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, etherFiAdmin);
+        data[14] = _encodeRoleGrant(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, etherFiAdmin);
 
         // all role grants have same target
-        for (uint256 i = 0; i <= 15; i++) {
+        for (uint256 i = 0; i <= 14; i++) {
             targets[i] = address(roleRegistry);
         }
 
@@ -122,29 +121,29 @@ contract V3PreludeTransactions is Script {
         //------------------------------- CONTRACT UPGRADES  -----------------------------------
         //--------------------------------------------------------------------------------------
 
-        targets[16] = address(eETH);
-        data[16] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, eETHImpl);
+        targets[15] = address(eETH);
+        data[15] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, eETHImpl);
 
-        targets[17] = address(etherFiAdmin);
-        data[17] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiAdminImpl);
+        targets[16] = address(etherFiAdmin);
+        data[16] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiAdminImpl);
 
-        targets[18] = address(stakingManager);
-        data[18] = abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, etherFiNodeImpl);
+        targets[17] = address(stakingManager);
+        data[17] = abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, etherFiNodeImpl);
 
-        targets[19] = address(etherFiNodesManager);
-        data[19] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiNodesManagerImpl);
+        targets[18] = address(etherFiNodesManager);
+        data[18] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiNodesManagerImpl);
 
-        targets[20] = address(etherFiOracle);
-        data[20] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiOracleImpl);
+        targets[19] = address(etherFiOracle);
+        data[19] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiOracleImpl);
 
-        targets[21] = address(liquidityPool);
-        data[21] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, liquidityPoolImpl);
+        targets[20] = address(liquidityPool);
+        data[20] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, liquidityPoolImpl);
 
-        targets[22] = address(stakingManager);
-        data[22] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, stakingManagerImpl);
+        targets[21] = address(stakingManager);
+        data[21] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, stakingManagerImpl);
 
-        targets[23] = address(weETH);
-        data[23] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, weETHImpl);
+        targets[22] = address(weETH);
+        data[22] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, weETHImpl);
 
         // schedule
         bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
