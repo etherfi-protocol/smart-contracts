@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "../test/TestSetup.sol";
@@ -18,29 +18,35 @@ import "forge-std/console2.sol";
 
 contract V3PreludeTransactions is Script {
 
-    uint256 constant BLOCK_BEFORE_UPGRADE = 22977373;
-
     EtherFiTimelock etherFiTimelock = EtherFiTimelock(payable(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761));
+
+    //--------------------------------------------------------------------------------------
+    //--------------------- Previous Implementations ---------------------------------------
+    //--------------------------------------------------------------------------------------
+    address constant oldLiquidityPoolImpl = 0xA6099d83A67a2c653feB5e4e48ec24C5aeE1C515;
+    address constant oldStakingManagerImpl = 0xB27d4e7b8fF1EF21751b50F3821D99719Ad5868f;
+    address constant oldEtherFiNodeImpl = 0xc5F2764383f93259Fba1D820b894B1DE0d47937e;
+    address constant oldEtherFiNodesManagerImpl = 0xE9EE6923D41Cf5F964F11065436BD90D4577B5e4;
+    address constant oldEtherFiOracleImpl = 0x99BE559FAdf311D2CEdeA6265F4d36dfa4377B70;
+    address constant oldEtherFiAdminImpl = 0x683583979C8be7Bcfa41E788Ab38857dfF792f49;
+    address constant oldEETHImpl = 0x46c51d2E6d5FEF0400d26320bC96995176c369DD;
+    address constant oldWeETHImpl = 0x353E98F34b6E5a8D9d1876Bf6dF01284d05837cB;
 
     //--------------------------------------------------------------------------------------
     //---------------------------- New Deployments -----------------------------------------
     //--------------------------------------------------------------------------------------
-    // TODO: update after prod deploy
-    // currenttly is deployments on https://virtual.mainnet.eu.rpc.tenderly.co/0d158367-3563-4395-a24f-96c478e76f49
-
-    address constant stakingManagerImpl = 0xb991a11310227b7B0D56a08FF1e17fbf55Aa85f4;
-    address constant etherFiNodeImpl = 0xcAd2475effd731244dE2692c204b1eC08F8bD77C;
-    address constant etherFiNodesManagerImpl = 0x0f607dF2a145a37A2622e7539fC89821ad28c593;
-    address constant liquidityPoolImpl = 0x2777Fea1e8E1EfcAa27E63a828Da02b573b71867;
-    address constant weETHImpl = 0xdf59da0C9509591FDF23869Ca8c0A561FB942ae3;
-    address constant eETHImpl = 0xAb948dD6bb77728f75724651999067Cde6626825;
-    address constant etherFiOracleImpl = 0xbEb3c9af86dB8D2425d69933F5eECB93Dcf486BC;
-    address constant etherFiAdminImpl = 0x4849C3DfEfC4709365165E9098703eE08c299678;
+    address constant liquidityPoolImpl = 0x025911766aEF6fF0C294FD831a2b5c17dC299B3f;
+    address constant stakingManagerImpl = 0x433d06fFc5EfE0e93daa22fcEF7eD60e65Bf70b4;
+    address constant etherFiNodeImpl = 0x5Dae50e686f7CB980E4d0c5E4492c56bC73eD9a2;
+    address constant etherFiNodesManagerImpl = 0x158B21148E86470E2075926EbD5528Af2D510cAF;
+    address constant etherFiOracleImpl = 0x5eefE6f65a280A6f1Eb1FdFf36Ab9e2af6f38462;
+    address constant etherFiAdminImpl = 0xd50f28485A75A1FdE432BA7d012d0E2543D2f20d;
+    address constant weETHImpl = 0x2d10683E941275D502173053927AD6066e6aFd6B;
+    address constant eETHImpl = 0xCB3D917A965A70214f430a135154Cd5ADdA2ad84;
 
     //--------------------------------------------------------------------------------------
     //------------------------- Existing Users/Proxies -------------------------------------
     //--------------------------------------------------------------------------------------
-
     address constant etherFiNodesManager = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
     address constant stakingManager = 0x25e821b7197B146F7713C3b89B6A4D83516B912d;
     address constant eETH = 0x35fA164735182de50811E8e2E824cFb9B6118ac2;
@@ -56,64 +62,25 @@ contract V3PreludeTransactions is Script {
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ----------------------------------------
     //--------------------------------------------------------------------------------------
-
-    //bytes32 ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE = EtherFiNode(payable(etherFiNodeImpl)).ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE();
-    //bytes32 ETHERFI_NODE_CALL_FORWARDER_ROLE = EtherFiNode(payable(etherFiNodeImpl)).ETHERFI_NODE_CALL_FORWARDER_ROLE();
-    //bytes32 STAKING_MANAGER_NODE_CREATOR_ROLE = StakingManager(payable(stakingManagerImpl)).STAKING_MANAGER_NODE_CREATOR_ROLE();
-    //bytes32 ETHERFI_NODES_MANAGER_ADMIN_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_ADMIN_ROLE();
-    //bytes32 ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE();
-    //bytes32 ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE();
-    //bytes32 LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE = LiquidityPool(payable(liquidityPoolImpl)).LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE();
-
-    //--------------------------------------------------------------------------------------
-    //-------------------------------- Previous Implementations  ---------------------------
-    //--------------------------------------------------------------------------------------
-
-    address constant etherFiNodeBeacon = 0x3c55986Cfee455E2533F4D29006634EcF9B7c03F;
-    address LiquidityPoolImplBefore;
-    address StakingManagerImplBefore;
-    address EtherFiNodesManagerImplBefore;
-    address EtherFiOracleImplBefore;
-    address EtherFiAdminImplBefore;
-    address EETHImplBefore;
-    address WeETHImplBefore;
-    address EtherFiNodeImplBefore;
+    bytes32 ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE = EtherFiNode(payable(etherFiNodeImpl)).ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE();
+    bytes32 ETHERFI_NODE_CALL_FORWARDER_ROLE = EtherFiNode(payable(etherFiNodeImpl)).ETHERFI_NODE_CALL_FORWARDER_ROLE();
+    bytes32 STAKING_MANAGER_NODE_CREATOR_ROLE = StakingManager(payable(stakingManagerImpl)).STAKING_MANAGER_NODE_CREATOR_ROLE();
+    bytes32 ETHERFI_NODES_MANAGER_ADMIN_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_ADMIN_ROLE();
+    bytes32 ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE();
+    bytes32 ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE();
+    bytes32 LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE = LiquidityPool(payable(liquidityPoolImpl)).LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE();
 
     function run() public {
-        // Get the state of the contracts before the upgrade
-//        initializeRealisticForkWithBlock(MAINNET_FORK, BLOCK_BEFORE_UPGRADE);
-/*
-        LiquidityPoolImplBefore = addressProviderInstance.getImplementationAddress("LiquidityPool");
-        StakingManagerImplBefore = addressProviderInstance.getImplementationAddress("StakingManager");
-        EtherFiNodesManagerImplBefore = addressProviderInstance.getImplementationAddress("EtherFiNodesManager");
-        EtherFiOracleImplBefore = addressProviderInstance.getImplementationAddress("EtherFiOracle");
-        EtherFiAdminImplBefore = addressProviderInstance.getImplementationAddress("EtherFiAdmin");
-        EETHImplBefore = addressProviderInstance.getImplementationAddress("EETH");
-        WeETHImplBefore = addressProviderInstance.getImplementationAddress("WeETH");
-        EtherFiNodeImplBefore = UpgradeableBeacon(etherFiNodeBeacon).implementation();
-        */
-        address testnetOwner = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
-        bytes32 proposerRole = 0xb09aa5aeb3702cfd50b6b62bc4532604938f21248a27a1d5ca736082b6819cc1;
-        bytes32 executorRole = 0xd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e63;
 
-        bytes memory testData1 = abi.encodeWithSelector(IAccessControl(address(etherFiTimelock)).grantRole.selector, proposerRole, testnetOwner);
-        bytes memory testData2 = abi.encodeWithSelector(IAccessControl(address(etherFiTimelock)).grantRole.selector, executorRole, testnetOwner);
-        console2.logBytes(testData1);
-        console2.logBytes(testData2);
-        return;
+        vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
 
-        /*
-        _executeUpgrade();
-        
-        console2.log("Upgrade complete - proceeding with rollback test");
-        
-        //_executeRollback();
-        
-        console2.log("Rollback complete - test finished successfully");
-        */
+        executeUpgrade();
+        executeRollback();
+
+        vm.stopBroadcast();
     }
 
-    function _executeUpgrade() internal {
+    function executeUpgrade() internal {
         address[] memory targets = new address[](24);
         bytes[] memory data = new bytes[](24);
         uint256[] memory values = new uint256[](24); // Default to 0
@@ -122,7 +89,6 @@ contract V3PreludeTransactions is Script {
         //---------------------------------- Grant Roles ---------------------------------------
         //--------------------------------------------------------------------------------------
 
-        /*
         // etherFiNode
         data[0] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, address(etherFiNodesManager));
         data[1] = _encodeRoleGrant(ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE, address(stakingManager));
@@ -151,7 +117,6 @@ contract V3PreludeTransactions is Script {
         for (uint256 i = 0; i <= 15; i++) {
             targets[i] = address(roleRegistry);
         }
-        */
 
         //--------------------------------------------------------------------------------------
         //------------------------------- CONTRACT UPGRADES  -----------------------------------
@@ -181,44 +146,102 @@ contract V3PreludeTransactions is Script {
         targets[23] = address(weETH);
         data[23] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, weETHImpl);
 
+        // schedule
         bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
-        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0)/*=predecessor*/, timelockSalt, 259200/*=minDelay*/);
+        bytes memory scheduleCalldata = abi.encodeWithSelector(
+            etherFiTimelock.scheduleBatch.selector,
+            values,
+            data,
+            bytes32(0)/*=predecessor*/,
+            timelockSalt,
+            259200/*=minDelay*/
+        );
 
-        //_batch_execute_timelock(targets, data, values, true, true, true, true);
+        console2.log("Schedule Tx:");
+        console2.logBytes(scheduleCalldata);
+
+        // execute
+        bytes memory executeCalldata = abi.encodeWithSelector(
+            etherFiTimelock.executeBatch.selector,
+            values,
+            data,
+            bytes32(0)/*=predecessor*/,
+            timelockSalt
+        );
+
+        console2.log("Execute Tx:");
+        console2.logBytes(executeCalldata);
+
+        // uncomment to run against fork
+        //etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0)/*=predecessor*/, timelockSalt, 259200/*=minDelay*/);
+
+        //bytes32 timelockSalt = TODO set as salt from schedule;
+        //etherFiTimelock.executeBatch(targets, values, data, bytes32(0)/*=predecessor*/, timelockSalt);
     }
 
 
-    function _executeRollback() internal {
-        
+    function executeRollback() internal {
+
         address[] memory targets = new address[](8);
         bytes[] memory data = new bytes[](8);
         uint256[] memory values = new uint256[](8); // Default to 0
 
         targets[0] = address(etherFiAdmin);
-        data[0] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, EtherFiAdminImplBefore);
+        data[0] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, oldEtherFiAdminImpl);
 
         targets[1] = address(eETH);
-        data[1] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector,EETHImplBefore);
+        data[1] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, oldEETHImpl);
 
         targets[2] = address(stakingManager);
-        data[2] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector,StakingManagerImplBefore);
+        data[2] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, oldStakingManagerImpl);
 
         targets[3] = address(etherFiNodesManager);
-        data[3] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector,EtherFiNodesManagerImplBefore);
+        data[3] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, oldEtherFiNodesManagerImpl);
 
         targets[4] = address(etherFiOracle);
-        data[4] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector,EtherFiOracleImplBefore);
+        data[4] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, oldEtherFiOracleImpl);
 
         targets[5] = address(liquidityPool);
-        data[5] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector,LiquidityPoolImplBefore);
+        data[5] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, oldLiquidityPoolImpl);
 
         targets[6] = address(stakingManager);
-        data[6] = abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, EtherFiNodeImplBefore);
+        data[6] = abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, oldEtherFiNodeImpl);
 
         targets[7] = address(weETH);
-        data[7] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector,WeETHImplBefore);
-    
-        //_batch_execute_timelock(targets, data, values, true, true, true, true);
+        data[7] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, oldWeETHImpl);
+
+        // schedule
+        bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
+        //bytes32 timelockSalt = 0xdf0ec353ec9a0cec6fd24a849783aea0fd395b5b0f4efb968986485ba6d4f6ff;
+        bytes memory scheduleCalldata = abi.encodeWithSelector(
+            etherFiTimelock.scheduleBatch.selector,
+            values,
+            data,
+            bytes32(0)/*=predecessor*/,
+            timelockSalt,
+            259200/*=minDelay*/
+        );
+
+        console2.log("Rollback Schedule Tx:");
+        console2.logBytes(scheduleCalldata);
+
+        // execute
+        bytes memory executeCalldata = abi.encodeWithSelector(
+            etherFiTimelock.executeBatch.selector,
+            values,
+            data,
+            bytes32(0)/*=predecessor*/,
+            timelockSalt
+        );
+
+        console2.log("Rollback Execute Tx:");
+        console2.logBytes(executeCalldata);
+
+        // uncomment to run against fork
+        //etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0)/*=predecessor*/, timelockSalt, 259200/*=minDelay*/);
+
+        //etherFiTimelock.executeBatch(targets, values, data, bytes32(0)/*=predecessor*/, timelockSalt);
+
     }
 
     function _encodeRoleGrant(bytes32 role, address account) internal pure returns (bytes memory) {
