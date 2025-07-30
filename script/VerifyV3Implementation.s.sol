@@ -21,6 +21,10 @@ import "../src/RoleRegistry.sol";
 import "./ContractCodeChecker.sol";
 
 contract VerifyV3Implementation is Script, ContractCodeChecker {
+    //EigenLayer Addresses
+    address eigenPodManager = 0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338;
+    address delegationManager=0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
+
     // Mainnet proxy addresses
     address stakingManagerProxy = 0x25e821b7197B146F7713C3b89B6A4D83516B912d;
     address liquidityPoolProxy = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
@@ -36,15 +40,18 @@ contract VerifyV3Implementation is Script, ContractCodeChecker {
     address TNFTProxy = 0x7B5ae07E2AF1C861BcC4736D23f5f66A61E0cA5e;
 
     // Implementation addresses to verify
-    address stakingManagerImpl = 0x58da2a0dD60375fE547EBfFb62674b362faa74F4;
-    address etherFiNodesManagerImpl = 0x6dA7cb57e102Ab9b046A6C39E6437258bbfA286D;
-    address liquidityPoolImpl = 0x14E3a143271BcB1Bc18ebE25aaA9FC3cE54100A3;
+    address stakingManagerImpl = 0x433d06fFc5EfE0e93daa22fcEF7eD60e65Bf70b4;
+    address etherFiNodesManagerImpl = 0x158B21148E86470E2075926EbD5528Af2D510cAF;
+    address liquidityPoolImpl = 0x025911766aEF6fF0C294FD831a2b5c17dC299B3f;
     address auctionManagerImpl = 0x68FE80C6e97E0c8613e2FED344358c6635ba5366;
-    address etherFiOracleImpl = 0xba0d7267ECb471EA929b958CBb7861c458FC20BF;
-    address etherFiAdminImpl = 0x86B0203B76ebe8556233244F99aCC97360989C04;
-    address eETHImpl = 0x226D1d7318D46d3CC2bEa5139d3af1cB42f017c8;
-    address weETHImpl = 0x0b8303f4CcdCa6D42164291Feb34A15bEb4ca4cE;
+    address etherFiOracleImpl = 0x5eefE6f65a280A6f1Eb1FdFf36Ab9e2af6f38462;
+    address etherFiAdminImpl = 0xd50f28485A75A1FdE432BA7d012d0E2543D2f20d;
+    address eETHImpl = 0xCB3D917A965A70214f430a135154Cd5ADdA2ad84;
+    address weETHImpl = 0x2d10683E941275D502173053927AD6066e6aFd6B;
     address TNFTImpl = 0xafb82ce44fd8a3431a64742bCD3547EEDA1AFea7;
+
+    //check
+    address etherFiNodeImpl = 0x5Dae50e686f7CB980E4d0c5E4492c56bC73eD9a2;
 
 
 
@@ -55,7 +62,7 @@ contract VerifyV3Implementation is Script, ContractCodeChecker {
 
     function run() public {
         //Select RPC to fork
-        string memory rpc = vm.rpcUrl(vm.envString("TENDERLY_TEST_RPC"));
+        string memory rpc = vm.rpcUrl(vm.envString("MAINNET_RPC_URL"));
         vm.createSelectFork(rpc);
 
         console2.log("========================================");
@@ -84,8 +91,13 @@ contract VerifyV3Implementation is Script, ContractCodeChecker {
         console2.log("No Immutable Variables");
         // verifyAuctionManagerImplementation();
 
-        // 5. Verify Additional Contract Implementations
-        console2.log("\n5. VERIFYING ADDITIONAL CONTRACT IMPLEMENTATIONS");
+        // 5. Verify EtherFiNode Implementation
+        console2.log("\n5. VERIFYING ETHERFI NODE IMPLEMENTATION");
+        console2.log("------------------------------------------------");
+        verifyEtherFiNodeImplementation();
+
+        // 6. Verify Additional Contract Implementations
+        console2.log("\n6. VERIFYING ADDITIONAL CONTRACT IMPLEMENTATIONS");
         console2.log("------------------------------------------------");
         verifyAdditionalImplementations();
 
@@ -183,6 +195,45 @@ contract VerifyV3Implementation is Script, ContractCodeChecker {
     //     // AuctionManager uses upgradeable pattern with no immutable variables
     //     // All contract references are stored as state variables
     // }
+
+    function verifyEtherFiNodeImplementation() internal {
+        console2.log("Verifying EtherFiNode implementation:", etherFiNodeImpl);
+        
+        // Verify EtherFiNode immutable variables
+        EtherFiNode etherFiNode = EtherFiNode(payable(etherFiNodeImpl));
+        
+        console2.log("Checking EtherFiNode immutable variables (all 5)...");
+        
+        // 1. liquidityPool
+        checkCondition(
+            address(etherFiNode.liquidityPool()) == liquidityPoolProxy,
+            "EtherFiNode liquidityPool immutable correct"
+        );
+        
+        // 2. etherFiNodesManager
+        checkCondition(
+            address(etherFiNode.etherFiNodesManager()) == etherFiNodesManagerProxy,
+            "EtherFiNode etherFiNodesManager immutable correct"
+        );
+        
+        // 3. roleRegistry
+        checkCondition(
+            address(etherFiNode.roleRegistry()) == roleRegistryProxy,
+            "EtherFiNode roleRegistry immutable correct"
+        );
+        
+        // 4. eigenPodManager
+        checkCondition(
+            address(etherFiNode.eigenPodManager()) == eigenPodManager,
+            "EtherFiNode eigenPodManager immutable correct"
+        );
+        
+        // 5. delegationManager
+        checkCondition(
+            address(etherFiNode.delegationManager()) == delegationManager,
+            "EtherFiNode delegationManager immutable correct"
+        );
+    }
 
     function verifyAdditionalImplementations() internal {
         // Verify eETH implementation and immutable variables
