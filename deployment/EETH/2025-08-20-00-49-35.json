@@ -1,0 +1,11 @@
+{
+  "contractName": "EETH",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x7972bd777a339ca98eff1677484aacc816b24d87000000000000000000000000",
+    "constructorArgs": {
+      "_roleRegistry": "0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9"
+    }
+  },
+  "deployedAddress": "0xCB3D917A965A70214f430a135154Cd5ADdA2ad84"
+}

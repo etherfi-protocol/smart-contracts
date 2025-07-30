@@ -41,7 +41,7 @@ contract DeployScript is Script {
     address constant delegationManager = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
 
     // TODO: update with final commit
-    bytes32 commitHashSalt = bytes32(bytes20(hex"e86fcb5e4472910962ec01860e3ce2a56ed148aa"));
+    bytes32 commitHashSalt = bytes32(bytes20(hex"7972bd777a339ca98eff1677484aacc816b24d87"));
 
     function run() external {
         // -------------------------------------------------------------------------
@@ -55,6 +55,7 @@ contract DeployScript is Script {
         // -------------------------------------------------------------------------
 
         // EtherFiNode
+        vm.startBroadcast();
         {
             string memory contractName = "EtherFiNode";
             bytes memory constructorArgs = abi.encode(
@@ -170,15 +171,14 @@ contract DeployScript is Script {
             verify(deployedAddress, bytecode, commitHashSalt);
         }
 
+        vm.stopBroadcast();
     }
 
     function deploy(string memory contractName, bytes memory constructorArgs, bytes memory bytecode, bytes32 salt, bool logging) internal returns (address) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address predictedAddress = factory.computeAddress(salt, bytecode);
-        vm.startBroadcast(deployerPrivateKey);
         address deployedAddress = factory.deploy(bytecode, salt);
         require(deployedAddress == predictedAddress, "Deployment address mismatch");
-        vm.stopBroadcast();
 
         if (logging) {
 

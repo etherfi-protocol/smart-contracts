@@ -1,0 +1,10 @@
+{
+  "contractName": "EtherFiOracle",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x7972bd777a339ca98eff1677484aacc816b24d87000000000000000000000000",
+    "constructorArgs": {
+    }
+  },
+  "deployedAddress": "0x5eefE6f65a280A6f1Eb1FdFf36Ab9e2af6f38462"
+}
