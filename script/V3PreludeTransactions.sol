@@ -149,6 +149,7 @@ contract V3PreludeTransactions is Script {
         bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
         bytes memory scheduleCalldata = abi.encodeWithSelector(
             etherFiTimelock.scheduleBatch.selector,
+            targets,
             values,
             data,
             bytes32(0)/*=predecessor*/,
@@ -162,6 +163,7 @@ contract V3PreludeTransactions is Script {
         // execute
         bytes memory executeCalldata = abi.encodeWithSelector(
             etherFiTimelock.executeBatch.selector,
+            targets,
             values,
             data,
             bytes32(0)/*=predecessor*/,
@@ -214,6 +216,7 @@ contract V3PreludeTransactions is Script {
         //bytes32 timelockSalt = 0xdf0ec353ec9a0cec6fd24a849783aea0fd395b5b0f4efb968986485ba6d4f6ff;
         bytes memory scheduleCalldata = abi.encodeWithSelector(
             etherFiTimelock.scheduleBatch.selector,
+            targets,
             values,
             data,
             bytes32(0)/*=predecessor*/,
@@ -227,6 +230,7 @@ contract V3PreludeTransactions is Script {
         // execute
         bytes memory executeCalldata = abi.encodeWithSelector(
             etherFiTimelock.executeBatch.selector,
+            targets,
             values,
             data,
             bytes32(0)/*=predecessor*/,
