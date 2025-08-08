@@ -11,9 +11,10 @@ import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.
 
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
+import "./AssetRecovery.sol";
+import "./interfaces/IRoleRegistry.sol";
 
-
-contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20PermitUpgradeable, IeETH {
+contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20PermitUpgradeable, IeETH, AssetRecovery {
     using CountersUpgradeable for CountersUpgradeable.Counter;
     ILiquidityPool public liquidityPool;
 
@@ -34,10 +35,16 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     bytes32 private immutable _HASHED_VERSION;
     bytes32 private immutable _TYPE_HASH;
 
+    IRoleRegistry public immutable roleRegistry;
+
+    bytes32 public constant EETH_OPERATING_ADMIN_ROLE = keccak256("EETH_OPERATING_ADMIN_ROLE");
+
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
 
+    error IncorrectRole();
+
     // TODO: Figure our what `name` and `version` are for
-    constructor() { 
+    constructor(address _roleRegistry) {
         bytes32 hashedName = keccak256("EETH");
         bytes32 hashedVersion = keccak256("1");
         bytes32 typeHash = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -47,6 +54,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         _CACHED_DOMAIN_SEPARATOR = _buildDomainSeparator(typeHash, hashedName, hashedVersion);
         _CACHED_THIS = address(this);
         _TYPE_HASH = typeHash;
+
+        require(_roleRegistry != address(0), "must set role registry");
+        roleRegistry = IRoleRegistry(_roleRegistry);
 
         _disableInitializers(); 
     }
@@ -139,6 +149,21 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         _approve(owner, spender, value);
     }
 
+    function recoverETH(address payable to, uint256 amount) external {
+        if(!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _recoverETH(to, amount);
+    }
+
+    function recoverERC20(address token, address to, uint256 amount) external {
+        if(!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _recoverERC20(token, to, amount);
+    }
+
+    function recoverERC721(address token, address to, uint256 tokenId) external {
+        if(!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _recoverERC721(token, to, tokenId);
+    }
+
     // [INTERNAL FUNCTIONS] 
     function _transfer(address _sender, address _recipient, uint256 _amount) internal {
         uint256 _sharesToTransfer = liquidityPool.sharesForAmount(_amount);
@@ -166,8 +191,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     }
 
     function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyOwner {}
+        address /* newImplementation */
+    ) internal view override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     function _useNonce(address owner) internal virtual returns (uint256 current) {
         CountersUpgradeable.Counter storage nonce = _nonces[owner];

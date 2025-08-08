@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import "./ILiquidityPool.sol";
 
 interface IStakingManager {
+
     struct DepositData {
         bytes publicKey;
         bytes signature;
@@ -11,34 +12,83 @@ interface IStakingManager {
         string ipfsHashForEncryptedValidatorKey;
     }
 
-    struct StakerInfo {
-        address staker;
-        ILiquidityPool.SourceOfFunds sourceOfFund;
-    }
+    // deposit flow
+    function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external payable;
+    function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable;
+    function calculateValidatorPubkeyHash(bytes memory pubkey) external pure returns (bytes32);
+    function initialDepositAmount() external returns (uint256);
+    function generateDepositDataRoot(bytes memory pubkey, bytes memory signature, bytes memory withdrawalCredentials, uint256 amount) external pure returns (bytes32);
 
-    function bidIdToStaker(uint256 id) external view returns (address);
-
+    // EtherFiNode Beacon Proxy
+    function upgradeEtherFiNode(address _newImplementation) external;
     function getEtherFiNodeBeacon() external view returns (address);
 
-    function initialize(address _auctionAddress, address _depositContractAddress) external;
-    function setEtherFiNodesManagerAddress(address _managerAddress) external;
-    function setLiquidityPoolAddress(address _liquidityPoolAddress) external;
-    
-    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, uint256 _numberOfValidators, address _staker, address _tnftHolder, address _bnftHolder, ILiquidityPool.SourceOfFunds source, bool _enableRestaking, uint256 _validatorIdToCoUseWithdrawalSafe) external returns (uint256[] memory);
-    function batchDepositWithBidIds(uint256[] calldata _candidateBidIds, bool _enableRestaking) external payable returns (uint256[] memory);
-
-    function batchRegisterValidators(bytes32 _depositRoot, uint256[] calldata _validatorId, DepositData[] calldata _depositData) external;
-    function batchRegisterValidators(bytes32 _depositRoot, uint256[] calldata _validatorId, address _bNftRecipient, address _tNftRecipient, DepositData[] calldata _depositData, address _user) external payable;
-
-    function batchApproveRegistration(uint256[] memory _validatorId, bytes[] calldata _pubKey, bytes[] calldata _signature, bytes32[] calldata _depositDataRootApproval) external payable;
-
-    function batchCancelDeposit(uint256[] calldata _validatorIds) external;
-
-    function batchCancelDepositAsBnftHolder(uint256[] calldata _validatorIds, address _caller) external;
-
-    function instantiateEtherFiNode(bool _createEigenPod) external returns (address);
-
-    function updateAdmin(address _address, bool _isAdmin) external;
+    // protocol
     function pauseContract() external;
     function unPauseContract() external;
+
+    // prevent storage shift on upgrade
+    struct LegacyStakingManagerState {
+        uint256[14] legacyState;
+        /*
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | stakeAmount            | uint128                                               | 301  | 16     | 16    | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | implementationContract | address                                               | 302  | 0      | 20    | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | liquidityPoolContract  | address                                               | 303  | 0      | 20    | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | isFullStakeEnabled     | bool                                                  | 303  | 20     | 1     | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | merkleRoot             | bytes32                                               | 304  | 0      | 32    | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | TNFTInterfaceInstance  | contract ITNFT                                        | 305  | 0      | 20    | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | BNFTInterfaceInstance  | contract IBNFT                                        | 306  | 0      | 20    | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | auctionManager         | contract IAuctionManager                              | 307  | 0      | 20    | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | depositContractEth2    | contract IDepositContract                             | 308  | 0      | 20    | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | nodesManager           | contract IEtherFiNodesManager                         | 309  | 0      | 20    | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | upgradableBeacon       | contract UpgradeableBeacon                            | 310  | 0      | 20    | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | bidIdToStakerInfo      | mapping(uint256 => struct IStakingManager.StakerInfo) | 311  | 0      | 32    | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | DEPRECATED_admin       | address                                               | 312  | 0      | 20    | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | nodeOperatorManager    | address                                               | 313  | 0      | 20    | src/StakingManager.sol:StakingManager |
+        |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
+        | admins                 | mapping(address => bool)                              | 314  | 0      | 32    | src/StakingManager.sol:StakingManager |
+        ╰------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------╯
+        */
+    }
+
+    //---------------------------------------------------------------------------
+    //-----------------------------  Events  -----------------------------------
+    //---------------------------------------------------------------------------
+
+    event validatorCreated(bytes32 indexed pubkeyHash, address indexed etherFiNode, bytes pubkey);
+    event validatorConfirmed(bytes32 indexed pubkeyHash, address indexed bnftRecipient, address indexed tnftRecipient, bytes pubkey);
+    event linkLegacyValidatorId(bytes32 indexed pubkeyHash, uint256 indexed legacyId);
+
+    // legacy event still being emitted in its original form to play nice with existing external tooling
+    event ValidatorRegistered(address indexed operator, address indexed bNftOwner, address indexed tNftOwner, uint256 validatorId, bytes validatorPubKey, string ipfsHashForEncryptedValidatorKey);
+
+    //--------------------------------------------------------------------------
+    //-----------------------------  Errors  -----------------------------------
+    //--------------------------------------------------------------------------
+
+    error InvalidCaller();
+    error UnlinkedPubkey();
+    error IncorrectBeaconRoot();
+    error InvalidPubKeyLength();
+    error InvalidDepositData();
+    error InactiveBid();
+    error InvalidEtherFiNode();
+    error InvalidValidatorSize();
+    error IncorrectRole();
+    error InvalidUpgrade();
+
 }

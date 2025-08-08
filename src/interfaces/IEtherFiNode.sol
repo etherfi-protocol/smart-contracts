@@ -4,100 +4,91 @@ pragma solidity ^0.8.13;
 import "./IEtherFiNodesManager.sol";
 
 import "../eigenlayer-interfaces/IDelegationManager.sol";
-
+import "../eigenlayer-interfaces/IEigenPod.sol";
 
 interface IEtherFiNode {
-    // State Transition Diagram for StateMachine contract:
-    //
-    //      NOT_INITIALIZED <-
-    //              |        |
-    //              ↓        |
-    //      STAKE_DEPOSITED --
-    //           /    \      |
-    //          ↓      ↓     |
-    //         LIVE <- WAITING_FOR_APPROVAL
-    //         |  \ 
-    //         |   ↓  
-    //         |  BEING_SLASHED
-    //         |   /
-    //         ↓  ↓
-    //         EXITED
-    //         |
-    //         ↓
-    //     FULLY_WITHDRAWN
-    // 
-    // Transitions are only allowed as directed above.
-    // For instance, a transition from STAKE_DEPOSITED to either LIVE or CANCELLED is allowed,
-    // but a transition from LIVE to NOT_INITIALIZED is not.
-    //
-    // All phase transitions should be made through the setPhase function,
-    // which validates transitions based on these rules.
-    //
-    enum VALIDATOR_PHASE {
-        NOT_INITIALIZED,
-        STAKE_DEPOSITED,
-        LIVE,
-        EXITED,
-        FULLY_WITHDRAWN,
-        DEPRECATED_CANCELLED,
-        BEING_SLASHED,
-        DEPRECATED_EVICTED,
-        WAITING_FOR_APPROVAL,
-        DEPRECATED_READY_FOR_DEPOSIT
+
+    // eigenlayer
+    function createEigenPod() external returns (address);
+    function getEigenPod() external view returns (IEigenPod);
+    function startCheckpoint() external;
+    function setProofSubmitter(address newProofSubmitter) external;
+    function verifyCheckpointProofs(BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
+    function queueETHWithdrawal(uint256 amount) external returns (bytes32 withdrawalRoot);
+    function completeQueuedETHWithdrawals(bool receiveAsTokens) external returns (uint256 balance);
+    function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external returns (bytes32[] memory withdrawalRoot);
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
+    function sweepFunds() external returns (uint256 balance);
+
+    // call forwarding
+    function forwardEigenPodCall(bytes memory data) external returns (bytes memory);
+    function forwardExternalCall(address to, bytes memory data) external returns (bytes memory);
+
+    struct LegacyNodeState {
+        uint256[10] legacyPadding;
+            /*
+            ╭---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------╮
+            | Name                                              | Type                              | Slot | Offset | Bytes | Contract                        |
+            +=================================================================================================================================================+
+            | etherFiNodesManager                               | address                           | 0    | 0      | 20    | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | DEPRECATED_localRevenueIndex                      | uint256                           | 1    | 0      | 32    | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | DEPRECATED_vestedAuctionRewards                   | uint256                           | 2    | 0      | 32    | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | DEPRECATED_ipfsHashForEncryptedValidatorKey       | string                            | 3    | 0      | 32    | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | DEPRECATED_exitRequestTimestamp                   | uint32                            | 4    | 0      | 4     | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | DEPRECATED_exitTimestamp                          | uint32                            | 4    | 4      | 4     | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | DEPRECATED_stakingStartTimestamp                  | uint32                            | 4    | 8      | 4     | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | DEPRECATED_phase                                  | enum IEtherFiNode.VALIDATOR_PHASE | 4    | 12     | 1     | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | DEPRECATED_restakingObservedExitBlock             | uint32                            | 4    | 13     | 4     | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | eigenPod                                          | address                           | 5    | 0      | 20    | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | isRestakingEnabled                                | bool                              | 5    | 20     | 1     | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | version                                           | uint16                            | 5    | 21     | 2     | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | _numAssociatedValidators                          | uint16                            | 5    | 23     | 2     | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | numExitRequestsByTnft                             | uint16                            | 5    | 25     | 2     | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | numExitedValidators                               | uint16                            | 5    | 27     | 2     | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | associatedValidatorIndices                        | mapping(uint256 => uint256)       | 6    | 0      | 32    | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | associatedValidatorIds                            | uint256[]                         | 7    | 0      | 32    | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | DEPRECATED_pendingWithdrawalFromRestakingInGwei   | uint64                            | 8    | 0      | 8     | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | DEPRECATED_completedWithdrawalFromRestakingInGwei | uint64                            | 8    | 8      | 8     | src/EtherFiNode.sol:EtherFiNode |
+            |---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------|
+            | DEPRECATED_restakingObservedExitBlocks            | mapping(uint256 => uint32)        | 9    | 0      | 32    | src/EtherFiNode.sol:EtherFiNode |
+            ╰---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------╯
+        */
     }
 
-    // VIEW functions
-    function numAssociatedValidators() external view returns (uint256);
-    function numExitRequestsByTnft() external view returns (uint16);
-    function numExitedValidators() external view returns (uint16);
-    function version() external view returns (uint16);
-    function eigenPod() external view returns (address);
-    function calculateTVL(uint256 _beaconBalance, IEtherFiNodesManager.ValidatorInfo memory _info, IEtherFiNodesManager.RewardsSplit memory _SRsplits, bool _onlyWithdrawable) external view returns (uint256, uint256, uint256, uint256);
-    function getNonExitPenalty(uint32 _tNftExitRequestTimestamp, uint32 _bNftExitRequestTimestamp) external view returns (uint256);
-    function getRewardsPayouts(uint32 _exitRequestTimestamp, IEtherFiNodesManager.RewardsSplit memory _splits) external view returns (uint256, uint256, uint256, uint256);
-    function getFullWithdrawalPayouts(IEtherFiNodesManager.ValidatorInfo memory _info, IEtherFiNodesManager.RewardsSplit memory _SRsplits) external view returns (uint256, uint256, uint256, uint256);
-    function associatedValidatorIds(uint256 _index) external view returns (uint256);
-    function associatedValidatorIndices(uint256 _validatorId) external view returns (uint256);
-    function validatePhaseTransition(VALIDATOR_PHASE _currentPhase, VALIDATOR_PHASE _newPhase) external pure returns (bool);
+    //---------------------------------------------------------------------------
+    //-----------------------------  Events  -----------------------------------
+    //---------------------------------------------------------------------------
 
-    function DEPRECATED_exitRequestTimestamp() external view returns (uint32);
-    function DEPRECATED_exitTimestamp() external view returns (uint32);
-    function DEPRECATED_phase() external view returns (VALIDATOR_PHASE);
+    event PartialWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
+    event FullWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, uint256 toOperator, uint256 toTnft, uint256 toBnft, uint256 toTreasury);
+    event QueuedRestakingWithdrawal(uint256 indexed _validatorId, address indexed etherFiNode, bytes32[] withdrawalRoots);
+    event FundsTransferred(address indexed recipient, uint256 amount);
 
-    // Non-VIEW functions
-    function initialize(address _etherFiNodesManager) external;
-    function createEigenPod() external;
-    function isRestakingEnabled() external view returns (bool);
-    function processNodeExit(uint256 _validatorId) external returns (bytes32[] memory withdrawalRoots);
-    function processFullWithdraw(uint256 _validatorId) external;
-    function queueEigenpodFullWithdrawal() external returns (bytes32[] memory withdrawalRoots);
-    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] memory withdrawals, bool _receiveAsTokens) external;
-    function completeQueuedWithdrawal(IDelegationManager.Withdrawal memory withdrawals, bool _receiveAsTokens) external;
-    function updateNumberOfAssociatedValidators(uint16 _up, uint16 _down) external;
-    function updateNumExitedValidators(uint16 _up, uint16 _down) external;
-    function registerValidator(uint256 _validatorId, bool _enableRestaking) external;
-    function unRegisterValidator(uint256 _validatorId, IEtherFiNodesManager.ValidatorInfo memory _info) external returns (bool);
-    function splitBalanceInExecutionLayer() external view returns (uint256 _withdrawalSafe, uint256 _eigenPod, uint256 _delayedWithdrawalRouter);
-    function totalBalanceInExecutionLayer() external view returns (uint256);
-    function withdrawableBalanceInExecutionLayer() external view returns (uint256);
-    function updateNumExitRequests(uint16 _up, uint16 _down) external;
-    function migrateVersion(uint256 _validatorId, IEtherFiNodesManager.ValidatorInfo memory _info) external;
+    //--------------------------------------------------------------------------
+    //-----------------------------  Errors  -----------------------------------
+    //--------------------------------------------------------------------------
 
-    function startCheckpoint(bool _revertIfNoBalance) external;
-    function setProofSubmitter(address _newProofSubmitter) external;
-    function callEigenPod(bytes memory data) external returns (bytes memory);
-    function forwardCall(address to, bytes memory data) external returns (bytes memory);
+    error TransferFailed();
+    error IncorrectRole();
+    error ForwardedCallNotAllowed();
+    error InvalidForwardedCall();
 
-    function withdrawFunds(
-        address _treasury,
-        uint256 _treasuryAmount,
-        address _operator,
-        uint256 _operatorAmount,
-        address _tnftHolder,
-        uint256 _tnftAmount,
-        address _bnftHolder,
-        uint256 _bnftAmount
-    ) external;
-
-    function moveFundsToManager(uint256 _amount) external;
 }

@@ -2,6 +2,9 @@
 pragma solidity ^0.8.13;
 
 import "./TestSetup.sol";
+import "./TestERC20.sol";
+import "./TestERC721.sol";
+import {ForceETHSender} from "./EETH.t.sol";
 
 contract WeETHTest is TestSetup {
     function setUp() public {
@@ -303,27 +306,166 @@ contract WeETHTest is TestSetup {
         // alices transaction still succeeds as the try catch swallows the error
         weEthInstance.wrapWithPermit(5 ether, permitInput);
     }
-
-    function test_rescueTreasuryWeeth() public {
-        uint256 treasuryBal = 31859761318927469119;
-        address treasuryInstance = 0x6329004E903B7F420245E7aF3f355186f2432466;
-        vm.deal(treasuryInstance, treasuryBal);
-        vm.startPrank(treasuryInstance);
-        liquidityPoolInstance.deposit{value: treasuryBal}();
-        eETHInstance.approve(address(weEthInstance), treasuryBal);
-        weEthInstance.wrap(treasuryBal);
-        vm.stopPrank();
-        uint256 preTreasuryBal = weEthInstance.balanceOf(treasuryInstance);
-        uint256 preOwnerBal = weEthInstance.balanceOf(owner);
-        vm.startPrank(alice);
+    
+    function test_RecoverETH() public {
+        uint256 amountToSend = 2 ether;
+        // We cannot send ETH directly to eETH contract because it has no fallback/retrieve method
+        ForceETHSender sender = new ForceETHSender();
+        vm.deal(address(sender), amountToSend);
+        sender.forceSend(payable(address(weEthInstance)));
+        
+        // Check that eETH contract now has ETH
+        assertEq(address(weEthInstance).balance, amountToSend);
+        
+        // Try to recover ETH without proper role - should fail
         vm.expectRevert();
-        weEthInstance.rescueTreasuryWeeth();
-        vm.stopPrank();
-        vm.startPrank(owner);
-        weEthInstance.rescueTreasuryWeeth();
-        vm.stopPrank();
-        assertEq(weEthInstance.balanceOf(address(treasuryInstance)), 0);
-        assertEq(weEthInstance.balanceOf(owner), preTreasuryBal + preOwnerBal);
-        vm.stopPrank(); 
+        vm.prank(bob);
+        weEthInstance.recoverETH(payable(bob), amountToSend);
+        
+        // Check alice's balance before recovery
+        uint256 aliceBalanceBefore = alice.balance;
+        
+        // Recover ETH as admin
+        vm.prank(admin);
+        weEthInstance.recoverETH(payable(alice), amountToSend);
+        
+        // Verify ETH was recovered
+        assertEq(address(weEthInstance).balance, 0);
+        assertEq(alice.balance, aliceBalanceBefore + amountToSend);
     }
+    
+    function test_RecoverERC20() public {
+        // Create a mock ERC20 token
+        TestERC20 mockToken = new TestERC20("Test Token", "TEST");
+        uint256 amountToSend = 1000e18;
+        
+        // Mint tokens to alice and send to eETH contract
+        mockToken.mint(alice, amountToSend);
+        vm.prank(alice);
+        mockToken.transfer(address(weEthInstance), amountToSend);
+        
+        assertEq(mockToken.balanceOf(address(weEthInstance)), amountToSend);
+            
+        // Try to recover tokens without proper role - should fail
+        vm.expectRevert();
+        vm.prank(bob);
+        weEthInstance.recoverERC20(address(mockToken), alice, amountToSend);
+        
+        // Recover tokens as admin (who has the role)
+        vm.prank(admin);
+        weEthInstance.recoverERC20(address(mockToken), alice, amountToSend);
+        
+        // Verify tokens were recovered
+        assertEq(mockToken.balanceOf(address(weEthInstance)), 0);
+        assertEq(mockToken.balanceOf(alice), amountToSend);
+    }
+
+    function test_RecoverERC721() public {
+        // Create a mock ERC721 token
+        TestERC721 mockNFT = new TestERC721("Test NFT", "TNFT");
+        
+        // Mint NFT to alice and send to eETH contract
+        uint256 tokenId = mockNFT.mint(alice);
+        vm.prank(alice);
+        mockNFT.transferFrom(alice, address(weEthInstance), tokenId);
+        
+        assertEq(mockNFT.ownerOf(tokenId), address(weEthInstance));
+        
+        // Try to recover NFT without proper role - should fail
+        vm.expectRevert();
+        vm.prank(bob);
+        weEthInstance.recoverERC721(address(mockNFT), alice, tokenId);
+        
+        // Recover NFT as admin
+        vm.prank(admin);
+        weEthInstance.recoverERC721(address(mockNFT), alice, tokenId);
+        
+        // Verify NFT was recovered
+        assertEq(mockNFT.ownerOf(tokenId), alice);
+    }
+
+    function test_RecoverETH_ErrorConditions() public {
+        uint256 amountToSend = 2 ether;
+        // Force ETH into the contract
+        ForceETHSender sender = new ForceETHSender();
+        vm.deal(address(sender), amountToSend);
+        sender.forceSend(payable(address(weEthInstance)));
+        
+        // Test 1: Try to recover 0 ETH - should revert with InvalidInput
+        vm.expectRevert(AssetRecovery.InvalidInput.selector);
+        vm.prank(admin);
+        weEthInstance.recoverETH(payable(alice), 0);
+        
+        // Test 2: Try to recover more ETH than exists - should revert with InsufficientBalance
+        vm.expectRevert(AssetRecovery.InsufficientBalance.selector);
+        vm.prank(admin);
+        weEthInstance.recoverETH(payable(alice), amountToSend + 1);
+        
+        // Test 3: Try to send to zero address - should revert with InvalidInput
+        vm.expectRevert(AssetRecovery.InvalidInput.selector);
+        vm.prank(admin);
+        weEthInstance.recoverETH(payable(address(0)), amountToSend);
+    }
+
+    function test_RecoverERC20_ErrorConditions() public {
+        TestERC20 mockToken = new TestERC20("Test Token", "TEST");
+        uint256 amountToSend = 1000e18;
+        
+        // Send tokens to eETH contract
+        mockToken.mint(alice, amountToSend);
+        vm.prank(alice);
+        mockToken.transfer(address(weEthInstance), amountToSend);
+        
+        // Test 1: Try to recover 0 tokens - should revert with InvalidInput
+        vm.expectRevert(AssetRecovery.InvalidInput.selector);
+        vm.prank(admin);
+        weEthInstance.recoverERC20(address(mockToken), alice, 0);
+        
+        // Test 2: Try to recover more tokens than exists - should revert with InsufficientBalance
+        vm.expectRevert(AssetRecovery.InsufficientBalance.selector);
+        vm.prank(admin);
+        weEthInstance.recoverERC20(address(mockToken), alice, amountToSend + 1);
+        
+        // Test 3: Try to send to zero address - should revert with InvalidInput
+        vm.expectRevert(AssetRecovery.InvalidInput.selector);
+        vm.prank(admin);
+        weEthInstance.recoverERC20(address(mockToken), address(0), amountToSend);
+        
+        // Test 4: Try to recover from zero token address - should revert with InvalidInput
+        vm.expectRevert(AssetRecovery.InvalidInput.selector);
+        vm.prank(admin);
+        weEthInstance.recoverERC20(address(0), alice, amountToSend);
+    }
+
+    function test_RecoverERC721_ErrorConditions() public {
+        TestERC721 mockNFT = new TestERC721("Test NFT", "TNFT");
+        uint256 tokenId = mockNFT.mint(alice);
+        
+        // Send NFT to eETH contract
+        vm.prank(alice);
+        mockNFT.transferFrom(alice, address(weEthInstance), tokenId);
+        
+        // Test 1: Try to recover NFT that doesn't exist - should revert
+        uint256 nonExistentTokenId = 9999;
+        vm.expectRevert(); // ERC721: invalid token ID or similar
+        vm.prank(admin);
+        weEthInstance.recoverERC721(address(mockNFT), alice, nonExistentTokenId);
+        
+        // Test 2: Try to recover NFT that contract doesn't own - should revert with ContractIsNotOwnerOfERC721Token
+        uint256 bobsTokenId = mockNFT.mint(bob);
+        vm.expectRevert(AssetRecovery.ContractIsNotOwnerOfERC721Token.selector);
+        vm.prank(admin);
+        weEthInstance.recoverERC721(address(mockNFT), alice, bobsTokenId);
+        
+        // Test 3: Try to send to zero address - should revert with InvalidInput
+        vm.expectRevert(AssetRecovery.InvalidInput.selector);
+        vm.prank(admin);
+        weEthInstance.recoverERC721(address(mockNFT), address(0), tokenId);
+        
+        // Test 4: Try to recover from zero token address - should revert with InvalidInput
+        vm.expectRevert(AssetRecovery.InvalidInput.selector);
+        vm.prank(admin);
+        weEthInstance.recoverERC721(address(0), alice, tokenId);
+    }
+
 }
