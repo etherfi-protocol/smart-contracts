@@ -27,6 +27,14 @@ vm.createSelectFork(rpc);
 ```
 forge script script/VerifyV3Upgrade.s.sol
 ```
+
+### Verify Implementation Addresses
+To verify the implementation addresses and their immutable variables:
+```
+forge script script/VerifyV3Implementation.s.sol --fork-url $TENDERLY_TEST_RPC
+```
+This checks that implementation contracts have the correct immutable variables set (e.g., roleRegistry, liquidityPool, etc.)
+
 ---
 
 ## Expected Output
@@ -71,6 +79,22 @@ If any check fails the script reverts with **“Verification failed”**.
 | LiquidityPool | `0x308861A430be4cce5502d0A12724771Fc6DaF216` |
 | AuctionManager | `0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9` |
 | RoleRegistry | `0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9` |
+
+---
+
+## Implementation Verification
+
+To verify the implementation addresses and their immutable variables:
+
+```bash
+forge script script/VerifyV3Implementation.s.sol --fork-url $TENDERLY_TEST_RPC
+```
+
+This script checks:
+- Implementation addresses match expected values
+- Immutable variables in each implementation are correctly set
+- StakingManager and EtherFiNodesManager immutables point to correct proxy addresses
+- eETH and weETH have correct roleRegistry immutable
 
 ---
 
