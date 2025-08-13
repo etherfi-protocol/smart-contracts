@@ -118,5 +118,6 @@ interface IEtherFiNodesManager {
     error IncorrectRole();
     error ForwardedCallNotAllowed();
     error InvalidForwardedCall();
-
+    error EmptyWithdrawalsRequest();
+    error InsufficientWithdrawalFees();
 }

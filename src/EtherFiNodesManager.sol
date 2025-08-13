@@ -114,10 +114,10 @@ contract EtherFiNodesManager is
     ) external payable whenNotPaused nonReentrant
     {
         // ---------- checks ----------
-        if (pod == address(0)) revert("pod=0");
+        if (pod == address(0)) revert UnknownNode();
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
         uint256 n = requests.length;
-        if (n == 0) revert("empty");
+        if (n == 0) revert EmptyWithdrawalsRequest();
 
         // Strict pubkey length check to avoid wasting fee on malformed requests.
         for (uint256 i = 0; i < n; ) {
@@ -127,7 +127,7 @@ contract EtherFiNodesManager is
 
             // Ensure the node exists for this pubkey hash
             if (address(etherFiNodeFromPubkeyHash[pubkeyHash]) == address(0)) {
-                revert("unknown pubkey");
+                revert UnknownNode();
             }
 
             unchecked { ++i; }
@@ -138,7 +138,7 @@ contract EtherFiNodesManager is
         uint256 feePer = IEigenPod(pod).getWithdrawalRequestFee();
         // unchecked mul; we already ensure n>0 and feePer is bounded by protocol economics.
         uint256 required = feePer * n;
-        if (msg.value < required) revert("insufficient fee");
+        if (msg.value < required) revert InsufficientWithdrawalFees();
 
         // ---------- interactions ----------
         // Forward full msg.value to tolerate fee update between the view and the call.
