@@ -111,10 +111,11 @@ contract EtherFiNodesManager is
     function batchWithdrawalRequests(
         address pod,
         IEigenPod.WithdrawalRequest[] calldata requests
-    ) external payable whenNotPaused nonReentrant onlyELTriggerRole()
+    ) external payable whenNotPaused nonReentrant
     {
         // ---------- checks ----------
         if (pod == address(0)) revert("pod=0");
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
         uint256 n = requests.length;
         if (n == 0) revert("empty");
 
@@ -314,10 +315,4 @@ contract EtherFiNodesManager is
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
-    
-    modifier onlyELTriggerRole() {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
-        _;
-    }
-
 }
