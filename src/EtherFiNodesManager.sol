@@ -120,12 +120,12 @@ contract EtherFiNodesManager is
 
         // Strict pubkey length check to avoid wasting fee on malformed requests.
         for (uint256 i = 0; i < n; ) {
-            bytes memory pk = requests[i].pubkey;
+            bytes memory pubkey = requests[i].pubkey;
             // Compute the pubkey hash
-            bytes32 pkHash = keccak256(pk);
+            bytes32 pubkeyHash = keccak256(pubkey);
 
             // Ensure the node exists for this pubkey hash
-            if (address(etherFiNodeFromPubkeyHash[pkHash]) == address(0)) {
+            if (address(etherFiNodeFromPubkeyHash[pubkeyHash]) == address(0)) {
                 revert("unknown pubkey");
             }
 
