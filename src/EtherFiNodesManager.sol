@@ -8,6 +8,7 @@ import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "./interfaces/IAuctionManager.sol";
+import "./eigenlayer-interfaces/IEigenPod.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
@@ -42,6 +43,7 @@ contract EtherFiNodesManager is
     bytes32 public constant ETHERFI_NODES_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
+    bytes32 public constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
 
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
@@ -93,6 +95,57 @@ contract EtherFiNodesManager is
 
     function startCheckpoint(uint256 id) external onlyEigenlayerAdmin whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).startCheckpoint();
+    }
+
+    /**
+     * @notice Forwards EIP-7002 withdrawal requests to the EigenPod, supporting single or batch requests.
+     * @dev Access: only addresses with ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE.
+     * @dev Pausable + nonReentrant for safety.
+     * @param pod The EigenPod address that owns the validators.
+     * @param requests An array of WithdrawalRequest, where:
+     *        - requests[i].pubkey is the 48-byte BLS pubkey
+     *        - requests[i].amountGwei == 0 means "full exit"; >0 means partial to pod
+     * @custom:fee You MUST send sufficient ETH in msg.value to cover the EIP-7002 predeploy fee
+     *             for ALL requests in this batch (fee updates per block). Overpay is okay.
+     */
+    function batchWithdrawalRequests(
+        address pod,
+        IEigenPod.WithdrawalRequest[] calldata requests
+    ) external payable whenNotPaused nonReentrant onlyELTriggerRole()
+    {
+        // ---------- checks ----------
+        if (pod == address(0)) revert("pod=0");
+        uint256 n = requests.length;
+        if (n == 0) revert("empty");
+
+        // Strict pubkey length check to avoid wasting fee on malformed requests.
+        for (uint256 i = 0; i < n; ) {
+            bytes memory pk = requests[i].pubkey;
+            // Compute the pubkey hash
+            bytes32 pkHash = keccak256(pk);
+
+            // Ensure the node exists for this pubkey hash
+            if (address(etherFiNodeFromPubkeyHash[pkHash]) == address(0)) {
+                revert("unknown pubkey");
+            }
+
+            unchecked { ++i; }
+        }   
+
+        // Ensure enough fee is sent *at the time of execution*.
+        // NOTE: The predeploy updates per block; callers should slightly overpay.
+        uint256 feePer = IEigenPod(pod).getWithdrawalRequestFee();
+        // unchecked mul; we already ensure n>0 and feePer is bounded by protocol economics.
+        uint256 required = feePer * n;
+        if (msg.value < required) revert("insufficient fee");
+
+        // ---------- interactions ----------
+        // Forward full msg.value to tolerate fee update between the view and the call.
+        // If predeploy accepts >= required and internally refunds/credits excess, that's fine.
+        IEigenPod(pod).requestWithdrawal{value: msg.value}(requests);
+
+        // in case if event needs to be added
+        // emit BatchWithdrawalRequestsForwarded(msg.sender, pod, n, msg.value);
     }
 
     function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyEigenlayerAdmin whenNotPaused {
@@ -259,6 +312,11 @@ contract EtherFiNodesManager is
 
     modifier onlyCallForwarder() {
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE, msg.sender)) revert IncorrectRole();
+        _;
+    }
+    
+    modifier onlyELTriggerRole() {
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 
