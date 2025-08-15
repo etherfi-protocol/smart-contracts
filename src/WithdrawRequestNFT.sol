@@ -45,6 +45,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     bool public paused;
     RoleRegistry public roleRegistry;
 
+    uint256 public maxWithdrawalAmount;
+
 
     bytes32 public constant WITHDRAW_REQUEST_NFT_ADMIN_ROLE = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
     bytes32 public constant IMPLICIT_FEE_CLAIMER_ROLE = keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
@@ -60,6 +62,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     event Unpaused(address account);
 
     error IncorrectRole();
+    error TooLargeWithdrawalAmount();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _treasury) {
@@ -99,6 +102,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         totalRemainderEEthShares = 0;
     }
 
+    function setMaxWithdrawalAmount(uint256 _maxWithdrawalAmount) external onlyAdmin {
+        maxWithdrawalAmount = _maxWithdrawalAmount;
+    }
+
     /// @notice creates a withdraw request and issues an associated NFT to the recipient
     /// @dev liquidity pool contract will call this function when a user requests withdraw
     /// @param amountOfEEth amount of eETH requested for withdrawal
@@ -109,6 +116,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external payable onlyLiquidityPool whenNotPaused returns (uint256) {
         uint256 requestId = nextRequestId++;
         uint32 feeGwei = uint32(fee / 1 gwei);
+
+        if(amountOfEEth > maxWithdrawalAmount) revert TooLargeWithdrawalAmount();
 
         _requests[requestId] = IWithdrawRequestNFT.WithdrawRequest(amountOfEEth, shareOfEEth, true, feeGwei);
 
