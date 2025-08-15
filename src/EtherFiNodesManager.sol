@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -14,6 +15,7 @@ import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "lib/BucketLimiter.sol";
 
 contract EtherFiNodesManager is
     Initializable,
@@ -35,7 +37,7 @@ contract EtherFiNodesManager is
     mapping(bytes4 => bool) public allowedForwardedEigenpodCalls; // Call Forwarding: functionSelector -> allowed
     mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls; // Call Forwarding: functionSelector -> targetAddress -> allowed
     mapping(bytes32 => IEtherFiNode) public etherFiNodeFromPubkeyHash;
-
+    BucketLimiter.Limit public exitRequestsLimit; // Exit requests are measured in "units" == number of validator requests
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -69,6 +71,10 @@ contract EtherFiNodesManager is
     function unPauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
+    }
+
+    function __initRateLimiter() internal {
+        exitRequestsLimit = BucketLimiter.create(uint64(100), uint64(1));
     }
 
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
@@ -119,6 +125,11 @@ contract EtherFiNodesManager is
         uint256 n = requests.length;
         if (n == 0) revert EmptyWithdrawalsRequest();
 
+        // Rate-limit by number of validator requests
+        uint64 units = SafeCast.toUint64(n);
+        bool ok = BucketLimiter.consume(exitRequestsLimit, units);
+        if (!ok) revert ExitRateLimitExceeded();
+
         // Strict pubkey length check to avoid wasting fee on malformed requests.
         for (uint256 i = 0; i < n; ) {
             bytes memory pubkey = requests[i].pubkey;
@@ -145,8 +156,21 @@ contract EtherFiNodesManager is
         // If predeploy accepts >= required and internally refunds/credits excess, that's fine.
         IEigenPod(pod).requestWithdrawal{value: msg.value}(requests);
 
-        // in case if event needs to be added
-        // emit BatchWithdrawalRequestsForwarded(msg.sender, pod, n, msg.value);
+        emit BatchWithdrawalRequestsForwarded(msg.sender, pod, n, msg.value);
+    }
+
+    function setExitRequestCapacity(uint256 capacity) external onlyAdmin() {
+        uint64 cap = SafeCast.toUint64(capacity);
+        BucketLimiter.setCapacity(exitRequestsLimit, cap);
+    }
+
+    function setExitRequestRefillPerSecond(uint256 refillPerSecond) external onlyAdmin() {
+        uint64 refill = SafeCast.toUint64(refillPerSecond);
+        BucketLimiter.setRefillRate(exitRequestsLimit, refill);
+    }
+
+    function canConsumeExitRequests(uint256 numRequests) external view returns (bool) {
+        return BucketLimiter.canConsume(exitRequestsLimit, SafeCast.toUint64(numRequests));
     }
 
     function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyEigenlayerAdmin whenNotPaused {

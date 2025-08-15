@@ -105,6 +105,7 @@ interface IEtherFiNodesManager {
     event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
     event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
     event FundsTransferred(address indexed nodeAddress, uint256 amount);
+    event BatchWithdrawalRequestsForwarded(address indexed operator, address indexed pod, uint256 requestCount, uint256 valueForwarded);
 
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------
@@ -120,4 +121,6 @@ interface IEtherFiNodesManager {
     error InvalidForwardedCall();
     error EmptyWithdrawalsRequest();
     error InsufficientWithdrawalFees();
+    error ExitRateLimitExceeded();
+    error ExitRateLimitExceededForPod();
 }
