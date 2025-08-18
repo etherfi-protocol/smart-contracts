@@ -124,6 +124,6 @@ interface IEtherFiNodesManager {
     error ExitRateLimitExceeded();
     error ExitRateLimitExceededForPod();
     error UnknownValidatorPubkey();
-    error UnknownNodeEigenPod();
+    error UnknownEigenPod();
     error PubkeysMapToDifferentPods();
 }
