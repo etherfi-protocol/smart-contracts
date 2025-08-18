@@ -128,20 +128,26 @@ contract EtherFiNodesManager is
 
         // Infer pod from first request
         // Use SSZ-based pubkey hash to stay consistent with EigenLayer (NOT keccak)
-        bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].pubkey);
+        bytes32[] memory pkHashes = new bytes32[](n);
+
+        bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].pubkey); // SSZ-based
+        pkHashes[0] = pkHash0;
+
         IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];
         if (address(node0) == address(0)) revert UnknownValidatorPubkey();
-        IEigenPod pod = node0.getEigenPod();
-        if (address(pod) == address(0)) revert UnknownNodeEigenPod();
 
-        // Validate every request maps to a known EtherFi node and the SAME pod
+        IEigenPod pod = node0.getEigenPod();
+        if (address(pod) == address(0)) revert UnknownEigenPod();
+
         for (uint256 i = 1; i < n; ) {
             bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
+            pkHashes[i] = pkHash;
+
             IEtherFiNode node = etherFiNodeFromPubkeyHash[pkHash];
             if (address(node) == address(0)) revert UnknownValidatorPubkey();
 
             IEigenPod pi = node.getEigenPod();
-            if (address(pi) == address(0)) revert UnknownNodeEigenPod();
+            if (address(pi) == address(0)) revert UnknownEigenPod();
             if (pi != pod) revert PubkeysMapToDifferentPods();
 
             unchecked { ++i; }
@@ -156,7 +162,19 @@ contract EtherFiNodesManager is
         // External interaction
         pod.requestWithdrawal{value: msg.value}(requests);
 
-        emit BatchWithdrawalRequestsForwarded(msg.sender, address(pod), n, msg.value);
+        // --- per-request events (post-success) ---
+        address initiator = msg.sender;
+        address podAddr = address(pod);
+        for (uint256 i = 0; i < n; ) {
+            emit ELExitRequestForwarded(
+                initiator,
+                podAddr,
+                pkHashes[i],
+                requests[i].amountGwei,
+                feePer
+            );
+            unchecked { ++i; }
+        }
     }
 
     function setExitRequestCapacity(uint256 capacity) external onlyAdmin() {
