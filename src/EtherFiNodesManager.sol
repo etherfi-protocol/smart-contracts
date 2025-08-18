@@ -121,59 +121,64 @@ contract EtherFiNodesManager is
         uint256 n = requests.length;
         if (n == 0) revert EmptyWithdrawalsRequest();
 
-        // Rate-limit by number of validator requests
-        uint64 units = SafeCast.toUint64(n);
-        bool ok = BucketLimiter.consume(exitRequestsLimit, units);
-        if (!ok) revert ExitRateLimitExceeded();
+        {
+            uint64 units = SafeCast.toUint64(n);
+            bool ok = BucketLimiter.consume(exitRequestsLimit, units);
+            if (!ok) revert ExitRateLimitExceeded();
+        }
 
-        // Infer pod from first request
-        // Use SSZ-based pubkey hash to stay consistent with EigenLayer (NOT keccak)
-        bytes32[] memory pkHashes = new bytes32[](n);
+        // ---- Resolve pod from first pubkey (scoped) ----
+        IEigenPod pod;
+        {
+            bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].pubkey);
+            IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];
+            if (address(node0) == address(0)) revert UnknownValidatorPubkey();
 
-        bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].pubkey); // SSZ-based
-        pkHashes[0] = pkHash0;
+            IEigenPod p0 = node0.getEigenPod();
+            if (address(p0) == address(0)) revert UnknownEigenPod();
+            pod = p0;
+        }
 
-        IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];
-        if (address(node0) == address(0)) revert UnknownValidatorPubkey();
+        // ---- Ensure all map to same pod (scoped) ----
+        {
+            for (uint256 i = 1; i < n; ) {
+                bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
+                IEtherFiNode node = etherFiNodeFromPubkeyHash[pkHash];
+                if (address(node) == address(0)) revert UnknownValidatorPubkey();
 
-        IEigenPod pod = node0.getEigenPod();
-        if (address(pod) == address(0)) revert UnknownEigenPod();
+                IEigenPod pi = node.getEigenPod();
+                if (address(pi) == address(0)) revert UnknownEigenPod();
+                if (pi != pod) revert PubkeysMapToDifferentPods();
 
-        for (uint256 i = 1; i < n; ) {
-            bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
-            pkHashes[i] = pkHash;
-
-            IEtherFiNode node = etherFiNodeFromPubkeyHash[pkHash];
-            if (address(node) == address(0)) revert UnknownValidatorPubkey();
-
-            IEigenPod pi = node.getEigenPod();
-            if (address(pi) == address(0)) revert UnknownEigenPod();
-            if (pi != pod) revert PubkeysMapToDifferentPods();
-
-            unchecked { ++i; }
+                unchecked { ++i; }
+            }
         }
 
         // Fee safety: require sufficient value at call time; forward full msg.value to tolerate fee bumps
         // NOTE: The predeploy updates per block; callers should slightly overpay.
-        uint256 feePer = pod.getWithdrawalRequestFee();
-        uint256 required = feePer * n;
-        if (msg.value < required) revert InsufficientWithdrawalFees();
+        {
+            uint256 feePer = pod.getWithdrawalRequestFee();
+            if (msg.value < feePer * n) revert InsufficientWithdrawalFees();
+        }
 
         // External interaction
         pod.requestWithdrawal{value: msg.value}(requests);
 
-        // --- per-request events (post-success) ---
-        address initiator = msg.sender;
-        address podAddr = address(pod);
-        for (uint256 i = 0; i < n; ) {
-            emit ELExitRequestForwarded(
-                initiator,
-                podAddr,
-                pkHashes[i],
-                requests[i].amountGwei,
-                feePer
-            );
-            unchecked { ++i; }
+        {
+            // Re-read feePer (view) to avoid keeping it alive earlier.
+            uint256 feePerForEvent = pod.getWithdrawalRequestFee();
+            address podAddr = address(pod);
+            for (uint256 i = 0; i < n; ) {
+                bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
+                emit ELExitRequestForwarded(
+                    msg.sender,
+                    podAddr,
+                    pkHash,
+                    requests[i].amountGwei,
+                    feePerForEvent
+                );
+                unchecked { ++i; }
+            }
         }
     }
 
