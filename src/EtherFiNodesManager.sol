@@ -103,24 +103,20 @@ contract EtherFiNodesManager is
         IEtherFiNode(etherfiNodeAddress(id)).startCheckpoint();
     }
 
+    // --------------------- Pectra: multi-pod batched exits --------------------
     /**
-     * @notice Forwards EIP-7002 withdrawal requests to the EigenPod, supporting single or batch requests.
-     * @dev Access: only addresses with ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE.
-     * @dev Pausable + nonReentrant for safety.
-     * @param pod The EigenPod address that owns the validators.
-     * @param requests An array of WithdrawalRequest, where:
-     *        - requests[i].pubkey is the 48-byte BLS pubkey
-     *        - requests[i].amountGwei == 0 means "full exit"; >0 means partial to pod
-     * @custom:fee You MUST send sufficient ETH in msg.value to cover the EIP-7002 predeploy fee
-     *             for ALL requests in this batch (fee updates per block). Overpay is okay.
+     * @notice Triggers EIP-7002 withdrawal requests, grouping by EigenPod automatically.
+     * @dev No `pod` param; we derive each pod from the validator pubkey using SSZ pubkey hash.
+     * @dev Access: only ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, pausable, nonReentrant.
+     * @param requests Array of WithdrawalRequest:
+     *        - pubkey: 48-byte BLS pubkey
+     *        - amountGwei: 0 for full exit, >0 for partial to pod
+     * @custom:fee Send enough ETH to cover sum of (feePerPod * requestsForPod). Overpay is OK.
      */
     function batchWithdrawalRequests(
-        address pod,
         IEigenPod.WithdrawalRequest[] calldata requests
     ) external payable whenNotPaused nonReentrant
     {
-        // ---------- checks ----------
-        if (pod == address(0)) revert UnknownNode();
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
         uint256 n = requests.length;
         if (n == 0) revert EmptyWithdrawalsRequest();
@@ -130,33 +126,37 @@ contract EtherFiNodesManager is
         bool ok = BucketLimiter.consume(exitRequestsLimit, units);
         if (!ok) revert ExitRateLimitExceeded();
 
-        // Strict pubkey length check to avoid wasting fee on malformed requests.
-        for (uint256 i = 0; i < n; ) {
-            bytes memory pubkey = requests[i].pubkey;
-            // Compute the pubkey hash
-            bytes32 pubkeyHash = keccak256(pubkey);
+        // Infer pod from first request
+        // Use SSZ-based pubkey hash to stay consistent with EigenLayer (NOT keccak)
+        bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].pubkey);
+        IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];
+        if (address(node0) == address(0)) revert UnknownValidatorPubkey();
+        IEigenPod pod = node0.getEigenPod();
+        if (address(pod) == address(0)) revert UnknownNodeEigenPod();
 
-            // Ensure the node exists for this pubkey hash
-            if (address(etherFiNodeFromPubkeyHash[pubkeyHash]) == address(0)) {
-                revert UnknownNode();
-            }
+        // Validate every request maps to a known EtherFi node and the SAME pod
+        for (uint256 i = 1; i < n; ) {
+            bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
+            IEtherFiNode node = etherFiNodeFromPubkeyHash[pkHash];
+            if (address(node) == address(0)) revert UnknownValidatorPubkey();
+
+            IEigenPod pi = node.getEigenPod();
+            if (address(pi) == address(0)) revert UnknownNodeEigenPod();
+            if (pi != pod) revert PubkeysMapToDifferentPods();
 
             unchecked { ++i; }
-        }   
+        }
 
-        // Ensure enough fee is sent *at the time of execution*.
+        // Fee safety: require sufficient value at call time; forward full msg.value to tolerate fee bumps
         // NOTE: The predeploy updates per block; callers should slightly overpay.
-        uint256 feePer = IEigenPod(pod).getWithdrawalRequestFee();
-        // unchecked mul; we already ensure n>0 and feePer is bounded by protocol economics.
+        uint256 feePer = pod.getWithdrawalRequestFee();
         uint256 required = feePer * n;
         if (msg.value < required) revert InsufficientWithdrawalFees();
 
-        // ---------- interactions ----------
-        // Forward full msg.value to tolerate fee update between the view and the call.
-        // If predeploy accepts >= required and internally refunds/credits excess, that's fine.
-        IEigenPod(pod).requestWithdrawal{value: msg.value}(requests);
+        // External interaction
+        pod.requestWithdrawal{value: msg.value}(requests);
 
-        emit BatchWithdrawalRequestsForwarded(msg.sender, pod, n, msg.value);
+        emit BatchWithdrawalRequestsForwarded(msg.sender, address(pod), n, msg.value);
     }
 
     function setExitRequestCapacity(uint256 capacity) external onlyAdmin() {
