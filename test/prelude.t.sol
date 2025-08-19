@@ -47,6 +47,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     bytes constant PK_16171 = hex"b964a67b7272ce6b59243d65ffd7b011363dd99322c88e583f14e34e19dfa249c80c724361ceaee7a9bfbfe1f3822871";
     bytes constant PK_16172 = hex"b22c8896452c858287426b478e76c2bf366f0c139cf54bd07fa7351290e9a9f92cc4f059ea349a441e1cfb60aacd2447";
     bytes constant PK_16173 = hex"87622c003bf0a4413bc736cc78a93b8fb5a427f5c538d71c52c9a453e9928a53c3f70acb37826b49f4ddc6d643667b78";
+    bytes constant PK_UNKNOWN = hex"850587731dbd50ac4e996913bde4154ea5ca72bad7ccd853bb47398ae76a75da92b9f824114a42a12ca87dd4fa07cd41";
 
     // Different-pod single (EigenPod: 0x813FF37BDD2b10845470Fa7d90bc7cD0FC94e456)
     bytes constant PK_24807 = hex"b4164dc6841e4b9d4736f89961b8e59ff9397d64d75d95fa3484c78de51a18c4031ef253896ba85b38d168f7211c8c71";
@@ -881,6 +882,13 @@ contract PreludeTest is Test, ArrayTestHelper {
         require(address(pod) != address(0), "test: node has no pod");
     }
 
+    function _sliceBytes(bytes[] memory arr, uint256 start, uint256 len) internal pure returns (bytes[] memory out) {
+        out = new bytes[](len);
+        for (uint256 i = 0; i < len; ++i) {
+            out[i] = arr[start + i];
+        }
+    }
+
     // ---------- tests for EL exits ----------
     function test_batchWithdrawalRequests_samePod_fullExit_success() public {
 
@@ -930,7 +938,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.deal(elExiter, 1 ether);
 
         // Expect one event per request AFTER success
-        // event ELExitRequestForwarded(address initiator, address pod, bytes32 validatorPubkeyHash, uint64 amountGwei, uint256 feePerRequest);
         for (uint256 i = 0; i < n; ++i) {
             bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[i]);
             vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
@@ -1004,7 +1011,6 @@ contract PreludeTest is Test, ArrayTestHelper {
             );
         }
 
-        // Act
         vm.prank(elExiter);
         etherFiNodesManager.batchWithdrawalRequests{value: valueToSend}(reqs);
     }
@@ -1025,5 +1031,200 @@ contract PreludeTest is Test, ArrayTestHelper {
         etherFiNodesManager.__initRateLimiter();
     }
 
+    function test_rateLimitSetters_access_control() public {
+        
+        bytes[] memory pubkeys = new bytes[](3);
+        uint256[] memory legacyIds = new uint256[](3);
+
+        pubkeys[0] = PK_16171;
+        pubkeys[1] = PK_16172;
+        pubkeys[2] = PK_16173;
+
+        legacyIds[0] = 51715;
+        legacyIds[1] = 51716;
+        legacyIds[2] = 51717;
+
+        vm.startPrank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        etherFiNodesManager.__initRateLimiter();
+        vm.stopPrank();
+
+        // Unauthorized caller -> revert
+        vm.expectRevert();
+        etherFiNodesManager.setExitRequestCapacity(100);
+        vm.expectRevert();
+        etherFiNodesManager.setExitRequestRefillPerSecond(10);
+
+        // Authorized caller (admin in fork has the config role) -> success
+        vm.startPrank(admin);
+        etherFiNodesManager.setExitRequestCapacity(100);
+        etherFiNodesManager.setExitRequestRefillPerSecond(10);
+        vm.stopPrank();
+    }
+
+    function test_setProofSubmitter_access_control() public {
+        // minimal setup to keep parity with your pattern
+        bytes[] memory pubkeys = new bytes[](3);
+        uint256[] memory legacyIds = new uint256[](3);
+        pubkeys[0] = PK_16171;
+        pubkeys[1] = PK_16172;
+        pubkeys[2] = PK_16173;
+
+        legacyIds[0] = 51715;
+        legacyIds[1] = 51716;
+        legacyIds[2] = 51717;
+
+        vm.startPrank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        etherFiNodesManager.__initRateLimiter();
+        vm.stopPrank();
+
+        // Unauthorized caller -> revert
+        vm.expectRevert();
+        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(1));
+
+        // Authorized caller -> success (e.g., eigenlayerAdmin per fork)
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(etherFiNodesManager));
+    }
+
+    function test_batchWithdrawalRequests_requires_role_reverts() public {
+
+        bytes[] memory pubkeys = new bytes[](3);
+        uint256[] memory legacyIds = new uint256[](3);
+        uint64[] memory amounts = new uint64[](3);
+        pubkeys[0] = PK_16171;
+        pubkeys[1] = PK_16172;
+        pubkeys[2] = PK_16173;
+
+        legacyIds[0] = 51715;
+        legacyIds[1] = 51716;
+        legacyIds[2] = 51717;
+
+        vm.startPrank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
+        etherFiNodesManager.__initRateLimiter();
+        vm.stopPrank();
+        _setExitRateLimit(100, 10);
+
+        // All same pod (sanity)
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        (, IEigenPod pod1) = _resolvePod(pubkeys[1]);
+        (, IEigenPod pod2) = _resolvePod(pubkeys[2]);
+        assertEq(address(pod0), address(pod1));
+        assertEq(address(pod0), address(pod2));
+
+        // full exits
+        amounts[0] = 0; amounts[1] = 0; amounts[2] = 0;
+        IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
+
+        // Set proof submitter (so that pod call doesn't revert on that check)
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(etherFiNodesManager));
+
+        // No EL_TRIGGER_EXIT role granted to msg.sender -> revert
+        uint256 feePer = pod0.getWithdrawalRequestFee();
+        uint256 valueToSend = feePer * reqs.length;
+        vm.deal(address(this), 1 ether);
+
+        vm.expectRevert();
+        etherFiNodesManager.batchWithdrawalRequests{value: valueToSend}(reqs);
+    }
+    function test_batchWithdrawalRequests_multiple_pods_revert() public {
+
+        bytes[] memory pubkeys = new bytes[](3);
+        uint256[] memory legacyIds = new uint256[](3);
+        uint64[] memory amounts = new uint64[](3);
+        pubkeys[0] = PK_16171;
+        pubkeys[1] = PK_16172;
+        pubkeys[2] = PK_24807;          // belongs to different pod
+
+        legacyIds[0] = 51715;
+        legacyIds[1] = 51716;
+        legacyIds[2] = 39327;           // matching legacy id for PK_DIFFPOD
+
+        vm.startPrank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        etherFiNodesManager.__initRateLimiter();
+        vm.stopPrank();
+        _setExitRateLimit(100, 10);
+
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        (, IEigenPod pod1) = _resolvePod(pubkeys[1]);
+        (, IEigenPod pod2) = _resolvePod(pubkeys[2]);
+
+        // Sanity: confirm third resolves to a different pod
+        assertEq(address(pod0), address(pod1));
+        assertTrue(address(pod0) != address(pod2));
+
+        amounts[0] = 0; amounts[1] = 0; amounts[2] = 0;
+        IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
+
+        // Set proof submitter (avoid unrelated revert)
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(etherFiNodesManager));
+
+        // Grant EL_TRIGGER_EXIT to the caller (so only multi-pod check is exercised)
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(
+            etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(),
+            address(this)
+        );
+        vm.stopPrank();
+
+        uint256 feePer = pod0.getWithdrawalRequestFee();
+        uint256 valueToSend = feePer * reqs.length;
+
+        vm.expectRevert(); // multi-pod should revert
+        etherFiNodesManager.batchWithdrawalRequests{value: valueToSend}(reqs);
+    }
+
+    function test_batchWithdrawalRequests_unknown_pubkey_revert() public {
+
+        bytes[] memory pubkeys = new bytes[](3);
+        uint256[] memory legacyIds = new uint256[](2);
+        uint64[] memory amounts = new uint64[](3);
+
+        pubkeys[0] = PK_16171;
+        pubkeys[1] = PK_16172;
+        pubkeys[2] = PK_UNKNOWN; // not linked -> should revert
+
+        legacyIds[0] = 51715;
+        legacyIds[1] = 51716;
+
+        // Link only two pubkeys; do NOT link PK_UNKNOWN
+        vm.startPrank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, _sliceBytes(pubkeys, 0, 2));
+        etherFiNodesManager.__initRateLimiter();
+        vm.stopPrank();
+        _setExitRateLimit(100, 10);
+
+        // Resolve pod for first two (sanity)
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        (, IEigenPod pod1) = _resolvePod(pubkeys[1]);
+        assertEq(address(pod0), address(pod1));
+
+        // full exits
+        amounts[0] = 0; amounts[1] = 0; amounts[2] = 0;
+        IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
+
+        // Set proof submitter for the known validator
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(etherFiNodesManager));
+
+        // Grant role to focus the revert on unknown pubkey
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(
+            etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(),
+            address(this)
+        );
+        vm.stopPrank();
+
+        uint256 feePer = pod0.getWithdrawalRequestFee();
+        uint256 valueToSend = feePer * reqs.length;
+
+        vm.expectRevert(); // unknown/unlinked pubkey must revert
+        etherFiNodesManager.batchWithdrawalRequests{value: valueToSend}(reqs);
+    }
 }
 
