@@ -106,7 +106,36 @@ contract EtherFiNodesManager is
         IEtherFiNode(etherfiNodeAddress(id)).startCheckpoint();
     }
 
-    // --------------------- Pectra: multi-pod batched exits --------------------
+    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyEigenlayerAdmin whenNotPaused {
+        IEtherFiNode(etherfiNodeAddress(id)).verifyCheckpointProofs(balanceContainerProof, proofs);
+    }
+
+    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyEigenlayerAdmin whenNotPaused {
+        IEtherFiNode(etherfiNodeAddress(id)).setProofSubmitter(proofSubmitter);
+    }
+
+    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyEigenlayerAdmin whenNotPaused returns (bytes32 withdrawalRoot) {
+        return IEtherFiNode(etherfiNodeAddress(id)).queueETHWithdrawal(amount);
+    }
+
+    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
+        uint256 balance = IEtherFiNode(etherfiNodeAddress(id)).completeQueuedETHWithdrawals(receiveAsTokens);
+        if(balance > 0) {
+            emit FundsTransferred(etherfiNodeAddress(id), balance);
+        }
+    }
+
+    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin whenNotPaused {
+        IEtherFiNode(etherfiNodeAddress(id)).queueWithdrawals(params);
+    }
+
+    function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
+        IEtherFiNode(etherfiNodeAddress(id)).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+    }
+
+    //-------------------------------------------------------------------
+    //-------------  Execution-Layer Triggered Withdrawals  -------------
+    //-------------------------------------------------------------------
     /**
      * @notice Triggers EIP-7002 withdrawal requests, grouping by EigenPod automatically.
      * @dev No `pod` param; we derive each pod from the validator pubkey using SSZ pubkey hash.
@@ -130,7 +159,7 @@ contract EtherFiNodesManager is
             if (!ok) revert ExitRateLimitExceeded();
         }
 
-        // ---- Resolve pod from first pubkey (scoped) ----
+        // ---- Resolve pod from first pubkey ----
         IEigenPod pod;
         {
             bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].pubkey);
@@ -142,7 +171,7 @@ contract EtherFiNodesManager is
             pod = p0;
         }
 
-        // ---- Ensure all map to same pod (scoped) ----
+        // ---- Ensure all map to same pod ----
         {
             for (uint256 i = 1; i < n; ) {
                 bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
@@ -157,8 +186,8 @@ contract EtherFiNodesManager is
             }
         }
 
-        // Fee safety: require sufficient value at call time; forward full msg.value to tolerate fee bumps
-        // NOTE: The predeploy updates per block; callers should slightly overpay.
+        // Fee safety: require exact value at call time;
+        // NOTE: The predeploy updates per block; callers should pay the exact amount.
         {
             uint256 feePer = pod.getWithdrawalRequestFee();
             if (msg.value < feePer * n) revert InsufficientWithdrawalFees();
@@ -197,33 +226,6 @@ contract EtherFiNodesManager is
 
     function canConsumeExitRequests(uint256 numRequests) external view returns (bool) {
         return BucketLimiter.canConsume(exitRequestsLimit, SafeCast.toUint64(numRequests));
-    }
-
-    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyEigenlayerAdmin whenNotPaused {
-        IEtherFiNode(etherfiNodeAddress(id)).verifyCheckpointProofs(balanceContainerProof, proofs);
-    }
-
-    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyEigenlayerAdmin whenNotPaused {
-        IEtherFiNode(etherfiNodeAddress(id)).setProofSubmitter(proofSubmitter);
-    }
-
-    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyEigenlayerAdmin whenNotPaused returns (bytes32 withdrawalRoot) {
-        return IEtherFiNode(etherfiNodeAddress(id)).queueETHWithdrawal(amount);
-    }
-
-    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
-        uint256 balance = IEtherFiNode(etherfiNodeAddress(id)).completeQueuedETHWithdrawals(receiveAsTokens);
-        if(balance > 0) {
-            emit FundsTransferred(etherfiNodeAddress(id), balance);
-        }
-    }
-
-    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin whenNotPaused {
-        IEtherFiNode(etherfiNodeAddress(id)).queueWithdrawals(params);
-    }
-
-    function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
-        IEtherFiNode(etherfiNodeAddress(id)).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
     }
 
     //-------------------------------------------------------------------

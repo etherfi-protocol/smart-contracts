@@ -130,7 +130,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 bidId;         // if none specified a new bid will be placed
         uint256 validatorSize; // if none specified default to 32 eth
         bool withdrawable;     // give the eigenpod "validatorSize" worth of withdrawable beacon shares
-        bytes pubkey;          // emulate validator from mainnet
+        bytes pubkey;          // if none specified a random pubkey is generated
     }
 
     struct TestValidator {
@@ -1194,7 +1194,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Link only two pubkeys; do NOT link PK_UNKNOWN
         vm.startPrank(admin);
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, _sliceBytes(pubkeys, 0, 2));
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, sliceBytes(pubkeys, 0, 2));
         etherFiNodesManager.__initRateLimiter();
         vm.stopPrank();
         _setExitRateLimit(100, 10);
