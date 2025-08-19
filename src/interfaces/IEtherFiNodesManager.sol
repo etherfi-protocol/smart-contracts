@@ -126,4 +126,5 @@ interface IEtherFiNodesManager {
     error UnknownValidatorPubkey();
     error UnknownEigenPod();
     error PubkeysMapToDifferentPods();
+    error RateLimiterAlreadyInitialized();
 }

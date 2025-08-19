@@ -901,7 +901,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.stopPrank();
         _setExitRateLimit(100, 10);
 
-        // All should resolve to the same pod
         ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
         ( , IEigenPod pod1) = _resolvePod(pubkeys[1]);
         ( , IEigenPod pod2) = _resolvePod(pubkeys[2]);
@@ -913,6 +912,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
 
         vm.prank(eigenlayerAdmin);
+        // this needs to be etherFiNodesManager because solidity is dumb
         etherFiNodesManager.setProofSubmitter(legacyIds[0], address(etherFiNodesManager));
 
         // Grant role to the triggering EOA
@@ -946,4 +946,84 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(elExiter);
         etherFiNodesManager.batchWithdrawalRequests{value: valueToSend}(reqs);
     }
+
+    function test_batchWithdrawalRequests_samePod_partialExit_success() public {
+
+        bytes[] memory pubkeys = new bytes[](3);
+        uint256[] memory legacyIds = new uint256[](3);
+        uint64[] memory amounts = new uint64[](3);
+        pubkeys[0] = PK_16171;
+        pubkeys[1] = PK_16172;
+        pubkeys[2] = PK_16173;
+
+        legacyIds[0] = 51715;
+        legacyIds[1] = 51716;
+        legacyIds[2] = 51717;
+
+        // Link and init
+        vm.startPrank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        etherFiNodesManager.__initRateLimiter();
+        vm.stopPrank();
+        _setExitRateLimit(100, 10);
+
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        (, IEigenPod pod1) = _resolvePod(pubkeys[1]);
+        (, IEigenPod pod2) = _resolvePod(pubkeys[2]);
+        assertEq(address(pod0), address(pod1));
+        assertEq(address(pod0), address(pod2));
+
+        // Build partial-exit requests (non-zero amounts)
+        amounts[0] = 0;
+        amounts[1] = 2_000 gwei;
+        amounts[2] = 3_000 gwei;
+        IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
+
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(etherFiNodesManager));
+
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(
+            etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(),
+            elExiter
+        );
+        vm.stopPrank();
+
+        // exact required ETH for fees
+        uint256 feePer = pod0.getWithdrawalRequestFee();
+        uint256 valueToSend = feePer * reqs.length;
+        vm.deal(elExiter, 1 ether);
+        vm.deal(eigenlayerAdmin, 1 ether);
+
+        // Expect one ELExitRequestForwarded event per request
+        for (uint256 i = 0; i < reqs.length; ++i) {
+            bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[i]);
+            vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
+            emit IEtherFiNodesManager.ELExitRequestForwarded(
+                elExiter, address(pod0), pkHash, amounts[i], feePer
+            );
+        }
+
+        // Act
+        vm.prank(elExiter);
+        etherFiNodesManager.batchWithdrawalRequests{value: valueToSend}(reqs);
+    }
+
+    function test_initRateLimiter_onlyOwner_and_singleton() public {
+
+        // 1) Wrong caller cannot init
+        vm.expectRevert();
+        etherFiNodesManager.__initRateLimiter();
+
+        // 2) Owner/admin can init
+        vm.prank(admin);
+        etherFiNodesManager.__initRateLimiter();
+
+        // 3) Cannot be initialized twice
+        vm.prank(admin);
+        vm.expectRevert();
+        etherFiNodesManager.__initRateLimiter();
+    }
+
 }
+
