@@ -73,7 +73,7 @@ contract EtherFiNodesManager is
         _unpause();
     }
 
-    function __initRateLimiter() internal {
+    function __initRateLimiter() external onlyAdmin() {
         exitRequestsLimit = BucketLimiter.create(uint64(100), uint64(1));
     }
 
