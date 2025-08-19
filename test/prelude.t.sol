@@ -919,10 +919,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         amounts[0] = 0; amounts[1] = 0; amounts[2] = 0;
         IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
 
-        vm.prank(eigenlayerAdmin);
-        // this needs to be etherFiNodesManager because solidity is dumb
-        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(etherFiNodesManager));
-
         // Grant role to the triggering EOA
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(
@@ -985,9 +981,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         amounts[1] = 2_000 gwei;
         amounts[2] = 3_000 gwei;
         IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
-
-        vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(etherFiNodesManager));
 
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(
@@ -1082,10 +1075,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Unauthorized caller -> revert
         vm.expectRevert();
         etherFiNodesManager.setProofSubmitter(legacyIds[0], address(1));
-
-        // Authorized caller -> success (e.g., eigenlayerAdmin per fork)
-        vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(etherFiNodesManager));
     }
 
     function test_batchWithdrawalRequests_requires_role_reverts() public {
@@ -1117,10 +1106,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         // full exits
         amounts[0] = 0; amounts[1] = 0; amounts[2] = 0;
         IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
-
-        // Set proof submitter (so that pod call doesn't revert on that check)
-        vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(etherFiNodesManager));
 
         // No EL_TRIGGER_EXIT role granted to msg.sender -> revert
         uint256 feePer = pod0.getWithdrawalRequestFee();
@@ -1159,10 +1144,6 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         amounts[0] = 0; amounts[1] = 0; amounts[2] = 0;
         IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
-
-        // Set proof submitter (avoid unrelated revert)
-        vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(etherFiNodesManager));
 
         // Grant EL_TRIGGER_EXIT to the caller (so only multi-pod check is exercised)
         vm.startPrank(roleRegistry.owner());
@@ -1207,10 +1188,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         // full exits
         amounts[0] = 0; amounts[1] = 0; amounts[2] = 0;
         IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
-
-        // Set proof submitter for the known validator
-        vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.setProofSubmitter(legacyIds[0], address(etherFiNodesManager));
 
         // Grant role to focus the revert on unknown pubkey
         vm.startPrank(roleRegistry.owner());
