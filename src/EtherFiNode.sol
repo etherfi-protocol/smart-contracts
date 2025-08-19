@@ -21,6 +21,7 @@ contract EtherFiNode is IEtherFiNode {
     ILiquidityPool public immutable liquidityPool;
     IEtherFiNodesManager public immutable etherFiNodesManager;
     IRoleRegistry public immutable roleRegistry;
+    address public etherFiNodesManagerAddress;
 
     // eigenlayer core contracts
     IEigenPodManager public immutable eigenPodManager;
@@ -50,6 +51,7 @@ contract EtherFiNode is IEtherFiNode {
         eigenPodManager = IEigenPodManager(_eigenPodManager);
         delegationManager = IDelegationManager(_delegationManager);
         roleRegistry = IRoleRegistry(_roleRegistry);
+        etherFiNodesManagerAddress = _etherFiNodesManager;
     }
 
     fallback() external payable {}
@@ -165,6 +167,16 @@ contract EtherFiNode is IEtherFiNode {
             emit FundsTransferred(address(liquidityPool), balance);
         }
         return balance;
+    }
+
+    //-------------------------------------------------------------------
+    //-------------  Execution-Layer Triggered Withdrawals  -------------
+    //-------------------------------------------------------------------
+    function forwardBatchWithdrawalRequests(IEigenPod pod, IEigenPod.WithdrawalRequest[] calldata requests) external payable {
+        if (msg.sender != etherFiNodesManagerAddress) {
+            revert InvalidForwardedCall();
+        }
+        pod.requestWithdrawal{value: msg.value}(requests);
     }
 
     //--------------------------------------------------------------------------------------

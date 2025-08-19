@@ -160,12 +160,11 @@ contract EtherFiNodesManager is
         }
 
         // ---- Resolve pod from first pubkey ----
-        IEigenPod pod;
+        bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].pubkey);
+        IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];
+        IEigenPod pod;        
         {
-            bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].pubkey);
-            IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];
-            if (address(node0) == address(0)) revert UnknownValidatorPubkey();
-
+            if (address(node0) == address(0)) revert UnknownValidatorPubkey(); 
             IEigenPod p0 = node0.getEigenPod();
             if (address(p0) == address(0)) revert UnknownEigenPod();
             pod = p0;
@@ -194,7 +193,7 @@ contract EtherFiNodesManager is
         }
 
         // External interaction
-        pod.requestWithdrawal{value: msg.value}(requests);
+        node0.forwardBatchWithdrawalRequests{value: msg.value}(pod, requests);
 
         {
             // Re-read feePer (view) to avoid keeping it alive earlier.
