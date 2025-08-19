@@ -1194,7 +1194,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Link only two pubkeys; do NOT link PK_UNKNOWN
         vm.startPrank(admin);
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, sliceBytes(pubkeys, 0, 2));
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, _sliceBytes(pubkeys, 0, 2));
         etherFiNodesManager.__initRateLimiter();
         vm.stopPrank();
         _setExitRateLimit(100, 10);
