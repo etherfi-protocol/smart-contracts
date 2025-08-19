@@ -74,6 +74,9 @@ contract EtherFiNodesManager is
     }
 
     function __initRateLimiter() external onlyAdmin() {
+        if (exitRequestsLimit.lastRefill != 0) {
+            revert RateLimiterAlreadyInitialized();
+        }
         exitRequestsLimit = BucketLimiter.create(uint64(100), uint64(1));
     }
 
