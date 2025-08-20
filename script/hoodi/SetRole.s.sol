@@ -38,6 +38,7 @@ import "../../src/interfaces/IRoleRegistry.sol";
  * - ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE: Call forwarder for nodes manager
  * - ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE: EigenLayer admin for individual nodes
  * - ETHERFI_NODE_CALL_FORWARDER_ROLE: Call forwarder for individual nodes
+ * - ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE: Executes Execution Layer Withdrawals
  * 
  * Usage Examples:
  * 
