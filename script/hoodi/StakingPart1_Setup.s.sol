@@ -34,12 +34,12 @@ import {StakingManager} from "../../src/StakingManager.sol";
  */
 contract StakingPart1 is Script {
     // Hoodi testnet addresses
-    address constant LIQUIDITY_POOL = 0xA6C7D9A055Ebb433E5C6E098b0487875537852F0;
-    address constant STAKING_MANAGER = 0xEcf3C0Dc644DBC7d0fbf7f69651D90f2177D0dFf;
-    address constant ETHERFI_NODES_MANAGER = 0x5eF18135824b4C99f142be7714D90673c7fcE775;
-    address constant AUCTION_MANAGER = 0xE3BDCE392B6363493a8Cbc4580857A3931023c9C;
-    address constant NODE_OPERATOR_MANAGER = 0x51BB73660D9a12fa06e2A42BcED7D25289d4054D;
-    address constant ROLE_REGISTRY = 0x8309580c86C11e61e3C57c7227f74535f6801d7C;
+    address constant LIQUIDITY_POOL = 0x4a8081095549e63153a61D21F92ff079fe39858E;
+    address constant STAKING_MANAGER = 0xDbE50E32Ed95f539F36bA315a75377FBc35aBc12;
+    address constant ETHERFI_NODES_MANAGER = 0x7579194b8265e3Aa7df451c6BD2aff5B1FC5F945;
+    address constant AUCTION_MANAGER = 0x261315c176864cE29D582f38DdA4930ED17CD95A;
+    address constant NODE_OPERATOR_MANAGER = 0x3e17543CaE3366cc67a3CBeD5Aa42d9d09D59b39;
+    address constant ROLE_REGISTRY = 0x7279853cA1804d4F705d885FeA7f1662323B5Aab;
     
     // Role definition
     bytes32 constant STAKING_MANAGER_NODE_CREATOR_ROLE = keccak256("STAKING_MANAGER_NODE_CREATOR_ROLE");
@@ -169,7 +169,6 @@ contract StakingPart1 is Script {
         console.log("Role Reg: %s",address(roleRegistry));
 
         address etherFiNode = stakingManager.instantiateEtherFiNode(true);
-        console.log("Here?");
         address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
         
         vm.stopBroadcast();
