@@ -107,6 +107,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), callForwarder);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), admin);
+        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_UNRESTAKER_ROLE(), eigenlayerAdmin);
+        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_UNRESTAKER_ROLE(), address(etherFiNodesManager));
         // roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elExiter);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
         roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), admin);
