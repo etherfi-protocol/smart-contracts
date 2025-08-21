@@ -890,7 +890,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     // ---------- tests for EL exits ----------
-    function test_batchWithdrawalRequests_samePod_fullExit_success() public {
+    function test_requestWithdrawal_samePod_fullExit_success() public {
 
         bytes[] memory pubkeys = new bytes[](3);
         uint256[] memory legacyIds = new uint256[](3);
@@ -937,7 +937,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         for (uint256 i = 0; i < n; ++i) {
             bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[i]);
             vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-            emit IEtherFiNodesManager.ELExitRequestForwarded(
+            emit IEtherFiNodesManager.ELWithdrawalRequestSent(
                 address(elExiter),
                 address(pod0),
                 pkHash,
@@ -947,10 +947,10 @@ contract PreludeTest is Test, ArrayTestHelper {
         }
 
         vm.prank(elExiter);
-        etherFiNodesManager.batchWithdrawalRequests{value: valueToSend}(reqs);
+        etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
     }
 
-    function test_batchWithdrawalRequests_samePod_partialExit_success() public {
+    function test_requestWithdrawal_samePod_partialExit_success() public {
 
         bytes[] memory pubkeys = new bytes[](3);
         uint256[] memory legacyIds = new uint256[](3);
@@ -999,13 +999,13 @@ contract PreludeTest is Test, ArrayTestHelper {
         for (uint256 i = 0; i < reqs.length; ++i) {
             bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[i]);
             vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-            emit IEtherFiNodesManager.ELExitRequestForwarded(
+            emit IEtherFiNodesManager.ELWithdrawalRequestSent(
                 elExiter, address(pod0), pkHash, amounts[i], feePer
             );
         }
 
         vm.prank(elExiter);
-        etherFiNodesManager.batchWithdrawalRequests{value: valueToSend}(reqs);
+        etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
     }
 
     function test_initRateLimiter_onlyOwner_and_singleton() public {
@@ -1077,7 +1077,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         etherFiNodesManager.setProofSubmitter(legacyIds[0], address(1));
     }
 
-    function test_batchWithdrawalRequests_requires_role_reverts() public {
+    function test_requestWithdrawal_requires_role_reverts() public {
 
         bytes[] memory pubkeys = new bytes[](3);
         uint256[] memory legacyIds = new uint256[](3);
@@ -1113,9 +1113,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.deal(address(this), 1 ether);
 
         vm.expectRevert();
-        etherFiNodesManager.batchWithdrawalRequests{value: valueToSend}(reqs);
+        etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
     }
-    function test_batchWithdrawalRequests_multiple_pods_revert() public {
+    function test_requestWithdrawal_multiple_pods_revert() public {
 
         bytes[] memory pubkeys = new bytes[](3);
         uint256[] memory legacyIds = new uint256[](3);
@@ -1157,10 +1157,10 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 valueToSend = feePer * reqs.length;
 
         vm.expectRevert(); // multi-pod should revert
-        etherFiNodesManager.batchWithdrawalRequests{value: valueToSend}(reqs);
+        etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
     }
 
-    function test_batchWithdrawalRequests_unknown_pubkey_revert() public {
+    function test_requestWithdrawal_unknown_pubkey_revert() public {
 
         bytes[] memory pubkeys = new bytes[](3);
         uint256[] memory legacyIds = new uint256[](2);
@@ -1201,7 +1201,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 valueToSend = feePer * reqs.length;
 
         vm.expectRevert(); // unknown/unlinked pubkey must revert
-        etherFiNodesManager.batchWithdrawalRequests{value: valueToSend}(reqs);
+        etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
     }
 }
 
