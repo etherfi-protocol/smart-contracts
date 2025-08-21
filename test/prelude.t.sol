@@ -908,7 +908,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
-        etherFiNodesManager.__initRateLimiter();
+        etherFiNodesManager.__initExitRateLimiter();
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
 
@@ -969,7 +969,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Link and init
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
-        etherFiNodesManager.__initRateLimiter();
+        etherFiNodesManager.__initExitRateLimiter();
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
 
@@ -1015,16 +1015,16 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // 1) Wrong caller cannot init
         vm.expectRevert();
-        etherFiNodesManager.__initRateLimiter();
+        etherFiNodesManager.__initExitRateLimiter();
 
         // 2) Owner/admin can init
         vm.prank(admin);
-        etherFiNodesManager.__initRateLimiter();
+        etherFiNodesManager.__initExitRateLimiter();
 
         // 3) Cannot be initialized twice
         vm.prank(admin);
         vm.expectRevert();
-        etherFiNodesManager.__initRateLimiter();
+        etherFiNodesManager.__initExitRateLimiter();
     }
 
     function test_rateLimitSetters_access_control() public {
@@ -1042,7 +1042,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
-        etherFiNodesManager.__initRateLimiter();
+        etherFiNodesManager.__initExitRateLimiter();
         vm.stopPrank();
 
         // Unauthorized caller -> revert
@@ -1072,7 +1072,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
-        etherFiNodesManager.__initRateLimiter();
+        etherFiNodesManager.__initExitRateLimiter();
         vm.stopPrank();
 
         // Unauthorized caller -> revert
@@ -1095,7 +1095,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
-        etherFiNodesManager.__initRateLimiter();
+        etherFiNodesManager.__initExitRateLimiter();
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
 
@@ -1133,7 +1133,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
-        etherFiNodesManager.__initRateLimiter();
+        etherFiNodesManager.__initExitRateLimiter();
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
 
@@ -1179,7 +1179,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Link only two pubkeys; do NOT link PK_UNKNOWN
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, _sliceBytes(pubkeys, 0, 2));
-        etherFiNodesManager.__initRateLimiter();
+        etherFiNodesManager.__initExitRateLimiter();
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
 

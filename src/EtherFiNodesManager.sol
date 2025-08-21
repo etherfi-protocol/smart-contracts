@@ -74,7 +74,7 @@ contract EtherFiNodesManager is
         _unpause();
     }
 
-    function __initRateLimiter() external onlyAdmin() {
+    function __initExitRateLimiter() external onlyAdmin() {
         if (exitRequestsLimit.lastRefill != 0) {
             revert RateLimiterAlreadyInitialized();
         }
