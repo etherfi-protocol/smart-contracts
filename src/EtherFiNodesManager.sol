@@ -37,7 +37,7 @@ contract EtherFiNodesManager is
     mapping(bytes4 => bool) public allowedForwardedEigenpodCalls; // Call Forwarding: functionSelector -> allowed
     mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls; // Call Forwarding: functionSelector -> targetAddress -> allowed
     mapping(bytes32 => IEtherFiNode) public etherFiNodeFromPubkeyHash;
-    BucketLimiter.Limit public exitRequestsLimit; // Exit requests are measured in "units" == number of validator requests
+    BucketLimiter.Limit public exitRequestsLimit;
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
