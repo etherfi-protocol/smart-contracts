@@ -168,19 +168,11 @@ contract EtherFiNodesManager is
         if (!canConsumeExitETH(totalExitGwei)) revert ExitRateLimitExceeded();
 
         bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].pubkey);
-        IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];
-        IEigenPod pod;        
-        {
-            if (address(node0) == address(0)) revert UnknownValidatorPubkey(); 
-            IEigenPod p0 = node0.getEigenPod();
-            if (address(p0) == address(0)) revert UnknownEigenPod();
-            pod = p0;
-        }
-
-        // Fee safety: require exact value at call time;
-        // NOTE: The predeploy updates per block; callers should pay the exact amount.
+        IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];      
+        if (address(node0) == address(0)) revert UnknownValidatorPubkey(); 
+        IEigenPod pod = node0.getEigenPod();
+        if (address(pod) == address(0)) revert UnknownEigenPod();
         uint256 feePer = pod.getWithdrawalRequestFee();
-        if (msg.value < feePer * n) revert InsufficientWithdrawalFees();
         
         for (uint256 i = 0; i < n; ) {
             bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
@@ -205,7 +197,10 @@ contract EtherFiNodesManager is
             unchecked { ++i; }   
         }
 
-        // External interaction
+        // ------------ fee checks ------------
+        if (msg.value < feePer * n) revert InsufficientWithdrawalFees();
+
+        // ------------ external interaction ----------
         node0.requestWithdrawal{value: msg.value}(pod, requests);
     }
 
@@ -237,8 +232,8 @@ contract EtherFiNodesManager is
     }
 
     // check for enough ETH left in remaining capacity
-    function canConsumeExitETH(uint256 totalEth) public view returns (bool) {
-        return BucketLimiter.canConsume(exitRequestsLimit, SafeCast.toUint64(totalEth));
+    function canConsumeExitETH(uint256 amountGwei) public view returns (bool) {
+        return BucketLimiter.canConsume(exitRequestsLimit, SafeCast.toUint64(amountGwei));
     }
 
     // Unrestaking rate limiting
