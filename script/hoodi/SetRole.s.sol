@@ -94,13 +94,13 @@ contract SetRole is Script {
         bytes32 role = keccak256(abi.encodePacked(roleName));
         require(role != bytes32(0), "Invalid role name");
         
-        if (action == "grant") {
+       if (keccak256(abi.encodePacked(action)) == keccak256(abi.encodePacked("grant"))) {
             grantRole(role);
-        } else if (action == "revoke") {
+        } else if (keccak256(abi.encodePacked(action)) == keccak256(abi.encodePacked("revoke"))) {
             revokeRole(role);
-        } else if (action == "check") {
+        } else if (keccak256(abi.encodePacked(action)) == keccak256(abi.encodePacked("check"))) {
             checkRole(role);
-        } else if (action == "list") {
+        } else if (keccak256(abi.encodePacked(action)) == keccak256(abi.encodePacked("list"))) {
             listRoleHolders(role);
         } else {
             revert("Invalid action. Use: grant, revoke, check, or list");
