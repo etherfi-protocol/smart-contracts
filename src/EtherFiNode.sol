@@ -89,6 +89,8 @@ contract EtherFiNode is IEtherFiNode {
     /// @dev convenience function to queue a beaconETH withdrawal from eigenlayer. You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
     ///   It is fine to queue a withdrawal before validators have finished exiting on the beacon chain.
     function queueETHWithdrawal(uint256 amount) external onlyEigenlayerAdmin returns (bytes32 withdrawalRoot) {
+        // Check unrestaking rate limit
+        etherFiNodesManager.consumeUnrestakingCapacity(amount);
 
         // beacon eth is always 1 to 1 with deposit shares
         uint256[] memory depositShares = new uint256[](1);
@@ -141,6 +143,17 @@ contract EtherFiNode is IEtherFiNode {
     /// @dev queue a withdrawal from eigenlayer. You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
     ///   For the general case of queuing a beaconETH withdrawal you can use queueETHWithdrawal instead.
     function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin returns (bytes32[] memory withdrawalRoots) {
+        // Calculate total amount for rate limiting (shares = wei, so each share * 1e18 = ether value)
+        uint256 totalAmount = 0;
+        for (uint256 i = 0; i < params.length; i++) {
+            for (uint256 j = 0; j < params[i].depositShares.length; j++) {
+                totalAmount += params[i].depositShares[j];
+            }
+        }
+        
+        // Check unrestaking rate limit
+        etherFiNodesManager.consumeUnrestakingCapacity(totalAmount);
+        
         return delegationManager.queueWithdrawals(params);
     }
 

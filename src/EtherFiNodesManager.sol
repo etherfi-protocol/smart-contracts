@@ -38,6 +38,7 @@ contract EtherFiNodesManager is
     mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls; // Call Forwarding: functionSelector -> targetAddress -> allowed
     mapping(bytes32 => IEtherFiNode) public etherFiNodeFromPubkeyHash;
     BucketLimiter.Limit public exitRequestsLimit;
+    BucketLimiter.Limit public unrestakingLimit;
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -78,6 +79,14 @@ contract EtherFiNodesManager is
             revert RateLimiterAlreadyInitialized();
         }
         exitRequestsLimit = BucketLimiter.create(uint64(172_800_000_000_000), uint64(2_000_000_000));
+    }
+
+    function __initUnrestakingRateLimiter() external onlyAdmin() {
+        if (unrestakingLimit.lastRefill != 0) {
+            revert RateLimiterAlreadyInitialized();
+        }
+        // Use gwei as base unit like exit limiter: 172,800 ETH capacity, 2 ETH/sec refill
+        unrestakingLimit = BucketLimiter.create(uint64(172_800_000_000_000), uint64(2_000_000_000));
     }
 
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
@@ -230,6 +239,31 @@ contract EtherFiNodesManager is
     // check for enough ETH left in remaining capacity
     function canConsumeExitETH(uint256 totalEth) public view returns (bool) {
         return BucketLimiter.canConsume(exitRequestsLimit, SafeCast.toUint64(totalEth));
+    }
+
+    // Unrestaking rate limiting
+    function canConsumeUnrestakingCapacity(uint256 amount) external view returns (bool) {
+        uint256 amountGwei = amount / 1 gwei;
+        return BucketLimiter.canConsume(unrestakingLimit, SafeCast.toUint64(amountGwei));
+    }
+
+    function consumeUnrestakingCapacity(uint256 amount) external {
+        uint256 amountGwei = amount / 1 gwei;
+        if (!BucketLimiter.consume(unrestakingLimit, SafeCast.toUint64(amountGwei))) revert ExitRateLimitExceeded();
+    }
+
+    // Amount of ETH that can be unrestaked in a period of time
+    // For e.g. 172800 ETH or 172_800_000_000_000 gwei
+    function setUnrestakingETHCapacity(uint256 capacityGwei) external onlyAdmin() {
+        uint64 cap = SafeCast.toUint64(capacityGwei);
+        BucketLimiter.setCapacity(unrestakingLimit, cap);
+    }
+
+    // Amount of ETH that refills per second for unrestaking once the bucket is not full
+    // for e.g. 2 ETH/second or 2_000_000_000 gwei/second rate would take 1 day to refill entirely 
+    function setUnrestakingETHRefillPerSecond(uint256 refillPerSecondGwei) external onlyAdmin() {
+        uint64 refill = SafeCast.toUint64(refillPerSecondGwei);
+        BucketLimiter.setRefillRate(unrestakingLimit, refill);
     }
 
     // returns withdrawal fee per each request
