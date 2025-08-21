@@ -109,7 +109,7 @@ interface IEtherFiNodesManager {
     event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
     event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
     event FundsTransferred(address indexed nodeAddress, uint256 amount);
-    event ELWithdrawalRequestSent(address indexed initiator, address indexed pod, bytes32 indexed validatorPubkeyHash, uint64 amountGwei, uint256 feePerRequest);
+    event ValidatorWithdrawalRequestSent(address indexed initiator, address indexed pod, bytes32 indexed validatorPubkeyHash, uint64 amountGwei, uint256 feePerRequest);
 
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------

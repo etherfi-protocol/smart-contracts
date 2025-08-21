@@ -940,7 +940,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         for (uint256 i = 0; i < n; ++i) {
             bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[i]);
             vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-            emit IEtherFiNodesManager.ELWithdrawalRequestSent(
+            emit IEtherFiNodesManager.ValidatorWithdrawalRequestSent(
                 address(elExiter),
                 address(pod0),
                 pkHash,
@@ -1002,7 +1002,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         for (uint256 i = 0; i < reqs.length; ++i) {
             bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[i]);
             vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-            emit IEtherFiNodesManager.ELWithdrawalRequestSent(
+            emit IEtherFiNodesManager.ValidatorWithdrawalRequestSent(
                 elExiter, address(pod0), pkHash, amounts[i], feePer
             );
         }

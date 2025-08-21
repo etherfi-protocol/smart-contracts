@@ -187,7 +187,7 @@ contract EtherFiNodesManager is
                 if (pi != pod) revert PubkeysMapToDifferentPods();
             }
 
-            emit ELWithdrawalRequestSent(
+            emit ValidatorWithdrawalRequestSent(
                 msg.sender,
                 address(pod),
                 pkHash,
