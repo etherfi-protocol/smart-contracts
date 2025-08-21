@@ -145,7 +145,7 @@ contract EtherFiNodesManager is
      *        - amountGwei: 0 for full exit, >0 for partial to pod
      * @custom:fee Send enough ETH to cover sum of (feePerPod * requestsForPod). Overpay is OK.
      */
-    function batchWithdrawalRequests(
+    function requestWithdrawal(
         IEigenPod.WithdrawalRequest[] calldata requests
     ) external payable whenNotPaused nonReentrant
     {
@@ -170,8 +170,9 @@ contract EtherFiNodesManager is
             pod = p0;
         }
 
-        // ---- Ensure all map to same pod ----
-        {
+        // ---- Single pre-call pass: validate all & cache pkHashes ----
+        bytes32[] memory pkHashes = new bytes32[](n);
+        pkHashes[0] = pkHash0;
             for (uint256 i = 1; i < n; ) {
                 bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
                 IEtherFiNode node = etherFiNodeFromPubkeyHash[pkHash];
@@ -181,9 +182,9 @@ contract EtherFiNodesManager is
                 if (address(pi) == address(0)) revert UnknownEigenPod();
                 if (pi != pod) revert PubkeysMapToDifferentPods();
 
+                pkHashes[i] = pkHash;
                 unchecked { ++i; }
             }
-        }
 
         // Fee safety: require exact value at call time;
         // NOTE: The predeploy updates per block; callers should pay the exact amount.
@@ -193,18 +194,17 @@ contract EtherFiNodesManager is
         }
 
         // External interaction
-        node0.forwardBatchWithdrawalRequests{value: msg.value}(pod, requests);
+        node0.requestWithdrawal{value: msg.value}(pod, requests);
 
+        // ---- Post-call: single emit pass using cached pkHashes ----
         {
-            // Re-read feePer (view) to avoid keeping it alive earlier.
             uint256 feePerForEvent = pod.getWithdrawalRequestFee();
             address podAddr = address(pod);
             for (uint256 i = 0; i < n; ) {
-                bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
-                emit ELExitRequestForwarded(
+                emit ELWithdrawalRequestSent(
                     msg.sender,
                     podAddr,
-                    pkHash,
+                    pkHashes[i],
                     requests[i].amountGwei,
                     feePerForEvent
                 );
