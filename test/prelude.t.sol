@@ -934,17 +934,17 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.deal(elExiter, 1 ether);
 
         // Expect one event per request AFTER success
-        // for (uint256 i = 0; i < n; ++i) {
-        //     bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[i]);
-        //     vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-        //     emit IEtherFiNodesManager.ELWithdrawalRequestSent(
-        //         address(elExiter),
-        //         address(pod0),
-        //         pkHash,
-        //         amounts[i],
-        //         feePer
-        //     );
-        // }
+        for (uint256 i = 0; i < n; ++i) {
+            bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[i]);
+            vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
+            emit IEtherFiNodesManager.ELWithdrawalRequestSent(
+                address(elExiter),
+                address(pod0),
+                pkHash,
+                amounts[i],
+                feePer
+            );
+        }
 
         vm.prank(elExiter);
         etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
@@ -996,13 +996,13 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.deal(eigenlayerAdmin, 1 ether);
 
         // Expect one ELExitRequestForwarded event per request
-        // for (uint256 i = 0; i < reqs.length; ++i) {
-        //     bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[i]);
-        //     vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-        //     emit IEtherFiNodesManager.ELWithdrawalRequestSent(
-        //         elExiter, address(pod0), pkHash, amounts[i], feePer
-        //     );
-        // }
+        for (uint256 i = 0; i < reqs.length; ++i) {
+            bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[i]);
+            vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
+            emit IEtherFiNodesManager.ELWithdrawalRequestSent(
+                elExiter, address(pod0), pkHash, amounts[i], feePer
+            );
+        }
 
         vm.prank(elExiter);
         etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);

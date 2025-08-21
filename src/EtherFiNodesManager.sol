@@ -173,14 +173,18 @@ contract EtherFiNodesManager is
         uint256 feePer = pod.getWithdrawalRequestFee();
         if (msg.value < feePer * n) revert InsufficientWithdrawalFees();
         
-        for (uint256 i = 1; i < n; ) {
+        for (uint256 i = 0; i < n; ) {
             bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
-            IEtherFiNode node = etherFiNodeFromPubkeyHash[pkHash];
-            if (address(node) == address(0)) revert UnknownValidatorPubkey();
+            
+            // Skip validation for first request (already validated above)
+            if (i > 0) {
+                IEtherFiNode node = etherFiNodeFromPubkeyHash[pkHash];
+                if (address(node) == address(0)) revert UnknownValidatorPubkey();
 
-            IEigenPod pi = node.getEigenPod();
-            if (address(pi) == address(0)) revert UnknownEigenPod();
-            if (pi != pod) revert PubkeysMapToDifferentPods();
+                IEigenPod pi = node.getEigenPod();
+                if (address(pi) == address(0)) revert UnknownEigenPod();
+                if (pi != pod) revert PubkeysMapToDifferentPods();
+            }
 
             emit ELWithdrawalRequestSent(
                 msg.sender,
