@@ -27,6 +27,10 @@ interface IEtherFiNodesManager {
     function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
     function sweepFunds(uint256 id) external;
 
+    // unrestaking rate limiting
+    function canConsumeUnrestakingCapacity(uint256 amount) external view returns (bool);
+    function consumeUnrestakingCapacity(uint256 amount) external;
+
     // call forwarding
     function updateAllowedForwardedExternalCalls(bytes4 selector, address target, bool allowed) external;
     function updateAllowedForwardedEigenpodCalls(bytes4 selector, bool allowed) external;
@@ -105,6 +109,7 @@ interface IEtherFiNodesManager {
     event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
     event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
     event FundsTransferred(address indexed nodeAddress, uint256 amount);
+    event ValidatorWithdrawalRequestSent(address indexed initiator, address indexed pod, bytes32 indexed validatorPubkeyHash, uint64 amountGwei, uint256 feePerRequest);
 
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------
@@ -118,5 +123,12 @@ interface IEtherFiNodesManager {
     error IncorrectRole();
     error ForwardedCallNotAllowed();
     error InvalidForwardedCall();
-
+    error EmptyWithdrawalsRequest();
+    error InsufficientWithdrawalFees();
+    error ExitRateLimitExceeded();
+    error ExitRateLimitExceededForPod();
+    error UnknownValidatorPubkey();
+    error UnknownEigenPod();
+    error PubkeysMapToDifferentPods();
+    error RateLimiterAlreadyInitialized();
 }

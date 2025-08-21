@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -8,11 +9,13 @@ import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "./interfaces/IAuctionManager.sol";
+import "./eigenlayer-interfaces/IEigenPod.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "lib/BucketLimiter.sol";
 
 contract EtherFiNodesManager is
     Initializable,
@@ -34,7 +37,8 @@ contract EtherFiNodesManager is
     mapping(bytes4 => bool) public allowedForwardedEigenpodCalls; // Call Forwarding: functionSelector -> allowed
     mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls; // Call Forwarding: functionSelector -> targetAddress -> allowed
     mapping(bytes32 => IEtherFiNode) public etherFiNodeFromPubkeyHash;
-
+    BucketLimiter.Limit public exitRequestsLimit;
+    BucketLimiter.Limit public unrestakingLimit;
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -42,6 +46,8 @@ contract EtherFiNodesManager is
     bytes32 public constant ETHERFI_NODES_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
+    bytes32 public constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
+    bytes32 public constant ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE = keccak256("ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE");
 
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
@@ -67,6 +73,21 @@ contract EtherFiNodesManager is
     function unPauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
+    }
+
+    function __initExitRateLimiter() external onlyAdmin() {
+        if (exitRequestsLimit.lastRefill != 0) {
+            revert RateLimiterAlreadyInitialized();
+        }
+        exitRequestsLimit = BucketLimiter.create(uint64(172_800_000_000_000), uint64(2_000_000_000));
+    }
+
+    function __initUnrestakingRateLimiter() external onlyAdmin() {
+        if (unrestakingLimit.lastRefill != 0) {
+            revert RateLimiterAlreadyInitialized();
+        }
+        // Use gwei as base unit like exit limiter: 172,800 ETH capacity, 2 ETH/sec refill
+        unrestakingLimit = BucketLimiter.create(uint64(172_800_000_000_000), uint64(2_000_000_000));
     }
 
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
@@ -120,6 +141,133 @@ contract EtherFiNodesManager is
 
     function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+    }
+
+    //-------------------------------------------------------------------
+    //-------------  Execution-Layer Triggered Withdrawals  -------------
+    //-------------------------------------------------------------------
+    /**
+     * @notice Triggers EIP-7002 withdrawal requests, grouping by EigenPod automatically.
+     * @dev No `pod` param; we derive each pod from the validator pubkey using SSZ pubkey hash.
+     * @dev Access: only ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, pausable, nonReentrant.
+     * @param requests Array of WithdrawalRequest:
+     *        - pubkey: 48-byte BLS pubkey
+     *        - amountGwei: 0 for full exit, >0 for partial to pod
+     * @custom:fee Send enough ETH to cover sum of (feePerPod * requestsForPod). Overpay is OK.
+     */
+    function requestWithdrawal(
+        IEigenPod.WithdrawalRequest[] calldata requests
+    ) external payable whenNotPaused nonReentrant
+    {
+        // ------------ role check ------------
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
+        
+        // ------------ checks ------------
+        uint256 n = requests.length;
+        if (n == 0) revert EmptyWithdrawalsRequest();
+        uint256 totalExitGwei = getTotalEthRequested(requests);
+        if (!canConsumeExitETH(totalExitGwei)) revert ExitRateLimitExceeded();
+
+        bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].pubkey);
+        IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];      
+        if (address(node0) == address(0)) revert UnknownValidatorPubkey(); 
+        IEigenPod pod = node0.getEigenPod();
+        if (address(pod) == address(0)) revert UnknownEigenPod();
+        uint256 feePer = pod.getWithdrawalRequestFee();
+        
+        for (uint256 i = 0; i < n; ) {
+            bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
+            
+            // Skip validation for first request (already validated above)
+            if (i > 0) {
+                IEtherFiNode node = etherFiNodeFromPubkeyHash[pkHash];
+                if (address(node) == address(0)) revert UnknownValidatorPubkey();
+
+                IEigenPod pi = node.getEigenPod();
+                if (address(pi) == address(0)) revert UnknownEigenPod();
+                if (pi != pod) revert PubkeysMapToDifferentPods();
+            }
+
+            emit ValidatorWithdrawalRequestSent(
+                msg.sender,
+                address(pod),
+                pkHash,
+                requests[i].amountGwei,
+                feePer
+            );
+            unchecked { ++i; }   
+        }
+
+        // ------------ fee checks ------------
+        if (msg.value < feePer * n) revert InsufficientWithdrawalFees();
+
+        // ------------ external interaction ----------
+        node0.requestWithdrawal{value: msg.value}(pod, requests);
+    }
+
+    function getTotalEthRequested (IEigenPod.WithdrawalRequest[] calldata requests) internal pure returns (uint256) {
+        uint256 totalGwei; 
+        uint256 FULL_EXIT_GWEI = 2_048_000_000_000;
+        for (uint256 i = 0; i < requests.length; ++i) {
+            uint256 gweiAmount = requests[i].amountGwei == 0
+                ? FULL_EXIT_GWEI
+                : uint256(requests[i].amountGwei);
+
+            totalGwei += gweiAmount;
+        }
+        return totalGwei;
+    }
+
+    // Amount of ETH that can be exited in a period of time
+    // For e.g. 172800 ETH or 172_800_000_000_000 gwei
+    function setExitETHCapacity(uint256 capacity) external onlyAdmin() {
+        uint64 cap = SafeCast.toUint64(capacity);
+        BucketLimiter.setCapacity(exitRequestsLimit, cap);
+    }
+
+    // Amount of ETH that refills per second once the bucket is not full
+    // for e.g. 2 ETH/second or 2_000_000_000 gwei/second rate would take 1 day to refill entirely 
+    function setExitETHRefillPerSecond(uint256 refillPerSecond) external onlyAdmin() {
+        uint64 refill = SafeCast.toUint64(refillPerSecond);
+        BucketLimiter.setRefillRate(exitRequestsLimit, refill);
+    }
+
+    // check for enough ETH left in remaining capacity
+    function canConsumeExitETH(uint256 amountGwei) public view returns (bool) {
+        return BucketLimiter.canConsume(exitRequestsLimit, SafeCast.toUint64(amountGwei));
+    }
+
+    // Unrestaking rate limiting
+    function canConsumeUnrestakingCapacity(uint256 amount) external view returns (bool) {
+        uint256 amountGwei = amount / 1 gwei;
+        return BucketLimiter.canConsume(unrestakingLimit, SafeCast.toUint64(amountGwei));
+    }
+
+    function consumeUnrestakingCapacity(uint256 amount) external {
+        uint256 amountGwei = amount / 1 gwei;
+        if (!BucketLimiter.consume(unrestakingLimit, SafeCast.toUint64(amountGwei))) revert ExitRateLimitExceeded();
+    }
+
+    // Amount of ETH that can be unrestaked in a period of time
+    // For e.g. 172800 ETH or 172_800_000_000_000 gwei
+    function setUnrestakingETHCapacity(uint256 capacityGwei) external {
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole();
+        uint64 cap = SafeCast.toUint64(capacityGwei);
+        BucketLimiter.setCapacity(unrestakingLimit, cap);
+    }
+
+    // Amount of ETH that refills per second for unrestaking once the bucket is not full
+    // for e.g. 2 ETH/second or 2_000_000_000 gwei/second rate would take 1 day to refill entirely 
+    function setUnrestakingETHRefillPerSecond(uint256 refillPerSecondGwei) external {
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole();
+        uint64 refill = SafeCast.toUint64(refillPerSecondGwei);
+        BucketLimiter.setRefillRate(unrestakingLimit, refill);
+    }
+
+    // returns withdrawal fee per each request
+    function getWithdrawalRequestFee(address pod) public view returns (uint256) {
+        uint256 feePerRequest = IEigenPod(pod).getWithdrawalRequestFee();
+        return feePerRequest;
     }
 
     //-------------------------------------------------------------------
@@ -261,5 +409,4 @@ contract EtherFiNodesManager is
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
-
 }
