@@ -130,7 +130,7 @@ contract StakingPart1 is Script {
         // Step 4: Register as validator spawner if needed
         console.log("\nStep 4: Checking validator spawner registration");
         bool spawner = liquidityPool.validatorSpawner(depositor);
-        if (spawner) {
+        if (!spawner) {
             console.log("Registering as validator spawner...");
             vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
             liquidityPool.registerValidatorSpawner(depositor);
