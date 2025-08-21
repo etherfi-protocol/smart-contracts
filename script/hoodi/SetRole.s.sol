@@ -56,7 +56,7 @@ import "../../src/interfaces/IRoleRegistry.sol";
  */
 contract SetRole is Script {
     // Contract addresses - UPDATE THESE FOR YOUR DEPLOYMENT
-    address constant ROLE_REGISTRY = 0x8309580c86C11e61e3C57c7227f74535f6801d7C; // Hoodi testnet
+    address constant ROLE_REGISTRY = 0x7279853cA1804d4F705d885FeA7f1662323B5Aab; // Hoodi testnet
     
     // Role definitions
     bytes32 constant PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
@@ -79,7 +79,8 @@ contract SetRole is Script {
     bytes32 constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
     bytes32 constant ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE = keccak256("ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE");
     bytes32 constant ETHERFI_NODE_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODE_CALL_FORWARDER_ROLE");
-    
+    bytes32 constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
+
     IRoleRegistry roleRegistry;
     
     function run() external {
@@ -87,10 +88,10 @@ contract SetRole is Script {
         roleRegistry = IRoleRegistry(ROLE_REGISTRY);
         
         // Get environment variables
-        string memory roleName = vm.envString("ROLE_NAME");
-        string memory action = vm.envString("ACTION");
+        string memory roleName = "ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE";//vm.envString("ROLE_NAME");
+        string memory action = "grant";//vm.envString("ACTION");
         
-        bytes32 role = getRoleFromName(roleName);
+        bytes32 role = keccak256(abi.encodePacked(roleName));
         require(role != bytes32(0), "Invalid role name");
         
         if (keccak256(abi.encodePacked(action)) == keccak256(abi.encodePacked("grant"))) {
@@ -165,52 +166,6 @@ contract SetRole is Script {
         
         for (uint256 i = 0; i < holders.length; i++) {
             console.log("Holder", i + 1, ":", holders[i]);
-        }
-    }
-    
-    function getRoleFromName(string memory roleName) internal pure returns (bytes32) {
-        if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("PROTOCOL_PAUSER"))) {
-            return PROTOCOL_PAUSER;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("PROTOCOL_UNPAUSER"))) {
-            return PROTOCOL_UNPAUSER;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("LIQUIDITY_POOL_ADMIN_ROLE"))) {
-            return LIQUIDITY_POOL_ADMIN_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE"))) {
-            return LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE"))) {
-            return ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE"))) {
-            return ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("EETH_OPERATING_ADMIN_ROLE"))) {
-            return EETH_OPERATING_ADMIN_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"))) {
-            return ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("ETHERFI_REWARDS_ROUTER_ADMIN_ROLE"))) {
-            return ETHERFI_REWARDS_ROUTER_ADMIN_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE"))) {
-            return CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE"))) {
-            return CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("WEETH_OPERATING_ADMIN_ROLE"))) {
-            return WEETH_OPERATING_ADMIN_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("WITHDRAW_REQUEST_NFT_ADMIN_ROLE"))) {
-            return WITHDRAW_REQUEST_NFT_ADMIN_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("IMPLICIT_FEE_CLAIMER_ROLE"))) {
-            return IMPLICIT_FEE_CLAIMER_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("STAKING_MANAGER_NODE_CREATOR_ROLE"))) {
-            return STAKING_MANAGER_NODE_CREATOR_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("ETHERFI_NODES_MANAGER_ADMIN_ROLE"))) {
-            return ETHERFI_NODES_MANAGER_ADMIN_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE"))) {
-            return ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE"))) {
-            return ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE"))) {
-            return ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE;
-        } else if (keccak256(abi.encodePacked(roleName)) == keccak256(abi.encodePacked("ETHERFI_NODE_CALL_FORWARDER_ROLE"))) {
-            return ETHERFI_NODE_CALL_FORWARDER_ROLE;
-        } else {
-            return bytes32(0);
         }
     }
 }
