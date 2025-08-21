@@ -77,7 +77,7 @@ contract EtherFiNodesManager is
         if (exitRequestsLimit.lastRefill != 0) {
             revert RateLimiterAlreadyInitialized();
         }
-        exitRequestsLimit = BucketLimiter.create(uint64(100), uint64(1));
+        exitRequestsLimit = BucketLimiter.create(uint64(172_800_000_000_000), uint64(2_000_000_000));
     }
 
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
@@ -155,7 +155,8 @@ contract EtherFiNodesManager is
         // ------------ checks ------------
         uint256 n = requests.length;
         if (n == 0) revert EmptyWithdrawalsRequest();
-        if (!checkExitRateLimit(n)) revert ExitRateLimitExceeded();
+        uint256 totalExitGwei = getTotalEthRequested(requests);
+        if (!canConsumeExitETH(totalExitGwei)) revert ExitRateLimitExceeded();
 
         bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].pubkey);
         IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];
@@ -195,24 +196,42 @@ contract EtherFiNodesManager is
         node0.requestWithdrawal{value: msg.value}(pod, requests);
     }
 
-    function checkExitRateLimit(uint256 n) internal returns (bool) {
-        uint64 units = SafeCast.toUint64(n);
-        bool ok = BucketLimiter.consume(exitRequestsLimit, units);
-        return ok;
+    function getTotalEthRequested (IEigenPod.WithdrawalRequest[] calldata requests) internal pure returns (uint256) {
+        uint256 totalGwei; 
+        uint256 FULL_EXIT_GWEI = 2_048_000_000_000;
+        for (uint256 i = 0; i < requests.length; ++i) {
+            uint256 gweiAmount = requests[i].amountGwei == 0
+                ? FULL_EXIT_GWEI
+                : uint256(requests[i].amountGwei);
+
+            totalGwei += gweiAmount;
+        }
+        return totalGwei;
     }
 
-    function setExitRequestCapacity(uint256 capacity) external onlyAdmin() {
+    // Amount of ETH that can be exited in a period of time
+    // For e.g. 172800 ETH or 172_800_000_000_000 gwei
+    function setExitETHCapacity(uint256 capacity) external onlyAdmin() {
         uint64 cap = SafeCast.toUint64(capacity);
         BucketLimiter.setCapacity(exitRequestsLimit, cap);
     }
 
-    function setExitRequestRefillPerSecond(uint256 refillPerSecond) external onlyAdmin() {
+    // Amount of ETH that refills per second once the bucket is not full
+    // for e.g. 2 ETH/second or 2_000_000_000 gwei/second rate would take 1 day to refill entirely 
+    function setExitETHRefillPerSecond(uint256 refillPerSecond) external onlyAdmin() {
         uint64 refill = SafeCast.toUint64(refillPerSecond);
         BucketLimiter.setRefillRate(exitRequestsLimit, refill);
     }
 
-    function canConsumeExitRequests(uint256 numRequests) external view returns (bool) {
-        return BucketLimiter.canConsume(exitRequestsLimit, SafeCast.toUint64(numRequests));
+    // check for enough ETH left in remaining capacity
+    function canConsumeExitETH(uint256 totalEth) public view returns (bool) {
+        return BucketLimiter.canConsume(exitRequestsLimit, SafeCast.toUint64(totalEth));
+    }
+
+    // returns withdrawal fee per each request
+    function getWithdrawalRequestFee(address pod) public view returns (uint256) {
+        uint256 feePerRequest = IEigenPod(pod).getWithdrawalRequestFee();
+        return feePerRequest;
     }
 
     //-------------------------------------------------------------------
