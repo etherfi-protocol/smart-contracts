@@ -473,6 +473,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_withdrawRestakedValidatorETH() public {
+        helper_initUnrestakingRateLimiter(); // Initialize to allow ETH withdrawal
 
         bytes memory validatorPubkey = hex"892c95f4e93ab042ee39397bff22cc43298ff4b2d6d6dec3f28b8b8ebcb5c65ab5e6fc29301c1faee473ec095f9e4306";
         bytes32 pubkeyHash = etherFiNodesManager.calculateValidatorPubkeyHash(validatorPubkey);
@@ -780,6 +781,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_withdrawMultipleLargeValidators() public {
+        helper_initUnrestakingRateLimiter(); // Initialize to allow large withdrawals
 
         // create a few large validators of different sizes
         TestValidatorParams memory params = defaultTestValidatorParams;
@@ -814,6 +816,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_withdrawMultipleSimultaneousWithdrawals() public {
+        helper_initUnrestakingRateLimiter(); // Initialize to allow multiple withdrawals
 
         TestValidatorParams memory params = defaultTestValidatorParams;
         params.validatorSize = 64 ether;
@@ -1202,6 +1205,156 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.expectRevert(); // unknown/unlinked pubkey must revert
         etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
+    }
+
+    // Helper function to initialize unrestaking rate limiter for tests that need it
+    function helper_initUnrestakingRateLimiter() internal {
+        vm.prank(admin);
+        etherFiNodesManager.__initUnrestakingRateLimiter();
+    }
+
+    // ---------- tests for unrestaking rate limiter ----------
+
+    function test_initUnrestakingRateLimiter_onlyOwner_and_singleton() public {
+        // 1) Wrong caller cannot init
+        vm.expectRevert();
+        etherFiNodesManager.__initUnrestakingRateLimiter();
+
+        // 2) Owner/admin can init
+        vm.prank(admin);
+        etherFiNodesManager.__initUnrestakingRateLimiter();
+
+        // 3) Cannot be initialized twice
+        vm.prank(admin);
+        vm.expectRevert();
+        etherFiNodesManager.__initUnrestakingRateLimiter();
+    }
+
+    function test_unrestakingRateLimitSetters_access_control() public {
+        // Initialize unrestaking limiter first
+        vm.prank(admin);
+        etherFiNodesManager.__initUnrestakingRateLimiter();
+
+        // Unauthorized caller -> revert
+        vm.expectRevert();
+        etherFiNodesManager.setUnrestakingETHCapacity(172_800_000_000_000); // 172,800 ETH in gwei
+        vm.expectRevert();
+        etherFiNodesManager.setUnrestakingETHRefillPerSecond(2_000_000_000); // 2 ETH/sec in gwei
+
+        // Authorized caller (admin in fork has the config role) -> success
+        vm.startPrank(admin);
+        etherFiNodesManager.setUnrestakingETHCapacity(172_800_000_000_000); // 172,800 ETH in gwei
+        etherFiNodesManager.setUnrestakingETHRefillPerSecond(2_000_000_000); // 2 ETH/sec in gwei
+        vm.stopPrank();
+    }
+
+    function test_queueETHWithdrawal_unrestaking_rate_limit() public {
+        // Setup: create a validator and initialize unrestaking limiter
+        TestValidator memory val = helper_createValidator(defaultTestValidatorParams);
+        
+        vm.prank(admin);
+        etherFiNodesManager.__initUnrestakingRateLimiter();
+        
+        // Set a low capacity for testing (10 ETH = 10_000_000_000 gwei)
+        vm.prank(admin);
+        etherFiNodesManager.setUnrestakingETHCapacity(10_000_000_000);
+
+        // First withdrawal within limit should succeed
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 5 ether);
+
+        // Second withdrawal within limit should succeed
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 4 ether);
+
+        // Third withdrawal exceeding limit should fail
+        vm.expectRevert();
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 2 ether);
+    }
+
+    function test_queueWithdrawals_unrestaking_rate_limit() public {
+        // Setup: create a validator and initialize unrestaking limiter
+        TestValidator memory val = helper_createValidator(defaultTestValidatorParams);
+        
+        vm.prank(admin);
+        etherFiNodesManager.__initUnrestakingRateLimiter();
+        
+        // Set a low capacity for testing (20 ETH = 20_000_000_000 gwei)
+        vm.prank(admin);
+        etherFiNodesManager.setUnrestakingETHCapacity(20_000_000_000);
+
+        // Create withdrawal params with shares (shares = wei, so 15 ether = 15 ETH)
+        IDelegationManager.QueuedWithdrawalParams[] memory params = 
+            new IDelegationManager.QueuedWithdrawalParams[](1);
+        
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = IStrategy(address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0));
+        
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = 15 ether; // 15 ETH worth of shares
+        
+        params[0].strategies = strategies;
+        params[0].depositShares = shares;
+        params[0].__deprecated_withdrawer = address(0);
+
+        // First withdrawal within limit should succeed
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueWithdrawals(uint256(val.pubkeyHash), params);
+
+        // Second withdrawal exceeding limit should fail (15 + 10 > 20)
+        shares[0] = 10 ether;
+        vm.expectRevert();
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueWithdrawals(uint256(val.pubkeyHash), params);
+    }
+
+    function test_directNodeAccess_queueETHWithdrawal_rate_limit() public {
+        // Test that direct access to EtherFiNode also respects rate limits
+        TestValidator memory val = helper_createValidator(defaultTestValidatorParams);
+        
+        vm.prank(admin);
+        etherFiNodesManager.__initUnrestakingRateLimiter();
+        
+        // Set a very low capacity for testing (1 ETH = 1_000_000_000 gwei)
+        vm.prank(admin);
+        etherFiNodesManager.setUnrestakingETHCapacity(1_000_000_000);
+
+        // Direct call to EtherFiNode should also be rate limited
+        IEtherFiNode etherFiNode = IEtherFiNode(val.etherFiNode);
+        
+        // First call should succeed
+        vm.prank(eigenlayerAdmin);
+        etherFiNode.queueETHWithdrawal(0.5 ether);
+
+        // Second call exceeding limit should fail
+        vm.expectRevert();
+        vm.prank(eigenlayerAdmin);
+        etherFiNode.queueETHWithdrawal(0.6 ether);
+    }
+
+    function test_canConsumeUnrestakingCapacity() public {
+        // Initialize unrestaking limiter
+        vm.prank(admin);
+        etherFiNodesManager.__initUnrestakingRateLimiter();
+        
+        // Set capacity (100 ETH = 100_000_000_000 gwei)
+        vm.prank(admin);
+        etherFiNodesManager.setUnrestakingETHCapacity(100_000_000_000);
+
+        // Check capacity before consuming (amounts in wei, converted internally to gwei)
+        assertTrue(etherFiNodesManager.canConsumeUnrestakingCapacity(50 ether)); 
+        assertTrue(etherFiNodesManager.canConsumeUnrestakingCapacity(100 ether)); 
+        assertFalse(etherFiNodesManager.canConsumeUnrestakingCapacity(101 ether)); 
+
+        // Consume some capacity
+        vm.prank(address(this)); // simulate call from EtherFiNode
+        etherFiNodesManager.consumeUnrestakingCapacity(30 ether);
+
+        // Check updated capacity
+        assertTrue(etherFiNodesManager.canConsumeUnrestakingCapacity(50 ether));
+        assertTrue(etherFiNodesManager.canConsumeUnrestakingCapacity(70 ether));
+        assertFalse(etherFiNodesManager.canConsumeUnrestakingCapacity(71 ether));
     }
 }
 
