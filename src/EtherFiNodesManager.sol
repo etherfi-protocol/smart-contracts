@@ -47,6 +47,7 @@ contract EtherFiNodesManager is
     bytes32 public constant ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
+    bytes32 public constant ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE = keccak256("ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE");
 
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
@@ -249,14 +250,16 @@ contract EtherFiNodesManager is
 
     // Amount of ETH that can be unrestaked in a period of time
     // For e.g. 172800 ETH or 172_800_000_000_000 gwei
-    function setUnrestakingETHCapacity(uint256 capacityGwei) external onlyAdmin() {
+    function setUnrestakingETHCapacity(uint256 capacityGwei) external {
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole();
         uint64 cap = SafeCast.toUint64(capacityGwei);
         BucketLimiter.setCapacity(unrestakingLimit, cap);
     }
 
     // Amount of ETH that refills per second for unrestaking once the bucket is not full
     // for e.g. 2 ETH/second or 2_000_000_000 gwei/second rate would take 1 day to refill entirely 
-    function setUnrestakingETHRefillPerSecond(uint256 refillPerSecondGwei) external onlyAdmin() {
+    function setUnrestakingETHRefillPerSecond(uint256 refillPerSecondGwei) external {
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole();
         uint64 refill = SafeCast.toUint64(refillPerSecondGwei);
         BucketLimiter.setRefillRate(unrestakingLimit, refill);
     }

@@ -39,6 +39,7 @@ contract EtherFiNode is IEtherFiNode {
 
     bytes32 public constant ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE = keccak256("ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODE_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODE_CALL_FORWARDER_ROLE");
+    bytes32 public constant ETHERFI_NODE_UNRESTAKER_ROLE = keccak256("ETHERFI_NODE_UNRESTAKER_ROLE");
 
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
@@ -88,7 +89,8 @@ contract EtherFiNode is IEtherFiNode {
 
     /// @dev convenience function to queue a beaconETH withdrawal from eigenlayer. You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
     ///   It is fine to queue a withdrawal before validators have finished exiting on the beacon chain.
-    function queueETHWithdrawal(uint256 amount) external onlyEigenlayerAdmin returns (bytes32 withdrawalRoot) {
+    function queueETHWithdrawal(uint256 amount) external returns (bytes32 withdrawalRoot) {
+        if (!roleRegistry.hasRole(ETHERFI_NODE_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole();
         // Check and consume unrestaking rate limit
         etherFiNodesManager.consumeUnrestakingCapacity(amount);
 
@@ -142,7 +144,8 @@ contract EtherFiNode is IEtherFiNode {
 
     /// @dev queue a withdrawal from eigenlayer. You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
     ///   For the general case of queuing a beaconETH withdrawal you can use queueETHWithdrawal instead.
-    function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin returns (bytes32[] memory withdrawalRoots) {
+    function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external returns (bytes32[] memory withdrawalRoots) {
+        if (!roleRegistry.hasRole(ETHERFI_NODE_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole();
         // Calculate total amount for rate limiting (shares = wei, so each share * 1e18 = ether value)
         uint256 totalAmount = 0;
         for (uint256 i = 0; i < params.length; i++) {
