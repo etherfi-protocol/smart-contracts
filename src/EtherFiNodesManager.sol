@@ -149,17 +149,14 @@ contract EtherFiNodesManager is
         IEigenPod.WithdrawalRequest[] calldata requests
     ) external payable whenNotPaused nonReentrant
     {
+        // ------------ role check ------------
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
+        
+        // ------------ checks ------------
         uint256 n = requests.length;
         if (n == 0) revert EmptyWithdrawalsRequest();
+        if (!checkExitRateLimit(n)) revert ExitRateLimitExceeded();
 
-        {
-            uint64 units = SafeCast.toUint64(n);
-            bool ok = BucketLimiter.consume(exitRequestsLimit, units);
-            if (!ok) revert ExitRateLimitExceeded();
-        }
-
-        // ---- Resolve pod from first pubkey ----
         bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].pubkey);
         IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];
         IEigenPod pod;        
@@ -170,47 +167,38 @@ contract EtherFiNodesManager is
             pod = p0;
         }
 
-        // ---- Single pre-call pass: validate all & cache pkHashes ----
-        bytes32[] memory pkHashes = new bytes32[](n);
-        pkHashes[0] = pkHash0;
-            for (uint256 i = 1; i < n; ) {
-                bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
-                IEtherFiNode node = etherFiNodeFromPubkeyHash[pkHash];
-                if (address(node) == address(0)) revert UnknownValidatorPubkey();
-
-                IEigenPod pi = node.getEigenPod();
-                if (address(pi) == address(0)) revert UnknownEigenPod();
-                if (pi != pod) revert PubkeysMapToDifferentPods();
-
-                pkHashes[i] = pkHash;
-                unchecked { ++i; }
-            }
-
         // Fee safety: require exact value at call time;
         // NOTE: The predeploy updates per block; callers should pay the exact amount.
-        {
-            uint256 feePer = pod.getWithdrawalRequestFee();
-            if (msg.value < feePer * n) revert InsufficientWithdrawalFees();
+        uint256 feePer = pod.getWithdrawalRequestFee();
+        if (msg.value < feePer * n) revert InsufficientWithdrawalFees();
+        
+        for (uint256 i = 1; i < n; ) {
+            bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
+            IEtherFiNode node = etherFiNodeFromPubkeyHash[pkHash];
+            if (address(node) == address(0)) revert UnknownValidatorPubkey();
+
+            IEigenPod pi = node.getEigenPod();
+            if (address(pi) == address(0)) revert UnknownEigenPod();
+            if (pi != pod) revert PubkeysMapToDifferentPods();
+
+            emit ELWithdrawalRequestSent(
+                msg.sender,
+                address(pod),
+                pkHash,
+                requests[i].amountGwei,
+                feePer
+            );
+            unchecked { ++i; }   
         }
 
         // External interaction
         node0.requestWithdrawal{value: msg.value}(pod, requests);
+    }
 
-        // ---- Post-call: single emit pass using cached pkHashes ----
-        {
-            uint256 feePerForEvent = pod.getWithdrawalRequestFee();
-            address podAddr = address(pod);
-            for (uint256 i = 0; i < n; ) {
-                emit ELWithdrawalRequestSent(
-                    msg.sender,
-                    podAddr,
-                    pkHashes[i],
-                    requests[i].amountGwei,
-                    feePerForEvent
-                );
-                unchecked { ++i; }
-            }
-        }
+    function checkExitRateLimit(uint256 n) internal returns (bool) {
+        uint64 units = SafeCast.toUint64(n);
+        bool ok = BucketLimiter.consume(exitRequestsLimit, units);
+        return ok;
     }
 
     function setExitRequestCapacity(uint256 capacity) external onlyAdmin() {
