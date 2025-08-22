@@ -192,6 +192,16 @@ contract EtherFiNode is IEtherFiNode {
         pod.requestWithdrawal{value: msg.value}(requests);
     }
 
+    //-------------------------------------------------------------------
+    //-------------  Execution-Layer Triggered Consolidations  ----------
+    //-------------------------------------------------------------------
+    function requestConsolidation(IEigenPod pod, IEigenPod.ConsolidationRequest[] calldata requests) external payable {
+        if (msg.sender != address(etherFiNodesManager)) {
+            revert InvalidCaller();
+        }
+        pod.requestConsolidation{value: msg.value}(requests);
+    }
+
     //--------------------------------------------------------------------------------------
     //-------------------------------- CALL FORWARDING  ------------------------------------
     //--------------------------------------------------------------------------------------
