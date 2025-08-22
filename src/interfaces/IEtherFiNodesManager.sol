@@ -110,6 +110,8 @@ interface IEtherFiNodesManager {
     event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
     event FundsTransferred(address indexed nodeAddress, uint256 amount);
     event ValidatorWithdrawalRequestSent(address indexed initiator, address indexed pod, bytes32 indexed validatorPubkeyHash, uint64 amountGwei, uint256 feePerRequest);
+    event ValidatorSwitchToCompoundingRequested(address indexed initiator, address indexed pod, bytes32 indexed validatorPubkeyHash, uint256 feePerRequest);
+    event ValidatorConsolidationRequested(address indexed initiator, address indexed pod, bytes32 indexed sourcePubkeyHash, bytes32 targetPubkeyHash, uint256 feePerRequest);
 
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------
@@ -124,7 +126,9 @@ interface IEtherFiNodesManager {
     error ForwardedCallNotAllowed();
     error InvalidForwardedCall();
     error EmptyWithdrawalsRequest();
+    error EmptyConsolidationRequest();
     error InsufficientWithdrawalFees();
+    error InsufficientConsolidationFees();
     error ExitRateLimitExceeded();
     error ExitRateLimitExceededForPod();
     error UnknownValidatorPubkey();
