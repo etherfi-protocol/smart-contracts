@@ -1,0 +1,185 @@
+name: Check storage layout
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+    # Optionally configure to run only for changes in specific files. For example:
+    paths:
+    - src/**
+    - foundry.toml
+    - remappings.txt
+    - .github/workflows/foundry-storage-check.yml
+
+jobs:
+  check_storage_layout:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: foundry-rs/foundry-toolchain@v1.2.0
+        with:
+          version: nightly
+
+      # Core Protocol Contracts
+      - name: Check storage layout for EETH
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/EETH.sol:EETH
+
+      - name: Check storage layout for WeETH
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/WeETH.sol:WeETH
+
+      - name: Check storage layout for LiquidityPool
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/LiquidityPool.sol:LiquidityPool
+
+      - name: Check storage layout for StakingManager
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/StakingManager.sol:StakingManager
+
+      - name: Check storage layout for EtherFiNodesManager
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/EtherFiNodesManager.sol:EtherFiNodesManager
+
+      - name: Check storage layout for EtherFiNode
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/EtherFiNode.sol:EtherFiNode
+
+      # Management & Admin Contracts
+      - name: Check storage layout for EtherFiAdmin
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/EtherFiAdmin.sol:EtherFiAdmin
+
+      - name: Check storage layout for NodeOperatorManager
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/NodeOperatorManager.sol:NodeOperatorManager
+
+      - name: Check storage layout for AuctionManager
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/AuctionManager.sol:AuctionManager
+
+      - name: Check storage layout for MembershipManager
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/MembershipManager.sol:MembershipManager
+
+      - name: Check storage layout for MembershipNFT
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/MembershipNFT.sol:MembershipNFT
+
+      - name: Check storage layout for RoleRegistry
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/RoleRegistry.sol:RoleRegistry
+
+      # Oracle & Rewards
+      - name: Check storage layout for EtherFiOracle
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/EtherFiOracle.sol:EtherFiOracle
+
+      - name: Check storage layout for CumulativeMerkleRewardsDistributor
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/CumulativeMerkleRewardsDistributor.sol:CumulativeMerkleRewardsDistributor
+
+      - name: Check storage layout for EtherFiRewardsRouter
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/EtherFiRewardsRouter.sol:EtherFiRewardsRouter
+
+      # NFT Contracts
+      - name: Check storage layout for BNFT
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/BNFT.sol:BNFT
+
+      - name: Check storage layout for TNFT
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/TNFT.sol:TNFT
+
+      - name: Check storage layout for WithdrawRequestNFT
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/WithdrawRequestNFT.sol:WithdrawRequestNFT
+
+      # Liquidity & Trading
+      - name: Check storage layout for Liquifier
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/Liquifier.sol:Liquifier
+
+      - name: Check storage layout for EtherFiRestaker
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/EtherFiRestaker.sol:EtherFiRestaker
+
+      - name: Check storage layout for EtherFiRedemptionManager
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/EtherFiRedemptionManager.sol:EtherFiRedemptionManager
+
+      - name: Check storage layout for DepositAdapter
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/DepositAdapter.sol:DepositAdapter
+
+      # Rate Limiting & Utilities
+      - name: Check storage layout for BucketRateLimiter
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/BucketRateLimiter.sol:BucketRateLimiter
+
+      - name: Check storage layout for TVLOracle
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/TVLOracle.sol:TVLOracle
+
+      - name: Check storage layout for EarlyAdopterPool
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/EarlyAdopterPool.sol:EarlyAdopterPool
+
+      - name: Check storage layout for UUPSProxy
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/UUPSProxy.sol:UUPSProxy
+
+      - name: Check storage layout for EtherFiTimelock
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/EtherFiTimelock.sol:EtherFiTimelock
+
+      # Helper Contracts
+      - name: Check storage layout for AddressProvider
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/helpers/AddressProvider.sol:AddressProvider
+
+      - name: Check storage layout for EtherFiOperationParameters
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/helpers/EtherFiOperationParameters.sol:EtherFiOperationParameters
+
+      - name: Check storage layout for EtherFiViewer
+        uses: Rubilmax/foundry-storage-check@main
+        with:
+          contract: src/helpers/EtherFiViewer.sol:EtherFiViewer
