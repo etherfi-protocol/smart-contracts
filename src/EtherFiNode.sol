@@ -195,11 +195,11 @@ contract EtherFiNode is IEtherFiNode {
     //-------------------------------------------------------------------
     //-------------  Execution-Layer Triggered Consolidations  ----------
     //-------------------------------------------------------------------
-    function requestConsolidation(IEigenPod pod, IEigenPod.ConsolidationRequest[] calldata requests) external payable {
+    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable {
         if (msg.sender != address(etherFiNodesManager)) {
             revert InvalidCaller();
         }
-        pod.requestConsolidation{value: msg.value}(requests);
+        getEigenPod().requestConsolidation{value: msg.value}(requests);
     }
 
     //--------------------------------------------------------------------------------------

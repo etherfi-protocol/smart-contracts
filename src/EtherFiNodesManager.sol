@@ -206,14 +206,14 @@ contract EtherFiNodesManager is
     }
 
     /**
-     * @notice Triggers EIP-7251 consolidation requests, grouping by EigenPod automatically.
-     * @dev No `pod` param; we derive each pod from the validator pubkey using SSZ pubkey hash.
+     * @notice Triggers EIP-7251 consolidation requests for validators in the same EigenPod.
      * @dev Access: only admin role, pausable, nonReentrant.
      * @param requests Array of ConsolidationRequest:
      *        - srcPubkey: 48-byte BLS pubkey of source validator
      *        - targetPubkey: 48-byte BLS pubkey of target validator
      *        - If srcPubkey == targetPubkey, this switches validator from 0x01 to 0x02 credentials
-     * @custom:fee Send enough ETH to cover sum of (feePerPod * requestsForPod). Overpay is OK.
+     * @dev EigenLayer validates that validators belong to the pod automatically.
+     * @custom:fee Send enough ETH to cover consolidation fees.
      */
     function requestConsolidation(
         IEigenPod.ConsolidationRequest[] calldata requests
@@ -223,6 +223,7 @@ contract EtherFiNodesManager is
         uint256 n = requests.length;
         if (n == 0) revert EmptyConsolidationRequest();
 
+        // Get node and pod from first validator
         bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].srcPubkey);
         IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];      
         if (address(node0) == address(0)) revert UnknownValidatorPubkey(); 
@@ -230,19 +231,10 @@ contract EtherFiNodesManager is
         if (address(pod) == address(0)) revert UnknownEigenPod();
         uint256 feePer = pod.getConsolidationRequestFee();
         
+        // Emit events for tracking
         for (uint256 i = 0; i < n; ) {
             bytes32 srcPkHash = calculateValidatorPubkeyHash(requests[i].srcPubkey);
             bytes32 targetPkHash = calculateValidatorPubkeyHash(requests[i].targetPubkey);
-            
-            // Skip validation for first request (already validated above)
-            if (i > 0) {
-                IEtherFiNode node = etherFiNodeFromPubkeyHash[srcPkHash];
-                if (address(node) == address(0)) revert UnknownValidatorPubkey();
-
-                IEigenPod pi = node.getEigenPod();
-                if (address(pi) == address(0)) revert UnknownEigenPod();
-                if (pi != pod) revert PubkeysMapToDifferentPods();
-            }
 
             // Emit appropriate event based on whether this is a switch or consolidation
             if (srcPkHash == targetPkHash) {
@@ -268,7 +260,7 @@ contract EtherFiNodesManager is
         if (msg.value < feePer * n) revert InsufficientConsolidationFees();
 
         // ------------ external interaction ----------
-        node0.requestConsolidation{value: msg.value}(pod, requests);
+        node0.requestConsolidation{value: msg.value}(requests);
     }
 
     function getTotalEthRequested (IEigenPod.WithdrawalRequest[] calldata requests) internal pure returns (uint256) {

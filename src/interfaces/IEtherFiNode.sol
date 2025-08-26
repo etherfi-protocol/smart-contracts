@@ -20,7 +20,7 @@ interface IEtherFiNode {
     function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
     function sweepFunds() external returns (uint256 balance);
     function requestWithdrawal(IEigenPod pod, IEigenPod.WithdrawalRequest[] calldata requests) external payable;
-    function requestConsolidation(IEigenPod pod, IEigenPod.ConsolidationRequest[] calldata requests) external payable;
+    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable;
 
 
     // call forwarding
