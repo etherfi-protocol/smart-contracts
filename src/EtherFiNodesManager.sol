@@ -205,9 +205,7 @@ contract EtherFiNodesManager is
         // Get node and pod from first validator
         bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].srcPubkey);
         IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];      
-        if (address(node0) == address(0)) revert UnknownValidatorPubkey(); 
         IEigenPod pod = node0.getEigenPod();
-        if (address(pod) == address(0)) revert UnknownEigenPod();
         uint256 feePer = pod.getConsolidationRequestFee();
         
         // Emit events for tracking
