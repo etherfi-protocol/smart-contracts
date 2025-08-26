@@ -162,43 +162,26 @@ contract EtherFiNodesManager is
         // ------------ role check ------------
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
         
-        // ------------ checks ------------
-        uint256 n = requests.length;
-        if (n == 0) revert EmptyWithdrawalsRequest();
+        // apply rate limit to restaking withdrawals
         uint256 totalExitGwei = getTotalEthRequested(requests);
-        if (!canConsumeExitETH(totalExitGwei)) revert ExitRateLimitExceeded();
-
-        bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].pubkey);
-        IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];      
-        if (address(node0) == address(0)) revert UnknownValidatorPubkey(); 
-        IEigenPod pod = node0.getEigenPod();
-        if (address(pod) == address(0)) revert UnknownEigenPod();
-        uint256 feePer = pod.getWithdrawalRequestFee();
-        
-        for (uint256 i = 0; i < n; ) {
-            bytes32 pkHash = calculateValidatorPubkeyHash(requests[i].pubkey);
-            
-            // Skip validation for first request (already validated above)
-            if (i > 0) {
-                IEtherFiNode node = etherFiNodeFromPubkeyHash[pkHash];
-                if (address(node) == address(0)) revert UnknownValidatorPubkey();
-            }
-
-            emit ValidatorWithdrawalRequestSent(
-                msg.sender,
-                address(pod),
-                pkHash,
-                requests[i].amountGwei,
-                feePer
-            );
-            unchecked { ++i; }   
-        }
+        if (!BucketLimiter.consume(exitRequestsLimit, SafeCast.toUint64(totalExitGwei))) revert ExitRateLimitExceeded();
+        // eigenlayer will revert if all validators don't belong to the same pod
+        bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].pubkey);
+        IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];      
+        IEigenPod pod = node.getEigenPod();
 
         // ------------ fee checks ------------
-        if (msg.value < feePer * n) revert InsufficientWithdrawalFees();
+        if (msg.value < pod.getWithdrawalRequestFee() * requests.length) revert InsufficientWithdrawalFees();
+        
+        // ----------- external interaction --------
+        node.requestWithdrawal{value: msg.value}(requests);
 
-        // ------------ external interaction ----------
-        node0.requestWithdrawal{value: msg.value}(requests);
+        // ------------ event emission -------------
+        for (uint256 i = 0; i < requests.length; ) {
+            bytes32 currentPubKeyHash = calculateValidatorPubkeyHash(requests[i].pubkey);
+            emit ValidatorWithdrawalRequestSent(address(pod), currentPubKeyHash, requests[i].pubkey);
+            unchecked { ++i; }   
+        }
     }
 
     function getTotalEthRequested (IEigenPod.WithdrawalRequest[] calldata requests) internal pure returns (uint256) {
@@ -228,17 +211,7 @@ contract EtherFiNodesManager is
         BucketLimiter.setRefillRate(exitRequestsLimit, refill);
     }
 
-    // check for enough ETH left in remaining capacity
-    function canConsumeExitETH(uint256 amountGwei) public view returns (bool) {
-        return BucketLimiter.canConsume(exitRequestsLimit, SafeCast.toUint64(amountGwei));
-    }
-
     // Unrestaking rate limiting
-    function canConsumeUnrestakingCapacity(uint256 amount) external view returns (bool) {
-        uint256 amountGwei = amount / 1 gwei;
-        return BucketLimiter.canConsume(unrestakingLimit, SafeCast.toUint64(amountGwei));
-    }
-
     function consumeUnrestakingCapacity(uint256 amount) external {
         uint256 amountGwei = amount / 1 gwei;
         if (!BucketLimiter.consume(unrestakingLimit, SafeCast.toUint64(amountGwei))) revert ExitRateLimitExceeded();
