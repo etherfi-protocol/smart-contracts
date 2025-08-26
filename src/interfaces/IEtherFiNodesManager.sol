@@ -28,7 +28,6 @@ interface IEtherFiNodesManager {
     function sweepFunds(uint256 id) external;
 
     // unrestaking rate limiting
-    function canConsumeUnrestakingCapacity(uint256 amount) external view returns (bool);
     function consumeUnrestakingCapacity(uint256 amount) external;
 
     // call forwarding
@@ -109,7 +108,7 @@ interface IEtherFiNodesManager {
     event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
     event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
     event FundsTransferred(address indexed nodeAddress, uint256 amount);
-    event ValidatorWithdrawalRequestSent(address indexed initiator, address indexed pod, bytes32 indexed validatorPubkeyHash, uint64 amountGwei, uint256 feePerRequest);
+    event ValidatorWithdrawalRequestSent(address indexed pod, bytes32 indexed validatorPubkeyHash, bytes validatorPubkey);
     event ValidatorSwitchToCompoundingRequested(address indexed initiator, address indexed pod, bytes32 indexed validatorPubkeyHash, uint256 feePerRequest);
     event ValidatorConsolidationRequested(address indexed initiator, address indexed pod, bytes32 indexed sourcePubkeyHash, bytes32 targetPubkeyHash, uint256 feePerRequest);
 
@@ -131,8 +130,6 @@ interface IEtherFiNodesManager {
     error InsufficientConsolidationFees();
     error ExitRateLimitExceeded();
     error ExitRateLimitExceededForPod();
-    error UnknownValidatorPubkey();
-    error UnknownEigenPod();
     error PubkeysMapToDifferentPods();
     error RateLimiterAlreadyInitialized();
 }
