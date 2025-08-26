@@ -157,7 +157,7 @@ contract EtherFiNode is IEtherFiNode {
             }
         }
         etherFiNodesManager.consumeUnrestakingCapacity(totalBeaconEth);
-        
+
         return delegationManager.queueWithdrawals(params);
     }
 
