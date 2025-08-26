@@ -146,16 +146,18 @@ contract EtherFiNode is IEtherFiNode {
     ///   For the general case of queuing a beaconETH withdrawal you can use queueETHWithdrawal instead.
     function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external returns (bytes32[] memory withdrawalRoots) {
         if (!roleRegistry.hasRole(ETHERFI_NODE_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole();
-        // Calculate total amount for rate limiting (shares = wei, so each share * 1e18 = ether value)
-        uint256 totalAmount = 0;
-        for (uint256 i = 0; i < params.length; i++) {
-            for (uint256 j = 0; j < params[i].depositShares.length; j++) {
-                totalAmount += params[i].depositShares[j];
-            }
-        } 
-        // Check and consume unrestaking rate limit
-        etherFiNodesManager.consumeUnrestakingCapacity(totalAmount);
         
+        // Calculate total beaconETH amount for rate limiting - only rate limit beaconETH strategy withdrawals
+        uint256 totalBeaconEth = 0;
+        for (uint256 i = 0; i < params.length; i++) {
+            for (uint256 j = 0; j < params[i].strategies.length; j++) {
+                if (params[i].strategies[j] == IStrategy(address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0))) {
+                    totalBeaconEth += params[i].depositShares[j];
+                }
+            }
+        }
+        etherFiNodesManager.consumeUnrestakingCapacity(totalBeaconEth);
+
         return delegationManager.queueWithdrawals(params);
     }
 
@@ -190,6 +192,16 @@ contract EtherFiNode is IEtherFiNode {
             revert InvalidCaller();
         }
         getEigenPod().requestWithdrawal{value: msg.value}(requests);
+    }
+
+    //-------------------------------------------------------------------
+    //-------------  Execution-Layer Triggered Consolidations  ----------
+    //-------------------------------------------------------------------
+    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable {
+        if (msg.sender != address(etherFiNodesManager)) {
+            revert InvalidCaller();
+        }
+        getEigenPod().requestConsolidation{value: msg.value}(requests);
     }
 
     //--------------------------------------------------------------------------------------

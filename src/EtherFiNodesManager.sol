@@ -155,13 +155,10 @@ contract EtherFiNodesManager is
      *        - amountGwei: 0 for full exit, >0 for partial to pod
      * @custom:fee Send enough ETH to cover sum of (feePerPod * requestsForPod). Overpay is OK.
      */
-    function requestWithdrawal(
-        IEigenPod.WithdrawalRequest[] calldata requests
-    ) external payable whenNotPaused nonReentrant
-    {
+    function requestWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable whenNotPaused nonReentrant {
         // ------------ role check ------------
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
-        
+
         // apply rate limit to restaking withdrawals
         uint256 totalExitGwei = getTotalEthRequested(requests);
         if (!BucketLimiter.consume(exitRequestsLimit, SafeCast.toUint64(totalExitGwei))) revert ExitRateLimitExceeded();
@@ -172,7 +169,7 @@ contract EtherFiNodesManager is
 
         // ------------ fee checks ------------
         if (msg.value < pod.getWithdrawalRequestFee() * requests.length) revert InsufficientWithdrawalFees();
-        
+
         // ----------- external interaction --------
         node.requestWithdrawal{value: msg.value}(requests);
 
@@ -180,6 +177,46 @@ contract EtherFiNodesManager is
         for (uint256 i = 0; i < requests.length; ) {
             bytes32 currentPubKeyHash = calculateValidatorPubkeyHash(requests[i].pubkey);
             emit ValidatorWithdrawalRequestSent(address(pod), currentPubKeyHash, requests[i].pubkey);
+            unchecked { ++i; }
+        }
+    }
+
+    /**
+     * @notice Triggers EIP-7251 consolidation requests for validators in the same EigenPod.
+     * @dev Access: only admin role, pausable, nonReentrant.
+     * @param requests Array of ConsolidationRequest:
+     *        - srcPubkey: 48-byte BLS pubkey of source validator
+     *        - targetPubkey: 48-byte BLS pubkey of target validator
+     *        - If srcPubkey == targetPubkey, this switches validator from 0x01 to 0x02 credentials
+     * @dev EigenLayer validates that validators belong to the pod automatically.
+     * @custom:fee Send enough ETH to cover consolidation fees.
+     */
+    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable whenNotPaused nonReentrant onlyAdmin {
+        // ------------ checks ------------
+        if (requests.length == 0) revert EmptyConsolidationRequest();
+        
+        // eigenlayer will revert if all validators don't belong to the same pod
+        bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].srcPubkey);
+        IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];      
+        IEigenPod pod = node.getEigenPod();
+        
+        // ------------ fee checks ------------
+        if (msg.value < pod.getConsolidationRequestFee() * requests.length) revert InsufficientConsolidationFees();
+        
+        // ----------- external interaction --------
+        node.requestConsolidation{value: msg.value}(requests);
+        
+        // ------------ event emission -------------
+        for (uint256 i = 0; i < requests.length; ) {
+            bytes32 srcPkHash = calculateValidatorPubkeyHash(requests[i].srcPubkey);
+            bytes32 targetPkHash = calculateValidatorPubkeyHash(requests[i].targetPubkey);
+            
+            // Emit appropriate event based on whether this is a switch or consolidation
+            if (srcPkHash == targetPkHash) {
+                emit ValidatorSwitchToCompoundingRequested(address(pod), srcPkHash, requests[i].srcPubkey);
+            } else {
+                emit ValidatorConsolidationRequested(address(pod), srcPkHash, requests[i].srcPubkey, targetPkHash, requests[i].targetPubkey);
+            }
             unchecked { ++i; }   
         }
     }
@@ -241,6 +278,12 @@ contract EtherFiNodesManager is
     // returns withdrawal fee per each request
     function getWithdrawalRequestFee(address pod) public view returns (uint256) {
         uint256 feePerRequest = IEigenPod(pod).getWithdrawalRequestFee();
+        return feePerRequest;
+    }
+
+    // returns consolidation fee per each request
+    function getConsolidationRequestFee(address pod) public view returns (uint256) {
+        uint256 feePerRequest = IEigenPod(pod).getConsolidationRequestFee();
         return feePerRequest;
     }
 

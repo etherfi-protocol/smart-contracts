@@ -107,4 +107,6 @@ contract MockEigenPodBase is IEigenPod {
     function getParentBlockRoot(uint64 timestamp) external virtual view returns (bytes32) {}
     function getWithdrawalRequestFee() external view returns (uint256){}
     function requestWithdrawal(WithdrawalRequest[] calldata requests) external payable {}
+    function getConsolidationRequestFee() external view returns (uint256){}
+    function requestConsolidation(ConsolidationRequest[] calldata requests) external payable {}
 }

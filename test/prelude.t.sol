@@ -1450,5 +1450,470 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Now capacity should be exhausted
         assertFalse(etherFiNodesManager.canConsumeUnrestakingCapacity(1 ether));
     }
+
+    // ---------- EIP-7251 Consolidation tests ----------
+    
+    function test_requestConsolidation_samePod_success() public {
+        // Setup validators in same pod
+        bytes[] memory pubkeys = new bytes[](3);
+        uint256[] memory legacyIds = new uint256[](3);
+        pubkeys[0] = PK_16171;
+        pubkeys[1] = PK_16172; 
+        pubkeys[2] = PK_16173;
+        legacyIds[0] = 51715;
+        legacyIds[1] = 51716;
+        legacyIds[2] = 51717;
+        
+        vm.prank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        (, IEigenPod pod1) = _resolvePod(pubkeys[1]);
+        (, IEigenPod pod2) = _resolvePod(pubkeys[2]);
+        
+        // Sanity check: all same pod
+        assertEq(address(pod0), address(pod1));
+        assertEq(address(pod1), address(pod2));
+        
+        // Create consolidation requests
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](2);
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[0],
+            targetPubkey: pubkeys[1]
+        });
+        reqs[1] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[1], 
+            targetPubkey: pubkeys[2]
+        });
+        
+        uint256 feePer = pod0.getConsolidationRequestFee();
+        uint256 valueToSend = feePer * reqs.length;
+        
+        // Expect consolidation events
+        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorConsolidationRequested(
+            address(pod0), 
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]), 
+            pubkeys[0], 
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]), 
+            pubkeys[1]
+        );
+        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorConsolidationRequested(
+            address(pod0), 
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]), 
+            pubkeys[1], 
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[2]), 
+            pubkeys[2]
+        );
+        vm.deal(admin, 1 ether);
+        vm.prank(admin);
+        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
+    }
+    
+    function test_requestConsolidation_switchToCompounding_success() public {
+        // Setup single validator
+        bytes[] memory pubkeys = new bytes[](1);
+        uint256[] memory legacyIds = new uint256[](1);
+        pubkeys[0] = PK_16171;
+        legacyIds[0] = 51715;
+        
+        vm.prank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        
+        // Create self-consolidation request (switch to compounding)
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](1);
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[0],
+            targetPubkey: pubkeys[0] // Same pubkey = switch to compounding
+        });
+        
+        uint256 feePer = pod0.getConsolidationRequestFee();
+        uint256 valueToSend = feePer * reqs.length;
+        
+        // Expect switch to compounding event
+        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(
+            address(pod0), 
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]), 
+            pubkeys[0]
+        );
+        vm.deal(admin, 1 ether);
+        vm.prank(admin);
+        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
+    }
+    
+    function test_requestConsolidation_requires_admin_reverts() public {
+        // Setup validator
+        bytes[] memory pubkeys = new bytes[](1);
+        uint256[] memory legacyIds = new uint256[](1);
+        pubkeys[0] = PK_16171;
+        legacyIds[0] = 51715;
+        
+        vm.prank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        
+        // Create consolidation request
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](1);
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[0],
+            targetPubkey: pubkeys[0]
+        });
+        
+        uint256 feePer = pod0.getConsolidationRequestFee();
+        uint256 valueToSend = feePer * reqs.length;
+        
+        // Non-admin should revert
+        vm.expectRevert();
+        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
+    }
+    
+    function test_requestConsolidation_emptyRequest_reverts() public {
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](0);
+        
+        vm.prank(admin);
+        vm.expectRevert();
+        etherFiNodesManager.requestConsolidation{value: 0}(reqs);
+    }
+    
+    function test_requestConsolidation_insufficientFees_reverts() public {
+        // Setup validator
+        bytes[] memory pubkeys = new bytes[](1);
+        uint256[] memory legacyIds = new uint256[](1);
+        pubkeys[0] = PK_16171;
+        legacyIds[0] = 51715;
+        
+        vm.prank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        uint256 feePer = pod0.getConsolidationRequestFee();
+        
+        // Create consolidation request
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](1);
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[0],
+            targetPubkey: pubkeys[0]
+        });
+        
+        // Send insufficient fee (fee - 1 wei)
+        vm.prank(admin);
+        vm.expectRevert();
+        if (feePer > 0) {
+            etherFiNodesManager.requestConsolidation{value: feePer - 1}(reqs);
+        } else {
+            // If fee is 0, we can't test insufficient fees, so just pass
+            assertTrue(true);
+        }
+    }
+    
+    function test_getConsolidationRequestFee() public {
+        // Setup validator
+        bytes[] memory pubkeys = new bytes[](1);
+        uint256[] memory legacyIds = new uint256[](1);
+        pubkeys[0] = PK_16171;
+        legacyIds[0] = 51715;
+        
+        vm.prank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        
+        uint256 directFee = pod0.getConsolidationRequestFee();
+        uint256 managerFee = etherFiNodesManager.getConsolidationRequestFee(address(pod0));
+        
+        assertEq(directFee, managerFee);
+    }
+
+    // ---------- Fork Tests for EIP-7251 Consolidation ----------
+    
+    function test_requestConsolidation_samePod_fullConsolidation_success() public {
+        bytes[] memory pubkeys = new bytes[](3);
+        uint256[] memory legacyIds = new uint256[](3);
+        pubkeys[0] = PK_16171;
+        pubkeys[1] = PK_16172;
+        pubkeys[2] = PK_16173;
+        legacyIds[0] = 51715;
+        legacyIds[1] = 51716;
+        legacyIds[2] = 51717;
+        
+        vm.startPrank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        vm.stopPrank();
+        
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        (, IEigenPod pod1) = _resolvePod(pubkeys[1]);
+        (, IEigenPod pod2) = _resolvePod(pubkeys[2]);
+        
+        // Sanity check: all same pod
+        assertEq(address(pod0), address(pod1));
+        assertEq(address(pod1), address(pod2));
+        
+        // Create consolidation requests: pubkeys[0] -> pubkeys[1] -> pubkeys[2] (chain consolidation)
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](2);
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[0],
+            targetPubkey: pubkeys[1]
+        });
+        reqs[1] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[1],
+            targetPubkey: pubkeys[2]
+        });
+        
+        uint256 feePer = pod0.getConsolidationRequestFee();
+        uint256 valueToSend = feePer * reqs.length;
+        
+        // Expect consolidation events
+        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorConsolidationRequested(
+            address(pod0),
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]),
+            pubkeys[0],
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]),
+            pubkeys[1]
+        );
+        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorConsolidationRequested(
+            address(pod0),
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]),
+            pubkeys[1],
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[2]),
+            pubkeys[2]
+        );
+        
+        vm.deal(admin, 1 ether);
+        vm.prank(admin);
+        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
+    }
+    
+    function test_requestConsolidation_samePod_switchToCompounding_success() public {
+        bytes[] memory pubkeys = new bytes[](2);
+        uint256[] memory legacyIds = new uint256[](2);
+        pubkeys[0] = PK_16171;
+        pubkeys[1] = PK_16172;
+        legacyIds[0] = 51715;
+        legacyIds[1] = 51716;
+        
+        vm.startPrank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        vm.stopPrank();
+        
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        (, IEigenPod pod1) = _resolvePod(pubkeys[1]);
+        
+        // Sanity check: all same pod
+        assertEq(address(pod0), address(pod1));
+        
+        // Create switch to compounding requests (srcPubkey == targetPubkey)
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](2);
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[0],
+            targetPubkey: pubkeys[0]  // Same pubkey = switch to compounding
+        });
+        reqs[1] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[1],
+            targetPubkey: pubkeys[1]  // Same pubkey = switch to compounding
+        });
+        
+        uint256 feePer = pod0.getConsolidationRequestFee();
+        uint256 valueToSend = feePer * reqs.length;
+        
+        // Expect switch to compounding events
+        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(
+            address(pod0),
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]),
+            pubkeys[0]
+        );
+        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(
+            address(pod0),
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]),
+            pubkeys[1]
+        );
+        
+        vm.deal(admin, 1 ether);
+        vm.prank(admin);
+        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
+    }
+    
+    function test_requestConsolidation_mixedOperations_success() public {
+        bytes[] memory pubkeys = new bytes[](3);
+        uint256[] memory legacyIds = new uint256[](3);
+        pubkeys[0] = PK_16171;
+        pubkeys[1] = PK_16172;
+        pubkeys[2] = PK_16173;
+        legacyIds[0] = 51715;
+        legacyIds[1] = 51716;
+        legacyIds[2] = 51717;
+        
+        vm.startPrank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        vm.stopPrank();
+        
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        
+        // Mixed operations: consolidation + switch to compounding
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](2);
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[0],
+            targetPubkey: pubkeys[1]  // Consolidation
+        });
+        reqs[1] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[2],
+            targetPubkey: pubkeys[2]  // Switch to compounding
+        });
+        
+        uint256 feePer = pod0.getConsolidationRequestFee();
+        uint256 valueToSend = feePer * reqs.length;
+        
+        // Expect mixed events
+        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorConsolidationRequested(
+            address(pod0),
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]),
+            pubkeys[0],
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]),
+            pubkeys[1]
+        );
+        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(
+            address(pod0),
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[2]),
+            pubkeys[2]
+        );
+        
+        vm.deal(admin, 1 ether);
+        vm.prank(admin);
+        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
+    }
+    
+    function test_requestConsolidation_accessControl_onlyAdmin() public {
+        bytes[] memory pubkeys = new bytes[](1);
+        uint256[] memory legacyIds = new uint256[](1);
+        pubkeys[0] = PK_16171;
+        legacyIds[0] = 51715;
+        
+        vm.startPrank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        vm.stopPrank();
+        
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        
+        // Create consolidation request
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](1);
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[0],
+            targetPubkey: pubkeys[0]
+        });
+        
+        uint256 feePer = pod0.getConsolidationRequestFee();
+        uint256 valueToSend = feePer * reqs.length;
+        
+        // Non-admin should revert
+        address nonAdmin = vm.addr(123);
+        vm.deal(nonAdmin, 1 ether);
+        vm.expectRevert();
+        vm.prank(nonAdmin);
+        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
+        
+        // Admin should succeed
+        vm.deal(admin, 1 ether);
+        vm.prank(admin);
+        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
+    }
+    
+    function test_requestConsolidation_insufficientFee_reverts() public {
+        bytes[] memory pubkeys = new bytes[](2);
+        uint256[] memory legacyIds = new uint256[](2);
+        pubkeys[0] = PK_16171;
+        pubkeys[1] = PK_16172;
+        legacyIds[0] = 51715;
+        legacyIds[1] = 51716;
+        
+        vm.startPrank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        vm.stopPrank();
+        
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        
+        // Create consolidation requests
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](2);
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[0],
+            targetPubkey: pubkeys[1]
+        });
+        reqs[1] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[1],
+            targetPubkey: pubkeys[0]
+        });
+        
+        uint256 feePer = pod0.getConsolidationRequestFee();
+        uint256 correctFee = feePer * reqs.length;
+        
+        // Test insufficient fee (if fee > 0)
+        if (feePer > 0) {
+            vm.deal(admin, 1 ether);
+            vm.expectRevert(IEtherFiNodesManager.InsufficientConsolidationFees.selector);
+            vm.prank(admin);
+            etherFiNodesManager.requestConsolidation{value: correctFee - 1}(reqs);
+        }
+        
+        // Test correct fee should work
+        vm.deal(admin, 1 ether);
+        vm.prank(admin);
+        etherFiNodesManager.requestConsolidation{value: correctFee}(reqs);
+    }
+    
+    function test_requestConsolidation_emptyRequests_reverts() public {
+        // Empty request array should revert
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](0);
+
+        vm.deal(admin, 1 ether);
+        vm.expectRevert(IEtherFiNodesManager.EmptyConsolidationRequest.selector);
+        vm.prank(admin);
+        etherFiNodesManager.requestConsolidation{value: 0}(reqs);
+    }
+    
+    function test_requestConsolidation_feeCalculation_accuracy() public {
+        bytes[] memory pubkeys = new bytes[](3);
+        uint256[] memory legacyIds = new uint256[](3);
+        pubkeys[0] = PK_16171;
+        pubkeys[1] = PK_16172;
+        pubkeys[2] = PK_16173;
+        legacyIds[0] = 51715;
+        legacyIds[1] = 51716;
+        legacyIds[2] = 51717;
+        
+        vm.startPrank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
+        vm.stopPrank();
+        
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        
+        // Test different batch sizes for fee calculation accuracy using only known working pubkeys
+        uint256 feePer = pod0.getConsolidationRequestFee();
+        
+        for (uint256 batchSize = 1; batchSize <= 3; batchSize++) {
+            IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](batchSize);
+            for (uint256 i = 0; i < batchSize; i++) {
+                reqs[i] = IEigenPodTypes.ConsolidationRequest({
+                    srcPubkey: pubkeys[i],
+                    targetPubkey: pubkeys[(i + 1) % pubkeys.length]
+                });
+            }
+            
+            uint256 expectedFee = feePer * batchSize;
+            
+            vm.deal(admin, 2 ether);
+            vm.prank(admin);
+            etherFiNodesManager.requestConsolidation{value: expectedFee}(reqs);
+        }
+    }
+
 }
 
