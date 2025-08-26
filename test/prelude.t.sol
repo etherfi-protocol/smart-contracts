@@ -1385,7 +1385,15 @@ contract PreludeTest is Test, ArrayTestHelper {
         assertTrue(etherFiNodesManager.canConsumeUnrestakingCapacity(50 ether));
         assertFalse(etherFiNodesManager.canConsumeUnrestakingCapacity(51 ether));
         
-        // Consume 30 ETH
+        // Test that unauthorized access is blocked
+        vm.expectRevert();
+        etherFiNodesManager.consumeUnrestakingCapacity(30 ether);
+        
+        // Grant required role to test address
+        vm.prank(roleRegistry.owner());
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), address(this));
+        
+        // Now consumption should work
         etherFiNodesManager.consumeUnrestakingCapacity(30 ether);
         
         // Check remaining capacity
@@ -1434,6 +1442,14 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Set capacity to 100 ETH
         vm.prank(admin);
         etherFiNodesManager.setUnrestakingETHCapacity(100_000_000_000);
+        
+        // Test that unauthorized access is blocked
+        vm.expectRevert();
+        etherFiNodesManager.consumeUnrestakingCapacity(20 ether);
+        
+        // Grant required role to test address
+        vm.prank(roleRegistry.owner());
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), address(this));
         
         // Multiple small consumptions should work
         etherFiNodesManager.consumeUnrestakingCapacity(20 ether);
