@@ -161,6 +161,9 @@ contract EtherFiNodesManager is
 
         // validate requests
         if (requests.length == 0) revert EmptyWithdrawalsRequest();
+        // ------------ rate-limit checks ---------
+        uint256 totalExitGwei = getTotalEthRequested(requests);
+        if (!BucketLimiter.consume(exitRequestsLimit, SafeCast.toUint64(totalExitGwei))) revert ExitRateLimitExceededForPod();
 
         // eigenlayer will revert if all validators don't belong to the same pod
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].pubkey);
@@ -172,9 +175,6 @@ contract EtherFiNodesManager is
 
         // ----------- external interaction --------
         node.requestWithdrawal{value: msg.value}(requests);
-
-        uint256 totalExitGwei = getTotalEthRequested(requests);
-        if (!BucketLimiter.consume(exitRequestsLimit, SafeCast.toUint64(totalExitGwei))) revert ExitRateLimitExceededForPod();
 
         // ------------ event emission -------------
         for (uint256 i = 0; i < requests.length; ) {
@@ -252,29 +252,9 @@ contract EtherFiNodesManager is
     }
 
     function consumeUnrestakingCapacity(uint256 amount) external {
-        // Allow calls from authorized roles OR from valid EtherFiNode contracts
-        bool isAuthorized = roleRegistry.hasRole(ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE, msg.sender) || 
-                           _isValidEtherFiNode(msg.sender);
-        
-        if (!isAuthorized) revert IncorrectRole();
-        
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole(); 
         uint256 amountGwei = amount / 1 gwei;
         if (!BucketLimiter.consume(unrestakingLimit, SafeCast.toUint64(amountGwei))) revert ExitRateLimitExceededForPod();
-    }
-    
-    /// @dev Check if the caller is a valid EtherFiNode contract
-    function _isValidEtherFiNode(address caller) internal view returns (bool) {
-        // Basic validation: must be a contract (not EOA) to prevent most attacks
-        // This prevents random users from draining capacity while allowing legitimate nodes
-        if (caller.code.length == 0) return false;
-        
-        // Additional validation: try to call a known EtherFiNode function
-        // If it succeeds, it's likely a legitimate node contract
-        try IEtherFiNode(caller).getEigenPod() returns (IEigenPod) {
-            return true; // If it can return an EigenPod, it's likely a legitimate EtherFiNode
-        } catch {
-            return false;
-        }
     }
 
     // Amount of ETH that can be unrestaked in a period of time
