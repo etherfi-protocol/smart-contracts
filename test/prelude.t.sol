@@ -1121,50 +1121,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.expectRevert();
         etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
     }
-    function test_requestWithdrawal_multiple_pods_revert() public {
-
-        bytes[] memory pubkeys = new bytes[](3);
-        uint256[] memory legacyIds = new uint256[](3);
-        uint64[] memory amounts = new uint64[](3);
-        pubkeys[0] = PK_16171;
-        pubkeys[1] = PK_16172;
-        pubkeys[2] = PK_24807;          // belongs to different pod
-
-        legacyIds[0] = 51715;
-        legacyIds[1] = 51716;
-        legacyIds[2] = 39327;           // matching legacy id for PK_DIFFPOD
-
-        vm.startPrank(admin);
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
-        etherFiNodesManager.__initExitRateLimiter();
-        vm.stopPrank();
-        _setExitRateLimit(172800, 2);
-
-        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
-        (, IEigenPod pod1) = _resolvePod(pubkeys[1]);
-        (, IEigenPod pod2) = _resolvePod(pubkeys[2]);
-
-        // Sanity: confirm third resolves to a different pod
-        assertEq(address(pod0), address(pod1));
-        assertTrue(address(pod0) != address(pod2));
-
-        amounts[0] = 0; amounts[1] = 0; amounts[2] = 0;
-        IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
-
-        // Grant EL_TRIGGER_EXIT to the caller (so only multi-pod check is exercised)
-        vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(
-            etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(),
-            address(this)
-        );
-        vm.stopPrank();
-
-        uint256 feePer = pod0.getWithdrawalRequestFee();
-        uint256 valueToSend = feePer * reqs.length;
-
-        vm.expectRevert(); // multi-pod should revert
-        etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
-    }
 
     function test_requestWithdrawal_unknown_pubkey_revert() public {
 

@@ -185,11 +185,11 @@ contract EtherFiNode is IEtherFiNode {
     //-------------------------------------------------------------------
     //-------------  Execution-Layer Triggered Withdrawals  -------------
     //-------------------------------------------------------------------
-    function requestWithdrawal(IEigenPod pod, IEigenPod.WithdrawalRequest[] calldata requests) external payable {
+    function requestWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable {
         if (msg.sender != address(etherFiNodesManager)) {
             revert InvalidCaller();
         }
-        pod.requestWithdrawal{value: msg.value}(requests);
+        getEigenPod().requestWithdrawal{value: msg.value}(requests);
     }
 
     //--------------------------------------------------------------------------------------

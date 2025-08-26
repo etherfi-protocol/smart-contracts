@@ -182,10 +182,6 @@ contract EtherFiNodesManager is
             if (i > 0) {
                 IEtherFiNode node = etherFiNodeFromPubkeyHash[pkHash];
                 if (address(node) == address(0)) revert UnknownValidatorPubkey();
-
-                IEigenPod pi = node.getEigenPod();
-                if (address(pi) == address(0)) revert UnknownEigenPod();
-                if (pi != pod) revert PubkeysMapToDifferentPods();
             }
 
             emit ValidatorWithdrawalRequestSent(
@@ -202,7 +198,7 @@ contract EtherFiNodesManager is
         if (msg.value < feePer * n) revert InsufficientWithdrawalFees();
 
         // ------------ external interaction ----------
-        node0.requestWithdrawal{value: msg.value}(pod, requests);
+        node0.requestWithdrawal{value: msg.value}(requests);
     }
 
     function getTotalEthRequested (IEigenPod.WithdrawalRequest[] calldata requests) internal pure returns (uint256) {
