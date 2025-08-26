@@ -155,13 +155,10 @@ contract EtherFiNodesManager is
      *        - amountGwei: 0 for full exit, >0 for partial to pod
      * @custom:fee Send enough ETH to cover sum of (feePerPod * requestsForPod). Overpay is OK.
      */
-    function requestWithdrawal(
-        IEigenPod.WithdrawalRequest[] calldata requests
-    ) external payable whenNotPaused nonReentrant
-    {
+    function requestWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable whenNotPaused nonReentrant {
         // ------------ role check ------------
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
-        
+
         // apply rate limit to restaking withdrawals
         uint256 totalExitGwei = getTotalEthRequested(requests);
         if (!BucketLimiter.consume(exitRequestsLimit, SafeCast.toUint64(totalExitGwei))) revert ExitRateLimitExceeded();
@@ -172,7 +169,7 @@ contract EtherFiNodesManager is
 
         // ------------ fee checks ------------
         if (msg.value < pod.getWithdrawalRequestFee() * requests.length) revert InsufficientWithdrawalFees();
-        
+
         // ----------- external interaction --------
         node.requestWithdrawal{value: msg.value}(requests);
 
@@ -180,7 +177,7 @@ contract EtherFiNodesManager is
         for (uint256 i = 0; i < requests.length; ) {
             bytes32 currentPubKeyHash = calculateValidatorPubkeyHash(requests[i].pubkey);
             emit ValidatorWithdrawalRequestSent(address(pod), currentPubKeyHash, requests[i].pubkey);
-            unchecked { ++i; }   
+            unchecked { ++i; }
         }
     }
 
@@ -194,50 +191,34 @@ contract EtherFiNodesManager is
      * @dev EigenLayer validates that validators belong to the pod automatically.
      * @custom:fee Send enough ETH to cover consolidation fees.
      */
-    function requestConsolidation(
-        IEigenPod.ConsolidationRequest[] calldata requests
-    ) external payable whenNotPaused nonReentrant onlyAdmin
-    {
+    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable whenNotPaused nonReentrant onlyAdmin {
         // ------------ checks ------------
-        uint256 n = requests.length;
-        if (n == 0) revert EmptyConsolidationRequest();
-
-        // Get node and pod from first validator
-        bytes32 pkHash0 = calculateValidatorPubkeyHash(requests[0].srcPubkey);
-        IEtherFiNode node0 = etherFiNodeFromPubkeyHash[pkHash0];      
-        IEigenPod pod = node0.getEigenPod();
-        uint256 feePer = pod.getConsolidationRequestFee();
+        if (requests.length == 0) revert EmptyConsolidationRequest();
         
-        // Emit events for tracking
-        for (uint256 i = 0; i < n; ) {
+        // eigenlayer will revert if all validators don't belong to the same pod
+        bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].srcPubkey);
+        IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];      
+        IEigenPod pod = node.getEigenPod();
+        
+        // ------------ fee checks ------------
+        if (msg.value < pod.getConsolidationRequestFee() * requests.length) revert InsufficientConsolidationFees();
+        
+        // ----------- external interaction --------
+        node.requestConsolidation{value: msg.value}(requests);
+        
+        // ------------ event emission -------------
+        for (uint256 i = 0; i < requests.length; ) {
             bytes32 srcPkHash = calculateValidatorPubkeyHash(requests[i].srcPubkey);
             bytes32 targetPkHash = calculateValidatorPubkeyHash(requests[i].targetPubkey);
-
+            
             // Emit appropriate event based on whether this is a switch or consolidation
             if (srcPkHash == targetPkHash) {
-                emit ValidatorSwitchToCompoundingRequested(
-                    msg.sender,
-                    address(pod),
-                    srcPkHash,
-                    feePer
-                );
+                emit ValidatorSwitchToCompoundingRequested(address(pod), srcPkHash, requests[i].srcPubkey);
             } else {
-                emit ValidatorConsolidationRequested(
-                    msg.sender,
-                    address(pod),
-                    srcPkHash,
-                    targetPkHash,
-                    feePer
-                );
+                emit ValidatorConsolidationRequested(address(pod), srcPkHash, requests[i].srcPubkey, targetPkHash, requests[i].targetPubkey);
             }
             unchecked { ++i; }   
         }
-
-        // ------------ fee checks ------------
-        if (msg.value < feePer * n) revert InsufficientConsolidationFees();
-
-        // ------------ external interaction ----------
-        node0.requestConsolidation{value: msg.value}(requests);
     }
 
     function getTotalEthRequested (IEigenPod.WithdrawalRequest[] calldata requests) internal pure returns (uint256) {

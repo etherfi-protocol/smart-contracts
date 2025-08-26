@@ -1490,18 +1490,21 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 valueToSend = feePer * reqs.length;
         
         // Expect consolidation events
-        bytes32 srcHash0 = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]);
-        bytes32 targetHash0 = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]);
-        bytes32 srcHash1 = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]);
-        bytes32 targetHash1 = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[2]);
-        
         vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
         emit IEtherFiNodesManager.ValidatorConsolidationRequested(
-            admin, address(pod0), srcHash0, targetHash0, feePer
+            address(pod0), 
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]), 
+            pubkeys[0], 
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]), 
+            pubkeys[1]
         );
         vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
         emit IEtherFiNodesManager.ValidatorConsolidationRequested(
-            admin, address(pod0), srcHash1, targetHash1, feePer
+            address(pod0), 
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]), 
+            pubkeys[1], 
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[2]), 
+            pubkeys[2]
         );
         vm.deal(admin, 1 ether);
         vm.prank(admin);
@@ -1531,14 +1534,14 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 valueToSend = feePer * reqs.length;
         
         // Expect switch to compounding event
-        bytes32 pubkeyHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]);
-        
-        vm.deal(admin, 1 ether);
-        vm.prank(admin);
         vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
         emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(
-            admin, address(pod0), pubkeyHash, feePer
+            address(pod0), 
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]), 
+            pubkeys[0]
         );
+        vm.deal(admin, 1 ether);
+        vm.prank(admin);
         etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
     }
     

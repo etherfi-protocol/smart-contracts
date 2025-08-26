@@ -109,8 +109,8 @@ interface IEtherFiNodesManager {
     event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
     event FundsTransferred(address indexed nodeAddress, uint256 amount);
     event ValidatorWithdrawalRequestSent(address indexed pod, bytes32 indexed validatorPubkeyHash, bytes validatorPubkey);
-    event ValidatorSwitchToCompoundingRequested(address indexed initiator, address indexed pod, bytes32 indexed validatorPubkeyHash, uint256 feePerRequest);
-    event ValidatorConsolidationRequested(address indexed initiator, address indexed pod, bytes32 indexed sourcePubkeyHash, bytes32 targetPubkeyHash, uint256 feePerRequest);
+    event ValidatorSwitchToCompoundingRequested(address indexed pod, bytes32 indexed validatorPubkeyHash, bytes validatorPubkey);
+    event ValidatorConsolidationRequested(address indexed pod, bytes32 indexed sourcePubkeyHash, bytes sourcePubkey, bytes32 targetPubkeyHash, bytes targetPubkey);
 
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------
