@@ -212,6 +212,11 @@ contract EtherFiNodesManager is
     }
 
     // Unrestaking rate limiting
+    function canConsumeUnrestakingCapacity(uint256 amount) external view returns (bool) {
+        uint256 amountGwei = amount / 1 gwei;
+        return BucketLimiter.canConsume(unrestakingLimit, SafeCast.toUint64(amountGwei));
+    }
+
     function consumeUnrestakingCapacity(uint256 amount) external {
         uint256 amountGwei = amount / 1 gwei;
         if (!BucketLimiter.consume(unrestakingLimit, SafeCast.toUint64(amountGwei))) revert ExitRateLimitExceeded();
