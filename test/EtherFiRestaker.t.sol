@@ -42,10 +42,8 @@ contract EtherFiRestakerTest is TestSetup {
         stEth.submit{value: _amount}(address(0));
 
         stEth.approve(address(liquifierInstance), _amount);
-        
-        ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(liquifierInstance), _amount, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
-        ILiquifier.PermitInput memory permitInput2 = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
-        liquifierInstance.depositWithERC20WithPermit(address(stEth), _amount, address(0), permitInput2);
+
+        liquifierInstance.depositWithERC20(address(stEth), _amount, address(0));
 
 
         // Aliice has 10 ether eETH
