@@ -30,6 +30,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     address public DEPRECATED_TNFT;
     IeETH public eETH; 
 
+    uint256 public DANGER;
+
     bool public DEPRECATED_eEthliquidStakingOpened;
 
     uint128 public totalValueOutOfLp;
