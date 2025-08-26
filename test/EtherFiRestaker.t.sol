@@ -40,10 +40,10 @@ contract EtherFiRestakerTest is TestSetup {
         vm.deal(alice, _amount);
         vm.startPrank(alice);        
         stEth.submit{value: _amount}(address(0));
-        
-        ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(liquifierInstance), _amount, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
-        ILiquifier.PermitInput memory permitInput2 = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
-        liquifierInstance.depositWithERC20WithPermit(address(stEth), _amount, address(0), permitInput2);
+
+        stEth.approve(address(liquifierInstance), _amount);
+
+        liquifierInstance.depositWithERC20(address(stEth), _amount, address(0));
 
 
         // Aliice has 10 ether eETH
@@ -127,7 +127,7 @@ contract EtherFiRestakerTest is TestSetup {
 
         IStrategy[] memory strategies = new IStrategy[](1);
         strategies[0] = etherFiRestakerInstance.getEigenLayerRestakingStrategy(address(stEth));
-        (uint256[] memory withdrawableShares, ) = eigenLayerDelegationManager.getWithdrawableShares(address(this), strategies);
+        (uint256[] memory withdrawableShares, ) = eigenLayerDelegationManager.getWithdrawableShares(address(etherFiRestakerInstance), strategies);
         
         IDelegationManagerTypes.QueuedWithdrawalParams[] memory params = new IDelegationManagerTypes.QueuedWithdrawalParams[](1);
         params[0] = IDelegationManagerTypes.QueuedWithdrawalParams({
@@ -144,50 +144,86 @@ contract EtherFiRestakerTest is TestSetup {
         bytes32[] memory withdrawalRoots = test_queueWithdrawals_1();
         assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
 
-        revert("FIX BELOW");
-
+        // Get the queued withdrawal details from EigenLayer
+        (IDelegationManager.Withdrawal memory withdrawal, uint256[] memory shares) = eigenLayerDelegationManager.getQueuedWithdrawal(withdrawalRoots[0]);
+        
         vm.startPrank(etherfiOperatingAdmin);
-        // // It won't complete the withdrawal because the withdrawal is still pending
-        // etherFiRestakerInstance.completeQueuedWithdrawals(1000);
-        // assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
-        // assertApproxEqAbs(etherFiRestakerInstance.getEthAmountInEigenLayerPendingForWithdrawals(address(stEth)), 5 ether, 2 wei);
+        
+        // It won't complete the withdrawal because the withdrawal is still pending (not enough blocks passed)
+        IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+        withdrawals[0] = withdrawal;
+        
+        IERC20[][] memory tokens = new IERC20[][](1);
+        tokens[0] = new IERC20[](1);
+        tokens[0][0] = IERC20(address(stEth));
+        
+        // This should fail because withdrawal delay hasn't passed
+        vm.expectRevert();
+        etherFiRestakerInstance.completeQueuedWithdrawals(withdrawals, tokens);
+        
+        assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
 
-        // vm.roll(block.number + 50400);
+        // Fast forward past the withdrawal delay (100800 blocks + 1 since it's exclusive)
+        vm.roll(block.number + 100800 + 1);
 
-        // etherFiRestakerInstance.completeQueuedWithdrawals(1000);
-        // assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
-        // assertApproxEqAbs(etherFiRestakerInstance.getEthAmountInEigenLayerPendingForWithdrawals(address(stEth)), 0, 2 wei);
+        // Now the withdrawal should complete successfully
+        etherFiRestakerInstance.completeQueuedWithdrawals(withdrawals, tokens);
+        assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
+        
         vm.stopPrank();
     }
 
     function test_completeQueuedWithdrawals_2() public {
         bytes32[] memory withdrawalRoots1 = test_queueWithdrawals_1();
 
-        vm.roll(block.number + 50400 / 2);
+        // Fast forward halfway through the withdrawal delay
+        vm.roll(block.number + 50400);
 
         bytes32[] memory withdrawalRoots2 = test_queueWithdrawals_1();
 
         assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots1[0]));
         assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots2[0]));
 
-        vm.roll(block.number + 50400 / 2);
+        // Fast forward so the first withdrawal is completable (total 100800 + 1 blocks from first withdrawal start)
+        // This means 50400 + 1 more blocks from current position
+        vm.roll(block.number + 50400 + 1);
 
-        revert("FIX BELOW");
+        // Get the queued withdrawal details from EigenLayer
+        (IDelegationManager.Withdrawal memory withdrawal1, ) = eigenLayerDelegationManager.getQueuedWithdrawal(withdrawalRoots1[0]);
+        (IDelegationManager.Withdrawal memory withdrawal2, ) = eigenLayerDelegationManager.getQueuedWithdrawal(withdrawalRoots2[0]);
 
-        // The first withdrawal is completed
-        // But, the second withdrawal is still pending
-        // Therefore, `completeQueuedWithdrawals` will not complete the second withdrawal
-        // vm.startPrank(etherfiOperatingAdmin);
-        // etherFiRestakerInstance.completeQueuedWithdrawals(1000);
+        vm.startPrank(etherfiOperatingAdmin);
+        
+        // The first withdrawal should be completable now (100800 + 1 blocks have passed since it was queued)
+        // But the second withdrawal is still pending (only 50400 + 1 blocks have passed)
+        IDelegationManager.Withdrawal[] memory withdrawals1 = new IDelegationManager.Withdrawal[](1);
+        withdrawals1[0] = withdrawal1;
+        
+        IERC20[][] memory tokens1 = new IERC20[][](1);
+        tokens1[0] = new IERC20[](1);
+        tokens1[0][0] = IERC20(address(stEth));
+        
+        // Complete the first withdrawal
+        etherFiRestakerInstance.completeQueuedWithdrawals(withdrawals1, tokens1);
+        assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots1[0]));
+        assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots2[0]));
 
-        // assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots1[0]));
-        // assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots2[0]));
+        // Fast forward another 50400 blocks so the second withdrawal can be completed 
+        // (total 100800 + 1 blocks from its start)
+        vm.roll(block.number + 50400);
 
-        // vm.roll(block.number + 50400 / 2);
-
-        // etherFiRestakerInstance.completeQueuedWithdrawals(1000);
-        // assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots1[0]));
-        // assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots2[0]));
+        // Now complete the second withdrawal
+        IDelegationManager.Withdrawal[] memory withdrawals2 = new IDelegationManager.Withdrawal[](1);
+        withdrawals2[0] = withdrawal2;
+        
+        IERC20[][] memory tokens2 = new IERC20[][](1);
+        tokens2[0] = new IERC20[](1);
+        tokens2[0][0] = IERC20(address(stEth));
+        
+        etherFiRestakerInstance.completeQueuedWithdrawals(withdrawals2, tokens2);
+        assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots1[0]));
+        assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots2[0]));
+        
         vm.stopPrank();
     }
 
@@ -222,7 +258,7 @@ contract EtherFiRestakerTest is TestSetup {
         });
 
         vm.startPrank(etherfiOperatingAdmin);
-        vm.expectRevert("DelegationManager._delegate: staker is already actively delegated");
+        vm.expectRevert("ActivelyDelegated()");
         etherFiRestakerInstance.delegateTo(avsOperator2, signature, 0x0);
         vm.stopPrank();
     }
