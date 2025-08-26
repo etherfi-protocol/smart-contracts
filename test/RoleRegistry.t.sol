@@ -174,5 +174,11 @@ contract RoleRegistryTest is Test {
         // Verify new owner
         assertEq(registry.owner(), user1);
         assertEq(registry.pendingOwner(), address(0));
+
+        // Try to grant role as non-owner
+        vm.startPrank(user1);
+        vm.expectRevert();
+        registry.grantRole(ADMIN_ROLE, user2);
+        vm.stopPrank();
     }
 }
