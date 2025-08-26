@@ -128,7 +128,6 @@ interface IEtherFiNodesManager {
     error EmptyConsolidationRequest();
     error InsufficientWithdrawalFees();
     error InsufficientConsolidationFees();
-    error ExitRateLimitExceeded();
     error ExitRateLimitExceededForPod();
     error PubkeysMapToDifferentPods();
     error RateLimiterAlreadyInitialized();

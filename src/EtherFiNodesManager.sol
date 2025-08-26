@@ -159,9 +159,9 @@ contract EtherFiNodesManager is
         // ------------ role check ------------
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
 
-        // apply rate limit to restaking withdrawals
-        uint256 totalExitGwei = getTotalEthRequested(requests);
-        if (!BucketLimiter.consume(exitRequestsLimit, SafeCast.toUint64(totalExitGwei))) revert ExitRateLimitExceeded();
+        // validate requests
+        if (requests.length == 0) revert EmptyWithdrawalsRequest();
+
         // eigenlayer will revert if all validators don't belong to the same pod
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].pubkey);
         IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];      
@@ -172,6 +172,9 @@ contract EtherFiNodesManager is
 
         // ----------- external interaction --------
         node.requestWithdrawal{value: msg.value}(requests);
+
+        uint256 totalExitGwei = getTotalEthRequested(requests);
+        if (!BucketLimiter.consume(exitRequestsLimit, SafeCast.toUint64(totalExitGwei))) revert ExitRateLimitExceededForPod();
 
         // ------------ event emission -------------
         for (uint256 i = 0; i < requests.length; ) {
@@ -248,15 +251,11 @@ contract EtherFiNodesManager is
         BucketLimiter.setRefillRate(exitRequestsLimit, refill);
     }
 
-    // Unrestaking rate limiting
-    function canConsumeUnrestakingCapacity(uint256 amount) external view returns (bool) {
-        uint256 amountGwei = amount / 1 gwei;
-        return BucketLimiter.canConsume(unrestakingLimit, SafeCast.toUint64(amountGwei));
-    }
-
     function consumeUnrestakingCapacity(uint256 amount) external {
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole();
+        
         uint256 amountGwei = amount / 1 gwei;
-        if (!BucketLimiter.consume(unrestakingLimit, SafeCast.toUint64(amountGwei))) revert ExitRateLimitExceeded();
+        if (!BucketLimiter.consume(unrestakingLimit, SafeCast.toUint64(amountGwei))) revert ExitRateLimitExceededForPod();
     }
 
     // Amount of ETH that can be unrestaked in a period of time
