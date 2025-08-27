@@ -232,6 +232,11 @@ contract PreludeTest is Test, ArrayTestHelper {
             vm.deal(eigenpod, params.validatorSize);
         }
 
+        // Grant the newly created EtherFiNode proxy the ability to consume unrestaking capacity
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), params.etherFiNode);
+        vm.stopPrank();
+
         TestValidator memory out = TestValidator({
             etherFiNode: params.etherFiNode,
             eigenPod: eigenPod,
@@ -487,6 +492,12 @@ contract PreludeTest is Test, ArrayTestHelper {
         // force link this validator
         vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(validatorPubkey));
+
+        // Grant the linked EtherFiNode proxy the ability to consume unrestaking capacity
+        address etherFiNodeAddress = etherFiNodesManager.etherfiNodeAddress(uint256(pubkeyHash));
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), etherFiNodeAddress);
+        vm.stopPrank();
 
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueETHWithdrawal(uint256(pubkeyHash), 1 ether);
