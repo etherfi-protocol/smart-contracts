@@ -33,15 +33,14 @@ contract EtherFiNodesManager is
     //---------------------------------------------------------------------------
     //-----------------------------  Storage  -----------------------------------
     //---------------------------------------------------------------------------
-
     LegacyNodesManagerState private legacyState;
     mapping(bytes4 => bool) public allowedForwardedEigenpodCalls; // Call Forwarding: functionSelector -> allowed
     mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls; // Call Forwarding: functionSelector -> targetAddress -> allowed
     mapping(bytes32 => IEtherFiNode) public etherFiNodeFromPubkeyHash;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ----------------------------------------
     //--------------------------------------------------------------------------------------
-
     bytes32 public constant ETHERFI_NODES_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
@@ -318,6 +317,7 @@ contract EtherFiNodesManager is
             emit PubkeyLinked(pubkeyHash, nodeAddress, validatorIds[i], pubkeys[i]);
         }
     }
+
 
     //--------------------------------------------------------------------------------------
     //-------------------------------- CALL FORWARDING  ------------------------------------
