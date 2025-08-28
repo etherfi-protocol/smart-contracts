@@ -343,7 +343,6 @@ contract EtherFiNodesManager is
         }
     }
 
-
     /// @dev this method is for linking our old legacy validator ids that were created before
     ///    we started tracking the pubkeys onchain. We can delete this method once we have linked all of our legacy validators
     function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyAdmin {

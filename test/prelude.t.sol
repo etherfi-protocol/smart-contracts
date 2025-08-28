@@ -43,6 +43,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     address eigenlayerAdmin = vm.addr(0xABABAB);
     address callForwarder = vm.addr(0xCDCDCD);
     address user = vm.addr(0xEFEFEF);
+    address podProver = vm.addr(0xABCDEF);
     address elExiter = address(0x12121212);
 
     // Same-pod group (EigenPod: 0x98B1377660B2ccCF88195d2360b1b1155249b940)
@@ -113,6 +114,8 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), callForwarder);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_POD_PROVER_ROLE(), address(podProver));
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elExiter);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_ADMIN_ROLE(), admin);
@@ -538,9 +541,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(admin);
         IEtherFiNode node = IEtherFiNode(stakingManager.instantiateEtherFiNode(true));
 
+        // methods should only be callable by EFNM
         vm.startPrank(user);
         {
-            // methods should only be callable by EFNM
             vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
             node.createEigenPod();
 
@@ -721,13 +724,14 @@ contract PreludeTest is Test, ArrayTestHelper {
 
     function test_setProofSubmitter() public {
 
+        vm.prank(admin);
+        IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode(/*createEigenPod=*/true));
         address newSubmitter = vm.addr(0xabc123);
-        IEtherFiNode node = IEtherFiNode(0xbD0BFF833DE891aDcFF6Ee5502B23f516bECBf6F);
 
         vm.prank(eigenlayerAdmin);
-        node.setProofSubmitter(newSubmitter);
+        etherFiNodesManager.setProofSubmitter(address(newNode), newSubmitter);
 
-        IEigenPod pod = node.getEigenPod();
+        IEigenPod pod = newNode.getEigenPod();
         assertEq(pod.proofSubmitter(), newSubmitter);
 
     }
@@ -767,8 +771,15 @@ contract PreludeTest is Test, ArrayTestHelper {
             bytes32(uint256(57)) /*slot*/,
             bytes32(uint256(1))
         );
-        // initiate a checkpoint
+
+
+        // only POD_PROVER can start checkpoint
         vm.prank(eigenlayerAdmin);
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        etherFiNodesManager.startCheckpoint(uint256(val.pubkeyHash));
+
+        // initiate a checkpoint
+        vm.prank(podProver);
         etherFiNodesManager.startCheckpoint(uint256(val.pubkeyHash));
         assert(IEigenPod(val.eigenPod).currentCheckpointTimestamp() != 0);
     }
