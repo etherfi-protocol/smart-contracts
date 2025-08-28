@@ -181,19 +181,6 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     }
 
     //--------------------------------------------------------------------------------------
-    //-----------------------------------  Migration  -----------------------------------
-    //--------------------------------------------------------------------------------------
-
-    /// @notice Migrate existing bucket limiter state during upgrade
-    /// @param id The limit identifier
-    /// @param legacyLimit The existing limit state to migrate
-    function migrateFromLegacyLimiter(bytes32 id, BucketLimiter.Limit calldata legacyLimit) external onlyAdmin {
-        if (limitExists(id)) revert LimitAlreadyExists();
-        limits[id] = legacyLimit;
-        emit LimiterCreated(id, legacyLimit.capacity, legacyLimit.refillRate);
-    }
-
-    //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
 
