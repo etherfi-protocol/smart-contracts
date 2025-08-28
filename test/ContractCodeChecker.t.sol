@@ -18,7 +18,7 @@ contract ContractCodeCheckerTest is TestSetup {
 
     function test_deployment_bytecode() public {
         // Create new implementations
-        EtherFiNodesManager etherFiNodesManagerImplementation = new EtherFiNodesManager(address(0x0), address(0x0));
+        EtherFiNodesManager etherFiNodesManagerImplementation = new EtherFiNodesManager(address(0x0), address(0x0), address(0x0));
         address etherFiNodesManagerImplAddress = address(0xE9EE6923D41Cf5F964F11065436BD90D4577B5e4);
 
         EtherFiNode etherFiNodeImplementation = new EtherFiNode(address(0x0), address(0x0), address(0x0), address(0x0), address(0x0));

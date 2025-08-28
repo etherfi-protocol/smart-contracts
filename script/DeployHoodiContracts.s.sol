@@ -4,7 +4,7 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "../src/EtherFiNodesManager.sol";
 import "../src/EtherFiNode.sol";
-import "../lib/BucketLimiter.sol";
+import "../src/EtherFiRateLimiter.sol";
 
 interface IUpgradable {
     function upgradeTo(address newImplementation) external;
@@ -23,12 +23,18 @@ contract DeployHoodiContracts is Script {
         address liquidityPoolProxy = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
         address eigenPodManagerProxy = 0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338;
         address delegationManagerProxy = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
-        address etherFiNodesManagerProxy = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F; // Current proxy
-        address etherFiNodeProxy = 0xfD4Ff2942e183161a5920749CD5A8B0cFD4164AC; // Current proxy
+        address etherFiNodesManagerProxy = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
+        address etherFiNodeProxy = 0xfD4Ff2942e183161a5920749CD5A8B0cFD4164AC;
+        address etherFiRateLimiterProxy = address(0x0); 
+        
+        // Deploy EtherFiRateLimiter first
+        console.log("Deploying EtherFiRateLimiter implementation...");
+        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(roleRegistryProxy);
+        console.log("EtherFiRateLimiter implementation deployed at:", address(rateLimiterImpl));
         
         // Deploy new EtherFiNodesManager implementation
         console.log("Deploying new EtherFiNodesManager implementation...");
-        EtherFiNodesManager newNodesManagerImpl = new EtherFiNodesManager(stakingManagerProxy, roleRegistryProxy);
+        EtherFiNodesManager newNodesManagerImpl = new EtherFiNodesManager(stakingManagerProxy, roleRegistryProxy, address(etherFiRateLimiterProxy));
         console.log("EtherFiNodesManager deployed at:", address(newNodesManagerImpl));
 
         // For EtherFiNode, we need several addresses. Using placeholders for now

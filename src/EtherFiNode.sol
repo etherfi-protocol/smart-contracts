@@ -91,7 +91,7 @@ contract EtherFiNode is IEtherFiNode {
     ///   It is fine to queue a withdrawal before validators have finished exiting on the beacon chain.
     function queueETHWithdrawal(uint256 amount) external returns (bytes32 withdrawalRoot) {
         if (!roleRegistry.hasRole(ETHERFI_NODE_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole();
-        // Check and consume unrestaking rate limit
+
         etherFiNodesManager.consumeUnrestakingCapacity(amount);
 
         // beacon eth is always 1 to 1 with deposit shares

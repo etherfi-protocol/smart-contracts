@@ -15,7 +15,7 @@ import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
 import "./interfaces/IRoleRegistry.sol";
-import "lib/BucketLimiter.sol";
+import "./interfaces/IEtherFiRateLimiter.sol";
 
 contract EtherFiNodesManager is
     Initializable,
@@ -28,6 +28,7 @@ contract EtherFiNodesManager is
 
     address public immutable stakingManager;
     IRoleRegistry public immutable roleRegistry;
+    IEtherFiRateLimiter public immutable rateLimiter;
 
     //---------------------------------------------------------------------------
     //-----------------------------  Storage  -----------------------------------
@@ -37,26 +38,30 @@ contract EtherFiNodesManager is
     mapping(bytes4 => bool) public allowedForwardedEigenpodCalls; // Call Forwarding: functionSelector -> allowed
     mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls; // Call Forwarding: functionSelector -> targetAddress -> allowed
     mapping(bytes32 => IEtherFiNode) public etherFiNodeFromPubkeyHash;
-    BucketLimiter.Limit public exitRequestsLimit;
-    BucketLimiter.Limit public unrestakingLimit;
     //--------------------------------------------------------------------------------------
-    //-------------------------------------  ROLES  ---------------------------------------
+    //-------------------------------------  ROLES  ----------------------------------------
     //--------------------------------------------------------------------------------------
 
     bytes32 public constant ETHERFI_NODES_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
-    bytes32 public constant ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE = keccak256("ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE");
+
+    //-------------------------------------------------------------------------
+    //-----------------------------  Rate Limiter Buckets ---------------------
+    //-------------------------------------------------------------------------
+    bytes32 public constant UNRESTAKING_LIMIT_ID = keccak256("UNRESTAKING_LIMIT_ID");
+    bytes32 public constant EXIT_REQUEST_LIMIT_ID = keccak256("EXIT_REQUEST_LIMIT_ID");
 
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
     //-------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _stakingManager, address _roleRegistry) {
+    constructor(address _stakingManager, address _roleRegistry, address _rateLimiter) {
         stakingManager = _stakingManager;
         roleRegistry = IRoleRegistry(_roleRegistry);
+        rateLimiter = IEtherFiRateLimiter(_rateLimiter);
 
         _disableInitializers();
     }
@@ -73,21 +78,6 @@ contract EtherFiNodesManager is
     function unPauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
-    }
-
-    function __initExitRateLimiter() external onlyAdmin() {
-        if (exitRequestsLimit.lastRefill != 0) {
-            revert RateLimiterAlreadyInitialized();
-        }
-        exitRequestsLimit = BucketLimiter.create(uint64(172_800_000_000_000), uint64(2_000_000_000));
-    }
-
-    function __initUnrestakingRateLimiter() external onlyAdmin() {
-        if (unrestakingLimit.lastRefill != 0) {
-            revert RateLimiterAlreadyInitialized();
-        }
-        // Use gwei as base unit like exit limiter: 172,800 ETH capacity, 2 ETH/sec refill
-        unrestakingLimit = BucketLimiter.create(uint64(172_800_000_000_000), uint64(2_000_000_000));
     }
 
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
@@ -163,7 +153,7 @@ contract EtherFiNodesManager is
         if (requests.length == 0) revert EmptyWithdrawalsRequest();
         // ------------ rate-limit checks ---------
         uint256 totalExitGwei = getTotalEthRequested(requests);
-        if (!BucketLimiter.consume(exitRequestsLimit, SafeCast.toUint64(totalExitGwei))) revert ExitRateLimitExceededForPod();
+        rateLimiter.consume(EXIT_REQUEST_LIMIT_ID, SafeCast.toUint64(totalExitGwei));
 
         // eigenlayer will revert if all validators don't belong to the same pod
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].pubkey);
@@ -237,40 +227,9 @@ contract EtherFiNodesManager is
         return totalGwei;
     }
 
-    // Amount of ETH that can be exited in a period of time
-    // For e.g. 172800 ETH or 172_800_000_000_000 gwei
-    function setExitETHCapacity(uint256 capacity) external onlyAdmin() {
-        uint64 cap = SafeCast.toUint64(capacity);
-        BucketLimiter.setCapacity(exitRequestsLimit, cap);
-    }
-
-    // Amount of ETH that refills per second once the bucket is not full
-    // for e.g. 2 ETH/second or 2_000_000_000 gwei/second rate would take 1 day to refill entirely 
-    function setExitETHRefillPerSecond(uint256 refillPerSecond) external onlyAdmin() {
-        uint64 refill = SafeCast.toUint64(refillPerSecond);
-        BucketLimiter.setRefillRate(exitRequestsLimit, refill);
-    }
-
     function consumeUnrestakingCapacity(uint256 amount) external {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole(); 
         uint256 amountGwei = amount / 1 gwei;
-        if (!BucketLimiter.consume(unrestakingLimit, SafeCast.toUint64(amountGwei))) revert ExitRateLimitExceededForPod();
-    }
-
-    // Amount of ETH that can be unrestaked in a period of time
-    // For e.g. 172800 ETH or 172_800_000_000_000 gwei
-    function setUnrestakingETHCapacity(uint256 capacityGwei) external {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole();
-        uint64 cap = SafeCast.toUint64(capacityGwei);
-        BucketLimiter.setCapacity(unrestakingLimit, cap);
-    }
-
-    // Amount of ETH that refills per second for unrestaking once the bucket is not full
-    // for e.g. 2 ETH/second or 2_000_000_000 gwei/second rate would take 1 day to refill entirely 
-    function setUnrestakingETHRefillPerSecond(uint256 refillPerSecondGwei) external {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole();
-        uint64 refill = SafeCast.toUint64(refillPerSecondGwei);
-        BucketLimiter.setRefillRate(unrestakingLimit, refill);
+        rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(amountGwei));
     }
 
     // returns withdrawal fee per each request

@@ -29,8 +29,6 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     //-------------------------  Constants  ------------------------------------
     //---------------------------------------------------------------------------
 
-    bytes32 public constant UNRESTAKING_LIMIT_ID = keccak256("UNRESTAKING_LIMIT_ID");
-    bytes32 public constant EXIT_REQUEST_LIMIT_ID = keccak256("EXIT_REQUEST_LIMIT_ID");
 
     //-------------------------------------------------------------------------
     //-------------------------  Deployment  ----------------------------------

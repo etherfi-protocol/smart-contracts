@@ -23,10 +23,6 @@ interface IEtherFiRateLimiter {
     function getLimit(bytes32 id) external view returns (uint64 capacity, uint64 remaining, uint64 refillRate, uint256 lastRefill);
     function isConsumerAllowed(bytes32 id, address consumer) external view returns (bool);
     function limitExists(bytes32 id) external view returns (bool);
-    
-    // constants
-    function UNRESTAKING_LIMIT_ID() external view returns (bytes32);
-    function EXIT_REQUEST_LIMIT_ID() external view returns (bytes32);
 
 
     //---------------------------------------------------------------------------
