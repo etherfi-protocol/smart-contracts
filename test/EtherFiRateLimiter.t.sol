@@ -709,54 +709,6 @@ contract EtherFiRateLimiterTest is Test {
     }
 
     //--------------------------------------------------------------------------------------
-    //-------------------------------- Migration Tests ------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    function test_migrateFromLegacyLimiter() public {
-        // Create legacy limit structure
-        BucketLimiter.Limit memory legacyLimit = BucketLimiter.Limit({
-            capacity: DEFAULT_CAPACITY,
-            remaining: DEFAULT_CAPACITY / 2,
-            lastRefill: uint64(block.timestamp), // Use current timestamp to avoid underflow
-            refillRate: DEFAULT_REFILL_RATE
-        });
-
-        vm.expectEmit(true, false, false, true);
-        emit LimiterCreated(LIMIT_ID_1, DEFAULT_CAPACITY, DEFAULT_REFILL_RATE);
-
-        vm.prank(admin);
-        rateLimiter.migrateFromLegacyLimiter(LIMIT_ID_1, legacyLimit);
-
-        assertTrue(rateLimiter.limitExists(LIMIT_ID_1));
-        
-        (uint64 capacity, uint64 remaining, uint64 refillRate, uint256 lastRefill) = 
-            rateLimiter.getLimit(LIMIT_ID_1);
-
-        assertEq(capacity, legacyLimit.capacity);
-        assertEq(remaining, legacyLimit.remaining);
-        assertEq(refillRate, legacyLimit.refillRate);
-        assertEq(lastRefill, legacyLimit.lastRefill);
-    }
-
-    function test_cannotMigrateDuplicateLimiter() public {
-        // Create regular limiter first
-        vm.prank(admin);
-        rateLimiter.createNewLimiter(LIMIT_ID_1, DEFAULT_CAPACITY, DEFAULT_REFILL_RATE);
-
-        // Try to migrate over it
-        BucketLimiter.Limit memory legacyLimit = BucketLimiter.Limit({
-            capacity: DEFAULT_CAPACITY * 2,
-            remaining: DEFAULT_CAPACITY,
-            lastRefill: uint64(block.timestamp),
-            refillRate: DEFAULT_REFILL_RATE * 2
-        });
-
-        vm.prank(admin);
-        vm.expectRevert(IEtherFiRateLimiter.LimitAlreadyExists.selector);
-        rateLimiter.migrateFromLegacyLimiter(LIMIT_ID_1, legacyLimit);
-    }
-
-    //--------------------------------------------------------------------------------------
     //-------------------------------- Integration Tests ----------------------------------
     //--------------------------------------------------------------------------------------
 
