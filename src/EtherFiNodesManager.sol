@@ -44,6 +44,7 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
     bytes32 public constant ETHERFI_NODES_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
+    bytes32 public constant ETHERFI_NODES_MANAGER_POD_PROVER_ROLE = keccak256("ETHERFI_NODES_MANAGER_POD_PROVER_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE = keccak256("ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE");
@@ -107,18 +108,18 @@ contract EtherFiNodesManager is
         return address(IEtherFiNode(node).getEigenPod());
     }
 
-    function startCheckpoint(uint256 id) external onlyEigenlayerAdmin whenNotPaused {
+    function startCheckpoint(uint256 id) external onlyPodProver whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).startCheckpoint();
     }
-    function startCheckpoint(address node) external onlyEigenlayerAdmin whenNotPaused {
+    function startCheckpoint(address node) external onlyPodProver whenNotPaused {
         if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
         IEtherFiNode(node).startCheckpoint();
     }
 
-    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyEigenlayerAdmin whenNotPaused {
+    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyPodProver whenNotPaused {
         IEtherFiNode(etherfiNodeAddress(id)).verifyCheckpointProofs(balanceContainerProof, proofs);
     }
-    function verifyCheckpointProofs(address node, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyEigenlayerAdmin whenNotPaused {
+    function verifyCheckpointProofs(address node, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyPodProver whenNotPaused {
         if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
         IEtherFiNode(node).verifyCheckpointProofs(balanceContainerProof, proofs);
     }
@@ -431,6 +432,11 @@ contract EtherFiNodesManager is
 
     modifier onlyCallForwarder() {
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE, msg.sender)) revert IncorrectRole();
+        _;
+    }
+
+    modifier onlyPodProver() {
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_POD_PROVER_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 }
