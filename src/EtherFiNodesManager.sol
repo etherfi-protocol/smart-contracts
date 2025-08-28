@@ -47,7 +47,6 @@ contract EtherFiNodesManager is
     bytes32 public constant ETHERFI_NODES_MANAGER_POD_PROVER_ROLE = keccak256("ETHERFI_NODES_MANAGER_POD_PROVER_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
-    bytes32 public constant ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE = keccak256("ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE");
 
     //-------------------------------------------------------------------------
     //-----------------------------  Rate Limiter Buckets ---------------------
@@ -254,7 +253,7 @@ contract EtherFiNodesManager is
 
         // eigenlayer will revert if all validators don't belong to the same pod
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].srcPubkey);
-        IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];      
+        IEtherFiNode node = etherFiNodeFromPubkeyHash[pubKeyHash];
         IEigenPod pod = node.getEigenPod();
 
         // submitting an execution layer consolidation request requires paying a fee per request
@@ -273,13 +272,6 @@ contract EtherFiNodesManager is
             }
             unchecked { ++i; }
         }
-    }
-
-
-    function consumeUnrestakingCapacity(uint256 amount) external {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole(); 
-        uint256 amountGwei = amount / 1 gwei;
-        rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(amountGwei));
     }
 
     // returns withdrawal fee per each request
