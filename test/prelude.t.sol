@@ -531,8 +531,8 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.completeQueuedETHWithdrawals(uint256(pubkeyHash), true);
 
-        // liquidity pool should have received withdrawal
-        assertEq(address(liquidityPool).balance, startingBalance + 1 ether);
+        // liquidity pool should have received at least the withdrawal amount (may include additional execution layer rewards)
+        assertGe(address(liquidityPool).balance, startingBalance + 1 ether);
     }
 
     function test_EtherFiNodePermissions() public {
@@ -1180,7 +1180,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Second withdrawal exceeding limit should fail (15 + 10 > 20)
         shares[0] = 10 ether;
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueWithdrawals(uint256(val.pubkeyHash), params);
     }
@@ -1245,21 +1245,40 @@ contract PreludeTest is Test, ArrayTestHelper {
 
     // ---------- Unrestaking rate limiting tests ----------
 
-    // TODO: re-implement
-    /*
     function test_unrestakingRateLimiting_capacity_consumption() public {
+        // Setup: create a large validator to support big withdrawals
+        TestValidatorParams memory params = defaultTestValidatorParams;
+        params.validatorSize = 100 ether; // Large validator to support multiple withdrawals
+        TestValidator memory val = helper_createValidator(params);
+        
         bytes32 limitId = etherFiNodesManager.UNRESTAKING_LIMIT_ID();
-
-        // Set capacity to 50 ETH
-        vm.prank(admin);
+        // Set capacity to 50 ETH and reset remaining
+        vm.startPrank(admin);
         rateLimiter.setCapacity(limitId, 50_000_000_000);
+        rateLimiter.setRemaining(limitId, 50_000_000_000);
+        vm.stopPrank();
 
-        // Test that unauthorized access is blocked by the access control we added
-        // This verifies our security fix is working - preventing DoS attacks
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
-        etherFiNodesManager.consumeUnrestakingCapacity(30 ether);
+        // Test consuming within capacity - should succeed
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 30 ether);
+        
+        // Check remaining capacity is reduced
+        (, uint64 remaining, , ) = rateLimiter.getLimit(limitId);
+        assertEq(remaining, 20_000_000_000); // 50 - 30 = 20 ETH in gwei
+        
+        // Test consuming more than remaining capacity - should fail
+        vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 25 ether);
+        
+        // Test consuming exactly remaining capacity - should succeed
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 20 ether);
+        
+        // Verify capacity is now exhausted
+        (, remaining, , ) = rateLimiter.getLimit(limitId);
+        assertEq(remaining, 0);
     }
-    */
 
     function test_unrestakingRateLimiting_role_based_admin() public {
         bytes32 limitId = etherFiNodesManager.UNRESTAKING_LIMIT_ID();
@@ -1294,21 +1313,59 @@ contract PreludeTest is Test, ArrayTestHelper {
         assertEq(refillRate, 3_000_000_000);
     }
 
-    // TODO: re-implement
-    /*
     function test_unrestakingRateLimiting_multiple_consumption() public {
+        // Setup: create multiple large validators for testing multiple consumption
+        TestValidatorParams memory params = defaultTestValidatorParams;
+        params.validatorSize = 64 ether; // Large validators to support withdrawals
+        TestValidator memory val1 = helper_createValidator(params);
+        params.validatorSize = 128 ether;
+        TestValidator memory val2 = helper_createValidator(params);
+        params.validatorSize = 100 ether;
+        TestValidator memory val3 = helper_createValidator(params);
+        
         bytes32 limitId = etherFiNodesManager.UNRESTAKING_LIMIT_ID();
-
-        // Set capacity to 100 ETH
-        vm.prank(admin);
+        // Set capacity to 100 ETH and reset remaining
+        vm.startPrank(admin);
         rateLimiter.setCapacity(limitId, 100_000_000_000);
+        rateLimiter.setRemaining(limitId, 100_000_000_000);
+        vm.stopPrank();
 
-        // Test that unauthorized access is blocked by the access control we added
-        // This verifies our security fix prevents multiple unauthorized consumption attempts
+        // Test multiple consumption attempts within capacity - all should succeed
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 25 ether);
+        
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val2.pubkeyHash), 30 ether);
+        
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val3.pubkeyHash), 20 ether);
+        
+        // Check remaining capacity after multiple consumptions (100 - 25 - 30 - 20 = 25 ETH)
+        (, uint64 remaining, , ) = rateLimiter.getLimit(limitId);
+        assertEq(remaining, 25_000_000_000);
+        
+        // Test that unauthorized access is blocked by the access control
         vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
-        etherFiNodesManager.consumeUnrestakingCapacity(20 ether);
+        vm.prank(user);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 10 ether);
+        
+        // Verify remaining capacity is unchanged after failed attempt
+        (, remaining, , ) = rateLimiter.getLimit(limitId);
+        assertEq(remaining, 25_000_000_000);
+        
+        // Test final consumption that would exceed remaining capacity should fail
+        vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 30 ether);
+        
+        // Test final consumption within remaining capacity should succeed
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 25 ether);
+        
+        // Verify capacity is now exhausted
+        (, remaining, , ) = rateLimiter.getLimit(limitId);
+        assertEq(remaining, 0);
     }
-    */
 
     // ---------- EIP-7251 Consolidation tests ----------
     function test_requestConsolidation_samePod_success() public {

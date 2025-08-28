@@ -137,10 +137,12 @@ contract EtherFiNodesManager is
     }
 
     function queueETHWithdrawal(uint256 id, uint256 amount) external onlyEigenlayerAdmin whenNotPaused returns (bytes32 withdrawalRoot) {
+        rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(amount / 1 gwei));
         return IEtherFiNode(etherfiNodeAddress(id)).queueETHWithdrawal(amount);
     }
     function queueETHWithdrawal(address node, uint256 amount) external onlyEigenlayerAdmin whenNotPaused returns (bytes32 withdrawalRoot) {
         if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
+        rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(amount / 1 gwei));
         return IEtherFiNode(node).queueETHWithdrawal(amount);
     }
 
@@ -160,14 +162,14 @@ contract EtherFiNodesManager is
 
     function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin whenNotPaused {
         // need to rate limit any beacon eth being withdrawn
-        rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(sumRestakingETHWithdrawals(params)));
+        rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(sumRestakingETHWithdrawals(params) / 1 gwei));
         IEtherFiNode(etherfiNodeAddress(id)).queueWithdrawals(params);
     }
     function queueWithdrawals(address node, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin whenNotPaused {
         if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
 
         // need to rate limit any beacon eth being withdrawn
-        rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(sumRestakingETHWithdrawals(params)));
+        rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(sumRestakingETHWithdrawals(params) / 1 gwei));
         IEtherFiNode(node).queueWithdrawals(params);
     }
 
