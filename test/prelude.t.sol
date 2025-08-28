@@ -109,15 +109,9 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // permissions
         vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE(), address(etherFiNodesManager));
-        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
-        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
-        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_CALL_FORWARDER_ROLE(), address(etherFiNodesManager));
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), callForwarder);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
-        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_UNRESTAKER_ROLE(), eigenlayerAdmin);
-        roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_UNRESTAKER_ROLE(), address(etherFiNodesManager));
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), eigenlayerAdmin);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elExiter);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
@@ -364,7 +358,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.startPrank(roleRegistry.owner());
         {
             roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), user);
-            roleRegistry.grantRole(EtherFiNode(payable(address(etherFiNode))).ETHERFI_NODE_CALL_FORWARDER_ROLE(), user);
         }
         vm.stopPrank();
 
@@ -916,7 +909,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     // ---------- tests for EL exits ----------
-    function test_requestWithdrawal_samePod_fullExit_success() public {
+    function test_requestExecutionLayerTriggeredWithdrawal_samePod_fullExit_success() public {
 
         bytes[] memory pubkeys = new bytes[](3);
         uint256[] memory legacyIds = new uint256[](3);
@@ -970,10 +963,10 @@ contract PreludeTest is Test, ArrayTestHelper {
         }
 
         vm.prank(elExiter);
-        etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
+        etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
     }
 
-    function test_requestWithdrawal_samePod_partialExit_success() public {
+    function test_requestExecutionLayerTriggeredWithdrawal_samePod_partialExit_success() public {
 
         bytes[] memory pubkeys = new bytes[](3);
         uint256[] memory legacyIds = new uint256[](3);
@@ -1027,7 +1020,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         }
 
         vm.prank(elExiter);
-        etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
+        etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
     }
 
     function test_rateLimitSetters_access_control() public {
@@ -1071,7 +1064,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         etherFiNodesManager.setProofSubmitter(legacyIds[0], address(1));
     }
 
-    function test_requestWithdrawal_requires_role_reverts() public {
+    function test_requestExecutionLayerTriggeredWithdrawal_requires_role_reverts() public {
 
         bytes[] memory pubkeys = new bytes[](3);
         uint256[] memory legacyIds = new uint256[](3);
@@ -1106,7 +1099,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.deal(address(this), 1 ether);
 
         vm.expectRevert();
-        etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
+        etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
     }
 
     // ---------- tests for unrestaking rate limiter ----------
@@ -1258,7 +1251,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // This should succeed (1 ETH << 5000 ETH capacity)
         vm.deal(elExiter, 1 ether);
         vm.prank(elExiter);
-        etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
+        etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
     }
     
     function test_exitRequestsRateLimiting_capacity_admin_functions() public {

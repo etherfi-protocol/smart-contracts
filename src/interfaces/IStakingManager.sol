@@ -22,6 +22,7 @@ interface IStakingManager {
     // EtherFiNode Beacon Proxy
     function upgradeEtherFiNode(address _newImplementation) external;
     function getEtherFiNodeBeacon() external view returns (address);
+    function deployedEtherFiNodes(address etherFiNode) external view returns (bool);
 
     // protocol
     function pauseContract() external;

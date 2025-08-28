@@ -2,7 +2,9 @@
 pragma solidity ^0.8.13;
 
 import "../interfaces/IEtherFiNode.sol";
+import "../interfaces/IStakingManager.sol";
 import "../eigenlayer-interfaces/IDelegationManager.sol";
+import "../eigenlayer-interfaces/IEigenPod.sol";
 import {BeaconChainProofs} from "../eigenlayer-libraries/BeaconChainProofs.sol";
 
 interface IEtherFiNodesManager {
@@ -14,7 +16,7 @@ interface IEtherFiNodesManager {
     function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external;
     function calculateValidatorPubkeyHash(bytes memory pubkey) external pure returns (bytes32);
 
-    function stakingManager() external view returns (address);
+    function stakingManager() external view returns (IStakingManager);
 
     // eigenlayer interactions
     function getEigenPod(uint256 id) external view returns (address);
@@ -26,10 +28,10 @@ interface IEtherFiNodesManager {
     function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external;
     function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
     function sweepFunds(uint256 id) external;
+    function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable;
+    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable;
 
-    // unrestaking rate limiting
-    function consumeUnrestakingCapacity(uint256 amount) external;
-    
+
     // rate limiting constants
     function UNRESTAKING_LIMIT_ID() external view returns (bytes32);
     function EXIT_REQUEST_LIMIT_ID() external view returns (bytes32);
