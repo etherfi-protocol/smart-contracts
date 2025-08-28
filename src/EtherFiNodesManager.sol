@@ -46,6 +46,7 @@ contract EtherFiNodesManager is
     bytes32 public constant ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
+    bytes32 public constant ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE = keccak256("ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE");
 
     //-------------------------------------------------------------------------
     //-----------------------------  Rate Limiter Buckets ---------------------
@@ -228,6 +229,7 @@ contract EtherFiNodesManager is
     }
 
     function consumeUnrestakingCapacity(uint256 amount) external {
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE, msg.sender)) revert IncorrectRole(); 
         uint256 amountGwei = amount / 1 gwei;
         rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(amountGwei));
     }

@@ -11,6 +11,8 @@ import "../src/EtherFiNodesManager.sol";
 import "../src/interfaces/IEtherFiNode.sol";
 import {IEigenPod, IEigenPodTypes } from "../src/eigenlayer-interfaces/IEigenPod.sol";
 import "../src/EtherFiNode.sol";
+import "../src/EtherFiRateLimiter.sol";
+import "../src/UUPSProxy.sol";
 import "../src/NodeOperatorManager.sol";
 import "../src/interfaces/ITNFT.sol";
 import "../src/interfaces/IBNFT.sol";
@@ -53,6 +55,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     bytes constant PK_24807 = hex"b4164dc6841e4b9d4736f89961b8e59ff9397d64d75d95fa3484c78de51a18c4031ef253896ba85b38d168f7211c8c71";
 
     TestValidatorParams defaultTestValidatorParams;
+    EtherFiRateLimiter rateLimiter;
 
     function setUp() public {
 
@@ -79,6 +82,12 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(LiquidityPool(payable(address(liquidityPool))).owner());
         LiquidityPool(payable(address(liquidityPool))).upgradeTo(address(liquidityPoolImpl));
 
+        // Deploy rate limiter first with proxy pattern
+        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry));
+        UUPSProxy rateLimiterProxy = new UUPSProxy(address(rateLimiterImpl), "");
+        rateLimiter = EtherFiRateLimiter(address(rateLimiterProxy));
+        rateLimiter.initialize();
+        
         // upgrade etherFiNode impl
         etherFiNodeImpl = new EtherFiNode(
             address(liquidityPool),
@@ -91,7 +100,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         stakingManager.upgradeEtherFiNode(address(etherFiNodeImpl));
 
         // deploy new efnm implementation
-        EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry));
+        EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
         vm.prank(etherFiNodesManager.owner());
         etherFiNodesManager.upgradeTo(address(etherFiNodesManagerImpl));
 
@@ -107,15 +116,21 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), callForwarder);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), admin);
         roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_UNRESTAKER_ROLE(), eigenlayerAdmin);
         roleRegistry.grantRole(etherFiNodeImpl.ETHERFI_NODE_UNRESTAKER_ROLE(), address(etherFiNodesManager));
-        // Grant the EtherFiNode implementation the ability to consume unrestaking capacity
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), address(etherFiNodeImpl));
-        // roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elExiter);
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), eigenlayerAdmin);
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elExiter);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
         roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), admin);
         roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        rateLimiter.createNewLimiter(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
+        rateLimiter.createNewLimiter(etherFiNodesManager.EXIT_REQUEST_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
+        rateLimiter.updateConsumers(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), address(etherFiNodesManager), true);
+        rateLimiter.updateConsumers(etherFiNodesManager.EXIT_REQUEST_LIMIT_ID(), address(etherFiNodesManager), true);
         vm.stopPrank();
 
         defaultTestValidatorParams = TestValidatorParams({
@@ -231,11 +246,6 @@ contract PreludeTest is Test, ArrayTestHelper {
             // give the pod enough eth to fulfill that withdrawal
             vm.deal(eigenpod, params.validatorSize);
         }
-
-        // Grant the newly created EtherFiNode proxy the ability to consume unrestaking capacity
-        vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), params.etherFiNode);
-        vm.stopPrank();
 
         TestValidator memory out = TestValidator({
             etherFiNode: params.etherFiNode,
@@ -483,7 +493,6 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_withdrawRestakedValidatorETH() public {
-        helper_initUnrestakingRateLimiter(); // Initialize to allow ETH withdrawal
 
         bytes memory validatorPubkey = hex"892c95f4e93ab042ee39397bff22cc43298ff4b2d6d6dec3f28b8b8ebcb5c65ab5e6fc29301c1faee473ec095f9e4306";
         bytes32 pubkeyHash = etherFiNodesManager.calculateValidatorPubkeyHash(validatorPubkey);
@@ -493,8 +502,16 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(validatorPubkey));
 
-        // Grant the linked EtherFiNode proxy the ability to consume unrestaking capacity
+        // Set up rate limiter for the linked EtherFiNode proxy
         address etherFiNodeAddress = etherFiNodesManager.etherfiNodeAddress(uint256(pubkeyHash));
+        if (address(rateLimiter) != address(0)) {
+            // Add EtherFiNode as a consumer for the unrestaking limit
+            vm.startPrank(admin);
+            rateLimiter.updateConsumers(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), etherFiNodeAddress, true);
+            vm.stopPrank();
+        }
+        
+        // Grant unrestaker role to the EtherFiNode so it can call consumeUnrestakingCapacity
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), etherFiNodeAddress);
         vm.stopPrank();
@@ -718,8 +735,6 @@ contract PreludeTest is Test, ArrayTestHelper {
 
     }
 
-
-
     function test_pubkeyHashAndLegacyId() public {
 
         // create a new validator
@@ -797,16 +812,13 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_withdrawMultipleLargeValidators() public {
-        helper_initUnrestakingRateLimiter(); // Initialize to allow large withdrawals
-
-        // create a few large validators of different sizes
+        // create multiple large validators of different sizes
         TestValidatorParams memory params = defaultTestValidatorParams;
         params.validatorSize = 64 ether;
         TestValidator memory val1 = helper_createValidator(params);
 
-        // attach all of them to the same etherfi node
+        // attach additional validators to the same etherfi node
         params.etherFiNode = val1.etherFiNode;
-
         params.validatorSize = 128 ether;
         TestValidator memory val2 = helper_createValidator(params);
         params.validatorSize = 1000 ether;
@@ -815,6 +827,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         TestValidator memory val4 = helper_createValidator(params);
 
         uint256 startingLPBalance = address(liquidityPool).balance;
+
+        // Grant unrestaker role to the EtherFiNode so it can call consumeUnrestakingCapacity
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), address(val1.etherFiNode));
+        vm.stopPrank();
 
         // should be able to withdraw arbitrary amounts not tied to any particular validator
         vm.prank(eigenlayerAdmin);
@@ -828,15 +845,27 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // liquidity pool should have received the withdrawal
         assertEq(address(liquidityPool).balance, startingLPBalance + 1234 ether);
-
+        
+        // verify all validators are properly created and linked to the same node
+        assertEq(address(etherFiNodesManager.etherFiNodeFromPubkeyHash(val1.pubkeyHash)), address(val1.etherFiNode));
+        assertEq(address(etherFiNodesManager.etherFiNodeFromPubkeyHash(val2.pubkeyHash)), address(val2.etherFiNode));
+        assertEq(address(etherFiNodesManager.etherFiNodeFromPubkeyHash(val3.pubkeyHash)), address(val3.etherFiNode));
+        assertEq(address(etherFiNodesManager.etherFiNodeFromPubkeyHash(val4.pubkeyHash)), address(val4.etherFiNode));
+        assertEq(address(val1.etherFiNode), address(val2.etherFiNode));
+        assertEq(address(val1.etherFiNode), address(val3.etherFiNode));
+        assertEq(address(val1.etherFiNode), address(val4.etherFiNode));
     }
 
     function test_withdrawMultipleSimultaneousWithdrawals() public {
-        helper_initUnrestakingRateLimiter(); // Initialize to allow multiple withdrawals
 
         TestValidatorParams memory params = defaultTestValidatorParams;
         params.validatorSize = 64 ether;
         TestValidator memory val = helper_createValidator(params);
+
+        // Grant unrestaker role to the EtherFiNode so it can call consumeUnrestakingCapacity
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), address(val.etherFiNode));
+        vm.stopPrank();
 
         // queue up multiple withdrawals
         vm.prank(eigenlayerAdmin);
@@ -858,28 +887,14 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     // ---------- helpers specific to EL withdrawal tests ----------
-
     function _setExitRateLimit(uint256 capacity, uint256 refillPerSecond) internal {
         // admin was already granted ETHERFI_NODES_MANAGER_ADMIN_ROLE in setUp()
         vm.startPrank(admin);
-        etherFiNodesManager.setExitETHCapacity(capacity * 1e9);
-        etherFiNodesManager.setExitETHRefillPerSecond(refillPerSecond * 1e9);
+        rateLimiter.setCapacity(etherFiNodesManager.EXIT_REQUEST_LIMIT_ID(), uint64(capacity * 1e9));
+        rateLimiter.setRefillRate(etherFiNodesManager.EXIT_REQUEST_LIMIT_ID(), uint64(refillPerSecond * 1e9));
         vm.stopPrank();
     }
 
-    function _mkRequests(bytes[] memory pubkeys, uint64[] memory amountsGwei)
-        internal
-        pure
-        returns (IEigenPod.WithdrawalRequest[] memory reqs)
-    {
-        require(pubkeys.length == amountsGwei.length, "test: length mismatch");
-        reqs = new IEigenPod.WithdrawalRequest[](pubkeys.length);
-        for (uint256 i = 0; i < pubkeys.length; ++i) {
-            reqs[i] = IEigenPodTypes.WithdrawalRequest({pubkey: pubkeys[i], amountGwei: amountsGwei[i]});
-        }
-    }
-
-    // ---- helpers for EL exit tests ----
     function _requestsFromPubkeys(bytes[] memory pubkeys, uint64[] memory amountsGwei)
         internal
         pure
@@ -893,19 +908,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         }
     }
 
-    // Resolve pod (and node) exactly as production does, using SSZ hash path.
-    function _resolvePod(bytes memory pubkey) internal view returns (IEtherFiNode node, IEigenPod pod) {
+    function _resolvePod(bytes memory pubkey) internal view returns (IEtherFiNode etherFiNode, IEigenPod pod) {
         bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkey);
-        IEtherFiNode etherFiNode = etherFiNodesManager.etherFiNodeFromPubkeyHash(pkHash);
+        etherFiNode = etherFiNodesManager.etherFiNodeFromPubkeyHash(pkHash);
         pod = etherFiNode.getEigenPod();
         require(address(pod) != address(0), "test: node has no pod");
-    }
-
-    function _sliceBytes(bytes[] memory arr, uint256 start, uint256 len) internal pure returns (bytes[] memory out) {
-        out = new bytes[](len);
-        for (uint256 i = 0; i < len; ++i) {
-            out[i] = arr[start + i];
-        }
     }
 
     // ---------- tests for EL exits ----------
@@ -924,7 +931,6 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
-        etherFiNodesManager.__initExitRateLimiter();
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
 
@@ -983,7 +989,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Link and init
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
-        etherFiNodesManager.__initExitRateLimiter();
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
 
@@ -1025,50 +1030,23 @@ contract PreludeTest is Test, ArrayTestHelper {
         etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
     }
 
-    function test_initRateLimiter_onlyOwner_and_singleton() public {
-
-        // 1) Wrong caller cannot init
-        vm.expectRevert();
-        etherFiNodesManager.__initExitRateLimiter();
-
-        // 2) Owner/admin can init
-        vm.prank(admin);
-        etherFiNodesManager.__initExitRateLimiter();
-
-        // 3) Cannot be initialized twice
-        vm.prank(admin);
-        vm.expectRevert();
-        etherFiNodesManager.__initExitRateLimiter();
-    }
-
     function test_rateLimitSetters_access_control() public {
+        // Get the limit ID once to avoid interference with expectRevert
+        bytes32 limitId = etherFiNodesManager.EXIT_REQUEST_LIMIT_ID();
         
-        bytes[] memory pubkeys = new bytes[](3);
-        uint256[] memory legacyIds = new uint256[](3);
-
-        pubkeys[0] = PK_16171;
-        pubkeys[1] = PK_16172;
-        pubkeys[2] = PK_16173;
-
-        legacyIds[0] = 51715;
-        legacyIds[1] = 51716;
-        legacyIds[2] = 51717;
-
-        vm.startPrank(admin);
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
-        etherFiNodesManager.__initExitRateLimiter();
-        vm.stopPrank();
-
         // Unauthorized caller -> revert
+        vm.prank(user);
         vm.expectRevert();
-        etherFiNodesManager.setExitETHCapacity(172800);
+        rateLimiter.setCapacity(limitId, 172800);
+        
+        vm.prank(user);
         vm.expectRevert();
-        etherFiNodesManager.setExitETHRefillPerSecond(2);
+        rateLimiter.setRefillRate(limitId, 2);
 
         // Authorized caller (admin in fork has the config role) -> success
         vm.startPrank(admin);
-        etherFiNodesManager.setExitETHCapacity(172800);
-        etherFiNodesManager.setExitETHRefillPerSecond(2);
+        rateLimiter.setCapacity(limitId, 172800);
+        rateLimiter.setRefillRate(limitId, 2);
         vm.stopPrank();
     }
 
@@ -1086,7 +1064,6 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
-        etherFiNodesManager.__initExitRateLimiter();
         vm.stopPrank();
 
         // Unauthorized caller -> revert
@@ -1109,7 +1086,6 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
-        etherFiNodesManager.__initExitRateLimiter();
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
 
@@ -1133,44 +1109,24 @@ contract PreludeTest is Test, ArrayTestHelper {
         etherFiNodesManager.requestWithdrawal{value: valueToSend}(reqs);
     }
 
-    // Helper function to initialize unrestaking rate limiter for tests that need it
-    function helper_initUnrestakingRateLimiter() internal {
-        vm.prank(admin);
-        etherFiNodesManager.__initUnrestakingRateLimiter();
-    }
-
     // ---------- tests for unrestaking rate limiter ----------
-
-    function test_initUnrestakingRateLimiter_onlyOwner_and_singleton() public {
-        // 1) Wrong caller cannot init
-        vm.expectRevert();
-        etherFiNodesManager.__initUnrestakingRateLimiter();
-
-        // 2) Owner/admin can init
-        vm.prank(admin);
-        etherFiNodesManager.__initUnrestakingRateLimiter();
-
-        // 3) Cannot be initialized twice
-        vm.prank(admin);
-        vm.expectRevert();
-        etherFiNodesManager.__initUnrestakingRateLimiter();
-    }
-
     function test_unrestakingRateLimitSetters_access_control() public {
-        // Initialize unrestaking limiter first
-        vm.prank(admin);
-        etherFiNodesManager.__initUnrestakingRateLimiter();
-
+        // Get the limit ID once to avoid interference with expectRevert
+        bytes32 limitId = etherFiNodesManager.UNRESTAKING_LIMIT_ID();
+        
         // Unauthorized caller -> revert
+        vm.prank(user);
         vm.expectRevert();
-        etherFiNodesManager.setUnrestakingETHCapacity(172_800_000_000_000); // 172,800 ETH in gwei
+        rateLimiter.setCapacity(limitId, 172_800_000_000_000); // 172,800 ETH in gwei
+        
+        vm.prank(user);
         vm.expectRevert();
-        etherFiNodesManager.setUnrestakingETHRefillPerSecond(2_000_000_000); // 2 ETH/sec in gwei
+        rateLimiter.setRefillRate(limitId, 2_000_000_000); // 2 ETH/sec in gwei
 
         // Authorized caller (admin in fork has the config role) -> success
         vm.startPrank(admin);
-        etherFiNodesManager.setUnrestakingETHCapacity(172_800_000_000_000); // 172,800 ETH in gwei
-        etherFiNodesManager.setUnrestakingETHRefillPerSecond(2_000_000_000); // 2 ETH/sec in gwei
+        rateLimiter.setCapacity(limitId, 172_800_000_000_000); // 172,800 ETH in gwei
+        rateLimiter.setRefillRate(limitId, 2_000_000_000); // 2 ETH/sec in gwei
         vm.stopPrank();
     }
 
@@ -1178,12 +1134,15 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Setup: create a validator and initialize unrestaking limiter
         TestValidator memory val = helper_createValidator(defaultTestValidatorParams);
         
-        vm.prank(admin);
-        etherFiNodesManager.__initUnrestakingRateLimiter();
-        
         // Set a low capacity for testing (10 ETH = 10_000_000_000 gwei)
-        vm.prank(admin);
-        etherFiNodesManager.setUnrestakingETHCapacity(10_000_000_000);
+        vm.startPrank(admin);
+        rateLimiter.setCapacity(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), 10_000_000_000);
+        vm.stopPrank();
+
+        // Grant unrestaker role to the EtherFiNode so it can call consumeUnrestakingCapacity
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), address(val.etherFiNode));
+        vm.stopPrank();
 
         // First withdrawal within limit should succeed
         vm.prank(eigenlayerAdmin);
@@ -1203,12 +1162,15 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Setup: create a validator and initialize unrestaking limiter
         TestValidator memory val = helper_createValidator(defaultTestValidatorParams);
         
-        vm.prank(admin);
-        etherFiNodesManager.__initUnrestakingRateLimiter();
-        
         // Set a low capacity for testing (20 ETH = 20_000_000_000 gwei)
-        vm.prank(admin);
-        etherFiNodesManager.setUnrestakingETHCapacity(20_000_000_000);
+        vm.startPrank(admin);
+        rateLimiter.setCapacity(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), 20_000_000_000);
+        vm.stopPrank();
+
+        // Grant unrestaker role to the EtherFiNode so it can call consumeUnrestakingCapacity
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), address(val.etherFiNode));
+        vm.stopPrank();
 
         // Create withdrawal params with shares (shares = wei, so 15 ether = 15 ETH)
         IDelegationManager.QueuedWithdrawalParams[] memory params = 
@@ -1239,15 +1201,18 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Test that direct access to EtherFiNode also respects rate limits
         TestValidator memory val = helper_createValidator(defaultTestValidatorParams);
         
-        vm.prank(admin);
-        etherFiNodesManager.__initUnrestakingRateLimiter();
-        
         // Set a very low capacity for testing (1 ETH = 1_000_000_000 gwei)
-        vm.prank(admin);
-        etherFiNodesManager.setUnrestakingETHCapacity(1_000_000_000);
+        vm.startPrank(admin);
+        rateLimiter.setCapacity(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), 1_000_000_000);
+        vm.stopPrank();
 
         // Direct call to EtherFiNode should also be rate limited
         IEtherFiNode etherFiNode = IEtherFiNode(val.etherFiNode);
+        
+        // Grant unrestaker role to the EtherFiNode so it can call consumeUnrestakingCapacity
+        vm.startPrank(roleRegistry.owner());
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(), address(etherFiNode));
+        vm.stopPrank();
         
         // First call should succeed
         vm.prank(eigenlayerAdmin);
@@ -1260,11 +1225,11 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_exitRequestsRateLimiting_partial_exit_success() public {
+        bytes32 limitId = etherFiNodesManager.EXIT_REQUEST_LIMIT_ID();
+        
         // Initialize exit rate limiter with large capacity
         vm.prank(admin);
-        etherFiNodesManager.__initExitRateLimiter();
-        vm.prank(admin);
-        etherFiNodesManager.setExitETHCapacity(5000_000_000_000); // 5000 ETH
+        rateLimiter.setCapacity(limitId, 5000_000_000_000); // 5000 ETH
         
         // Setup validator for partial exit
         bytes[] memory pubkeys = new bytes[](1);
@@ -1297,34 +1262,34 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
     
     function test_exitRequestsRateLimiting_capacity_admin_functions() public {
-        // Initialize exit rate limiter
-        vm.prank(admin);
-        etherFiNodesManager.__initExitRateLimiter();
+        bytes32 limitId = etherFiNodesManager.EXIT_REQUEST_LIMIT_ID();
         
         // Test setting capacity
         vm.prank(admin);
-        etherFiNodesManager.setExitETHCapacity(200_000_000_000); // 200 ETH
+        rateLimiter.setCapacity(limitId, 200_000_000_000); // 200 ETH
         
         // Test setting refill rate
         vm.prank(admin);
-        etherFiNodesManager.setExitETHRefillPerSecond(5_000_000_000); // 5 ETH/sec
+        rateLimiter.setRefillRate(limitId, 5_000_000_000); // 5 ETH/sec
         
         // Test non-admin cannot change settings
+        vm.prank(user);
         vm.expectRevert();
-        etherFiNodesManager.setExitETHCapacity(300_000_000_000);
+        rateLimiter.setCapacity(limitId, 300_000_000_000);
         
+        vm.prank(user);
         vm.expectRevert();
-        etherFiNodesManager.setExitETHRefillPerSecond(10_000_000_000);
+        rateLimiter.setRefillRate(limitId, 10_000_000_000);
     }
     
     // ---------- Unrestaking rate limiting tests ----------
     
     function test_unrestakingRateLimiting_capacity_consumption() public {
-        helper_initUnrestakingRateLimiter();
+        bytes32 limitId = etherFiNodesManager.UNRESTAKING_LIMIT_ID();
         
         // Set capacity to 50 ETH
         vm.prank(admin);
-        etherFiNodesManager.setUnrestakingETHCapacity(50_000_000_000);
+        rateLimiter.setCapacity(limitId, 50_000_000_000);
         
         // Test that unauthorized access is blocked by the access control we added
         // This verifies our security fix is working - preventing DoS attacks
@@ -1333,41 +1298,44 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
     
     function test_unrestakingRateLimiting_role_based_admin() public {
-        helper_initUnrestakingRateLimiter();
+        bytes32 limitId = etherFiNodesManager.UNRESTAKING_LIMIT_ID();
         
-        // Grant unrestaker role to test address
-        vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(
-            etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(),
-            address(this)
-        );
-        vm.stopPrank();
+        // Debug: check if admin has the role
+        bool hasRole = roleRegistry.hasRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
+        assertTrue(hasRole, "Admin should have the rate limiter role");
         
-        // Should be able to set capacity and refill rate
-        etherFiNodesManager.setUnrestakingETHCapacity(100_000_000_000); // 100 ETH
-        etherFiNodesManager.setUnrestakingETHRefillPerSecond(3_000_000_000); // 3 ETH/sec
+        // Admin should be able to set capacity and refill rate
+        vm.prank(admin);
+        rateLimiter.setCapacity(limitId, 100_000_000_000); // 100 ETH
+        vm.prank(admin);
+        rateLimiter.setRefillRate(limitId, 3_000_000_000); // 3 ETH/sec
         
-        // Revoke role
-        vm.startPrank(roleRegistry.owner());
-        roleRegistry.revokeRole(
-            etherFiNodesManager.ETHERFI_NODES_MANAGER_UNRESTAKER_ROLE(),
-            address(this)
-        );
-        vm.stopPrank();
+        // Verify the values were set correctly
+        (uint64 capacity, , uint64 refillRate, ) = rateLimiter.getLimit(limitId);
+        assertEq(capacity, 100_000_000_000);
+        assertEq(refillRate, 3_000_000_000);
         
+        // Test setting capacity without admin role should fail
+        vm.prank(user);
         vm.expectRevert();
-        etherFiNodesManager.setUnrestakingETHCapacity(200_000_000_000);
+        rateLimiter.setCapacity(limitId, 200_000_000_000);
         
+        vm.prank(user);
         vm.expectRevert();
-        etherFiNodesManager.setUnrestakingETHRefillPerSecond(5_000_000_000);
+        rateLimiter.setRefillRate(limitId, 5_000_000_000);
+        
+        // Verify values remain unchanged after failed attempts
+        (capacity, , refillRate, ) = rateLimiter.getLimit(limitId);
+        assertEq(capacity, 100_000_000_000);
+        assertEq(refillRate, 3_000_000_000);
     }
     
     function test_unrestakingRateLimiting_multiple_consumption() public {
-        helper_initUnrestakingRateLimiter();
+        bytes32 limitId = etherFiNodesManager.UNRESTAKING_LIMIT_ID();
         
         // Set capacity to 100 ETH
         vm.prank(admin);
-        etherFiNodesManager.setUnrestakingETHCapacity(100_000_000_000);
+        rateLimiter.setCapacity(limitId, 100_000_000_000);
         
         // Test that unauthorized access is blocked by the access control we added
         // This verifies our security fix prevents multiple unauthorized consumption attempts
@@ -1376,7 +1344,6 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     // ---------- EIP-7251 Consolidation tests ----------
-    
     function test_requestConsolidation_samePod_success() public {
         // Setup validators in same pod
         bytes[] memory pubkeys = new bytes[](3);
@@ -1434,107 +1401,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(admin);
         etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
     }
-    
-    function test_requestConsolidation_switchToCompounding_success() public {
-        // Setup single validator
-        bytes[] memory pubkeys = new bytes[](1);
-        uint256[] memory legacyIds = new uint256[](1);
-        pubkeys[0] = PK_16171;
-        legacyIds[0] = 51715;
-        
-        vm.prank(admin);
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
-        
-        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
-        
-        // Create self-consolidation request (switch to compounding)
-        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](1);
-        reqs[0] = IEigenPodTypes.ConsolidationRequest({
-            srcPubkey: pubkeys[0],
-            targetPubkey: pubkeys[0] // Same pubkey = switch to compounding
-        });
-        
-        uint256 feePer = pod0.getConsolidationRequestFee();
-        uint256 valueToSend = feePer * reqs.length;
-        
-        // Expect switch to compounding event
-        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(
-            address(pod0), 
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]), 
-            pubkeys[0]
-        );
-        vm.deal(admin, 1 ether);
-        vm.prank(admin);
-        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
-    }
-    
-    function test_requestConsolidation_requires_admin_reverts() public {
-        // Setup validator
-        bytes[] memory pubkeys = new bytes[](1);
-        uint256[] memory legacyIds = new uint256[](1);
-        pubkeys[0] = PK_16171;
-        legacyIds[0] = 51715;
-        
-        vm.prank(admin);
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
-        
-        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
-        
-        // Create consolidation request
-        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](1);
-        reqs[0] = IEigenPodTypes.ConsolidationRequest({
-            srcPubkey: pubkeys[0],
-            targetPubkey: pubkeys[0]
-        });
-        
-        uint256 feePer = pod0.getConsolidationRequestFee();
-        uint256 valueToSend = feePer * reqs.length;
-        
-        // Non-admin should revert
-        vm.expectRevert();
-        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
-    }
-    
-    function test_requestConsolidation_emptyRequest_reverts() public {
-        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](0);
-        
-        vm.prank(admin);
-        vm.expectRevert();
-        etherFiNodesManager.requestConsolidation{value: 0}(reqs);
-    }
-    
-    function test_requestConsolidation_insufficientFees_reverts() public {
-        // Setup validator
-        bytes[] memory pubkeys = new bytes[](1);
-        uint256[] memory legacyIds = new uint256[](1);
-        pubkeys[0] = PK_16171;
-        legacyIds[0] = 51715;
 
-        vm.prank(admin);
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
-
-        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
-        uint256 feePer = pod0.getConsolidationRequestFee();
-
-        // Create consolidation request
-        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](1);
-        reqs[0] = IEigenPodTypes.ConsolidationRequest({
-            srcPubkey: pubkeys[0],
-            targetPubkey: pubkeys[0]
-        });
-
-        // Send insufficient fee (fee - 1 wei)
-        vm.prank(admin);
-        vm.expectRevert();
-        if (feePer > 0) {
-            etherFiNodesManager.requestConsolidation{value: feePer - 1}(reqs);
-        } else {
-            // If fee is 0, we can't test insufficient fees, so just pass
-            assertTrue(true);
-        }
-    }
-    
     function test_getConsolidationRequestFee() public {
         // Setup validator
         bytes[] memory pubkeys = new bytes[](1);
@@ -1551,67 +1418,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 managerFee = etherFiNodesManager.getConsolidationRequestFee(address(pod0));
         
         assertEq(directFee, managerFee);
-    }
-
-    // ---------- Fork Tests for EIP-7251 Consolidation ----------
-    
-    function test_requestConsolidation_samePod_fullConsolidation_success() public {
-        bytes[] memory pubkeys = new bytes[](3);
-        uint256[] memory legacyIds = new uint256[](3);
-        pubkeys[0] = PK_16171;
-        pubkeys[1] = PK_16172;
-        pubkeys[2] = PK_16173;
-        legacyIds[0] = 51715;
-        legacyIds[1] = 51716;
-        legacyIds[2] = 51717;
-        
-        vm.startPrank(admin);
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
-        vm.stopPrank();
-        
-        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
-        (, IEigenPod pod1) = _resolvePod(pubkeys[1]);
-        (, IEigenPod pod2) = _resolvePod(pubkeys[2]);
-        
-        // Sanity check: all same pod
-        assertEq(address(pod0), address(pod1));
-        assertEq(address(pod1), address(pod2));
-        
-        // Create consolidation requests: pubkeys[0] -> pubkeys[1] -> pubkeys[2] (chain consolidation)
-        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](2);
-        reqs[0] = IEigenPodTypes.ConsolidationRequest({
-            srcPubkey: pubkeys[0],
-            targetPubkey: pubkeys[1]
-        });
-        reqs[1] = IEigenPodTypes.ConsolidationRequest({
-            srcPubkey: pubkeys[1],
-            targetPubkey: pubkeys[2]
-        });
-        
-        uint256 feePer = pod0.getConsolidationRequestFee();
-        uint256 valueToSend = feePer * reqs.length;
-        
-        // Expect consolidation events
-        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-        emit IEtherFiNodesManager.ValidatorConsolidationRequested(
-            address(pod0),
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]),
-            pubkeys[0],
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]),
-            pubkeys[1]
-        );
-        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-        emit IEtherFiNodesManager.ValidatorConsolidationRequested(
-            address(pod0),
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]),
-            pubkeys[1],
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[2]),
-            pubkeys[2]
-        );
-        
-        vm.deal(admin, 1 ether);
-        vm.prank(admin);
-        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
     }
     
     function test_requestConsolidation_samePod_switchToCompounding_success() public {
