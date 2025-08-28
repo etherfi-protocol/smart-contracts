@@ -430,6 +430,54 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.assertTrue(stakingManager.deployedEtherFiNodes(oldNodes[1]), "not added to mapping");
     }
 
+    function test_etherFiNodeAllowedCallers() public {
+
+        vm.prank(admin);
+        IEtherFiNode node = IEtherFiNode(stakingManager.instantiateEtherFiNode(true));
+
+        // methods should only be callable by EFNM
+        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+        node.createEigenPod();
+
+        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+        node.setProofSubmitter(address(0x123));
+
+        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+        node.startCheckpoint();
+
+        BeaconChainProofs.BalanceContainerProof memory containerProof = BeaconChainProofs.BalanceContainerProof({balanceContainerRoot: bytes32(uint256(1)),proof: ""});
+        BeaconChainProofs.BalanceProof[] memory balanceProofs = new BeaconChainProofs.BalanceProof[](1);
+        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+        node.verifyCheckpointProofs(containerProof, balanceProofs);
+
+        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+        node.queueETHWithdrawal(1000);
+
+        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+        node.completeQueuedETHWithdrawals(true);
+
+        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+        node.queueWithdrawals(new IDelegationManager.QueuedWithdrawalParams[](0));
+
+        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+        node.completeQueuedWithdrawals(new IDelegationManager.Withdrawal[](0), new IERC20[][](0), new bool[](0));
+
+        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+        node.sweepFunds();
+
+        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+        node.requestExecutionLayerTriggeredWithdrawal(new IEigenPod.WithdrawalRequest[](0));
+
+        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+        node.requestConsolidation(new IEigenPod.ConsolidationRequest[](0));
+
+        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+        node.forwardEigenPodCall(hex"00000000");
+
+        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+        node.forwardExternalCall(address(0x123), hex"00000000");
+    }
+
     function test_StakingManagerUpgradePermissions() public {
 
         // deploy new staking manager implementation
