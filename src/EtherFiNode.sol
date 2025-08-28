@@ -40,6 +40,7 @@ contract EtherFiNode is IEtherFiNode {
     bytes32 public constant ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE = keccak256("ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_NODE_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODE_CALL_FORWARDER_ROLE");
     bytes32 public constant ETHERFI_NODE_UNRESTAKER_ROLE = keccak256("ETHERFI_NODE_UNRESTAKER_ROLE");
+    address public constant BEACON_ETH_STRATEGY_ADDRESS = address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0);
 
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
@@ -127,7 +128,7 @@ contract EtherFiNode is IEtherFiNode {
             uint32 slashableUntil = queuedWithdrawals[i].startBlock + EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS;
             if (uint32(block.number) <= slashableUntil) continue;
             if (queuedWithdrawals[i].strategies.length != 1) continue;
-            if (queuedWithdrawals[i].strategies[0] != IStrategy(address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0))) continue;
+            if (queuedWithdrawals[i].strategies[0] != IStrategy(BEACON_ETH_STRATEGY_ADDRESS)) continue;
 
             delegationManager.completeQueuedWithdrawal(queuedWithdrawals[i], tokens, receiveAsTokens);
         }
@@ -151,7 +152,7 @@ contract EtherFiNode is IEtherFiNode {
         uint256 totalBeaconEth = 0;
         for (uint256 i = 0; i < params.length; i++) {
             for (uint256 j = 0; j < params[i].strategies.length; j++) {
-                if (params[i].strategies[j] == IStrategy(address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0))) {
+                if (params[i].strategies[j] == IStrategy(BEACON_ETH_STRATEGY_ADDRESS)) {
                     totalBeaconEth += params[i].depositShares[j];
                 }
             }
