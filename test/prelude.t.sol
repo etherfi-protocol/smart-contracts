@@ -329,7 +329,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // create a node + pod
         vm.prank(admin);
-        IEtherFiNode etherFiNode = IEtherFiNode(stakingManager.instantiateEtherFiNode(true /*createEigenPod*/));
+        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/);
 
         // link it to an arbitrary id
         uint256 legacyID = 10885;
@@ -341,17 +341,10 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.startPrank(user);
         {
             vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-            etherFiNode.forwardEigenPodCall("");
+            etherFiNodesManager.forwardEigenPodCall(toArray(etherFiNode), toArray_bytes(""));
 
             vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-            etherFiNode.forwardExternalCall(address(0), "");
-
-            vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
-            etherFiNodesManager.forwardEigenPodCall(toArray_u256(legacyID), toArray_bytes(""));
-
-            vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
-            etherFiNodesManager.forwardExternalCall(toArray_u256(legacyID), toArray_bytes(""), address(0));
-
+            etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), toArray_bytes(""), address(0));
         }
         vm.stopPrank();
 
@@ -372,16 +365,10 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.startPrank(user);
         {
             vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
-            etherFiNode.forwardEigenPodCall(checkpointData);
+            etherFiNodesManager.forwardEigenPodCall(toArray(etherFiNode), toArray_bytes(checkpointData));
 
             vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
-            etherFiNode.forwardExternalCall(address(0), data);
-
-            vm.expectRevert(IEtherFiNodesManager.ForwardedCallNotAllowed.selector);
-            etherFiNodesManager.forwardEigenPodCall(toArray_u256(legacyID), toArray_bytes(checkpointData));
-
-            vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
-            etherFiNodesManager.forwardExternalCall(toArray_u256(legacyID), toArray_bytes(data), target);
+            etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), toArray_bytes(data), address(0));
         }
         vm.stopPrank();
 
@@ -396,10 +383,8 @@ contract PreludeTest is Test, ArrayTestHelper {
         // calls should succeed after being whitelisted
         vm.startPrank(user);
         {
-            etherFiNode.forwardEigenPodCall(checkpointData);
-            etherFiNode.forwardExternalCall(target, data);
-            etherFiNodesManager.forwardEigenPodCall(toArray_u256(legacyID), toArray_bytes(checkpointData));
-            etherFiNodesManager.forwardExternalCall(toArray_u256(legacyID), toArray_bytes(data), target);
+            etherFiNodesManager.forwardEigenPodCall(toArray(etherFiNode), toArray_bytes(checkpointData));
+            etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), toArray_bytes(data), target);
         }
         vm.stopPrank();
 
@@ -428,54 +413,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         stakingManager.backfillExistingEtherFiNodes(oldNodes);
         vm.assertTrue(stakingManager.deployedEtherFiNodes(oldNodes[0]), "not added to mapping");
         vm.assertTrue(stakingManager.deployedEtherFiNodes(oldNodes[1]), "not added to mapping");
-    }
-
-    function test_etherFiNodeAllowedCallers() public {
-
-        vm.prank(admin);
-        IEtherFiNode node = IEtherFiNode(stakingManager.instantiateEtherFiNode(true));
-
-        // methods should only be callable by EFNM
-        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
-        node.createEigenPod();
-
-        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
-        node.setProofSubmitter(address(0x123));
-
-        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
-        node.startCheckpoint();
-
-        BeaconChainProofs.BalanceContainerProof memory containerProof = BeaconChainProofs.BalanceContainerProof({balanceContainerRoot: bytes32(uint256(1)),proof: ""});
-        BeaconChainProofs.BalanceProof[] memory balanceProofs = new BeaconChainProofs.BalanceProof[](1);
-        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
-        node.verifyCheckpointProofs(containerProof, balanceProofs);
-
-        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
-        node.queueETHWithdrawal(1000);
-
-        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
-        node.completeQueuedETHWithdrawals(true);
-
-        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
-        node.queueWithdrawals(new IDelegationManager.QueuedWithdrawalParams[](0));
-
-        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
-        node.completeQueuedWithdrawals(new IDelegationManager.Withdrawal[](0), new IERC20[][](0), new bool[](0));
-
-        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
-        node.sweepFunds();
-
-        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
-        node.requestExecutionLayerTriggeredWithdrawal(new IEigenPod.WithdrawalRequest[](0));
-
-        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
-        node.requestConsolidation(new IEigenPod.ConsolidationRequest[](0));
-
-        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
-        node.forwardEigenPodCall(hex"00000000");
-
-        vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
-        node.forwardExternalCall(address(0x123), hex"00000000");
     }
 
     function test_StakingManagerUpgradePermissions() public {
@@ -599,54 +536,52 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // create a node
         vm.prank(admin);
-        IEtherFiNode etherFiNode = IEtherFiNode(stakingManager.instantiateEtherFiNode(true));
+        IEtherFiNode node = IEtherFiNode(stakingManager.instantiateEtherFiNode(true));
 
         vm.startPrank(user);
+        {
+            // methods should only be callable by EFNM
+            vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+            node.createEigenPod();
 
-        // Normal user should fail for all eigenlayer functions
-        vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-        etherFiNode.createEigenPod();
+            vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+            node.setProofSubmitter(address(0x123));
 
-        vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-        etherFiNode.setProofSubmitter(address(0));
+            vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+            node.startCheckpoint();
 
-        vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-        etherFiNode.startCheckpoint();
+            BeaconChainProofs.BalanceContainerProof memory containerProof = BeaconChainProofs.BalanceContainerProof({balanceContainerRoot: bytes32(uint256(1)),proof: ""});
+            BeaconChainProofs.BalanceProof[] memory balanceProofs = new BeaconChainProofs.BalanceProof[](1);
+            vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+            node.verifyCheckpointProofs(containerProof, balanceProofs);
 
-        BeaconChainProofs.BalanceProof[] memory balanceProofs = new BeaconChainProofs.BalanceProof[](1);
-        BeaconChainProofs.BalanceContainerProof memory containerProof = BeaconChainProofs.BalanceContainerProof({
-            balanceContainerRoot: bytes32(uint256(1)),
-            proof: ""
-        });
-        vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-        etherFiNode.verifyCheckpointProofs(containerProof, balanceProofs);
+            vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+            node.queueETHWithdrawal(1000);
 
-        vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-        etherFiNode.queueETHWithdrawal(1 ether);
+            vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+            node.completeQueuedETHWithdrawals(true);
 
-        vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-        etherFiNode.completeQueuedETHWithdrawals(true);
+            vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+            node.queueWithdrawals(new IDelegationManager.QueuedWithdrawalParams[](0));
 
-        IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
-        vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-        etherFiNode.queueWithdrawals(params);
+            vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+            node.completeQueuedWithdrawals(new IDelegationManager.Withdrawal[](0), new IERC20[][](0), new bool[](0));
 
-        IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
-        IERC20[][] memory tokens = new IERC20[][](1);
-        bool[] memory receiveAsTokens = new bool[](1);
-        vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-        etherFiNode.completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+            vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+            node.sweepFunds();
 
-        vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-        etherFiNode.sweepFunds();
+            vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+            node.requestExecutionLayerTriggeredWithdrawal(new IEigenPod.WithdrawalRequest[](0));
 
-        // normal user should fail for all call forwarding
-        vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-        etherFiNode.forwardEigenPodCall("");
+            vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+            node.requestConsolidation(new IEigenPod.ConsolidationRequest[](0));
 
-        vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-        etherFiNode.forwardExternalCall(address(0), "");
+            vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+            node.forwardEigenPodCall(hex"00000000");
 
+            vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
+            node.forwardExternalCall(address(0x123), hex"00000000");
+        }
         vm.stopPrank();
     }
 
@@ -703,14 +638,14 @@ contract PreludeTest is Test, ArrayTestHelper {
         etherFiNodesManager.sweepFunds(nodeId);
 
         // normal user should fail for all call forwarding
-        uint256[] memory nodeIds = new uint256[](1);
+        address[] memory nodes = new address[](1);
         bytes[] memory data = new bytes[](1);
 
         vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
-        etherFiNodesManager.forwardEigenPodCall(nodeIds, data);
+        etherFiNodesManager.forwardEigenPodCall(nodes, data);
 
         vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
-        etherFiNodesManager.forwardExternalCall(nodeIds, data, address(0));
+        etherFiNodesManager.forwardExternalCall(nodes, data, address(0));
 
         vm.stopPrank();
     }
@@ -779,7 +714,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // admin creates one and it should be connected
         vm.prank(eigenlayerAdmin);
-        address newPod = newNode.createEigenPod();
+        address newPod = etherFiNodesManager.createEigenPod(address(newNode));
         assert(newPod != address(0));
         assertEq(newPod, address(newNode.getEigenPod()));
     }
@@ -1237,28 +1172,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.expectRevert();
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueWithdrawals(uint256(val.pubkeyHash), params);
-    }
-
-    function test_directNodeAccess_queueETHWithdrawal_rate_limit() public {
-        // Test that direct access to EtherFiNode also respects rate limits
-        TestValidator memory val = helper_createValidator(defaultTestValidatorParams);
-
-        // Set a very low capacity for testing (1 ETH = 1_000_000_000 gwei)
-        vm.startPrank(admin);
-        rateLimiter.setCapacity(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), 1_000_000_000);
-        vm.stopPrank();
-
-        // Direct call to EtherFiNode should also be rate limited
-        IEtherFiNode etherFiNode = IEtherFiNode(val.etherFiNode);
-
-        // First call should succeed
-        vm.prank(eigenlayerAdmin);
-        etherFiNode.queueETHWithdrawal(0.5 ether);
-
-        // Second call exceeding limit should fail
-        vm.expectRevert();
-        vm.prank(eigenlayerAdmin);
-        etherFiNode.queueETHWithdrawal(0.6 ether);
     }
 
     function test_exitRequestsRateLimiting_partial_exit_success() public {

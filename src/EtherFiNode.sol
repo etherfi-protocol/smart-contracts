@@ -183,23 +183,11 @@ contract EtherFiNode is IEtherFiNode {
     //--------------------------------------------------------------------------------------
 
     function forwardEigenPodCall(bytes calldata data) external onlyEtherFiNodesManager returns (bytes memory) {
-
-        // validate the call
-        if (data.length < 4) revert InvalidForwardedCall();
-        bytes4 selector = bytes4(data[:4]);
-        if (!etherFiNodesManager.allowedForwardedEigenpodCalls(selector)) revert ForwardedCallNotAllowed();
-
         // callContract will revert if targeting an EOA so it is safe if getEigenPod() returns the zero address
         return LibCall.callContract(address(getEigenPod()), 0, data);
     }
 
     function forwardExternalCall(address to, bytes calldata data) external onlyEtherFiNodesManager returns (bytes memory) {
-
-        // validate the call
-        if (data.length < 4) revert InvalidForwardedCall();
-        bytes4 selector = bytes4(data[:4]);
-        if (!etherFiNodesManager.allowedForwardedExternalCalls(selector, to)) revert ForwardedCallNotAllowed();
-
         return LibCall.callContract(to, 0, data);
     }
 

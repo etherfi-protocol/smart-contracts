@@ -161,14 +161,13 @@ contract EtherFiNodesManager is
     function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin whenNotPaused {
         // need to rate limit any beacon eth being withdrawn
         rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(sumRestakingETHWithdrawals(params)));
-
         IEtherFiNode(etherfiNodeAddress(id)).queueWithdrawals(params);
     }
     function queueWithdrawals(address node, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin whenNotPaused {
+        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
+
         // need to rate limit any beacon eth being withdrawn
         rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(sumRestakingETHWithdrawals(params)));
-
-        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
         IEtherFiNode(node).queueWithdrawals(params);
     }
 
@@ -387,28 +386,39 @@ contract EtherFiNodesManager is
     }
 
     /// @notice forward a whitelisted call to a whitelisted external contract with the EtherFiNode as the caller
-    function forwardExternalCall(uint256[] calldata ids, bytes[] calldata data, address target) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
-        if (ids.length != data.length) revert InvalidForwardedCall();
+    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
+        if (nodes.length != data.length) revert InvalidForwardedCall();
 
-        returnData = new bytes[](ids.length);
-        for (uint256 i = 0; i < ids.length; i++) {
+        returnData = new bytes[](nodes.length);
+        for (uint256 i = 0; i < nodes.length; i++) {
+            IEtherFiNode node = IEtherFiNode(nodes[i]);
+            if (!stakingManager.deployedEtherFiNodes(address(node))) revert UnknownNode();
+
+            // validate the call
+            if (data[i].length < 4) revert InvalidForwardedCall();
+            bytes4 selector = bytes4(data[i][:4]);
+            if (!allowedForwardedExternalCalls[selector][target]) revert ForwardedCallNotAllowed();
 
             // call validation + whitelist checks performed in node implementation
-            IEtherFiNode node = IEtherFiNode(etherfiNodeAddress(ids[i]));
             returnData[i] = node.forwardExternalCall(target, data[i]);
         }
     }
 
     /// @notice forward a whitelisted call to the associated eigenPod of the EtherFiNode with the EtherFiNode as the caller.
     ///   This serves to allow us to support minor eigenlayer upgrades without needing to immediately upgrade our contracts.
-    function forwardEigenPodCall(uint256[] calldata ids, bytes[] calldata data) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
-        if (ids.length != data.length) revert InvalidForwardedCall();
+    function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
+        if (nodes.length != data.length) revert InvalidForwardedCall();
 
-        returnData = new bytes[](ids.length);
-        for (uint256 i = 0; i < ids.length; i++) {
+        returnData = new bytes[](nodes.length);
+        for (uint256 i = 0; i < nodes.length; i++) {
+            IEtherFiNode node = IEtherFiNode(nodes[i]);
+            if (!stakingManager.deployedEtherFiNodes(address(node))) revert UnknownNode();
 
-            // call validation + whitelist checks performed in node implementation
-            IEtherFiNode node = IEtherFiNode(etherfiNodeAddress(ids[i]));
+            // validate call
+            if (data[i].length < 4) revert InvalidForwardedCall();
+            bytes4 selector = bytes4(data[i][:4]);
+            if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
+
             returnData[i] = node.forwardEigenPodCall(data[i]);
         }
     }
