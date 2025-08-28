@@ -202,12 +202,13 @@ contract StakingManager is
 
         BeaconProxy proxy = new BeaconProxy(address(etherFiNodeBeacon), "");
         address node = address(proxy);
-        if (_createEigenPod) {
-            IEtherFiNode(node).createEigenPod();
-        }
 
         deployedEtherFiNodes[node] = true;
         emit EtherFiNodeDeployed(node);
+
+        if (_createEigenPod) {
+            etherFiNodesManager.createEigenPod(node);
+        }
 
         return node;
     }

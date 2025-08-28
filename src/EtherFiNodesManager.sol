@@ -99,6 +99,11 @@ contract EtherFiNodesManager is
     // tooling which used to operate on a per-validator level instead of per-pod/per-node.
     // Over time we will migrate to directly calling the associated method on the EtherFiNode contract where applicable.
 
+    function createEigenPod(address node) external onlyEigenlayerAdmin whenNotPaused returns (address) {
+        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
+        return IEtherFiNode(node).createEigenPod();
+    }
+
     function getEigenPod(uint256 id) public view returns (address) {
         return address(IEtherFiNode(etherfiNodeAddress(id)).getEigenPod());
     }

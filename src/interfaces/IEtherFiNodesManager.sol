@@ -19,15 +19,25 @@ interface IEtherFiNodesManager {
     function stakingManager() external view returns (IStakingManager);
 
     // eigenlayer interactions
+    function createEigenPod(address node) external returns (address);
     function getEigenPod(uint256 id) external view returns (address);
+    function getEigenPod(address node) external view returns (address);
     function startCheckpoint(uint256 id) external;
+    function startCheckpoint(address node) external;
     function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
+    function verifyCheckpointProofs(address node, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
     function setProofSubmitter(uint256 id, address newProofSubmitter) external;
+    function setProofSubmitter(address node, address newProofSubmitter) external;
     function queueETHWithdrawal(uint256 id, uint256 amount) external returns (bytes32 withdrawalRoot);
+    function queueETHWithdrawal(address node, uint256 amount) external returns (bytes32 withdrawalRoot);
     function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external;
+    function completeQueuedETHWithdrawals(address node, bool receiveAsTokens) external;
     function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external;
+    function queueWithdrawals(address node, IDelegationManager.QueuedWithdrawalParams[] calldata params) external;
     function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
+    function completeQueuedWithdrawals(address node, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
     function sweepFunds(uint256 id) external;
+    //function sweepFunds(address node) external;
     function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable;
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable;
 

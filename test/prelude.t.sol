@@ -112,8 +112,10 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), callForwarder);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elExiter);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
+        roleRegistry.grantRole(stakingManager.STAKING_MANAGER_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), admin);
         roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
@@ -401,6 +403,31 @@ contract PreludeTest is Test, ArrayTestHelper {
         }
         vm.stopPrank();
 
+    }
+
+    function test_deployedEtherFiNodes() public {
+
+        // creating a node should add it to the mapping
+        vm.prank(admin);
+        address restakedNode = stakingManager.instantiateEtherFiNode(true);
+        vm.prank(admin);
+        address nonRestakedNode = stakingManager.instantiateEtherFiNode(false);
+
+        vm.assertTrue(stakingManager.deployedEtherFiNodes(restakedNode), "not added to mapping");
+        vm.assertTrue(stakingManager.deployedEtherFiNodes(nonRestakedNode), "not added to mapping");
+
+        // only admin should be able to backfil existing nodes
+        address[] memory oldNodes = new address[](2);
+        oldNodes[0] = 0x0F3e5FA1720E0b99d4DF5ed38783d6f7d71AaF12;
+        oldNodes[1] = 0xB94AD22998B357fC52e6ff6bE1024a1846BE6f73;
+        vm.prank(user);
+        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        stakingManager.backfillExistingEtherFiNodes(oldNodes);
+
+        vm.prank(admin);
+        stakingManager.backfillExistingEtherFiNodes(oldNodes);
+        vm.assertTrue(stakingManager.deployedEtherFiNodes(oldNodes[0]), "not added to mapping");
+        vm.assertTrue(stakingManager.deployedEtherFiNodes(oldNodes[1]), "not added to mapping");
     }
 
     function test_StakingManagerUpgradePermissions() public {
