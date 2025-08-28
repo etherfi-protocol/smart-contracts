@@ -53,6 +53,8 @@ contract EtherFiNodesManager is
     //-------------------------------------------------------------------------
     bytes32 public constant UNRESTAKING_LIMIT_ID = keccak256("UNRESTAKING_LIMIT_ID");
     bytes32 public constant EXIT_REQUEST_LIMIT_ID = keccak256("EXIT_REQUEST_LIMIT_ID");
+    // maximum exitable balance in gwei
+    uint256 public constant FULL_EXIT_GWEI = 2_048_000_000_000;
 
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
@@ -232,7 +234,6 @@ contract EtherFiNodesManager is
 
     function getTotalEthRequested (IEigenPod.WithdrawalRequest[] calldata requests) internal pure returns (uint256) {
         uint256 totalGwei;
-        uint256 FULL_EXIT_GWEI = 2_048_000_000_000;
         for (uint256 i = 0; i < requests.length; ++i) {
             uint256 gweiAmount = requests[i].amountGwei == 0
                 ? FULL_EXIT_GWEI
