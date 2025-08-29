@@ -19,6 +19,9 @@ interface IEtherFiNode {
     function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external returns (bytes32[] memory withdrawalRoot);
     function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
     function sweepFunds() external returns (uint256 balance);
+    function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable;
+    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable;
+
 
     // call forwarding
     function forwardEigenPodCall(bytes memory data) external returns (bytes memory);
@@ -90,5 +93,7 @@ interface IEtherFiNode {
     error IncorrectRole();
     error ForwardedCallNotAllowed();
     error InvalidForwardedCall();
+    error InvalidCaller();
+    error NoCompleteableWithdrawals();
 
 }
