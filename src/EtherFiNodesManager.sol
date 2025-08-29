@@ -207,7 +207,7 @@ contract EtherFiNodesManager is
      * @param requests Array of WithdrawalRequest:
      *        - pubkey: 48-byte BLS pubkey
      *        - amountGwei: 0 for full exit, >0 for partial to pod
-     * @custom:fee Send enough ETH to cover sum of (feePerPod * requestsForPod). Overpay is OK.
+     * @custom:fee Send EXACT ETH to cover sum of (feePerPod * requestsForPod).
      */
     function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable whenNotPaused nonReentrant {
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
@@ -252,7 +252,7 @@ contract EtherFiNodesManager is
      *        - targetPubkey: 48-byte BLS pubkey of target validator
      *        - If srcPubkey == targetPubkey, this switches validator from 0x01 to 0x02 credentials
      * @dev EigenLayer validates that validators belong to the pod automatically.
-     * @custom:fee Send enough ETH to cover consolidation fees.
+     * @custom:fee Send EXACT ETH to cover consolidation fees.
      */
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable whenNotPaused nonReentrant onlyAdmin {
         if (requests.length == 0) revert EmptyConsolidationRequest();

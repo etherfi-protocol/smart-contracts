@@ -890,4 +890,339 @@ contract EtherFiRateLimiterTest is Test {
                 string(abi.encodePacked("Failed at time interval: ", vm.toString(timeIntervals[i]))));
         }
     }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- Fuzz Tests -----------------------------------------
+    //--------------------------------------------------------------------------------------
+    
+    /// @dev Fuzz test for creating limiters with random valid parameters
+    function testFuzz_createLimiterWithRandomParameters(
+        uint64 capacity,
+        uint64 refillRate,
+        bytes32 limitId
+    ) public {
+        vm.assume(limitId != bytes32(0)); // Avoid zero limit ID
+        
+        vm.prank(admin);
+        rateLimiter.createNewLimiter(limitId, capacity, refillRate);
+        
+        assertTrue(rateLimiter.limitExists(limitId));
+        
+        (uint64 actualCapacity, uint64 remaining, uint64 actualRefillRate, uint256 lastRefill) = 
+            rateLimiter.getLimit(limitId);
+        
+        assertEq(actualCapacity, capacity);
+        assertEq(remaining, capacity); // Should start full
+        assertEq(actualRefillRate, refillRate);
+        assertEq(lastRefill, block.timestamp);
+    }
+    
+    /// @dev Fuzz test for consumption with random valid amounts
+    function testFuzz_consumeRandomAmounts(
+        uint64 capacity,
+        uint64 refillRate,
+        uint64 consumeAmount
+    ) public {
+        vm.assume(capacity > 0); // Need some capacity to consume
+        vm.assume(consumeAmount <= capacity); // Must be within capacity
+        
+        bytes32 limitId = keccak256("FUZZ_LIMIT");
+        
+        // Setup
+        vm.prank(admin);
+        rateLimiter.createNewLimiter(limitId, capacity, refillRate);
+        
+        vm.prank(admin);
+        rateLimiter.updateConsumers(limitId, consumer1, true);
+        
+        // Consume
+        vm.prank(consumer1);
+        rateLimiter.consume(limitId, consumeAmount);
+        
+        // Verify remaining
+        assertEq(rateLimiter.consumable(limitId), capacity - consumeAmount);
+    }
+    
+    /// @dev Fuzz test for consumption exceeding capacity should always revert
+    function testFuzz_consumeExceedingCapacityReverts(
+        uint64 capacity,
+        uint64 excessAmount
+    ) public {
+        vm.assume(excessAmount > capacity); // Amount must exceed capacity
+        
+        bytes32 limitId = keccak256("FUZZ_LIMIT_EXCEED");
+        
+        // Setup
+        vm.prank(admin);
+        rateLimiter.createNewLimiter(limitId, capacity, 1000);
+        
+        vm.prank(admin);
+        rateLimiter.updateConsumers(limitId, consumer1, true);
+        
+        // Should revert
+        vm.prank(consumer1);
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        rateLimiter.consume(limitId, excessAmount);
+        
+        // Capacity should remain unchanged
+        assertEq(rateLimiter.consumable(limitId), capacity);
+    }
+    
+    /// @dev Fuzz test for time-based refill with random time advances
+    function testFuzz_timeBasedRefillWithRandomTime(
+        uint64 capacity,
+        uint64 refillRate,
+        uint64 consumeAmount,
+        uint256 timeAdvance
+    ) public {
+        vm.assume(capacity > 0);
+        vm.assume(consumeAmount <= capacity);
+        vm.assume(timeAdvance > 0 && timeAdvance < 365 days); // Reasonable time bounds
+        
+        bytes32 limitId = keccak256("FUZZ_TIME_REFILL");
+        
+        // Setup
+        vm.prank(admin);
+        rateLimiter.createNewLimiter(limitId, capacity, refillRate);
+        
+        vm.prank(admin);
+        rateLimiter.updateConsumers(limitId, consumer1, true);
+        
+        // Consume some amount
+        vm.prank(consumer1);
+        rateLimiter.consume(limitId, consumeAmount);
+        
+        uint64 remainingAfterConsume = capacity - consumeAmount;
+        
+        // Advance time
+        vm.warp(block.timestamp + timeAdvance);
+        
+        // Calculate expected refill (capped at original capacity)
+        // Use checked arithmetic to prevent overflow
+        uint256 expectedRefill;
+        
+        // Prevent multiplication overflow
+        if (refillRate > 0 && timeAdvance > type(uint256).max / refillRate) {
+            expectedRefill = type(uint256).max; // Overflow case
+        } else {
+            expectedRefill = timeAdvance * refillRate;
+        }
+        
+        uint64 expectedRemaining;
+        
+        if (expectedRefill > type(uint64).max) {
+            expectedRemaining = capacity; // Overflow protection
+        } else if (remainingAfterConsume > capacity) {
+            expectedRemaining = capacity; // Safety check
+        } else {
+            uint256 totalRemaining = remainingAfterConsume + expectedRefill;
+            if (totalRemaining >= capacity) {
+                expectedRemaining = capacity; // Cap at capacity
+            } else {
+                expectedRemaining = uint64(totalRemaining);
+            }
+        }
+        
+        assertEq(rateLimiter.consumable(limitId), expectedRemaining);
+    }
+    
+    /// @dev Fuzz test for multiple sequential consumptions
+    function testFuzz_multipleSequentialConsumptions(
+        uint64 capacity,
+        uint8 numConsumptions,
+        uint64 seed
+    ) public {
+        vm.assume(capacity > 0);
+        vm.assume(numConsumptions > 0 && numConsumptions <= 20); // Reasonable number
+        
+        bytes32 limitId = keccak256(abi.encodePacked("FUZZ_MULTI", seed));
+        
+        // Setup
+        vm.prank(admin);
+        rateLimiter.createNewLimiter(limitId, capacity, DEFAULT_REFILL_RATE);
+        
+        vm.prank(admin);
+        rateLimiter.updateConsumers(limitId, consumer1, true);
+        
+        uint64 totalConsumed = 0;
+        
+        for (uint8 i = 0; i < numConsumptions; i++) {
+            // Generate pseudo-random amount based on seed and iteration
+            uint64 amount = uint64(uint256(keccak256(abi.encodePacked(seed, i))) % capacity);
+            
+            // Only consume if within remaining capacity
+            if (amount <= rateLimiter.consumable(limitId)) {
+                vm.prank(consumer1);
+                rateLimiter.consume(limitId, amount);
+                totalConsumed += amount;
+                
+                assertEq(rateLimiter.consumable(limitId), capacity - totalConsumed);
+            }
+        }
+    }
+    
+    /// @dev Fuzz test for capacity updates with random values
+    function testFuzz_capacityUpdates(
+        uint64 initialCapacity,
+        uint64 newCapacity,
+        uint64 consumeAmount
+    ) public {
+        vm.assume(initialCapacity > 0);
+        vm.assume(consumeAmount <= initialCapacity);
+        
+        bytes32 limitId = keccak256("FUZZ_CAPACITY_UPDATE");
+        
+        // Setup with initial capacity
+        vm.prank(admin);
+        rateLimiter.createNewLimiter(limitId, initialCapacity, DEFAULT_REFILL_RATE);
+        
+        vm.prank(admin);
+        rateLimiter.updateConsumers(limitId, consumer1, true);
+        
+        // Consume some amount
+        vm.prank(consumer1);
+        rateLimiter.consume(limitId, consumeAmount);
+        
+        uint64 remainingAfterConsume = initialCapacity - consumeAmount;
+        
+        // Update capacity
+        vm.prank(admin);
+        rateLimiter.setCapacity(limitId, newCapacity);
+        
+        // Verify capacity update behavior
+        (uint64 actualCapacity, uint64 remaining,,) = rateLimiter.getLimit(limitId);
+        assertEq(actualCapacity, newCapacity);
+        
+        if (newCapacity < remainingAfterConsume) {
+            // Remaining should be capped to new capacity
+            assertEq(remaining, newCapacity);
+        } else {
+            // Remaining should stay the same
+            assertEq(remaining, remainingAfterConsume);
+        }
+    }
+    
+    /// @dev Fuzz test for refill rate updates with time progression
+    function testFuzz_refillRateUpdates(
+        uint64 capacity,
+        uint64 initialRate,
+        uint64 newRate,
+        uint256 timeAdvance
+    ) public {
+        vm.assume(capacity > 0);
+        vm.assume(timeAdvance > 0 && timeAdvance < 365 days);
+        
+        bytes32 limitId = keccak256("FUZZ_REFILL_RATE");
+        
+        // Setup
+        vm.prank(admin);
+        rateLimiter.createNewLimiter(limitId, capacity, initialRate);
+        
+        vm.prank(admin);
+        rateLimiter.updateConsumers(limitId, consumer1, true);
+        
+        // Consume all capacity
+        vm.prank(consumer1);
+        rateLimiter.consume(limitId, capacity);
+        
+        // Update refill rate
+        vm.prank(admin);
+        rateLimiter.setRefillRate(limitId, newRate);
+        
+        // Advance time
+        vm.warp(block.timestamp + timeAdvance);
+        
+        // Calculate expected refill with new rate
+        uint256 expectedRefill = timeAdvance * newRate;
+        uint64 expectedRemaining;
+        
+        if (expectedRefill > type(uint64).max) {
+            expectedRemaining = capacity;
+        } else if (uint64(expectedRefill) >= capacity) {
+            expectedRemaining = capacity;
+        } else {
+            expectedRemaining = uint64(expectedRefill);
+        }
+        
+        assertEq(rateLimiter.consumable(limitId), expectedRemaining);
+    }
+    
+    /// @dev Fuzz test for remaining amount updates
+    function testFuzz_remainingUpdates(
+        uint64 capacity,
+        uint64 newRemaining
+    ) public {
+        vm.assume(capacity > 0);
+        
+        bytes32 limitId = keccak256("FUZZ_REMAINING");
+        
+        // Setup
+        vm.prank(admin);
+        rateLimiter.createNewLimiter(limitId, capacity, DEFAULT_REFILL_RATE);
+        
+        // Update remaining
+        vm.prank(admin);
+        rateLimiter.setRemaining(limitId, newRemaining);
+        
+        // Verify remaining was set correctly
+        (, uint64 actualRemaining,,) = rateLimiter.getLimit(limitId);
+        assertEq(actualRemaining, newRemaining);
+        assertEq(rateLimiter.consumable(limitId), newRemaining);
+    }
+    
+    /// @dev Fuzz test for edge cases with very large numbers
+    function testFuzz_edgeCasesLargeNumbers(
+        uint64 capacity,
+        uint64 refillRate
+    ) public {
+        // Test behavior with maximum uint64 values
+        vm.assume(capacity > 0 || refillRate > 0); // At least one must be non-zero for meaningful test
+        
+        bytes32 limitId = keccak256("FUZZ_LARGE_NUMBERS");
+        
+        vm.prank(admin);
+        rateLimiter.createNewLimiter(limitId, capacity, refillRate);
+        
+        assertTrue(rateLimiter.limitExists(limitId));
+        
+        (uint64 actualCapacity, uint64 remaining, uint64 actualRefillRate,) = 
+            rateLimiter.getLimit(limitId);
+        
+        assertEq(actualCapacity, capacity);
+        assertEq(remaining, capacity);
+        assertEq(actualRefillRate, refillRate);
+    }
+    
+    /// @dev Fuzz test for consumer authorization with random addresses
+    function testFuzz_consumerAuthorization(
+        address randomConsumer,
+        uint64 capacity,
+        uint64 amount
+    ) public {
+        vm.assume(randomConsumer != address(0));
+        vm.assume(randomConsumer != admin);
+        vm.assume(capacity > 0);
+        vm.assume(amount <= capacity);
+        
+        bytes32 limitId = keccak256("FUZZ_CONSUMER_AUTH");
+        
+        // Setup
+        vm.prank(admin);
+        rateLimiter.createNewLimiter(limitId, capacity, DEFAULT_REFILL_RATE);
+        
+        // Random consumer should not be able to consume
+        vm.prank(randomConsumer);
+        vm.expectRevert(IEtherFiRateLimiter.InvalidConsumer.selector);
+        rateLimiter.consume(limitId, amount);
+        
+        // Authorize the consumer
+        vm.prank(admin);
+        rateLimiter.updateConsumers(limitId, randomConsumer, true);
+        
+        // Now they should be able to consume
+        vm.prank(randomConsumer);
+        rateLimiter.consume(limitId, amount);
+        
+        assertEq(rateLimiter.consumable(limitId), capacity - amount);
+    }
 }
