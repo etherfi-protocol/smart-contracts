@@ -225,10 +225,9 @@ contract EtherFiNodesManager is
         if (msg.value < pod.getWithdrawalRequestFee() * requests.length) revert InsufficientWithdrawalFees();
         node.requestExecutionLayerTriggeredWithdrawal{value: msg.value}(requests);
 
-        for (uint256 i = 0; i < requests.length; ) {
+        for (uint256 i = 0; i < requests.length; i++) {
             bytes32 currentPubKeyHash = calculateValidatorPubkeyHash(requests[i].pubkey);
             emit ValidatorWithdrawalRequestSent(address(pod), currentPubKeyHash, requests[i].pubkey);
-            unchecked { ++i; }
         }
     }
 
