@@ -164,6 +164,6 @@ library BucketLimiter {
      */
     function setRemaining(Limit storage limit, uint64 remaining) internal {
         refill(limit);
-        limit.remaining = remaining;
+        limit.remaining = remaining > limit.capacity ? limit.capacity : remaining;
     }
 }
