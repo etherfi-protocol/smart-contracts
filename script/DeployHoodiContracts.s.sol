@@ -17,14 +17,13 @@ contract DeployHoodiContracts is Script {
         vm.startBroadcast(deployerPrivateKey);
 
         // Known addresses on Hoodi testnet
-        address stakingManagerProxy = 0xEcf3C0Dc644DBC7d0fbf7f69651D90f2177D0dFf;
-        
-        address roleRegistryProxy = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
-        address liquidityPoolProxy = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
-        address eigenPodManagerProxy = 0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338;
-        address delegationManagerProxy = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
-        address etherFiNodesManagerProxy = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
-        address etherFiNodeProxy = 0xfD4Ff2942e183161a5920749CD5A8B0cFD4164AC;
+        address stakingManagerProxy = 0xDbE50E32Ed95f539F36bA315a75377FBc35aBc12;
+        address roleRegistryProxy = 0x7279853cA1804d4F705d885FeA7f1662323B5Aab;
+        address liquidityPoolProxy = 0x4a8081095549e63153a61D21F92ff079fe39858E;
+        address eigenPodManagerProxy = 0xcd1442415Fc5C29Aa848A49d2e232720BE07976c;
+        address delegationManagerProxy = 0x867837a9722C512e0862d8c2E15b8bE220E8b87d;
+        address etherFiNodesManagerProxy = 0x7579194b8265e3Aa7df451c6BD2aff5B1FC5F945;
+        address etherFiNodeProxy = 0xCb77c1EDf717b551C57c15332700b213c02f1b90;
         address etherFiRateLimiterProxy = address(0x0); 
         
         // Deploy EtherFiRateLimiter first

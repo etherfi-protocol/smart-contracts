@@ -168,7 +168,7 @@ contract StakingPart1 is Script {
         console.log("Role reg: %s",address(stakingManager.roleRegistry()));
         console.log("Role Reg: %s",address(roleRegistry));
 
-        address etherFiNode = stakingManager.instantiateEtherFiNode(true);
+        address etherFiNode = stakingManager.instantiateEtherFiNode(false); // false if we don't want to create a new eigenPod
         address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
         
         vm.stopBroadcast();
