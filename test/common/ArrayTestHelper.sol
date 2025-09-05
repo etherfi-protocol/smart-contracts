@@ -31,6 +31,11 @@ contract ArrayTestHelper {
         vals[0] = val;
         return vals;
     }
+    function toArray(address val) public pure returns (address[] memory) {
+        address[] memory vals = new address[](1);
+        vals[0] = val;
+        return vals;
+    }
     function toArray(IDelegationManager.Withdrawal memory withdrawal) public pure returns (IDelegationManager.Withdrawal[] memory) {
         IDelegationManager.Withdrawal[] memory vals = new IDelegationManager.Withdrawal[](1);
         vals[0] = withdrawal;
