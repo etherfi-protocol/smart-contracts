@@ -24,6 +24,8 @@ contract Rerestake is Script {
     function run() public {
 
         address[] memory nodes = new address[](81);
+        //nodes[0] = address(0x1B65AE9Ba310F033E5c15FdaAb4a485aB0b798c8);
+        //nodes[1] = address(0xBF4859a818ecbe578C9C98F7F36086e1F45D3d16);
         nodes[0] = address(0x3e7230E6184e89525fa89CADBBBCfBd056157d5E);
         nodes[1] = address(0x89c5e2206315Ff914f59CDc3dC93117c2D2274EE);
         nodes[2] = address(0x7AFaeeF339c6767D921420514f11B4D8AA3363F4);
@@ -117,25 +119,35 @@ contract Rerestake is Script {
                 continue;
             }
 
-            // claim all but first claimable withdrawal with receiveAsTokens = false
+            // we want to "cancel" i.e. re-restake any withdrawals that are not divisible by 32 ether
+            // ignoring the first withdrawal that is not divisible by 32 ether
             IDelegationManager.Withdrawal[] memory toClaim = new IDelegationManager.Withdrawal[](queuedWithdrawals.length-1);
             IERC20[][] memory tokens = new IERC20[][](queuedWithdrawals.length-1);
             bool[] memory receiveAsTokens = new bool[](queuedWithdrawals.length-1);
 
-            for (uint256 j = 1; j < queuedWithdrawals.length; j++) {
+            uint256 numNonDivisibleWithdrawals = 0;
+            for (uint256 j = 0; j < queuedWithdrawals.length; j++) {
 
                 // ignore if not ready to claim
                 uint32 slashableUntil = queuedWithdrawals[j].startBlock + EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS;
                 if (uint32(block.number) <= slashableUntil) continue;
 
-                IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
-                withdrawals[0] = queuedWithdrawals[j];
-                IERC20[][] memory tokens = new IERC20[][](1);
-                tokens[0] = new IERC20[](1); // don't need to actually set for beacon eth
-                bool[] memory receiveAsTokens = new bool[](1);
-                receiveAsTokens[0] = false;
+                bool isDivisible = queuedWithdrawals[j].scaledShares[0] % 32 ether == 0;
+                if (!isDivisible) {
+                    numNonDivisibleWithdrawals++;
+                }
 
-                IEtherFiNode(nodes[i]).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+                // if this is not the first nonDivisible withdrawal we have seen, "cancel" it
+                if (numNonDivisibleWithdrawals > 1 && !isDivisible) {
+                    IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+                    withdrawals[0] = queuedWithdrawals[j];
+                    IERC20[][] memory tokens = new IERC20[][](1);
+                    tokens[0] = new IERC20[](1); // don't need to actually set for beacon eth
+                    bool[] memory receiveAsTokens = new bool[](1);
+                    receiveAsTokens[0] = false;
+
+                    IEtherFiNode(nodes[i]).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+                }
             }
         }
 
