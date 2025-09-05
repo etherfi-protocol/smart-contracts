@@ -86,9 +86,10 @@ contract EtherFiNodesManager is
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
     ///   the eth to the liquidity pool in the event of ETH being accidentally sent there
     function sweepFunds(uint256 id) external onlyAdmin whenNotPaused {
-        uint256 balance = IEtherFiNode(etherfiNodeAddress(id)).sweepFunds();
+        address nodeAddr = etherfiNodeAddress(id);
+        uint256 balance = IEtherFiNode(nodeAddr).sweepFunds();
         if(balance > 0) {
-            emit FundsTransferred(etherfiNodeAddress(id), balance);
+            emit FundsTransferred(nodeAddr, balance);
         }
     }
 
@@ -106,81 +107,82 @@ contract EtherFiNodesManager is
         return IEtherFiNode(node).createEigenPod();
     }
 
-    function getEigenPod(uint256 id) public view returns (address) {
-        return address(IEtherFiNode(etherfiNodeAddress(id)).getEigenPod());
-    }
     function getEigenPod(address node) public view returns (address) {
-        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
+        _validateNode(node);
         return address(IEtherFiNode(node).getEigenPod());
     }
-
-    function startCheckpoint(uint256 id) external onlyPodProver whenNotPaused {
-        IEtherFiNode(etherfiNodeAddress(id)).startCheckpoint();
+    
+    function getEigenPod(uint256 id) public view returns (address) {
+        return getEigenPod(etherfiNodeAddress(id));
     }
-    function startCheckpoint(address node) external onlyPodProver whenNotPaused {
-        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
+
+    function startCheckpoint(address node) public onlyPodProver whenNotPaused {
+        _validateNode(node);
         IEtherFiNode(node).startCheckpoint();
     }
-
-    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyPodProver whenNotPaused {
-        IEtherFiNode(etherfiNodeAddress(id)).verifyCheckpointProofs(balanceContainerProof, proofs);
+    
+    function startCheckpoint(uint256 id) external onlyPodProver whenNotPaused {
+        startCheckpoint(etherfiNodeAddress(id));
     }
-    function verifyCheckpointProofs(address node, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyPodProver whenNotPaused {
-        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
+
+    function verifyCheckpointProofs(address node, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) public onlyPodProver whenNotPaused {
+        _validateNode(node);
         IEtherFiNode(node).verifyCheckpointProofs(balanceContainerProof, proofs);
     }
-
-    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyEigenlayerAdmin whenNotPaused {
-        IEtherFiNode(etherfiNodeAddress(id)).setProofSubmitter(proofSubmitter);
+    
+    function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external onlyPodProver whenNotPaused {
+        verifyCheckpointProofs(etherfiNodeAddress(id), balanceContainerProof, proofs);
     }
-    function setProofSubmitter(address node, address proofSubmitter) external onlyEigenlayerAdmin whenNotPaused {
-        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
+
+    function setProofSubmitter(address node, address proofSubmitter) public onlyEigenlayerAdmin whenNotPaused {
+        _validateNode(node);
         IEtherFiNode(node).setProofSubmitter(proofSubmitter);
     }
-
-    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyEigenlayerAdmin whenNotPaused returns (bytes32 withdrawalRoot) {
-        rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(amount / 1 gwei));
-        return IEtherFiNode(etherfiNodeAddress(id)).queueETHWithdrawal(amount);
+    
+    function setProofSubmitter(uint256 id, address proofSubmitter) external onlyEigenlayerAdmin whenNotPaused {
+        setProofSubmitter(etherfiNodeAddress(id), proofSubmitter);
     }
-    function queueETHWithdrawal(address node, uint256 amount) external onlyEigenlayerAdmin whenNotPaused returns (bytes32 withdrawalRoot) {
-        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
+
+    function queueETHWithdrawal(address node, uint256 amount) public onlyEigenlayerAdmin whenNotPaused returns (bytes32 withdrawalRoot) {
+        _validateNode(node);
         rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(amount / 1 gwei));
         return IEtherFiNode(node).queueETHWithdrawal(amount);
     }
-
-    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
-        uint256 balance = IEtherFiNode(etherfiNodeAddress(id)).completeQueuedETHWithdrawals(receiveAsTokens);
-        if(balance > 0) {
-            emit FundsTransferred(etherfiNodeAddress(id), balance);
-        }
+    
+    function queueETHWithdrawal(uint256 id, uint256 amount) external onlyEigenlayerAdmin whenNotPaused returns (bytes32 withdrawalRoot) {
+        return queueETHWithdrawal(etherfiNodeAddress(id), amount);
     }
-    function completeQueuedETHWithdrawals(address node, bool receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
-        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
+
+    function completeQueuedETHWithdrawals(address node, bool receiveAsTokens) public onlyEigenlayerAdmin whenNotPaused {
+        _validateNode(node);
         uint256 balance = IEtherFiNode(node).completeQueuedETHWithdrawals(receiveAsTokens);
         if(balance > 0) {
             emit FundsTransferred(node, balance);
         }
     }
-
-    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin whenNotPaused {
-        // need to rate limit any beacon eth being withdrawn
-        rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(sumRestakingETHWithdrawals(params) / 1 gwei));
-        IEtherFiNode(etherfiNodeAddress(id)).queueWithdrawals(params);
+    
+    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
+        completeQueuedETHWithdrawals(etherfiNodeAddress(id), receiveAsTokens);
     }
-    function queueWithdrawals(address node, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin whenNotPaused {
-        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
 
+    function queueWithdrawals(address node, IDelegationManager.QueuedWithdrawalParams[] calldata params) public onlyEigenlayerAdmin whenNotPaused {
+        _validateNode(node);
         // need to rate limit any beacon eth being withdrawn
         rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(sumRestakingETHWithdrawals(params) / 1 gwei));
         IEtherFiNode(node).queueWithdrawals(params);
     }
-
-    function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
-        IEtherFiNode(etherfiNodeAddress(id)).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+    
+    function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external onlyEigenlayerAdmin whenNotPaused {
+        queueWithdrawals(etherfiNodeAddress(id), params);
     }
-    function completeQueuedWithdrawals(address node, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
-        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
+
+    function completeQueuedWithdrawals(address node, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) public onlyEigenlayerAdmin whenNotPaused {
+        _validateNode(node);
         IEtherFiNode(node).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+    }
+    
+    function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
+        completeQueuedWithdrawals(etherfiNodeAddress(id), withdrawals, tokens, receiveAsTokens);
     }
 
     function sumRestakingETHWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) internal pure returns (uint256) {
@@ -282,14 +284,12 @@ contract EtherFiNodesManager is
 
     // returns withdrawal fee per each request
     function getWithdrawalRequestFee(address pod) public view returns (uint256) {
-        uint256 feePerRequest = IEigenPod(pod).getWithdrawalRequestFee();
-        return feePerRequest;
+        return IEigenPod(pod).getWithdrawalRequestFee();
     }
 
     // returns consolidation fee per each request
     function getConsolidationRequestFee(address pod) public view returns (uint256) {
-        uint256 feePerRequest = IEigenPod(pod).getConsolidationRequestFee();
-        return feePerRequest;
+        return IEigenPod(pod).getConsolidationRequestFee();
     }
 
     //-------------------------------------------------------------------
@@ -392,16 +392,14 @@ contract EtherFiNodesManager is
 
         returnData = new bytes[](nodes.length);
         for (uint256 i = 0; i < nodes.length; i++) {
-            IEtherFiNode node = IEtherFiNode(nodes[i]);
-            if (!stakingManager.deployedEtherFiNodes(address(node))) revert UnknownNode();
-
+            _validateNode(nodes[i]);
             // validate the call
             if (data[i].length < 4) revert InvalidForwardedCall();
             bytes4 selector = bytes4(data[i][:4]);
             if (!allowedForwardedExternalCalls[selector][target]) revert ForwardedCallNotAllowed();
 
             // call validation + whitelist checks performed in node implementation
-            returnData[i] = node.forwardExternalCall(target, data[i]);
+            returnData[i] = IEtherFiNode(nodes[i]).forwardExternalCall(target, data[i]);
         }
     }
 
@@ -412,16 +410,23 @@ contract EtherFiNodesManager is
 
         returnData = new bytes[](nodes.length);
         for (uint256 i = 0; i < nodes.length; i++) {
-            IEtherFiNode node = IEtherFiNode(nodes[i]);
-            if (!stakingManager.deployedEtherFiNodes(address(node))) revert UnknownNode();
-
+            _validateNode(nodes[i]);
             // validate call
             if (data[i].length < 4) revert InvalidForwardedCall();
             bytes4 selector = bytes4(data[i][:4]);
             if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
 
-            returnData[i] = node.forwardEigenPodCall(data[i]);
+            returnData[i] = IEtherFiNode(nodes[i]).forwardEigenPodCall(data[i]);
         }
+    }
+
+    //--------------------------------------------------------------------------------------
+    //-----------------------------------  HELPERS  ----------------------------------------
+    //--------------------------------------------------------------------------------------
+    
+    /// @dev Internal helper to validate node exists and revert if not
+    function _validateNode(address node) internal view {
+        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
     }
 
     //--------------------------------------------------------------------------------------
