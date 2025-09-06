@@ -20,12 +20,10 @@ contract Rerestake is Script {
     EtherFiNodesManager etherFiNodesManager = EtherFiNodesManager(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F);
     address constant delegationManager = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
     uint32 public constant EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS = 100800;
+    mapping(address => bool) public nodeSeen;
+    address[] public nodes = new address[](81);
 
     function run() public {
-
-        address[] memory nodes = new address[](81);
-        //nodes[0] = address(0x1B65AE9Ba310F033E5c15FdaAb4a485aB0b798c8);
-        //nodes[1] = address(0xBF4859a818ecbe578C9C98F7F36086e1F45D3d16);
         nodes[0] = address(0x3e7230E6184e89525fa89CADBBBCfBd056157d5E);
         nodes[1] = address(0x89c5e2206315Ff914f59CDc3dC93117c2D2274EE);
         nodes[2] = address(0x7AFaeeF339c6767D921420514f11B4D8AA3363F4);
@@ -109,13 +107,22 @@ contract Rerestake is Script {
         nodes[80] = address(0xb9d000815899360ECfaD44Cd3C150103B37fCE28);
 
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
-
+        uint256 cnt = 0;
+        uint256 cntRemoved = 0;
+        uint256 amountRemoved = 0;
         for (uint256 i = 0; i < nodes.length; i++) {
             address node = nodes[i];
+            if (nodeSeen[node]) {
+                continue;
+            }
+            nodeSeen[node] = true;
+            cnt++;
+
             (IDelegationManager.Withdrawal[] memory queuedWithdrawals, ) = IDelegationManager(delegationManager).getQueuedWithdrawals(node);
 
             // no duplicate withdrawals
             if (queuedWithdrawals.length <= 1) {
+                console2.log("No withdrawals for node", node);
                 continue;
             }
 
@@ -137,6 +144,9 @@ contract Rerestake is Script {
                     numNonDivisibleWithdrawals++;
                 }
 
+                if(isDivisible) {
+                    console2.log("The Divisible withdrawal with amount and node", queuedWithdrawals[j].scaledShares[0], node);
+                }
                 // if this is not the first nonDivisible withdrawal we have seen, "cancel" it
                 if (numNonDivisibleWithdrawals > 1 && !isDivisible) {
                     IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
@@ -147,9 +157,14 @@ contract Rerestake is Script {
                     receiveAsTokens[0] = false;
 
                     IEtherFiNode(nodes[i]).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+                    cntRemoved++;
+                    amountRemoved += queuedWithdrawals[j].scaledShares[0];
                 }
             }
         }
+        console2.log("Total nodes", cnt);
+        console2.log("Total nodes removed", cntRemoved);
+        console2.log("Total amount removed", amountRemoved);
 
         vm.stopBroadcast();
     }
