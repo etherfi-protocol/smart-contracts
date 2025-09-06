@@ -49,10 +49,16 @@ interface IEtherFiNodesManager {
     // call forwarding
     function updateAllowedForwardedExternalCalls(bytes4 selector, address target, bool allowed) external;
     function updateAllowedForwardedEigenpodCalls(bytes4 selector, bool allowed) external;
+    function updateUserAllowedForwardedExternalCalls(address user, bytes4 selector, address target, bool allowed) external;
+    function updateUserAllowedForwardedEigenpodCalls(address user, bytes4 selector, bool allowed) external;
+    function batchUpdateAllowedForwardedExternalCalls(bytes4[] calldata selectors, address[] calldata targets, bool[] calldata allowed) external;
+    function batchUpdateUserAllowedForwardedExternalCalls(address user, bytes4[] calldata selectors, address[] calldata targets, bool[] calldata allowed) external;
     function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external returns (bytes[] memory returnData);
     function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external returns (bytes[] memory returnData);
-    function allowedForwardedEigenpodCalls(bytes4 selector) external returns (bool);
-    function allowedForwardedExternalCalls(bytes4 selector, address to) external returns (bool);
+    function allowedForwardedEigenpodCalls(bytes4 selector) external view returns (bool);
+    function allowedForwardedExternalCalls(bytes4 selector, address to) external view returns (bool);
+    function userAllowedForwardedEigenpodCalls(address user, bytes4 selector) external view returns (bool);
+    function userAllowedForwardedExternalCalls(address user, bytes4 selector, address to) external view returns (bool);
 
     // protocol
     function pauseContract() external;
@@ -123,6 +129,8 @@ interface IEtherFiNodesManager {
     event PubkeyLinked(bytes32 indexed pubkeyHash, address indexed nodeAddress, uint256 indexed legacyId, bytes pubkey);
     event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
     event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
+    event UserAllowedForwardedExternalCallsUpdated(address indexed user, bytes4 indexed selector, address indexed _target, bool _allowed);
+    event UserAllowedForwardedEigenpodCallsUpdated(address indexed user, bytes4 indexed selector, bool _allowed);
     event FundsTransferred(address indexed nodeAddress, uint256 amount);
     event ValidatorWithdrawalRequestSent(address indexed pod, bytes32 indexed validatorPubkeyHash, bytes validatorPubkey);
     event ValidatorSwitchToCompoundingRequested(address indexed pod, bytes32 indexed validatorPubkeyHash, bytes validatorPubkey);
