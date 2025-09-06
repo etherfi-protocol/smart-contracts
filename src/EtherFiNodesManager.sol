@@ -35,11 +35,9 @@ contract EtherFiNodesManager is
     //-----------------------------  Storage  -----------------------------------
     //---------------------------------------------------------------------------
     LegacyNodesManagerState private legacyState;
-    mapping(bytes4 => bool) public allowedForwardedEigenpodCalls; // Call Forwarding: functionSelector -> allowed
-    mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls; // Call Forwarding: functionSelector -> targetAddress -> allowed
+    mapping(address => mapping(bytes4 => bool)) public allowedForwardedEigenpodCalls; // Call Forwarding: user -> functionSelector -> allowed
+    mapping(address => mapping(bytes4 => mapping(address => bool))) public allowedForwardedExternalCalls; // Call Forwarding: user -> functionSelector -> targetAddress -> allowed
     mapping(bytes32 => IEtherFiNode) public etherFiNodeFromPubkeyHash;
-    mapping(address => mapping(bytes4 => bool)) public userAllowedForwardedEigenpodCalls;
-    mapping(address => mapping(bytes4 => mapping(address => bool))) public userAllowedForwardedExternalCalls;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ----------------------------------------
@@ -373,38 +371,21 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
 
     /// @notice Update the whitelist for external calls that can be executed by an EtherfiNode
-    /// @param selector method selector
-    /// @param target call target for forwarded call
-    /// @param allowed enable or disable the call
-    function updateAllowedForwardedExternalCalls(bytes4 selector, address target, bool allowed) external onlyAdmin {
-        allowedForwardedExternalCalls[selector][target] = allowed;
-        emit AllowedForwardedExternalCallsUpdated(selector, target, allowed);
-    }
-
-    /// @notice Update the whitelist for external calls that can be executed against the corresponding eigenpod
-    /// @param selector method selector
-    /// @param allowed enable or disable the call
-    function updateAllowedForwardedEigenpodCalls(bytes4 selector, bool allowed) external onlyAdmin {
-        allowedForwardedEigenpodCalls[selector] = allowed;
-        emit AllowedForwardedEigenpodCallsUpdated(selector, allowed);
-    }
-
-    /// @notice Update the user-specific whitelist for external calls that can be executed by an EtherfiNode
     /// @param user The address to grant/revoke permission for
     /// @param selector method selector
     /// @param target call target for forwarded call
     /// @param allowed enable or disable the call
-    function updateUserAllowedForwardedExternalCalls(address user, bytes4 selector, address target, bool allowed) external onlyAdmin {
-        userAllowedForwardedExternalCalls[user][selector][target] = allowed;
+    function updateAllowedForwardedExternalCalls(address user, bytes4 selector, address target, bool allowed) external onlyAdmin {
+        allowedForwardedExternalCalls[user][selector][target] = allowed;
         emit UserAllowedForwardedExternalCallsUpdated(user, selector, target, allowed);
     }
 
-    /// @notice Update the user-specific whitelist for external calls that can be executed against the corresponding eigenpod
+    /// @notice Update the whitelist for external calls that can be executed against the corresponding eigenpod
     /// @param user The address to grant/revoke permission for
     /// @param selector method selector
     /// @param allowed enable or disable the call
-    function updateUserAllowedForwardedEigenpodCalls(address user, bytes4 selector, bool allowed) external onlyAdmin {
-        userAllowedForwardedEigenpodCalls[user][selector] = allowed;
+    function updateAllowedForwardedEigenpodCalls(address user, bytes4 selector, bool allowed) external onlyAdmin {
+        allowedForwardedEigenpodCalls[user][selector] = allowed;
         emit UserAllowedForwardedEigenpodCallsUpdated(user, selector, allowed);
     }
 
@@ -419,10 +400,8 @@ contract EtherFiNodesManager is
             if (data[i].length < 4) revert InvalidForwardedCall();
             bytes4 selector = bytes4(data[i][:4]);
 
-            // Check user-specific whitelist first, then fall back to general whitelist
-            bool isAllowed = userAllowedForwardedExternalCalls[msg.sender][selector][target] || allowedForwardedExternalCalls[selector][target];
-
-            if (!isAllowed) revert ForwardedCallNotAllowed();
+            // Check if user is allowed to call this selector on this target
+            if (!allowedForwardedExternalCalls[msg.sender][selector][target]) revert ForwardedCallNotAllowed();
 
             // call validation + whitelist checks performed in node implementation
             returnData[i] = IEtherFiNode(nodes[i]).forwardExternalCall(target, data[i]);
@@ -441,38 +420,19 @@ contract EtherFiNodesManager is
             if (data[i].length < 4) revert InvalidForwardedCall();
             bytes4 selector = bytes4(data[i][:4]);
 
-            // Check user-specific whitelist first, then fall back to general whitelist
-            bool isAllowed = userAllowedForwardedEigenpodCalls[msg.sender][selector] || allowedForwardedEigenpodCalls[selector];
-
-            if (!isAllowed) revert ForwardedCallNotAllowed();
+            // Check if user is allowed to call this selector on eigenpod
+            if (!allowedForwardedEigenpodCalls[msg.sender][selector]) revert ForwardedCallNotAllowed();
 
             returnData[i] = IEtherFiNode(nodes[i]).forwardEigenPodCall(data[i]);
         }
     }
 
     /// @notice Batch update the whitelist for external calls (convenience function)
-    /// @param selectors Array of method selectors
-    /// @param targets Array of call targets for forwarded calls
-    /// @param allowed Array of enable/disable flags
-    function batchUpdateAllowedForwardedExternalCalls(
-        bytes4[] calldata selectors, 
-        address[] calldata targets, 
-        bool[] calldata allowed
-    ) external onlyAdmin {
-        if (selectors.length != targets.length || selectors.length != allowed.length) revert LengthMismatch();
-
-        for (uint256 i = 0; i < selectors.length; i++) {
-            allowedForwardedExternalCalls[selectors[i]][targets[i]] = allowed[i];
-            emit AllowedForwardedExternalCallsUpdated(selectors[i], targets[i], allowed[i]);
-        }
-    }
-
-    /// @notice Batch update user-specific whitelist for external calls (convenience function)
     /// @param user The address to grant/revoke permissions for
     /// @param selectors Array of method selectors
     /// @param targets Array of call targets for forwarded calls
     /// @param allowed Array of enable/disable flags
-    function batchUpdateUserAllowedForwardedExternalCalls(
+    function batchUpdateAllowedForwardedExternalCalls(
         address user,
         bytes4[] calldata selectors, 
         address[] calldata targets, 
@@ -481,7 +441,7 @@ contract EtherFiNodesManager is
         if (selectors.length != targets.length || selectors.length != allowed.length) revert LengthMismatch();
 
         for (uint256 i = 0; i < selectors.length; i++) {
-            userAllowedForwardedExternalCalls[user][selectors[i]][targets[i]] = allowed[i];
+            allowedForwardedExternalCalls[user][selectors[i]][targets[i]] = allowed[i];
             emit UserAllowedForwardedExternalCallsUpdated(user, selectors[i], targets[i], allowed[i]);
         }
     }

@@ -377,8 +377,8 @@ contract PreludeTest is Test, ArrayTestHelper {
         // whitelist calls
         vm.startPrank(admin);
         {
-            etherFiNodesManager.updateAllowedForwardedExternalCalls(decimalsSelector, target, true);
-            etherFiNodesManager.updateAllowedForwardedEigenpodCalls(checkpointSelector, true);
+            etherFiNodesManager.updateAllowedForwardedExternalCalls(user, decimalsSelector, target, true);
+            etherFiNodesManager.updateAllowedForwardedEigenpodCalls(user, checkpointSelector, true);
         }
         vm.stopPrank();
 
@@ -420,17 +420,13 @@ contract PreludeTest is Test, ArrayTestHelper {
         address rewardsCoordinator = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
         address usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
         
-        // Test 1: User-specific whitelist takes precedence over general whitelist
+        // Test 1: User-specific whitelist (no more general fallback)
         vm.startPrank(admin);
         {
-            // General whitelist allows processClaim
-            etherFiNodesManager.updateAllowedForwardedExternalCalls(processClaimSelector, rewardsCoordinator, true);
-            
             // User1 specifically allowed for processClaim
-            etherFiNodesManager.updateUserAllowedForwardedExternalCalls(user1, processClaimSelector, rewardsCoordinator, true);
+            etherFiNodesManager.updateAllowedForwardedExternalCalls(user1, processClaimSelector, rewardsCoordinator, true);
             
-            // User2 NOT specifically allowed (will use general whitelist)
-            // Not setting user2 whitelist, so it falls back to general
+            // User2 NOT specifically allowed
         }
         vm.stopPrank();
 
@@ -445,32 +441,21 @@ contract PreludeTest is Test, ArrayTestHelper {
             // If it fails, it's due to the actual call, not the whitelist
         }
 
-        // User2 can also call processClaim (general whitelist)
+        // User2 cannot call processClaim (not in whitelist)
         vm.prank(user2);
-        try etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), processClaimData, rewardsCoordinator) {
-            // Call went through whitelist check
-        } catch {
-            // If it fails, it's due to the actual call, not the whitelist
-        }
+        vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
+        etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), processClaimData, rewardsCoordinator);
 
-        // Test 2: User-specific denial overrides general allowance
+        // Test 2: Revoke user-specific permission
         vm.startPrank(admin);
         {
-            // Remove general whitelist
-            etherFiNodesManager.updateAllowedForwardedExternalCalls(processClaimSelector, rewardsCoordinator, false);
+            // Remove user1's permission
+            etherFiNodesManager.updateAllowedForwardedExternalCalls(user1, processClaimSelector, rewardsCoordinator, false);
         }
         vm.stopPrank();
 
-        // User1 can still call (user-specific whitelist still active)
+        // User1 can no longer call (permission revoked)
         vm.prank(user1);
-        try etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), processClaimData, rewardsCoordinator) {
-            // Call went through whitelist check
-        } catch {
-            // If it fails, it's due to the actual call, not the whitelist
-        }
-
-        // User2 cannot call anymore (no general whitelist, no user-specific)
-        vm.prank(user2);
         vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
         etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), processClaimData, rewardsCoordinator);
 
@@ -480,7 +465,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.startPrank(admin);
         {
             // Only user1 allowed for checkpoint calls
-            etherFiNodesManager.updateUserAllowedForwardedEigenpodCalls(user1, checkpointSelector, true);
+            etherFiNodesManager.updateAllowedForwardedEigenpodCalls(user1, checkpointSelector, true);
         }
         vm.stopPrank();
 
@@ -514,7 +499,7 @@ contract PreludeTest is Test, ArrayTestHelper {
             allowed[0] = true;
             allowed[1] = false; // revoke processClaim for user1
             
-            etherFiNodesManager.batchUpdateUserAllowedForwardedExternalCalls(user1, selectors, targets, allowed);
+            etherFiNodesManager.batchUpdateAllowedForwardedExternalCalls(user1, selectors, targets, allowed);
         }
         vm.stopPrank();
 
@@ -534,11 +519,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Test 5: Access control - only admin can update whitelists
         vm.prank(user1);
         vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-        etherFiNodesManager.updateUserAllowedForwardedExternalCalls(user2, transferSelector, usdc, true);
+        etherFiNodesManager.updateAllowedForwardedExternalCalls(user2, transferSelector, usdc, true);
 
         vm.prank(user1);
         vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
-        etherFiNodesManager.updateUserAllowedForwardedEigenpodCalls(user2, checkpointSelector, true);
+        etherFiNodesManager.updateAllowedForwardedEigenpodCalls(user2, checkpointSelector, true);
     }
 
     function test_deployedEtherFiNodes() public {
