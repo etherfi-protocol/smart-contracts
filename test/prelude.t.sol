@@ -484,45 +484,13 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
         etherFiNodesManager.forwardEigenPodCall(toArray(etherFiNode), checkpointData);
 
-        // Test 4: Batch update functions
-        vm.startPrank(admin);
-        {
-            // Batch update for user1
-            bytes4[] memory selectors = new bytes4[](2);
-            address[] memory targets = new address[](2);
-            bool[] memory allowed = new bool[](2);
-            
-            selectors[0] = transferSelector;
-            selectors[1] = processClaimSelector;
-            targets[0] = usdc;
-            targets[1] = rewardsCoordinator;
-            allowed[0] = true;
-            allowed[1] = false; // revoke processClaim for user1
-            
-            etherFiNodesManager.batchUpdateAllowedForwardedExternalCalls(user1, selectors, targets, allowed);
-        }
-        vm.stopPrank();
-
-        // User1 can now call transfer but not processClaim
+        // Test 4: Access control - only admin can update whitelists
         vm.prank(user1);
-        bytes[] memory transferData = toArray_bytes(abi.encodeWithSelector(transferSelector, address(0x123), 100));
-        try etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), transferData, usdc) {
-            // Call went through whitelist check
-        } catch {
-            // If it fails, it's due to the actual call, not the whitelist
-        }
-
-        vm.prank(user1);
-        vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
-        etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), processClaimData, rewardsCoordinator);
-
-        // Test 5: Access control - only admin can update whitelists
-        vm.prank(user1);
-        vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
         etherFiNodesManager.updateAllowedForwardedExternalCalls(user2, transferSelector, usdc, true);
 
         vm.prank(user1);
-        vm.expectRevert(IEtherFiNode.IncorrectRole.selector);
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
         etherFiNodesManager.updateAllowedForwardedEigenpodCalls(user2, checkpointSelector, true);
     }
 

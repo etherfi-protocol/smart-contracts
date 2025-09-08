@@ -49,7 +49,6 @@ interface IEtherFiNodesManager {
     // call forwarding
     function updateAllowedForwardedExternalCalls(address user, bytes4 selector, address target, bool allowed) external;
     function updateAllowedForwardedEigenpodCalls(address user, bytes4 selector, bool allowed) external;
-    function batchUpdateAllowedForwardedExternalCalls(address user, bytes4[] calldata selectors, address[] calldata targets, bool[] calldata allowed) external;
     function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external returns (bytes[] memory returnData);
     function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external returns (bytes[] memory returnData);
     function allowedForwardedEigenpodCalls(address user, bytes4 selector) external view returns (bool);
