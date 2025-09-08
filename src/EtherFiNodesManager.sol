@@ -427,25 +427,6 @@ contract EtherFiNodesManager is
         }
     }
 
-    /// @notice Batch update the whitelist for external calls (convenience function)
-    /// @param user The address to grant/revoke permissions for
-    /// @param selectors Array of method selectors
-    /// @param targets Array of call targets for forwarded calls
-    /// @param allowed Array of enable/disable flags
-    function batchUpdateAllowedForwardedExternalCalls(
-        address user,
-        bytes4[] calldata selectors, 
-        address[] calldata targets, 
-        bool[] calldata allowed
-    ) external onlyAdmin {
-        if (selectors.length != targets.length || selectors.length != allowed.length) revert LengthMismatch();
-
-        for (uint256 i = 0; i < selectors.length; i++) {
-            allowedForwardedExternalCalls[user][selectors[i]][targets[i]] = allowed[i];
-            emit UserAllowedForwardedExternalCallsUpdated(user, selectors[i], targets[i], allowed[i]);
-        }
-    }
-
     //--------------------------------------------------------------------------------------
     //-----------------------------------  HELPERS  ----------------------------------------
     //--------------------------------------------------------------------------------------
