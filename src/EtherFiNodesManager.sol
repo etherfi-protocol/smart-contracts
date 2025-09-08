@@ -48,7 +48,6 @@ contract EtherFiNodesManager is
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
 
-
     //-------------------------------------------------------------------------
     //-----------------------------  Rate Limiter Buckets ---------------------
     //-------------------------------------------------------------------------

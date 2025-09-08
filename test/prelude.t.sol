@@ -460,29 +460,27 @@ contract PreludeTest is Test, ArrayTestHelper {
         etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), processClaimData, rewardsCoordinator);
 
         // Test 3: Test EigenPod call forwarding with granular whitelist
-        bytes4 checkpointSelector = 0x47d28372; // currentCheckpoint
-        
+        bytes4 podOwnerSelector = 0x0b18ff66; // podOwner()
+
         vm.startPrank(admin);
         {
-            // Only user1 allowed for checkpoint calls
-            etherFiNodesManager.updateAllowedForwardedEigenpodCalls(user1, checkpointSelector, true);
+            // Only user1 allowed for podOwner calls
+            etherFiNodesManager.updateAllowedForwardedEigenpodCalls(user1, podOwnerSelector, true);
         }
         vm.stopPrank();
 
-        bytes[] memory checkpointData = toArray_bytes(abi.encodeWithSelector(checkpointSelector));
-        
-        // User1 can call
-        vm.prank(user1);
-        try etherFiNodesManager.forwardEigenPodCall(toArray(etherFiNode), checkpointData) {
-            // Call went through whitelist check
-        } catch {
-            // If it fails, it's due to the actual call, not the whitelist
-        }
+        bytes[] memory podOwnerData = toArray_bytes(abi.encodeWithSelector(podOwnerSelector));
 
-        // User2 cannot call
+        // User1 can call podOwner (should succeed)
+        vm.prank(user1);
+        bytes[] memory result = etherFiNodesManager.forwardEigenPodCall(toArray(etherFiNode), podOwnerData);
+        // Verify we got a result back (successful call)
+        assertTrue(result.length > 0);
+
+        // User2 cannot call (not whitelisted)
         vm.prank(user2);
         vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
-        etherFiNodesManager.forwardEigenPodCall(toArray(etherFiNode), checkpointData);
+        etherFiNodesManager.forwardEigenPodCall(toArray(etherFiNode), podOwnerData);
 
         // Test 4: Access control - only admin can update whitelists
         vm.prank(user1);
@@ -491,7 +489,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.prank(user1);
         vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
-        etherFiNodesManager.updateAllowedForwardedEigenpodCalls(user2, checkpointSelector, true);
+        etherFiNodesManager.updateAllowedForwardedEigenpodCalls(user2, podOwnerSelector, true);
     }
 
     function test_deployedEtherFiNodes() public {
