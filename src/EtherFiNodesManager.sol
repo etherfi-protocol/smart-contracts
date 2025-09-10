@@ -35,8 +35,8 @@ contract EtherFiNodesManager is
     //-----------------------------  Storage  -----------------------------------
     //---------------------------------------------------------------------------
     LegacyNodesManagerState private legacyState;
-    mapping(bytes4 => bool) public allowedForwardedEigenpodCalls; // Call Forwarding: functionSelector -> allowed
-    mapping(bytes4 => mapping(address => bool)) public allowedForwardedExternalCalls; // Call Forwarding: functionSelector -> targetAddress -> allowed
+    mapping(address => mapping(bytes4 => bool)) public allowedForwardedEigenpodCalls; // Call Forwarding: user -> functionSelector -> allowed
+    mapping(address => mapping(bytes4 => mapping(address => bool))) public allowedForwardedExternalCalls; // Call Forwarding: user -> functionSelector -> targetAddress -> allowed
     mapping(bytes32 => IEtherFiNode) public etherFiNodeFromPubkeyHash;
 
     //--------------------------------------------------------------------------------------
@@ -370,20 +370,22 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
 
     /// @notice Update the whitelist for external calls that can be executed by an EtherfiNode
+    /// @param user The address to grant/revoke permission for
     /// @param selector method selector
     /// @param target call target for forwarded call
     /// @param allowed enable or disable the call
-    function updateAllowedForwardedExternalCalls(bytes4 selector, address target, bool allowed) external onlyAdmin {
-        allowedForwardedExternalCalls[selector][target] = allowed;
-        emit AllowedForwardedExternalCallsUpdated(selector, target, allowed);
+    function updateAllowedForwardedExternalCalls(address user, bytes4 selector, address target, bool allowed) external onlyAdmin {
+        allowedForwardedExternalCalls[user][selector][target] = allowed;
+        emit UserAllowedForwardedExternalCallsUpdated(user, selector, target, allowed);
     }
 
     /// @notice Update the whitelist for external calls that can be executed against the corresponding eigenpod
+    /// @param user The address to grant/revoke permission for
     /// @param selector method selector
     /// @param allowed enable or disable the call
-    function updateAllowedForwardedEigenpodCalls(bytes4 selector, bool allowed) external onlyAdmin {
-        allowedForwardedEigenpodCalls[selector] = allowed;
-        emit AllowedForwardedEigenpodCallsUpdated(selector, allowed);
+    function updateAllowedForwardedEigenpodCalls(address user, bytes4 selector, bool allowed) external onlyAdmin {
+        allowedForwardedEigenpodCalls[user][selector] = allowed;
+        emit UserAllowedForwardedEigenpodCallsUpdated(user, selector, allowed);
     }
 
     /// @notice forward a whitelisted call to a whitelisted external contract with the EtherFiNode as the caller
@@ -396,7 +398,9 @@ contract EtherFiNodesManager is
             // validate the call
             if (data[i].length < 4) revert InvalidForwardedCall();
             bytes4 selector = bytes4(data[i][:4]);
-            if (!allowedForwardedExternalCalls[selector][target]) revert ForwardedCallNotAllowed();
+
+            // Check if user is allowed to call this selector on this target
+            if (!allowedForwardedExternalCalls[msg.sender][selector][target]) revert ForwardedCallNotAllowed();
 
             // call validation + whitelist checks performed in node implementation
             returnData[i] = IEtherFiNode(nodes[i]).forwardExternalCall(target, data[i]);
@@ -414,7 +418,9 @@ contract EtherFiNodesManager is
             // validate call
             if (data[i].length < 4) revert InvalidForwardedCall();
             bytes4 selector = bytes4(data[i][:4]);
-            if (!allowedForwardedEigenpodCalls[selector]) revert ForwardedCallNotAllowed();
+
+            // Check if user is allowed to call this selector on eigenpod
+            if (!allowedForwardedEigenpodCalls[msg.sender][selector]) revert ForwardedCallNotAllowed();
 
             returnData[i] = IEtherFiNode(nodes[i]).forwardEigenPodCall(data[i]);
         }

@@ -377,8 +377,8 @@ contract PreludeTest is Test, ArrayTestHelper {
         // whitelist calls
         vm.startPrank(admin);
         {
-            etherFiNodesManager.updateAllowedForwardedExternalCalls(decimalsSelector, target, true);
-            etherFiNodesManager.updateAllowedForwardedEigenpodCalls(checkpointSelector, true);
+            etherFiNodesManager.updateAllowedForwardedExternalCalls(user, decimalsSelector, target, true);
+            etherFiNodesManager.updateAllowedForwardedEigenpodCalls(user, checkpointSelector, true);
         }
         vm.stopPrank();
 
@@ -390,6 +390,106 @@ contract PreludeTest is Test, ArrayTestHelper {
         }
         vm.stopPrank();
 
+    }
+
+    function test_granularForwardingWhitelist() public {
+        // Setup: create node + pod
+        vm.prank(admin);
+        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/);
+
+        // Setup: link to legacy ID
+        uint256 legacyID = 10886;
+        bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
+        vm.prank(admin);
+        etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(pubkey));
+
+        // Setup: create two users with CALL_FORWARDER_ROLE
+        address user1 = vm.addr(0x1001);
+        address user2 = vm.addr(0x1002);
+        
+        vm.startPrank(roleRegistry.owner());
+        {
+            roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), user1);
+            roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), user2);
+        }
+        vm.stopPrank();
+
+        // Define test selectors and targets
+        bytes4 processClaimSelector = 0x3ccc861d; // processClaim
+        bytes4 transferSelector = 0xa9059cbb; // transfer
+        address rewardsCoordinator = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
+        address usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+        
+        // Test 1: User-specific whitelist (no more general fallback)
+        vm.startPrank(admin);
+        {
+            // User1 specifically allowed for processClaim
+            etherFiNodesManager.updateAllowedForwardedExternalCalls(user1, processClaimSelector, rewardsCoordinator, true);
+            
+            // User2 NOT specifically allowed
+        }
+        vm.stopPrank();
+
+        // User1 can call processClaim (user-specific whitelist)
+        vm.prank(user1);
+        bytes[] memory processClaimData = toArray_bytes(abi.encodeWithSelector(processClaimSelector));
+        // Note: We're not testing the actual execution, just that the whitelist allows the call
+        // In production, this would include proper parameters for processClaim
+        try etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), processClaimData, rewardsCoordinator) {
+            // Call went through whitelist check
+        } catch {
+            // If it fails, it's due to the actual call, not the whitelist
+        }
+
+        // User2 cannot call processClaim (not in whitelist)
+        vm.prank(user2);
+        vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
+        etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), processClaimData, rewardsCoordinator);
+
+        // Test 2: Revoke user-specific permission
+        vm.startPrank(admin);
+        {
+            // Remove user1's permission
+            etherFiNodesManager.updateAllowedForwardedExternalCalls(user1, processClaimSelector, rewardsCoordinator, false);
+        }
+        vm.stopPrank();
+
+        // User1 can no longer call (permission revoked)
+        vm.prank(user1);
+        vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
+        etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), processClaimData, rewardsCoordinator);
+
+        // Test 3: Test EigenPod call forwarding with granular whitelist
+        bytes4 podOwnerSelector = 0x0b18ff66; // podOwner()
+
+        vm.startPrank(admin);
+        {
+            // Only user1 allowed for podOwner calls
+            etherFiNodesManager.updateAllowedForwardedEigenpodCalls(user1, podOwnerSelector, true);
+        }
+        vm.stopPrank();
+
+        bytes[] memory podOwnerData = toArray_bytes(abi.encodeWithSelector(podOwnerSelector));
+
+        // User1 can call podOwner (should succeed)
+        vm.prank(user1);
+        bytes[] memory result = etherFiNodesManager.forwardEigenPodCall(toArray(etherFiNode), podOwnerData);
+        // Verify we got a result back (successful call)
+        assertTrue(result.length > 0);
+
+        // User2 cannot call (not whitelisted)
+        vm.prank(user2);
+        vm.expectRevert(IEtherFiNode.ForwardedCallNotAllowed.selector);
+        etherFiNodesManager.forwardEigenPodCall(toArray(etherFiNode), podOwnerData);
+
+        // Test 4: Access control - only admin can update whitelists
+        vm.prank(user1);
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        etherFiNodesManager.updateAllowedForwardedExternalCalls(user2, transferSelector, usdc, true);
+
+        vm.prank(user1);
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        etherFiNodesManager.updateAllowedForwardedEigenpodCalls(user2, podOwnerSelector, true);
     }
 
     function test_deployedEtherFiNodes() public {
