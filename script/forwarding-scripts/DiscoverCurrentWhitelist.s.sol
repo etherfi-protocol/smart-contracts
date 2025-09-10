@@ -30,8 +30,6 @@ contract DiscoverCurrentWhitelist is Script {
         // Check External calls
         discoverExternalCalls();
         console2.log("");
-
-        generateCleanupScript();
     }
 
     function discoverEigenPodCalls() internal view {
@@ -71,7 +69,6 @@ contract DiscoverCurrentWhitelist is Script {
                     }
                 } catch {
                     console.log("Call failed - 2");
-
                 }
             }
         }
@@ -129,17 +126,6 @@ contract DiscoverCurrentWhitelist is Script {
         targets[7] = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F; // EtherFi NodesManager
   
         return targets;
-    }
-
-    function generateCleanupScript() internal pure {
-        console2.log("=== CLEANUP SCRIPT TEMPLATE ===");
-        console2.log("Based on findings above, create cleanup script like:");
-        console2.log("");
-        console2.log("function cleanupOldMappings() external onlyAdmin {");
-        console2.log("    // Clear each FOUND item:");
-        console2.log("    // clearEigenPodCall(selector);");
-        console2.log("    // clearExternalCall(selector, target);"); 
-        console2.log("}");
     }
 
     // Helper function to check specific combinations manually
