@@ -62,8 +62,8 @@ contract DeployPectraUpgradeCreate2 is Script {
     address constant DELEGATION_MANAGER = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
 
     // === DEPLOYMENT SALT ===
-    // TODO: update with final commit hash
-    bytes32 constant commitHashSalt = bytes32(bytes20(hex"7002e1c1e2e3e4e5e6e7e8e9eaebecedeeeff000")); // EIP-7002 themed
+    // Final commit hash: 6c46a46c04f65838ca4ea2750f2b293e01117eb7
+    bytes32 constant commitHashSalt = bytes32(bytes20(hex"6c46a46c04f65838ca4ea2750f2b293e01117eb7"));
 
     // === DEPLOYED CONTRACTS ===
     EtherFiRateLimiter public rateLimiterProxy;
