@@ -121,7 +121,7 @@ contract DiscoverCurrentWhitelist is Script {
         targets[4] = 0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0; // BeaconChainETHStrategy
 
         // EtherFi contracts
-        targets[5] = 0x35F4f28A8d3Ff20EEd10e087e8F96Ea2641E6AA2; // EtherFi LiquidityPool
+        targets[5] = 0x308861A430be4cce5502d0A12724771Fc6DaF216; // EtherFi LiquidityPool
         targets[6] = 0x25e821b7197B146F7713C3b89B6A4D83516B912d; // EtherFi StakingManager
         targets[7] = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F; // EtherFi NodesManager
   
