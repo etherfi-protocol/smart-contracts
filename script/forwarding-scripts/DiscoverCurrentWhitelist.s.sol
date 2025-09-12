@@ -111,7 +111,7 @@ contract DiscoverCurrentWhitelist is Script {
     }
 
     function getAllTargets() internal pure returns (address[] memory) {
-        address[] memory targets = new address[](25);
+        address[] memory targets = new address[](8);
 
         // EigenLayer contracts
         targets[0] = 0x7750d328b314EfFa365A0402CcfD489B80B0adda; // RewardsCoordinator
