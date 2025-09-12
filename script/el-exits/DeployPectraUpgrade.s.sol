@@ -15,10 +15,6 @@ interface IUpgradable {
     function upgradeTo(address newImplementation) external;
 }
 
-interface IStakingManager {
-    function upgradeEtherFiNode(address newImplementation) external;
-}
-
 // Interface for the OLD contract to clear whitelist before upgrade
 interface ICurrentEtherFiNodesManager {
     function allowedForwardedEigenpodCalls(bytes4 selector) external view returns (bool);
