@@ -138,6 +138,14 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         require(sent, "ETH_SEND_TO_LIQUIDITY_POOL_FAILED");
     }
 
+    /// @notice Transfer stETH to a recipient for instant withdrawal
+    /// @param recipient The address to receive stETH
+    /// @param amount The amount of stETH to transfer
+    function transferStETH(address recipient, uint256 amount) external onlyAdmin {
+        require(amount <= lido.balanceOf(address(this)), "EtherFiRestaker: Insufficient stETH balance");
+        IERC20(address(lido)).safeTransfer(recipient, amount);
+    }
+
     // |--------------------------------------------------------------------------------------------|
     // |                                    EigenLayer Restaking                                    |
     // |--------------------------------------------------------------------------------------------|
