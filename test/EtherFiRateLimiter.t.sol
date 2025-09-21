@@ -1165,9 +1165,11 @@ contract EtherFiRateLimiterTest is Test {
         rateLimiter.setRemaining(limitId, newRemaining);
         
         // Verify remaining was set correctly
+        // Note: setRemaining caps the value to capacity if newRemaining > capacity
+        uint64 expectedRemaining = newRemaining > capacity ? capacity : newRemaining;
         (, uint64 actualRemaining,,) = rateLimiter.getLimit(limitId);
-        assertEq(actualRemaining, newRemaining);
-        assertEq(rateLimiter.consumable(limitId), newRemaining);
+        assertEq(actualRemaining, expectedRemaining);
+        assertEq(rateLimiter.consumable(limitId), expectedRemaining);
     }
     
     /// @dev Fuzz test for edge cases with very large numbers
