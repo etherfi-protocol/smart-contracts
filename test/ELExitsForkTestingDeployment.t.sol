@@ -79,6 +79,9 @@ contract ELExitsForkTestingDeploymentTest is Test {
         console2.log("=== REALISTIC EIP-7002 UPGRADE SIMULATION ===");
         console2.log("Simulating actual mainnet upgrade process...");
         console2.log("");
+        if (block.chainid != 1) {
+            return; // skip if not mainnet fork
+        }
 
         // Step 1: Deploy new rate limiter
         _deployRateLimiter();
@@ -306,6 +309,9 @@ contract ELExitsForkTestingDeploymentTest is Test {
     }
 
     function test_SimulateELExit() public {
+        if (block.chainid != 1) {
+            return; // skip if not mainnet fork
+        }
         test_RealisticUpgradeDeployment();
 
         console2.log("");
