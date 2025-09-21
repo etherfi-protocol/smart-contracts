@@ -1,0 +1,53 @@
+// ========================================
+// ALLOWED FORWARDED EXTERNAL CALLS SELECTORS
+// ========================================
+// Function: updateAllowedForwardedExternalCalls(bytes4 selector, address target, bool allowed)
+
+0xff1f4e85
+0x00000000
+0x9a15bf92
+0xc7ed7a90
+0xb3997123
+0xa9059cbb
+0x49d16bfe
+0xf392444a
+0x3ccc861d
+0xb2389711
+0xddbe92fe
+0xeea9064b
+0x5a771e50
+0x7f548071
+0xda8be864
+0x0dd8dd02
+0xa35bf44e
+0x33404396
+0x2adbe62d
+0x7c8c4d7b
+0x542e72e8
+0x9435bb43
+
+// ========================================
+// ALLOWED FORWARDED EIGENPOD CALLS SELECTORS
+// ========================================
+// Function: updateAllowedForwardedEigenpodCalls(bytes4 selector, bool allowed)
+
+0xa8f495bc
+0x00000000
+0x4ce3499e
+0x88676cad
+0xddda2067
+0xf074ba62
+0x039157d2
+0x3f65cf19
+0xc4907442
+0x0e6681c7
+0x0dd8dd02
+0x25548188
+0x9435bb43
+
+// ========================================
+// SUMMARY
+// ========================================
+// External calls selectors: 22
+// Eigenpod calls selectors: 13
+// Total selectors: 35
