@@ -89,11 +89,11 @@ contract VerifyPectraUpgradeDeployment is Script {
 
         // Check rate limiter address integration
         if (rateLimiterAddress != address(0)) {
-            try nodesManager.etherFiRateLimiter() returns (address limiter) {
-                if (limiter == rateLimiterAddress) {
-                    console2.log(unicode"✓ Rate limiter correctly integrated:", limiter);
+            try nodesManager.rateLimiter() returns (IEtherFiRateLimiter limiter) {
+                if (address(limiter) == rateLimiterAddress) {
+                    console2.log(unicode"✓ Rate limiter correctly integrated:", address(limiter));
                 } else {
-                    console2.log(unicode"✗ Rate limiter mismatch - expected:", rateLimiterAddress, "got:", limiter);
+                    console2.log(unicode"✗ Rate limiter mismatch - expected:", rateLimiterAddress, "got:", address(limiter));
                 }
             } catch {
                 console2.log(unicode"✗ Rate limiter integration not accessible");
@@ -225,31 +225,19 @@ contract VerifyPectraUpgradeDeployment is Script {
         console2.log("Checking function signatures exist:");
 
         // Check EL-triggered withdrawal function
-        try nodesManager.requestExecutionLayerTriggeredWithdrawal.selector returns (bytes4 selector) {
-            console2.log(unicode"✓ requestExecutionLayerTriggeredWithdrawal exists:", vm.toString(selector));
-        } catch {
-            console2.log(unicode"✗ requestExecutionLayerTriggeredWithdrawal missing");
-        }
+        bytes4 selector1 = nodesManager.requestExecutionLayerTriggeredWithdrawal.selector;
+        console2.log(unicode"✓ requestExecutionLayerTriggeredWithdrawal exists:", vm.toString(selector1));
 
         // Check consolidation function
-        try nodesManager.requestConsolidation.selector returns (bytes4 selector) {
-            console2.log(unicode"✓ requestConsolidation exists:", vm.toString(selector));
-        } catch {
-            console2.log(unicode"✗ requestConsolidation missing");
-        }
+        bytes4 selector2 = nodesManager.requestConsolidation.selector;
+        console2.log(unicode"✓ requestConsolidation exists:", vm.toString(selector2));
 
         // Check new call forwarding functions
-        try nodesManager.updateAllowedForwardedEigenpodCalls.selector returns (bytes4 selector) {
-            console2.log(unicode"✓ updateAllowedForwardedEigenpodCalls (user-specific) exists:", vm.toString(selector));
-        } catch {
-            console2.log(unicode"✗ updateAllowedForwardedEigenpodCalls (user-specific) missing");
-        }
+        bytes4 selector3 = nodesManager.updateAllowedForwardedEigenpodCalls.selector;
+        console2.log(unicode"✓ updateAllowedForwardedEigenpodCalls (user-specific) exists:", vm.toString(selector3));
 
-        try nodesManager.updateAllowedForwardedExternalCalls.selector returns (bytes4 selector) {
-            console2.log(unicode"✓ updateAllowedForwardedExternalCalls (user-specific) exists:", vm.toString(selector));
-        } catch {
-            console2.log(unicode"✗ updateAllowedForwardedExternalCalls (user-specific) missing");
-        }
+        bytes4 selector4 = nodesManager.updateAllowedForwardedExternalCalls.selector;
+        console2.log(unicode"✓ updateAllowedForwardedExternalCalls (user-specific) exists:", vm.toString(selector4));
 
         console2.log("");
     }
