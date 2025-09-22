@@ -22,7 +22,6 @@ import "./EtherFiRestaker.sol";
 import "lib/BucketLimiter.sol";
 
 import "./RoleRegistry.sol";
-import "forge-std/console.sol";
 
 /*
     The contract allows instant redemption of eETH and weETH tokens to ETH with an exit fee.
@@ -87,12 +86,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
 
     function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate) external {
         for(uint256 i = 0; i < _exitFeeSplitToTreasuryInBps.length; i++) {
-            console.log("token", address(_tokens[i]));
-            console.log("bucketCapacity", _bucketCapacity[i]);
-            console.log("bucketRefillRate", _bucketRefillRate[i]);
-            console.log("exitFeeSplitToTreasuryInBps", _exitFeeSplitToTreasuryInBps[i]);
-            console.log("exitFeeInBps", _exitFeeInBps[i]);
-            console.log("lowWatermarkInBpsOfTvl", _lowWatermarkInBpsOfTvl[i]);
             tokenToRedemptionInfo[address(_tokens[i])] = RedemptionInfo({
                 limit: BucketLimiter.create(_convertToBucketUnit(_bucketCapacity[i], Math.Rounding.Down), _convertToBucketUnit(_bucketRefillRate[i], Math.Rounding.Down)),
                 exitFeeSplitToTreasuryInBps: _exitFeeSplitToTreasuryInBps[i],
@@ -259,17 +252,11 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      */
     function canRedeem(uint256 amount, address token) public view returns (bool) {
         uint256 liquidEthAmount = getInstantLiquidityAmount(token);
-        console.log("liquidEthAmount", liquidEthAmount);
         if (liquidEthAmount < lowWatermarkInETH(token)) {
-            console.log("below low watermark");
             return false;
         }
         uint64 bucketUnit = _convertToBucketUnit(amount, Math.Rounding.Up);
         bool consumable = BucketLimiter.canConsume(tokenToRedemptionInfo[token].limit, bucketUnit);
-        console.log("consumable", consumable);
-        console.log("amount", amount);
-        console.log("liquidEthAmount", liquidEthAmount);
-        console.log("canRedeem", consumable && amount <= liquidEthAmount);
         return consumable && amount <= liquidEthAmount;
     }
 

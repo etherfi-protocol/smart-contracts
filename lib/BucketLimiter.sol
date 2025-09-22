@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "forge-std/console.sol";
 
 /**
  * The BucketLimiter contract is used to limit the rate of some action.
@@ -69,8 +68,6 @@ library BucketLimiter {
     }
 
     function canConsume(Limit memory limit, uint64 amount) external view returns (bool) {
-        console.log("limit.remaining", limit.remaining);
-        console.log("amount", amount);
         _refill(limit);
         return limit.remaining >= amount;
     }
