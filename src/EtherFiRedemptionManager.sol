@@ -21,6 +21,8 @@ import "./EtherFiRestaker.sol";
 
 import "lib/BucketLimiter.sol";
 
+import "forge-std/console.sol";
+
 import "./RoleRegistry.sol";
 
 /*
@@ -175,6 +177,52 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         _redeemWeEth(weEthAmount, receiver, ETH_ADDRESS);
     }
 
+    function _processETHRedemption(
+        address receiver,
+        uint256 eEthAmountToReceiver,
+        uint256 sharesToBurn,
+        uint256 feeShareToStakers
+    ) internal {
+        uint256 prevBalance = address(this).balance;
+        uint256 prevLpBalance = address(liquidityPool).balance;
+        uint256 totalEEthShare = eEth.totalShares();
+
+        // Withdraw ETH from the liquidity pool
+        require(liquidityPool.withdraw(address(this), eEthAmountToReceiver) == sharesToBurn, "invalid num shares burnt");
+        uint256 ethReceived = address(this).balance - prevBalance;
+
+        // To Stakers by burning shares
+        liquidityPool.burnEEthShares(feeShareToStakers);
+        require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
+
+        // To Receiver by transferring ETH, using gas 10k for additional safety
+        (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
+        require(success, "EtherFiRedemptionManager: Transfer failed");
+
+        // Make sure the liquidity pool balance is correct && total shares are correct
+        require(address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiRedemptionManager: Invalid liquidity pool balance");
+    }
+
+    /**
+     * @notice Processes stETH-specific redemption logic.
+     */
+    function _processStETHRedemption(
+        address receiver,
+        uint256 eEthAmountToReceiver,
+        uint256 feeShareToStakers
+    ) internal {
+        uint256 totalEEthShare = eEth.totalShares();
+
+        // For stETH redemption, we only burn shares for fee handling, no ETH withdrawal needed
+        // To Stakers by burning shares
+        liquidityPool.burnEEthShares(feeShareToStakers);
+        
+        // Validate total shares (no sharesToBurn since we don't withdraw from LP for stETH)
+        require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - feeShareToStakers, "EtherFiRedemptionManager: Invalid total shares");
+
+        _transferStETHFromRestaker(receiver, eEthAmountToReceiver);
+    }
+
     /**
      * @notice Redeems ETH.
      * @param ethAmount The amount of ETH to redeem after the exit fee.
@@ -187,31 +235,13 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         uint256 eEthShareFee = eEthShares - sharesToBurn;
         uint256 feeShareToStakers = eEthShareFee - feeShareToTreasury;
 
-        // Snapshot balances & shares for sanity check at the end
-        uint256 prevBalance = address(this).balance;
-        uint256 prevLpBalance = address(liquidityPool).balance;
-        uint256 totalEEthShare = eEth.totalShares();
-
-        // Withdraw ETH from the liquidity pool
-        require(liquidityPool.withdraw(address(this), eEthAmountToReceiver) == sharesToBurn, "invalid num shares burnt");
-        uint256 ethReceived = address(this).balance - prevBalance;
-
-        // To Stakers by burning shares
-        liquidityPool.burnEEthShares(feeShareToStakers);
-
-        // To Treasury by transferring eETH
+        if(outputToken == ETH_ADDRESS) {
+            _processETHRedemption(receiver, eEthAmountToReceiver, sharesToBurn, feeShareToStakers);
+        } else if(outputToken == address(lido)) {
+            _processStETHRedemption(receiver, eEthAmountToReceiver, feeShareToStakers);
+        }
+        // Common fee handling: Transfer to Treasury
         IERC20(address(eEth)).safeTransfer(treasury, eEthFeeAmountToTreasury);
-        
-        // uint256 totalShares = eEth.totalShares();
-        require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
-
-        // To Receiver by transferring ETH, using gas 10k for additional safety
-        (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
-        require(success, "EtherFiRedemptionManager: Transfer failed");
-
-        // Make sure the liquidity pool balance is correct && total shares are correct
-        require(address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiRedemptionManager: Invalid liquidity pool balance");
-        // require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
         }
 
         emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver, outputToken);
@@ -290,6 +320,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     }
 
     function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
+        console.log("setLowWatermarkInBpsOfTvl", _lowWatermarkInBpsOfTvl, token);
         require(_lowWatermarkInBpsOfTvl <= BASIS_POINT_SCALE, "INVALID");
         tokenToRedemptionInfo[token].lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
     }
@@ -355,6 +386,14 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         uint256 eEthShareFee = eEthShares - sharesToBurn;
         feeShareToTreasury = eEthShareFee.mulDiv(tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps, BASIS_POINT_SCALE);
         eEthFeeAmountToTreasury = liquidityPool.amountForShare(feeShareToTreasury);
+    }
+
+    /**
+     * @dev Transfers stETH from EtherFiRestaker to receiver.
+     * This function requires that this contract has admin permission on EtherFiRestaker.
+     */
+    function _transferStETHFromRestaker(address receiver, uint256 amount) internal {
+        etherFiRestaker.transferStETH(receiver, amount);
     }
 
     /**

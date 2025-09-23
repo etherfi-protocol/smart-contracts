@@ -9,6 +9,7 @@ import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "forge-std/console2.sol";
 
 import "./Liquifier.sol";
 import "./LiquidityPool.sol";
@@ -28,6 +29,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     IRewardsCoordinator public immutable rewardsCoordinator;
+    address public immutable etherFiRedemptionManager;
 
     LiquidityPool public liquidityPool;
     Liquifier public liquifier;
@@ -59,8 +61,9 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     error IncorrectCaller();
 
      /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _rewardsCoordinator) {
+    constructor(address _rewardsCoordinator, address _etherFiRedemptionManager) {
         rewardsCoordinator = IRewardsCoordinator(_rewardsCoordinator);
+        etherFiRedemptionManager = _etherFiRedemptionManager;
         _disableInitializers();
     }
 
@@ -91,6 +94,15 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     // |--------------------------------------------------------------------------------------------|
     // |                                   Handling Lido's stETH                                    |
     // |--------------------------------------------------------------------------------------------|
+
+    /// @notice Transfer stETH to a recipient for instant withdrawal
+    /// @param recipient The address to receive stETH
+    /// @param amount The amount of stETH to transfer
+    function transferStETH(address recipient, uint256 amount) external {
+        if(msg.sender != etherFiRedemptionManager) revert IncorrectCaller();
+        require(amount <= lido.balanceOf(address(this)), "EtherFiRestaker: Insufficient stETH balance");
+        IERC20(address(lido)).safeTransfer(recipient, amount);
+    }
 
     /// Initiate the redemption of stETH for ETH 
     /// @notice Request for all stETH holdings
@@ -343,6 +355,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     /* MODIFIER */
     modifier onlyAdmin() {
+        console2.log("onlyAdmin", msg.sender);
         _requireAdmin();
         _;
     }

@@ -409,7 +409,40 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(address(0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0)));
+        etherFiRestakerInstance = EtherFiRestaker(payable(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf)));
         roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
+
+        ///remove after steth instant withdrawal is live
+        upgradeEtherFiRedemptionManager();
+    }
+
+    function upgradeEtherFiRedemptionManager() public {
+        address ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+        EtherFiRedemptionManager Implementation = new EtherFiRedemptionManager(address(payable(liquidityPoolInstance)), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance));
+        EtherFiRestaker restakerImplementation = new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance));
+        vm.prank(owner);
+        etherFiRestakerInstance.upgradeTo(address(restakerImplementation));
+        vm.prank(owner);
+        etherFiRedemptionManagerInstance.upgradeTo(address(Implementation));
+        address[] memory _tokens = new address[](2);
+        _tokens[0] = ETH_ADDRESS;
+        _tokens[1] = address(etherFiRestakerInstance.lido());
+        uint16[] memory _exitFeeSplitToTreasuryInBps = new uint16[](2);
+        _exitFeeSplitToTreasuryInBps[0] = 10_00;
+        _exitFeeSplitToTreasuryInBps[1] = 10_00;
+        uint16[] memory _exitFeeInBps = new uint16[](2);
+        _exitFeeInBps[0] = 1_00;
+        _exitFeeInBps[1] = 1_00;
+        uint16[] memory _lowWatermarkInBpsOfTvl = new uint16[](2);
+        _lowWatermarkInBpsOfTvl[0] = 1_00;
+        _lowWatermarkInBpsOfTvl[1] = 50;
+        uint256[] memory _bucketCapacity = new uint256[](2);
+        _bucketCapacity[0] = 2000 ether;
+        _bucketCapacity[1] = 2000 ether;
+        uint256[] memory _bucketRefillRate = new uint256[](2);
+        _bucketRefillRate[0] = 0.3 ether;
+        _bucketRefillRate[1] = 0.3 ether;
+        etherFiRedemptionManagerInstance.initializeTokenParameters(_tokens, _exitFeeSplitToTreasuryInBps, _exitFeeInBps, _lowWatermarkInBpsOfTvl, _bucketCapacity, _bucketRefillRate);
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
@@ -443,7 +476,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function deployEtherFiRestaker() internal {
-        etherFiRestakerImplementation = new EtherFiRestaker(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf));
+        etherFiRestakerImplementation = new EtherFiRestaker(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf), address(etherFiRedemptionManagerInstance));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
@@ -629,12 +662,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
 
-        etherFiRestakerImplementation = new EtherFiRestaker(address(0x0));
+        etherFiRestakerImplementation = new EtherFiRestaker(address(0x0), address(0x0));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
         etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance))), "");
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
+
 
 
         address[] memory _tokens = new address[](2);
@@ -656,7 +690,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         _bucketRefillRate[0] = 0.001 ether;
         _bucketRefillRate[1] = 0.001 ether;
         etherFiRedemptionManagerInstance.initializeTokenParameters(_tokens, _exitFeeSplitToTreasuryInBps, _exitFeeInBps, _lowWatermarkInBpsOfTvl, _bucketCapacity, _bucketRefillRate);
-        console.log("is initialized");
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), owner);
         
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
