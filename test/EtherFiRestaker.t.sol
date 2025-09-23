@@ -277,9 +277,4 @@ contract EtherFiRestakerTest is TestSetup {
         assertEq(eigenLayerRewardsCoordinator.claimerFor(address(restaker)), _claimer);
     }
 
-    function test_transferSteth_end_to_end() public {
-        //fill in later
-        assert(1==1);
-    }
-
 }
