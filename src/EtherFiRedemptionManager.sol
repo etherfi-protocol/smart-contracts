@@ -96,52 +96,12 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     }
 
     /**
-     * @notice Redeems eETH for stETH.
-     * @param eEthAmount The amount of eETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed stETH.
-     */
-    function redeemEEthForStETH(uint256 eEthAmount, address receiver) public whenNotPaused nonReentrant {
-        _redeemEEth(eEthAmount, receiver, address(lido));
-    }
-
-    /**
-     * @notice Redeems weETH for stETH.
-     * @param weEthAmount The amount of weETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed stETH.
-     */
-    function redeemWeEthForStETH(uint256 weEthAmount, address receiver) public whenNotPaused nonReentrant {
-        _redeemWeEth(weEthAmount, receiver, address(lido));
-    }
-
-    /**
-     * @notice Redeems eETH for stETH with permit.
-     * @param eEthAmount The amount of eETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed stETH.
-     * @param permit The permit params.
-     */
-    function redeemEEthForStETHWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit) external whenNotPaused nonReentrant {
-        try eEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
-        _redeemEEth(eEthAmount, receiver, address(lido));
-    }
-
-    /**
-     * @notice Redeems weETH for stETH with permit.
-     * @param weEthAmount The amount of weETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed stETH.
-     * @param permit The permit params.
-     */
-    function redeemWeEthForStETHWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit) external whenNotPaused nonReentrant {
-        try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
-        _redeemWeEth(weEthAmount, receiver, address(lido));
-    }
-
-    /**
      * @notice Redeems eETH for ETH.
      * @param eEthAmount The amount of eETH to redeem after the exit fee.
      * @param receiver The address to receive the redeemed ETH.
      */
-    function redeemEEth(uint256 eEthAmount, address receiver) public whenNotPaused nonReentrant {
-        _redeemEEth(eEthAmount, receiver, ETH_ADDRESS);
+    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
+        _redeemEEth(eEthAmount, receiver, outputToken);
     }
 
     /**
@@ -149,8 +109,8 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      * @param weEthAmount The amount of weETH to redeem after the exit fee.
      * @param receiver The address to receive the redeemed ETH.
      */
-    function redeemWeEth(uint256 weEthAmount, address receiver) public whenNotPaused nonReentrant {
-        _redeemWeEth(weEthAmount, receiver, ETH_ADDRESS);
+    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
+        _redeemWeEth(weEthAmount, receiver, outputToken);
     }
 
     /**
@@ -159,9 +119,9 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      * @param receiver The address to receive the redeemed ETH.
      * @param permit The permit params.
      */
-    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit) external whenNotPaused nonReentrant {
-        try eEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
-        _redeemEEth(eEthAmount, receiver, ETH_ADDRESS);
+    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
+        try eEth.permit(receiver, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
+        _redeemEEth(eEthAmount, receiver, outputToken);
     }
 
     /**
@@ -170,9 +130,9 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      * @param receiver The address to receive the redeemed ETH.
      * @param permit The permit params.
      */
-    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit) external whenNotPaused nonReentrant {
-        try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
-        _redeemWeEth(weEthAmount, receiver, ETH_ADDRESS);
+    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
+        try weEth.permit(receiver, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
+        _redeemWeEth(weEthAmount, receiver, outputToken);
     }
 
     function _processETHRedemption(
