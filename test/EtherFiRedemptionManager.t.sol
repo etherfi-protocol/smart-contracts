@@ -389,4 +389,25 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         vm.stopPrank();
     }
+
+    function test_clearOutSlotForUpgrade() public {
+        setUp_Fork();
+
+        EtherFiRedemptionManager newEtherFiRedemptionManager = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance));
+        vm.startPrank(owner);
+        etherFiRedemptionManagerInstance.upgradeTo(address(newEtherFiRedemptionManager));
+        etherFiRedemptionManagerInstance.clearOutSlotForUpgrade();
+        vm.stopPrank();
+
+        //verify that the slot is cleared
+        assertEq(etherFiRedemptionManagerInstance.exitFeeSplitToTreasuryInBps(), 0);
+        assertEq(etherFiRedemptionManagerInstance.exitFeeInBps(), 0);
+        assertEq(etherFiRedemptionManagerInstance.lowWatermarkInBpsOfTvl(), 0);
+
+        (uint64 cap, uint64 rem, uint64 last, uint64 rate) = etherFiRedemptionManagerInstance.limit();
+        assertEq(cap, 0);
+        assertEq(rem, 0);
+        assertEq(last, 0);
+        assertEq(rate, 0);
+    }
 }

@@ -76,6 +76,14 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
     }
 
+    function clearOutSlotForUpgrade() external {
+        require(msg.sender == roleRegistry.owner(), "IncorrectCaller");
+        delete limit;
+        delete exitFeeSplitToTreasuryInBps;
+        delete exitFeeInBps;
+        delete lowWatermarkInBpsOfTvl;
+    }
+
     /**
      * @notice Redeems eETH for ETH.
      * @param eEthAmount The amount of eETH to redeem after the exit fee.
