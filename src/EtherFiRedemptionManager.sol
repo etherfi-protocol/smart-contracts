@@ -21,8 +21,6 @@ import "./EtherFiRestaker.sol";
 
 import "lib/BucketLimiter.sol";
 
-import "forge-std/console.sol";
-
 import "./RoleRegistry.sol";
 
 /*
@@ -86,7 +84,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         __ReentrancyGuard_init();
     }
 
-    function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate) external {
+    function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate)  external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         for(uint256 i = 0; i < _exitFeeSplitToTreasuryInBps.length; i++) {
             tokenToRedemptionInfo[address(_tokens[i])] = RedemptionInfo({
                 limit: BucketLimiter.create(_convertToBucketUnit(_bucketCapacity[i], Math.Rounding.Down), _convertToBucketUnit(_bucketRefillRate[i], Math.Rounding.Down)),
@@ -220,7 +218,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         // Validate total shares (no sharesToBurn since we don't withdraw from LP for stETH)
         require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - feeShareToStakers, "EtherFiRedemptionManager: Invalid total shares");
 
-        _transferStETHFromRestaker(receiver, eEthAmountToReceiver);
+        etherFiRestaker.transferStETH(receiver, eEthAmountToReceiver);
     }
 
     /**
@@ -320,7 +318,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     }
 
     function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
-        console.log("setLowWatermarkInBpsOfTvl", _lowWatermarkInBpsOfTvl, token);
         require(_lowWatermarkInBpsOfTvl <= BASIS_POINT_SCALE, "INVALID");
         tokenToRedemptionInfo[token].lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
     }
@@ -386,14 +383,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         uint256 eEthShareFee = eEthShares - sharesToBurn;
         feeShareToTreasury = eEthShareFee.mulDiv(tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps, BASIS_POINT_SCALE);
         eEthFeeAmountToTreasury = liquidityPool.amountForShare(feeShareToTreasury);
-    }
-
-    /**
-     * @dev Transfers stETH from EtherFiRestaker to receiver.
-     * This function requires that this contract has admin permission on EtherFiRestaker.
-     */
-    function _transferStETHFromRestaker(address receiver, uint256 amount) internal {
-        etherFiRestaker.transferStETH(receiver, amount);
     }
 
     /**

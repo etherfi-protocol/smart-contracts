@@ -9,7 +9,6 @@ import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "forge-std/console2.sol";
 
 import "./Liquifier.sol";
 import "./LiquidityPool.sol";
@@ -355,7 +354,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     /* MODIFIER */
     modifier onlyAdmin() {
-        console2.log("onlyAdmin", msg.sender);
         _requireAdmin();
         _;
     }

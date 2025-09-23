@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "forge-std/console2.sol";
 import "./TestSetup.sol";
+import "lib/BucketLimiter.sol";
 
 contract EtherFiRedemptionManagerTest is TestSetup {
 
@@ -19,11 +20,9 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     function setUp_Fork() public {
         setUpTests();
         initializeRealisticFork(MAINNET_FORK);
-
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), op_admin);
         vm.stopPrank();
-
     }
 
     function test_upgrade_only_by_owner() public {
@@ -478,13 +477,50 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function test_end_to_end_redeem_stETH() public {
         setUp_Fork();
+        vm.startPrank(op_admin);
+        address[] memory _tokens = new address[](1);
+        _tokens[0] = address(etherFiRestakerInstance.lido());
+        uint16[] memory _exitFeeSplitToTreasuryInBps = new uint16[](1);
+        _exitFeeSplitToTreasuryInBps[0] = 20_00;
+        uint16[] memory _exitFeeInBps = new uint16[](1);
+        _exitFeeInBps[0] = 3_00;
+        uint16[] memory _lowWatermarkInBpsOfTvl = new uint16[](1);
+        _lowWatermarkInBpsOfTvl[0] = 2_00;
+        uint256[] memory _bucketCapacity = new uint256[](1);
+        _bucketCapacity[0] = 10 ether;
+        uint256[] memory _bucketRefillRate = new uint256[](1);
+        _bucketRefillRate[0] = 0.001 ether;
+        etherFiRedemptionManagerInstance.initializeTokenParameters(_tokens, _exitFeeSplitToTreasuryInBps, _exitFeeInBps, _lowWatermarkInBpsOfTvl, _bucketCapacity, _bucketRefillRate);
 
-        vm.deal(user, 10 ether);
-        vm.startPrank(user);
-        liquidityPoolInstance.deposit{value: 10 ether}();
+        // verify the struct has the correct values for stETH after update token parameters
+        (BucketLimiter.Limit memory limit, uint16 exitSplit, uint16 exitFee, uint16 lowWM) =
+            etherFiRedemptionManagerInstance.tokenToRedemptionInfo(address(etherFiRestakerInstance.lido()));
+        assertEq(exitSplit, 20_00);
+        assertEq(exitFee, 3_00);
+        assertEq(lowWM, 2_00);
+        uint64 expectedCapacity = uint64(10 ether / 1e12);
+        uint64 expectedRefillRate = uint64(0.001 ether / 1e12);
+        assertEq(limit.capacity, expectedCapacity);
+        assertEq(limit.refillRate, expectedRefillRate);
         vm.stopPrank();
 
         //test low watermark works
+        vm.startPrank(user);
+        vm.deal(user, 10 ether);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.expectRevert("EtherFiRedemptionManager: Exceeded total redeemable amount");
+        etherFiRedemptionManagerInstance.redeemEEthForStETH(1 ether, user);
+        vm.stopPrank();
+        vm.startPrank(op_admin);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, address(etherFiRestakerInstance.lido()));
+        vm.stopPrank();
+        vm.startPrank(user);
+        uint256 balanceBefore = stEth.balanceOf(user);
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
+        etherFiRedemptionManagerInstance.redeemEEthForStETH(1 ether, user); 
+        uint256 balanceAfter = stEth.balanceOf(user);
+        assertApproxEqAbs(balanceAfter, balanceBefore + 1 ether - 0.03 ether, 1e1);
+        vm.stopPrank();
 
         //test fees works
 
