@@ -1,0 +1,13 @@
+{
+  "contractName": "EtherFiNodesManager",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x6c46a46c04f65838ca4ea2750f2b293e01117eb7000000000000000000000000",
+    "constructorArgs": {
+      "_stakingManager": "0x25e821b7197B146F7713C3b89B6A4D83516B912d",
+      "_roleRegistry": "0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9",
+      "_rateLimiter": "0xDEFb954f4eA67f803FdcD63b1F97caE245FC3cB1"
+    }
+  },
+  "deployedAddress": "0xE5c104c9e023aAe31F1b874a21aa4288F40cFA34"
+}
