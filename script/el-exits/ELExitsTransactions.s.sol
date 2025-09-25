@@ -184,10 +184,10 @@ contract ElExitsTransactions is Script {
         console2.logBytes(executeCalldata);
 
         // uncomment to run against fork
-        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, 259200);
+        // etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, 259200);
 
         // bytes32 timelockSalt = TODO set as salt from schedule;
-        etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
+        // etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
     }
 
     //--------------------------------------------------------------------------------------
