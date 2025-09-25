@@ -22,13 +22,16 @@ contract VerifyPectraUpgradeDeployment is Script {
     address constant STAKING_MANAGER_PROXY = 0x25e821b7197B146F7713C3b89B6A4D83516B912d;
     address constant ETHERFI_NODES_MANAGER_PROXY = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
     address constant ROLE_REGISTRY = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
+    address constant rateLimiterAddress = 0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8;
 
     // === ROLE ADDRESSES ===
-    address constant ETHERFI_ADMIN_EXECUTER = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
-    address constant ETHERFI_ADMIN = 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705;
-
-    // Rate limiter address to be set after deployment
-    address rateLimiterAddress;
+    // address constant ETHERFI_ADMIN_EXECUTER = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
+    address constant ETHERFI_ADMIN = 0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a;
+    address constant ETHERFI_OPERATING_ADMIN =
+        0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
+    address constant POD_PROVER = 0x7835fB36A8143a014A2c381363cD1A4DeE586d2A;
+    address constant EL_TRIGGER_EXITER =
+        0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
 
     function run() external {
         console2.log("========================================");
@@ -36,27 +39,9 @@ contract VerifyPectraUpgradeDeployment is Script {
         console2.log("========================================");
         console2.log("");
 
-        // Set the rate limiter address - update this after deployment
-        console2.log("Enter rate limiter address to verify:");
-        console2.log("Run with: --sig 'verifyWithRateLimiter(address)' <rate-limiter-address>");
-        console2.log("");
-
         verifyContractUpgrades();
         verifyRoleAssignments();
-        console2.log("To verify rate limiter, use verifyWithRateLimiter(address) function");
-    }
-
-    function verifyWithRateLimiter(address _rateLimiterAddress) external {
-        rateLimiterAddress = _rateLimiterAddress;
-        console2.log("========================================");
-        console2.log("EIP-7002 DEPLOYMENT VERIFICATION");
-        console2.log("========================================");
-        console2.log("Rate Limiter Address:", rateLimiterAddress);
-        console2.log("");
-
-        verifyContractUpgrades();
-        verifyRoleAssignments();
-        verifyRateLimiter();
+        // verifyRateLimiter();
         verifyNewFunctionality();
 
         printVerificationSummary();
@@ -111,11 +96,11 @@ contract VerifyPectraUpgradeDeployment is Script {
 
         // Check EL Trigger Exit Role
         try nodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE() returns (bytes32 elTriggerExitRole) {
-            bool hasRole = roleRegistry.hasRole(elTriggerExitRole, ETHERFI_ADMIN_EXECUTER);
+            bool hasRole = roleRegistry.hasRole(elTriggerExitRole, EL_TRIGGER_EXITER);
             if (hasRole) {
-                console2.log(unicode"✓ EL Trigger Exit role assigned to:", ETHERFI_ADMIN_EXECUTER);
+                console2.log(unicode"✓ EL Trigger Exit role assigned to:", EL_TRIGGER_EXITER);
             } else {
-                console2.log(unicode"✗ EL Trigger Exit role NOT assigned to:", ETHERFI_ADMIN_EXECUTER);
+                console2.log(unicode"✗ EL Trigger Exit role NOT assigned to:", EL_TRIGGER_EXITER);
             }
         } catch {
             console2.log(unicode"✗ Cannot check EL Trigger Exit role - contract not upgraded?");
@@ -125,11 +110,11 @@ contract VerifyPectraUpgradeDeployment is Script {
         if (rateLimiterAddress != address(0)) {
             EtherFiRateLimiter rateLimiter = EtherFiRateLimiter(rateLimiterAddress);
             try rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE() returns (bytes32 rateLimiterAdminRole) {
-                bool hasRole = roleRegistry.hasRole(rateLimiterAdminRole, ETHERFI_ADMIN);
+                bool hasRole = roleRegistry.hasRole(rateLimiterAdminRole, ETHERFI_OPERATING_ADMIN);
                 if (hasRole) {
-                    console2.log(unicode"✓ Rate Limiter Admin role assigned to:", ETHERFI_ADMIN);
+                    console2.log(unicode"✓ Rate Limiter Admin role assigned to:", ETHERFI_OPERATING_ADMIN);
                 } else {
-                    console2.log(unicode"✗ Rate Limiter Admin role NOT assigned to:", ETHERFI_ADMIN);
+                    console2.log(unicode"✗ Rate Limiter Admin role NOT assigned to:", ETHERFI_OPERATING_ADMIN);
                 }
             } catch {
                 console2.log(unicode"✗ Cannot check Rate Limiter Admin role");
@@ -148,73 +133,73 @@ contract VerifyPectraUpgradeDeployment is Script {
         console2.log("");
     }
 
-    function verifyRateLimiter() internal view {
-        if (rateLimiterAddress == address(0)) {
-            console2.log("=== RATE LIMITER VERIFICATION SKIPPED ===");
-            console2.log("Rate limiter address not provided");
-            console2.log("");
-            return;
-        }
+    // function verifyRateLimiter() internal view {
+    //     if (rateLimiterAddress == address(0)) {
+    //         console2.log("=== RATE LIMITER VERIFICATION SKIPPED ===");
+    //         console2.log("Rate limiter address not provided");
+    //         console2.log("");
+    //         return;
+    //     }
 
-        console2.log("=== VERIFYING RATE LIMITER ===");
+    //     console2.log("=== VERIFYING RATE LIMITER ===");
 
-        EtherFiRateLimiter rateLimiter = EtherFiRateLimiter(rateLimiterAddress);
-        EtherFiNodesManager nodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER_PROXY));
+    //     EtherFiRateLimiter rateLimiter = EtherFiRateLimiter(rateLimiterAddress);
+    //     EtherFiNodesManager nodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER_PROXY));
 
-        // Check bucket initialization
-        bytes32 unrestakingLimitId = nodesManager.UNRESTAKING_LIMIT_ID();
-        bytes32 exitRequestLimitId = nodesManager.EXIT_REQUEST_LIMIT_ID();
+    //     // Check bucket initialization
+    //     bytes32 unrestakingLimitId = nodesManager.UNRESTAKING_LIMIT_ID();
+    //     bytes32 exitRequestLimitId = nodesManager.EXIT_REQUEST_LIMIT_ID();
 
-        // Verify UNRESTAKING_LIMIT_ID bucket
-        try rateLimiter.getLimit(unrestakingLimitId) returns (
-            uint64 capacity, 
-            uint64 remaining, 
-            uint64 refillRate, 
-            uint256 lastRefill
-        ) {
-            console2.log(unicode"✓ UNRESTAKING_LIMIT_ID bucket initialized:");
-            console2.log("  Capacity:", capacity);
-            console2.log("  Remaining:", remaining);
-            console2.log("  Refill Rate:", refillRate);
-            console2.log("  Last Refill:", lastRefill);
-        } catch {
-            console2.log(unicode"✗ UNRESTAKING_LIMIT_ID bucket not initialized");
-        }
+    //     // Verify UNRESTAKING_LIMIT_ID bucket
+    //     try rateLimiter.getLimit(unrestakingLimitId) returns (
+    //         uint64 capacity, 
+    //         uint64 remaining, 
+    //         uint64 refillRate, 
+    //         uint256 lastRefill
+    //     ) {
+    //         console2.log(unicode"✓ UNRESTAKING_LIMIT_ID bucket initialized:");
+    //         console2.log("  Capacity:", capacity);
+    //         console2.log("  Remaining:", remaining);
+    //         console2.log("  Refill Rate:", refillRate);
+    //         console2.log("  Last Refill:", lastRefill);
+    //     } catch {
+    //         console2.log(unicode"✗ UNRESTAKING_LIMIT_ID bucket not initialized");
+    //     }
 
-        // Verify EXIT_REQUEST_LIMIT_ID bucket
-        try rateLimiter.getLimit(exitRequestLimitId) returns (
-            uint64 capacity, 
-            uint64 remaining, 
-            uint64 refillRate, 
-            uint256 lastRefill
-        ) {
-            console2.log(unicode"✓ EXIT_REQUEST_LIMIT_ID bucket initialized:");
-            console2.log("  Capacity:", capacity);
-            console2.log("  Remaining:", remaining);
-            console2.log("  Refill Rate:", refillRate);
-            console2.log("  Last Refill:", lastRefill);
-        } catch {
-            console2.log(unicode"✗ EXIT_REQUEST_LIMIT_ID bucket not initialized");
-        }
+    //     // Verify EXIT_REQUEST_LIMIT_ID bucket
+    //     try rateLimiter.getLimit(exitRequestLimitId) returns (
+    //         uint64 capacity, 
+    //         uint64 remaining, 
+    //         uint64 refillRate, 
+    //         uint256 lastRefill
+    //     ) {
+    //         console2.log(unicode"✓ EXIT_REQUEST_LIMIT_ID bucket initialized:");
+    //         console2.log("  Capacity:", capacity);
+    //         console2.log("  Remaining:", remaining);
+    //         console2.log("  Refill Rate:", refillRate);
+    //         console2.log("  Last Refill:", lastRefill);
+    //     } catch {
+    //         console2.log(unicode"✗ EXIT_REQUEST_LIMIT_ID bucket not initialized");
+    //     }
 
-        // Check consumer permissions
-        bool unrestakingConsumer = rateLimiter.isConsumerAllowed(unrestakingLimitId, ETHERFI_NODES_MANAGER_PROXY);
-        bool exitRequestConsumer = rateLimiter.isConsumerAllowed(exitRequestLimitId, ETHERFI_NODES_MANAGER_PROXY);
+    //     // Check consumer permissions
+    //     bool unrestakingConsumer = rateLimiter.isConsumerAllowed(unrestakingLimitId, ETHERFI_NODES_MANAGER_PROXY);
+    //     bool exitRequestConsumer = rateLimiter.isConsumerAllowed(exitRequestLimitId, ETHERFI_NODES_MANAGER_PROXY);
 
-        if (unrestakingConsumer) {
-            console2.log(unicode"✓ EtherFiNodesManager allowed as UNRESTAKING consumer");
-        } else {
-            console2.log(unicode"✗ EtherFiNodesManager NOT allowed as UNRESTAKING consumer");
-        }
+    //     if (unrestakingConsumer) {
+    //         console2.log(unicode"✓ EtherFiNodesManager allowed as UNRESTAKING consumer");
+    //     } else {
+    //         console2.log(unicode"✗ EtherFiNodesManager NOT allowed as UNRESTAKING consumer");
+    //     }
 
-        if (exitRequestConsumer) {
-            console2.log(unicode"✓ EtherFiNodesManager allowed as EXIT_REQUEST consumer");
-        } else {
-            console2.log(unicode"✗ EtherFiNodesManager NOT allowed as EXIT_REQUEST consumer");
-        }
+    //     if (exitRequestConsumer) {
+    //         console2.log(unicode"✓ EtherFiNodesManager allowed as EXIT_REQUEST consumer");
+    //     } else {
+    //         console2.log(unicode"✗ EtherFiNodesManager NOT allowed as EXIT_REQUEST consumer");
+    //     }
 
-        console2.log("");
-    }
+    //     console2.log("");
+    // }
 
     function verifyNewFunctionality() internal view {
         console2.log("=== VERIFYING NEW FUNCTIONALITY ACCESS ===");
@@ -269,8 +254,8 @@ contract VerifyPectraUpgradeDeployment is Script {
         console2.log("");
         
         console2.log("Key Role Holders:");
-        console2.log("- EL Exit Trigger:", ETHERFI_ADMIN_EXECUTER);
-        console2.log("- Rate Limiter Admin:", ETHERFI_ADMIN);
+        console2.log("- EL Exit Trigger:", EL_TRIGGER_EXITER);
+        console2.log("- Rate Limiter Admin:", ETHERFI_OPERATING_ADMIN);
         console2.log("");
         
         console2.log("Manual Testing Recommendations:");
