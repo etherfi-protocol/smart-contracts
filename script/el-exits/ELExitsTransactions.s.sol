@@ -614,10 +614,10 @@ contract ElExitsTransactions is Script {
         console2.log("Initializing Rate Limiter");
 
         // uncomment to run against fork
-        EtherFiRateLimiter(payable(etherFiRateLimiterProxy)).createNewLimiter(UNRESTAKING_LIMIT_ID, CAPACITY_RATE_LIMITER, REFILL_RATE_LIMITER);
-        EtherFiRateLimiter(payable(etherFiRateLimiterProxy)).createNewLimiter(EXIT_REQUEST_LIMIT_ID, CAPACITY_RATE_LIMITER, REFILL_RATE_LIMITER);
-        EtherFiRateLimiter(payable(etherFiRateLimiterProxy)).updateConsumers(UNRESTAKING_LIMIT_ID, address(etherFiNodesManager), true);
-        EtherFiRateLimiter(payable(etherFiRateLimiterProxy)).updateConsumers(EXIT_REQUEST_LIMIT_ID, address(etherFiNodesManager), true);
+        // EtherFiRateLimiter(payable(etherFiRateLimiterProxy)).createNewLimiter(UNRESTAKING_LIMIT_ID, CAPACITY_RATE_LIMITER, REFILL_RATE_LIMITER);
+        // EtherFiRateLimiter(payable(etherFiRateLimiterProxy)).createNewLimiter(EXIT_REQUEST_LIMIT_ID, CAPACITY_RATE_LIMITER, REFILL_RATE_LIMITER);
+        // EtherFiRateLimiter(payable(etherFiRateLimiterProxy)).updateConsumers(UNRESTAKING_LIMIT_ID, address(etherFiNodesManager), true);
+        // EtherFiRateLimiter(payable(etherFiRateLimiterProxy)).updateConsumers(EXIT_REQUEST_LIMIT_ID, address(etherFiNodesManager), true);
 
         address[] memory targets = new address[](4);
         bytes[] memory data = new bytes[](4);
