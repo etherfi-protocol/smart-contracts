@@ -204,7 +204,10 @@ contract ElExitsTransactions is Script {
     bytes4 UPDATE_USER_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FOUR = 0x3f65cf19; // verifyWithdrawalCredentials
 
     function run() public {
-        console2.log("Running El Exits Transactions");
+        console2.log("================================================");
+        console2.log("======================== Running El Exits Transactions ========================");
+        console2.log("================================================");
+        console2.log("");
         vm.startBroadcast(ETHERFI_OPERATING_ADMIN);
         cleanUpOldMappingsInEtherFiNodesManager();
         vm.stopBroadcast();
@@ -213,10 +216,13 @@ contract ElExitsTransactions is Script {
         executeElExitTransactions();
         vm.stopBroadcast();
 
-        console2.log("Running Post Upgrade Transactions");
+        console2.log("================================================");
+        console2.log("======================== Running Post Upgrade Transactions ========================");
+        console2.log("================================================");
+        console2.log("");
         vm.startBroadcast(ETHERFI_OPERATING_ADMIN);
         backfillEtherFiNodes();
-        initializeEtherFiRateLimiter();
+        setUpEtherFiRateLimiter();
         addNewMappingsInEtherFiNodesManager();
         vm.stopBroadcast();
 
@@ -224,27 +230,32 @@ contract ElExitsTransactions is Script {
         // -------------------------------------- UNCOMMENT ONLY FOR ROLLBACK --------------------------------------
         // ---------------------------------------------------------------------------------------------------------
 
-        // console2.log("Running Rollback Transactions");
-        // // @dev NOTE: check the comment => uncomment to run against fork
-        // // ROLLBACK
-        // // 1. Rollback the new mappings in EtherFiNodesManager
-        // vm.startBroadcast(ETHERFI_OPERATING_ADMIN);
-        // rollback_newMappingsFromEtherFiNodesManager();
-        // vm.stopBroadcast();
+        console2.log("================================================");
+        console2.log("======================== Running Rollback Transactions ========================");
+        console2.log("================================================");
+        console2.log("");
+        // @dev NOTE: check the comment => uncomment to run against fork
+        // ROLLBACK
+        // 1. Rollback the new mappings in EtherFiNodesManager
+        vm.startBroadcast(ETHERFI_OPERATING_ADMIN);
+        rollback_newMappingsFromEtherFiNodesManager();
+        vm.stopBroadcast();
 
-        // // 2. First execute the upgrade tx back to the old implementations
-        // vm.startBroadcast(TIMELOCK_CONTROLLER);
-        // rollback_executeElExitTransactions();
-        // vm.stopBroadcast();
+        // 2. First execute the upgrade tx back to the old implementations
+        vm.startBroadcast(TIMELOCK_CONTROLLER);
+        rollback_executeElExitTransactions();
+        vm.stopBroadcast();
 
-        // // 3. Then rollback the old mappings
-        // vm.startBroadcast(ETHERFI_OPERATING_ADMIN);
-        // rollback_oldMappingsInEtherFiNodesManager();
-        // vm.stopBroadcast();
+        // 3. Then rollback the old mappings
+        vm.startBroadcast(ETHERFI_OPERATING_ADMIN);
+        rollback_oldMappingsInEtherFiNodesManager();
+        vm.stopBroadcast();
     }
 
     function executeElExitTransactions() public {
         console2.log("Executing El Exit");
+        console2.log("================================================");
+
         address[] memory targets = new address[](7);
         bytes[] memory data = new bytes[](7);
         uint256[] memory values = new uint256[](7); // Default to 0
@@ -316,9 +327,10 @@ contract ElExitsTransactions is Script {
             timelockSalt,
             MIN_DELAY_TIMELOCK // minDelay
         );
-        console2.log("Schedule Tx:");
+        console2.log("====== Schedule Execute El Exit Transactions Tx:");
         console2.logBytes(scheduleCalldata);
-
+        console2.log("================================================");
+        console2.log("");
         // execute
         bytes memory executeCalldata = abi.encodeWithSelector(
             etherFiTimelock.executeBatch.selector,
@@ -328,8 +340,10 @@ contract ElExitsTransactions is Script {
             bytes32(0), //predecessor
             timelockSalt
         );
-        console2.log("Execute Tx:");
+        console2.log("====== Execute El Exit Transactions Tx:");
         console2.logBytes(executeCalldata);
+        console2.log("================================================");
+        console2.log("");
 
         // uncomment to run against fork
         // console2.log("=== SCHEDULING BATCH ===");
@@ -484,9 +498,10 @@ contract ElExitsTransactions is Script {
             timelockSalt,
             MIN_DELAY_OPERATING_TIMELOCK // minDelay
         );
-        console2.log("Clean Up Old Whitelist Mappings Schedule Tx:");
+        console2.log("====== Schedule Clean Up Old Whitelist Mappings In EtherFiNodesManager Tx:");
         console2.logBytes(scheduleCalldata);
-
+        console2.log("================================================");
+        console2.log("");
         // execute
         bytes memory executeCalldata = abi.encodeWithSelector(
             etherFiOperatingTimelock.executeBatch.selector,
@@ -496,9 +511,10 @@ contract ElExitsTransactions is Script {
             bytes32(0), //predecessor
             timelockSalt
         );
-        console2.log("Clean Up Old Whitelist Mappings Execute Tx:");
+        console2.log("====== Execute Clean Up Old Whitelist Mappings In EtherFiNodesManager Tx:");
         console2.logBytes(executeCalldata);
-
+        console2.log("================================================");
+        console2.log("");
         // uncomment to run against fork
         // console2.log("=== SCHEDULING BATCH ===");
         // console2.log("Current timestamp:", block.timestamp);
@@ -512,6 +528,7 @@ contract ElExitsTransactions is Script {
 
     function addNewMappingsInEtherFiNodesManager() public {
         console2.log("Adding New Mappings");
+        console2.log("================================================");
         address ALLOWED_CALLER = 0x7835fB36A8143a014A2c381363cD1A4DeE586d2A;
         address EIGENLAYER_REWARDS_COORDINATOR = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
 
@@ -562,9 +579,10 @@ contract ElExitsTransactions is Script {
             timelockSalt,
             MIN_DELAY_OPERATING_TIMELOCK // minDelay
         );
-        console2.log("Add New Mappings Schedule Tx:");
+        console2.log("====== Schedule New Mappings In EtherFiNodesManager Tx:");
         console2.logBytes(scheduleCalldata);
-
+        console2.log("================================================");
+        console2.log("");
         // execute
         bytes memory executeCalldata = abi.encodeWithSelector(
             etherFiOperatingTimelock.executeBatch.selector,
@@ -574,8 +592,10 @@ contract ElExitsTransactions is Script {
             bytes32(0), //predecessor
             timelockSalt
         );
-        console2.log("Add New Mappings Execute Tx:");
+        console2.log("====== Execute New Mappings In EtherFiNodesManager Tx:");
         console2.logBytes(executeCalldata);
+        console2.log("================================================");
+        console2.log("");
 
         // uncomment to run against fork
         // console2.log("=== SCHEDULING BATCH ===");
@@ -590,6 +610,8 @@ contract ElExitsTransactions is Script {
 
     function backfillEtherFiNodes() public {
         console2.log("Backfilling EtherFiNodes - All 504 addresses");
+        console2.log("================================================");
+
         // All 504 addresses
         address[] memory etherFiNodes = _getEtherFiNodes();
 
@@ -605,13 +627,17 @@ contract ElExitsTransactions is Script {
             etherFiNodes
         );
 
+
         console2.log("target: ", targets[0]);
         console2.log("data: ");
         console2.logBytes(data[0]);
+        console2.log("================================================");
+        console2.log("");
     }
 
-    function initializeEtherFiRateLimiter() public {
-        console2.log("Initializing Rate Limiter");
+    function setUpEtherFiRateLimiter() public {
+        console2.log("Setting Up EtherFiRateLimiter");
+        console2.log("================================================");
 
         // uncomment to run against fork
         // EtherFiRateLimiter(payable(etherFiRateLimiterProxy)).createNewLimiter(UNRESTAKING_LIMIT_ID, CAPACITY_RATE_LIMITER, REFILL_RATE_LIMITER);
@@ -649,13 +675,15 @@ contract ElExitsTransactions is Script {
         );
 
         for (uint256 i = 0; i < 4; i++) {
-            console2.log("Initialize Rate Limiter Execute Txns:", i);
+            console2.log("====== Execute Set Up EtherFiRateLimiter Tx:", i);
             targets[i] = address(etherFiRateLimiterProxy);
             console2.log("target: ", targets[i]);
             console2.log("data: ");
             console2.logBytes(data[i]);
             console2.log("--------------------------------");
         }
+        console2.log("================================================");
+        console2.log("");
     }
 
     //--------------------------------------------------------------------------------------
@@ -713,8 +741,9 @@ contract ElExitsTransactions is Script {
             timelockSalt,
             MIN_DELAY_OPERATING_TIMELOCK // minDelay
         );
-        console2.log("Add New Mappings Schedule Tx:");
+        console2.log("====== Schedule Rollback New Mappings In EtherFiNodesManager Tx:");
         console2.logBytes(scheduleCalldata);
+        console2.log("================================================");
 
         // execute
         bytes memory executeCalldata = abi.encodeWithSelector(
@@ -725,8 +754,10 @@ contract ElExitsTransactions is Script {
             bytes32(0), //predecessor
             timelockSalt
         );
-        console2.log("Rollback New Mappings Execute Tx:");
+        console2.log("====== Execute Rollback New Mappings In EtherFiNodesManager Tx:");
         console2.logBytes(executeCalldata);
+        console2.log("================================================");
+        console2.log("");
 
         // uncomment to run against fork
         // console2.log("=== SCHEDULING BATCH ===");
@@ -746,6 +777,8 @@ contract ElExitsTransactions is Script {
 
     function rollback_executeElExitTransactions() public {
         console2.log("Executing El Exit Rollback");
+        console2.log("================================================");
+
         address[] memory targets = new address[](3);
         bytes[] memory data = new bytes[](3);
         uint256[] memory values = new uint256[](3); // Default to 0
@@ -785,8 +818,9 @@ contract ElExitsTransactions is Script {
             timelockSalt,
             MIN_DELAY_TIMELOCK // minDelay
         );
-        console2.log("Rollback Schedule Tx:");
+        console2.log("====== Rollback Schedule Tx:");
         console2.logBytes(scheduleCalldata);
+        console2.log("================================================");
 
         // execute
         bytes memory executeCalldata = abi.encodeWithSelector(
@@ -797,8 +831,11 @@ contract ElExitsTransactions is Script {
             bytes32(0), //predecessor
             timelockSalt
         );
-        console2.log("Rollback Execute Tx:");
+        console2.log("====== Rollback Execute Tx:");
         console2.logBytes(executeCalldata);
+
+        console2.log("");
+        console2.log("================================================");
 
         // uncomment to run against fork
         // console2.log("=== SCHEDULING BATCH ===");
@@ -953,8 +990,10 @@ contract ElExitsTransactions is Script {
             timelockSalt,
             MIN_DELAY_OPERATING_TIMELOCK // minDelay
         );
-        console2.log("Clean Up Old Whitelist Mappings Schedule Tx:");
+        console2.log("====== Schedule Rollback Cleaned Up Old Whitelist Mappings In EtherFiNodesManager Tx:");
         console2.logBytes(scheduleCalldata);
+        console2.log("================================================");
+        console2.log("");
 
         // execute
         bytes memory executeCalldata = abi.encodeWithSelector(
@@ -965,8 +1004,10 @@ contract ElExitsTransactions is Script {
             bytes32(0), //predecessor
             timelockSalt
         );
-        console2.log("Clean Up Old Whitelist Mappings Execute Tx:");
+        console2.log("====== Execute Rollback Cleaned Up Old Whitelist Mappings In EtherFiNodesManager Tx:");
         console2.logBytes(executeCalldata);
+        console2.log("================================================");
+        console2.log("");
 
         // uncomment to run against fork
         // console2.log("=== SCHEDULING BATCH ===");
