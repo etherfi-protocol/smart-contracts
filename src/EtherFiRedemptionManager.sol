@@ -176,7 +176,8 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
 
         // For stETH redemption, we only burn shares for fee handling, no ETH withdrawal needed
         // To Stakers by burning shares
-        liquidityPool.burnEEthShares(feeShareToStakers);
+        liquidityPool.burnEEthShares(eEthAmountToReceiver + feeShareToStakers);
+        liquidityPool.rebase(int128(eEthAmountToReceiver));
         
         // Validate total shares (no sharesToBurn since we don't withdraw from LP for stETH)
         require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - feeShareToStakers, "EtherFiRedemptionManager: Invalid total shares");
