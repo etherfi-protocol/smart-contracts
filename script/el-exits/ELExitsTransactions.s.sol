@@ -28,7 +28,7 @@ contract ElExitsTransactions is Script {
     address constant oldStakingManagerImpl =
         0x433d06fFc5EfE0e93daa22fcEF7eD60e65Bf70b4;
     address constant oldEtherFiNodeImpl =
-        0xc5F2764383f93259Fba1D820b894B1DE0d47937e;
+        0x5Dae50e686f7CB980E4d0c5E4492c56bC73eD9a2;
     address constant oldEtherFiNodesManagerImpl =
         0x158B21148E86470E2075926EbD5528Af2D510cAF;
 
