@@ -59,6 +59,9 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
 
     event Redeemed(address indexed receiver, uint256 redemptionAmount, uint256 feeAmountToTreasury, uint256 feeAmountToStakers, address token);
 
+    error InvalidAmount();
+
+
     receive() external payable {}
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -172,17 +175,19 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         uint256 eEthAmountToReceiver,
         uint256 sharesToBurn
     ) internal {
+        if (eEthAmountToReceiver > type(uint128).max || eEthAmountToReceiver == 0 || sharesToBurn == 0) revert InvalidAmount();
         uint256 totalEEthShare = eEth.totalShares();
+        uint256 totalValueOutOfLpBefore = liquidityPool.totalValueOutOfLp();
 
-        // For stETH redemption, we only burn shares for fee handling, no ETH withdrawal needed
-        // To Stakers by burning shares
+        // For stETH redemption, we burn fee shares and steth to the receiver
         liquidityPool.burnEEthShares(sharesToBurn);
+        
         int128 stethDecrease = int128(int256(eEthAmountToReceiver)) * -1;
         liquidityPool.rebase(stethDecrease);
         
-        // Validate total shares (no sharesToBurn since we don't withdraw from LP for stETH)
+        // Validate total shares and total value out of lp
         require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - sharesToBurn, "EtherFiRedemptionManager: Invalid total shares");
-
+        require(liquidityPool.totalValueOutOfLp() == totalValueOutOfLpBefore - eEthAmountToReceiver, "EtherFiRedemptionManager: Invalid total value out of lp");
         etherFiRestaker.transferStETH(receiver, eEthAmountToReceiver);
     }
 
