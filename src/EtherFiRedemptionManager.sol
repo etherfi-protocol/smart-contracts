@@ -24,7 +24,7 @@ import "lib/BucketLimiter.sol";
 import "./RoleRegistry.sol";
 
 /*
-    The contract allows instant redemption of eETH and weETH tokens to ETH with an exit fee.
+    The contract allows instant redemption of eETH and weETH tokens to ETH or stETH with an exit fee.
     - It has the exit fee as a percentage of the total amount redeemed.
     - It has a rate limiter to limit the total amount that can be redeemed in a given time period.
 */
@@ -102,42 +102,46 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     }
 
     /**
-     * @notice Redeems eETH for ETH.
+     * @notice Redeems eETH for outputToken (ETH or stETH).
      * @param eEthAmount The amount of eETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed ETH.
+     * @param receiver The address to receive the redeemed outputToken.
+     * @param outputToken The token to redeem to (ETH or stETH).
      */
     function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
 
     /**
-     * @notice Redeems weETH for ETH.
+     * @notice Redeems weETH for outputToken (ETH or stETH).
      * @param weEthAmount The amount of weETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed ETH.
+     * @param receiver The address to receive the redeemed outputToken.
+     * @param outputToken The token to redeem to (ETH or stETH).
      */
     function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
 
     /**
-     * @notice Redeems eETH for ETH with permit.
+     * @notice Redeems eETH for outputToken (ETH or stETH) with permit.
      * @param eEthAmount The amount of eETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed ETH.
+     * @param receiver The address to receive the redeemed outputToken.
      * @param permit The permit params.
+     * @param outputToken The token to redeem to (ETH or stETH).
      */
     function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
-        try eEth.permit(receiver, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
+        try eEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
 
     /**
-     * @notice Redeems weETH for ETH.
+     * @notice Redeems weETH for outputToken (ETH or stETH).
      * @param weEthAmount The amount of weETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed ETH.
+     * @param receiver The address to receive the redeemed outputToken.
      * @param permit The permit params.
+     * @param outputToken The token to redeem to (ETH or stETH).
      */
     function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
-        try weEth.permit(receiver, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
+        try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
 
@@ -179,7 +183,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         uint256 totalEEthShare = eEth.totalShares();
         uint256 totalValueOutOfLpBefore = liquidityPool.totalValueOutOfLp();
 
-        // For stETH redemption, we burn fee shares and steth to the receiver
+        // For stETH redemption, we burn fee shares and the eeth backed by the steth to the receiver
         liquidityPool.burnEEthShares(sharesToBurn);
         
         int128 stethDecrease = int128(int256(eEthAmountToReceiver)) * -1;
@@ -192,9 +196,9 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     }
 
     /**
-     * @notice Redeems ETH.
-     * @param ethAmount The amount of ETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed ETH.
+     * @notice Redeems outputToken (ETH or stETH).
+     * @param ethAmount The amount of outputToken to redeem after the exit fee.
+     * @param receiver The address to receive the redeemed outputToken.
      */
     function _redeem(uint256 ethAmount, uint256 eEthShares, address receiver, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury, address outputToken) internal {
         _updateRateLimit(ethAmount, outputToken);
@@ -247,11 +251,17 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
 
     /**
      * @dev Returns whether the given amount can be redeemed.
-     * @param amount The ETH or eETH amount to check.
+     * @param amount The ETH or stETH amount to check
+     * @param token The token to check to redeem
      */
     function canRedeem(uint256 amount, address token) public view returns (bool) {
         uint256 liquidEthAmount = getInstantLiquidityAmount(token);
-        if (liquidEthAmount < lowWatermarkInETH(token)) {
+        uint256 lowWatermark = lowWatermarkInETH(token);
+        if (liquidEthAmount  < lowWatermark) {
+            return false;
+        }
+        uint256 availableAmount = liquidEthAmount - lowWatermark;
+        if (availableAmount < amount) {
             return false;
         }
         uint64 bucketUnit = _convertToBucketUnit(amount, Math.Rounding.Up);
@@ -262,6 +272,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     /**
      * @dev Sets the maximum size of the bucket that can be consumed in a given time period.
      * @param capacity The capacity of the bucket.
+     * @param token The token to set the capacity for
      */
     function setCapacity(uint256 capacity, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
@@ -272,6 +283,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     /**
      * @dev Sets the rate at which the bucket is refilled per second.
      * @param refillRate The rate at which the bucket is refilled per second.
+     * @param token The token to set the refill rate for
      */
     function setRefillRatePerSecond(uint256 refillRate, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
@@ -282,6 +294,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     /**
      * @dev Sets the exit fee.
      * @param _exitFeeInBps The exit fee.
+     * @param token The token to set the exit fee for
      */
     function setExitFeeBasisPoints(uint16 _exitFeeInBps, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         require(_exitFeeInBps <= BASIS_POINT_SCALE, "INVALID");
