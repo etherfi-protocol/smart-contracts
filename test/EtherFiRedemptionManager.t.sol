@@ -522,9 +522,45 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 balanceAfter = stEth.balanceOf(user);
         assertApproxEqAbs(balanceAfter, balanceBefore + 1 ether - 0.03 ether, 1e1);
         vm.stopPrank();
+    }
 
-        //test fees works
+    function test_redeem_stETH_share_price() public {
+        setUp_Fork();
+        vm.startPrank(user);
+        vm.deal(user, 10 ether);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), 10 ether);
+        address lidoToken = address(etherFiRestakerInstance.lido()); // external call; fetch before expectRevert
+        uint256 totalValueOutOfLpBefore = liquidityPoolInstance.totalValueOutOfLp();
+        uint256 totalValueInLpBefore = liquidityPoolInstance.totalValueInLp();
+        uint256 totalSharesBefore = eETHInstance.totalShares();
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, lidoToken);
+        uint256 totalSharesAfter = eETHInstance.totalShares();
+        uint256 totalValueOutOfLpAfter = liquidityPoolInstance.totalValueOutOfLp();
+        uint256 totalValueInLpAfter = liquidityPoolInstance.totalValueInLp();
+        console.log("change in value out of lp", totalValueOutOfLpBefore- totalValueOutOfLpAfter);
+        console.log("change in value in lp", totalValueInLpBefore-totalValueInLpAfter);
+        console.log("change in shares", totalSharesBefore-totalSharesAfter);
+        vm.stopPrank();
+    }
 
-        //test 
+    function test_redeem_eEth_share_price() public {
+        setUp_Fork();
+        vm.startPrank(user);
+        vm.deal(user, 10 ether);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), 10 ether);
+        address lidoToken = address(etherFiRestakerInstance.lido()); // external call; fetch before expectRevert
+        uint256 totalValueOutOfLpBefore = liquidityPoolInstance.totalValueOutOfLp();
+        uint256 totalValueInLpBefore = liquidityPoolInstance.totalValueInLp();
+        uint256 totalSharesBefore = eETHInstance.totalShares();
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, ETH_ADDRESS);
+        uint256 totalSharesAfter = eETHInstance.totalShares();
+        uint256 totalValueOutOfLpAfter = liquidityPoolInstance.totalValueOutOfLp();
+        uint256 totalValueInLpAfter = liquidityPoolInstance.totalValueInLp();
+        console.log("change in value out of lp", totalValueOutOfLpBefore- totalValueOutOfLpAfter);
+        console.log("change in value in lp", totalValueInLpBefore-totalValueInLpAfter);
+        console.log("change in shares", totalSharesBefore-totalSharesAfter);
+        vm.stopPrank();
     }
 }
