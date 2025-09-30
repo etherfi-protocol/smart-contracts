@@ -22,6 +22,8 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), op_admin);
+        LiquidityPool liquidityPoolImpl = new LiquidityPool();
+        liquidityPoolInstance.upgradeTo(payable(address(liquidityPoolImpl)));
         vm.stopPrank();
     }
 

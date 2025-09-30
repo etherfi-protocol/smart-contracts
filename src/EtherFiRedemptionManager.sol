@@ -170,17 +170,18 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     function _processStETHRedemption(
         address receiver,
         uint256 eEthAmountToReceiver,
-        uint256 feeShareToStakers
+        uint256 sharesToBurn
     ) internal {
         uint256 totalEEthShare = eEth.totalShares();
 
         // For stETH redemption, we only burn shares for fee handling, no ETH withdrawal needed
         // To Stakers by burning shares
-        liquidityPool.burnEEthShares(eEthAmountToReceiver + feeShareToStakers);
-        liquidityPool.rebase(int128(eEthAmountToReceiver));
+        liquidityPool.burnEEthShares(sharesToBurn);
+        int128 stethDecrease = int128(int256(eEthAmountToReceiver)) * -1;
+        liquidityPool.rebase(stethDecrease);
         
         // Validate total shares (no sharesToBurn since we don't withdraw from LP for stETH)
-        require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - feeShareToStakers, "EtherFiRedemptionManager: Invalid total shares");
+        require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - sharesToBurn, "EtherFiRedemptionManager: Invalid total shares");
 
         etherFiRestaker.transferStETH(receiver, eEthAmountToReceiver);
     }
@@ -194,13 +195,14 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         _updateRateLimit(ethAmount, outputToken);
         {
         // Derive additionals
-        uint256 eEthShareFee = eEthShares - sharesToBurn;
-        uint256 feeShareToStakers = eEthShareFee - feeShareToTreasury;
 
         if(outputToken == ETH_ADDRESS) {
+            uint256 eEthShareFee = eEthShares - sharesToBurn;
+            uint256 feeShareToStakers = eEthShareFee - feeShareToTreasury;
             _processETHRedemption(receiver, eEthAmountToReceiver, sharesToBurn, feeShareToStakers);
         } else if(outputToken == address(lido)) {
-            _processStETHRedemption(receiver, eEthAmountToReceiver, feeShareToStakers);
+            uint256 totalSharesToWithdrawAndBurn = eEthShares - feeShareToTreasury;
+            _processStETHRedemption(receiver, eEthAmountToReceiver, totalSharesToWithdrawAndBurn);
         }
         // Common fee handling: Transfer to Treasury
         IERC20(address(eEth)).safeTransfer(treasury, eEthFeeAmountToTreasury);
