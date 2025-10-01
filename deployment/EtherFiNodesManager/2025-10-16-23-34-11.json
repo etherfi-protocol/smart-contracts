@@ -6,8 +6,8 @@
     "constructorArgs": {
       "_stakingManager": "0x25e821b7197B146F7713C3b89B6A4D83516B912d",
       "_roleRegistry": "0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9",
-      "_rateLimiter": "0x34A1D3fff3958843C43aD80F30b94c510645C316"
+      "_rateLimiter": "0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8"
     }
   },
-  "deployedAddress": "0x60Cf80df3814DE1A04De534130F53524ABcB50D1"
+  "deployedAddress": "0x0f366dF7af5003fC7C6524665ca58bDeAdDC3745"
 }

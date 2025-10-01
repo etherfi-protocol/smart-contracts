@@ -97,6 +97,7 @@ contract DeployPectraUpgradeCreate2 is Script {
     function deployRateLimiter() internal {
         console2.log("=== STEP 1: DEPLOYING ETHERFI RATE LIMITER ===");
         
+        address rateLimiterImpl;
         // Deploy implementation using Create2Factory
         {
             string memory contractName = "EtherFiRateLimiter";
@@ -105,19 +106,28 @@ contract DeployPectraUpgradeCreate2 is Script {
                 type(EtherFiRateLimiter).creationCode,
                 constructorArgs
             );
-            address rateLimiterImpl = deployCreate2(contractName, constructorArgs, bytecode, commitHashSalt, true);
+            rateLimiterImpl = deployCreate2(contractName, constructorArgs, bytecode, commitHashSalt, true);
             console2.log("Rate limiter implementation:", rateLimiterImpl);
         }
 
-        // Deploy proxy (regular deployment since it's simpler)
-        EtherFiRateLimiter rateLimiterImpl = EtherFiRateLimiter(
-            factory.computeAddress(
-                commitHashSalt,
-                abi.encodePacked(type(EtherFiRateLimiter).creationCode, abi.encode(ROLE_REGISTRY))
-            )
+        address rateLimiterProxyAddr;
+        // Deploy proxy using Create2Factory
+        {
+        string memory contractName = "UUPSProxy";
+        bytes memory constructorArgs = abi.encode(address(rateLimiterImpl), "");
+        bytes memory bytecode = abi.encodePacked(
+            type(UUPSProxy).creationCode,
+            constructorArgs
         );
-        UUPSProxy rateLimiterProxyContract = new UUPSProxy(address(rateLimiterImpl), "");
-        rateLimiterProxy = EtherFiRateLimiter(address(rateLimiterProxyContract));
+        rateLimiterProxyAddr = deployCreate2(
+            contractName,
+            constructorArgs,
+            bytecode,
+            commitHashSalt,
+            true
+        );
+        }
+        rateLimiterProxy = EtherFiRateLimiter(rateLimiterProxyAddr);
         console2.log("Rate limiter proxy:", address(rateLimiterProxy));
         
         // Initialize
