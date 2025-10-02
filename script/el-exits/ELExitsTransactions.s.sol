@@ -175,7 +175,7 @@ contract ElExitsTransactions is Script {
                 BeaconChainProofs.BalanceProof[] calldata proofs
             ) external;
 
-        cast sig "verifyCheckpointProofs((bytes32,bytes),(bytes32,bytes32,bytes))"
+        cast sig "verifyCheckpointProofs((bytes32,bytes),[(bytes32,bytes32,bytes)])"
         0xbd97dd29
 
         // ------------------------------------------------------------------------------------------------
@@ -200,7 +200,7 @@ contract ElExitsTransactions is Script {
 
     // Eigenpod calls selectors
     bytes4 UPDATE_USER_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_TWO = 0x88676cad; // startCheckpoint
-    bytes4 UPDATE_USER_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_THREE = 0xbd97dd29; // verifyCheckpointProofs
+    bytes4 UPDATE_USER_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_THREE = 0xf074ba62; // verifyCheckpointProofs
     bytes4 UPDATE_USER_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FOUR = 0x3f65cf19; // verifyWithdrawalCredentials
 
     function run() public {
@@ -540,7 +540,7 @@ contract ElExitsTransactions is Script {
         data[0] = abi.encodeWithSelector(
             EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector,
             ALLOWED_CALLER,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_ONE, // processClaim
+            UPDATE_USER_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_ONE, // processClaim
             EIGENLAYER_REWARDS_COORDINATOR,
             true
         );
@@ -548,19 +548,19 @@ contract ElExitsTransactions is Script {
         data[1] = abi.encodeWithSelector(
             EtherFiNodesManager.updateAllowedForwardedEigenpodCalls.selector,
             ALLOWED_CALLER,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_TWO,
+            UPDATE_USER_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_TWO, // startCheckpoint
             true
         );
         data[2] = abi.encodeWithSelector(
             EtherFiNodesManager.updateAllowedForwardedEigenpodCalls.selector,
             ALLOWED_CALLER,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_THREE,
+            UPDATE_USER_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_THREE, // verifyCheckpointProofs
             true
         );
         data[3] = abi.encodeWithSelector(
             EtherFiNodesManager.updateAllowedForwardedEigenpodCalls.selector,
             ALLOWED_CALLER,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FOUR,
+            UPDATE_USER_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FOUR, // verifyWithdrawalCredentials
             true
         );
 
@@ -702,7 +702,7 @@ contract ElExitsTransactions is Script {
         data[0] = abi.encodeWithSelector(
             EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector,
             ALLOWED_CALLER,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_ONE, // processClaim
+            UPDATE_USER_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_ONE, // processClaim
             EIGENLAYER_REWARDS_COORDINATOR,
             false
         );
@@ -710,19 +710,19 @@ contract ElExitsTransactions is Script {
         data[1] = abi.encodeWithSelector(
             EtherFiNodesManager.updateAllowedForwardedEigenpodCalls.selector,
             ALLOWED_CALLER,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_TWO,
+            UPDATE_USER_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_TWO, // startCheckpoint
             false
         );
         data[2] = abi.encodeWithSelector(
             EtherFiNodesManager.updateAllowedForwardedEigenpodCalls.selector,
             ALLOWED_CALLER,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_THREE,
+            UPDATE_USER_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_THREE, // verifyCheckpointProofs
             false
         );
         data[3] = abi.encodeWithSelector(
             EtherFiNodesManager.updateAllowedForwardedEigenpodCalls.selector,
             ALLOWED_CALLER,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FOUR,
+            UPDATE_USER_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FOUR, // verifyWithdrawalCredentials
             false
         );
 
