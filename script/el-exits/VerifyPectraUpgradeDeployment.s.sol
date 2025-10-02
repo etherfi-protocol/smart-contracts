@@ -8,6 +8,8 @@ import "../../src/EtherFiNodesManager.sol";
 import "../../src/EtherFiRateLimiter.sol";
 import "../../src/StakingManager.sol";
 import "../../src/RoleRegistry.sol";
+import "../../src/EtherFiNode.sol";
+import "../../src/UUPSProxy.sol";
 
 interface ICreate2Factory {
     function computeAddress(bytes32 salt, bytes memory code) external view returns (address);

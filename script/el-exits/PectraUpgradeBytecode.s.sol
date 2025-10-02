@@ -41,6 +41,9 @@ contract PectraUpgradeBytecode is Script {
 
     }
 
+    // Run Script:
+    // forge script script/el-exits/PectraUpgradeBytecode.s.sol --rpc-url https://eth-mainnet.g.alchemy.com/v2/wXoAsdB1xREO2dkzPMopQ4G8_iX4mtuT -vvvv
+
     function run() external {
         vm.startBroadcast();
         console2.log("========================================");
@@ -64,12 +67,12 @@ contract PectraUpgradeBytecode is Script {
 
         console2.log("Verifying rate limiter bytecode...");
         contractCodeChecker.verifyContractByteCodeMatch(deployedRateLimiter, address(rateLimiterImplementation));
-        // console2.log("Verifying etherfi node bytecode...");
-        // contractCodeChecker.verifyContractByteCodeMatch(deployedEtherFiNode, address(etherFiNodeImplementation));
-        // console2.log("Verifying etherfi nodes manager bytecode...");
-        // contractCodeChecker.verifyContractByteCodeMatch(deployedEtherFiNodesManager, address(etherFiNodesManagerImplementation));
-        // console2.log("Verifying staking manager bytecode...");
-        // contractCodeChecker.verifyContractByteCodeMatch(deployedStakingManager, address(stakingManagerImplementation));
+        console2.log("Verifying etherfi node bytecode...");
+        contractCodeChecker.verifyContractByteCodeMatch(deployedEtherFiNode, address(etherFiNodeImplementation));
+        console2.log("Verifying etherfi nodes manager bytecode...");
+        contractCodeChecker.verifyContractByteCodeMatch(deployedEtherFiNodesManager, address(etherFiNodesManagerImplementation));
+        console2.log("Verifying staking manager bytecode...");
+        contractCodeChecker.verifyContractByteCodeMatch(deployedStakingManager, address(stakingManagerImplementation));
         vm.stopBroadcast();
     }
 }
