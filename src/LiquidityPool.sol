@@ -84,6 +84,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     event Deposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
     event Withdraw(address indexed sender, address recipient, uint256 amount, SourceOfFunds source);
+    event EEthSharesBurnedForNonETHWithdrawal(uint256 amountSharesToBurn, uint256 withdrawalValueInETH);
     event UpdatedWhitelist(address userAddress, bool value);
     event UpdatedTreasury(address newTreasury); 
     event UpdatedFeeRecipient(address newFeeRecipient);
@@ -478,6 +479,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         totalValueOutOfLp -= uint128(_withdrawalValueInETH);
 
         eETH.burnShares(msg.sender, _amountSharesToBurn);
+        emit EEthSharesBurnedForNonETHWithdrawal(_amountSharesToBurn, _withdrawalValueInETH);
     }
 
     //--------------------------------------------------------------------------------------

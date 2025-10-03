@@ -559,6 +559,41 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.stopPrank();
     }
 
+    function test_redeem_stETH_share_price_with_not_fee() public {
+        setUp_Fork();
+        vm.startPrank(user);
+        vm.deal(user, 10 ether);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), 10 ether);
+        vm.stopPrank();
+        //set fee to 0
+        vm.startPrank(op_admin);
+        etherFiRedemptionManagerInstance.setExitFeeBasisPoints(0, address(etherFiRestakerInstance.lido()));
+        vm.stopPrank();
+        //get number of shares for 1 ether
+        vm.startPrank(user);
+        uint256 sharesFor_999_ether = liquidityPoolInstance.sharesForAmount(1 ether); // should be 0.9 ether since 0.1 ether is left for 
+        address lidoToken = address(etherFiRestakerInstance.lido()); // external call; fetch before expectRevert
+        uint256 totalValueOutOfLpBefore = liquidityPoolInstance.totalValueOutOfLp();
+        uint256 totalValueInLpBefore = liquidityPoolInstance.totalValueInLp();
+        uint256 totalSharesBefore = eETHInstance.totalShares();
+        uint256 treasuryBalanceBefore = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
+        //steth balance before
+        uint256 stethBalanceBefore = stEth.balanceOf(user);
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, lidoToken);
+        uint256 stethBalanceAfter = stEth.balanceOf(user);
+        uint256 totalSharesAfter = eETHInstance.totalShares();
+        uint256 totalValueOutOfLpAfter = liquidityPoolInstance.totalValueOutOfLp();
+        uint256 totalValueInLpAfter = liquidityPoolInstance.totalValueInLp();
+        uint256 treasuryBalanceAfter = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
+        assertApproxEqAbs(stethBalanceAfter - stethBalanceBefore, 1 ether, 3);
+        assertApproxEqAbs(totalSharesBefore - totalSharesAfter, sharesFor_999_ether, 1);
+        assertApproxEqAbs(totalValueOutOfLpBefore - totalValueOutOfLpAfter, 1 ether, 3);
+        assertEq(totalValueInLpAfter- totalValueInLpBefore, 0);
+        assertEq(treasuryBalanceAfter-treasuryBalanceBefore, 0);
+        vm.stopPrank();
+    }
+
     function test_redeem_eEth_share_price() public {
         setUp_Fork();
         vm.startPrank(user);
