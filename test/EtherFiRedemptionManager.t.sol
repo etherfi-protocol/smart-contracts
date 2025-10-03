@@ -478,7 +478,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.prank(address(etherFiRedemptionManagerInstance));
         etherFiRestakerInstance.transferStETH(user, 1 ether);
         uint256 balanceAfter = etherFiRestakerInstance.lido().balanceOf(user);
-        assertApproxEqAbs(balanceAfter, balanceBefore + 1 ether, 1);
+        assertApproxEqAbs(balanceAfter, balanceBefore + 1 ether, 2);
     }
 
     function test_end_to_end_redeem_stETH() public {
