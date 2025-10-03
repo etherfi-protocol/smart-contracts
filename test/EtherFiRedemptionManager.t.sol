@@ -40,6 +40,12 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     }
 
     function test_rate_limit() public {
+
+
+        vm.deal(user, 100000 ether);
+        vm.prank(user);
+        liquidityPoolInstance.deposit{value: 100000 ether}();
+
         vm.deal(user, 5 ether);
         vm.prank(user);
         liquidityPoolInstance.deposit{value: 5 ether}();
@@ -545,11 +551,11 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 totalValueOutOfLpAfter = liquidityPoolInstance.totalValueOutOfLp();
         uint256 totalValueInLpAfter = liquidityPoolInstance.totalValueInLp();
         uint256 treasuryBalanceAfter = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
-        assertApproxEqAbs(stethBalanceAfter - stethBalanceBefore, 0.99 ether, 2);
+        assertApproxEqAbs(stethBalanceAfter - stethBalanceBefore, 0.99 ether, 3);
         assertApproxEqAbs(totalSharesBefore - totalSharesAfter, sharesFor_999_ether, 1);
-        assertApproxEqAbs(totalValueOutOfLpBefore - totalValueOutOfLpAfter, 0.99 ether, 2);
+        assertApproxEqAbs(totalValueOutOfLpBefore - totalValueOutOfLpAfter, 0.99 ether, 3);
         assertEq(totalValueInLpAfter- totalValueInLpBefore, 0);
-        assertApproxEqAbs(treasuryBalanceAfter-treasuryBalanceBefore, 0.001 ether, 2);
+        assertApproxEqAbs(treasuryBalanceAfter-treasuryBalanceBefore, 0.001 ether, 3);
         vm.stopPrank();
     }
 

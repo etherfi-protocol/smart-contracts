@@ -183,11 +183,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         uint256 totalEEthShare = eEth.totalShares();
         uint256 totalValueOutOfLpBefore = liquidityPool.totalValueOutOfLp();
 
-        // For stETH redemption, we burn fee shares and the eeth backed by the steth to the receiver
-        liquidityPool.burnEEthShares(sharesToBurn);
-        
-        int128 stethDecrease = int128(int256(eEthAmountToReceiver)) * -1;
-        liquidityPool.rebase(stethDecrease);
+        liquidityPool.burnSharesForNonETHWithdrawal(sharesToBurn, eEthAmountToReceiver);
         
         // Validate total shares and total value out of lp
         require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - sharesToBurn, "EtherFiRedemptionManager: Invalid total shares");
