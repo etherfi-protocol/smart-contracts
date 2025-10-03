@@ -98,7 +98,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     event ProtocolFeePaid(uint128 protocolFees);
     event WhitelistStatusUpdated(bool value);
     event ValidatorExitRequested(uint256 indexed validatorId);
-    event SharesBurnedForNonETHWithdrawal(uint256 amountSharesToBurn, uint256 withdrawalValueInETH);
 
     error IncorrectCaller();
     error InvalidAmount();
@@ -412,19 +411,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
     }
 
-    function burnSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external {
-        uint256 share = sharesForWithdrawalAmount(_withdrawalValueInETH);
-        if (msg.sender != address(etherFiRedemptionManager)) revert IncorrectCaller();
-        if (_amountSharesToBurn == 0 || _withdrawalValueInETH == 0) revert InvalidAmount();
-        //verify the share price will not go down
-        if(share > _amountSharesToBurn) revert InvalidAmount();
-
-        eETH.burnShares(msg.sender, _amountSharesToBurn);
-        totalValueOutOfLp -= uint128(_withdrawalValueInETH);
-
-        emit SharesBurnedForNonETHWithdrawal(_amountSharesToBurn, _withdrawalValueInETH);
-    }
-
     /// @notice pay protocol fees including 5% to treaury, 5% to node operator and ethfund bnft holders
     /// @param _protocolFees The amount of protocol fees to pay in ether
     function payProtocolFees(uint128 _protocolFees) external {
@@ -479,6 +465,19 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function burnEEthShares(uint256 shares) external {
         if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
         eETH.burnShares(msg.sender, shares);
+    }
+
+    function burnEEthSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external {
+        uint256 share = sharesForWithdrawalAmount(_withdrawalValueInETH);
+        if (msg.sender != address(etherFiRedemptionManager)) revert IncorrectCaller();
+        if (_amountSharesToBurn == 0 || _withdrawalValueInETH == 0) revert InvalidAmount();
+
+        // Verify the share price will not go down
+        if (share > _amountSharesToBurn) revert InvalidAmount();
+
+        totalValueOutOfLp -= uint128(_withdrawalValueInETH);
+
+        eETH.burnShares(msg.sender, _amountSharesToBurn);
     }
 
     //--------------------------------------------------------------------------------------
