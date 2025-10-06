@@ -24,12 +24,12 @@ interface IERC1822ProxiableUpgradeable {
 }
 
 contract Utils is Script {
-    // Create2 factory
-    // ICreate2Factory constant factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
     // ERC1967 storage slot for implementation address
     bytes32 constant IMPLEMENTATION_SLOT =
         0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
 
+    uint256 MIN_DELAY_OPERATING_TIMELOCK = 28800; // 8 hours
+    uint256 MIN_DELAY_TIMELOCK = 259200; // 72 hours
 
     function deploy(string memory contractName, bytes memory constructorArgs, bytes memory bytecode, bytes32 salt, bool logging, ICreate2Factory factory) internal returns (address) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
