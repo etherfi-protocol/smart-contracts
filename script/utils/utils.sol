@@ -6,6 +6,7 @@ import "forge-std/Vm.sol";
 import "forge-std/StdJson.sol";
 import "forge-std/console.sol";
 import "forge-std/console2.sol";
+import "openzeppelin-contracts-upgradeable/contracts/interfaces/draft-IERC1822Upgradeable.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);
@@ -17,10 +18,6 @@ interface IUpgrade {
     function upgradeTo(address) external;
 
     function roleRegistry() external returns (address);
-}
-
-interface IERC1822ProxiableUpgradeable {
-    function proxiableUUID() external view returns (bytes32);
 }
 
 contract Utils is Script {
@@ -72,10 +69,76 @@ contract Utils is Script {
             console.log("Deployment log saved to:", logFileName);
             console.log(deployLog);
         }
+        
+        return deployedAddress;
     }
 
     function verify(address addr, bytes memory bytecode, bytes32 salt, ICreate2Factory factory) internal view returns (bool) {
         return factory.verify(addr, salt, bytecode);
+    }
+
+    function getImplementation(address proxy) internal view returns (address) {
+        bytes32 slot = IMPLEMENTATION_SLOT;
+        bytes32 impl;
+        assembly {
+            impl := sload(slot)
+        }
+        return address(uint160(uint256(impl)));
+    }
+
+    function checkCondition(bool condition, string memory message) internal pure {
+        require(condition, message);
+    }
+
+    function verifyProxyUpgradeability(
+        address proxy,
+        string memory name
+    ) internal {
+        console2.log(string.concat("Checking ", name, " upgradeability..."));
+
+        // 1. Proxy really points to an implementation
+        address impl = getImplementation(proxy);
+        console.log("Implementation:", impl);
+        checkCondition(
+            impl != address(0) && impl != proxy,
+            string.concat(name, " is a proxy with an implementation")
+        );
+
+        // 2. Implementation exposes correct proxiableUUID()
+        try IERC1822ProxiableUpgradeable(impl).proxiableUUID() returns (
+            bytes32 slot
+        ) {
+            checkCondition(
+                slot == IMPLEMENTATION_SLOT,
+                string.concat(name, " implementation returns correct UUID")
+            );
+        } catch {
+            checkCondition(
+                false,
+                string.concat(name, " implementation missing proxiableUUID()")
+            );
+        }
+
+        (bool ok, bytes memory data) = proxy.staticcall(
+            abi.encodeWithSignature("upgradeTo(address)", impl)
+        );
+
+        checkCondition(
+            ok || data.length != 0,
+            string.concat(name, " proxy exposes upgradeTo()")
+        );
+        vm.prank(address(0xcaffe));
+        try IUpgrade(proxy).upgradeTo(address(0xbeef)) {
+            checkCondition(
+                false,
+                string.concat(name, " allows a random to upgrade")
+            );
+        } catch {
+            checkCondition(
+                true,
+                string.concat(name, " does not allows a random to upgrade")
+            );
+        }
     }
 
     //-------------------------------------------------------------------------
@@ -307,13 +370,70 @@ contract Utils is Script {
     // The timestamp is in UTC (Coordinated Universal Time). This is because block.timestamp returns a Unix timestamp, which is always in UTC.
     function getTimestampString() internal view returns (string memory) {
         uint256 ts = block.timestamp;
-        string memory year = vm.toString((ts / 31536000) + 1970);
-        string memory month = pad(vm.toString(((ts % 31536000) / 2592000) + 1));
-        string memory day = pad(vm.toString(((ts % 2592000) / 86400) + 1));
-        string memory hour = pad(vm.toString((ts % 86400) / 3600));
-        string memory minute = pad(vm.toString((ts % 3600) / 60));
-        string memory second = pad(vm.toString(ts % 60));
-        return string.concat(year,"-",month,"-",day,"-",hour,"-",minute,"-",second);
+        
+        // Calculate year accounting for leap years
+        uint256 year = 1970;
+        uint256 remainingSeconds = ts;
+        
+        while (remainingSeconds >= secondsInYear(year)) {
+            remainingSeconds -= secondsInYear(year);
+            year++;
+        }
+        
+        // Calculate month accounting for varying month lengths
+        uint256 month = 1;
+        while (remainingSeconds >= secondsInMonth(year, month)) {
+            remainingSeconds -= secondsInMonth(year, month);
+            month++;
+        }
+        
+        // Calculate day (1-based)
+        uint256 day = (remainingSeconds / 86400) + 1;
+        remainingSeconds %= 86400;
+        
+        // Calculate time components
+        uint256 hour = remainingSeconds / 3600;
+        remainingSeconds %= 3600;
+        uint256 minute = remainingSeconds / 60;
+        uint256 second = remainingSeconds % 60;
+        
+        return string.concat(
+            vm.toString(year), "-",
+            pad(vm.toString(month)), "-",
+            pad(vm.toString(day)), "-",
+            pad(vm.toString(hour)), "-",
+            pad(vm.toString(minute)), "-",
+            pad(vm.toString(second))
+        );
+    }
+    
+    // Helper function to calculate seconds in a given year (accounting for leap years)
+    function secondsInYear(uint256 year) internal pure returns (uint256) {
+        if (isLeapYear(year)) {
+            return 366 * 86400; // 366 days * 24 hours * 3600 seconds
+        } else {
+            return 365 * 86400; // 365 days * 24 hours * 3600 seconds
+        }
+    }
+    
+    // Helper function to calculate seconds in a given month (accounting for varying month lengths)
+    function secondsInMonth(uint256 year, uint256 month) internal pure returns (uint256) {
+        uint256 daysInMonth;
+        
+        if (month == 2) {
+            daysInMonth = isLeapYear(year) ? 29 : 28;
+        } else if (month == 4 || month == 6 || month == 9 || month == 11) {
+            daysInMonth = 30;
+        } else {
+            daysInMonth = 31;
+        }
+        
+        return daysInMonth * 86400; // days * 24 hours * 3600 seconds
+    }
+    
+    // Helper function to determine if a year is a leap year
+    function isLeapYear(uint256 year) internal pure returns (bool) {
+        return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
     }
 
     function pad(string memory n) internal pure returns (string memory) {

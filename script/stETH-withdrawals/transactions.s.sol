@@ -6,6 +6,10 @@ import "forge-std/console2.sol";
 import {Utils} from "../utils/utils.sol";
 import {EtherFiTimelock} from "../../src/EtherFiTimelock.sol";
 import {UUPSUpgradeable} from "lib/openzeppelin-contracts/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {EtherFiRedemptionManager} from "../../src/EtherFiRedemptionManager.sol";
+import {EtherFiRedemptionManagerTemp} from "../../src/EtherFiRedemptionManagerTemp.sol";
+import {EtherFiRestaker} from "../../src/EtherFiRestaker.sol";
+import {LiquidityPool} from "../../src/LiquidityPool.sol";
 
 contract StETHWithdrawalsTransactions is Script, Utils {
     EtherFiTimelock etherFiTimelock = EtherFiTimelock(payable(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761));
@@ -17,18 +21,20 @@ contract StETHWithdrawalsTransactions is Script, Utils {
     address constant oldEtherFiRedemptionManagerImpl = 0xe6f40295A7500509faD08E924c91b0F050a7b84b;
     address constant oldEtherFiRestakerImpl = 0x0052F731a6BEA541843385ffBA408F52B74Cb624;
 
+    // https://etherscan.io/address/0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0#readProxyContract
     uint16 constant oldExitFeeSplitToTreasuryInBps = 1000;
     uint16 constant oldExitFeeInBps = 30;
     uint16 constant oldLowWatermarkInBpsOfTvl = 100;
     uint64 constant oldRefillRatePerSecond = 23148;
     uint64 constant oldCapacity = 2000000000;
+
     //--------------------------------------------------------------------------------------
     //---------------------------- New Deployments -----------------------------------------
     //--------------------------------------------------------------------------------------
-    address liquidityPoolImpl;
-    address etherFiRedemptionManagerTempImpl;
-    address etherFiRestakerImpl;
-    address etherFiRedemptionManagerImpl;   
+    LiquidityPool liquidityPoolImpl = LiquidityPool(payable(0x1e1Ec0c6564e4700b6FEf45a30EFbF8AD8FFb24B));
+    EtherFiRedemptionManagerTemp etherFiRedemptionManagerTempImpl = EtherFiRedemptionManagerTemp(payable(0x590015FDf9334594B0Ae14f29b0dEd9f1f8504Bc));
+    EtherFiRestaker etherFiRestakerImpl = EtherFiRestaker(payable(0x71bEf55739F0b148E2C3e645FDE947f380C48615));
+    EtherFiRedemptionManager etherFiRedemptionManagerImpl = EtherFiRedemptionManager(payable(0xE3F384Dc7002547Dd240AC1Ad69a430CCE1e292d));   
 
     //--------------------------------------------------------------------------------------
     //------------------------- Existing Users/Proxies -------------------------------------
@@ -43,16 +49,162 @@ contract StETHWithdrawalsTransactions is Script, Utils {
     address constant treasury = 0x0c83EAe1FE72c390A02E426572854931EefF93BA;
     address constant etherFiRestaker = 0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf;
 
+    address constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
+    address constant TIMELOCK_CONTROLLER = 0xcdd57D11476c22d265722F68390b036f3DA48c21;
+
+    //--------------------------------------------------------------------------------------
+    //-----------------------------  OLD EFRM SELECTORS  -----------------------------------
+    //--------------------------------------------------------------------------------------
+    bytes4 constant SET_EXIT_FEE_BASIS_POINTS_SELECTOR = 0xad0cba24;
+    bytes4 constant SET_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS_SELECTOR = 0x69b095a2;
+    bytes4 constant SET_LOW_WATERMARK_IN_BPS_OF_TVL_SELECTOR = 0x298f3f03;
+    bytes4 constant SET_REFILL_RATE_PER_SECOND_SELECTOR = 0x2f530824;
+    bytes4 constant SET_CAPACITY_SELECTOR = 0x91915ef8;
+
     function run() external {
         console2.log("StETH Withdrawals Transactions");
-        vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
+        console2.log("================================================");
+        console2.log("");
+
+        vm.startBroadcast(TIMELOCK_CONTROLLER);
+        // vm.startPrank(TIMELOCK_CONTROLLER);
+
         scheduleCleanUpStorageOnEFRM();
         upgrade();
-        rollback();
+        rollbackUpgrade();
+
+        // vm.stopPrank();
         vm.stopBroadcast();
+
+        vm.startBroadcast(ETHERFI_OPERATING_ADMIN);
+        // vm.startPrank(ETHERFI_OPERATING_ADMIN);
+
+        rollbackEFRMStorage();
+        
+        // vm.stopPrank();
+        vm.stopBroadcast();
+
+        
     }
 
-    function upgrade() external {
+    function scheduleCleanUpStorageOnEFRM() public {
+        _upgradeEFRMToTemp();
+        _clearOutSlotForUpgrade();
+    }
+
+    function _upgradeEFRMToTemp() internal {
+        address[] memory targets = new address[](1);
+        bytes[] memory data = new bytes[](1);
+        uint256[] memory values = new uint256[](1);
+        
+        targets[0] = address(etherFiRedemptionManager);
+        data[0] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiRedemptionManagerTempImpl);
+
+        bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
+        bytes memory scheduleCalldata = abi.encodeWithSelector(
+            etherFiTimelock.scheduleBatch.selector,
+            targets,
+            values,
+            data,
+            bytes32(0)/*=predecessor*/,
+            timelockSalt,
+            MIN_DELAY_TIMELOCK/*=minDelay*/
+        );
+
+        console2.log("Schedule Upgrade EFRM To Temp Tx:");
+        console2.logBytes(scheduleCalldata);
+        console2.log("================================================");
+        console2.log("");
+
+        bytes memory executeCalldata = abi.encodeWithSelector(
+            etherFiTimelock.executeBatch.selector,
+            targets,
+            values,
+            data,
+            bytes32(0)/*=predecessor*/,
+            timelockSalt
+        );
+
+        console2.log("Execute Upgrade EFRM To Temp Tx:");
+        console2.logBytes(executeCalldata);
+        console2.log("================================================");
+        console2.log("");
+
+        // uncomment to run against fork
+        console2.log("=== SCHEDULING BATCH ===");
+        console2.log("Current timestamp:", block.timestamp);
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_TIMELOCK);
+        console2.log("Schedule of Upgrade EFRM To Temp successful");
+        console2.log("================================================");
+        console2.log("");
+
+        console2.log("=== FAST FORWARDING TIME ===");
+        // vm.warp(block.timestamp + MIN_DELAY_TIMELOCK + 1); // +1 to ensure it's past the delay
+        // increaseTimeTenderly(MIN_DELAY_TIMELOCK + 1);
+
+        // console2.log("New timestamp:", block.timestamp);
+        // etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
+        // console2.log("Execute of Upgrade EFRM To Temp successful");
+        // console2.log("================================================");
+        // console2.log("");
+    }
+
+    function _clearOutSlotForUpgrade() internal {
+        address[] memory targets = new address[](1);
+        bytes[] memory data = new bytes[](1);
+        uint256[] memory values = new uint256[](1);
+
+        targets[0] = address(etherFiRedemptionManager);
+        data[0] = abi.encodeWithSelector(EtherFiRedemptionManagerTemp.clearOutSlotForUpgrade.selector);
+
+        //--------------------------------------------------------------------------------------
+        //------------------------------- SCHEDULE TX --------------------------------------
+        //------------------------------------------------      --------------------------------------
+        bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
+        bytes memory scheduleCalldata = abi.encodeWithSelector(
+            etherFiTimelock.scheduleBatch.selector,
+            targets,
+            values,
+            data,
+            bytes32(0)/*=predecessor*/,
+            timelockSalt,
+            MIN_DELAY_TIMELOCK/*=minDelay*/
+        );
+
+        console2.log("Schedule Clean Up Storage On EFRM Tx:");
+        console2.logBytes(scheduleCalldata);
+        console2.log("================================================");
+        console2.log("");
+
+        // execute
+        bytes memory executeCalldata = abi.encodeWithSelector(
+            etherFiTimelock.executeBatch.selector,
+            targets,
+            values,
+            data,
+            bytes32(0)/*=predecessor*/,
+            timelockSalt
+        );
+
+        console2.log("Execute Clean Up Storage On EFRM Tx:");
+        console2.logBytes(executeCalldata);
+        console2.log("================================================");
+        console2.log("");
+
+        // uncomment to run against fork
+        console2.log("=== SCHEDULING BATCH ===");
+        console2.log("Current timestamp:", block.timestamp);
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_TIMELOCK);
+
+        // console2.log("=== FAST FORWARDING TIME ===");
+        // vm.warp(block.timestamp + MIN_DELAY_TIMELOCK + 1); // +1 to ensure it's past the delay
+        // increaseTimeTenderly(MIN_DELAY_TIMELOCK + 1);
+
+        // console2.log("New timestamp:", block.timestamp);
+        // etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
+    }
+
+    function upgrade() public {
         console2.log("Executing Upgrade");
         address[] memory targets = new address[](3);
         bytes[] memory data = new bytes[](3);
@@ -98,134 +250,25 @@ contract StETHWithdrawalsTransactions is Script, Utils {
         console2.log("");
 
         // uncomment to run against fork
-        // console2.log("=== SCHEDULING BATCH ===");
-        // console2.log("Current timestamp:", block.timestamp);
-        // etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_TIMELOCK);
+        console2.log("=== SCHEDULING BATCH ===");
+        console2.log("Current timestamp:", block.timestamp);
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_TIMELOCK);
+        console2.log("Schedule of Upgrade Tx successful");
+        console2.log("================================================");
+        console2.log("");
 
         // console2.log("=== FAST FORWARDING TIME ===");
         // vm.warp(block.timestamp + MIN_DELAY_TIMELOCK + 1); // +1 to ensure it's past the delay
+        // increaseTimeTenderly(MIN_DELAY_TIMELOCK + 1);
         // console2.log("New timestamp:", block.timestamp);
         // etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
+        // console2.log("Execute of Upgrade Tx successful");
+        // console2.log("================================================");
+        // console2.log("");
     }
 
-    function scheduleCleanUpStorageOnEFRM() external {
-        address[] memory targets = new address[](1);
-        bytes[] memory data = new bytes[](1);
-        uint256[] memory values = new uint256[](1);
 
-        targets[0] = address(etherFiRedemptionManager);
-        data[0] = abi.encodeWithSelector(EtherFiRedemptionManager.clearOutSlotForUpgrade.selector);
-
-        //--------------------------------------------------------------------------------------
-        //------------------------------- SCHEDULE TX --------------------------------------
-        //------------------------------------------------      --------------------------------------
-        bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
-        bytes memory scheduleCalldata = abi.encodeWithSelector(
-            etherFiTimelock.scheduleBatch.selector,
-            targets,
-            values,
-            data,
-            bytes32(0)/*=predecessor*/,
-            timelockSalt,
-            MIN_DELAY_TIMELOCK/*=minDelay*/
-        );
-
-        console2.log("Schedule Clean Up Storage On EFRM Tx:");
-        console2.logBytes(scheduleCalldata);
-        console2.log("================================================");
-        console2.log("");
-
-        // execute
-        bytes memory executeCalldata = abi.encodeWithSelector(
-            etherFiTimelock.executeBatch.selector,
-            targets,
-            values,
-            data,
-            bytes32(0)/*=predecessor*/,
-            timelockSalt
-        );
-
-        console2.log("Execute Clean Up Storage On EFRM Tx:");
-        console2.logBytes(executeCalldata);
-        console2.log("================================================");
-        console2.log("");
-
-        // uncomment to run against fork
-        // console2.log("=== SCHEDULING BATCH ===");
-        // console2.log("Current timestamp:", block.timestamp);
-        // etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_TIMELOCK);
-
-        // console2.log("=== FAST FORWARDING TIME ===");
-        // vm.warp(block.timestamp + MIN_DELAY_TIMELOCK + 1); // +1 to ensure it's past the delay
-        // console2.log("New timestamp:", block.timestamp);
-        // etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
-    }
-
-    function rollback() external {
-        console2.log("Executing Rollback");
-        _rollback_Upgrade();
-        _rollback_EFRM_storage();
-    }
-
-    function _rollback_EFRM_storage() internal {
-        address[] memory targets = new address[](5);
-        bytes[] memory data = new bytes[](5);
-        uint256[] memory values = new uint256[](5);
-
-        // TODO: check about the remaining field in Limit 
-
-        data[0] = abi.encodeWithSelector(EtherFiRedemptionManager.setExitFeeBasisPoints.selector, oldExitFeeInBps);
-        data[1] = abi.encodeWithSelector(EtherFiRedemptionManager.setExitFeeSplitToTreasuryInBps.selector, oldExitFeeSplitToTreasuryInBps);
-        data[2] = abi.encodeWithSelector(EtherFiRedemptionManager.setLowWatermarkInBpsOfTvl.selector, oldLowWatermarkInBpsOfTvl);
-        data[3] = abi.encodeWithSelector(EtherFiRedemptionManager.setRefillRatePerSecond.selector, oldRefillRatePerSecond);
-        data[4] = abi.encodeWithSelector(EtherFiRedemptionManager.setCapacity.selector, oldCapacity);
-
-        for(uint256 i = 0; i < targets.length; i++) {
-            targets[i] = address(etherFiRedemptionManager);
-        }
-
-        bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
-        bytes memory scheduleCalldata = abi.encodeWithSelector(
-            etherfiOperatingTimelock.scheduleBatch.selector,
-            targets,
-            values,
-            data,
-            bytes32(0)/*=predecessor*/,
-            timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK/*=minDelay*/
-        );
-
-        console2.log("Schedule Rollback EFRM Storage Tx:");
-        console2.logBytes(scheduleCalldata);
-        console2.log("================================================");
-        console2.log("");
-
-        bytes memory executeCalldata = abi.encodeWithSelector(
-            etherfiOperatingTimelock.executeBatch.selector,
-            targets,
-            values,
-            data,
-            bytes32(0)/*=predecessor*/,
-            timelockSalt
-        );
-
-        console2.log("Execute Rollback EFRM Storage Tx:");
-        console2.logBytes(executeCalldata);
-        console2.log("================================================");
-        console2.log("");
-
-        // uncomment to run against fork
-        // console2.log("=== SCHEDULING BATCH ===");
-        // console2.log("Current timestamp:", block.timestamp);
-        // etherfiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
-
-        // console2.log("=== EXECUTING BATCH ===");
-        // vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
-        // console2.log("New timestamp:", block.timestamp);
-        // etherfiOperatingTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
-    }
-
-    function _rollback_Upgrade() internal {
+    function rollbackUpgrade() public {
         address[] memory targets = new address[](4);
         bytes[] memory data = new bytes[](4);
         uint256[] memory values = new uint256[](4);
@@ -270,13 +313,83 @@ contract StETHWithdrawalsTransactions is Script, Utils {
         console2.log("");
 
         // uncomment to run against fork
-        // console2.log("=== SCHEDULING BATCH ===");
-        // console2.log("Current timestamp:", block.timestamp);
-        // etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_TIMELOCK);
+        console2.log("=== SCHEDULING BATCH ===");
+        console2.log("Current timestamp:", block.timestamp);
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_TIMELOCK);
+        console2.log("Schedule of Rollback Upgrade Tx successful");
+        console2.log("================================================");
+        console2.log("");
 
         // console2.log("=== FAST FORWARDING TIME ===");
         // vm.warp(block.timestamp + MIN_DELAY_TIMELOCK + 1); // +1 to ensure it's past the delay
-        // console2.log("New timestamp:", block.timestamp);
+        // increaseTimeTenderly(MIN_DELAY_TIMELOCK + 1);
+        // console2.log("New timestamp:", block.timestamp);   
         // etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
+        // console2.log("Execute of Rollback Upgrade Tx successful");
+        // console2.log("================================================");
+        // console2.log("");
+    }
+
+    function rollbackEFRMStorage() public {
+        address[] memory targets = new address[](5);
+        bytes[] memory data = new bytes[](5);
+        uint256[] memory values = new uint256[](5);
+
+        data[0] = abi.encodeWithSelector(SET_EXIT_FEE_BASIS_POINTS_SELECTOR, oldExitFeeInBps);
+        data[1] = abi.encodeWithSelector(SET_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS_SELECTOR, oldExitFeeSplitToTreasuryInBps);
+        data[2] = abi.encodeWithSelector(SET_LOW_WATERMARK_IN_BPS_OF_TVL_SELECTOR, oldLowWatermarkInBpsOfTvl);
+        data[3] = abi.encodeWithSelector(SET_REFILL_RATE_PER_SECOND_SELECTOR, oldRefillRatePerSecond);
+        data[4] = abi.encodeWithSelector(SET_CAPACITY_SELECTOR, oldCapacity);
+
+        for(uint256 i = 0; i < targets.length; i++) {
+            targets[i] = address(etherFiRedemptionManager);
+        }
+
+        bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
+        bytes memory scheduleCalldata = abi.encodeWithSelector(
+            etherfiOperatingTimelock.scheduleBatch.selector,
+            targets,
+            values,
+            data,
+            bytes32(0)/*=predecessor*/,
+            timelockSalt,
+            MIN_DELAY_OPERATING_TIMELOCK/*=minDelay*/
+        );
+
+        console2.log("Schedule Rollback EFRM Storage Tx:");
+        console2.logBytes(scheduleCalldata);
+        console2.log("================================================");
+        console2.log("");
+
+        bytes memory executeCalldata = abi.encodeWithSelector(
+            etherfiOperatingTimelock.executeBatch.selector,
+            targets,
+            values,
+            data,
+            bytes32(0)/*=predecessor*/,
+            timelockSalt
+        );
+
+        console2.log("Execute Rollback EFRM Storage Tx:");
+        console2.logBytes(executeCalldata);
+        console2.log("================================================");
+        console2.log("");
+
+        // uncomment to run against fork
+        console2.log("=== SCHEDULING BATCH ===");
+        console2.log("Current timestamp:", block.timestamp);
+        etherfiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
+        console2.log("Schedule of Rollback EFRM Storage Tx successful");
+        console2.log("================================================");
+        console2.log("");
+
+        // console2.log("=== EXECUTING BATCH ===");
+        // // vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
+        // // increaseTimeTenderly(MIN_DELAY_OPERATING_TIMELOCK + 1);
+        // console2.log("New timestamp:", block.timestamp);
+        // etherfiOperatingTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
+        // console2.log("Execute of Rollback EFRM Storage Tx successful");
+        // console2.log("================================================");
+        // console2.log("");
     }
 }
