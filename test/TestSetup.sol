@@ -683,7 +683,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         address[] memory _tokens = new address[](2);
         _tokens[0] = address(etherFiRedemptionManagerInstance.ETH_ADDRESS());
-        _tokens[1] = address(weEthInstance);
+        _tokens[1] = address(etherFiRestakerInstance.lido());
         uint16[] memory _exitFeeSplitToTreasuryInBps = new uint16[](2);
         _exitFeeSplitToTreasuryInBps[0] = 10_00;
         _exitFeeSplitToTreasuryInBps[1] = 10_00;
