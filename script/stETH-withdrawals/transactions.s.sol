@@ -240,11 +240,13 @@ contract StETHWithdrawalsTransactions is Script, Utils {
         _lowWatermarkInBpsOfTvl[0] = 100;
         _lowWatermarkInBpsOfTvl[1] = 0;
         uint256[] memory _bucketCapacity = new uint256[](2);
-        _bucketCapacity[0] = 2000000000;
-        _bucketCapacity[1] = 2000000000;
+        _bucketCapacity[0] = 2000000000; // 2000 eETH
+        _bucketCapacity[1] = 5000000000; // 5000 stETH
+        // Limit to 5000 ETH per day.
+        // refill rate = 5000 * 1e6 / 86400 = 57870.37 stETH per second.
         uint256[] memory _bucketRefillRate = new uint256[](2);
         _bucketRefillRate[0] = 23148;
-        _bucketRefillRate[1] = 5000;
+        _bucketRefillRate[1] = 57871;
         
         targets[0] = address(etherFiRedemptionManager);
         data[0] = abi.encodeWithSelector(EtherFiRedemptionManager.initializeTokenParameters.selector, _tokens, _exitFeeSplitToTreasuryInBps, _exitFeeInBps, _lowWatermarkInBpsOfTvl, _bucketCapacity, _bucketRefillRate);
