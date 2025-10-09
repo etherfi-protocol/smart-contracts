@@ -43,6 +43,7 @@ contract StETHWithdrawalsTransactions is Script, Utils {
     address constant rewardsCoordinator = 0x7750d328b314EfFa365A0402CcfD489B80B0adda; // Eigen Layer Rewards Coordinator - https://etherscan.io/address/0x7750d328b314effa365a0402ccfd489b80b0adda
     address constant etherFiRedemptionManager = 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0;
     address constant eETH = 0x35fA164735182de50811E8e2E824cFb9B6118ac2;
+    address constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address constant weETH = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
     address constant stETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address constant liquidityPool = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
@@ -228,7 +229,7 @@ contract StETHWithdrawalsTransactions is Script, Utils {
         uint256[] memory values = new uint256[](1);
 
         address[] memory _tokens = new address[](2);
-        _tokens[0] = eETH;
+        _tokens[0] = ETH;
         _tokens[1] = stETH;
         uint16[] memory _exitFeeSplitToTreasuryInBps = new uint16[](2);
         _exitFeeSplitToTreasuryInBps[0] = 1000;
@@ -240,7 +241,7 @@ contract StETHWithdrawalsTransactions is Script, Utils {
         _lowWatermarkInBpsOfTvl[0] = 100;
         _lowWatermarkInBpsOfTvl[1] = 0;
         uint256[] memory _bucketCapacity = new uint256[](2);
-        _bucketCapacity[0] = 2000000000; // 2000 eETH
+        _bucketCapacity[0] = 2000000000; // 2000 ETH
         _bucketCapacity[1] = 5000000000; // 5000 stETH
         // Limit to 5000 ETH per day.
         // refill rate = 5000 * 1e6 / 86400 = 57870.37 stETH per second.
@@ -360,9 +361,9 @@ contract StETHWithdrawalsTransactions is Script, Utils {
     }
 
     function rollbackUpgrade() public {
-        address[] memory targets = new address[](4);
-        bytes[] memory data = new bytes[](4);
-        uint256[] memory values = new uint256[](4);
+        address[] memory targets = new address[](3);
+        bytes[] memory data = new bytes[](3);
+        uint256[] memory values = new uint256[](3);
 
         targets[0] = address(liquidityPool);
         data[0] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, oldLiquidityPoolImpl);
