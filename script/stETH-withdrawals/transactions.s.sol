@@ -235,7 +235,7 @@ contract StETHWithdrawalsTransactions is Script, Utils {
         _exitFeeSplitToTreasuryInBps[1] = 1000;
         uint16[] memory _exitFeeInBps = new uint16[](2);
         _exitFeeInBps[0] = 30;
-        _exitFeeInBps[1] = 10;
+        _exitFeeInBps[1] = 0;
         uint16[] memory _lowWatermarkInBpsOfTvl = new uint16[](2);
         _lowWatermarkInBpsOfTvl[0] = 100;
         _lowWatermarkInBpsOfTvl[1] = 0;
