@@ -89,7 +89,6 @@ contract DeployInstanstStETHWithdrawals is Script, Utils {
         {
             string memory contractName = "LiquidityPool";
             bytes memory constructorArgs = abi.encode(
-                address(treasury)
             );
             bytes memory bytecode = abi.encodePacked(
                 type(LiquidityPool).creationCode,
