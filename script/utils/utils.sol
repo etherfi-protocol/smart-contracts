@@ -79,11 +79,8 @@ contract Utils is Script {
 
     function getImplementation(address proxy) internal view returns (address) {
         bytes32 slot = IMPLEMENTATION_SLOT;
-        bytes32 impl;
-        assembly {
-            impl := sload(slot)
-        }
-        return address(uint160(uint256(impl)));
+        bytes32 value = vm.load(proxy, slot);
+        return address(uint160(uint256(value)));
     }
 
     function checkCondition(bool condition, string memory message) internal pure {
@@ -139,6 +136,19 @@ contract Utils is Script {
                 string.concat(name, " does not allows a random to upgrade")
             );
         }
+    }
+
+    // Helper function to verify Create2 address    
+    function verifyCreate2Address(
+        string memory contractName, 
+        bytes memory constructorArgs, 
+        bytes memory bytecode, 
+        bytes32 salt, 
+        bool logging,
+        ICreate2Factory factory
+    ) internal view returns (address) {
+        address predictedAddress = factory.computeAddress(salt, bytecode);
+        return predictedAddress;
     }
 
     //-------------------------------------------------------------------------
