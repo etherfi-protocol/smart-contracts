@@ -82,8 +82,8 @@ contract StETHWithdrawalsTransactions is Script, Utils {
         // vm.stopPrank();
         vm.stopBroadcast();
 
-        // console2.log("=============== ROLLBACK TRANSACTIONS ================");
-        // console2.log("================================================");
+        console2.log("=============== ROLLBACK TRANSACTIONS ================");
+        console2.log("================================================");
 
         vm.startBroadcast(TIMELOCK_CONTROLLER);
         // vm.startPrank(TIMELOCK_CONTROLLER);
@@ -221,6 +221,9 @@ contract StETHWithdrawalsTransactions is Script, Utils {
         // vm.warp(block.timestamp + MIN_DELAY_TIMELOCK + 1); // +1 to ensure it's past the delay
         // console2.log("New timestamp:", block.timestamp);
         // etherFiTimelock.executeBatch(targets, values, data, predecessor, timelockSalt);
+        // console2.log("Execute of Clean Up Storage On EFRM Tx successful");
+        // console2.log("================================================");
+        // console2.log("");
     }
 
     function initializeTokenParametersEFRM() public {
@@ -299,7 +302,6 @@ contract StETHWithdrawalsTransactions is Script, Utils {
     }
 
     function upgrade() public {
-        console2.log("Executing Upgrade");
         address[] memory targets = new address[](3);
         bytes[] memory data = new bytes[](3);
         uint256[] memory values = new uint256[](3);

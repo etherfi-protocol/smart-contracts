@@ -16,6 +16,7 @@ import {ICreate2Factory} from "../utils/utils.sol";
 contract VerifyStETHWithdrawals is Script, Test, Utils {
     bytes32 commitHashSalt = bytes32(bytes20(hex"037da63f453b943e7bd96c155e0798003094e4a0"));
     ICreate2Factory constant factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
+    address constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     //--------------------------------------------------------------------------------------
     //---------------------------- New Deployments -----------------------------------------
@@ -230,7 +231,7 @@ contract VerifyStETHWithdrawals is Script, Test, Utils {
         console2.log(unicode"✓ transferStETH exists:", vm.toString(selector2));
 
         EtherFiRedemptionManager etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(ETHERFI_REDEMPTION_MANAGER_PROXY));
-        (BucketLimiter.Limit memory limit, uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl) = etherFiRedemptionManagerInstance.tokenToRedemptionInfo(address(EETH_PROXY));
+        (BucketLimiter.Limit memory limit, uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl) = etherFiRedemptionManagerInstance.tokenToRedemptionInfo(address(ETH));
         console2.log(unicode"✓ exitFeeSplitToTreasuryInBps exists:", exitFeeSplitToTreasuryInBps);
         console2.log(unicode"✓ exitFeeInBps exists:", exitFeeInBps);
         console2.log(unicode"✓ lowWatermarkInBpsOfTvl exists:", lowWatermarkInBpsOfTvl);
