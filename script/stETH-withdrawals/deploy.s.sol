@@ -32,59 +32,59 @@ contract DeployInstanstStETHWithdrawals is Script, Utils {
     address constant etherFiRestaker = 0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf;
 
     // TODO: update with final commit
-    bytes32 commitHashSalt = bytes32(bytes20(hex"037da53f453b943e7bd96c155e0798003094e4a0"));
+    bytes32 commitHashSalt = bytes32(bytes20(hex"037da63f453b943e7bd96c155e0798003094e4a0"));
 
     function run() external {
         vm.startBroadcast();
 
-        // {
-        //     string memory contractName = "EtherFiRedemptionManagerTemp";
-        //     bytes memory constructorArgs = abi.encode(
-        //         address(liquidityPool),
-        //         address(eETH),
-        //         address(weETH),
-        //         address(treasury),
-        //         address(roleRegistry)
-        //     );
-        //     bytes memory bytecode = abi.encodePacked(
-        //         type(EtherFiRedemptionManagerTemp).creationCode,
-        //         constructorArgs
-        //     );
-        //     etherFiRedemptionManagerTempImpl = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true, factory);
-        //     verify(etherFiRedemptionManagerTempImpl, bytecode, commitHashSalt, factory);
-        // }
+        {
+            string memory contractName = "EtherFiRedemptionManagerTemp";
+            bytes memory constructorArgs = abi.encode(
+                address(liquidityPool),
+                address(eETH),
+                address(weETH),
+                address(treasury),
+                address(roleRegistry)
+            );
+            bytes memory bytecode = abi.encodePacked(
+                type(EtherFiRedemptionManagerTemp).creationCode,
+                constructorArgs
+            );
+            etherFiRedemptionManagerTempImpl = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true, factory);
+            verify(etherFiRedemptionManagerTempImpl, bytecode, commitHashSalt, factory);
+        }
 
-        // {
-        //     string memory contractName = "EtherFiRestaker";
-        //     bytes memory constructorArgs = abi.encode(
-        //         address(rewardsCoordinator),
-        //         address(etherFiRedemptionManager)
-        //     );
-        //     bytes memory bytecode = abi.encodePacked(
-        //         type(EtherFiRestaker).creationCode,
-        //         constructorArgs
-        //     );
-        //     etherFiRestakerImpl = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true, factory);
-        //     verify(etherFiRestakerImpl, bytecode, commitHashSalt, factory);
-        // }
+        {
+            string memory contractName = "EtherFiRestaker";
+            bytes memory constructorArgs = abi.encode(
+                address(rewardsCoordinator),
+                address(etherFiRedemptionManager)
+            );
+            bytes memory bytecode = abi.encodePacked(
+                type(EtherFiRestaker).creationCode,
+                constructorArgs
+            );
+            etherFiRestakerImpl = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true, factory);
+            verify(etherFiRestakerImpl, bytecode, commitHashSalt, factory);
+        }
 
-        // {
-        //     string memory contractName = "EtherFiRedemptionManager";
-        //     bytes memory constructorArgs = abi.encode(
-        //         address(liquidityPool),
-        //         address(eETH),
-        //         address(weETH),
-        //         address(treasury),
-        //         address(roleRegistry),
-        //         address(etherFiRestaker)
-        //     );
-        //     bytes memory bytecode = abi.encodePacked(
-        //         type(EtherFiRedemptionManager).creationCode,
-        //         constructorArgs
-        //     );
-        //     etherFiRedemptionManagerImpl = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true, factory);
-        //     verify(etherFiRedemptionManagerImpl, bytecode, commitHashSalt, factory);
-        // }
+        {
+            string memory contractName = "EtherFiRedemptionManager";
+            bytes memory constructorArgs = abi.encode(
+                address(liquidityPool),
+                address(eETH),
+                address(weETH),
+                address(treasury),
+                address(roleRegistry),
+                address(etherFiRestaker)
+            );
+            bytes memory bytecode = abi.encodePacked(
+                type(EtherFiRedemptionManager).creationCode,
+                constructorArgs
+            );
+            etherFiRedemptionManagerImpl = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true, factory);
+            verify(etherFiRedemptionManagerImpl, bytecode, commitHashSalt, factory);
+        }
 
         {
             string memory contractName = "LiquidityPool";
