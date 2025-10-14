@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Initializable} from "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
+import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import "./interfaces/IWeETHWithdrawAdapter.sol";
-import "./interfaces/IWeETH.sol";
-import "./interfaces/IeETH.sol";
-import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IWithdrawRequestNFT.sol";
-import "./interfaces/IRoleRegistry.sol";
+import {IWeETHWithdrawAdapter} from "../interfaces/IWeETHWithdrawAdapter.sol";
+import {IWeETH} from "../interfaces/IWeETH.sol";
+import {IeETH} from "../interfaces/IeETH.sol";
+import {ILiquidityPool} from "../interfaces/ILiquidityPool.sol";
+import {IWithdrawRequestNFT} from "../interfaces/IWithdrawRequestNFT.sol";
+import {IRoleRegistry} from "../interfaces/IRoleRegistry.sol";
 
 /**
  * @title WeETHWithdrawAdapter
@@ -195,6 +196,15 @@ contract WeETHWithdrawAdapter is
      */
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    /**
+     * @notice Get the equivalent eETH amount for a given weETH amount
+     * @param weETHAmount Amount of weETH
+     * @return eETHAmount Equivalent amount of eETH
+     */
+    function getEETHByWeETH(uint256 weETHAmount) external view returns (uint256 eETHAmount) {
+        return weETH.getEETHByWeETH(weETHAmount);
     }
 
     //--------------------------------------------------------------------------------------

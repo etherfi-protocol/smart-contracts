@@ -5,17 +5,15 @@ import "forge-std/Script.sol";
 import "forge-std/console.sol";
 import "../src/helpers/WeETHWithdrawAdapter.sol";
 import "../src/UUPSProxy.sol";
-import "../src/helpers/AddressProvider.sol";
 
 /**
  * @title Deploy WeETH Withdraw Adapter
  * @notice Deploys the WeETHWithdrawAdapter implementation and UUPS proxy
  * 
  * This script will:
- * 1. Get required contract addresses from AddressProvider
- * 2. Deploy the WeETHWithdrawAdapter implementation
- * 3. Deploy the UUPSProxy with initialization
- * 4. Transfer ownership to the timelock
+ * 1. Deploy the WeETHWithdrawAdapter implementation
+ * 2. Deploy the UUPSProxy with initialization
+ * 3. Transfer ownership to the timelock
  * 
  * Usage:
  * 
@@ -36,30 +34,19 @@ import "../src/helpers/AddressProvider.sol";
  */
 contract DeployWeETHWithdrawAdapter is Script {
     
-    AddressProvider public addressProvider;
-    
-    // Contract addresses
-    address weETHAddress;
-    address eETHAddress;
-    address liquidityPoolAddress;
-    address withdrawRequestNFTAddress;
-    address roleRegistryAddress;
-    address timelockAddress;
+    // Mainnet contract addresses (hardcoded like in DeployV3Prelude.s.sol)
+    address constant weETHAddress = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
+    address constant eETHAddress = 0x35fA164735182de50811E8e2E824cFb9B6118ac2;
+    address constant liquidityPoolAddress = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
+    address constant withdrawRequestNFTAddress = 0x7d5706f6ef3F89B3951E23e557CDFBC3239D4E2c;
+    address constant roleRegistryAddress = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
+    address constant timelockAddress = 0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761;
 
     function run() external {
         console.log("\n========================================");
         console.log("WeETH Withdraw Adapter Deployment");
         console.log("========================================\n");
 
-        // Get AddressProvider from environment
-        address addressProviderAddress = vm.envAddress("CONTRACT_REGISTRY");
-        addressProvider = AddressProvider(addressProviderAddress);
-        
-        console.log("Using AddressProvider at:", addressProviderAddress);
-        
-        // Fetch required contract addresses
-        fetchContractAddresses();
-        
         // Display addresses for verification
         displayAddresses();
         
@@ -107,27 +94,8 @@ contract DeployWeETHWithdrawAdapter is Script {
         verifyDeployment(adapter);
     }
     
-    function fetchContractAddresses() internal {
-        console.log("\nFetching contract addresses from AddressProvider...");
-        
-        weETHAddress = addressProvider.getContractAddress("WeETH");
-        eETHAddress = addressProvider.getContractAddress("EETH");
-        liquidityPoolAddress = addressProvider.getContractAddress("LiquidityPool");
-        withdrawRequestNFTAddress = addressProvider.getContractAddress("WithdrawRequestNFT");
-        roleRegistryAddress = addressProvider.getContractAddress("RoleRegistry");
-        timelockAddress = addressProvider.getContractAddress("EtherFiTimelock");
-        
-        // Validate addresses
-        require(weETHAddress != address(0), "WeETH address not found");
-        require(eETHAddress != address(0), "EETH address not found");
-        require(liquidityPoolAddress != address(0), "LiquidityPool address not found");
-        require(withdrawRequestNFTAddress != address(0), "WithdrawRequestNFT address not found");
-        require(roleRegistryAddress != address(0), "RoleRegistry address not found");
-        require(timelockAddress != address(0), "EtherFiTimelock address not found");
-    }
-    
-    function displayAddresses() internal view {
-        console.log("\nContract Addresses:");
+    function displayAddresses() internal pure {
+        console.log("\nUsing Mainnet Contract Addresses:");
         console.log("-------------------");
         console.log("WeETH:              ", weETHAddress);
         console.log("EETH:               ", eETHAddress);
@@ -137,7 +105,7 @@ contract DeployWeETHWithdrawAdapter is Script {
         console.log("EtherFiTimelock:    ", timelockAddress);
     }
     
-    function displayDeploymentSummary(address implementation, address proxy) internal view {
+    function displayDeploymentSummary(address implementation, address proxy) internal pure {
         console.log("\n========================================");
         console.log("Deployment Summary");
         console.log("========================================");
