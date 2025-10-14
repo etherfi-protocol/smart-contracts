@@ -42,13 +42,4 @@ interface IWeETHWithdrawAdapter {
      * @return eETHAmount Equivalent amount of eETH
      */
     function getEETHByWeETH(uint256 weETHAmount) external view returns (uint256 eETHAmount);
-
-    // Events
-    event WithdrawRequested(
-        address indexed user, 
-        address indexed recipient, 
-        uint256 weETHAmount, 
-        uint256 eETHAmount, 
-        uint256 indexed requestId
-    );
 }

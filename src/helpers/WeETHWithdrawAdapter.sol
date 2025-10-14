@@ -92,11 +92,14 @@ contract WeETHWithdrawAdapter is
     }
 
     /**
-     * @notice Initialize the adapter contract (only sets owner and paused state)
+     * @notice Initialize the adapter contract with initial owner
+     * @param _initialOwner Address that will be set as the contract owner
      */
-    function initialize() external initializer {
+    function initialize(address _initialOwner) external initializer {
+        if (_initialOwner == address(0)) revert ZeroAddress();
         __Ownable_init();
         __UUPSUpgradeable_init();
+        _transferOwnership(_initialOwner);
         paused = false;
     }
 
@@ -125,9 +128,7 @@ contract WeETHWithdrawAdapter is
         
         // Create withdrawal request through LiquidityPool
         requestId = liquidityPool.requestWithdraw(recipient, eETHAmount);
-        
-        emit WithdrawRequested(msg.sender, recipient, weETHAmount, eETHAmount, requestId);
-        
+                
         return requestId;
     }
 
