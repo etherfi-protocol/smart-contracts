@@ -23,3 +23,6 @@ goerli = "${GOERLI_RPC_URL}"
 [etherscan]
 mainnet = { key = "${ETHERSCAN_API_KEY}" }
 goerli =  { key = "${ETHERSCAN_API_KEY}" }
+
+# Used for verifying contracts on Tenderly Virtual Testnet
+unknown_chain = { key = "${TENDERLY_ACCESS_KEY}", chain =1, url = "${TENDERLY_VIRTUAL_TESTNET_RPC_URL}/verify/etherscan" }

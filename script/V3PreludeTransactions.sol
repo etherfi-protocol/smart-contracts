@@ -17,6 +17,7 @@ import "../lib/openzeppelin-contracts/contracts/access/IAccessControl.sol";
 import "forge-std/console2.sol";
 
 contract V3PreludeTransactions is Script {
+    /*
 
     EtherFiTimelock etherFiTimelock = EtherFiTimelock(payable(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761));
 
@@ -152,9 +153,9 @@ contract V3PreludeTransactions is Script {
             targets,
             values,
             data,
-            bytes32(0)/*=predecessor*/,
+            bytes32(0), // predecessor
             timelockSalt,
-            259200/*=minDelay*/
+            259200 // minDelay
         );
 
         console2.log("Schedule Tx:");
@@ -166,7 +167,7 @@ contract V3PreludeTransactions is Script {
             targets,
             values,
             data,
-            bytes32(0)/*=predecessor*/,
+            bytes32(0), //predecessor
             timelockSalt
         );
 
@@ -174,10 +175,10 @@ contract V3PreludeTransactions is Script {
         console2.logBytes(executeCalldata);
 
         // uncomment to run against fork
-        //etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0)/*=predecessor*/, timelockSalt, 259200/*=minDelay*/);
+        //etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, 259200);
 
         //bytes32 timelockSalt = TODO set as salt from schedule;
-        //etherFiTimelock.executeBatch(targets, values, data, bytes32(0)/*=predecessor*/, timelockSalt);
+        //etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
     }
 
 
@@ -219,9 +220,9 @@ contract V3PreludeTransactions is Script {
             targets,
             values,
             data,
-            bytes32(0)/*=predecessor*/,
+            bytes32(0), // predecessor
             timelockSalt,
-            259200/*=minDelay*/
+            259200 // minDelay
         );
 
         console2.log("Rollback Schedule Tx:");
@@ -233,7 +234,7 @@ contract V3PreludeTransactions is Script {
             targets,
             values,
             data,
-            bytes32(0)/*=predecessor*/,
+            bytes32(0), //predecessor
             timelockSalt
         );
 
@@ -241,13 +242,14 @@ contract V3PreludeTransactions is Script {
         console2.logBytes(executeCalldata);
 
         // uncomment to run against fork
-        //etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0)/*=predecessor*/, timelockSalt, 259200/*=minDelay*/);
+        //etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, 259200);
 
-        //etherFiTimelock.executeBatch(targets, values, data, bytes32(0)/*=predecessor*/, timelockSalt);
+        //etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
 
     }
 
     function _encodeRoleGrant(bytes32 role, address account) internal pure returns (bytes memory) {
         return abi.encodeWithSelector(RoleRegistry.grantRole.selector, role, account);
     }
+    */
 }

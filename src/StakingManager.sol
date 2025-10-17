@@ -41,12 +41,14 @@ contract StakingManager is
     //---------------------------------------------------------------------------
 
     LegacyStakingManagerState legacyState; // all legacy state in this contract has been deprecated
+    mapping(address => bool) public deployedEtherFiNodes;
 
     //---------------------------------------------------------------------------
     //---------------------------  ROLES  ---------------------------------------
     //---------------------------------------------------------------------------
 
     bytes32 public constant STAKING_MANAGER_NODE_CREATOR_ROLE = keccak256("STAKING_MANAGER_NODE_CREATOR_ROLE");
+    bytes32 public constant STAKING_MANAGER_ADMIN_ROLE = keccak256("STAKING_MANAGER_ADMIN_ROLE");
 
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
@@ -200,10 +202,36 @@ contract StakingManager is
 
         BeaconProxy proxy = new BeaconProxy(address(etherFiNodeBeacon), "");
         address node = address(proxy);
+
+        deployedEtherFiNodes[node] = true;
+        emit EtherFiNodeDeployed(node);
+
         if (_createEigenPod) {
-            IEtherFiNode(node).createEigenPod();
+            etherFiNodesManager.createEigenPod(node);
         }
+
         return node;
+    }
+
+    /// @dev this method is for backfilling the addresses of etherFiNodes the protocol has previously deployed
+    ///    Once this data has been backfilled we can delete this method
+    function backfillExistingEtherFiNodes(address[] calldata nodes) external onlyAdmin {
+        for (uint256 i = 0; i < nodes.length; i++) {
+            address node = nodes[i];
+            if (deployedEtherFiNodes[node]) continue; // already linked
+
+            deployedEtherFiNodes[node] = true;
+            emit EtherFiNodeDeployed(node);
+        }
+    }
+
+    //--------------------------------------------------------------------------------------
+    //-----------------------------------  MODIFIERS  --------------------------------------
+    //--------------------------------------------------------------------------------------
+
+    modifier onlyAdmin() {
+        if (!roleRegistry.hasRole(STAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _;
     }
 
 }

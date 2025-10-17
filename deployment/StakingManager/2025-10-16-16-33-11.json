@@ -1,0 +1,16 @@
+{
+  "contractName": "StakingManager",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x6c46a46c04f65838ca4ea2750f2b293e01117eb7000000000000000000000000",
+    "constructorArgs": {
+      "_liquidityPool": "0x308861A430be4cce5502d0A12724771Fc6DaF216",
+      "_etherFiNodesManager": "0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F",
+      "_ethDepositContract": "0x00000000219ab540356cBB839Cbe05303d7705Fa",
+      "_auctionManager": "0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9",
+      "_etherFiNodeBeacon": "0x3c55986Cfee455E2533F4D29006634EcF9B7c03F",
+      "_roleRegistry": "0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9"
+    }
+  },
+  "deployedAddress": "0xa38d03ea42F8bc31892336E1F42523e94FB91a7A"
+}

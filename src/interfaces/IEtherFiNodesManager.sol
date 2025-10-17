@@ -2,7 +2,9 @@
 pragma solidity ^0.8.13;
 
 import "../interfaces/IEtherFiNode.sol";
+import "../interfaces/IStakingManager.sol";
 import "../eigenlayer-interfaces/IDelegationManager.sol";
+import "../eigenlayer-interfaces/IEigenPod.sol";
 import {BeaconChainProofs} from "../eigenlayer-libraries/BeaconChainProofs.sol";
 
 interface IEtherFiNodesManager {
@@ -14,26 +16,43 @@ interface IEtherFiNodesManager {
     function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external;
     function calculateValidatorPubkeyHash(bytes memory pubkey) external pure returns (bytes32);
 
-    function stakingManager() external view returns (address);
+    function stakingManager() external view returns (IStakingManager);
 
     // eigenlayer interactions
+    function createEigenPod(address node) external returns (address);
     function getEigenPod(uint256 id) external view returns (address);
+    function getEigenPod(address node) external view returns (address);
     function startCheckpoint(uint256 id) external;
+    function startCheckpoint(address node) external;
     function verifyCheckpointProofs(uint256 id, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
+    function verifyCheckpointProofs(address node, BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
     function setProofSubmitter(uint256 id, address newProofSubmitter) external;
+    function setProofSubmitter(address node, address newProofSubmitter) external;
     function queueETHWithdrawal(uint256 id, uint256 amount) external returns (bytes32 withdrawalRoot);
+    function queueETHWithdrawal(address node, uint256 amount) external returns (bytes32 withdrawalRoot);
     function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external;
+    function completeQueuedETHWithdrawals(address node, bool receiveAsTokens) external;
     function queueWithdrawals(uint256 id, IDelegationManager.QueuedWithdrawalParams[] calldata params) external;
+    function queueWithdrawals(address node, IDelegationManager.QueuedWithdrawalParams[] calldata params) external;
     function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
+    function completeQueuedWithdrawals(address node, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
     function sweepFunds(uint256 id) external;
+    //function sweepFunds(address node) external;
+    function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable;
+    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable;
+
+
+    // rate limiting constants
+    function UNRESTAKING_LIMIT_ID() external view returns (bytes32);
+    function EXIT_REQUEST_LIMIT_ID() external view returns (bytes32);
 
     // call forwarding
-    function updateAllowedForwardedExternalCalls(bytes4 selector, address target, bool allowed) external;
-    function updateAllowedForwardedEigenpodCalls(bytes4 selector, bool allowed) external;
-    function forwardExternalCall(uint256[] calldata ids, bytes[] calldata data, address target) external returns (bytes[] memory returnData);
-    function forwardEigenPodCall(uint256[] calldata ids, bytes[] calldata data) external returns (bytes[] memory returnData);
-    function allowedForwardedEigenpodCalls(bytes4 selector) external returns (bool);
-    function allowedForwardedExternalCalls(bytes4 selector, address to) external returns (bool);
+    function updateAllowedForwardedExternalCalls(address user, bytes4 selector, address target, bool allowed) external;
+    function updateAllowedForwardedEigenpodCalls(address user, bytes4 selector, bool allowed) external;
+    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external returns (bytes[] memory returnData);
+    function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external returns (bytes[] memory returnData);
+    function allowedForwardedEigenpodCalls(address user, bytes4 selector) external view returns (bool);
+    function allowedForwardedExternalCalls(address user, bytes4 selector, address to) external view returns (bool);
 
     // protocol
     function pauseContract() external;
@@ -102,9 +121,12 @@ interface IEtherFiNodesManager {
     //---------------------------------------------------------------------------
 
     event PubkeyLinked(bytes32 indexed pubkeyHash, address indexed nodeAddress, uint256 indexed legacyId, bytes pubkey);
-    event AllowedForwardedExternalCallsUpdated(bytes4 indexed selector, address indexed _target, bool _allowed);
-    event AllowedForwardedEigenpodCallsUpdated(bytes4 indexed selector, bool _allowed);
+    event UserAllowedForwardedExternalCallsUpdated(address indexed user, bytes4 indexed selector, address indexed _target, bool _allowed);
+    event UserAllowedForwardedEigenpodCallsUpdated(address indexed user, bytes4 indexed selector, bool _allowed);
     event FundsTransferred(address indexed nodeAddress, uint256 amount);
+    event ValidatorWithdrawalRequestSent(address indexed pod, bytes32 indexed validatorPubkeyHash, bytes validatorPubkey);
+    event ValidatorSwitchToCompoundingRequested(address indexed pod, bytes32 indexed validatorPubkeyHash, bytes validatorPubkey);
+    event ValidatorConsolidationRequested(address indexed pod, bytes32 indexed sourcePubkeyHash, bytes sourcePubkey, bytes32 targetPubkeyHash, bytes targetPubkey);
 
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------
@@ -118,5 +140,8 @@ interface IEtherFiNodesManager {
     error IncorrectRole();
     error ForwardedCallNotAllowed();
     error InvalidForwardedCall();
-
+    error EmptyWithdrawalsRequest();
+    error EmptyConsolidationRequest();
+    error InsufficientWithdrawalFees();
+    error InsufficientConsolidationFees();
 }

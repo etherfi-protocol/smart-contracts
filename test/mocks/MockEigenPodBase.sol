@@ -105,4 +105,8 @@ contract MockEigenPodBase is IEigenPod {
     /// to an existing slot within the last 24 hours. If the slot at `timestamp` was skipped, this method
     /// will revert.
     function getParentBlockRoot(uint64 timestamp) external virtual view returns (bytes32) {}
+    function getWithdrawalRequestFee() external view returns (uint256){}
+    function requestWithdrawal(WithdrawalRequest[] calldata requests) external payable {}
+    function getConsolidationRequestFee() external view returns (uint256){}
+    function requestConsolidation(ConsolidationRequest[] calldata requests) external payable {}
 }

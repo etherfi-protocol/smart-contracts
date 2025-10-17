@@ -26,6 +26,7 @@ import "../src/archive/ProtocolRevenueManager.sol";
 import "../src/BNFT.sol";
 import "../src/TNFT.sol";
 import "../src/EtherFiNode.sol";
+import "../src/EtherFiRateLimiter.sol";
 import "../src/LiquidityPool.sol";
 import "../src/Liquifier.sol";
 import "../src/EtherFiRestaker.sol";
@@ -99,6 +100,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     UUPSProxy public auctionManagerProxy;
     UUPSProxy public stakingManagerProxy;
     UUPSProxy public etherFiNodeManagerProxy;
+    UUPSProxy public rateLimiterProxy;
     UUPSProxy public protocolRevenueManagerProxy;
     UUPSProxy public TNFTProxy;
     UUPSProxy public BNFTProxy;
@@ -133,6 +135,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     EtherFiNodesManager public managerInstance;
     EtherFiNodesManager public managerImplementation;
+
+    EtherFiRateLimiter public rateLimiterInstance;
+    EtherFiRateLimiter public rateLimiterImplementation;
 
     RegulationsManager public regulationsManagerInstance;
     RegulationsManager public regulationsManagerImplementation;
@@ -468,6 +473,11 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryProxy = new UUPSProxy(address(roleRegistryImplementation), abi.encodeWithSelector(RoleRegistry.initialize.selector, owner));
         roleRegistryInstance = RoleRegistry(address(roleRegistryProxy));
 
+        rateLimiterImplementation = new EtherFiRateLimiter(address(roleRegistryInstance));
+        rateLimiterProxy = new UUPSProxy(address(rateLimiterImplementation), "");
+        rateLimiterInstance = EtherFiRateLimiter(address(rateLimiterProxy));
+        rateLimiterInstance.initialize();
+
         nodeOperatorManagerImplementation = new NodeOperatorManager();
         nodeOperatorManagerProxy = new UUPSProxy(address(nodeOperatorManagerImplementation), "");
         nodeOperatorManagerInstance = NodeOperatorManager(address(nodeOperatorManagerProxy));
@@ -504,7 +514,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         protocolRevenueManagerInstance.initialize();
         protocolRevenueManagerInstance.updateAdmin(alice);
 
-        managerImplementation = new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistryInstance));
+        managerImplementation = new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance));
         etherFiNodeManagerProxy = new UUPSProxy(address(managerImplementation), "");
         managerInstance = EtherFiNodesManager(payable(address(etherFiNodeManagerProxy)));
         
@@ -1488,7 +1498,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_etherfi_nodes_manager_contract() internal {
-        address newImpl = address(new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistryInstance)));
+        address newImpl = address(new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance)));
         vm.prank(managerInstance.owner());
         managerInstance.upgradeTo(newImpl);
     }

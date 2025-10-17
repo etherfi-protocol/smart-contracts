@@ -22,6 +22,7 @@ interface IStakingManager {
     // EtherFiNode Beacon Proxy
     function upgradeEtherFiNode(address _newImplementation) external;
     function getEtherFiNodeBeacon() external view returns (address);
+    function deployedEtherFiNodes(address etherFiNode) external view returns (bool);
 
     // protocol
     function pauseContract() external;
@@ -72,6 +73,7 @@ interface IStakingManager {
     event validatorCreated(bytes32 indexed pubkeyHash, address indexed etherFiNode, bytes pubkey);
     event validatorConfirmed(bytes32 indexed pubkeyHash, address indexed bnftRecipient, address indexed tnftRecipient, bytes pubkey);
     event linkLegacyValidatorId(bytes32 indexed pubkeyHash, uint256 indexed legacyId);
+    event EtherFiNodeDeployed(address indexed etheFiNode);
 
     // legacy event still being emitted in its original form to play nice with existing external tooling
     event ValidatorRegistered(address indexed operator, address indexed bNftOwner, address indexed tNftOwner, uint256 validatorId, bytes validatorPubKey, string ipfsHashForEncryptedValidatorKey);
