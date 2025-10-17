@@ -70,7 +70,7 @@ contract DeployWeETHWithdrawAdapter is Script {
     address constant timelockAddress = 0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761;
     
     // Commit hash salt
-    bytes32 constant commitHashSalt = bytes32(bytes20(hex"5bb56076faac983d51c2145b4de117335f6e4fa5"));
+    bytes32 constant commitHashSalt = bytes32(bytes20(hex"97cd063025712908c02476f03a21565e2fd4f801"));
 
     function run() external {
         console.log("\n========================================");
