@@ -8,6 +8,8 @@ import "../../src/EtherFiNodesManager.sol";
 import "../../src/EtherFiNode.sol";
 import "../../src/EtherFiTimelock.sol";
 import "../../src/interfaces/IRoleRegistry.sol";
+import "../../src/RoleRegistry.sol";
+
 import {IEigenPod, IEigenPodTypes } from "../../src/eigenlayer-interfaces/IEigenPod.sol";
 
 /**
