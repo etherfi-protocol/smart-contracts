@@ -42,6 +42,7 @@ contract StakingManager is
 
     LegacyStakingManagerState legacyState; // all legacy state in this contract has been deprecated
     mapping(address => bool) public deployedEtherFiNodes;
+    mapping(bytes32 => ValidatorCreationStatus) public validatorCreationStatus;
 
     //---------------------------------------------------------------------------
     //---------------------------  ROLES  ---------------------------------------
@@ -49,6 +50,7 @@ contract StakingManager is
 
     bytes32 public constant STAKING_MANAGER_NODE_CREATOR_ROLE = keccak256("STAKING_MANAGER_NODE_CREATOR_ROLE");
     bytes32 public constant STAKING_MANAGER_ADMIN_ROLE = keccak256("STAKING_MANAGER_ADMIN_ROLE");
+    bytes32 public constant STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE = keccak256("STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE");
 
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
@@ -88,26 +90,29 @@ contract StakingManager is
     //---------------------------------------------------------------------------
     //------------------------- Deposit Flow ------------------------------------
     //---------------------------------------------------------------------------
+    
+    function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external {
+        if (!roleRegistry.hasRole(STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE, msg.sender)) revert IncorrectRole();
+        bytes32 validatorCreationDataHash = keccak256(abi.encodePacked(depositData.publicKey, depositData.signature, depositData.depositDataRoot, depositData.ipfsHashForEncryptedValidatorKey, bidId, etherFiNode));
+        if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.REGISTERED) revert InvalidValidatorCreationStatus();
+        validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.INVALIDATED;
+        emit ValidatorCreationStatusUpdated(depositData, bidId, etherFiNode, validatorCreationDataHash, ValidatorCreationStatus.INVALIDATED);
+    }
 
-    /// @notice send 1 eth to deposit contract to create the validator.
+   /// @notice send 1 eth to deposit contract to create the validator.
     ///    The rest of the eth will not be sent until the oracle confirms the withdrawal credentials
-    /// @dev provided deposit data must be for a 0x02 compounding validator
     function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external payable {
         if (msg.sender != liquidityPool) revert InvalidCaller();
         if (depositData.length != bidIds.length) revert InvalidDepositData();
-        if (address(IEtherFiNode(etherFiNode).getEigenPod()) == address(0)) revert InvalidEtherFiNode();
 
-        // process each 1 eth deposit to create validators for later verification from oracle
         for (uint256 i = 0; i < depositData.length; i++) {
+            bytes32 validatorCreationDataHash = keccak256(abi.encodePacked(depositData[i].publicKey, depositData[i].signature, depositData[i].depositDataRoot, depositData[i].ipfsHashForEncryptedValidatorKey, bidIds[i], etherFiNode));
+            if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.REGISTERED) revert InvalidValidatorCreationStatus();
 
-            // claim the bid
-            if (!auctionManager.isBidActive(bidIds[i])) revert InactiveBid();
-            auctionManager.updateSelectedBidInformation(bidIds[i]);
-
-            // verify deposit root
             bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
             bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, initialDepositAmount);
-            if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
+            validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.CONFIRMED;
+            auctionManager.updateSelectedBidInformation(bidIds[i]);
 
             // Link the pubkey to a node. Will revert if this pubkey is already registered to a different target
             etherFiNodesManager.linkPubkeyToNode(depositData[i].publicKey, etherFiNode, bidIds[i]);
@@ -121,6 +126,31 @@ contract StakingManager is
 
             // legacy event for compatibility with existing tooling
             emit ValidatorRegistered(auctionManager.getBidOwner(bidIds[i]), address(liquidityPool), address(liquidityPool), bidIds[i], depositData[i].publicKey, depositData[i].ipfsHashForEncryptedValidatorKey);
+            emit ValidatorCreationStatusUpdated(depositData[i], bidIds[i], etherFiNode, validatorCreationDataHash, ValidatorCreationStatus.CONFIRMED);
+        }
+    }
+
+    /// @notice register the beacon validators data for later confirmation from the oracle before the 1eth deposit
+    /// @dev provided deposit data must be for a 0x02 compounding validator
+    function registerBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external {
+        if (msg.sender != liquidityPool) revert InvalidCaller();
+        if (depositData.length != bidIds.length) revert InvalidDepositData();
+        if (address(IEtherFiNode(etherFiNode).getEigenPod()) == address(0) || !deployedEtherFiNodes[etherFiNode]) revert InvalidEtherFiNode();
+
+        // process each 1 eth deposit to create validators for later verification from oracle
+        for (uint256 i = 0; i < depositData.length; i++) {
+
+            // claim the bid
+            if (!auctionManager.isBidActive(bidIds[i])) revert InactiveBid();
+
+            // verify deposit root
+            bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
+            bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, initialDepositAmount);
+            if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
+
+            bytes32 validatorCreationDataHash = keccak256(abi.encodePacked(depositData[i].publicKey, depositData[i].signature, depositData[i].depositDataRoot, depositData[i].ipfsHashForEncryptedValidatorKey, bidIds[i], etherFiNode));
+            validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.REGISTERED;
+            emit ValidatorCreationStatusUpdated(depositData[i], bidIds[i], etherFiNode, validatorCreationDataHash, ValidatorCreationStatus.REGISTERED);
         }
     }
 
