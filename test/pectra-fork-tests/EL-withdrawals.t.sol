@@ -28,6 +28,11 @@ contract ELExitsTest is Test {
 
     bytes constant PK_28689 = hex"88d73705e9c3f29b042d3fe70bdc8781debc5506db43dd00122fd1fa7f4755535d31c7ecb2686ff53669b080ef9e18a3";
 
+    // MULTIPLE EL EXITS TEST
+    bytes constant PK_80143 = hex"811cd0bb7dd301afbbddd1d5db15ff0ca9d5f8ada78c0b1223f75b524aca1ca9ff1ba205d9efd7c37c2174576cc123e2";
+    bytes constant PK_80194 = hex"b86cb11d564b29a38cdc8a3f1f9c35e6dcd2d0f85f40da60f745e479ba42b4548c83a2b049cf02277fceaa9b421d0039";
+    bytes constant PK_89936 = hex"b8786ec7945d737698e374193f05a5498e932e2941263a7842837e9e3fac033af285e53a90afecf994585d178b5eedaa";
+
     function setUp() public {}
 
     function _resolvePod(bytes memory pubkey) internal view returns (IEtherFiNode etherFiNode, IEigenPod pod) {
@@ -52,8 +57,6 @@ contract ELExitsTest is Test {
 
     function test_ELExits() public {
         console2.log("=== EL EXITS TEST ===");
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), realElExiter);
-        require(hasRole, "test: realElExiter does not have the EL Trigger Exit Role");
 
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory legacyIds = new uint256[](1);
@@ -81,6 +84,42 @@ contract ELExitsTest is Test {
             etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]), 
             pubkeys[0]
         );
+        vm.prank(realElExiter);
+        etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
+        vm.stopPrank();
+    }
+
+    function test_multiple_ELExits() public {
+        console2.log("=== MULTIPLE EL EXITS TEST ===");
+
+        bytes[] memory pubkeys = new bytes[](3);
+        uint64[] memory amounts = new uint64[](3);
+
+        pubkeys[0] = PK_80194;
+        amounts[0] = 0;
+        
+        pubkeys[1] = PK_89936;
+        amounts[1] = 0;
+
+        pubkeys[2] = PK_80143;
+        amounts[2] = 0;
+
+        uint256[] memory linkOnlyOneValidatorlegacyId = new uint256[](1);
+        linkOnlyOneValidatorlegacyId[0] = 80194;
+        bytes[] memory linkOnlyOneValidatorPubkeys = new bytes[](1);
+        linkOnlyOneValidatorPubkeys[0] = PK_80194;
+        
+        vm.prank(address(etherFiOperatingTimelock));
+        etherFiNodesManager.linkLegacyValidatorIds(linkOnlyOneValidatorlegacyId, linkOnlyOneValidatorPubkeys); 
+        vm.stopPrank();  
+
+        ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
+
+        uint256 feePer = pod0.getWithdrawalRequestFee();
+        uint256 n = reqs.length;
+        uint256 valueToSend = feePer * n;
+
         vm.prank(realElExiter);
         etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
         vm.stopPrank();
