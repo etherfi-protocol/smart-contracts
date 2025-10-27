@@ -36,7 +36,6 @@ contract ConsolidateValidators is Script {
     address constant EL_TRIGGER_EXITER = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
 
     uint256 MIN_DELAY_OPERATING_TIMELOCK = 28800; // 8 hours
-    uint256 MIN_DELAY_TIMELOCK = 259200; // 72 hours
 
     //consolidate the following validators:
     bytes constant PK_54043 = hex"8014c4704f081bd4b8470cb93722601095a314c3db7ccf79c129189d01c432db968a64131f23a94c8ff1e280500ae3d3"; // linked in EtherfiNodesManager
@@ -49,39 +48,83 @@ contract ConsolidateValidators is Script {
         console2.log("================================================");
         console2.log("");
 
-        uint256[] memory legacyIdsForOneValidator = new uint256[](1);
-        legacyIdsForOneValidator[0] = 54043;
-        bytes[] memory pubkeysForOneValidator = new bytes[](1);
-        pubkeysForOneValidator[0] = PK_54043;
+        // uint256[] memory legacyIdsForOneValidator = new uint256[](1);
+        // legacyIdsForOneValidator[0] = 54043;
+        // bytes[] memory pubkeysForOneValidator = new bytes[](1);
+        // pubkeysForOneValidator[0] = PK_54043;
 
-        vm.prank(address(etherFiOperatingTimelock));
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIdsForOneValidator, pubkeysForOneValidator); 
-        vm.stopPrank();
-        console2.log("Linking legacy validator ids for one validator complete");
+        // vm.prank(address(etherFiOperatingTimelock));
+        // etherFiNodesManager.linkLegacyValidatorIds(legacyIdsForOneValidator, pubkeysForOneValidator); 
+        // vm.stopPrank();
+        // console2.log("Linking legacy validator ids for one validator complete");
+        
+        vm.deal(address(etherFiOperatingTimelock), 1 ether);
+        scheduleConsolidation();  
+    }
 
+    function scheduleConsolidation() public {
+        ( , IEigenPod pod) = _resolvePod(PK_54043);
+        console2.log("Pod address:", address(pod));
         bytes[] memory validatorPubkeys = new bytes[](2);
         validatorPubkeys[0] = PK_54043;
         validatorPubkeys[1] = PK_54045;
-        // validatorPubkeys[2] = PK_54041;
-
-        ( , IEigenPod pod0) = _resolvePod(validatorPubkeys[0]);
-
         IEigenPodTypes.ConsolidationRequest[] memory reqs = _consolidationRequestsFromPubkeys(validatorPubkeys);
 
-        uint256 feePer = pod0.getConsolidationRequestFee();
+        uint256 feePer = pod.getConsolidationRequestFee();
         uint256 n = reqs.length;
         uint256 valueToSend = feePer * n;
-        
-        vm.deal(address(etherFiOperatingTimelock), valueToSend + 1 ether);
+        console2.log("Value to send:", valueToSend);
+        console2.log("Fee per:", feePer);
+        console2.log("Number of requests:", n);
 
-        vm.prank(address(etherFiOperatingTimelock));
-        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
-        vm.stopPrank();
-        // calling requestConsolidation again to test the revert
-        vm.prank(address(etherFiOperatingTimelock));
-        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
-        vm.stopPrank();
+        address[] memory targets = new address[](1);
+        targets[0] = address(etherFiNodesManager);
+        uint256[] memory values = new uint256[](1);
+        values[0] = valueToSend;
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encodeWithSelector(
+            etherFiNodesManager.requestConsolidation.selector,
+            reqs
+        );
 
+        bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
+        bytes memory scheduleCalldata = abi.encodeWithSelector(
+            etherFiOperatingTimelock.scheduleBatch.selector,
+            targets,
+            values,
+            data,
+            bytes32(0), // predecessor
+            timelockSalt,
+            MIN_DELAY_OPERATING_TIMELOCK // minDelay
+        );
+        console2.log("Scheduled consolidation request Tx");
+        console2.log("================================================");
+        console2.logBytes(scheduleCalldata);
+        console2.log("================================================");
+        console2.log("");
+
+        bytes memory executeCalldata = abi.encodeWithSelector(
+            etherFiOperatingTimelock.executeBatch.selector,
+            targets,
+            values,
+            data,
+            bytes32(0), // predecessor
+            timelockSalt,
+            MIN_DELAY_OPERATING_TIMELOCK // minDelay
+        );
+        console2.log("Executed consolidation request Tx");
+        console2.log("================================================");
+        console2.logBytes(executeCalldata);
+        console2.log("================================================");
+        console2.log("");
+
+        vm.prank(address(ETHERFI_NODES_MANAGER_ADMIN_ROLE));
+        etherFiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
+        vm.stopPrank();
+        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay        
+        vm.prank(address(ETHERFI_NODES_MANAGER_ADMIN_ROLE));
+        etherFiOperatingTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
+        vm.stopPrank();
     }
 
     function _consolidationRequestsFromPubkeys(bytes[] memory pubkeys)
