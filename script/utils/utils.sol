@@ -7,6 +7,8 @@ import "forge-std/StdJson.sol";
 import "forge-std/console.sol";
 import "forge-std/console2.sol";
 import "openzeppelin-contracts-upgradeable/contracts/interfaces/draft-IERC1822Upgradeable.sol";
+import {Deployed} from "../deploys/Deployed.s.sol";
+import {EtherFiTimelock} from "../../src/EtherFiTimelock.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);
@@ -20,7 +22,7 @@ interface IUpgrade {
     function roleRegistry() external returns (address);
 }
 
-contract Utils is Script {
+contract Utils is Script, Deployed {
     // ERC1967 storage slot for implementation address
     bytes32 constant IMPLEMENTATION_SLOT =
         0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
@@ -448,5 +450,35 @@ contract Utils is Script {
 
     function pad(string memory n) internal pure returns (string memory) {
         return bytes(n).length == 1 ? string.concat("0", n) : n;
+    }
+
+    function _execute_timelock(address timelock, address target, bytes memory data, bytes32 predecessor, bytes32 salt) internal {
+        vm.startPrank(timelockToAdmin[timelock]);
+        EtherFiTimelock timelockInstance = EtherFiTimelock(payable(timelock));
+        timelockInstance.execute(target, 0, data, predecessor, salt);
+        vm.stopPrank();
+    }
+
+    function _executeBatch_timelock(address timelock, address[] memory targets, bytes[] memory data, bytes32 predecessor, bytes32 salt) internal {
+        uint256[] memory values = new uint256[](targets.length);
+        for (uint256 i = 0; i < targets.length; i++) {
+            values[i] = 0;
+        }
+
+        vm.startPrank(timelockToAdmin[timelock]);
+        EtherFiTimelock timelockInstance = EtherFiTimelock(payable(timelock));
+        timelockInstance.executeBatch(targets, values, data, predecessor, salt);
+        vm.stopPrank();
+    }
+
+    function _executeBatch_timelock(address timelock, address target, bytes memory data, bytes32 predecessor, bytes32 salt) internal {
+        address[] memory targetsArray = new address[](1);
+        targetsArray[0] = target;
+        bytes[] memory dataArray = new bytes[](1);
+        dataArray[0] = data;
+        uint256[] memory valuesArray = new uint256[](1);
+        valuesArray[0] = 0;
+        
+        _executeBatch_timelock(timelock, targetsArray, dataArray, predecessor, salt);
     }
 }
