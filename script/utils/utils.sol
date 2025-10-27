@@ -27,8 +27,8 @@ contract Utils is Script, Deployed {
     bytes32 constant IMPLEMENTATION_SLOT =
         0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
 
-    uint256 MIN_DELAY_OPERATING_TIMELOCK = 28800; // 8 hours
-    uint256 MIN_DELAY_TIMELOCK = 259200; // 72 hours
+    uint256 constant MIN_DELAY_OPERATING_TIMELOCK = 28800; // 8 hours
+    uint256 constant MIN_DELAY_TIMELOCK = 259200; // 72 hours
 
     function deploy(string memory contractName, bytes memory constructorArgs, bytes memory bytecode, bytes32 salt, bool logging, ICreate2Factory factory) internal returns (address) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -450,6 +450,36 @@ contract Utils is Script, Deployed {
 
     function pad(string memory n) internal pure returns (string memory) {
         return bytes(n).length == 1 ? string.concat("0", n) : n;
+    }
+
+    function _schedule_timelock(address timelock, uint256 minDelay, address target, bytes memory data, bytes32 predecessor, bytes32 salt) internal {
+        vm.startPrank(timelockToAdmin[timelock]);
+        EtherFiTimelock timelockInstance = EtherFiTimelock(payable(timelock));
+        timelockInstance.schedule(target, 0, data, predecessor, salt, minDelay);
+        vm.stopPrank();
+    }
+
+    function _scheduleBatch_timelock(address timelock, uint256 minDelay, address[] memory targets, bytes[] memory data, bytes32 predecessor, bytes32 salt) internal {
+        uint256[] memory values = new uint256[](targets.length);
+        for (uint256 i = 0; i < targets.length; i++) {
+            values[i] = 0;
+        }
+
+        vm.startPrank(timelockToAdmin[timelock]);
+        EtherFiTimelock timelockInstance = EtherFiTimelock(payable(timelock));
+        timelockInstance.scheduleBatch(targets, values, data, predecessor, salt, minDelay);
+        vm.stopPrank();
+    }
+
+    function _scheduleBatch_timelock(address timelock, uint256 minDelay, address target, bytes memory data, bytes32 predecessor, bytes32 salt) internal {
+        address[] memory targetsArray = new address[](1);
+        targetsArray[0] = target;
+        bytes[] memory dataArray = new bytes[](1);
+        dataArray[0] = data;
+        uint256[] memory valuesArray = new uint256[](1);
+        valuesArray[0] = 0;
+        
+        _scheduleBatch_timelock(timelock, minDelay, targetsArray, dataArray, predecessor, salt);
     }
 
     function _execute_timelock(address timelock, address target, bytes memory data, bytes32 predecessor, bytes32 salt) internal {
