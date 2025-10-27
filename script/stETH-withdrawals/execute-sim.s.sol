@@ -4,9 +4,8 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import {Utils} from "../utils/utils.sol";
-import {TimelockSimulator} from "../helpers/TimelockSimulator.s.sol";
 
-contract ExecuteSim is TimelockSimulator {
+contract ExecuteSim is Utils {
     function run() external {
         // 1.a Upgrade EFRM to Temp
         _executeBatch_timelock(
