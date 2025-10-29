@@ -106,27 +106,28 @@ contract StakingManager is
         if (depositData.length != bidIds.length) revert InvalidDepositData();
 
         for (uint256 i = 0; i < depositData.length; i++) {
-            bytes32 validatorCreationDataHash = keccak256(abi.encodePacked(depositData[i].publicKey, depositData[i].signature, depositData[i].depositDataRoot, depositData[i].ipfsHashForEncryptedValidatorKey, bidIds[i], etherFiNode));
+            DepositData memory d = depositData[i];
+            bytes32 validatorCreationDataHash = keccak256(abi.encodePacked(d.publicKey, d.signature, d.depositDataRoot, d.ipfsHashForEncryptedValidatorKey, bidIds[i], etherFiNode));
             if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.REGISTERED) revert InvalidValidatorCreationStatus();
 
             bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
-            bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, initialDepositAmount);
+            bytes32 computedDataRoot = generateDepositDataRoot(d.publicKey, d.signature, withdrawalCredentials, initialDepositAmount);
             validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.CONFIRMED;
             auctionManager.updateSelectedBidInformation(bidIds[i]);
 
             // Link the pubkey to a node. Will revert if this pubkey is already registered to a different target
-            etherFiNodesManager.linkPubkeyToNode(depositData[i].publicKey, etherFiNode, bidIds[i]);
+            etherFiNodesManager.linkPubkeyToNode(d.publicKey, etherFiNode, bidIds[i]);
 
             // Deposit to the Beacon Chain
-            depositContractEth2.deposit{value: initialDepositAmount}(depositData[i].publicKey, withdrawalCredentials, depositData[i].signature, computedDataRoot);
+            depositContractEth2.deposit{value: initialDepositAmount}(d.publicKey, withdrawalCredentials, d.signature, computedDataRoot);
 
-            bytes32 pubkeyHash = calculateValidatorPubkeyHash(depositData[i].publicKey);
-            emit validatorCreated(pubkeyHash, etherFiNode, depositData[i].publicKey);
+            bytes32 pubkeyHash = calculateValidatorPubkeyHash(d.publicKey);
+            emit validatorCreated(pubkeyHash, etherFiNode, d.publicKey);
             emit linkLegacyValidatorId(pubkeyHash, bidIds[i]); // can remove this once we fully transition to pubkeys
 
             // legacy event for compatibility with existing tooling
-            emit ValidatorRegistered(auctionManager.getBidOwner(bidIds[i]), address(liquidityPool), address(liquidityPool), bidIds[i], depositData[i].publicKey, depositData[i].ipfsHashForEncryptedValidatorKey);
-            emit ValidatorCreationStatusUpdated(depositData[i], bidIds[i], etherFiNode, validatorCreationDataHash, ValidatorCreationStatus.CONFIRMED);
+            emit ValidatorRegistered(auctionManager.getBidOwner(bidIds[i]), address(liquidityPool), address(liquidityPool), bidIds[i], d.publicKey, d.ipfsHashForEncryptedValidatorKey);
+            emit ValidatorCreationStatusUpdated(d, bidIds[i], etherFiNode, validatorCreationDataHash, ValidatorCreationStatus.CONFIRMED);
         }
     }
 
