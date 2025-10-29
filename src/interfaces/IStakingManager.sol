@@ -12,7 +12,7 @@ interface IStakingManager {
         string ipfsHashForEncryptedValidatorKey;
     }
 
-        // Possibles for validator creation status
+    // Possible values for validator creation status
     enum ValidatorCreationStatus {
         NOT_REGISTERED,
         REGISTERED,
