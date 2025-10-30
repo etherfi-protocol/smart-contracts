@@ -27,11 +27,8 @@ library StructuredLinkedList {
      */
     function listExists(List storage self) internal view returns (bool) {
         // if the head nodes previous or next pointers both point to itself, then there are no items in the list
-        if (self.list[_HEAD][_PREV] != _HEAD || self.list[_HEAD][_NEXT] != _HEAD) {
-            return true;
-        } else {
-            return false;
-        }
+        if (self.list[_HEAD][_PREV] != _HEAD || self.list[_HEAD][_NEXT] != _HEAD) return true;
+        else return false;
     }
 
     /**
@@ -42,11 +39,8 @@ library StructuredLinkedList {
      */
     function nodeExists(List storage self, uint256 _node) internal view returns (bool) {
         if (self.list[_node][_PREV] == _HEAD && self.list[_node][_NEXT] == _HEAD) {
-            if (self.list[_HEAD][_NEXT] == _node) {
-                return true;
-            } else {
-                return false;
-            }
+            if (self.list[_HEAD][_NEXT] == _node) return true;
+            else return false;
         } else {
             return true;
         }
@@ -77,11 +71,8 @@ library StructuredLinkedList {
      * @return bool, uint256, uint256 true if node exists or false otherwise, previous node, next node
      */
     function getNode(List storage self, uint256 _node) internal view returns (bool, uint256, uint256) {
-        if (!nodeExists(self, _node)) {
-            return (false, 0, 0);
-        } else {
-            return (true, self.list[_node][_PREV], self.list[_node][_NEXT]);
-        }
+        if (!nodeExists(self, _node)) return (false, 0, 0);
+        else return (true, self.list[_node][_PREV], self.list[_node][_NEXT]);
     }
 
     /**
@@ -149,9 +140,7 @@ library StructuredLinkedList {
      * @return uint256 the removed node
      */
     function remove(List storage self, uint256 _node) internal returns (uint256) {
-        if ((_node == _NULL) || (!nodeExists(self, _node))) {
-            return 0;
-        }
+        if ((_node == _NULL) || (!nodeExists(self, _node))) return 0;
         _createLink(self, self.list[_node][_PREV], self.list[_node][_NEXT], _NEXT);
         delete self.list[_node][_PREV];
         delete self.list[_node][_NEXT];

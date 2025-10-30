@@ -21,9 +21,7 @@ contract LoyaltyPointsMarketSafe is Ownable {
     }
 
     function boostToTop(uint256 tokenId) external payable {
-        if (msg.value != boostPaymentAmount) {
-            revert InvalidAmount();
-        }
+        if (msg.value != boostPaymentAmount) revert InvalidAmount();
         emit BoostToTop(msg.sender, tokenId, msg.value);
     }
 

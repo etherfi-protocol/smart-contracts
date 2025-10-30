@@ -82,14 +82,13 @@ multiline_func_body = false
 multiline_block_brace = false
 
 # Whether single-line statement blocks are allowed
-# "preserve": Keeps existing formatting (no change)
+# "preserve": Keeps existing formatting (no change) - recommended for maintaining current style
 # "single": Allows single-line blocks without braces: if (condition) doSomething();
 # "multi": Always requires braces and multi-line formatting (safer, prevents bugs)
 #     if (condition) {
 #         doSomething();
 #     }
-# "multi" is safer as it prevents bugs from adding code to if statements
-single_line_statement_blocks = "multi"
+single_line_statement_blocks = "single"
 
 # Whether to add blank lines between contract/interface/library definitions
 # false: No extra lines between definitions (compact)

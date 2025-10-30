@@ -98,18 +98,10 @@ contract CleanupOldWhitelist is Script {
             console2.log(unicode"✓ ALL PREVIOUSLY WHITELISTED ITEMS SUCCESSFULLY CLEARED");
         } else {
             console2.log(unicode"✗ SOME ITEMS STILL WHITELISTED:");
-            if (eigenPod1) {
-                console2.log("  - EigenPod 0x0dd8dd02 still active");
-            }
-            if (eigenPod2) {
-                console2.log("  - EigenPod 0x88676cad still active");
-            }
-            if (external1) {
-                console2.log("  - External 0x3ccc861d on RewardsCoordinator still active");
-            }
-            if (external2) {
-                console2.log("  - External 0x0dd8dd02 on DelegationManager still active");
-            }
+            if (eigenPod1) console2.log("  - EigenPod 0x0dd8dd02 still active");
+            if (eigenPod2) console2.log("  - EigenPod 0x88676cad still active");
+            if (external1) console2.log("  - External 0x3ccc861d on RewardsCoordinator still active");
+            if (external2) console2.log("  - External 0x0dd8dd02 on DelegationManager still active");
             console2.log("Check admin permissions and rerun cleanup if needed");
         }
     }

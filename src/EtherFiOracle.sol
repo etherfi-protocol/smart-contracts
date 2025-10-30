@@ -197,9 +197,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     function removeCommitteeMember(address _address) public onlyOwner {
         require(committeeMemberStates[_address].registered == true, "Not registered");
         numCommitteeMembers--;
-        if (committeeMemberStates[_address].enabled) {
-            numActiveCommitteeMembers--;
-        }
+        if (committeeMemberStates[_address].enabled) numActiveCommitteeMembers--;
         delete committeeMemberStates[_address];
 
         emit CommitteeMemberRemoved(_address);
@@ -209,11 +207,8 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         require(committeeMemberStates[_address].registered == true, "Not registered");
         require(committeeMemberStates[_address].enabled != _enabled, "Already in the target state");
         committeeMemberStates[_address].enabled = _enabled;
-        if (_enabled) {
-            numActiveCommitteeMembers++;
-        } else {
-            numActiveCommitteeMembers--;
-        }
+        if (_enabled) numActiveCommitteeMembers++;
+        else numActiveCommitteeMembers--;
 
         emit CommitteeMemberUpdated(_address, _enabled);
     }

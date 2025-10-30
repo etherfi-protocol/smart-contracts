@@ -50,9 +50,7 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
     }
 
     function setClaimDelay(uint256 _claimDelay) external {
-        if (!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE, msg.sender)) revert IncorrectRole();
         claimDelay = _claimDelay;
         emit ClaimDelayUpdated(claimDelay);
     }
@@ -66,9 +64,7 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
      */
 
     function setPendingMerkleRoot(address _token, bytes32 _merkleRoot) external whenNotPaused {
-        if (!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         pendingMerkleRoots[_token] = _merkleRoot;
         lastPendingMerkleUpdatedToTimestamp[_token] = block.timestamp;
         emit PendingMerkleRootUpdated(_token, _merkleRoot);
@@ -82,15 +78,9 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
      * @param _finalizedBlock Block number up to which rewards are calculated
      */
     function finalizeMerkleRoot(address _token, uint256 _finalizedBlock) external whenNotPaused {
-        if (!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
-        if (!(block.timestamp >= lastPendingMerkleUpdatedToTimestamp[_token] + claimDelay)) {
-            revert InsufficentDelay();
-        }
-        if (_finalizedBlock < lastRewardsCalculatedToBlock[_token] || _finalizedBlock > block.number) {
-            revert InvalidFinalizedBlock();
-        }
+        if (!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!(block.timestamp >= lastPendingMerkleUpdatedToTimestamp[_token] + claimDelay)) revert InsufficentDelay();
+        if (_finalizedBlock < lastRewardsCalculatedToBlock[_token] || _finalizedBlock > block.number) revert InvalidFinalizedBlock();
         bytes32 oldClaimableMerkleRoot = claimableMerkleRoots[_token];
         claimableMerkleRoots[_token] = pendingMerkleRoots[_token];
         lastRewardsCalculatedToBlock[_token] = _finalizedBlock;
@@ -109,33 +99,23 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
      *
      */
     function claim(address token, address account, uint256 cumulativeAmount, bytes32 expectedMerkleRoot, bytes32[] calldata merkleProof) external override whenNotPaused {
-        if (claimableMerkleRoots[token] != expectedMerkleRoot) {
-            revert MerkleRootWasUpdated();
-        }
-        if (!whitelistedRecipient[account]) {
-            revert NonWhitelistedUser();
-        }
+        if (claimableMerkleRoots[token] != expectedMerkleRoot) revert MerkleRootWasUpdated();
+        if (!whitelistedRecipient[account]) revert NonWhitelistedUser();
 
         // Verify the merkle proof
         bytes32 leaf = keccak256(abi.encodePacked(account, cumulativeAmount));
-        if (!_verifyAsm(merkleProof, expectedMerkleRoot, leaf)) {
-            revert InvalidProof();
-        }
+        if (!_verifyAsm(merkleProof, expectedMerkleRoot, leaf)) revert InvalidProof();
 
         // Mark it claimed
         uint256 preclaimed = cumulativeClaimed[token][account];
-        if (preclaimed >= cumulativeAmount) {
-            revert NothingToClaim();
-        }
+        if (preclaimed >= cumulativeAmount) revert NothingToClaim();
         cumulativeClaimed[token][account] = cumulativeAmount;
 
         uint256 amount = cumulativeAmount - preclaimed;
         // Send the token
         if (token == ETH_ADDRESS) {
             (bool success,) = account.call{value: amount}("");
-            if (!success) {
-                revert ETHTransferFailed();
-            }
+            if (!success) revert ETHTransferFailed();
         } else {
             IERC20(token).safeTransfer(account, amount);
         }
@@ -143,25 +123,19 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
     }
 
     function updateWhitelistedRecipient(address user, bool isWhitelisted) external {
-        if (!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         whitelistedRecipient[user] = isWhitelisted;
         emit RecipientStatusUpdated(user, isWhitelisted);
     }
 
     function pause() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         paused = true;
         emit Paused(msg.sender);
     }
 
     function unpause() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         paused = false;
         emit UnPaused(msg.sender);
     }
@@ -179,9 +153,7 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
     }
 
     function _verifyAsm(bytes32[] calldata proof, bytes32 root, bytes32 leaf) private pure returns (bool valid) {
-        if (proof.length > 1000) {
-            revert InvalidProof();
-        }
+        if (proof.length > 1000) revert InvalidProof();
         assembly ("memory-safe") {
             // solhint-disable-line no-inline-assembly
             let ptr := proof.offset
@@ -207,9 +179,7 @@ contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistribut
     }
 
     function _requireNotPaused() internal view virtual {
-        if (paused) {
-            revert ContractPaused();
-        }
+        if (paused) revert ContractPaused();
     }
 
     //--------------------------------------------------------------------------------------

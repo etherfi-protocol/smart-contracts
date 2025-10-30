@@ -68,9 +68,7 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     }
 
     function mint(address _to, uint256 _amount) external onlyMembershipManagerContract returns (uint256) {
-        if (mintingPaused || nextMintTokenId > maxTokenId) {
-            revert MintingIsPaused();
-        }
+        if (mintingPaused || nextMintTokenId > maxTokenId) revert MintingIsPaused();
 
         uint32 tokenId = nextMintTokenId++;
         _mint(_to, tokenId, _amount, "");
@@ -93,13 +91,9 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     }
 
     function processDepositFromEapUser(address _user, uint32 _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) external onlyMembershipManagerContract {
-        if (eapDepositProcessed[_user] == true) {
-            revert InvalidEAPRollover();
-        }
+        if (eapDepositProcessed[_user] == true) revert InvalidEAPRollover();
         bytes32 leaf = keccak256(abi.encodePacked(_user, _snapshotEthAmount, _points, _eapDepositBlockNumber));
-        if (!MerkleProof.verify(_merkleProof, eapMerkleRoot, leaf)) {
-            revert InvalidEAPRollover();
-        }
+        if (!MerkleProof.verify(_merkleProof, eapMerkleRoot, leaf)) revert InvalidEAPRollover();
 
         eapDepositProcessed[_user] = true;
     }
@@ -142,15 +136,11 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
 
     function _beforeTokenTransfer(address _operator, address _from, address _to, uint256[] memory _ids, uint256[] memory _amounts, bytes memory _data) internal view override {
         // empty mints and burns from checks
-        if (_from == address(0x00) || _to == address(0x00)) {
-            return;
-        }
+        if (_from == address(0x00) || _to == address(0x00)) return;
 
         // prevent transfers if token is locked
         for (uint256 x; x < _ids.length; ++x) {
-            if (block.number < nftData[_ids[x]].transferLockedUntil) {
-                revert RequireTokenUnlocked();
-            }
+            if (block.number < nftData[_ids[x]].transferLockedUntil) revert RequireTokenUnlocked();
         }
     }
 
@@ -166,23 +156,16 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
 
     function valueOf(uint256 _tokenId) public view returns (uint256) {
         (uint96 rewardsLocalIndex,,,,, uint8 tier, uint8 version) = membershipManager.tokenData(_tokenId);
-        if (version == 0) {
-            return _V0_valueOf(_tokenId);
-        } else if (version == 1) {
-            return _V1_valueOf(_tokenId);
-        } else {
-            revert InvalidVersion();
-        }
+        if (version == 0) return _V0_valueOf(_tokenId);
+        else if (version == 1) return _V1_valueOf(_tokenId);
+        else revert InvalidVersion();
         return 0;
     }
 
     function accruedStakingRewardsOf(uint256 _tokenId) public view returns (uint256) {
         (uint96 rewardsLocalIndex,,,,, uint8 tier, uint8 version) = membershipManager.tokenData(_tokenId);
-        if (version == 0) {
-            return _V0_accruedStakingRewardsOf(_tokenId);
-        } else {
-            revert InvalidVersion();
-        }
+        if (version == 0) return _V0_accruedStakingRewardsOf(_tokenId);
+        else revert InvalidVersion();
         return 0;
     }
 
@@ -199,9 +182,7 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         (uint128 amounts, uint128 shares) = membershipManager.tokenDeposits(_tokenId);
         (uint96 rewardsGlobalIndex,,,) = membershipManager.tierData(tier);
         uint256 rewards = 0;
-        if (rewardsGlobalIndex > rewardsLocalIndex) {
-            rewards = uint256(rewardsGlobalIndex - rewardsLocalIndex) * shares / 1 ether;
-        }
+        if (rewardsGlobalIndex > rewardsLocalIndex) rewards = uint256(rewardsGlobalIndex - rewardsLocalIndex) * shares / 1 ether;
         return rewards;
     }
 
@@ -241,9 +222,7 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
 
     function accruedTierPointsOf(uint256 _tokenId) public view returns (uint40) {
         uint256 amounts = valueOf(_tokenId);
-        if (amounts == 0) {
-            return 0;
-        }
+        if (amounts == 0) return 0;
         (,,, uint32 prevPointsAccrualTimestamp,,,) = membershipManager.tokenData(_tokenId);
         uint256 tierPointsPerDay = 24; // 1 per an hour
         uint256 earnedPoints = (uint32(block.timestamp) - prevPointsAccrualTimestamp) * tierPointsPerDay / 1 days;
@@ -275,9 +254,7 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     function membershipPointsEarning(uint256 _tokenId, uint256 _since, uint256 _until) public view returns (uint40) {
         uint256 amounts = valueOf(_tokenId);
         uint256 shares = liquidityPool.sharesForAmount(amounts);
-        if (amounts == 0 || shares == 0) {
-            return 0;
-        }
+        if (amounts == 0 || shares == 0) return 0;
 
         uint16 pointsGrowthRate = membershipManager.pointsGrowthRate();
 
@@ -305,15 +282,14 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         lastBlockNumbers[3] = 16_755_015; // https://etherscan.io/tx/0xe579a56c6c1b1878b368836b682b8fa7c39fe54d6f07750158b570844597e5b4
 
         uint8 tierId;
-        if (_eapDepositBlockNumber <= lastBlockNumbers[3]) {
-            tierId = 3; // PLATINUM
-        } else if (_eapDepositBlockNumber <= lastBlockNumbers[2]) {
-            tierId = 2; // GOLD
-        } else if (_eapDepositBlockNumber <= lastBlockNumbers[1]) {
-            tierId = 1; // SILVER
-        } else {
-            tierId = 0; // BRONZE
-        }
+        if (_eapDepositBlockNumber <= lastBlockNumbers[3]) tierId = 3; // PLATINUM
+
+        else if (_eapDepositBlockNumber <= lastBlockNumbers[2]) tierId = 2; // GOLD
+
+        else if (_eapDepositBlockNumber <= lastBlockNumbers[1]) tierId = 1; // SILVER
+
+        else tierId = 0; // BRONZE
+
         uint8 nextTierId = (tierId < numTiers - 1) ? tierId + 1 : tierId;
 
         (, uint40 current,,) = membershipManager.tierData(tierId);
@@ -324,9 +300,7 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
 
         // Linear projection of TierPoints within the tier
         // so that the days in EAP is taken into account for the days remaining for the next tier
-        if (tierId != nextTierId) {
-            tierPoints += (next - current) * (lastBlockNumbers[tierId] - _eapDepositBlockNumber) / (lastBlockNumbers[tierId] - lastBlockNumbers[nextTierId]);
-        }
+        if (tierId != nextTierId) tierPoints += (next - current) * (lastBlockNumbers[tierId] - _eapDepositBlockNumber) / (lastBlockNumbers[tierId] - lastBlockNumbers[nextTierId]);
 
         // They kept staking with us after the EAP ended
         // One tier point per hour
@@ -398,9 +372,7 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     }
 
     modifier onlyMembershipManagerContract() {
-        if (msg.sender != address(membershipManager)) {
-            revert OnlyMembershipManagerContract();
-        }
+        if (msg.sender != address(membershipManager)) revert OnlyMembershipManagerContract();
         _;
     }
 }

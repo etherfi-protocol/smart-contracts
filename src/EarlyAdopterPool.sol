@@ -160,11 +160,8 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
     function calculateUserPoints(address _user) public view returns (uint256) {
         uint256 lengthOfDeposit;
 
-        if (claimingOpen == 0) {
-            lengthOfDeposit = block.timestamp - depositInfo[_user].depositTime;
-        } else {
-            lengthOfDeposit = endTime - depositInfo[_user].depositTime;
-        }
+        if (claimingOpen == 0) lengthOfDeposit = block.timestamp - depositInfo[_user].depositTime;
+        else lengthOfDeposit = endTime - depositInfo[_user].depositTime;
 
         //Scaled by 1000, therefore, 1005 would be 1.005
         uint256 userMultiplier = Math.min(2000, 1000 + ((lengthOfDeposit * 10) / 2592) / 10);
@@ -209,11 +206,8 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
 
         address receiver;
 
-        if (_identifier == 0) {
-            receiver = msg.sender;
-        } else {
-            receiver = claimReceiverContract;
-        }
+        if (_identifier == 0) receiver = msg.sender;
+        else receiver = claimReceiverContract;
 
         require(rETHInstance.transfer(receiver, rETHbal), "Transfer failed");
         require(wstETHInstance.transfer(receiver, wstETHbal), "Transfer failed");

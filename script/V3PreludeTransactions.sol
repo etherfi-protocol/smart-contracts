@@ -19,7 +19,7 @@ import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 
 contract V3PreludeTransactions is Script {
-    /*
+/*
 
         EtherFiTimelock etherFiTimelock = EtherFiTimelock(payable(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761));
 
@@ -254,5 +254,4 @@ contract V3PreludeTransactions is Script {
             return abi.encodeWithSelector(RoleRegistry.grantRole.selector, role, account);
         }
         */
-
-    }
+}

@@ -44,15 +44,10 @@ library globalIndexLibrary {
             globalIndex[i] = rewardsGlobalIndex;
             if (shares > 0) {
                 uint256 delta = 1 ether * rescaledTierRewards[i] / shares;
-                if (uint256(rewardsGlobalIndex) + uint256(delta) > type(uint96).max) {
-                    revert IntegerOverflow();
-                }
+                if (uint256(rewardsGlobalIndex) + uint256(delta) > type(uint96).max) revert IntegerOverflow();
 
-                if (isLoss) {
-                    globalIndex[i] -= uint96(delta);
-                } else {
-                    globalIndex[i] += uint96(delta);
-                }
+                if (isLoss) globalIndex[i] -= uint96(delta);
+                else globalIndex[i] += uint96(delta);
             }
         }
 
@@ -135,11 +130,8 @@ library globalIndexLibrary {
             (uint128 totalPooledEEthShares,) = membershipManager.tierVaults(i);
             uint256 prevEthAmount = _ethRewardsPerEEthShareBeforeRebase * totalPooledEEthShares / 1 ether;
             uint256 newEthAmount = prevEthAmount;
-            if (isLoss) {
-                newEthAmount -= rescaledTierRewards[i];
-            } else {
-                newEthAmount += rescaledTierRewards[i];
-            }
+            if (isLoss) newEthAmount -= rescaledTierRewards[i];
+            else newEthAmount += rescaledTierRewards[i];
             vaultTotalPooledEEthShares[i] = uint128(liquidityPool.sharesForAmount(newEthAmount));
         }
         return vaultTotalPooledEEthShares;

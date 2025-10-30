@@ -68,16 +68,12 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
     }
 
     function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
     function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 
@@ -86,9 +82,7 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
     function sweepFunds(uint256 id) external onlyAdmin whenNotPaused {
         address nodeAddr = etherfiNodeAddress(id);
         uint256 balance = IEtherFiNode(nodeAddr).sweepFunds();
-        if (balance > 0) {
-            emit FundsTransferred(nodeAddr, balance);
-        }
+        if (balance > 0) emit FundsTransferred(nodeAddr, balance);
     }
 
     //--------------------------------------------------------------------------------------
@@ -101,9 +95,7 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
     // Over time we will migrate to directly calling the associated method on the EtherFiNode contract where applicable.
 
     function createEigenPod(address node) external onlyEigenlayerAdmin whenNotPaused returns (address) {
-        if (!stakingManager.deployedEtherFiNodes(node)) {
-            revert UnknownNode();
-        }
+        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
         return IEtherFiNode(node).createEigenPod();
     }
 
@@ -156,9 +148,7 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
     function completeQueuedETHWithdrawals(address node, bool receiveAsTokens) public onlyEigenlayerAdmin whenNotPaused {
         _validateNode(node);
         uint256 balance = IEtherFiNode(node).completeQueuedETHWithdrawals(receiveAsTokens);
-        if (balance > 0) {
-            emit FundsTransferred(node, balance);
-        }
+        if (balance > 0) emit FundsTransferred(node, balance);
     }
 
     function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
@@ -190,9 +180,7 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
         uint256 totalBeaconEth = 0;
         for (uint256 i = 0; i < params.length; i++) {
             for (uint256 j = 0; j < params[i].strategies.length; j++) {
-                if (params[i].strategies[j] == IStrategy(BEACON_ETH_STRATEGY_ADDRESS)) {
-                    totalBeaconEth += params[i].depositShares[j];
-                }
+                if (params[i].strategies[j] == IStrategy(BEACON_ETH_STRATEGY_ADDRESS)) totalBeaconEth += params[i].depositShares[j];
             }
         }
         return totalBeaconEth;
@@ -212,12 +200,8 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
      * @custom:fee Send EXACT ETH to cover sum of (feePerPod * requestsForPod).
      */
     function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable whenNotPaused nonReentrant {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
-        if (requests.length == 0) {
-            revert EmptyWithdrawalsRequest();
-        }
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
+        if (requests.length == 0) revert EmptyWithdrawalsRequest();
 
         // rate limit the amount of the that can be withdrawn from beacon chain
         uint256 totalExitGwei = getTotalEthRequested(requests);
@@ -228,9 +212,7 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
         IEigenPod pod = node.getEigenPod();
 
         // submitting an execution layer withdrawal request requires paying a fee per request
-        if (msg.value < pod.getWithdrawalRequestFee() * requests.length) {
-            revert InsufficientWithdrawalFees();
-        }
+        if (msg.value < pod.getWithdrawalRequestFee() * requests.length) revert InsufficientWithdrawalFees();
         node.requestExecutionLayerTriggeredWithdrawal{value: msg.value}(requests);
 
         for (uint256 i = 0; i < requests.length; i++) {
@@ -260,9 +242,7 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
      * @custom:fee Send EXACT ETH to cover consolidation fees.
      */
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable whenNotPaused nonReentrant onlyAdmin {
-        if (requests.length == 0) {
-            revert EmptyConsolidationRequest();
-        }
+        if (requests.length == 0) revert EmptyConsolidationRequest();
 
         // eigenlayer will revert if all validators don't belong to the same pod
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].srcPubkey);
@@ -270,9 +250,7 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
         IEigenPod pod = node.getEigenPod();
 
         // submitting an execution layer consolidation request requires paying a fee per request
-        if (msg.value < pod.getConsolidationRequestFee() * requests.length) {
-            revert InsufficientConsolidationFees();
-        }
+        if (msg.value < pod.getConsolidationRequestFee() * requests.length) revert InsufficientConsolidationFees();
         node.requestConsolidation{value: msg.value}(requests);
 
         for (uint256 i = 0; i < requests.length;) {
@@ -280,11 +258,8 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
             bytes32 targetPkHash = calculateValidatorPubkeyHash(requests[i].targetPubkey);
 
             // Emit appropriate event based on whether this is a switch or consolidation
-            if (srcPkHash == targetPkHash) {
-                emit ValidatorSwitchToCompoundingRequested(address(pod), srcPkHash, requests[i].srcPubkey);
-            } else {
-                emit ValidatorConsolidationRequested(address(pod), srcPkHash, requests[i].srcPubkey, targetPkHash, requests[i].targetPubkey);
-            }
+            if (srcPkHash == targetPkHash) emit ValidatorSwitchToCompoundingRequested(address(pod), srcPkHash, requests[i].srcPubkey);
+            else emit ValidatorConsolidationRequested(address(pod), srcPkHash, requests[i].srcPubkey, targetPkHash, requests[i].targetPubkey);
             unchecked {
                 ++i;
             }
@@ -307,9 +282,7 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
 
     ///@notice Calculates the pubkey hash of a validator's pubkey as per SSZ spec
     function calculateValidatorPubkeyHash(bytes memory pubkey) public pure returns (bytes32) {
-        if (pubkey.length != 48) {
-            revert InvalidPubKeyLength();
-        }
+        if (pubkey.length != 48) revert InvalidPubKeyLength();
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
     }
 
@@ -325,16 +298,10 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
 
     /// @dev associate the provided pubkey with particular EtherFiNode instance.
     function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external whenNotPaused {
-        if (msg.sender != address(stakingManager)) {
-            revert InvalidCaller();
-        }
+        if (msg.sender != address(stakingManager)) revert InvalidCaller();
         bytes32 pubkeyHash = calculateValidatorPubkeyHash(pubkey);
-        if (address(etherFiNodeFromPubkeyHash[pubkeyHash]) != address(0)) {
-            revert AlreadyLinked();
-        }
-        if (legacyState.DEPRECATED_etherfiNodeAddress[legacyId] != address(0)) {
-            revert AlreadyLinked();
-        }
+        if (address(etherFiNodeFromPubkeyHash[pubkeyHash]) != address(0)) revert AlreadyLinked();
+        if (legacyState.DEPRECATED_etherfiNodeAddress[legacyId] != address(0)) revert AlreadyLinked();
 
         // link legacyId for now. We can remove this in a future upgrade
         legacyState.DEPRECATED_etherfiNodeAddress[legacyId] = nodeAddress;
@@ -355,31 +322,22 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
         // heuristic that if a pubkey hash, at least 1 bit of higher order bits must be 1
         // all of the legacy id's were incrementing integers that will not have those bits set
         uint256 mask = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000;
-        if (mask & id > 0) {
-            return address(etherFiNodeFromPubkeyHash[bytes32(id)]);
-        } else {
-            return legacyState.DEPRECATED_etherfiNodeAddress[id];
-        }
+        if (mask & id > 0) return address(etherFiNodeFromPubkeyHash[bytes32(id)]);
+        else return legacyState.DEPRECATED_etherfiNodeAddress[id];
     }
 
     /// @dev this method is for linking our old legacy validator ids that were created before
     ///    we started tracking the pubkeys onchain. We can delete this method once we have linked all of our legacy validators
     function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyAdmin {
-        if (validatorIds.length != pubkeys.length) {
-            revert LengthMismatch();
-        }
+        if (validatorIds.length != pubkeys.length) revert LengthMismatch();
         for (uint256 i = 0; i < validatorIds.length; i++) {
             // lookup which node we are linking against
             address nodeAddress = legacyState.DEPRECATED_etherfiNodeAddress[validatorIds[i]];
-            if (nodeAddress == address(0)) {
-                revert UnknownNode();
-            }
+            if (nodeAddress == address(0)) revert UnknownNode();
 
             // ensure we haven't already linked this pubkey
             bytes32 pubkeyHash = calculateValidatorPubkeyHash(pubkeys[i]);
-            if (address(etherFiNodeFromPubkeyHash[pubkeyHash]) != address(0)) {
-                revert AlreadyLinked();
-            }
+            if (address(etherFiNodeFromPubkeyHash[pubkeyHash]) != address(0)) revert AlreadyLinked();
 
             etherFiNodeFromPubkeyHash[pubkeyHash] = IEtherFiNode(nodeAddress);
             emit PubkeyLinked(pubkeyHash, nodeAddress, validatorIds[i], pubkeys[i]);
@@ -411,23 +369,17 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
 
     /// @notice forward a whitelisted call to a whitelisted external contract with the EtherFiNode as the caller
     function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
-        if (nodes.length != data.length) {
-            revert InvalidForwardedCall();
-        }
+        if (nodes.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](nodes.length);
         for (uint256 i = 0; i < nodes.length; i++) {
             _validateNode(nodes[i]);
             // validate the call
-            if (data[i].length < 4) {
-                revert InvalidForwardedCall();
-            }
+            if (data[i].length < 4) revert InvalidForwardedCall();
             bytes4 selector = bytes4(data[i][:4]);
 
             // Check if user is allowed to call this selector on this target
-            if (!allowedForwardedExternalCalls[msg.sender][selector][target]) {
-                revert ForwardedCallNotAllowed();
-            }
+            if (!allowedForwardedExternalCalls[msg.sender][selector][target]) revert ForwardedCallNotAllowed();
 
             // call validation + whitelist checks performed in node implementation
             returnData[i] = IEtherFiNode(nodes[i]).forwardExternalCall(target, data[i]);
@@ -437,23 +389,17 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
     /// @notice forward a whitelisted call to the associated eigenPod of the EtherFiNode with the EtherFiNode as the caller.
     ///   This serves to allow us to support minor eigenlayer upgrades without needing to immediately upgrade our contracts.
     function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
-        if (nodes.length != data.length) {
-            revert InvalidForwardedCall();
-        }
+        if (nodes.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](nodes.length);
         for (uint256 i = 0; i < nodes.length; i++) {
             _validateNode(nodes[i]);
             // validate call
-            if (data[i].length < 4) {
-                revert InvalidForwardedCall();
-            }
+            if (data[i].length < 4) revert InvalidForwardedCall();
             bytes4 selector = bytes4(data[i][:4]);
 
             // Check if user is allowed to call this selector on eigenpod
-            if (!allowedForwardedEigenpodCalls[msg.sender][selector]) {
-                revert ForwardedCallNotAllowed();
-            }
+            if (!allowedForwardedEigenpodCalls[msg.sender][selector]) revert ForwardedCallNotAllowed();
 
             returnData[i] = IEtherFiNode(nodes[i]).forwardEigenPodCall(data[i]);
         }
@@ -465,9 +411,7 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
 
     /// @dev Internal helper to validate node exists and revert if not
     function _validateNode(address node) internal view {
-        if (!stakingManager.deployedEtherFiNodes(node)) {
-            revert UnknownNode();
-        }
+        if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
     }
 
     //--------------------------------------------------------------------------------------
@@ -475,30 +419,22 @@ contract EtherFiNodesManager is Initializable, IEtherFiNodesManager, OwnableUpgr
     //--------------------------------------------------------------------------------------
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_ADMIN_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyEigenlayerAdmin() {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyCallForwarder() {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyPodProver() {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_POD_PROVER_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_POD_PROVER_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 }

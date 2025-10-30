@@ -85,11 +85,8 @@ contract ContractCodeChecker {
         bytes memory localBytecode = address(localDeployed).code;
         bytes memory onchainRuntimeBytecode = address(deployedImpl).code;
 
-        if (compareBytes(localBytecode, onchainRuntimeBytecode)) {
-            console2.log("-> Full Bytecode Match: Success\n");
-        } else {
-            console2.log("-> Full Bytecode Match: Fail\n");
-        }
+        if (compareBytes(localBytecode, onchainRuntimeBytecode)) console2.log("-> Full Bytecode Match: Success\n");
+        else console2.log("-> Full Bytecode Match: Fail\n");
     }
 
     function verifyPartialMatch(address deployedImpl, address localDeployed) public {
@@ -100,25 +97,18 @@ contract ContractCodeChecker {
         bytes memory onchainRuntimeBytecode = deployedImpl.code;
 
         // Optionally check length first (not strictly necessary if doing a partial match)
-        if (localBytecode.length == 0 || onchainRuntimeBytecode.length == 0) {
-            revert("One of the bytecode arrays is empty, cannot verify.");
-        }
+        if (localBytecode.length == 0 || onchainRuntimeBytecode.length == 0) revert("One of the bytecode arrays is empty, cannot verify.");
 
         // Attempt to trim metadata from both local and on-chain bytecode
         bytes memory trimmedLocal = trimMetadata(localBytecode);
         bytes memory trimmedOnchain = trimMetadata(onchainRuntimeBytecode);
 
         // If trimmed lengths differ significantly, it suggests structural differences in code
-        if (trimmedLocal.length != trimmedOnchain.length) {
-            revert("Post-trim length mismatch: potential code differences.");
-        }
+        if (trimmedLocal.length != trimmedOnchain.length) revert("Post-trim length mismatch: potential code differences.");
 
         // Compare trimmed arrays byte-by-byte
-        if (compareBytes(trimmedLocal, trimmedOnchain)) {
-            console2.log("-> Partial Bytecode Match: Success\n");
-        } else {
-            console2.log("-> Partial Bytecode Match: Fail\n");
-        }
+        if (compareBytes(trimmedLocal, trimmedOnchain)) console2.log("-> Partial Bytecode Match: Success\n");
+        else console2.log("-> Partial Bytecode Match: Fail\n");
     }
 
     function verifyLengthMatch(address deployedImpl, address localDeployed) public {
@@ -126,11 +116,8 @@ contract ContractCodeChecker {
         bytes memory localBytecode = localDeployed.code;
         bytes memory onchainRuntimeBytecode = deployedImpl.code;
 
-        if (localBytecode.length == onchainRuntimeBytecode.length) {
-            console2.log("-> Length Match: Success\n");
-        } else {
-            console2.log("-> Length Match: Fail\n");
-        }
+        if (localBytecode.length == onchainRuntimeBytecode.length) console2.log("-> Length Match: Success\n");
+        else console2.log("-> Length Match: Fail\n");
     }
 
     function verifyContractByteCodeMatch(address deployedImpl, address localDeployed) public {

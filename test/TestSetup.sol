@@ -341,11 +341,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     // testnet or mainnet.
     function initializeRealisticForkWithBlock(uint8 forkEnum, uint256 blockNo) public {
         if (forkEnum == MAINNET_FORK) {
-            if (blockNo == 0) {
-                vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
-            } else {
-                vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL"), blockNo));
-            }
+            if (blockNo == 0) vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+            else vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL"), blockNo));
             addressProviderInstance = AddressProvider(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
             owner = addressProviderInstance.getContractAddress("EtherFiTimelock");
             admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
@@ -1051,9 +1048,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         bytes[] memory,
         /*_signature*/
         string memory _revertMessage
-    )
-        internal
-    {
+    ) internal {
         _initReportBlockStamp(_report);
 
         uint32 currentSlot = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
@@ -1073,16 +1068,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiOracleInstance.submitReport(_report);
 
         int256 offset = int256(int16(etherFiAdminInstance.postReportWaitTimeInSlots()));
-        if (offset > 2 * 32) {
-            offset -= 2 * 32;
-        }
-        if (offset > 0) {
-            _moveClock(offset);
-        }
+        if (offset > 2 * 32) offset -= 2 * 32;
+        if (offset > 0) _moveClock(offset);
 
-        if (bytes(_revertMessage).length > 0) {
-            vm.expectRevert(bytes(_revertMessage));
-        }
+        if (bytes(_revertMessage).length > 0) vm.expectRevert(bytes(_revertMessage));
 
         vm.prank(alice);
         etherFiAdminInstance.executeTasks(_report);
@@ -1130,9 +1119,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         vm.expectEmit(true, true, false, true);
         emit LiquidityPool.ValidatorSpawnerRegistered(_user);
-        if (!registered) {
-            liquidityPoolInstance.registerValidatorSpawner(_user);
-        }
+        if (!registered) liquidityPoolInstance.registerValidatorSpawner(_user);
     }
 
     function setUpBnftHolders() internal {
@@ -1227,13 +1214,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.deal(_bnftStaker, 10_000 ether);
 
         address admin;
-        if (block.chainid == 1) {
-            admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
-        } else if (block.chainid == 17_000) {
-            admin = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
-        } else {
-            admin = alice;
-        }
+        if (block.chainid == 1) admin = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
+        else if (block.chainid == 17_000) admin = 0xD0d7F8a5a86d8271ff87ff24145Cf40CEa9F7A39;
+        else admin = alice;
         vm.startPrank(admin);
         registerAsBnftHolder(_nodeOperator);
         // liquidityPoolInstance.updateBnftMode(_isLpBnftHolder);
@@ -1243,9 +1226,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         auctionInstance.disableWhitelist();
 
         vm.startPrank(_nodeOperator);
-        if (!nodeOperatorManagerInstance.registered(_nodeOperator)) {
-            nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 10_000);
-        }
+        if (!nodeOperatorManagerInstance.registered(_nodeOperator)) nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 10_000);
         vm.stopPrank();
 
         vm.startPrank(admin);
@@ -1268,11 +1249,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.stopPrank();
 
         startHoax(bob);
-        if (_isLpBnftHolder) {
-            liquidityPoolInstance.deposit{value: 32 ether * _numValidators}();
-        } else {
-            liquidityPoolInstance.deposit{value: 32 ether * _numValidators}();
-        }
+        if (_isLpBnftHolder) liquidityPoolInstance.deposit{value: 32 ether * _numValidators}();
+        else liquidityPoolInstance.deposit{value: 32 ether * _numValidators}();
         vm.stopPrank();
 
         // TODO(dave): rework test setup
@@ -1413,11 +1391,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     // Given two uint256 params (a, b, c),
     // Check if |a-b| <= c
     function _assertWithinRange(uint256 a, uint256 b, uint256 c) internal pure returns (bool) {
-        if (a > b) {
-            return a - b <= c;
-        } else {
-            return b - a <= c;
-        }
+        if (a > b) return a - b <= c;
+        else return b - a <= c;
     }
 
     function _finalizeLidoWithdrawals(uint256[] memory reqIds) internal {
@@ -1507,21 +1482,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         }
         bytes32 salt = keccak256(abi.encodePacked(target, data, block.number));
 
-        if (_schedule) {
-            etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
-        }
-        if (_log_schedule) {
-            _output_schedule_txn(target, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
-        }
+        if (_schedule) etherFiTimelockInstance.schedule(target, 0, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
+        if (_log_schedule) _output_schedule_txn(target, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
 
         vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
 
-        if (_execute) {
-            etherFiTimelockInstance.execute(target, 0, data, bytes32(0), salt);
-        }
-        if (_log_execute) {
-            _output_execute_timelock_txn(target, data, bytes32(0), salt);
-        }
+        if (_execute) etherFiTimelockInstance.execute(target, 0, data, bytes32(0), salt);
+        if (_log_execute) _output_execute_timelock_txn(target, data, bytes32(0), salt);
 
         vm.warp(block.timestamp + 1);
         vm.stopPrank();
@@ -1531,21 +1498,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
 
         bytes32 salt = keccak256(abi.encode(targets, data, block.number));
-        if (_schedule) {
-            etherFiTimelockInstance.scheduleBatch(targets, values, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
-        }
-        if (_log_schedule) {
-            _batch_output_schedule_txn(targets, data, values, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
-        }
+        if (_schedule) etherFiTimelockInstance.scheduleBatch(targets, values, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
+        if (_log_schedule) _batch_output_schedule_txn(targets, data, values, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
 
         vm.warp(block.timestamp + etherFiTimelockInstance.getMinDelay());
 
-        if (_execute) {
-            etherFiTimelockInstance.executeBatch(targets, values, data, bytes32(0), salt);
-        }
-        if (_log_execute) {
-            _batch_output_execute_timelock_txn(targets, data, values, bytes32(0), salt);
-        }
+        if (_execute) etherFiTimelockInstance.executeBatch(targets, values, data, bytes32(0), salt);
+        if (_log_execute) _batch_output_execute_timelock_txn(targets, data, values, bytes32(0), salt);
 
         vm.warp(block.timestamp + 1);
         vm.stopPrank();

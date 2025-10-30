@@ -19,9 +19,7 @@ contract RegulationsManagerV2 is Ownable {
     error InvalidTermsAndConditionsSignature();
 
     function verifyTermsSignature(bytes memory signature) external {
-        if (recoverSigner(generateTermsDigest(), signature) != msg.sender) {
-            revert InvalidTermsAndConditionsSignature();
-        }
+        if (recoverSigner(generateTermsDigest(), signature) != msg.sender) revert InvalidTermsAndConditionsSignature();
     }
 
     function generateTermsDigest() public view returns (bytes32) {

@@ -171,9 +171,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      */
     function totalRedeemableAmount() external view returns (uint256) {
         uint256 liquidEthAmount = address(liquidityPool).balance - liquidityPool.ethAmountLockedForWithdrawal();
-        if (liquidEthAmount < lowWatermarkInETH()) {
-            return 0;
-        }
+        if (liquidEthAmount < lowWatermarkInETH()) return 0;
         uint64 consumableBucketUnits = BucketLimiter.consumable(limit);
         uint256 consumableAmount = _convertFromBucketUnit(consumableBucketUnits);
         return Math.min(consumableAmount, liquidEthAmount);
@@ -185,9 +183,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      */
     function canRedeem(uint256 amount) public view returns (bool) {
         uint256 liquidEthAmount = address(liquidityPool).balance - liquidityPool.ethAmountLockedForWithdrawal();
-        if (liquidEthAmount < lowWatermarkInETH()) {
-            return false;
-        }
+        if (liquidEthAmount < lowWatermarkInETH()) return false;
         uint64 bucketUnit = _convertToBucketUnit(amount, Math.Rounding.Up);
         bool consumable = BucketLimiter.canConsume(limit, bucketUnit);
         return consumable && amount <= liquidEthAmount;

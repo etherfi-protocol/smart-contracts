@@ -28,11 +28,8 @@ contract DepositContract is IDepositContract {
         bytes32 node;
         uint256 size = deposit_count;
         for (uint256 height = 0; height < DEPOSIT_CONTRACT_TREE_DEPTH; height++) {
-            if ((size & 1) == 1) {
-                node = sha256(abi.encodePacked(branch[height], node));
-            } else {
-                node = sha256(abi.encodePacked(node, zero_hashes[height]));
-            }
+            if ((size & 1) == 1) node = sha256(abi.encodePacked(branch[height], node));
+            else node = sha256(abi.encodePacked(node, zero_hashes[height]));
             size /= 2;
         }
         return sha256(abi.encodePacked(node, to_little_endian_64(uint64(deposit_count)), bytes24(0)));

@@ -175,9 +175,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         uint256 scanUntil = Math.min(lastRequestIdToScanUntilForShareRemainder, scanFrom + _numReqsToScan - 1);
 
         for (uint256 i = scanFrom; i <= scanUntil; i++) {
-            if (!_exists(i)) {
-                continue;
-            }
+            if (!_exists(i)) continue;
             aggregateSumOfEEthShare += _requests[i].shareOfEEth;
         }
 
@@ -240,24 +238,16 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) {
-            revert IncorrectRole();
-        }
-        if (paused) {
-            revert("Pausable: already paused");
-        }
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        if (paused) revert("Pausable: already paused");
         paused = true;
         emit Paused(msg.sender);
     }
 
     function unPauseContract() external {
         require(isScanOfShareRemainderCompleted(), "scan is not completed");
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) {
-            revert IncorrectRole();
-        }
-        if (!paused) {
-            revert("Pausable: not paused");
-        }
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        if (!paused) revert("Pausable: not paused");
 
         paused = false;
         emit Unpaused(msg.sender);
@@ -270,9 +260,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     ///   - Burn: the rest of the remainder is burned
     /// @param _eEthAmount: the remainder of the eEth amount
     function handleRemainder(uint256 _eEthAmount) external {
-        if (!roleRegistry.hasRole(IMPLICIT_FEE_CLAIMER_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(IMPLICIT_FEE_CLAIMER_ROLE, msg.sender)) revert IncorrectRole();
         require(_eEthAmount != 0, "EETH amount cannot be 0");
         require(isScanOfShareRemainderCompleted(), "Not all prev requests have been scanned");
         require(getEEthRemainderAmount() >= _eEthAmount, "Not enough eETH remainder");
@@ -286,12 +274,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         totalRemainderEEthShares -= eEthSharesToMoved;
 
-        if (eEthAmountToTreasury > 0) {
-            IERC20(address(eETH)).safeTransfer(treasury, eEthAmountToTreasury);
-        }
-        if (eEthSharesToBurn > 0) {
-            liquidityPool.burnEEthShares(eEthSharesToBurn);
-        }
+        if (eEthAmountToTreasury > 0) IERC20(address(eETH)).safeTransfer(treasury, eEthAmountToTreasury);
+        if (eEthSharesToBurn > 0) liquidityPool.burnEEthShares(eEthSharesToBurn);
 
         require(beforeEEthShares - eEthSharesToMoved == eETH.shares(address(this)), "Invalid eETH shares after remainder handling");
 

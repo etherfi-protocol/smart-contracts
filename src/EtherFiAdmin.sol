@@ -88,61 +88,33 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // if true, pause,
     // else, unpuase
     function pause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) {
-            revert IncorrectRole();
-        }
-        if (_etherFiOracle && !IEtherFiPausable(address(etherFiOracle)).paused()) {
-            etherFiOracle.pauseContract();
-        }
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        if (_etherFiOracle && !IEtherFiPausable(address(etherFiOracle)).paused()) etherFiOracle.pauseContract();
 
-        if (_stakingManager && !IEtherFiPausable(address(stakingManager)).paused()) {
-            stakingManager.pauseContract();
-        }
+        if (_stakingManager && !IEtherFiPausable(address(stakingManager)).paused()) stakingManager.pauseContract();
 
-        if (_auctionManager && !IEtherFiPausable(address(auctionManager)).paused()) {
-            auctionManager.pauseContract();
-        }
+        if (_auctionManager && !IEtherFiPausable(address(auctionManager)).paused()) auctionManager.pauseContract();
 
-        if (_etherFiNodesManager && !IEtherFiPausable(address(etherFiNodesManager)).paused()) {
-            etherFiNodesManager.pauseContract();
-        }
+        if (_etherFiNodesManager && !IEtherFiPausable(address(etherFiNodesManager)).paused()) etherFiNodesManager.pauseContract();
 
-        if (_liquidityPool && !IEtherFiPausable(address(liquidityPool)).paused()) {
-            liquidityPool.pauseContract();
-        }
+        if (_liquidityPool && !IEtherFiPausable(address(liquidityPool)).paused()) liquidityPool.pauseContract();
 
-        if (_membershipManager && !IEtherFiPausable(address(membershipManager)).paused()) {
-            membershipManager.pauseContract();
-        }
+        if (_membershipManager && !IEtherFiPausable(address(membershipManager)).paused()) membershipManager.pauseContract();
     }
 
     function unPause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) {
-            revert IncorrectRole();
-        }
-        if (_etherFiOracle && IEtherFiPausable(address(etherFiOracle)).paused()) {
-            etherFiOracle.unPauseContract();
-        }
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        if (_etherFiOracle && IEtherFiPausable(address(etherFiOracle)).paused()) etherFiOracle.unPauseContract();
 
-        if (_stakingManager && IEtherFiPausable(address(stakingManager)).paused()) {
-            stakingManager.unPauseContract();
-        }
+        if (_stakingManager && IEtherFiPausable(address(stakingManager)).paused()) stakingManager.unPauseContract();
 
-        if (_auctionManager && IEtherFiPausable(address(auctionManager)).paused()) {
-            auctionManager.unPauseContract();
-        }
+        if (_auctionManager && IEtherFiPausable(address(auctionManager)).paused()) auctionManager.unPauseContract();
 
-        if (_etherFiNodesManager && IEtherFiPausable(address(etherFiNodesManager)).paused()) {
-            etherFiNodesManager.unPauseContract();
-        }
+        if (_etherFiNodesManager && IEtherFiPausable(address(etherFiNodesManager)).paused()) etherFiNodesManager.unPauseContract();
 
-        if (_liquidityPool && IEtherFiPausable(address(liquidityPool)).paused()) {
-            liquidityPool.unPauseContract();
-        }
+        if (_liquidityPool && IEtherFiPausable(address(liquidityPool)).paused()) liquidityPool.unPauseContract();
 
-        if (_membershipManager && IEtherFiPausable(address(membershipManager)).paused()) {
-            membershipManager.unPauseContract();
-        }
+        if (_membershipManager && IEtherFiPausable(address(membershipManager)).paused()) membershipManager.unPauseContract();
     }
 
     function initializeRoleRegistry(address _roleRegistry) external onlyOwner {
@@ -152,9 +124,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function setValidatorTaskBatchSize(uint16 _batchSize) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         validatorTaskBatchSize = _batchSize;
     }
 
@@ -162,25 +132,15 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         bytes32 reportHash = etherFiOracle.generateReportHash(_report);
         uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
 
-        if (!etherFiOracle.isConsensusReached(reportHash)) {
-            return false;
-        }
-        if (slotForNextReportToProcess() != _report.refSlotFrom) {
-            return false;
-        }
-        if (blockForNextReportToProcess() != _report.refBlockFrom) {
-            return false;
-        }
-        if (current_slot < postReportWaitTimeInSlots + etherFiOracle.getConsensusSlot(reportHash)) {
-            return false;
-        }
+        if (!etherFiOracle.isConsensusReached(reportHash)) return false;
+        if (slotForNextReportToProcess() != _report.refSlotFrom) return false;
+        if (blockForNextReportToProcess() != _report.refBlockFrom) return false;
+        if (current_slot < postReportWaitTimeInSlots + etherFiOracle.getConsensusSlot(reportHash)) return false;
         return true;
     }
 
     function executeTasks(IEtherFiOracle.OracleReport calldata _report) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
 
         bytes32 reportHash = etherFiOracle.generateReportHash(_report);
         uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
@@ -202,9 +162,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
 
         require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
@@ -217,9 +175,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
         require(validatorApprovalTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
@@ -231,9 +187,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     //protocol owns the eth that was distributed to NO and treasury in eigenpods and etherfinodes
     function _handleProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal {
         require(_report.protocolFees >= 0, "EtherFiAdmin: protocol fees can't be negative");
-        if (_report.protocolFees == 0) {
-            return;
-        }
+        if (_report.protocolFees == 0) return;
         int128 totalRewards = _report.protocolFees + _report.accruedRewards;
         // protocol fees are less than 20% of total rewards
         require(_report.protocolFees * 5 <= totalRewards, "EtherFiAdmin: protocol fees exceed 20% total rewards");
@@ -242,9 +196,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report) internal {
-        if (_report.accruedRewards == 0) {
-            return;
-        }
+        if (_report.accruedRewards == 0) return;
 
         // compute the elapsed time since the last rebase
         int256 elapsedSlots = int32(_report.refSlotTo - lastHandledReportRefSlot);
@@ -257,9 +209,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // - 10% APR = 0.0274% per day
         int256 currentTVL = int128(uint128(liquidityPool.getTotalPooledEther()));
         int256 apr;
-        if (currentTVL > 0) {
-            apr = 10_000 * (_report.accruedRewards * 365 days) / (currentTVL * elapsedTime);
-        }
+        if (currentTVL > 0) apr = 10_000 * (_report.accruedRewards * 365 days) / (currentTVL * elapsedTime);
         int256 absApr = (apr > 0) ? apr : -apr;
         require(absApr <= acceptableRebaseAprInBps, "EtherFiAdmin: TVL changed too much");
 
@@ -269,9 +219,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function _enqueueValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) internal {
         uint256 numBatches = (_validators.length + validatorTaskBatchSize - 1) / validatorTaskBatchSize;
 
-        if (_validators.length == 0) {
-            return;
-        }
+        if (_validators.length == 0) return;
         for (uint256 i = 0; i < numBatches; i++) {
             uint256 start = i * validatorTaskBatchSize;
             uint256 end = (i + 1) * validatorTaskBatchSize > _validators.length ? _validators.length : (i + 1) * validatorTaskBatchSize;
@@ -308,16 +256,12 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
     }
 
     function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }

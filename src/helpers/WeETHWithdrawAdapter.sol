@@ -66,9 +66,7 @@ contract WeETHWithdrawAdapter is Initializable, UUPSUpgradeable, OwnableUpgradea
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _weETH, address _eETH, address _liquidityPool, address _withdrawRequestNFT, address _roleRegistry) {
-        if (_weETH == address(0) || _eETH == address(0) || _liquidityPool == address(0) || _withdrawRequestNFT == address(0) || _roleRegistry == address(0)) {
-            revert ZeroAddress();
-        }
+        if (_weETH == address(0) || _eETH == address(0) || _liquidityPool == address(0) || _withdrawRequestNFT == address(0) || _roleRegistry == address(0)) revert ZeroAddress();
 
         weETH = IWeETH(_weETH);
         eETH = IeETH(_eETH);
@@ -84,9 +82,7 @@ contract WeETHWithdrawAdapter is Initializable, UUPSUpgradeable, OwnableUpgradea
      * @param _initialOwner Address that will be set as the contract owner
      */
     function initialize(address _initialOwner) external initializer {
-        if (_initialOwner == address(0)) {
-            revert ZeroAddress();
-        }
+        if (_initialOwner == address(0)) revert ZeroAddress();
         __Ownable_init();
         __UUPSUpgradeable_init();
         _transferOwnership(_initialOwner);
@@ -100,12 +96,8 @@ contract WeETHWithdrawAdapter is Initializable, UUPSUpgradeable, OwnableUpgradea
      * @return requestId The ID of the created withdrawal request
      */
     function requestWithdraw(uint256 weETHAmount, address recipient) public whenNotPaused returns (uint256 requestId) {
-        if (weETHAmount == 0) {
-            revert ZeroAmount();
-        }
-        if (recipient == address(0)) {
-            revert ZeroAddress();
-        }
+        if (weETHAmount == 0) revert ZeroAmount();
+        if (recipient == address(0)) revert ZeroAddress();
 
         // Transfer weETH from user to this contract
         IERC20(address(weETH)).safeTransferFrom(msg.sender, address(this), weETHAmount);
@@ -145,12 +137,8 @@ contract WeETHWithdrawAdapter is Initializable, UUPSUpgradeable, OwnableUpgradea
      * @notice Pause the contract
      */
     function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) {
-            revert IncorrectRole();
-        }
-        if (paused) {
-            revert("Pausable: already paused");
-        }
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        if (paused) revert("Pausable: already paused");
 
         paused = true;
         emit Paused(msg.sender);
@@ -160,12 +148,8 @@ contract WeETHWithdrawAdapter is Initializable, UUPSUpgradeable, OwnableUpgradea
      * @notice Unpause the contract
      */
     function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) {
-            revert IncorrectRole();
-        }
-        if (!paused) {
-            revert("Pausable: not paused");
-        }
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        if (!paused) revert("Pausable: not paused");
 
         paused = false;
         emit Unpaused(msg.sender);
@@ -199,13 +183,7 @@ contract WeETHWithdrawAdapter is Initializable, UUPSUpgradeable, OwnableUpgradea
     /**
      * @notice Authorize contract upgrades
      */
-    function _authorizeUpgrade(
-        address /* newImplementation */
-    )
-        internal
-        view
-        override
-    {
+    function _authorizeUpgrade(address /* newImplementation */ ) internal view override {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
@@ -213,9 +191,7 @@ contract WeETHWithdrawAdapter is Initializable, UUPSUpgradeable, OwnableUpgradea
      * @notice Check if contract is not paused
      */
     function _requireNotPaused() internal view {
-        if (paused) {
-            revert ContractPaused();
-        }
+        if (paused) revert ContractPaused();
     }
 
     //--------------------------------------------------------------------------------------

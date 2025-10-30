@@ -95,11 +95,8 @@ contract AuctionManager is Initializable, IAuctionManager, PausableUpgradeable, 
             require(nodeOperatorManager.isWhitelisted(msg.sender), "Only whitelisted addresses");
             require(msg.value == _bidSize * _bidAmountPerBid && _bidAmountPerBid >= whitelistBidAmount && _bidAmountPerBid <= maxBidAmount, "Incorrect bid value");
         } else {
-            if (nodeOperatorManager.isWhitelisted(msg.sender)) {
-                require(msg.value == _bidSize * _bidAmountPerBid && _bidAmountPerBid >= whitelistBidAmount && _bidAmountPerBid <= maxBidAmount, "Incorrect bid value");
-            } else {
-                require(msg.value == _bidSize * _bidAmountPerBid && _bidAmountPerBid >= minBidAmount && _bidAmountPerBid <= maxBidAmount, "Incorrect bid value");
-            }
+            if (nodeOperatorManager.isWhitelisted(msg.sender)) require(msg.value == _bidSize * _bidAmountPerBid && _bidAmountPerBid >= whitelistBidAmount && _bidAmountPerBid <= maxBidAmount, "Incorrect bid value");
+            else require(msg.value == _bidSize * _bidAmountPerBid && _bidAmountPerBid >= minBidAmount && _bidAmountPerBid <= maxBidAmount, "Incorrect bid value");
         }
         uint64 keysRemaining = nodeOperatorManager.getNumKeysRemaining(msg.sender);
         require(_bidSize <= keysRemaining, "Insufficient public keys");

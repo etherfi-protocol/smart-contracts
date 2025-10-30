@@ -79,9 +79,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
         console2.log("=== REALISTIC EIP-7002 UPGRADE SIMULATION ===");
         console2.log("Simulating actual mainnet upgrade process...");
         console2.log("");
-        if (block.chainid != 1) {
-            return; // skip if not mainnet fork
-        }
+        if (block.chainid != 1) return; // skip if not mainnet fork
 
         // Step 1: Deploy new rate limiter
         _deployRateLimiter();
@@ -231,11 +229,8 @@ contract ELExitsForkTestingDeploymentTest is Test {
 
         // Test 2: Rate limiter functionality
         try rateLimiter.getLimit(etherFiNodesManager.UNRESTAKING_LIMIT_ID()) returns (uint64 capacity, uint64, uint64, uint256) {
-            if (capacity > 0) {
-                console2.log(unicode"✓ Rate limiter buckets properly initialized");
-            } else {
-                console2.log(unicode"✗ Rate limiter buckets not initialized");
-            }
+            if (capacity > 0) console2.log(unicode"✓ Rate limiter buckets properly initialized");
+            else console2.log(unicode"✗ Rate limiter buckets not initialized");
         } catch {
             console2.log(unicode"✗ Rate limiter not accessible");
         }
@@ -289,9 +284,8 @@ contract ELExitsForkTestingDeploymentTest is Test {
     }
 
     function test_SimulateELExit() public {
-        if (block.chainid != 1) {
-            return; // skip if not mainnet fork
-        }
+        if (block.chainid != 1) return; // skip if not mainnet fork
+
         test_RealisticUpgradeDeployment();
 
         console2.log("");

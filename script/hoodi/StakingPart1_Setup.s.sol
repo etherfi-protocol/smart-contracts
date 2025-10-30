@@ -102,9 +102,7 @@ contract StakingPart1 is Script {
 
             vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
             // Add admin rights if needed
-            if (!nodeOperatorManager.admins(depositor)) {
-                nodeOperatorManager.updateAdmin(depositor, true);
-            }
+            if (!nodeOperatorManager.admins(depositor)) nodeOperatorManager.updateAdmin(depositor, true);
             nodeOperatorManager.addToWhitelist(nodeOp);
             vm.stopBroadcast();
         }

@@ -77,9 +77,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     error DisallowZeroAddress();
 
     function initialize(address _eEthAddress, address _liquidityPoolAddress, address _membershipNft, address _treasury, address _protocolRevenueManager) external initializer {
-        if (_eEthAddress == address(0) || _liquidityPoolAddress == address(0) || _treasury == address(0) || _protocolRevenueManager == address(0) || _membershipNft == address(0)) {
-            revert DisallowZeroAddress();
-        }
+        if (_eEthAddress == address(0) || _liquidityPoolAddress == address(0) || _treasury == address(0) || _protocolRevenueManager == address(0) || _membershipNft == address(0)) revert DisallowZeroAddress();
 
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -111,9 +109,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     /// @param _points EAP points that the user has in the merkle snapshot
     /// @param _merkleProof array of hashes forming the merkle proof for the user
     function wrapEthForEap(uint256 _amount, uint256 _amountForPoints, uint32 _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) external payable whenNotPaused returns (uint256) {
-        if (_points == 0 || msg.value < _snapshotEthAmount || msg.value > _snapshotEthAmount * 2 || msg.value != _amount + _amountForPoints) {
-            revert InvalidEAPRollover();
-        }
+        if (_points == 0 || msg.value < _snapshotEthAmount || msg.value > _snapshotEthAmount * 2 || msg.value != _amount + _amountForPoints) revert InvalidEAPRollover();
 
         membershipNFT.processDepositFromEapUser(msg.sender, _eapDepositBlockNumber, _snapshotEthAmount, _points, _merkleProof);
         uint40 loyaltyPoints = uint40(_min(_points, type(uint40).max));
@@ -143,9 +139,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
         uint256 depositPerNFT = _amount + _amountForPoints;
         uint256 ethNeededPerNFT = depositPerNFT + feeAmount;
 
-        if (depositPerNFT / 1 gwei < minDepositGwei || msg.value != ethNeededPerNFT) {
-            revert InvalidDeposit();
-        }
+        if (depositPerNFT / 1 gwei < minDepositGwei || msg.value != ethNeededPerNFT) revert InvalidDeposit();
 
         return _wrapEth(_amount, _amountForPoints);
     }
@@ -157,9 +151,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
         uint256 depositPerNFT = _amount + _amountForPoints;
         uint256 ethNeededPerNFT = depositPerNFT + feeAmount;
 
-        if (depositPerNFT / 1 gwei < minDepositGwei || msg.value != _numNFTs * ethNeededPerNFT) {
-            revert InvalidDeposit();
-        }
+        if (depositPerNFT / 1 gwei < minDepositGwei || msg.value != _numNFTs * ethNeededPerNFT) revert InvalidDeposit();
 
         uint256[] memory tokenIds = new uint256[](_numNFTs);
         for (uint256 i = 0; i < _numNFTs; i++) {
@@ -194,9 +186,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     /// @param _amount The amount of membership tokens to exchange.
     function requestWithdraw(uint256 _tokenId, uint256 _amount) external whenNotPaused returns (uint256) {
         _requireTokenOwner(_tokenId);
-        if (liquidityPool.totalValueInLp() < _amount) {
-            revert InsufficientLiquidity();
-        }
+        if (liquidityPool.totalValueInLp() < _amount) revert InsufficientLiquidity();
 
         // prevent transfers for several blocks after a withdrawal to prevent frontrunning
         membershipNFT.incrementLock(_tokenId, withdrawalLockBlocks);
@@ -204,9 +194,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
         _claimPoints(_tokenId);
         _claimStakingRewards(_tokenId);
 
-        if (!membershipNFT.isWithdrawable(_tokenId, _amount)) {
-            revert ExceededMaxWithdrawal();
-        }
+        if (!membershipNFT.isWithdrawable(_tokenId, _amount)) revert ExceededMaxWithdrawal();
 
         uint256 prevAmount = tokenDeposits[_tokenId].amounts;
         _updateAllTimeHighDepositOf(_tokenId);
@@ -231,14 +219,10 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
 
         uint256 feeAmount = burnFee * 0.001 ether;
         uint256 totalBalance = _withdrawAndBurn(_tokenId);
-        if (totalBalance < feeAmount) {
-            revert InsufficientBalance();
-        }
+        if (totalBalance < feeAmount) revert InsufficientBalance();
 
         eETH.approve(address(liquidityPool), totalBalance);
-        if (feeAmount > 0) {
-            liquidityPool.withdraw(address(this), feeAmount);
-        }
+        if (feeAmount > 0) liquidityPool.withdraw(address(this), feeAmount);
         uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(msg.sender, totalBalance, uint64(feeAmount));
         _emitNftUpdateEvent(_tokenId);
         return withdrawTokenId;
@@ -253,9 +237,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
 
         uint8 oldTier = tokenData[_tokenId].tier;
         uint8 newTier = membershipNFT.claimableTier(_tokenId);
-        if (oldTier != newTier) {
-            _claimTier(_tokenId, oldTier, newTier);
-        }
+        if (oldTier != newTier) _claimTier(_tokenId, oldTier, newTier);
         _emitNftUpdateEvent(_tokenId);
     }
 
@@ -298,9 +280,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
 
     function addNewTier(uint40 _requiredTierPoints, uint24 _weight) external returns (uint256) {
         _requireAdmin();
-        if (tierDeposits.length >= type(uint8).max) {
-            revert TierLimitExceeded();
-        }
+        if (tierDeposits.length >= type(uint8).max) revert TierLimitExceeded();
         tierDeposits.push(TierDeposit(0, 0));
         tierData.push(TierData(0, _requiredTierPoints, _weight, 0));
         return tierDeposits.length - 1;
@@ -310,9 +290,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
 
     function updateTier(uint8 _tier, uint40 _requiredTierPoints, uint24 _weight) external {
         _requireAdmin();
-        if (_tier >= tierData.length) {
-            revert OutOfBound();
-        }
+        if (_tier >= tierData.length) revert OutOfBound();
         tierData[_tier].requiredTierPoints = _requiredTierPoints;
         tierData[_tier].weight = _weight;
     }
@@ -370,16 +348,10 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
 
     function withdrawFees(uint256 _amount, address _recipient) external {
         _requireAdmin();
-        if (_recipient == address(0)) {
-            revert InvalidWithdraw();
-        }
-        if (address(this).balance < _amount) {
-            revert InvalidWithdraw();
-        }
+        if (_recipient == address(0)) revert InvalidWithdraw();
+        if (address(this).balance < _amount) revert InvalidWithdraw();
         (bool sent,) = address(_recipient).call{value: _amount}("");
-        if (!sent) {
-            revert InvalidWithdraw();
-        }
+        if (!sent) revert InvalidWithdraw();
     }
 
     function updatePointsParams(uint16 _newPointsBoostFactor, uint16 _newPointsGrowthRate) external {
@@ -467,17 +439,13 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
         _deposit(tokenId, _amount, _amountForPoints);
 
         // Finally, we mint the token!
-        if (tokenId != membershipNFT.mint(_to, 1)) {
-            revert WrongTokenMinted();
-        }
+        if (tokenId != membershipNFT.mint(_to, 1)) revert WrongTokenMinted();
 
         return tokenId;
     }
 
     function _deposit(uint256 _tokenId, uint256 _amount, uint256 _amountForPoints) internal {
-        if (_amountForPoints != 0) {
-            revert Deprecated();
-        }
+        if (_amountForPoints != 0) revert Deprecated();
         uint256 tier = tokenData[_tokenId].tier;
         _incrementTokenDeposit(_tokenId, _amount + _amountForPoints);
         _incrementTierDeposit(tier, _amount + _amountForPoints);
@@ -487,9 +455,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
         // subtract fee from provided ether. Will revert if not enough eth provided
         uint256 upgradeFeeAmount = uint256(upgradeFee) * 0.001 ether;
         uint256 additionalDeposit = msg.value - upgradeFeeAmount;
-        if (!canTopUp(_tokenId, additionalDeposit, _amount, _amountForPoints)) {
-            revert InvalidDeposit();
-        }
+        if (!canTopUp(_tokenId, additionalDeposit, _amount, _amountForPoints)) revert InvalidDeposit();
 
         TokenDeposit memory deposit = tokenDeposits[_tokenId];
         TokenData storage token = tokenData[_tokenId];
@@ -528,9 +494,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     function _withdraw(uint256 _tokenId, uint256 _amount) internal {
-        if (tokenDeposits[_tokenId].amounts < _amount) {
-            revert InsufficientBalance();
-        }
+        if (tokenDeposits[_tokenId].amounts < _amount) revert InsufficientBalance();
         uint256 tier = tokenData[_tokenId].tier;
         _decrementTokenDeposit(_tokenId, _amount);
         _decrementTierDeposit(tier, _amount);
@@ -573,12 +537,8 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     error UnexpectedTier();
 
     function _claimTier(uint256 _tokenId, uint8 _curTier, uint8 _newTier) internal {
-        if (tokenData[_tokenId].tier != _curTier) {
-            revert UnexpectedTier();
-        }
-        if (_curTier == _newTier) {
-            return;
-        }
+        if (tokenData[_tokenId].tier != _curTier) revert UnexpectedTier();
+        if (_curTier == _newTier) return;
         uint256 amount = tokenDeposits[_tokenId].amounts;
         _decrementTierDeposit(_curTier, amount);
         _incrementTierDeposit(_newTier, amount);
@@ -625,23 +585,17 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     error OnlyTokenOwner();
 
     function _requireTokenOwner(uint256 _tokenId) internal {
-        if (membershipNFT.balanceOfUser(msg.sender, _tokenId) != 1) {
-            revert OnlyTokenOwner();
-        }
+        if (membershipNFT.balanceOfUser(msg.sender, _tokenId) != 1) revert OnlyTokenOwner();
     }
 
     error OnlyAdmin();
 
     function _requireAdmin() internal {
-        if (!admins[msg.sender]) {
-            revert OnlyAdmin();
-        }
+        if (!admins[msg.sender]) revert OnlyAdmin();
     }
 
     function _feeAmountSanityCheck(uint256 _feeAmount) internal {
-        if (_feeAmount % 0.001 ether != 0 || _feeAmount / 0.001 ether > type(uint16).max) {
-            revert InvalidAmount();
-        }
+        if (_feeAmount % 0.001 ether != 0 || _feeAmount / 0.001 ether > type(uint16).max) revert InvalidAmount();
     }
 
     error IntegerOverflow();
@@ -694,21 +648,15 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     function tierForPoints(uint40 _tierPoints) public view returns (uint8) {
         uint8 tierId = 0;
 
-        while (tierId < tierData.length && _tierPoints >= tierData[tierId].requiredTierPoints) {
-            tierId++;
-        }
+        while (tierId < tierData.length && _tierPoints >= tierData[tierId].requiredTierPoints) tierId++;
 
         return tierId - 1;
     }
 
     function canTopUp(uint256 _tokenId, uint256 _totalAmount, uint128 _amount, uint128 _amountForPoints) public view returns (bool) {
         uint32 prevTopUpTimestamp = tokenData[_tokenId].prevTopUpTimestamp;
-        if (block.timestamp - uint256(prevTopUpTimestamp) < topUpCooltimePeriod) {
-            return false;
-        }
-        if (_totalAmount != _amount + _amountForPoints) {
-            return false;
-        }
+        if (block.timestamp - uint256(prevTopUpTimestamp) < topUpCooltimePeriod) return false;
+        if (_totalAmount != _amount + _amountForPoints) return false;
         return true;
     }
 

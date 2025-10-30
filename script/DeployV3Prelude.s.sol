@@ -252,15 +252,10 @@ contract DeployScript is Script {
     }
 
     function formatStaticParam(string memory t, bytes32 chunk) internal pure returns (string memory) {
-        if (compare(t, "address")) {
-            return vm.toString(address(uint160(uint256(chunk))));
-        } else if (compare(t, "uint256")) {
-            return vm.toString(uint256(chunk));
-        } else if (compare(t, "bool")) {
-            return uint256(chunk) != 0 ? "true" : "false";
-        } else if (compare(t, "bytes32")) {
-            return vm.toString(chunk);
-        }
+        if (compare(t, "address")) return vm.toString(address(uint160(uint256(chunk))));
+        else if (compare(t, "uint256")) return vm.toString(uint256(chunk));
+        else if (compare(t, "bool")) return uint256(chunk) != 0 ? "true" : "false";
+        else if (compare(t, "bytes32")) return vm.toString(chunk);
         revert("Unsupported static type");
     }
 
@@ -336,12 +331,8 @@ contract DeployScript is Script {
         bytes memory b = bytes(str);
         uint256 start;
         uint256 end = b.length;
-        while (start < b.length && uint8(b[start]) <= 0x20) {
-            start++;
-        }
-        while (end > start && uint8(b[end - 1]) <= 0x20) {
-            end--;
-        }
+        while (start < b.length && uint8(b[start]) <= 0x20) start++;
+        while (end > start && uint8(b[end - 1]) <= 0x20) end--;
         bytes memory out = new bytes(end - start);
         for (uint256 i = 0; i < out.length; i++) {
             out[i] = b[start + i];
@@ -356,13 +347,9 @@ contract DeployScript is Script {
     function startsWith(string memory str, string memory prefix) internal pure returns (bool) {
         bytes memory s = bytes(str);
         bytes memory p = bytes(prefix);
-        if (s.length < p.length) {
-            return false;
-        }
+        if (s.length < p.length) return false;
         for (uint256 i = 0; i < p.length; i++) {
-            if (s[i] != p[i]) {
-                return false;
-            }
+            if (s[i] != p[i]) return false;
         }
         return true;
     }

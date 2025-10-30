@@ -98,12 +98,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @notice Request for a specific amount of stETH holdings
     /// @param _amount the amount of stETH to request
     function stEthRequestWithdrawal(uint256 _amount) public onlyAdmin returns (uint256[] memory) {
-        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) {
-            revert IncorrectAmount();
-        }
-        if (_amount > lido.balanceOf(address(this))) {
-            revert NotEnoughBalance();
-        }
+        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) revert IncorrectAmount();
+        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
 
         uint256 maxAmount = lidoWithdrawalQueue.MAX_STETH_WITHDRAWAL_AMOUNT();
         uint256 numReqs = (_amount + maxAmount - 1) / maxAmount;
@@ -273,9 +269,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     // get the amount of token restaked in EigenLayer pending for withdrawals
     function getAmountInEigenLayerPendingForWithdrawals(address _token) public view returns (uint256) {
         TokenInfo memory info = tokenInfos[_token];
-        if (info.elStrategy == IStrategy(address(0))) {
-            return 0;
-        }
+        if (info.elStrategy == IStrategy(address(0))) return 0;
         uint256 amount = info.elStrategy.sharesToUnderlyingView(info.elSharesInPendingForWithdrawals);
         return amount;
     }
@@ -333,15 +327,11 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     function _requireAdmin() internal view virtual {
-        if (!(admins[msg.sender] || msg.sender == owner())) {
-            revert IncorrectCaller();
-        }
+        if (!(admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
     }
 
     function _requirePauser() internal view virtual {
-        if (!(pausers[msg.sender] || admins[msg.sender] || msg.sender == owner())) {
-            revert IncorrectCaller();
-        }
+        if (!(pausers[msg.sender] || admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
     }
 
     /* MODIFIER */

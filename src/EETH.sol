@@ -144,23 +144,17 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     }
 
     function recoverETH(address payable to, uint256 amount) external {
-        if (!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _recoverETH(to, amount);
     }
 
     function recoverERC20(address token, address to, uint256 amount) external {
-        if (!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _recoverERC20(token, to, amount);
     }
 
     function recoverERC721(address token, address to, uint256 tokenId) external {
-        if (!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) {
-            revert IncorrectRole();
-        }
+        if (!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _recoverERC721(token, to, tokenId);
     }
 
@@ -190,13 +184,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         emit TransferShares(_sender, _recipient, _sharesAmount);
     }
 
-    function _authorizeUpgrade(
-        address /* newImplementation */
-    )
-        internal
-        view
-        override
-    {
+    function _authorizeUpgrade(address /* newImplementation */ ) internal view override {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
@@ -240,11 +228,8 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     }
 
     function _domainSeparatorV4() internal view returns (bytes32) {
-        if (address(this) == _CACHED_THIS && block.chainid == _CACHED_CHAIN_ID) {
-            return _CACHED_DOMAIN_SEPARATOR;
-        } else {
-            return _buildDomainSeparator(_TYPE_HASH, _HASHED_NAME, _HASHED_VERSION);
-        }
+        if (address(this) == _CACHED_THIS && block.chainid == _CACHED_CHAIN_ID) return _CACHED_DOMAIN_SEPARATOR;
+        else return _buildDomainSeparator(_TYPE_HASH, _HASHED_NAME, _HASHED_VERSION);
     }
 
     function _buildDomainSeparator(bytes32 typeHash, bytes32 nameHash, bytes32 versionHash) private view returns (bytes32) {

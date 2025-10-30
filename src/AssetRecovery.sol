@@ -68,17 +68,11 @@ abstract contract AssetRecovery is ReentrancyGuardTransient {
      * @param amount Amount of ETH to recover
      */
     function _recoverETH(address payable to, uint256 amount) internal nonReentrant {
-        if (to == address(0) || amount == 0) {
-            revert InvalidInput();
-        }
-        if (amount > address(this).balance) {
-            revert InsufficientBalance();
-        }
+        if (to == address(0) || amount == 0) revert InvalidInput();
+        if (amount > address(this).balance) revert InsufficientBalance();
 
         (bool success,) = to.call{value: amount}("");
-        if (!success) {
-            revert EthTransferFailed();
-        }
+        if (!success) revert EthTransferFailed();
 
         emit ETHRecovered(to, amount);
     }
@@ -90,12 +84,8 @@ abstract contract AssetRecovery is ReentrancyGuardTransient {
      * @param amount Amount of tokens to recover
      */
     function _recoverERC20(address token, address to, uint256 amount) internal nonReentrant {
-        if (token == address(0) || to == address(0) || amount == 0) {
-            revert InvalidInput();
-        }
-        if (amount > IERC20(token).balanceOf(address(this))) {
-            revert InsufficientBalance();
-        }
+        if (token == address(0) || to == address(0) || amount == 0) revert InvalidInput();
+        if (amount > IERC20(token).balanceOf(address(this))) revert InsufficientBalance();
 
         IERC20(token).safeTransfer(to, amount);
 
@@ -109,12 +99,8 @@ abstract contract AssetRecovery is ReentrancyGuardTransient {
      * @param tokenId ID of the token to recover
      */
     function _recoverERC721(address token, address to, uint256 tokenId) internal nonReentrant {
-        if (token == address(0) || to == address(0)) {
-            revert InvalidInput();
-        }
-        if (IERC721(token).ownerOf(tokenId) != address(this)) {
-            revert ContractIsNotOwnerOfERC721Token();
-        }
+        if (token == address(0) || to == address(0)) revert InvalidInput();
+        if (IERC721(token).ownerOf(tokenId) != address(this)) revert ContractIsNotOwnerOfERC721Token();
 
         IERC721(token).safeTransferFrom(address(this), to, tokenId);
 

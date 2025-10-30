@@ -113,30 +113,20 @@ contract EtherFiNode is IEtherFiNode {
         for (uint256 i = 0; i < queuedWithdrawals.length; i++) {
             // skip this withdrawal if not enough time has passed or if it is not a simple beaconETH withdrawal
             uint32 slashableUntil = queuedWithdrawals[i].startBlock + EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS;
-            if (uint32(block.number) <= slashableUntil) {
-                continue;
-            }
-            if (queuedWithdrawals[i].strategies.length != 1) {
-                continue;
-            }
-            if (queuedWithdrawals[i].strategies[0] != IStrategy(BEACON_ETH_STRATEGY_ADDRESS)) {
-                continue;
-            }
+            if (uint32(block.number) <= slashableUntil) continue;
+            if (queuedWithdrawals[i].strategies.length != 1) continue;
+            if (queuedWithdrawals[i].strategies[0] != IStrategy(BEACON_ETH_STRATEGY_ADDRESS)) continue;
 
             delegationManager.completeQueuedWithdrawal(queuedWithdrawals[i], tokens, receiveAsTokens);
             anyWithdrawalsCompleted = true;
         }
-        if (!anyWithdrawalsCompleted) {
-            revert NoCompleteableWithdrawals();
-        } // bad dev experience if function completes but nothing happened
+        if (!anyWithdrawalsCompleted) revert NoCompleteableWithdrawals(); // bad dev experience if function completes but nothing happened
 
         // if there are available rewards, forward them to the liquidityPool
         uint256 balance = address(this).balance;
         if (balance > 0) {
             (bool sent,) = payable(address(liquidityPool)).call{value: balance, gas: 20_000}("");
-            if (!sent) {
-                revert TransferFailed();
-            }
+            if (!sent) revert TransferFailed();
             emit FundsTransferred(address(liquidityPool), balance);
         }
         return balance;
@@ -161,9 +151,7 @@ contract EtherFiNode is IEtherFiNode {
         uint256 balance = address(this).balance;
         if (balance > 0) {
             (bool sent,) = payable(address(liquidityPool)).call{value: balance, gas: 20_000}("");
-            if (!sent) {
-                revert TransferFailed();
-            }
+            if (!sent) revert TransferFailed();
             emit FundsTransferred(address(liquidityPool), balance);
         }
         return balance;
@@ -201,9 +189,7 @@ contract EtherFiNode is IEtherFiNode {
     //--------------------------------------------------------------------------------------
 
     modifier onlyEtherFiNodesManager() {
-        if (msg.sender != address(etherFiNodesManager)) {
-            revert InvalidCaller();
-        }
+        if (msg.sender != address(etherFiNodesManager)) revert InvalidCaller();
         _;
     }
 }

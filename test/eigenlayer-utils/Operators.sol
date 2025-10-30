@@ -36,9 +36,7 @@ contract Operators is Test {
         bytes memory b = bytes(s);
         uint256 result = 0;
         for (uint256 i = 0; i < b.length; i++) {
-            if (uint256(uint8(b[i])) >= 48 && uint256(uint8(b[i])) <= 57) {
-                result = result * 10 + (uint256(uint8(b[i])) - 48);
-            }
+            if (uint256(uint8(b[i])) >= 48 && uint256(uint8(b[i])) <= 57) result = result * 10 + (uint256(uint8(b[i])) - 48);
         }
         return result;
     }

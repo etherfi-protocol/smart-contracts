@@ -38,9 +38,7 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     /// @param account The address to check roles for
     /// @param encodedRoles ABI encoded roles (abi.encode(ROLE_1, ROLE_2, ...))
     function checkRoles(address account, bytes memory encodedRoles) public view {
-        if (!_hasAnyRoles(account, encodedRoles)) {
-            __revertEnumerableRolesUnauthorized();
-        }
+        if (!_hasAnyRoles(account, encodedRoles)) __revertEnumerableRolesUnauthorized();
     }
 
     /// @notice Checks if an account has a specific role
@@ -76,9 +74,7 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     }
 
     function onlyProtocolUpgrader(address account) public view {
-        if (owner() != account) {
-            revert OnlyProtocolUpgrader();
-        }
+        if (owner() != account) revert OnlyProtocolUpgrader();
     }
 
     function __revertEnumerableRolesUnauthorized() private pure {
