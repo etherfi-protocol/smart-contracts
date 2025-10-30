@@ -1,19 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import "../interfaces/IRegulationsManager.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "../interfaces/IRegulationsManager.sol";
+import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
-contract RegulationsManager is
-    IRegulationsManager,
-    Initializable,
-    OwnableUpgradeable,
-    PausableUpgradeable,
-    UUPSUpgradeable
-{
+contract RegulationsManager is IRegulationsManager, Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable {
     mapping(uint32 => mapping(address => bool)) public isEligible;
     mapping(address => bytes32) public declarationHashes;
     mapping(uint256 => bytes32) public correctVersionHash;
@@ -39,7 +33,7 @@ contract RegulationsManager is
     constructor() {
         _disableInitializers();
     }
-    
+
     /// @notice initializes contract
     function initialize() external initializer {
         __Pausable_init();
@@ -60,14 +54,8 @@ contract RegulationsManager is
     /// @dev can be called by the owner or the user them self
     /// @param _user the user to remove from the whitelist
     function removeFromWhitelist(address _user) external whenNotPaused {
-        require(
-            msg.sender == _user || msg.sender == owner(),
-            "Incorrect Caller"
-        );
-        require(
-            isEligible[whitelistVersion][_user] == true,
-            "User may be in a regulated country"
-        );
+        require(msg.sender == _user || msg.sender == owner(), "Incorrect Caller");
+        require(isEligible[whitelistVersion][_user] == true, "User may be in a regulated country");
 
         isEligible[whitelistVersion][_user] = false;
 
@@ -104,9 +92,7 @@ contract RegulationsManager is
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
 
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------

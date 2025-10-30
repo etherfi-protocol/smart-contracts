@@ -3,12 +3,13 @@ pragma solidity ^0.8.24;
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 import "./RoleRegistry.sol";
 
-contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
+contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     address public immutable treasury;
@@ -42,12 +43,11 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     }
 
     function withdrawToLiquidityPool() external {
-
         uint256 balance = address(this).balance;
         require(balance > 0, "Contract balance is zero");
-        (bool success, ) = liquidityPool.call{value: balance}("");
+        (bool success,) = liquidityPool.call{value: balance}("");
         require(success, "TRANSFER_FAILED");
-        
+
         emit EthSent(address(this), liquidityPool, balance);
     }
 
@@ -69,5 +69,7 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    function getImplementation() external view returns (address) {return _getImplementation();}
+    function getImplementation() external view returns (address) {
+        return _getImplementation();
+    }
 }

@@ -13,5 +13,4 @@ interface IRegulationsManager {
     function isEligible(uint32 _whitelistVersion, address _user) external view returns (bool);
 
     function whitelistVersion() external view returns (uint32);
-
 }

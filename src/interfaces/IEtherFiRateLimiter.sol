@@ -2,7 +2,6 @@
 pragma solidity ^0.8.27;
 
 interface IEtherFiRateLimiter {
-
     // admin
     function updateConsumers(bytes32 id, address consumer, bool allowed) external;
     function createNewLimiter(bytes32 id, uint64 capacity, uint64 refillRate) external;
@@ -23,7 +22,6 @@ interface IEtherFiRateLimiter {
     function getLimit(bytes32 id) external view returns (uint64 capacity, uint64 remaining, uint64 refillRate, uint256 lastRefill);
     function isConsumerAllowed(bytes32 id, address consumer) external view returns (bool);
     function limitExists(bytes32 id) external view returns (bool);
-
 
     //---------------------------------------------------------------------------
     //-----------------------------  Events  -----------------------------------

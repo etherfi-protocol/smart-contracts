@@ -1,8 +1,8 @@
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
 import "./TestERC20.sol";
 import "./TestERC721.sol";
+import "./TestSetup.sol";
 
 // Helper contract to force ETH into a contract using selfdestruct
 contract ForceETHSender {
@@ -12,12 +12,10 @@ contract ForceETHSender {
 }
 
 contract EETHTest is TestSetup {
-
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
 
     function setUp() public {
-       
         setUpTests();
     }
 
@@ -130,7 +128,7 @@ contract EETHTest is TestSetup {
 
         // Staking Rewards sent to liquidity pool
         /// vm.deal sets the balance of whoever its called on
-        /// In this case 10 ether is added as reward 
+        /// In this case 10 ether is added as reward
         vm.prank(address(membershipManagerInstance));
         liquidityPoolInstance.rebase(10 ether);
         _transferTo(address(liquidityPoolInstance), 10 ether);
@@ -308,53 +306,55 @@ contract EETHTest is TestSetup {
 
         assertEq(eETHInstance.allowance(alice, bob), 0.5 ether);
     }
+
     function test_RecoverETH() public {
         uint256 amountToSend = 2 ether;
         // We cannot send ETH directly to eETH contract because it has no fallback/retrieve method
         ForceETHSender sender = new ForceETHSender();
         vm.deal(address(sender), amountToSend);
         sender.forceSend(payable(address(eETHInstance)));
-        
+
         // Check that eETH contract now has ETH
         assertEq(address(eETHInstance).balance, amountToSend);
-        
+
         // Try to recover ETH without proper role - should fail
         vm.expectRevert();
         vm.prank(bob);
         eETHInstance.recoverETH(payable(bob), amountToSend);
-        
+
         // Check alice's balance before recovery
         uint256 aliceBalanceBefore = alice.balance;
-        
+
         // Recover ETH as admin
         vm.prank(admin);
         eETHInstance.recoverETH(payable(alice), amountToSend);
-        
+
         // Verify ETH was recovered
         assertEq(address(eETHInstance).balance, 0);
         assertEq(alice.balance, aliceBalanceBefore + amountToSend);
     }
+
     function test_RecoverERC20() public {
         // Create a mock ERC20 token
         TestERC20 mockToken = new TestERC20("Test Token", "TEST");
         uint256 amountToSend = 1000e18;
-        
+
         // Mint tokens to alice and send to eETH contract
         mockToken.mint(alice, amountToSend);
         vm.prank(alice);
         mockToken.transfer(address(eETHInstance), amountToSend);
-        
+
         assertEq(mockToken.balanceOf(address(eETHInstance)), amountToSend);
-            
+
         // Try to recover tokens without proper role - should fail
         vm.expectRevert();
         vm.prank(bob);
         eETHInstance.recoverERC20(address(mockToken), alice, amountToSend);
-        
+
         // Recover tokens as admin (who has the role)
         vm.prank(admin);
         eETHInstance.recoverERC20(address(mockToken), alice, amountToSend);
-        
+
         // Verify tokens were recovered
         assertEq(mockToken.balanceOf(address(eETHInstance)), 0);
         assertEq(mockToken.balanceOf(alice), amountToSend);
@@ -363,23 +363,23 @@ contract EETHTest is TestSetup {
     function test_RecoverERC721() public {
         // Create a mock ERC721 token
         TestERC721 mockNFT = new TestERC721("Test NFT", "TNFT");
-        
+
         // Mint NFT to alice and send to eETH contract
         uint256 tokenId = mockNFT.mint(alice);
         vm.prank(alice);
         mockNFT.transferFrom(alice, address(eETHInstance), tokenId);
-        
+
         assertEq(mockNFT.ownerOf(tokenId), address(eETHInstance));
-        
+
         // Try to recover NFT without proper role - should fail
         vm.expectRevert();
         vm.prank(bob);
         eETHInstance.recoverERC721(address(mockNFT), alice, tokenId);
-        
+
         // Recover NFT as admin
         vm.prank(admin);
         eETHInstance.recoverERC721(address(mockNFT), alice, tokenId);
-        
+
         // Verify NFT was recovered
         assertEq(mockNFT.ownerOf(tokenId), alice);
     }
@@ -390,17 +390,17 @@ contract EETHTest is TestSetup {
         ForceETHSender sender = new ForceETHSender();
         vm.deal(address(sender), amountToSend);
         sender.forceSend(payable(address(eETHInstance)));
-        
+
         // Test 1: Try to recover 0 ETH - should revert with InvalidInput
         vm.expectRevert(AssetRecovery.InvalidInput.selector);
         vm.prank(admin);
         eETHInstance.recoverETH(payable(alice), 0);
-        
+
         // Test 2: Try to recover more ETH than exists - should revert with InsufficientBalance
         vm.expectRevert(AssetRecovery.InsufficientBalance.selector);
         vm.prank(admin);
         eETHInstance.recoverETH(payable(alice), amountToSend + 1);
-        
+
         // Test 3: Try to send to zero address - should revert with InvalidInput
         vm.expectRevert(AssetRecovery.InvalidInput.selector);
         vm.prank(admin);
@@ -410,27 +410,27 @@ contract EETHTest is TestSetup {
     function test_RecoverERC20_ErrorConditions() public {
         TestERC20 mockToken = new TestERC20("Test Token", "TEST");
         uint256 amountToSend = 1000e18;
-        
+
         // Send tokens to eETH contract
         mockToken.mint(alice, amountToSend);
         vm.prank(alice);
         mockToken.transfer(address(eETHInstance), amountToSend);
-        
+
         // Test 1: Try to recover 0 tokens - should revert with InvalidInput
         vm.expectRevert(AssetRecovery.InvalidInput.selector);
         vm.prank(admin);
         eETHInstance.recoverERC20(address(mockToken), alice, 0);
-        
+
         // Test 2: Try to recover more tokens than exists - should revert with InsufficientBalance
         vm.expectRevert(AssetRecovery.InsufficientBalance.selector);
         vm.prank(admin);
         eETHInstance.recoverERC20(address(mockToken), alice, amountToSend + 1);
-        
+
         // Test 3: Try to send to zero address - should revert with InvalidInput
         vm.expectRevert(AssetRecovery.InvalidInput.selector);
         vm.prank(admin);
         eETHInstance.recoverERC20(address(mockToken), address(0), amountToSend);
-        
+
         // Test 4: Try to recover from zero token address - should revert with InvalidInput
         vm.expectRevert(AssetRecovery.InvalidInput.selector);
         vm.prank(admin);
@@ -440,33 +440,31 @@ contract EETHTest is TestSetup {
     function test_RecoverERC721_ErrorConditions() public {
         TestERC721 mockNFT = new TestERC721("Test NFT", "TNFT");
         uint256 tokenId = mockNFT.mint(alice);
-        
+
         // Send NFT to eETH contract
         vm.prank(alice);
         mockNFT.transferFrom(alice, address(eETHInstance), tokenId);
-        
+
         // Test 1: Try to recover NFT that doesn't exist - should revert
         uint256 nonExistentTokenId = 9999;
         vm.expectRevert(); // ERC721: invalid token ID or similar
         vm.prank(admin);
         eETHInstance.recoverERC721(address(mockNFT), alice, nonExistentTokenId);
-        
+
         // Test 2: Try to recover NFT that contract doesn't own - should revert with ContractIsNotOwnerOfERC721Token
         uint256 bobsTokenId = mockNFT.mint(bob);
         vm.expectRevert(AssetRecovery.ContractIsNotOwnerOfERC721Token.selector);
         vm.prank(admin);
         eETHInstance.recoverERC721(address(mockNFT), alice, bobsTokenId);
-        
+
         // Test 3: Try to send to zero address - should revert with InvalidInput
         vm.expectRevert(AssetRecovery.InvalidInput.selector);
         vm.prank(admin);
         eETHInstance.recoverERC721(address(mockNFT), address(0), tokenId);
-        
+
         // Test 4: Try to recover from zero token address - should revert with InvalidInput
         vm.expectRevert(AssetRecovery.InvalidInput.selector);
         vm.prank(admin);
         eETHInstance.recoverERC721(address(0), alice, tokenId);
     }
-    
-
 }

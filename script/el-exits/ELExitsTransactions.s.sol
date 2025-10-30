@@ -1,68 +1,56 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "../../test/TestSetup.sol";
-import "../../src/EtherFiTimelock.sol";
+import "../../lib/openzeppelin-contracts/contracts/access/IAccessControl.sol";
+import "../../src/EETH.sol";
+import "../../src/EtherFiAdmin.sol";
 import "../../src/EtherFiNode.sol";
 import "../../src/EtherFiNodesManager.sol";
-import "../../src/LiquidityPool.sol";
-import "../../src/StakingManager.sol";
 import "../../src/EtherFiOracle.sol";
-import "../../src/EtherFiAdmin.sol";
-import "../../src/EETH.sol";
-import "../../src/WeETH.sol";
-import "../../src/RoleRegistry.sol";
+
 import "../../src/EtherFiRateLimiter.sol";
-import "../../lib/openzeppelin-contracts/contracts/access/IAccessControl.sol";
+import "../../src/EtherFiTimelock.sol";
+import "../../src/LiquidityPool.sol";
+import "../../src/RoleRegistry.sol";
+import "../../src/StakingManager.sol";
+import "../../src/WeETH.sol";
+import "../../test/TestSetup.sol";
+
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 
 contract ElExitsTransactions is Script {
-    EtherFiTimelock etherFiTimelock =
-        EtherFiTimelock(payable(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761));
+    EtherFiTimelock etherFiTimelock = EtherFiTimelock(payable(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761));
     EtherFiTimelock etherFiOperatingTimelock = EtherFiTimelock(payable(ETHERFI_NODES_MANAGER_ADMIN_ROLE));
 
     //--------------------------------------------------------------------------------------
     //--------------------- Previous Implementations ---------------------------------------
     //--------------------------------------------------------------------------------------
-    address constant oldStakingManagerImpl =
-        0x433d06fFc5EfE0e93daa22fcEF7eD60e65Bf70b4;
-    address constant oldEtherFiNodeImpl =
-        0x5Dae50e686f7CB980E4d0c5E4492c56bC73eD9a2;
-    address constant oldEtherFiNodesManagerImpl =
-        0x158B21148E86470E2075926EbD5528Af2D510cAF;
+    address constant oldStakingManagerImpl = 0x433d06fFc5EfE0e93daa22fcEF7eD60e65Bf70b4;
+    address constant oldEtherFiNodeImpl = 0x5Dae50e686f7CB980E4d0c5E4492c56bC73eD9a2;
+    address constant oldEtherFiNodesManagerImpl = 0x158B21148E86470E2075926EbD5528Af2D510cAF;
 
     //--------------------------------------------------------------------------------------
     //---------------------------- New Deployments -----------------------------------------
     //--------------------------------------------------------------------------------------
-    address constant etherFiRateLimiterImpl =
-        0x1dd43C32f03f8A74b8160926D559d34358880A89;
-    address constant etherFiRateLimiterProxy =
-        0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8;
-    address constant stakingManagerImpl =
-        0xa38d03ea42F8bc31892336E1F42523e94FB91a7A;
-    address constant etherFiNodeImpl =
-        0x6268728c52aAa4EC670F5fcdf152B50c4B463472;
-    address constant etherFiNodesManagerImpl =
-        0x0f366dF7af5003fC7C6524665ca58bDeAdDC3745;
+    address constant etherFiRateLimiterImpl = 0x1dd43C32f03f8A74b8160926D559d34358880A89;
+    address constant etherFiRateLimiterProxy = 0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8;
+    address constant stakingManagerImpl = 0xa38d03ea42F8bc31892336E1F42523e94FB91a7A;
+    address constant etherFiNodeImpl = 0x6268728c52aAa4EC670F5fcdf152B50c4B463472;
+    address constant etherFiNodesManagerImpl = 0x0f366dF7af5003fC7C6524665ca58bDeAdDC3745;
 
     //--------------------------------------------------------------------------------------
     //------------------------- Existing Users/Proxies -------------------------------------
     //--------------------------------------------------------------------------------------
-    address constant etherFiNodesManager =
-        0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
-    address constant stakingManager =
-        0x25e821b7197B146F7713C3b89B6A4D83516B912d;
+    address constant etherFiNodesManager = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
+    address constant stakingManager = 0x25e821b7197B146F7713C3b89B6A4D83516B912d;
     address constant roleRegistry = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
 
-    address constant ETHERFI_OPERATING_ADMIN =
-        0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
+    address constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
     address constant POD_PROVER = 0x7835fB36A8143a014A2c381363cD1A4DeE586d2A;
-    address constant EL_TRIGGER_EXITER =
-        0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
+    address constant EL_TRIGGER_EXITER = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
 
-    address constant ETHERFI_NODES_MANAGER_ADMIN_ROLE =
-        0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a; // Operating Timelock
+    address constant ETHERFI_NODES_MANAGER_ADMIN_ROLE = 0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a; // Operating Timelock
 
     address constant TIMELOCK_CONTROLLER = 0xcdd57D11476c22d265722F68390b036f3DA48c21;
 
@@ -70,21 +58,13 @@ contract ElExitsTransactions is Script {
     //-------------------------------------  ROLES  ----------------------------------------
     //--------------------------------------------------------------------------------------
 
-    bytes32 ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE =
-        EtherFiNodesManager(payable(etherFiNodesManagerImpl))
-            .ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE();
+    bytes32 ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE();
 
-    bytes32 ETHERFI_NODES_MANAGER_POD_PROVER_ROLE =
-        EtherFiNodesManager(payable(etherFiNodesManagerImpl))
-            .ETHERFI_NODES_MANAGER_POD_PROVER_ROLE();
+    bytes32 ETHERFI_NODES_MANAGER_POD_PROVER_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_POD_PROVER_ROLE();
 
-    bytes32 STAKING_MANAGER_ADMIN_ROLE =
-        StakingManager(payable(stakingManagerImpl))
-            .STAKING_MANAGER_ADMIN_ROLE();
+    bytes32 STAKING_MANAGER_ADMIN_ROLE = StakingManager(payable(stakingManagerImpl)).STAKING_MANAGER_ADMIN_ROLE();
 
-    bytes32 ETHERFI_RATE_LIMITER_ADMIN_ROLE =
-        EtherFiRateLimiter(payable(etherFiRateLimiterImpl))
-            .ETHERFI_RATE_LIMITER_ADMIN_ROLE();
+    bytes32 ETHERFI_RATE_LIMITER_ADMIN_ROLE = EtherFiRateLimiter(payable(etherFiRateLimiterImpl)).ETHERFI_RATE_LIMITER_ADMIN_ROLE();
 
     //--------------------------------------------------------------------------------------
     //------------------------------- SELECTORS ---------------------------------------
@@ -95,8 +75,8 @@ contract ElExitsTransactions is Script {
     // cast sig "updateAllowedForwardedEigenpodCalls(bytes4,bool)"
     bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR = 0x4cba6c74;
 
-    uint256 MIN_DELAY_OPERATING_TIMELOCK = 28800; // 8 hours
-    uint256 MIN_DELAY_TIMELOCK = 259200; // 72 hours
+    uint256 MIN_DELAY_OPERATING_TIMELOCK = 28_800; // 8 hours
+    uint256 MIN_DELAY_TIMELOCK = 259_200; // 72 hours
 
     // External calls selectors
     bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_ONE = 0x9a15bf92;
@@ -118,7 +98,6 @@ contract ElExitsTransactions is Script {
     bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SIX = 0x0dd8dd02;
     bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SEVEN = 0x9435bb43;
 
-
     //--------------------------------------------------------------------------------------
     //---------------------------------  POST UPGRADE RELATED STUFF  -----------------------
     //--------------------------------------------------------------------------------------
@@ -126,13 +105,9 @@ contract ElExitsTransactions is Script {
     //--------------------------------------------------------------------------------------
     //---------------------------------  LIMIT IDS  ----------------------------------------
     //--------------------------------------------------------------------------------------
-    bytes32 UNRESTAKING_LIMIT_ID =
-        EtherFiNodesManager(payable(etherFiNodesManagerImpl))
-            .UNRESTAKING_LIMIT_ID();
+    bytes32 UNRESTAKING_LIMIT_ID = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).UNRESTAKING_LIMIT_ID();
 
-    bytes32 EXIT_REQUEST_LIMIT_ID =
-        EtherFiNodesManager(payable(etherFiNodesManagerImpl))
-            .EXIT_REQUEST_LIMIT_ID();
+    bytes32 EXIT_REQUEST_LIMIT_ID = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).EXIT_REQUEST_LIMIT_ID();
 
     uint64 CAPACITY_RATE_LIMITER = 100_000_000_000_000;
     uint64 REFILL_RATE_LIMITER = 2_000_000_000;
@@ -141,7 +116,7 @@ contract ElExitsTransactions is Script {
     //---------------------------------  SELECTORS  ----------------------------------------
     //--------------------------------------------------------------------------------------
 
-        /*
+    /*
         External forwarded calls
         // ------------------------------------------------------------------------------------------------
         King rewards claiming from eigen
@@ -265,22 +240,10 @@ contract ElExitsTransactions is Script {
         //--------------------------------------------------------------------------------------
 
         // etherFiNode
-        data[0] = _encodeRoleGrant(
-            ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE,
-            EL_TRIGGER_EXITER
-        );
-        data[1] = _encodeRoleGrant(
-            ETHERFI_NODES_MANAGER_POD_PROVER_ROLE,
-            POD_PROVER
-        );
-        data[2] = _encodeRoleGrant(
-            STAKING_MANAGER_ADMIN_ROLE,
-            ETHERFI_OPERATING_ADMIN
-        );
-        data[3] = _encodeRoleGrant(
-            ETHERFI_RATE_LIMITER_ADMIN_ROLE,
-            ETHERFI_OPERATING_ADMIN
-        );
+        data[0] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, EL_TRIGGER_EXITER);
+        data[1] = _encodeRoleGrant(ETHERFI_NODES_MANAGER_POD_PROVER_ROLE, POD_PROVER);
+        data[2] = _encodeRoleGrant(STAKING_MANAGER_ADMIN_ROLE, ETHERFI_OPERATING_ADMIN);
+        data[3] = _encodeRoleGrant(ETHERFI_RATE_LIMITER_ADMIN_ROLE, ETHERFI_OPERATING_ADMIN);
 
         for (uint256 i = 0; i < 4; i++) {
             targets[i] = address(roleRegistry);
@@ -291,33 +254,22 @@ contract ElExitsTransactions is Script {
         //--------------------------------------------------------------------------------------
 
         targets[4] = address(stakingManager);
-        data[4] = abi.encodeWithSelector(
-            UUPSUpgradeable.upgradeTo.selector,
-            stakingManagerImpl
-        );
+        data[4] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, stakingManagerImpl);
 
         targets[5] = address(etherFiNodesManager);
-        data[5] = abi.encodeWithSelector(
-            UUPSUpgradeable.upgradeTo.selector,
-            etherFiNodesManagerImpl
-        );
+        data[5] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiNodesManagerImpl);
 
         //--------------------------------------------------------------------------------------
         //------------------------------- ETHERFI NODE UPGRADE  -----------------------------------
         //--------------------------------------------------------------------------------------
 
         targets[6] = address(stakingManager);
-        data[6] = abi.encodeWithSelector(
-            StakingManager.upgradeEtherFiNode.selector,
-            etherFiNodeImpl
-        );
+        data[6] = abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, etherFiNodeImpl);
 
         //--------------------------------------------------------------------------------------
         //------------------------------- SCHEDULE TX  -----------------------------------
         //--------------------------------------------------------------------------------------
-        bytes32 timelockSalt = keccak256(
-            abi.encode(targets, data, block.number)
-        );
+        bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
         bytes memory scheduleCalldata = abi.encodeWithSelector(
             etherFiTimelock.scheduleBatch.selector,
             targets,
@@ -366,126 +318,53 @@ contract ElExitsTransactions is Script {
         // -------------------------- Whitelisted External Calls --------------------------
 
         targets[0] = address(etherFiNodesManager);
-        data[0] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_ONE,
-            0x035bdAeaB85E47710C27EdA7FD754bA80aD4ad02,
-            false
-        );
+        data[0] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_ONE, 0x035bdAeaB85E47710C27EdA7FD754bA80aD4ad02, false);
 
         targets[1] = address(etherFiNodesManager);
-        data[1] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_TWO,
-            0xec53bF9167f50cDEB3Ae105f56099aaaB9061F83,
-            false
-        );
+        data[1] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_TWO, 0xec53bF9167f50cDEB3Ae105f56099aaaB9061F83, false);
 
         targets[2] = address(etherFiNodesManager);
-        data[2] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_THREE,
-            0x7750d328b314EfFa365A0402CcfD489B80B0adda,
-            false
-        );
+        data[2] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_THREE, 0x7750d328b314EfFa365A0402CcfD489B80B0adda, false);
 
         targets[3] = address(etherFiNodesManager);
-        data[3] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_FOUR,
-            0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A,
-            false
-        );
+        data[3] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_FOUR, 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, false);
 
         targets[4] = address(etherFiNodesManager);
-        data[4] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_FIVE,
-            0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A,
-            false
-        );
+        data[4] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_FIVE, 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, false);
 
         targets[5] = address(etherFiNodesManager);
-        data[5] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_SIX,
-            0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A,
-            false
-        );
+        data[5] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_SIX, 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, false);
 
         targets[6] = address(etherFiNodesManager);
-        data[6] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_SEVEN,
-            0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A,
-            false
-        );
+        data[6] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_SEVEN, 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, false);
 
         targets[7] = address(etherFiNodesManager);
-        data[7] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_EIGHT,
-            0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A,
-            false
-        );
+        data[7] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_EIGHT, 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, false);
 
         targets[8] = address(etherFiNodesManager);
-        data[8] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_NINE,
-            0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A,
-            false
-        );
+        data[8] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_NINE, 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, false);
 
         // -------------------------- Whitelisted Eigenpod Calls --------------------------
         targets[9] = address(etherFiNodesManager);
-        data[9] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_ONE,
-            false
-        );
+        data[9] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_ONE, false);
 
         targets[10] = address(etherFiNodesManager);
-        data[10] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_TWO,
-            false
-        );
+        data[10] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_TWO, false);
 
         targets[11] = address(etherFiNodesManager);
-        data[11] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_THREE,
-            false
-        );
+        data[11] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_THREE, false);
 
         targets[12] = address(etherFiNodesManager);
-        data[12] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FOUR,
-            false
-        );
+        data[12] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FOUR, false);
 
         targets[13] = address(etherFiNodesManager);
-        data[13] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FIVE,
-            false
-        );
+        data[13] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FIVE, false);
 
         targets[14] = address(etherFiNodesManager);
-        data[14] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SIX,
-            false
-        );
+        data[14] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SIX, false);
 
         targets[15] = address(etherFiNodesManager);
-        data[15] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SEVEN,
-            false
-        );
+        data[15] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SEVEN, false);
 
         // schedule
         bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
@@ -617,16 +496,12 @@ contract ElExitsTransactions is Script {
 
         // uncomment to run against fork
         // StakingManager(payable(stakingManager)).backfillExistingEtherFiNodes(etherFiNodes);
-        
+
         address[] memory targets = new address[](1);
         bytes[] memory data = new bytes[](1);
 
         targets[0] = address(stakingManager);
-        data[0] = abi.encodeWithSelector(
-            StakingManager.backfillExistingEtherFiNodes.selector,
-            etherFiNodes
-        );
-
+        data[0] = abi.encodeWithSelector(StakingManager.backfillExistingEtherFiNodes.selector, etherFiNodes);
 
         console2.log("target: ", targets[0]);
         console2.log("data: ");
@@ -649,30 +524,10 @@ contract ElExitsTransactions is Script {
         bytes[] memory data = new bytes[](4);
         uint256[] memory values = new uint256[](4); // Default to 0
 
-        data[0] = abi.encodeWithSelector(
-            EtherFiRateLimiter.createNewLimiter.selector,
-            UNRESTAKING_LIMIT_ID,
-            CAPACITY_RATE_LIMITER,
-            REFILL_RATE_LIMITER
-        );
-        data[1] = abi.encodeWithSelector(
-            EtherFiRateLimiter.createNewLimiter.selector,
-            EXIT_REQUEST_LIMIT_ID,
-            CAPACITY_RATE_LIMITER,
-            REFILL_RATE_LIMITER
-        );
-        data[2] = abi.encodeWithSelector(
-            EtherFiRateLimiter.updateConsumers.selector,
-            UNRESTAKING_LIMIT_ID,
-            address(etherFiNodesManager),
-            true
-        );
-        data[3] = abi.encodeWithSelector(
-            EtherFiRateLimiter.updateConsumers.selector,
-            EXIT_REQUEST_LIMIT_ID,
-            address(etherFiNodesManager),
-            true
-        );
+        data[0] = abi.encodeWithSelector(EtherFiRateLimiter.createNewLimiter.selector, UNRESTAKING_LIMIT_ID, CAPACITY_RATE_LIMITER, REFILL_RATE_LIMITER);
+        data[1] = abi.encodeWithSelector(EtherFiRateLimiter.createNewLimiter.selector, EXIT_REQUEST_LIMIT_ID, CAPACITY_RATE_LIMITER, REFILL_RATE_LIMITER);
+        data[2] = abi.encodeWithSelector(EtherFiRateLimiter.updateConsumers.selector, UNRESTAKING_LIMIT_ID, address(etherFiNodesManager), true);
+        data[3] = abi.encodeWithSelector(EtherFiRateLimiter.updateConsumers.selector, EXIT_REQUEST_LIMIT_ID, address(etherFiNodesManager), true);
 
         for (uint256 i = 0; i < 4; i++) {
             console2.log("====== Execute Set Up EtherFiRateLimiter Tx:", i);
@@ -788,27 +643,16 @@ contract ElExitsTransactions is Script {
         //--------------------------------------------------------------------------------------
 
         targets[0] = address(stakingManager);
-        data[0] = abi.encodeWithSelector(
-            UUPSUpgradeable.upgradeTo.selector,
-            oldStakingManagerImpl
-        );
+        data[0] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, oldStakingManagerImpl);
 
         targets[1] = address(etherFiNodesManager);
-        data[1] = abi.encodeWithSelector(
-            UUPSUpgradeable.upgradeTo.selector,
-            oldEtherFiNodesManagerImpl
-        );
+        data[1] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, oldEtherFiNodesManagerImpl);
 
         targets[2] = address(stakingManager);
-        data[2] = abi.encodeWithSelector(
-            StakingManager.upgradeEtherFiNode.selector,
-            oldEtherFiNodeImpl
-        );
+        data[2] = abi.encodeWithSelector(StakingManager.upgradeEtherFiNode.selector, oldEtherFiNodeImpl);
 
         // schedule
-        bytes32 timelockSalt = keccak256(
-            abi.encode(targets, data, block.number)
-        );
+        bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
         bytes memory scheduleCalldata = abi.encodeWithSelector(
             etherFiTimelock.scheduleBatch.selector,
             targets,
@@ -858,126 +702,53 @@ contract ElExitsTransactions is Script {
         // -------------------------- Whitelisted External Calls --------------------------
 
         targets[0] = address(etherFiNodesManager);
-        data[0] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_ONE,
-            0x035bdAeaB85E47710C27EdA7FD754bA80aD4ad02,
-            true
-        );
+        data[0] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_ONE, 0x035bdAeaB85E47710C27EdA7FD754bA80aD4ad02, true);
 
         targets[1] = address(etherFiNodesManager);
-        data[1] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_TWO,
-            0xec53bF9167f50cDEB3Ae105f56099aaaB9061F83,
-            true
-        );
+        data[1] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_TWO, 0xec53bF9167f50cDEB3Ae105f56099aaaB9061F83, true);
 
         targets[2] = address(etherFiNodesManager);
-        data[2] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_THREE,
-            0x7750d328b314EfFa365A0402CcfD489B80B0adda,
-            true
-        );
+        data[2] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_THREE, 0x7750d328b314EfFa365A0402CcfD489B80B0adda, true);
 
         targets[3] = address(etherFiNodesManager);
-        data[3] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_FOUR,
-            0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A,
-            true
-        );
+        data[3] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_FOUR, 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, true);
 
         targets[4] = address(etherFiNodesManager);
-        data[4] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_FIVE,
-            0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A,
-            true
-        );
+        data[4] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_FIVE, 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, true);
 
         targets[5] = address(etherFiNodesManager);
-        data[5] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_SIX,
-            0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A,
-            true
-        );
+        data[5] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_SIX, 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, true);
 
         targets[6] = address(etherFiNodesManager);
-        data[6] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_SEVEN,
-            0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A,
-            true
-        );
+        data[6] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_SEVEN, 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, true);
 
         targets[7] = address(etherFiNodesManager);
-        data[7] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_EIGHT,
-            0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A,
-            true
-        );
+        data[7] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_EIGHT, 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, true);
 
         targets[8] = address(etherFiNodesManager);
-        data[8] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_NINE,
-            0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A,
-            true
-        );
+        data[8] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_NINE, 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A, true);
 
         // -------------------------- Whitelisted Eigenpod Calls --------------------------
         targets[9] = address(etherFiNodesManager);
-        data[9] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_ONE,
-            true
-        );
+        data[9] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_ONE, true);
 
         targets[10] = address(etherFiNodesManager);
-        data[10] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_TWO,
-            true
-        );
+        data[10] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_TWO, true);
 
         targets[11] = address(etherFiNodesManager);
-        data[11] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_THREE,
-            true
-        );
+        data[11] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_THREE, true);
 
         targets[12] = address(etherFiNodesManager);
-        data[12] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FOUR,
-            true
-        );
+        data[12] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FOUR, true);
 
         targets[13] = address(etherFiNodesManager);
-        data[13] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FIVE,
-            true
-        );
+        data[13] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FIVE, true);
 
         targets[14] = address(etherFiNodesManager);
-        data[14] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SIX,
-            true
-        );
+        data[14] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SIX, true);
 
         targets[15] = address(etherFiNodesManager);
-        data[15] = abi.encodeWithSelector(
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR,
-            UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SEVEN,
-            true
-        );
+        data[15] = abi.encodeWithSelector(UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR, UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SEVEN, true);
 
         // schedule
         bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
@@ -1024,16 +795,8 @@ contract ElExitsTransactions is Script {
     //------------------------------- HELPER FUNCTIONS  -----------------------------------
     //--------------------------------------------------------------------------------------
 
-    function _encodeRoleGrant(
-        bytes32 role,
-        address account
-    ) internal pure returns (bytes memory) {
-        return
-            abi.encodeWithSelector(
-                RoleRegistry.grantRole.selector,
-                role,
-                account
-            );
+    function _encodeRoleGrant(bytes32 role, address account) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(RoleRegistry.grantRole.selector, role, account);
     }
 
     function _getEtherFiNodes() internal pure returns (address[] memory etherFiNodes) {

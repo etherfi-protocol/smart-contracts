@@ -4,20 +4,14 @@ pragma solidity ^0.8.13;
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/INodeOperatorManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
-import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
+
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 
-contract AuctionManager is
-    Initializable,
-    IAuctionManager,
-    PausableUpgradeable,
-    OwnableUpgradeable,
-    ReentrancyGuardUpgradeable,
-    UUPSUpgradeable
-{
+contract AuctionManager is Initializable, IAuctionManager, PausableUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -65,11 +59,9 @@ contract AuctionManager is
     //--------------------------------------------------------------------------------------
 
     /// @notice Initialize to set variables on deployment
-    function initialize(
-        address _nodeOperatorManagerContract
-    ) external initializer {
+    function initialize(address _nodeOperatorManagerContract) external initializer {
         require(_nodeOperatorManagerContract != address(0), "No Zero Addresses");
-        
+
         whitelistBidAmount = 0.001 ether;
         minBidAmount = 0.01 ether;
         maxBidAmount = 5 ether;
@@ -84,7 +76,7 @@ contract AuctionManager is
         __ReentrancyGuard_init();
     }
 
-    function initializeOnUpgrade(address _membershipManagerContractAddress, uint128 _accumulatedRevenueThreshold, address _etherFiAdminContractAddress, address _nodeOperatorManagerAddress) external onlyOwner { 
+    function initializeOnUpgrade(address _membershipManagerContractAddress, uint128 _accumulatedRevenueThreshold, address _etherFiAdminContractAddress, address _nodeOperatorManagerAddress) external onlyOwner {
         require(_membershipManagerContractAddress != address(0) && _etherFiAdminContractAddress != address(0) && _nodeOperatorManagerAddress != address(0), "No Zero Addresses");
         membershipManagerContractAddress = _membershipManagerContractAddress;
         nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerAddress);
@@ -97,39 +89,16 @@ contract AuctionManager is
     /// @param _bidSize the number of bids that the node operator would like to create
     /// @param _bidAmountPerBid the ether value of each bid that is created
     /// @return bidIdArray array of the bidIDs that were created
-    function createBid(
-        uint256 _bidSize,
-        uint256 _bidAmountPerBid
-    ) external payable whenNotPaused nonReentrant returns (uint256[] memory) {
+    function createBid(uint256 _bidSize, uint256 _bidAmountPerBid) external payable whenNotPaused nonReentrant returns (uint256[] memory) {
         require(_bidSize > 0, "Bid size is too small");
         if (whitelistEnabled) {
-            require(
-                nodeOperatorManager.isWhitelisted(msg.sender),
-                "Only whitelisted addresses"
-            );
-            require(
-                msg.value == _bidSize * _bidAmountPerBid &&
-                    _bidAmountPerBid >= whitelistBidAmount &&
-                    _bidAmountPerBid <= maxBidAmount,
-                "Incorrect bid value"
-            );
+            require(nodeOperatorManager.isWhitelisted(msg.sender), "Only whitelisted addresses");
+            require(msg.value == _bidSize * _bidAmountPerBid && _bidAmountPerBid >= whitelistBidAmount && _bidAmountPerBid <= maxBidAmount, "Incorrect bid value");
         } else {
-            if (
-                nodeOperatorManager.isWhitelisted(msg.sender)
-            ) {
-                require(
-                    msg.value == _bidSize * _bidAmountPerBid &&
-                        _bidAmountPerBid >= whitelistBidAmount &&
-                        _bidAmountPerBid <= maxBidAmount,
-                    "Incorrect bid value"
-                );
+            if (nodeOperatorManager.isWhitelisted(msg.sender)) {
+                require(msg.value == _bidSize * _bidAmountPerBid && _bidAmountPerBid >= whitelistBidAmount && _bidAmountPerBid <= maxBidAmount, "Incorrect bid value");
             } else {
-                require(
-                    msg.value == _bidSize * _bidAmountPerBid &&
-                        _bidAmountPerBid >= minBidAmount &&
-                        _bidAmountPerBid <= maxBidAmount,
-                    "Incorrect bid value"
-                );
+                require(msg.value == _bidSize * _bidAmountPerBid && _bidAmountPerBid >= minBidAmount && _bidAmountPerBid <= maxBidAmount, "Incorrect bid value");
             }
         }
         uint64 keysRemaining = nodeOperatorManager.getNumKeysRemaining(msg.sender);
@@ -145,12 +114,7 @@ contract AuctionManager is
             ipfsIndexArray[i] = ipfsIndex;
 
             //Creates a bid object for storage and lookup in future
-            bids[bidId] = Bid({
-                amount: _bidAmountPerBid,
-                bidderPubKeyIndex: ipfsIndex,
-                bidderAddress: msg.sender,
-                isActive: true
-            });
+            bids[bidId] = Bid({amount: _bidAmountPerBid, bidderPubKeyIndex: ipfsIndex, bidderAddress: msg.sender, isActive: true});
         }
         numberOfBids += _bidSize;
         numberOfActiveBids += _bidSize;
@@ -178,9 +142,7 @@ contract AuctionManager is
     /// @notice Updates the details of the bid which has been used in a stake match
     /// @dev Called by batchDepositWithBidIds() in StakingManager.sol
     /// @param _bidId the ID of the bid being removed from the auction (since it has been selected)
-    function updateSelectedBidInformation(
-        uint256 _bidId
-    ) external onlyStakingManagerContract {
+    function updateSelectedBidInformation(uint256 _bidId) external onlyStakingManagerContract {
         Bid storage bid = bids[_bidId];
         require(bid.isActive, "The bid is not active");
 
@@ -190,9 +152,7 @@ contract AuctionManager is
 
     /// @notice Lets a bid that was matched to a cancelled stake re-enter the auction
     /// @param _bidId the ID of the bid which was matched to the cancelled stake.
-    function reEnterAuction(
-        uint256 _bidId
-    ) external onlyStakingManagerContract {
+    function reEnterAuction(uint256 _bidId) external onlyStakingManagerContract {
         Bid storage bid = bids[_bidId];
         require(!bid.isActive, "Bid already active");
 
@@ -204,14 +164,12 @@ contract AuctionManager is
     /// @notice Transfer the auction fee received from the node operator to the membership NFT contract when above the threshold
     /// @dev Called by registerValidator() in StakingManager.sol
     /// @param _bidId the ID of the validator
-    function processAuctionFeeTransfer(
-        uint256 _bidId
-    ) external onlyStakingManagerContract {
+    function processAuctionFeeTransfer(uint256 _bidId) external onlyStakingManagerContract {
         uint256 amount = bids[_bidId].amount;
         uint256 newAccumulatedRevenue = accumulatedRevenue + amount;
         if (newAccumulatedRevenue >= accumulatedRevenueThreshold) {
             accumulatedRevenue = 0;
-            (bool sent, ) = membershipManagerContractAddress.call{value: newAccumulatedRevenue}("");
+            (bool sent,) = membershipManagerContractAddress.call{value: newAccumulatedRevenue}("");
             require(sent, "Failed to send Ether");
         } else {
             accumulatedRevenue = uint128(newAccumulatedRevenue);
@@ -221,7 +179,7 @@ contract AuctionManager is
     function transferAccumulatedRevenue() external onlyAdmin {
         uint256 transferAmount = accumulatedRevenue;
         accumulatedRevenue = 0;
-        (bool sent, ) = membershipManagerContractAddress.call{value: transferAmount}("");
+        (bool sent,) = membershipManagerContractAddress.call{value: transferAmount}("");
         require(sent, "Failed to send Ether");
     }
 
@@ -263,7 +221,7 @@ contract AuctionManager is
         numberOfActiveBids--;
 
         // Refund the user with their bid amount
-        (bool sent, ) = msg.sender.call{value: bid.amount}("");
+        (bool sent,) = msg.sender.call{value: bid.amount}("");
         require(sent, "Failed to send Ether");
 
         emit BidCancelled(_bidId);
@@ -301,9 +259,7 @@ contract AuctionManager is
 
     /// @notice Sets the staking managers contract address in the current contract
     /// @param _stakingManagerContractAddress new stakingManagerContract address
-    function setStakingManagerContractAddress(
-        address _stakingManagerContractAddress
-    ) external onlyOwner {
+    function setStakingManagerContractAddress(address _stakingManagerContractAddress) external onlyOwner {
         require(address(stakingManagerContractAddress) == address(0), "Address already set");
         require(_stakingManagerContractAddress != address(0), "No zero addresses");
         stakingManagerContractAddress = _stakingManagerContractAddress;
@@ -332,17 +288,13 @@ contract AuctionManager is
 
     /// @notice Updates the minimum bid price for a whitelisted address
     /// @param _newAmount the new amount to set the minimum bid price as
-    function updateWhitelistMinBidAmount(
-        uint128 _newAmount
-    ) external onlyOwner {
+    function updateWhitelistMinBidAmount(uint128 _newAmount) external onlyOwner {
         require(_newAmount < minBidAmount && _newAmount > 0, "Invalid Amount");
         whitelistBidAmount = _newAmount;
     }
 
     function updateNodeOperatorManager(address _address) external onlyOwner {
-        nodeOperatorManager = INodeOperatorManager(
-            _address
-        );
+        nodeOperatorManager = INodeOperatorManager(_address);
     }
 
     /// @notice Updates the address of the admin

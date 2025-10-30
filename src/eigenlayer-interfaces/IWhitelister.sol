@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "./IStrategyManager.sol";
-import "./IStrategy.sol";
 import "./IDelegationManager.sol";
+import "./IStrategy.sol";
+import "./IStrategyManager.sol";
 // import "../../../script/whitelist/Staker.sol";
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Create2.sol";
 
 interface IWhitelister {
@@ -15,25 +15,11 @@ interface IWhitelister {
 
     function getStaker(address operator) external returns (address);
 
-    function depositIntoStrategy(
-        address staker,
-        IStrategy strategy,
-        IERC20 token,
-        uint256 amount
-    ) external returns (bytes memory);
+    function depositIntoStrategy(address staker, IStrategy strategy, IERC20 token, uint256 amount) external returns (bytes memory);
 
-    function queueWithdrawal(
-        address staker,
-        IDelegationManager.QueuedWithdrawalParams[] calldata queuedWithdrawalParams
-    ) external returns (bytes memory);
+    function queueWithdrawal(address staker, IDelegationManager.QueuedWithdrawalParams[] calldata queuedWithdrawalParams) external returns (bytes memory);
 
-    function completeQueuedWithdrawal(
-        address staker,
-        IDelegationManager.Withdrawal calldata queuedWithdrawal,
-        IERC20[] calldata tokens,
-        uint256 middlewareTimesIndex,
-        bool receiveAsTokens
-    ) external returns (bytes memory);
+    function completeQueuedWithdrawal(address staker, IDelegationManager.Withdrawal calldata queuedWithdrawal, IERC20[] calldata tokens, uint256 middlewareTimesIndex, bool receiveAsTokens) external returns (bytes memory);
 
     function transfer(address staker, address token, address to, uint256 amount) external returns (bytes memory);
 

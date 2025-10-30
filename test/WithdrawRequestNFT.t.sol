@@ -3,24 +3,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "forge-std/console2.sol";
 import "./TestSetup.sol";
-
+import "forge-std/console2.sol";
 
 contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
-
     constructor() WithdrawRequestNFT(address(0)) {}
 
     function updateParam(uint32 _currentRequestIdToScanFromForShareRemainder, uint32 _lastRequestIdToScanUntilForShareRemainder) external {
         currentRequestIdToScanFromForShareRemainder = _currentRequestIdToScanFromForShareRemainder;
         lastRequestIdToScanUntilForShareRemainder = _lastRequestIdToScanUntilForShareRemainder;
     }
-    
 }
 
 contract WithdrawRequestNFTTest is TestSetup {
-
-    uint32[] public reqIds =[ 20, 388, 478, 714, 726, 729, 735, 815, 861, 916, 941, 1014, 1067, 1154, 1194, 1253];
+    uint32[] public reqIds = [20, 388, 478, 714, 726, 729, 735, 815, 861, 916, 941, 1014, 1067, 1154, 1194, 1253];
     address etherfi_admin_wallet = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
 
     function setUp() public {
@@ -237,7 +233,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 bobsEndingBalance = address(bob).balance;
 
         assertEq(bobsEndingBalance, bobsStartingBalance + 60 ether, "Bobs balance should be 60 ether higher");
-        
     }
 
     function test_SD_6() public {
@@ -264,9 +259,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Within `LP.requestWithdraw`
         // - `share` is calculated by `sharesForAmount` as (9 * 98) / 100 = 8.82 ---> (rounded down to) 8
 
-
         _finalizeWithdrawalRequest(requestId);
-
 
         vm.prank(bob);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
@@ -276,7 +269,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         // - `amountToTransfer` is min(9, 8) = 8
         // Therefore, it calls `LP.withdraw(.., 8)`
 
-        // Within `LP.withdraw`, 
+        // Within `LP.withdraw`,
         // - `share` is calculated by 'sharesForWithdrawalAmount' as (8 * 98 + 100 - 1) / 100 = 8.83 ---> (rounded down to) 8
 
         // As a result, bob received 8 wei ETH which is 1 wei less than 9 wei.
@@ -284,13 +277,12 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), 0);
 
         // We burnt 8 wei eETH share which is worth of 8.16 wei eETH amount.
-        // We processed the withdrawal of 8 wei ETH. 
+        // We processed the withdrawal of 8 wei ETH.
         // --> The rest 0.16 wei ETH is effectively distributed to the other eETH holders.
     }
 
-
     // It depicts the scenario where bob's WithdrawalRequest NFT is stolen by alice.
-    // The owner invalidates the request 
+    // The owner invalidates the request
     function test_InvalidatedRequestNft_after_finalization() public returns (uint256 requestId) {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
@@ -347,7 +339,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.startPrank(withdrawRequestNFTInstance.owner());
         // 1. Upgrade
         withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(owner))));
-        withdrawRequestNFTInstance.initializeOnUpgrade(address(roleRegistryInstance), 50_00);
+        withdrawRequestNFTInstance.initializeOnUpgrade(address(roleRegistryInstance), 5000);
 
         // 2. (For test) update the scan range
         updateParam(1, 200);
@@ -399,14 +391,14 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.assume(depositAmount >= 1 ether && depositAmount <= 1000 ether);
         vm.assume(withdrawAmount > 0 && withdrawAmount <= depositAmount);
         vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance));
-        
+
         // Setup initial balance for bob
         vm.deal(bob, depositAmount);
-        
+
         // Deposit ETH and get eETH
         vm.startPrank(bob);
         liquidityPoolInstance.deposit{value: depositAmount}();
-        
+
         // Approve and request withdraw
         eETHInstance.approve(address(liquidityPoolInstance), withdrawAmount);
         uint256 requestId = liquidityPoolInstance.requestWithdraw(recipient, withdrawAmount);
@@ -414,12 +406,12 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Verify the request was created correctly
         WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
-        
+
         assertEq(request.amountOfEEth, withdrawAmount, "Incorrect withdrawal amount");
         assertEq(request.shareOfEEth, liquidityPoolInstance.sharesForAmount(withdrawAmount), "Incorrect share amount");
         assertTrue(request.isValid, "Request should be valid");
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId), recipient, "Incorrect NFT owner");
-        
+
         // Verify eETH balances
         assertEq(eETHInstance.balanceOf(bob), depositAmount - withdrawAmount, "Incorrect remaining eETH balance");
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), withdrawAmount, "Incorrect contract eETH balance");
@@ -429,26 +421,19 @@ contract WithdrawRequestNFTTest is TestSetup {
             uint256 reqAmount = eETHInstance.balanceOf(bob);
             vm.startPrank(bob);
             eETHInstance.approve(address(liquidityPoolInstance), reqAmount);
-            uint256 requestId2 = liquidityPoolInstance.requestWithdraw(recipient, reqAmount);    
+            uint256 requestId2 = liquidityPoolInstance.requestWithdraw(recipient, reqAmount);
             vm.stopPrank();
             assertEq(requestId2, requestId + 1, "Incorrect next request ID");
         }
     }
 
-    function testFuzz_ClaimWithdraw(
-        uint96 depositAmount,
-        uint96 withdrawAmount,
-        uint96 rebaseAmount,
-        uint16 remainderSplitBps,
-        address recipient
-    ) public {
+    function testFuzz_ClaimWithdraw(uint96 depositAmount, uint96 withdrawAmount, uint96 rebaseAmount, uint16 remainderSplitBps, address recipient) public {
         // Assume valid conditions
         vm.assume(depositAmount >= 1 ether && depositAmount <= 1e6 ether);
         vm.assume(withdrawAmount > 0 && withdrawAmount <= depositAmount);
         vm.assume(rebaseAmount >= 0.5 ether && rebaseAmount <= depositAmount);
-        vm.assume(remainderSplitBps <= 10000);
+        vm.assume(remainderSplitBps <= 10_000);
         vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance));
-
 
         vm.expectRevert("scan is completed");
         withdrawRequestNFTInstance.aggregateSumEEthShareAmount(10);
@@ -491,7 +476,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 initialTotalShares = eETHInstance.totalShares();
 
         _finalizeWithdrawalRequest(requestId);
-        
+
         vm.prank(recipient);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
 
@@ -500,50 +485,26 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Verify share burning
         assertLe(burnedShares, request.shareOfEEth, "Burned shares should be less than or equal to requested shares");
-        assertApproxEqAbs(
-            burnedShares,
-            expectedBurnedShares,
-            1e3,
-            "Incorrect amount of shares burnt"
-        );
-        
+        assertApproxEqAbs(burnedShares, expectedBurnedShares, 1e3, "Incorrect amount of shares burnt");
 
         // Verify total supply reduction
-        assertApproxEqAbs(
-            eETHInstance.totalShares(),
-            initialTotalShares - burnedShares,
-            1,
-            "Total shares not reduced correctly"
-        );
-        assertGe(
-            eETHInstance.totalShares(),
-            initialTotalShares - burnedShares,
-            "Total shares should be greater than or equal to initial shares minus burned shares"
-        );
+        assertApproxEqAbs(eETHInstance.totalShares(), initialTotalShares - burnedShares, 1, "Total shares not reduced correctly");
+        assertGe(eETHInstance.totalShares(), initialTotalShares - burnedShares, "Total shares should be greater than or equal to initial shares minus burned shares");
 
         // Verify the withdrawal results
         WithdrawRequestNFT.WithdrawRequest memory requestAfter = withdrawRequestNFTInstance.getRequest(requestId);
-        
+
         // Request should be cleared
         assertEq(requestAfter.amountOfEEth, 0, "Request should be cleared after claim");
-        
+
         // NFT should be burned
         vm.expectRevert("ERC721: invalid token ID");
         withdrawRequestNFTInstance.ownerOf(requestId);
 
         // Verify recipient received correct ETH amount
-        assertEq(
-            address(recipient).balance,
-            recipientBalanceBefore + expectedWithdrawAmount,
-            "Recipient should receive correct ETH amount"
-        );
+        assertEq(address(recipient).balance, recipientBalanceBefore + expectedWithdrawAmount, "Recipient should receive correct ETH amount");
 
-        assertApproxEqAbs(
-            withdrawRequestNFTInstance.totalRemainderEEthShares(),
-            expectedDustShares,
-            1,
-            "Incorrect remainder shares"
-        );
+        assertApproxEqAbs(withdrawRequestNFTInstance.totalRemainderEEthShares(), expectedDustShares, 1, "Incorrect remainder shares");
 
         uint256 dustEEthAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
         console2.log("wtf");
@@ -556,13 +517,13 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.assume(depositAmount >= 1 ether && depositAmount <= 1000 ether);
         vm.assume(withdrawAmount > 0 && withdrawAmount <= depositAmount);
         vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance) && recipient != alice && recipient != admin && recipient != (address(etherFiAdminInstance)));
-        
+
         // Setup initial balance and deposit
         vm.deal(recipient, depositAmount);
-        
+
         vm.startPrank(recipient);
         liquidityPoolInstance.deposit{value: depositAmount}();
-        
+
         // Request withdraw
         eETHInstance.approve(address(liquidityPoolInstance), withdrawAmount);
         uint256 requestId = liquidityPoolInstance.requestWithdraw(recipient, withdrawAmount);
@@ -587,7 +548,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Verify request state after invalidation
         assertFalse(withdrawRequestNFTInstance.isValid(requestId), "Request should be invalid");
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId), recipient, "NFT ownership should remain unchanged");
-        
+
         // Verify cannot transfer invalid request
         vm.prank(recipient);
         vm.expectRevert("INVALID_REQUEST");

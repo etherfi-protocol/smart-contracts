@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
-import "src/interfaces/IEtherFiNodesManager.sol";
+import "src/eigenlayer-interfaces/IDelegationManager.sol";
 import "src/eigenlayer-interfaces/IEigenPod.sol";
 import "src/eigenlayer-interfaces/IEigenPodManager.sol";
-import "src/eigenlayer-interfaces/IDelegationManager.sol";
+import "src/interfaces/IEtherFiNodesManager.sol";
 
 import "src/helpers/AddressProvider.sol";
 
 contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
-
-
     AddressProvider addressProvider;
     IEtherFiNodesManager nodesManager;
 

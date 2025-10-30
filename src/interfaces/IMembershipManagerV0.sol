@@ -2,7 +2,6 @@
 pragma solidity ^0.8.13;
 
 interface IMembershipManagerV0 {
-
     struct TokenDeposit {
         uint128 amounts;
         uint128 shares;
@@ -14,8 +13,8 @@ interface IMembershipManagerV0 {
         uint40 baseTierPoints;
         uint32 prevPointsAccrualTimestamp;
         uint32 prevTopUpTimestamp;
-        uint8  tier;
-        uint8  __gap;
+        uint8 tier;
+        uint8 __gap;
     }
 
     struct TierDeposit {
@@ -27,13 +26,13 @@ interface IMembershipManagerV0 {
         uint96 rewardsGlobalIndex;
         uint40 requiredTierPoints;
         uint24 weight;
-        uint96  __gap;
+        uint96 __gap;
     }
 
     // State-changing functions
     function initialize(address _eEthAddress, address _liquidityPoolAddress, address _membershipNft, address _treasury, address _protocolRevenueManager) external;
 
-    function wrapEthForEap(uint256 _amount, uint256 _amountForPoint, uint32  _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) external payable returns (uint256);
+    function wrapEthForEap(uint256 _amount, uint256 _amountForPoint, uint32 _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) external payable returns (uint256);
     function wrapEth(uint256 _amount, uint256 _amountForPoint) external payable returns (uint256);
 
     function topUpDepositWithEth(uint256 _tokenId, uint128 _amount, uint128 _amountForPoints) external payable;
@@ -69,7 +68,7 @@ interface IMembershipManagerV0 {
     function updateTier(uint8 _tier, uint40 _requiredTierPoints, uint24 _weight) external;
     function setPoints(uint256 _tokenId, uint40 _loyaltyPoints, uint40 _tierPoints) external;
     function setPointsBatch(uint256[] calldata _tokenIds, uint40[] calldata _loyaltyPoints, uint40[] calldata _tierPoints) external;
-    function recoverTierPointsForEap(uint256 _tokenId, uint32  _eapDepositBlockNumber) external;
+    function recoverTierPointsForEap(uint256 _tokenId, uint32 _eapDepositBlockNumber) external;
     function recoverTierPointsForEapBatch(uint256[] calldata _tokenIds, uint32[] calldata _eapDepositBlockNumbers) external;
     function setMinDepositWei(uint56 _value) external;
     function setMaxDepositTopUpPercent(uint8 _percent) external;

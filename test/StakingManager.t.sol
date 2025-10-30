@@ -4,21 +4,9 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 
 contract StakingManagerTest is TestSetup {
-    event StakeDeposit(
-        address indexed staker,
-        uint256 indexed bidId,
-        address indexed withdrawSafe,
-        bool restaked
-    );
+    event StakeDeposit(address indexed staker, uint256 indexed bidId, address indexed withdrawSafe, bool restaked);
     event DepositCancelled(uint256 id);
-    event ValidatorRegistered(
-        address indexed operator,
-        address indexed bNftOwner,
-        address indexed tNftOwner,
-        uint256 validatorId,
-        bytes validatorPubKey,
-        string ipfsHashForEncryptedValidatorKey
-    );
+    event ValidatorRegistered(address indexed operator, address indexed bNftOwner, address indexed tNftOwner, uint256 validatorId, bytes validatorPubKey, string ipfsHashForEncryptedValidatorKey);
 
     uint256[] public processedBids;
     uint256[] public validatorArray;
@@ -227,7 +215,7 @@ contract StakingManagerTest is TestSetup {
         bidIdArray[7] = 12;
         bidIdArray[8] = 19;
         bidIdArray[9] = 20;
- 
+    
         vm.expectRevert("NOT_ENOUGH_BIDS");
         stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
             bidIdArray,
@@ -1317,4 +1305,3 @@ contract StakingManagerTest is TestSetup {
     }
     */
 }
-

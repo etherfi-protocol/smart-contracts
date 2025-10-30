@@ -1,33 +1,26 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IAuctionManager.sol";
-import "./interfaces/IStakingManager.sol";
+
 import "./interfaces/IDepositContract.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
+import "./interfaces/IRoleRegistry.sol";
+import "./interfaces/IStakingManager.sol";
 import "./libraries/DepositDataRootGenerator.sol";
 
-import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
-import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/beacon/IBeaconUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/proxy/beacon/IBeaconUpgradeable.sol";
+
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
+import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
-contract StakingManager is
-    Initializable,
-    IStakingManager,
-    IBeaconUpgradeable,
-    OwnableUpgradeable,
-    PausableUpgradeable,
-    ReentrancyGuardUpgradeable,
-    UUPSUpgradeable
-{
-
+contract StakingManager is Initializable, IStakingManager, IBeaconUpgradeable, OwnableUpgradeable, PausableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     address public immutable liquidityPool;
     uint256 public constant initialDepositAmount = 1 ether;
     IEtherFiNodesManager public immutable etherFiNodesManager;
@@ -54,14 +47,7 @@ contract StakingManager is
     //-----------------------------  Admin  -----------------------------------
     //-------------------------------------------------------------------------
 
-    constructor(
-        address _liquidityPool,
-        address _etherFiNodesManager,
-        address _ethDepositContract,
-        address _auctionManager,
-        address _etherFiNodeBeacon,
-        address _roleRegistry
-    ) {
+    constructor(address _liquidityPool, address _etherFiNodesManager, address _ethDepositContract, address _auctionManager, address _etherFiNodeBeacon, address _roleRegistry) {
         liquidityPool = _liquidityPool;
         etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
         depositContractEth2 = IDepositContract(_ethDepositContract);
@@ -80,6 +66,7 @@ contract StakingManager is
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
+
     function unPauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
@@ -99,7 +86,6 @@ contract StakingManager is
 
         // process each 1 eth deposit to create validators for later verification from oracle
         for (uint256 i = 0; i < depositData.length; i++) {
-
             // claim the bid
             if (!auctionManager.isBidActive(bidIds[i])) revert InactiveBid();
             auctionManager.updateSelectedBidInformation(bidIds[i]);
@@ -138,7 +124,6 @@ contract StakingManager is
         uint256 remainingDeposit = validatorSizeWei - initialDepositAmount;
 
         for (uint256 i = 0; i < depositData.length; i++) {
-
             // check that withdrawal credentials for pubkey match what we originally intended
             // It is expected that the oracle will not call the function for any key that was front-run by a malicious operator
             bytes32 pubkeyHash = calculateValidatorPubkeyHash(depositData[i].publicKey);
@@ -233,5 +218,4 @@ contract StakingManager is
         if (!roleRegistry.hasRole(STAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
-
 }

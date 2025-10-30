@@ -1,22 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
+import "../../src/interfaces/IRoleRegistry.sol";
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
-import "../../src/interfaces/IRoleRegistry.sol";
 
 /**
  * @title Set Role Script
  * @notice Script for granting or revoking roles in the EtherFi protocol
- * 
+ *
  * Notice: Ensure to set ENV vars for action, roleName, and address before running and add --private-key $PRIVATE_KEY of admin(found in 1Password)
- *  
+ *
  * This script allows you to:
  * 1. Grant a role to an address
  * 2. Revoke a role from an address
  * 3. Check if an address has a role
  * 4. List all addresses with a specific role
- * 
+ *
  * Available roles:
  * - PROTOCOL_PAUSER: Can pause protocol contracts
  * - PROTOCOL_UNPAUSER: Can unpause protocol contracts
@@ -39,25 +39,25 @@ import "../../src/interfaces/IRoleRegistry.sol";
  * - ETHERFI_NODE_EIGENLAYER_ADMIN_ROLE: EigenLayer admin for individual nodes
  * - ETHERFI_NODE_CALL_FORWARDER_ROLE: Call forwarder for individual nodes
  * - ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE: Executes Execution Layer Withdrawals
- * 
+ *
  * Usage Examples:
- * 
+ *
  * 1. Grant PROTOCOL_PAUSER role:
  *    ROLE_NAME=PROTOCOL_PAUSER ADDRESS=0x123... ACTION=grant forge script script/SetRole.s.sol:SetRole --rpc-url $RPC_URL --broadcast
- * 
+ *
  * 2. Revoke PROTOCOL_PAUSER role:
  *    ROLE_NAME=PROTOCOL_PAUSER ADDRESS=0x123... ACTION=revoke forge script script/SetRole.s.sol:SetRole --rpc-url $RPC_URL --broadcast
- * 
+ *
  * 3. Check if address has role:
  *    ROLE_NAME=PROTOCOL_PAUSER ADDRESS=0x123... ACTION=check forge script script/SetRole.s.sol:SetRole --rpc-url $RPC_URL
- * 
+ *
  * 4. List all addresses with role:
  *    ROLE_NAME=PROTOCOL_PAUSER ACTION=list forge script script/SetRole.s.sol:SetRole --rpc-url $RPC_URL
  */
 contract SetRole is Script {
     // Contract addresses - UPDATE THESE FOR YOUR DEPLOYMENT
     address constant ROLE_REGISTRY = 0x7279853cA1804d4F705d885FeA7f1662323B5Aab; // Hoodi testnet
-    
+
     // Role definitions
     bytes32 constant PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
     bytes32 constant PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
@@ -82,19 +82,19 @@ contract SetRole is Script {
     bytes32 constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
 
     IRoleRegistry roleRegistry;
-    
+
     function run() external {
         // Initialize contracts
         roleRegistry = IRoleRegistry(ROLE_REGISTRY);
-        
+
         // Get environment variables
-        string memory roleName = "ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE";//vm.envString("ROLE_NAME");
-        string memory action = "grant";//vm.envString("ACTION");
-        
+        string memory roleName = "ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE"; //vm.envString("ROLE_NAME");
+        string memory action = "grant"; //vm.envString("ACTION");
+
         bytes32 role = keccak256(abi.encodePacked(roleName));
         require(role != bytes32(0), "Invalid role name");
-        
-       if (keccak256(abi.encodePacked(action)) == keccak256(abi.encodePacked("grant"))) {
+
+        if (keccak256(abi.encodePacked(action)) == keccak256(abi.encodePacked("grant"))) {
             grantRole(role);
         } else if (keccak256(abi.encodePacked(action)) == keccak256(abi.encodePacked("revoke"))) {
             revokeRole(role);
@@ -106,64 +106,64 @@ contract SetRole is Script {
             revert("Invalid action. Use: grant, revoke, check, or list");
         }
     }
-    
+
     function grantRole(bytes32 role) internal {
         address target = vm.envAddress("ADDRESS");
         require(target != address(0), "ADDRESS environment variable required");
-        
+
         vm.startBroadcast();
-        
+
         console.log("Granting role", vm.toString(role));
         console.log("To address:", target);
-        
+
         roleRegistry.grantRole(role, target);
-        
+
         vm.stopBroadcast();
-        
+
         console.log("Role granted successfully!");
-        
+
         // Verify the role was granted
         bool hasRole = roleRegistry.hasRole(role, target);
         console.log("Verification - Has role:", hasRole);
     }
-    
+
     function revokeRole(bytes32 role) internal {
         address target = vm.envAddress("ADDRESS");
         require(target != address(0), "ADDRESS environment variable required");
-        
+
         vm.startBroadcast();
-        
+
         console.log("Revoking role", vm.toString(role));
         console.log("From address:", target);
-        
+
         roleRegistry.revokeRole(role, target);
-        
+
         vm.stopBroadcast();
-        
+
         console.log("Role revoked successfully!");
-        
+
         // Verify the role was revoked
         bool hasRole = roleRegistry.hasRole(role, target);
         console.log("Verification - Has role:", hasRole);
     }
-    
+
     function checkRole(bytes32 role) internal view {
         address target = vm.envAddress("ADDRESS");
         require(target != address(0), "ADDRESS environment variable required");
-        
+
         bool hasRole = roleRegistry.hasRole(role, target);
-        
+
         console.log("Role:", vm.toString(role));
         console.log("Address:", target);
         console.log("Has role:", hasRole);
     }
-    
+
     function listRoleHolders(bytes32 role) internal view {
         address[] memory holders = roleRegistry.roleHolders(role);
-        
+
         console.log("Role:", vm.toString(role));
         console.log("Number of holders:", holders.length);
-        
+
         for (uint256 i = 0; i < holders.length; i++) {
             console.log("Holder", i + 1, ":", holders[i]);
         }

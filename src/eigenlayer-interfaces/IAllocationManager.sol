@@ -2,10 +2,11 @@
 pragma solidity >=0.5.0;
 
 import {OperatorSet} from "../eigenlayer-libraries/OperatorSetLib.sol";
-import "./IPauserRegistry.sol";
-import "./IStrategy.sol";
+
 import "./IAVSRegistrar.sol";
+import "./IPauserRegistry.sol";
 import "./ISemVerMixin.sol";
+import "./IStrategy.sol";
 
 interface IAllocationManagerErrors {
     /// Input Validation
@@ -177,9 +178,7 @@ interface IAllocationManagerEvents is IAllocationManagerTypes {
     event AllocationDelaySet(address operator, uint32 delay, uint32 effectBlock);
 
     /// @notice Emitted when an operator's magnitude is updated for a given operatorSet and strategy
-    event AllocationUpdated(
-        address operator, OperatorSet operatorSet, IStrategy strategy, uint64 magnitude, uint32 effectBlock
-    );
+    event AllocationUpdated(address operator, OperatorSet operatorSet, IStrategy strategy, uint64 magnitude, uint32 effectBlock);
 
     /// @notice Emitted when operator's encumbered magnitude is updated for a given strategy
     event EncumberedMagnitudeUpdated(address operator, IStrategy strategy, uint64 encumberedMagnitude);
@@ -189,9 +188,7 @@ interface IAllocationManagerEvents is IAllocationManagerTypes {
 
     /// @notice Emitted when an operator is slashed by an operator set for a strategy
     /// `wadSlashed` is the proportion of the operator's total delegated stake that was slashed
-    event OperatorSlashed(
-        address operator, OperatorSet operatorSet, IStrategy[] strategies, uint256[] wadSlashed, string description
-    );
+    event OperatorSlashed(address operator, OperatorSet operatorSet, IStrategy[] strategies, uint256[] wadSlashed, string description);
 
     /// @notice Emitted when an AVS configures the address that will handle registration/deregistration
     event AVSRegistrarSet(address avs, IAVSRegistrar registrar);
@@ -267,11 +264,7 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      *
      * @dev can be called permissionlessly by anyone
      */
-    function clearDeallocationQueue(
-        address operator,
-        IStrategy[] calldata strategies,
-        uint16[] calldata numToClear
-    ) external;
+    function clearDeallocationQueue(address operator, IStrategy[] calldata strategies, uint16[] calldata numToClear) external;
 
     /**
      * @notice Allows an operator to register for one or more operator sets for an AVS. If the operator
@@ -290,9 +283,7 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      * deregisterOperator` method to complete deregistration. This call MUST succeed in order for
      * deregistration to be successful.
      */
-    function deregisterFromOperatorSets(
-        DeregisterParams calldata params
-    ) external;
+    function deregisterFromOperatorSets(DeregisterParams calldata params) external;
 
     /**
      * @notice Called by the delegation manager OR an operator to set an operator's allocation delay.
@@ -341,11 +332,7 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      * @param operatorSetId the operator set to remove strategies from
      * @param strategies the strategies to remove
      */
-    function removeStrategiesFromOperatorSet(
-        address avs,
-        uint32 operatorSetId,
-        IStrategy[] calldata strategies
-    ) external;
+    function removeStrategiesFromOperatorSet(address avs, uint32 operatorSetId, IStrategy[] calldata strategies) external;
 
     /**
      *
@@ -357,18 +344,14 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      * @notice Returns the number of operator sets for the AVS
      * @param avs the AVS to query
      */
-    function getOperatorSetCount(
-        address avs
-    ) external view returns (uint256);
+    function getOperatorSetCount(address avs) external view returns (uint256);
 
     /**
      * @notice Returns the list of operator sets the operator has current or pending allocations/deallocations in
      * @param operator the operator to query
      * @return the list of operator sets the operator has current or pending allocations/deallocations in
      */
-    function getAllocatedSets(
-        address operator
-    ) external view returns (OperatorSet[] memory);
+    function getAllocatedSets(address operator) external view returns (OperatorSet[] memory);
 
     /**
      * @notice Returns the list of strategies an operator has current or pending allocations/deallocations from
@@ -377,10 +360,7 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      * @param operatorSet the operator set to query
      * @return the list of strategies
      */
-    function getAllocatedStrategies(
-        address operator,
-        OperatorSet memory operatorSet
-    ) external view returns (IStrategy[] memory);
+    function getAllocatedStrategies(address operator, OperatorSet memory operatorSet) external view returns (IStrategy[] memory);
 
     /**
      * @notice Returns the current/pending stake allocation an operator has from a strategy to an operator set
@@ -389,11 +369,7 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      * @param strategy the strategy to query
      * @return the current/pending stake allocation
      */
-    function getAllocation(
-        address operator,
-        OperatorSet memory operatorSet,
-        IStrategy strategy
-    ) external view returns (Allocation memory);
+    function getAllocation(address operator, OperatorSet memory operatorSet, IStrategy strategy) external view returns (Allocation memory);
 
     /**
      * @notice Returns the current/pending stake allocations for multiple operators from a strategy to an operator set
@@ -402,11 +378,7 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      * @param strategy the strategy to query
      * @return each operator's allocation
      */
-    function getAllocations(
-        address[] memory operators,
-        OperatorSet memory operatorSet,
-        IStrategy strategy
-    ) external view returns (Allocation[] memory);
+    function getAllocations(address[] memory operators, OperatorSet memory operatorSet, IStrategy strategy) external view returns (Allocation[] memory);
 
     /**
      * @notice Given a strategy, returns a list of operator sets and corresponding stake allocations.
@@ -417,10 +389,7 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      * @return the list of all operator sets the operator has allocations for
      * @return the corresponding list of allocations from the specific `strategy`
      */
-    function getStrategyAllocations(
-        address operator,
-        IStrategy strategy
-    ) external view returns (OperatorSet[] memory, Allocation[] memory);
+    function getStrategyAllocations(address operator, IStrategy strategy) external view returns (OperatorSet[] memory, Allocation[] memory);
 
     /**
      * @notice For a strategy, get the amount of magnitude that is allocated across one or more operator sets
@@ -456,10 +425,7 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      * @param strategies the strategies to get the max magnitudes for
      * @return the max magnitudes for each strategy
      */
-    function getMaxMagnitudes(
-        address operator,
-        IStrategy[] calldata strategies
-    ) external view returns (uint64[] memory);
+    function getMaxMagnitudes(address operator, IStrategy[] calldata strategies) external view returns (uint64[] memory);
 
     /**
      * @notice Returns the maximum magnitudes each operator can allocate for the given strategy
@@ -469,10 +435,7 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      * @param strategy the strategy to get the max magnitudes for
      * @return the max magnitudes for each operator
      */
-    function getMaxMagnitudes(
-        address[] calldata operators,
-        IStrategy strategy
-    ) external view returns (uint64[] memory);
+    function getMaxMagnitudes(address[] calldata operators, IStrategy strategy) external view returns (uint64[] memory);
 
     /**
      * @notice Returns the maximum magnitude an operator can allocate for the given strategies
@@ -484,11 +447,7 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      * @param blockNumber the blockNumber at which to check the max magnitudes
      * @return the max magnitudes for each strategy
      */
-    function getMaxMagnitudesAtBlock(
-        address operator,
-        IStrategy[] calldata strategies,
-        uint32 blockNumber
-    ) external view returns (uint64[] memory);
+    function getMaxMagnitudesAtBlock(address operator, IStrategy[] calldata strategies, uint32 blockNumber) external view returns (uint64[] memory);
 
     /**
      * @notice Returns the time in blocks between an operator allocating slashable magnitude
@@ -498,17 +457,13 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      * @return isSet Whether the operator has configured a delay
      * @return delay The time in blocks between allocating magnitude and magnitude becoming slashable
      */
-    function getAllocationDelay(
-        address operator
-    ) external view returns (bool isSet, uint32 delay);
+    function getAllocationDelay(address operator) external view returns (bool isSet, uint32 delay);
 
     /**
      * @notice Returns a list of all operator sets the operator is registered for
      * @param operator The operator address to query.
      */
-    function getRegisteredSets(
-        address operator
-    ) external view returns (OperatorSet[] memory operatorSets);
+    function getRegisteredSets(address operator) external view returns (OperatorSet[] memory operatorSets);
 
     /**
      * @notice Returns whether the operator is registered for the operator set
@@ -520,41 +475,31 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
     /**
      * @notice Returns whether the operator set exists
      */
-    function isOperatorSet(
-        OperatorSet memory operatorSet
-    ) external view returns (bool);
+    function isOperatorSet(OperatorSet memory operatorSet) external view returns (bool);
 
     /**
      * @notice Returns all the operators registered to an operator set
      * @param operatorSet The operatorSet to query.
      */
-    function getMembers(
-        OperatorSet memory operatorSet
-    ) external view returns (address[] memory operators);
+    function getMembers(OperatorSet memory operatorSet) external view returns (address[] memory operators);
 
     /**
      * @notice Returns the number of operators registered to an operatorSet.
      * @param operatorSet The operatorSet to get the member count for
      */
-    function getMemberCount(
-        OperatorSet memory operatorSet
-    ) external view returns (uint256);
+    function getMemberCount(OperatorSet memory operatorSet) external view returns (uint256);
 
     /**
      * @notice Returns the address that handles registration/deregistration for the AVS
      * If not set, defaults to the input address (`avs`)
      */
-    function getAVSRegistrar(
-        address avs
-    ) external view returns (IAVSRegistrar);
+    function getAVSRegistrar(address avs) external view returns (IAVSRegistrar);
 
     /**
      * @notice Returns an array of strategies in the operatorSet.
      * @param operatorSet The operatorSet to query.
      */
-    function getStrategiesInOperatorSet(
-        OperatorSet memory operatorSet
-    ) external view returns (IStrategy[] memory strategies);
+    function getStrategiesInOperatorSet(OperatorSet memory operatorSet) external view returns (IStrategy[] memory strategies);
 
     /**
      * @notice Returns the minimum amount of stake that will be slashable as of some future block,
@@ -574,12 +519,7 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      * @param strategies the strategies that each slashable stake corresponds to
      * @param futureBlock the block at which to get allocation information. Should be a future block.
      */
-    function getMinimumSlashableStake(
-        OperatorSet memory operatorSet,
-        address[] memory operators,
-        IStrategy[] memory strategies,
-        uint32 futureBlock
-    ) external view returns (uint256[][] memory slashableStake);
+    function getMinimumSlashableStake(OperatorSet memory operatorSet, address[] memory operators, IStrategy[] memory strategies, uint32 futureBlock) external view returns (uint256[][] memory slashableStake);
 
     /**
      * @notice Returns the current allocated stake, irrespective of the operator's slashable status for the operatorSet.
@@ -587,11 +527,7 @@ interface IAllocationManager is IAllocationManagerErrors, IAllocationManagerEven
      * @param operators the operators to query
      * @param strategies the strategies to query
      */
-    function getAllocatedStake(
-        OperatorSet memory operatorSet,
-        address[] memory operators,
-        IStrategy[] memory strategies
-    ) external view returns (uint256[][] memory slashableStake);
+    function getAllocatedStake(OperatorSet memory operatorSet, address[] memory operators, IStrategy[] memory strategies) external view returns (uint256[][] memory slashableStake);
 
     /**
      * @notice Returns whether an operator is slashable by an operator set.

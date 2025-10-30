@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
-import {UUPSUpgradeable, Initializable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {Initializable, UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {EnumerableRoles} from "solady/auth/EnumerableRoles.sol";
 
 /// @title RoleRegistry - An upgradeable role-based access control system
@@ -54,15 +54,15 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     /// @param role The role to grant (as bytes32)
     /// @param account The address to grant the role to
     function grantRole(bytes32 role, address account) public {
-        setRole(account, uint256(role), true);  
-    } 
+        setRole(account, uint256(role), true);
+    }
 
     /// @notice Revokes a role from an account
     /// @dev Only callable by the contract owner (handled in setRole function)
     /// @param role The role to revoke (as bytes32)
     /// @param account The address to revoke the role from
     function revokeRole(bytes32 role, address account) public {
-        setRole(account, uint256(role), false);  
+        setRole(account, uint256(role), false);
     }
 
     /// @notice Gets all addresses that have a specific role

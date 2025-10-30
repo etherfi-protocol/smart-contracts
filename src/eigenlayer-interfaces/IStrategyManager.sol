@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "./IStrategy.sol";
-import "./IShareManager.sol";
 import "./IDelegationManager.sol";
 import "./IEigenPodManager.sol";
 import "./ISemVerMixin.sol";
+import "./IShareManager.sol";
+import "./IStrategy.sol";
 
 interface IStrategyManagerErrors {
     /// @dev Thrown when total strategies deployed exceeds max.
@@ -65,11 +65,7 @@ interface IStrategyManager is IStrategyManagerErrors, IStrategyManagerEvents, IS
      * @param initialStrategyWhitelister The initial value of `strategyWhitelister` to set.
      * @param initialPausedStatus The initial value of `_paused` to set.
      */
-    function initialize(
-        address initialOwner,
-        address initialStrategyWhitelister,
-        uint256 initialPausedStatus
-    ) external;
+    function initialize(address initialOwner, address initialStrategyWhitelister, uint256 initialPausedStatus) external;
 
     /**
      * @notice Deposits `amount` of `token` into the specified `strategy` and credits shares to the caller
@@ -83,11 +79,7 @@ interface IStrategyManager is IStrategyManagerErrors, IStrategyManagerEvents, IS
      * Tokens that diverge significantly from ERC20 norms can cause unexpected behavior in token balances for
      * that strategy, e.g. ERC-777 tokens allowing cross-contract reentrancy.
      */
-    function depositIntoStrategy(
-        IStrategy strategy,
-        IERC20 token,
-        uint256 amount
-    ) external returns (uint256 depositShares);
+    function depositIntoStrategy(IStrategy strategy, IERC20 token, uint256 amount) external returns (uint256 depositShares);
 
     /**
      * @notice Deposits `amount` of `token` into the specified `strategy` and credits shares to the `staker`
@@ -106,69 +98,46 @@ interface IStrategyManager is IStrategyManagerErrors, IStrategyManagerEvents, IS
      * Tokens that diverge significantly from ERC20 norms can cause unexpected behavior in token balances for
      * that strategy, e.g. ERC-777 tokens allowing cross-contract reentrancy.
      */
-    function depositIntoStrategyWithSignature(
-        IStrategy strategy,
-        IERC20 token,
-        uint256 amount,
-        address staker,
-        uint256 expiry,
-        bytes memory signature
-    ) external returns (uint256 depositShares);
+    function depositIntoStrategyWithSignature(IStrategy strategy, IERC20 token, uint256 amount, address staker, uint256 expiry, bytes memory signature) external returns (uint256 depositShares);
 
     /**
      * @notice Burns Strategy shares for the given strategy by calling into the strategy to transfer
      * to the default burn address.
      * @param strategy The strategy to burn shares in.
      */
-    function burnShares(
-        IStrategy strategy
-    ) external;
+    function burnShares(IStrategy strategy) external;
 
     /**
      * @notice Owner-only function to change the `strategyWhitelister` address.
      * @param newStrategyWhitelister new address for the `strategyWhitelister`.
      */
-    function setStrategyWhitelister(
-        address newStrategyWhitelister
-    ) external;
+    function setStrategyWhitelister(address newStrategyWhitelister) external;
 
     /**
      * @notice Owner-only function that adds the provided Strategies to the 'whitelist' of strategies that stakers can deposit into
      * @param strategiesToWhitelist Strategies that will be added to the `strategyIsWhitelistedForDeposit` mapping (if they aren't in it already)
      */
-    function addStrategiesToDepositWhitelist(
-        IStrategy[] calldata strategiesToWhitelist
-    ) external;
+    function addStrategiesToDepositWhitelist(IStrategy[] calldata strategiesToWhitelist) external;
 
     /**
      * @notice Owner-only function that removes the provided Strategies from the 'whitelist' of strategies that stakers can deposit into
      * @param strategiesToRemoveFromWhitelist Strategies that will be removed to the `strategyIsWhitelistedForDeposit` mapping (if they are in it)
      */
-    function removeStrategiesFromDepositWhitelist(
-        IStrategy[] calldata strategiesToRemoveFromWhitelist
-    ) external;
+    function removeStrategiesFromDepositWhitelist(IStrategy[] calldata strategiesToRemoveFromWhitelist) external;
 
     /// @notice Returns bool for whether or not `strategy` is whitelisted for deposit
-    function strategyIsWhitelistedForDeposit(
-        IStrategy strategy
-    ) external view returns (bool);
+    function strategyIsWhitelistedForDeposit(IStrategy strategy) external view returns (bool);
 
     /**
      * @notice Get all details on the staker's deposits and corresponding shares
      * @return (staker's strategies, shares in these strategies)
      */
-    function getDeposits(
-        address staker
-    ) external view returns (IStrategy[] memory, uint256[] memory);
+    function getDeposits(address staker) external view returns (IStrategy[] memory, uint256[] memory);
 
-    function getStakerStrategyList(
-        address staker
-    ) external view returns (IStrategy[] memory);
+    function getStakerStrategyList(address staker) external view returns (IStrategy[] memory);
 
     /// @notice Simple getter function that returns `stakerStrategyList[staker].length`.
-    function stakerStrategyListLength(
-        address staker
-    ) external view returns (uint256);
+    function stakerStrategyListLength(address staker) external view returns (uint256);
 
     /// @notice Returns the current shares of `user` in `strategy`
     function stakerDepositShares(address user, IStrategy strategy) external view returns (uint256 shares);
@@ -180,9 +149,7 @@ interface IStrategyManager is IStrategyManagerErrors, IStrategyManagerEvents, IS
     function strategyWhitelister() external view returns (address);
 
     /// @notice Returns the burnable shares of a strategy
-    function getBurnableShares(
-        IStrategy strategy
-    ) external view returns (uint256);
+    function getBurnableShares(IStrategy strategy) external view returns (uint256);
 
     /**
      * @notice Gets every strategy with burnable shares and the amount of burnable shares in each said strategy
@@ -203,12 +170,5 @@ interface IStrategyManager is IStrategyManagerErrors, IStrategyManagerEvents, IS
      * @param expiry The expiry of the signature.
      * @return The EIP-712 signable digest hash.
      */
-    function calculateStrategyDepositDigestHash(
-        address staker,
-        IStrategy strategy,
-        IERC20 token,
-        uint256 amount,
-        uint256 nonce,
-        uint256 expiry
-    ) external view returns (bytes32);
+    function calculateStrategyDepositDigestHash(address staker, IStrategy strategy, IERC20 token, uint256 amount, uint256 nonce, uint256 expiry) external view returns (bytes32);
 }

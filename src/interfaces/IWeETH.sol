@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 import "./ILiquidityPool.sol";
 import "./IeETH.sol";
+import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 
 interface IWeETH is IERC20Upgradeable {
-
     struct PermitInput {
         uint256 value;
         uint256 deadline;
         uint8 v;
         bytes32 r;
         bytes32 s;
-    } 
-    
+    }
+
     // STATE VARIABLES
     function eETH() external view returns (IeETH);
     function liquidityPool() external view returns (ILiquidityPool);
@@ -26,15 +25,7 @@ interface IWeETH is IERC20Upgradeable {
     function wrap(uint256 _eETHAmount) external returns (uint256);
     function wrapWithPermit(uint256 _eETHAmount, ILiquidityPool.PermitInput calldata _permit) external returns (uint256);
     function unwrap(uint256 _weETHAmount) external returns (uint256);
-    function permit(
-        address owner,
-        address spender,
-        uint256 value,
-        uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external;
+    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external;
 
     function setWhitelistedSpender(address[] calldata _spenders, bool _isWhitelisted) external;
     function setBlacklistedRecipient(address[] calldata _recipients, bool _isBlacklisted) external;
@@ -44,5 +35,4 @@ interface IWeETH is IERC20Upgradeable {
     function getEETHByWeETH(uint256 _weETHAmount) external view returns (uint256);
     function getRate() external view returns (uint256);
     function getImplementation() external view returns (address);
-
 }

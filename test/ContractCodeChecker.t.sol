@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
 import "../src/EtherFiNode.sol";
 import "../src/EtherFiNodesManager.sol";
 import "../src/EtherFiRestaker.sol";
+import "./TestSetup.sol";
 
 /**
  * @title TestByteCodeMatch
  * @dev Test contract to verify bytecode matches between deployed contracts and their implementations
  */
 contract ContractCodeCheckerTest is TestSetup {
-
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
     }
@@ -37,11 +36,10 @@ contract ContractCodeCheckerTest is TestSetup {
         // This test can be used for future deployments
         // It follows the same pattern as the test_deployment_bytecode function
         // but with different contract addresses
-        
+
         // Example (replace with actual addresses when needed):
         // address newNodesManagerImplAddress = address(0x...);
         // EtherFiNodesManager newNodesManagerImplementation = new EtherFiNodesManager();
         // verifyContractByteCodeMatch(newNodesManagerImplAddress, address(newNodesManagerImplementation));
     }
 }
-

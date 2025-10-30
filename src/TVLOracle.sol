@@ -17,10 +17,7 @@ contract TVLOracle is Ownable {
     /// @notice Sets TVL by aggregator
     /// @param _newTvl New TVL calculated by aggregator
     function setTvl(uint256 _newTvl) public {
-        require(
-            msg.sender == tvlAggregator,
-            "Only TVL Aggregator can call this message"
-        );
+        require(msg.sender == tvlAggregator, "Only TVL Aggregator can call this message");
         require(_newTvl > 0, "TVL shouldn't be 0");
 
         _currentTvl = _newTvl;

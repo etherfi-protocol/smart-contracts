@@ -2,7 +2,6 @@
 pragma solidity ^0.8.13;
 
 interface IMembershipManager {
-
     struct TokenDeposit {
         uint128 amounts;
         uint128 shares;
@@ -14,8 +13,8 @@ interface IMembershipManager {
         uint40 baseTierPoints;
         uint32 prevPointsAccrualTimestamp;
         uint32 prevTopUpTimestamp;
-        uint8  tier;
-        uint8  version;
+        uint8 tier;
+        uint8 version;
     }
 
     // Used for V1
@@ -34,11 +33,11 @@ interface IMembershipManager {
         uint96 rewardsGlobalIndex;
         uint40 requiredTierPoints;
         uint24 weight;
-        uint96  __gap;
+        uint96 __gap;
     }
 
     // State-changing functions
-    function wrapEthForEap(uint256 _amount, uint256 _amountForPoint, uint32  _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) external payable returns (uint256);
+    function wrapEthForEap(uint256 _amount, uint256 _amountForPoint, uint32 _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) external payable returns (uint256);
     function wrapEth(uint256 _amount, uint256 _amountForPoint) external payable returns (uint256);
     function wrapEth(uint256 _amount, uint256 _amountForPoint, address _referral) external payable returns (uint256);
 

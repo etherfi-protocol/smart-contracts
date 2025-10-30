@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/math/Math.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+
 import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
     using Math for uint256;
@@ -55,18 +56,8 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
     event Withdrawn(address indexed sender);
     event ClaimReceiverContractSet(address indexed receiverAddress);
     event ClaimingOpened(uint256 deadline);
-    event Fundsclaimed(
-        address indexed user,
-        uint256 indexed pointsAccumulated
-    );
-    event ERC20TVLUpdated(
-        uint256 rETHBal,
-        uint256 wstETHBal,
-        uint256 sfrxETHBal,
-        uint256 cbETHBal,
-        uint256 ETHBal,
-        uint256 tvl
-    );
+    event Fundsclaimed(address indexed user, uint256 indexed pointsAccumulated);
+    event ERC20TVLUpdated(uint256 rETHBal, uint256 wstETHBal, uint256 sfrxETHBal, uint256 cbETHBal, uint256 ETHBal, uint256 tvl);
 
     event EthTVLUpdated(uint256 ETHBal, uint256 tvl);
 
@@ -82,12 +73,7 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
     /// @param _wstETH address of the wstEth contract to receive
     /// @param _sfrxETH address of the sfrxEth contract to receive
     /// @param _cbETH address of the _cbEth contract to receive
-    constructor(
-        address _rETH,
-        address _wstETH,
-        address _sfrxETH,
-        address _cbETH
-    ) {
+    constructor(address _rETH, address _wstETH, address _sfrxETH, address _cbETH) {
         rETH = _rETH;
         wstETH = _wstETH;
         sfrxETH = _sfrxETH;
@@ -107,19 +93,8 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
     /// @dev User must have approved contract before
     /// @param _erc20Contract erc20 token contract being deposited
     /// @param _amount amount of the erc20 token being deposited
-    function deposit(address _erc20Contract, uint256 _amount)
-        external
-        OnlyCorrectAmount(_amount)
-        DepositingOpen
-        whenNotPaused
-    {
-        require(
-            (_erc20Contract == rETH ||
-                _erc20Contract == sfrxETH ||
-                _erc20Contract == wstETH ||
-                _erc20Contract == cbETH),
-            "Unsupported token"
-        );
+    function deposit(address _erc20Contract, uint256 _amount) external OnlyCorrectAmount(_amount) DepositingOpen whenNotPaused {
+        require((_erc20Contract == rETH || _erc20Contract == sfrxETH || _erc20Contract == wstETH || _erc20Contract == cbETH), "Unsupported token");
 
         depositInfo[msg.sender].depositTime = block.timestamp;
         depositInfo[msg.sender].totalERC20Balance += _amount;
@@ -127,24 +102,11 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
         require(IERC20(_erc20Contract).transferFrom(msg.sender, address(this), _amount), "Transfer failed");
 
         emit DepositERC20(msg.sender, _amount);
-        emit ERC20TVLUpdated(
-            rETHInstance.balanceOf(address(this)),
-            wstETHInstance.balanceOf(address(this)),
-            sfrxETHInstance.balanceOf(address(this)),
-            cbETHInstance.balanceOf(address(this)),
-            address(this).balance,
-            getContractTVL()
-        );
+        emit ERC20TVLUpdated(rETHInstance.balanceOf(address(this)), wstETHInstance.balanceOf(address(this)), sfrxETHInstance.balanceOf(address(this)), cbETHInstance.balanceOf(address(this)), address(this).balance, getContractTVL());
     }
 
     /// @notice deposits Ether into contract
-    function depositEther()
-        external
-        payable
-        OnlyCorrectAmount(msg.value)
-        DepositingOpen
-        whenNotPaused
-    {
+    function depositEther() external payable OnlyCorrectAmount(msg.value) DepositingOpen whenNotPaused {
         depositInfo[msg.sender].depositTime = block.timestamp;
         depositInfo[msg.sender].etherBalance += msg.value;
 
@@ -164,10 +126,7 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
     /// @dev can only call once receiver contract is ready and claiming is open
     function claim() public nonReentrant {
         require(claimingOpen == 1, "Claiming not open");
-        require(
-            claimReceiverContract != address(0),
-            "Claiming address not set"
-        );
+        require(claimReceiverContract != address(0), "Claiming address not set");
         require(block.timestamp <= claimDeadline, "Claiming is complete");
         require(depositInfo[msg.sender].depositTime != 0, "No deposit stored");
 
@@ -179,8 +138,8 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
 
     /// @notice Sets claiming to be open, to allow users to claim their points
     /// @param _claimDeadline the amount of time in days until claiming will close
-    function setClaimingOpen(uint256 _claimDeadline) public onlyOwner {        
-        claimDeadline = block.timestamp + (_claimDeadline * 86400);
+    function setClaimingOpen(uint256 _claimDeadline) public onlyOwner {
+        claimDeadline = block.timestamp + (_claimDeadline * 86_400);
         claimingOpen = 1;
         endTime = block.timestamp;
 
@@ -189,10 +148,7 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
 
     /// @notice Set the contract which will receive claimed funds
     /// @param _receiverContract contract address for where claiming will send the funds
-    function setClaimReceiverContract(address _receiverContract)
-        public
-        onlyOwner
-    {
+    function setClaimReceiverContract(address _receiverContract) public onlyOwner {
         require(_receiverContract != address(0), "Cannot set as address zero");
         claimReceiverContract = _receiverContract;
 
@@ -211,17 +167,11 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
         }
 
         //Scaled by 1000, therefore, 1005 would be 1.005
-        uint256 userMultiplier = Math.min(
-            2000,
-            1000 + ((lengthOfDeposit * 10) / 2592) / 10
-        );
-        uint256 totalUserBalance = depositInfo[_user].etherBalance +
-            depositInfo[_user].totalERC20Balance;
+        uint256 userMultiplier = Math.min(2000, 1000 + ((lengthOfDeposit * 10) / 2592) / 10);
+        uint256 totalUserBalance = depositInfo[_user].etherBalance + depositInfo[_user].totalERC20Balance;
 
         //Formula for calculating points total
-        return
-            ((Math.sqrt(totalUserBalance) * lengthOfDeposit) *
-                userMultiplier) / 1e14;
+        return ((Math.sqrt(totalUserBalance) * lengthOfDeposit) * userMultiplier) / 1e14;
     }
 
     //Pauses the contract
@@ -270,7 +220,7 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
         require(sfrxETHInstance.transfer(receiver, sfrxEthbal), "Transfer failed");
         require(cbETHInstance.transfer(receiver, cbEthBal), "Transfer failed");
 
-        (bool sent, ) = receiver.call{value: ethBalance}("");
+        (bool sent,) = receiver.call{value: ethBalance}("");
         require(sent, "Failed to send Ether");
     }
 
@@ -280,25 +230,10 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
 
     /// @dev Returns the total value locked of all currencies in contract
     function getContractTVL() public view returns (uint256 tvl) {
-        tvl = (rETHInstance.balanceOf(address(this)) +
-            wstETHInstance.balanceOf(address(this)) +
-            sfrxETHInstance.balanceOf(address(this)) +
-            cbETHInstance.balanceOf(address(this)) +
-            address(this).balance);
+        tvl = (rETHInstance.balanceOf(address(this)) + wstETHInstance.balanceOf(address(this)) + sfrxETHInstance.balanceOf(address(this)) + cbETHInstance.balanceOf(address(this)) + address(this).balance);
     }
 
-    function getUserTVL(address _user)
-        public
-        view
-        returns (
-            uint256 rETHBal,
-            uint256 wstETHBal,
-            uint256 sfrxETHBal,
-            uint256 cbETHBal,
-            uint256 ethBal,
-            uint256 totalBal
-        )
-    {
+    function getUserTVL(address _user) public view returns (uint256 rETHBal, uint256 wstETHBal, uint256 sfrxETHBal, uint256 cbETHBal, uint256 ethBal, uint256 totalBal) {
         rETHBal = userToErc20Balance[_user][rETH];
         wstETHBal = userToErc20Balance[_user][wstETH];
         sfrxETHBal = userToErc20Balance[_user][sfrxETH];
@@ -312,10 +247,7 @@ contract EarlyAdopterPool is Ownable, ReentrancyGuard, Pausable {
     //--------------------------------------------------------------------------------------
 
     modifier OnlyCorrectAmount(uint256 _amount) {
-        require(
-            _amount >= 0.1 ether && _amount <= 100 ether,
-            "Incorrect Deposit Amount"
-        );
+        require(_amount >= 0.1 ether && _amount <= 100 ether, "Incorrect Deposit Amount");
         _;
     }
 

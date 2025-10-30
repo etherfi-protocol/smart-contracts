@@ -6,9 +6,7 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 contract TestERC721 is ERC721 {
     uint256 private _nextTokenId;
 
-    constructor(string memory _name, string memory _symbol)
-        ERC721(_name, _symbol)
-    {}
+    constructor(string memory _name, string memory _symbol) ERC721(_name, _symbol) {}
 
     function mint(address _to) public returns (uint256) {
         uint256 tokenId = _nextTokenId++;
