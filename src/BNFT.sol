@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin-upgradeable/contracts/token/ERC721/ERC721Upgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/token/ERC721/ERC721Upgradeable.sol";
 
 contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     //--------------------------------------------------------------------------------------
@@ -23,7 +23,7 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     //--------------------------------------------------------------------------------------
 
     /// @notice initialize to set variables on deployment
-    function initialize(address _stakingManagerAddress) initializer external {
+    function initialize(address _stakingManagerAddress) external initializer {
         require(_stakingManagerAddress != address(0), "No zero addresses");
         __ERC721_init("Bond NFT", "BNFT");
         __Ownable_init();
@@ -33,7 +33,7 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     /// @notice initialization function that should be called after phase 2.0 contract upgrade
-    function initializeOnUpgrade(address _etherFiNodesManagerAddress) onlyOwner external {
+    function initializeOnUpgrade(address _etherFiNodesManagerAddress) external onlyOwner {
         require(_etherFiNodesManagerAddress != address(0), "Cannot initialize to zero address");
 
         etherFiNodesManagerAddress = _etherFiNodesManagerAddress;
@@ -62,8 +62,8 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
         address from,
         address to,
         uint256, // firstTokenId
-        uint256  // batchSize
-    ) internal virtual override(ERC721Upgradeable ){
+        uint256 // batchSize
+    ) internal virtual override(ERC721Upgradeable) {
         // only allow mint or burn
         require(from == address(0) || to == address(0), "Err: token is SOUL BOUND");
     }
@@ -72,9 +72,7 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
 
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     //--------------------------------------------------------------------------------------
     //--------------------------------------  GETTER  --------------------------------------

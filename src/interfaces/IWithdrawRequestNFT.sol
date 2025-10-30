@@ -3,10 +3,10 @@ pragma solidity ^0.8.13;
 
 interface IWithdrawRequestNFT {
     struct WithdrawRequest {
-        uint96  amountOfEEth;
-        uint96  shareOfEEth;
-        bool    isValid;
-        uint32  feeGwei;
+        uint96 amountOfEEth;
+        uint96 shareOfEEth;
+        bool isValid;
+        uint32 feeGwei;
     }
 
     function initialize(address _liquidityPoolAddress, address _eEthAddress, address _membershipManager) external;

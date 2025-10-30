@@ -1,0 +1,19 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo ""
+echo "🔨 Formatting Solidity code..."
+
+# Run forge fmt
+forge fmt
+
+# Check for changes and stage them
+if [ -n "$(git diff --name-only *.sol **/*.sol 2>/dev/null)" ]; then
+    echo "✨ Code formatted! Adding to commit..."
+    git add *.sol **/*.sol 2>/dev/null || true
+    echo "✅ Formatted files staged"
+else
+    echo "✅ No formatting needed"
+fi
+
+echo ""

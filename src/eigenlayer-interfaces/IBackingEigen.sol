@@ -26,9 +26,7 @@ interface IBackingEigen is IERC20 {
     /**
      * @notice An initializer function that sets initial values for the contract's state variables.
      */
-    function initialize(
-        address initialOwner
-    ) external;
+    function initialize(address initialOwner) external;
 
     // @notice Allows the contract owner to modify an entry in the `isMinter` mapping.
     function setIsMinter(address minterAddress, bool newStatus) external;
@@ -44,9 +42,7 @@ interface IBackingEigen is IERC20 {
      *
      * See {ERC20-_burn}.
      */
-    function burn(
-        uint256 amount
-    ) external;
+    function burn(uint256 amount) external;
 
     /// @notice the address of the wrapped Eigen token EIGEN
     function EIGEN() external view returns (IERC20);

@@ -3,14 +3,13 @@ pragma solidity ^0.8.27;
 
 import "src/eigenlayer-interfaces/IDelegationManager.sol";
 
-import "../../src/eigenlayer-interfaces/IStrategy.sol";
 import "../../src/eigenlayer-interfaces/IPauserRegistry.sol";
 import "../../src/eigenlayer-interfaces/ISignatureUtilsMixin.sol";
+import "../../src/eigenlayer-interfaces/IStrategy.sol";
 import "../../src/eigenlayer-libraries/SlashingLib.sol";
 
 // IDelegationManager but with all functions made virtual
 contract MockDelegationManagerBase is IDelegationManager {
-
     /**
      * @dev Initializes the initial owner and paused status.
      */
@@ -31,11 +30,7 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @dev This function will revert if the caller is already delegated to an operator.
      * @dev Note that the `metadataURI` is *never stored * and is only emitted in the `OperatorMetadataURIUpdated` event
      */
-    function registerAsOperator(
-        address initDelegationApprover,
-        uint32 allocationDelay,
-        string calldata metadataURI
-    ) external virtual {}
+    function registerAsOperator(address initDelegationApprover, uint32 allocationDelay, string calldata metadataURI) external virtual {}
 
     /**
      * @notice Updates an operator's stored `delegationApprover`.
@@ -62,11 +57,7 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @dev The signature/salt are used ONLY if the operator has configured a delegationApprover.
      * If they have not, these params can be left empty.
      */
-    function delegateTo(
-        address operator,
-        SignatureWithExpiry memory approverSignatureAndExpiry,
-        bytes32 approverSalt
-    ) external virtual {}
+    function delegateTo(address operator, SignatureWithExpiry memory approverSignatureAndExpiry, bytes32 approverSalt) external virtual {}
 
     /**
      * @notice Undelegates the staker from their operator and queues a withdrawal for all of their shares
@@ -78,9 +69,7 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @dev Reverts if the caller is not the staker, nor the operator who the staker is delegated to, nor the operator's specified "delegationApprover"
      * @dev Reverts if the `staker` is not delegated to an operator
      */
-    function undelegate(
-        address staker
-    ) external virtual returns (bytes32[] memory withdrawalRoots) {}
+    function undelegate(address staker) external virtual returns (bytes32[] memory withdrawalRoots) {}
 
     /**
      * @notice Undelegates the staker from their current operator, and redelegates to `newOperator`
@@ -93,11 +82,7 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @param newOperatorApproverSig A signature from the operator's `delegationApprover`
      * @param approverSalt A unique single use value tied to the approver's signature
      */
-    function redelegate(
-        address newOperator,
-        SignatureWithExpiry memory newOperatorApproverSig,
-        bytes32 approverSalt
-    ) external virtual returns (bytes32[] memory withdrawalRoots) {}
+    function redelegate(address newOperator, SignatureWithExpiry memory newOperatorApproverSig, bytes32 approverSalt) external virtual returns (bytes32[] memory withdrawalRoots) {}
 
     /**
      * @notice Allows a staker to queue a withdrawal of their deposit shares. The withdrawal can be
@@ -110,9 +95,7 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @dev To view all the staker's strategies/deposit shares that can be queued for withdrawal, see `getDepositedShares`
      * @dev To view the current conversion between a staker's deposit shares and withdrawable shares, see `getWithdrawableShares`
      */
-    function queueWithdrawals(
-        QueuedWithdrawalParams[] calldata params
-    ) external virtual returns (bytes32[] memory) {}
+    function queueWithdrawals(QueuedWithdrawalParams[] calldata params) external virtual returns (bytes32[] memory) {}
 
     /**
      * @notice Used to complete a queued withdrawal
@@ -125,11 +108,7 @@ contract MockDelegationManagerBase is IDelegationManager {
      * NOTE: if the caller receives shares and is currently delegated to an operator, the received shares are
      * automatically delegated to the caller's current operator.
      */
-    function completeQueuedWithdrawal(
-        Withdrawal calldata withdrawal,
-        IERC20[] calldata tokens,
-        bool receiveAsTokens
-    ) external virtual {}
+    function completeQueuedWithdrawal(Withdrawal calldata withdrawal, IERC20[] calldata tokens, bool receiveAsTokens) external virtual {}
 
     /**
      * @notice Used to complete multiple queued withdrawals
@@ -138,11 +117,7 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @param receiveAsTokens Whether or not to complete each withdrawal as tokens. See `completeQueuedWithdrawal` for the usage of a single boolean.
      * @dev See `completeQueuedWithdrawal` for relevant dev tags
      */
-    function completeQueuedWithdrawals(
-        Withdrawal[] calldata withdrawals,
-        IERC20[][] calldata tokens,
-        bool[] calldata receiveAsTokens
-    ) external virtual {}
+    function completeQueuedWithdrawals(Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external virtual {}
 
     /**
      * @notice Called by a share manager when a staker's deposit share balance in a strategy increases.
@@ -157,12 +132,7 @@ contract MockDelegationManagerBase is IDelegationManager {
      * staker has been slashed 100% on the beacon chain such that the calculated slashing factor is 0, this
      * method WILL REVERT.
      */
-    function increaseDelegatedShares(
-        address staker,
-        IStrategy strategy,
-        uint256 prevDepositShares,
-        uint256 addedShares
-    ) external virtual {}
+    function increaseDelegatedShares(address staker, IStrategy strategy, uint256 prevDepositShares, uint256 addedShares) external virtual {}
 
     /**
      * @notice If the staker is delegated, decreases its operator's shares in response to
@@ -173,11 +143,7 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @dev Note: `beaconChainSlashingFactorDecrease` are assumed to ALWAYS be < 1 WAD.
      * These invariants are maintained in the EigenPodManager.
      */
-    function decreaseDelegatedShares(
-        address staker,
-        uint256 curDepositShares,
-        uint64 beaconChainSlashingFactorDecrease
-    ) external virtual {}
+    function decreaseDelegatedShares(address staker, uint256 curDepositShares, uint64 beaconChainSlashingFactorDecrease) external virtual {}
 
     /**
      * @notice Decreases the operators shares in storage after a slash and increases the burnable shares by calling
@@ -190,12 +156,7 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @dev Note: Assumes `prevMaxMagnitude <= newMaxMagnitude`. This invariant is maintained in
      * the AllocationManager.
      */
-    function slashOperatorShares(
-        address operator,
-        IStrategy strategy,
-        uint64 prevMaxMagnitude,
-        uint64 newMaxMagnitude
-    ) external virtual {}
+    function slashOperatorShares(address operator, IStrategy strategy, uint64 prevMaxMagnitude, uint64 newMaxMagnitude) external virtual {}
 
     /**
      *
@@ -208,63 +169,47 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @notice Mapping: staker => operator whom the staker is currently delegated to.
      * @dev Note that returning address(0) indicates that the staker is not actively delegated to any operator.
      */
-    function delegatedTo(
-        address staker
-    ) external virtual view returns (address) {}
+    function delegatedTo(address staker) external view virtual returns (address) {}
 
     /**
      * @notice Mapping: delegationApprover => 32-byte salt => whether or not the salt has already been used by the delegationApprover.
      * @dev Salts are used in the `delegateTo` function. Note that this function only processes the delegationApprover's
      * signature + the provided salt if the operator being delegated to has specified a nonzero address as their `delegationApprover`.
      */
-    function delegationApproverSaltIsSpent(address _delegationApprover, bytes32 salt) external virtual view returns (bool) {}
+    function delegationApproverSaltIsSpent(address _delegationApprover, bytes32 salt) external view virtual returns (bool) {}
 
     /// @notice Mapping: staker => cumulative number of queued withdrawals they have ever initiated.
     /// @dev This only increments (doesn't decrement), and is used to help ensure that otherwise identical withdrawals have unique hashes.
-    function cumulativeWithdrawalsQueued(
-        address staker
-    ) external virtual view returns (uint256) {}
+    function cumulativeWithdrawalsQueued(address staker) external view virtual returns (uint256) {}
 
     /**
      * @notice Returns 'true' if `staker` *is* actively delegated, and 'false' otherwise.
      */
-    function isDelegated(
-        address staker
-    ) external virtual view returns (bool) {}
+    function isDelegated(address staker) external view virtual returns (bool) {}
 
     /**
      * @notice Returns true is an operator has previously registered for delegation.
      */
-    function isOperator(
-        address operator
-    ) external virtual view returns (bool) {}
+    function isOperator(address operator) external view virtual returns (bool) {}
 
     /**
      * @notice Returns the delegationApprover account for an operator
      */
-    function delegationApprover(
-        address operator
-    ) external virtual view returns (address) {}
+    function delegationApprover(address operator) external view virtual returns (address) {}
 
     /**
      * @notice Returns the shares that an operator has delegated to them in a set of strategies
      * @param operator the operator to get shares for
      * @param strategies the strategies to get shares for
      */
-    function getOperatorShares(
-        address operator,
-        IStrategy[] memory strategies
-    ) external virtual view returns (uint256[] memory) {}
+    function getOperatorShares(address operator, IStrategy[] memory strategies) external view virtual returns (uint256[] memory) {}
 
     /**
      * @notice Returns the shares that a set of operators have delegated to them in a set of strategies
      * @param operators the operators to get shares for
      * @param strategies the strategies to get shares for
      */
-    function getOperatorsShares(
-        address[] memory operators,
-        IStrategy[] memory strategies
-    ) external virtual view returns (uint256[][] memory) {}
+    function getOperatorsShares(address[] memory operators, IStrategy[] memory strategies) external view virtual returns (uint256[][] memory) {}
 
     /**
      * @notice Returns amount of withdrawable shares from an operator for a strategy that is still in the queue
@@ -274,7 +219,7 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @param strategy the strategy to get shares for
      * @return the amount of shares that are slashable in the withdrawal queue for an operator and a strategy
      */
-    function getSlashableSharesInQueue(address operator, IStrategy strategy) external virtual view returns (uint256) {}
+    function getSlashableSharesInQueue(address operator, IStrategy strategy) external view virtual returns (uint256) {}
 
     /**
      * @notice Given a staker and a set of strategies, return the shares they can queue for withdrawal and the
@@ -283,31 +228,24 @@ contract MockDelegationManagerBase is IDelegationManager {
      * The shares amount returned is the actual amount of Strategy shares the staker would receive (subject
      * to each strategy's underlying shares to token ratio).
      */
-    function getWithdrawableShares(
-        address staker,
-        IStrategy[] memory strategies
-    ) external virtual view returns (uint256[] memory withdrawableShares, uint256[] memory depositShares) {}
+    function getWithdrawableShares(address staker, IStrategy[] memory strategies) external view virtual returns (uint256[] memory withdrawableShares, uint256[] memory depositShares) {}
 
     /**
      * @notice Returns the number of shares in storage for a staker and all their strategies
      */
-    function getDepositedShares(
-        address staker
-    ) external virtual view returns (IStrategy[] memory, uint256[] memory) {}
+    function getDepositedShares(address staker) external view virtual returns (IStrategy[] memory, uint256[] memory) {}
 
     /**
      * @notice Returns the scaling factor applied to a staker's deposits for a given strategy
      */
-    function depositScalingFactor(address staker, IStrategy strategy) external virtual view returns (uint256) {}
+    function depositScalingFactor(address staker, IStrategy strategy) external view virtual returns (uint256) {}
 
     /**
      * @notice Returns the Withdrawal associated with a `withdrawalRoot`.
      * @param withdrawalRoot The hash identifying the queued withdrawal.
      * @return withdrawal The withdrawal details.
      */
-    function queuedWithdrawals(
-        bytes32 withdrawalRoot
-    ) external view returns (Withdrawal memory withdrawal) {}
+    function queuedWithdrawals(bytes32 withdrawalRoot) external view returns (Withdrawal memory withdrawal) {}
 
     /**
      * @notice Returns the Withdrawal and corresponding shares associated with a `withdrawalRoot`
@@ -317,9 +255,7 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @dev The shares are what a user would receive from completing a queued withdrawal, assuming all slashings are applied
      * @dev Withdrawals queued before the slashing release cannot be queried with this method
      */
-    function getQueuedWithdrawal(
-        bytes32 withdrawalRoot
-    ) external virtual view returns (Withdrawal memory withdrawal, uint256[] memory shares) {}
+    function getQueuedWithdrawal(bytes32 withdrawalRoot) external view virtual returns (Withdrawal memory withdrawal, uint256[] memory shares) {}
 
     /**
      * @notice Returns all queued withdrawals and their corresponding shares for a staker.
@@ -328,15 +264,11 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @return shares 2D array of shares, where each inner array corresponds to the strategies in the withdrawal.
      * @dev The shares are what a user would receive from completing a queued withdrawal, assuming all slashings are applied.
      */
-    function getQueuedWithdrawals(
-        address staker
-    ) external virtual view returns (Withdrawal[] memory withdrawals, uint256[][] memory shares) {}
+    function getQueuedWithdrawals(address staker) external view virtual returns (Withdrawal[] memory withdrawals, uint256[][] memory shares) {}
 
     /// @notice Returns a list of queued withdrawal roots for the `staker`.
     /// NOTE that this only returns withdrawals queued AFTER the slashing release.
-    function getQueuedWithdrawalRoots(
-        address staker
-    ) external virtual view returns (bytes32[] memory) {}
+    function getQueuedWithdrawalRoots(address staker) external view virtual returns (bytes32[] memory) {}
 
     /**
      * @notice Converts shares for a set of strategies to deposit shares, likely in order to input into `queueWithdrawals`
@@ -346,16 +278,10 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @return the deposit shares
      * @dev will be a few wei off due to rounding errors
      */
-    function convertToDepositShares(
-        address staker,
-        IStrategy[] memory strategies,
-        uint256[] memory withdrawableShares
-    ) external virtual view returns (uint256[] memory) {}
+    function convertToDepositShares(address staker, IStrategy[] memory strategies, uint256[] memory withdrawableShares) external view virtual returns (uint256[] memory) {}
 
     /// @notice Returns the keccak256 hash of `withdrawal`.
-    function calculateWithdrawalRoot(
-        Withdrawal memory withdrawal
-    ) external virtual pure returns (bytes32) {}
+    function calculateWithdrawalRoot(Withdrawal memory withdrawal) external pure virtual returns (bytes32) {}
 
     /**
      * @notice Calculates the digest hash to be signed by the operator's delegationApprove and used in the `delegateTo` function.
@@ -365,16 +291,10 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @param approverSalt A unique and single use value associated with the approver signature.
      * @param expiry Time after which the approver's signature becomes invalid
      */
-    function calculateDelegationApprovalDigestHash(
-        address staker,
-        address operator,
-        address _delegationApprover,
-        bytes32 approverSalt,
-        uint256 expiry
-    ) external virtual view returns (bytes32) {}
+    function calculateDelegationApprovalDigestHash(address staker, address operator, address _delegationApprover, bytes32 approverSalt, uint256 expiry) external view virtual returns (bytes32) {}
 
     /// @notice return address of the beaconChainETHStrategy
-    function beaconChainETHStrategy() external virtual view returns (IStrategy) {}
+    function beaconChainETHStrategy() external view virtual returns (IStrategy) {}
 
     /**
      * @notice Returns the minimum withdrawal delay in blocks to pass for withdrawals queued to be completable.
@@ -383,8 +303,8 @@ contract MockDelegationManagerBase is IDelegationManager {
      * @dev Backwards-compatible interface to return the internal `MIN_WITHDRAWAL_DELAY_BLOCKS` value
      * @dev Previous value in storage was deprecated. See `__deprecated_minWithdrawalDelayBlocks`
      */
-    function minWithdrawalDelayBlocks() external virtual view returns (uint32) {}
+    function minWithdrawalDelayBlocks() external view virtual returns (uint32) {}
 
     /// @notice The EIP-712 typehash for the DelegationApproval struct used by the contract
-    function DELEGATION_APPROVAL_TYPEHASH() external virtual view returns (bytes32) {}
+    function DELEGATION_APPROVAL_TYPEHASH() external view virtual returns (bytes32) {}
 }

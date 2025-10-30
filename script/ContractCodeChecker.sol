@@ -4,15 +4,8 @@ pragma solidity ^0.8.13;
 import {console} from "forge-std/console.sol";
 import {console2} from "forge-std/console2.sol";
 
-
 contract ContractCodeChecker {
-
-    event ByteMismatchSegment(
-        uint256 startIndex,
-        uint256 endIndex,
-        bytes aSegment,
-        bytes bSegment
-    );
+    event ByteMismatchSegment(uint256 startIndex, uint256 endIndex, bytes aSegment, bytes bSegment);
 
     function compareBytes(bytes memory a, bytes memory b) internal returns (bool) {
         if (a.length != b.length) {
@@ -50,12 +43,7 @@ contract ContractCodeChecker {
         return !anyMismatch;
     }
 
-    function emitMismatchSegment(
-        bytes memory a,
-        bytes memory b,
-        uint256 start,
-        uint256 end
-    ) internal {
+    function emitMismatchSegment(bytes memory a, bytes memory b, uint256 start, uint256 end) internal {
         // endIndex is inclusive
         uint256 segmentLength = end - start + 1;
 
@@ -82,8 +70,8 @@ contract ContractCodeChecker {
 
         // Every byte corresponds to two hex characters
         bytes memory str = new bytes(2 + data.length * 2);
-        str[0] = '0';
-        str[1] = 'x';
+        str[0] = "0";
+        str[1] = "x";
         for (uint256 i = 0; i < data.length; i++) {
             str[2 + i * 2] = alphabet[uint8(data[i] >> 4)];
             str[3 + i * 2] = alphabet[uint8(data[i] & 0x0f)];
@@ -110,7 +98,7 @@ contract ContractCodeChecker {
         // Fetch runtime bytecode from on-chain addresses
         bytes memory localBytecode = localDeployed.code;
         bytes memory onchainRuntimeBytecode = deployedImpl.code;
-        
+
         // Optionally check length first (not strictly necessary if doing a partial match)
         if (localBytecode.length == 0 || onchainRuntimeBytecode.length == 0) {
             revert("One of the bytecode arrays is empty, cannot verify.");
@@ -155,11 +143,11 @@ contract ContractCodeChecker {
     // This is a heuristic based on known patterns in the metadata.
     function trimMetadata(bytes memory code) internal pure returns (bytes memory) {
         // Metadata usually starts with 0xa2 or a similar tag near the end.
-        // We can scan backward for a known marker. 
+        // We can scan backward for a known marker.
         // In Solidity 0.8.x, metadata often starts near the end with 0xa2 0x64 ... pattern.
         // This is a simplified approach and may need refinement.
-        
-        // For a more robust approach, you'd analyze the last bytes. 
+
+        // For a more robust approach, you'd analyze the last bytes.
         // Typically, the CBOR metadata is at the very end of the bytecode.
         uint256 length = code.length;
         if (length < 4) {
@@ -190,5 +178,4 @@ contract ContractCodeChecker {
         // If no metadata marker found, return as is.
         return code;
     }
-    
 }

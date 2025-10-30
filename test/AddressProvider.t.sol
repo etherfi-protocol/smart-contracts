@@ -4,13 +4,12 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 
 contract AuctionManagerV2Test is AuctionManager {
-    function isUpgraded() public pure returns(bool){
+    function isUpgraded() public pure returns (bool) {
         return true;
     }
 }
 
 contract AddressProviderTest is TestSetup {
-
     AuctionManagerV2Test public auctionManagerV2Instance;
 
     function setUp() public {
@@ -25,23 +24,14 @@ contract AddressProviderTest is TestSetup {
     function test_AddNewContract() public {
         vm.expectRevert("Only owner function");
         vm.prank(alice);
-        addressProviderInstance.addContract(
-            address(auctionManagerProxy),
-            "AuctionManager"
-        );
+        addressProviderInstance.addContract(address(auctionManagerProxy), "AuctionManager");
 
         vm.startPrank(owner);
-        vm.warp(20000);
-        addressProviderInstance.addContract(
-            address(auctionManagerProxy),
-            "AuctionManager"
-        );
+        vm.warp(20_000);
+        addressProviderInstance.addContract(address(auctionManagerProxy), "AuctionManager");
 
-        (
-            address contractAddress,
-            string memory name
-        ) = addressProviderInstance.contracts("AuctionManager");
-        
+        (address contractAddress, string memory name) = addressProviderInstance.contracts("AuctionManager");
+
         assertEq(contractAddress, address(auctionManagerProxy));
         assertEq(name, "AuctionManager");
         assertEq(addressProviderInstance.numberOfContracts(), 1);
@@ -49,51 +39,32 @@ contract AddressProviderTest is TestSetup {
 
     function test_RemoveContract() public {
         vm.startPrank(owner);
-        vm.warp(20000);
-        addressProviderInstance.addContract(
-            address(auctionManagerProxy),
-            "AuctionManager"
-        );
+        vm.warp(20_000);
+        addressProviderInstance.addContract(address(auctionManagerProxy), "AuctionManager");
 
-        addressProviderInstance.addContract(
-            address(liquidityPoolProxy),
-            "LiquidityPool"
-        );
+        addressProviderInstance.addContract(address(liquidityPoolProxy), "LiquidityPool");
         vm.stopPrank();
 
         vm.expectRevert("Only owner function");
         vm.prank(alice);
-        addressProviderInstance.removeContract(
-            "AuctionManager"
-        );
+        addressProviderInstance.removeContract("AuctionManager");
 
         vm.startPrank(owner);
         vm.expectRevert("Contract does not exist");
-        addressProviderInstance.removeContract(
-            "AuctionManage"
-        );
+        addressProviderInstance.removeContract("AuctionManage");
 
-        (
-            address contractAddress,
-            string memory name
-        ) = addressProviderInstance.contracts("AuctionManager");
-        
+        (address contractAddress, string memory name) = addressProviderInstance.contracts("AuctionManager");
+
         assertEq(contractAddress, address(auctionManagerProxy));
         assertEq(name, "AuctionManager");
         assertEq(addressProviderInstance.numberOfContracts(), 2);
 
-        addressProviderInstance.removeContract(
-            "AuctionManager"
-        );
+        addressProviderInstance.removeContract("AuctionManager");
 
-        (
-            contractAddress,
-            name
-        ) = addressProviderInstance.contracts("AuctionManager");
+        (contractAddress, name) = addressProviderInstance.contracts("AuctionManager");
 
         assertEq(contractAddress, address(0));
         assertEq(addressProviderInstance.numberOfContracts(), 1);
-
     }
 
     function test_SetOwner() public {
@@ -113,18 +84,9 @@ contract AddressProviderTest is TestSetup {
 
     function test_GetImplementationAddress() public {
         vm.startPrank(owner);
-        addressProviderInstance.addContract(
-            address(auctionManagerProxy),
-            "AuctionManager"
-        );
-        addressProviderInstance.addContract(
-            address(liquidityPoolProxy),
-            "LiquidityPool"
-        );
-        addressProviderInstance.addContract(
-            address(regulationsManagerProxy),
-            "RegulationsManager"
-        );
+        addressProviderInstance.addContract(address(auctionManagerProxy), "AuctionManager");
+        addressProviderInstance.addContract(address(liquidityPoolProxy), "LiquidityPool");
+        addressProviderInstance.addContract(address(regulationsManagerProxy), "RegulationsManager");
 
         assertEq(addressProviderInstance.getImplementationAddress("LiquidityPool"), address(liquidityPoolImplementation));
         assertEq(addressProviderInstance.getImplementationAddress("RegulationsManager"), address(regulationsManagerImplementation));
@@ -134,6 +96,5 @@ contract AddressProviderTest is TestSetup {
         auctionInstance.upgradeTo(address(auctionManagerV2Implementation));
 
         assertEq(addressProviderInstance.getImplementationAddress("AuctionManager"), address(auctionManagerV2Implementation));
-
     }
 }

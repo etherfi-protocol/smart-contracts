@@ -1,27 +1,28 @@
 pragma solidity ^0.8.27;
 
-import "forge-std/console2.sol";
-import "forge-std/Test.sol";
-import "../test/common/ArrayTestHelper.sol";
+import "../src/AuctionManager.sol";
+import "../src/EtherFiNode.sol";
+import "../src/EtherFiNodesManager.sol";
+import "../src/EtherFiRateLimiter.sol";
+import "../src/NodeOperatorManager.sol";
+import "../src/StakingManager.sol";
+import "../src/UUPSProxy.sol";
+import {IEigenPod, IEigenPodTypes} from "../src/eigenlayer-interfaces/IEigenPod.sol";
+
+import "../src/interfaces/IBNFT.sol";
+import "../src/interfaces/IEtherFiNode.sol";
+import "../src/interfaces/IEtherFiNodesManager.sol";
 import "../src/interfaces/ILiquidityPool.sol";
 import "../src/interfaces/IStakingManager.sol";
-import "../src/StakingManager.sol";
-import "../src/interfaces/IEtherFiNodesManager.sol";
-import "../src/EtherFiNodesManager.sol";
-import "../src/interfaces/IEtherFiNode.sol";
-import {IEigenPod, IEigenPodTypes } from "../src/eigenlayer-interfaces/IEigenPod.sol";
-import "../src/EtherFiNode.sol";
-import "../src/EtherFiRateLimiter.sol";
-import "../src/UUPSProxy.sol";
-import "../src/NodeOperatorManager.sol";
-import "../src/interfaces/ITNFT.sol";
-import "../src/interfaces/IBNFT.sol";
-import "../src/AuctionManager.sol";
-import "../src/libraries/DepositDataRootGenerator.sol";
 
+import "../src/interfaces/ITNFT.sol";
+
+import "../src/libraries/DepositDataRootGenerator.sol";
+import "../test/common/ArrayTestHelper.sol";
+import "forge-std/Test.sol";
+import "forge-std/console2.sol";
 
 contract PreludeTest is Test, ArrayTestHelper {
-
     StakingManager stakingManager;
     ILiquidityPool liquidityPool;
     EtherFiNodesManager etherFiNodesManager;
@@ -59,7 +60,6 @@ contract PreludeTest is Test, ArrayTestHelper {
     EtherFiRateLimiter rateLimiter;
 
     function setUp() public {
-
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
 
         stakingManager = StakingManager(0x25e821b7197B146F7713C3b89B6A4D83516B912d);
@@ -68,14 +68,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         auctionManager = AuctionManager(0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9);
 
         // deploy new staking manager implementation
-        StakingManager stakingManagerImpl = new StakingManager(
-            address(liquidityPool),
-            address(etherFiNodesManager),
-            address(stakingDepositContract),
-            address(auctionManager),
-            address(etherFiNodeBeacon),
-            address(roleRegistry)
-        );
+        StakingManager stakingManagerImpl = new StakingManager(address(liquidityPool), address(etherFiNodesManager), address(stakingDepositContract), address(auctionManager), address(etherFiNodeBeacon), address(roleRegistry));
         vm.prank(stakingManager.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
@@ -88,15 +81,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         UUPSProxy rateLimiterProxy = new UUPSProxy(address(rateLimiterImpl), "");
         rateLimiter = EtherFiRateLimiter(address(rateLimiterProxy));
         rateLimiter.initialize();
-        
+
         // upgrade etherFiNode impl
-        etherFiNodeImpl = new EtherFiNode(
-            address(liquidityPool),
-            address(etherFiNodesManager),
-            eigenPodManager,
-            delegationManager,
-            address(roleRegistry)
-        );
+        etherFiNodeImpl = new EtherFiNode(address(liquidityPool), address(etherFiNodesManager), eigenPodManager, delegationManager, address(roleRegistry));
         vm.prank(stakingManager.owner());
         stakingManager.upgradeEtherFiNode(address(etherFiNodeImpl));
 
@@ -132,22 +119,21 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         defaultTestValidatorParams = TestValidatorParams({
             nodeOperator: address(0), // attach to a random node operator
-            etherFiNode: address(0),  // create a new etherfiNode
-            bidId: 0,                 // create and claim a new bid
-            withdrawable: true,       // simulate validator being ready to withdraw from pod
+            etherFiNode: address(0), // create a new etherfiNode
+            bidId: 0, // create and claim a new bid
+            withdrawable: true, // simulate validator being ready to withdraw from pod
             validatorSize: 32 ether,
             pubkey: ""
         });
-
     }
 
     struct TestValidatorParams {
-        address nodeOperator;  // if none specified a new operator will be created
-        address etherFiNode;   // if none specified a new node will be deployed
-        uint256 bidId;         // if none specified a new bid will be placed
+        address nodeOperator; // if none specified a new operator will be created
+        address etherFiNode; // if none specified a new node will be deployed
+        uint256 bidId; // if none specified a new bid will be placed
         uint256 validatorSize; // if none specified default to 32 eth
-        bool withdrawable;     // give the eigenpod "validatorSize" worth of withdrawable beacon shares
-        bytes pubkey;          // if none specified a random pubkey is generated
+        bool withdrawable; // give the eigenpod "validatorSize" worth of withdrawable beacon shares
+        bytes pubkey; // if none specified a random pubkey is generated
     }
 
     struct TestValidator {
@@ -161,7 +147,6 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function helper_createValidator(TestValidatorParams memory _params) public returns (TestValidator memory) {
-
         // create a copy or else successive calls of this method can mutate the input unexpectedly
         TestValidatorParams memory params = TestValidatorParams(_params.nodeOperator, _params.etherFiNode, _params.bidId, _params.validatorSize, _params.withdrawable, _params.pubkey);
 
@@ -184,7 +169,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // create a new node if none provided
         if (params.etherFiNode == address(0)) {
             vm.prank(admin);
-            params.etherFiNode = stakingManager.instantiateEtherFiNode(/*createEigenPod=*/ true);
+            params.etherFiNode = stakingManager.instantiateEtherFiNode( /*createEigenPod=*/ true);
         }
         // default validator size if not provided
         if (params.validatorSize == 0) {
@@ -196,37 +181,17 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // initial deposit
         address eigenPod = address(IEtherFiNode(params.etherFiNode).getEigenPod());
-        bytes32 initialDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
-            pubkey,
-            signature,
-            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod),
-            1 ether
-        );
-        IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: initialDepositRoot,
-            ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
-        });
-        vm.deal(address(liquidityPool), 10000 ether);
+        bytes32 initialDepositRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod), 1 ether);
+        IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({publicKey: pubkey, signature: signature, depositDataRoot: initialDepositRoot, ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"});
+        vm.deal(address(liquidityPool), 10_000 ether);
         vm.prank(address(liquidityPool));
         stakingManager.createBeaconValidators{value: 1 ether}(toArray(initialDepositData), toArray_u256(params.bidId), params.etherFiNode);
 
         uint256 confirmAmount = params.validatorSize - 1 ether;
 
         // remaining deposit
-        bytes32 confirmDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
-            pubkey,
-            signature,
-            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod),
-            confirmAmount
-        );
-        IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: confirmDepositRoot,
-            ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
-        });
+        bytes32 confirmDepositRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod), confirmAmount);
+        IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({publicKey: pubkey, signature: signature, depositDataRoot: confirmDepositRoot, ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"});
         vm.prank(address(liquidityPool));
         stakingManager.confirmAndFundBeaconValidators{value: confirmAmount}(toArray(confirmDepositData), params.validatorSize);
 
@@ -234,7 +199,7 @@ contract PreludeTest is Test, ArrayTestHelper {
             // Poke some withdrawable funds into the restakedExecutionLayerGwei storage slot of the eigenpod.
             // This is much easier than trying to do the full proof based workflow which relies on beacon state.
             address eigenpod = etherFiNodesManager.getEigenPod(uint256(params.bidId));
-            vm.store(eigenpod, bytes32(uint256(52)) /*slot*/, bytes32(uint256(params.validatorSize / 1 gwei)));
+            vm.store(eigenpod, bytes32(uint256(52)), /*slot*/ bytes32(uint256(params.validatorSize / 1 gwei)));
 
             // grant shares via delegation manager so that withdrawals work
             vm.prank(delegationManager);
@@ -244,20 +209,11 @@ contract PreludeTest is Test, ArrayTestHelper {
             vm.deal(eigenpod, params.validatorSize);
         }
 
-        TestValidator memory out = TestValidator({
-            etherFiNode: params.etherFiNode,
-            eigenPod: eigenPod,
-            legacyId: params.bidId,
-            pubkeyHash: stakingManager.calculateValidatorPubkeyHash(pubkey),
-            nodeOperator: params.nodeOperator,
-            validatorSize: params.validatorSize,
-            pubkey: pubkey
-        });
+        TestValidator memory out = TestValidator({etherFiNode: params.etherFiNode, eigenPod: eigenPod, legacyId: params.bidId, pubkeyHash: stakingManager.calculateValidatorPubkeyHash(pubkey), nodeOperator: params.nodeOperator, validatorSize: params.validatorSize, pubkey: pubkey});
         return out;
     }
 
     function test_validatorHelper() public {
-
         // deploy 2 validators with default settings
         TestValidator memory val = helper_createValidator(defaultTestValidatorParams);
         console2.log("------------------------------------");
@@ -307,8 +263,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     // After the v3-prelude upgrade is complete and any leftover validators in this state
     // have been approved, we can delete this test as this state can't happen anymore
     function test_approveExisting1EthBid() public {
-
-        uint256 bidId = 114850;
+        uint256 bidId = 114_850;
         bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
         bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
 
@@ -320,21 +275,16 @@ contract PreludeTest is Test, ArrayTestHelper {
         liquidityPool.setValidatorSizeWei(33 ether);
 
         vm.prank(admin);
-        liquidityPool.batchApproveRegistration(
-            toArray_u256(bidId),
-            toArray_bytes(pubkey),
-            toArray_bytes(signature)
-        );
+        liquidityPool.batchApproveRegistration(toArray_u256(bidId), toArray_bytes(pubkey), toArray_bytes(signature));
     }
 
     function test_forwardingWhitelist() public {
-
         // create a node + pod
         vm.prank(admin);
-        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/);
+        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/ );
 
         // link it to an arbitrary id
-        uint256 legacyID = 10885;
+        uint256 legacyID = 10_885;
         bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
         vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(pubkey));
@@ -360,7 +310,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes4 decimalsSelector = hex"313ce567"; // ERC20 decimals()
         bytes4 checkpointSelector = hex"47d28372"; // eigenpod currentCheckpoint()
         bytes memory data = hex"313ce567";
-        bytes memory checkpointData = hex"47d28372" ;
+        bytes memory checkpointData = hex"47d28372";
         address target = 0xFe0c30065B384F05761f15d0CC899D4F9F9Cc0eB; // ethfi
 
         // user should fail due to calls not being whitelisted
@@ -389,16 +339,15 @@ contract PreludeTest is Test, ArrayTestHelper {
             etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), toArray_bytes(data), target);
         }
         vm.stopPrank();
-
     }
 
     function test_granularForwardingWhitelist() public {
         // Setup: create node + pod
         vm.prank(admin);
-        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/);
+        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/ );
 
         // Setup: link to legacy ID
-        uint256 legacyID = 10886;
+        uint256 legacyID = 10_886;
         bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
         vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(pubkey));
@@ -406,7 +355,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Setup: create two users with CALL_FORWARDER_ROLE
         address user1 = vm.addr(0x1001);
         address user2 = vm.addr(0x1002);
-        
+
         vm.startPrank(roleRegistry.owner());
         {
             roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), user1);
@@ -419,13 +368,13 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes4 transferSelector = 0xa9059cbb; // transfer
         address rewardsCoordinator = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
         address usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
-        
+
         // Test 1: User-specific whitelist (no more general fallback)
         vm.startPrank(admin);
         {
             // User1 specifically allowed for processClaim
             etherFiNodesManager.updateAllowedForwardedExternalCalls(user1, processClaimSelector, rewardsCoordinator, true);
-            
+
             // User2 NOT specifically allowed
         }
         vm.stopPrank();
@@ -493,7 +442,6 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_deployedEtherFiNodes() public {
-
         // creating a node should add it to the mapping
         vm.prank(admin);
         address restakedNode = stakingManager.instantiateEtherFiNode(true);
@@ -518,16 +466,8 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_StakingManagerUpgradePermissions() public {
-
         // deploy new staking manager implementation
-        StakingManager stakingManagerImpl = new StakingManager(
-            address(liquidityPool),
-            address(etherFiNodesManager),
-            address(stakingDepositContract),
-            address(auctionManager),
-            address(etherFiNodeBeacon),
-            address(roleRegistry)
-        );
+        StakingManager stakingManagerImpl = new StakingManager(address(liquidityPool), address(etherFiNodesManager), address(stakingDepositContract), address(auctionManager), address(etherFiNodeBeacon), address(roleRegistry));
 
         // only owner should be able to upgrade
         vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
@@ -540,7 +480,6 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_createBeaconValidators() public {
-
         address nodeOperator = vm.addr(0x123456);
         vm.prank(nodeOperator);
         nodeOperatorManager.registerNodeOperator("test_ipfs_hash", 1000);
@@ -548,30 +487,17 @@ contract PreludeTest is Test, ArrayTestHelper {
         // create a bid
         vm.deal(nodeOperator, 33 ether);
         vm.prank(nodeOperator);
-        uint256[] memory bidIds = auctionManager.createBid{value: 0.1 ether}(
-            1,
-            0.1 ether
-        );
+        uint256[] memory bidIds = auctionManager.createBid{value: 0.1 ether}(1, 0.1 ether);
 
         bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
         bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
 
         vm.prank(admin);
-        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/);
+        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/ );
 
         address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
-        bytes32 initialDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
-            pubkey,
-            signature,
-            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod),
-            1 ether
-        );
-        IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: initialDepositRoot,
-            ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
-        });
+        bytes32 initialDepositRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod), 1 ether);
+        IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({publicKey: pubkey, signature: signature, depositDataRoot: initialDepositRoot, ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"});
 
         vm.deal(address(liquidityPool), 100 ether);
         vm.prank(address(liquidityPool));
@@ -580,29 +506,18 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 validatorSize = 32 ether;
         uint256 confirmAmount = validatorSize - 1 ether;
 
-        bytes32 confirmDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
-            pubkey,
-            signature,
-            etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod),
-            confirmAmount
-        );
+        bytes32 confirmDepositRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod), confirmAmount);
 
-        IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: confirmDepositRoot,
-            ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
-        });
+        IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({publicKey: pubkey, signature: signature, depositDataRoot: confirmDepositRoot, ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"});
 
         vm.prank(address(liquidityPool));
         stakingManager.confirmAndFundBeaconValidators{value: confirmAmount}(toArray(confirmDepositData), validatorSize);
     }
 
     function test_withdrawRestakedValidatorETH() public {
-
         bytes memory validatorPubkey = hex"892c95f4e93ab042ee39397bff22cc43298ff4b2d6d6dec3f28b8b8ebcb5c65ab5e6fc29301c1faee473ec095f9e4306";
         bytes32 pubkeyHash = etherFiNodesManager.calculateValidatorPubkeyHash(validatorPubkey);
-        uint256 legacyID = 10885;
+        uint256 legacyID = 10_885;
 
         // force link this validator
         vm.prank(admin);
@@ -622,7 +537,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // poke some withdrawable funds into the restakedExecutionLayerGwei storage slot of the eigenpod
         address eigenpod = etherFiNodesManager.getEigenPod(uint256(pubkeyHash));
-        vm.store(eigenpod, bytes32(uint256(52)) /*slot*/, bytes32(uint256(50 ether / 1 gwei)));
+        vm.store(eigenpod, bytes32(uint256(52)), /*slot*/ bytes32(uint256(50 ether / 1 gwei)));
 
         uint256 startingBalance = address(liquidityPool).balance;
 
@@ -635,7 +550,6 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_EtherFiNodePermissions() public {
-
         // create a node
         vm.prank(admin);
         IEtherFiNode node = IEtherFiNode(stakingManager.instantiateEtherFiNode(true));
@@ -652,7 +566,7 @@ contract PreludeTest is Test, ArrayTestHelper {
             vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
             node.startCheckpoint();
 
-            BeaconChainProofs.BalanceContainerProof memory containerProof = BeaconChainProofs.BalanceContainerProof({balanceContainerRoot: bytes32(uint256(1)),proof: ""});
+            BeaconChainProofs.BalanceContainerProof memory containerProof = BeaconChainProofs.BalanceContainerProof({balanceContainerRoot: bytes32(uint256(1)), proof: ""});
             BeaconChainProofs.BalanceProof[] memory balanceProofs = new BeaconChainProofs.BalanceProof[](1);
             vm.expectRevert(IEtherFiNode.InvalidCaller.selector);
             node.verifyCheckpointProofs(containerProof, balanceProofs);
@@ -687,9 +601,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.stopPrank();
     }
 
-
     function test_EtherFiNodesManagerPermissions() public {
-
         uint256 nodeId = 1;
 
         // none of the EFNM roles should be allowed to upgrade
@@ -713,10 +625,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         etherFiNodesManager.startCheckpoint(nodeId);
 
         BeaconChainProofs.BalanceProof[] memory balanceProofs = new BeaconChainProofs.BalanceProof[](1);
-        BeaconChainProofs.BalanceContainerProof memory containerProof = BeaconChainProofs.BalanceContainerProof({
-            balanceContainerRoot: bytes32(uint256(1)),
-            proof: ""
-        });
+        BeaconChainProofs.BalanceContainerProof memory containerProof = BeaconChainProofs.BalanceContainerProof({balanceContainerRoot: bytes32(uint256(1)), proof: ""});
         vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
         etherFiNodesManager.verifyCheckpointProofs(nodeId, containerProof, balanceProofs);
 
@@ -753,18 +662,12 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_StakingManagerPermissions() public {
-
         bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
         bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
 
         // only liquidityPool can call createBeaconValidators
         bytes32 initialDepositDataRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, "", 1 ether);
-        IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: initialDepositDataRoot,
-            ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
-        });
+        IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({publicKey: pubkey, signature: signature, depositDataRoot: initialDepositDataRoot, ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"});
         uint256[] memory bidIds = new uint256[](1);
         vm.prank(admin);
         vm.expectRevert(IStakingManager.InvalidCaller.selector);
@@ -772,16 +675,10 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // only liquidityPool can call confirmAndFundBeaconValidators
         bytes32 confirmDepositDataRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, "", 31 ether);
-        IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: 0,
-            ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
-        });
+        IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({publicKey: pubkey, signature: signature, depositDataRoot: 0, ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"});
         vm.prank(address(admin));
         vm.expectRevert(IStakingManager.InvalidCaller.selector);
         stakingManager.confirmAndFundBeaconValidators(toArray(confirmDepositData), 32 ether);
-
 
         // only protocolUpgrader can upgrade etherFiNode
         EtherFiNode nodeImpl = new EtherFiNode(address(0), address(0), address(0), address(0), address(0));
@@ -794,7 +691,6 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_getEigenPod() public {
-
         // node that has existing eigenpod
         IEtherFiNode node = IEtherFiNode(0xbD0BFF833DE891aDcFF6Ee5502B23f516bECBf6F);
         address eigenPod = address(node.getEigenPod());
@@ -803,15 +699,14 @@ contract PreludeTest is Test, ArrayTestHelper {
         // new node that doesn't have existing eigenpod
         // should return zero address
         vm.prank(admin);
-        IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode(/*createEigenPod=*/false));
+        IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode( /*createEigenPod=*/ false));
         assertEq(address(newNode.getEigenPod()), address(0));
     }
 
     function test_createEigenPod() public {
-
         // create pod without eigenpod
         vm.prank(admin);
-        IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode(/*createEigenPod=*/false));
+        IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode( /*createEigenPod=*/ false));
         assertEq(address(newNode.getEigenPod()), address(0));
 
         // admin creates one and it should be connected
@@ -822,9 +717,8 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_setProofSubmitter() public {
-
         vm.prank(admin);
-        IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode(/*createEigenPod=*/true));
+        IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode( /*createEigenPod=*/ true));
         address newSubmitter = vm.addr(0xabc123);
 
         vm.prank(eigenlayerAdmin);
@@ -832,11 +726,9 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         IEigenPod pod = newNode.getEigenPod();
         assertEq(pod.proofSubmitter(), newSubmitter);
-
     }
 
     function test_pubkeyHashAndLegacyId() public {
-
         // create a new validator
         TestValidator memory val = helper_createValidator(defaultTestValidatorParams);
 
@@ -848,7 +740,6 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_startCheckpoint() public {
-
         // create a new validator with an eigenpod
         TestValidator memory val = helper_createValidator(defaultTestValidatorParams);
 
@@ -865,12 +756,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         //Need to store activeValidatorCount > 0 so that proofsSubmitted isn't 0
         //If it is 0 then currentCheckpointTimestamp is reset to 0 as no proofs are needed.
-        vm.store(
-            val.eigenPod,
-            bytes32(uint256(57)) /*slot*/,
-            bytes32(uint256(1))
-        );
-
+        vm.store(val.eigenPod, bytes32(uint256(57)), /*slot*/ bytes32(uint256(1)));
 
         // only POD_PROVER can start checkpoint
         vm.prank(eigenlayerAdmin);
@@ -884,12 +770,11 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_linkLegacyValidatorIds() public {
-
         // grab some legacyIds that existed before the upgrade
         uint256[] memory legacyIds = new uint256[](3);
-        legacyIds[0] = 10270;
-        legacyIds[1] = 10271;
-        legacyIds[2] = 26606;
+        legacyIds[0] = 10_270;
+        legacyIds[1] = 10_271;
+        legacyIds[2] = 26_606;
 
         // random pubkeys to attach
         bytes[] memory pubkeys = new bytes[](3);
@@ -910,12 +795,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         // should fail if attempt to link unknown node
-        uint256 badId = 9999999;
+        uint256 badId = 9_999_999;
         bytes memory badPubkey = vm.randomBytes(48);
         vm.expectRevert(IEtherFiNodesManager.UnknownNode.selector);
         vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(badId), toArray_bytes(badPubkey));
-
     }
 
     function test_withdrawMultipleLargeValidators() public {
@@ -959,7 +843,6 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_withdrawMultipleSimultaneousWithdrawals() public {
-
         TestValidatorParams memory params = defaultTestValidatorParams;
         params.validatorSize = 64 ether;
         TestValidator memory val = helper_createValidator(params);
@@ -992,11 +875,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.stopPrank();
     }
 
-    function _requestsFromPubkeys(bytes[] memory pubkeys, uint64[] memory amountsGwei)
-        internal
-        pure
-        returns (IEigenPod.WithdrawalRequest[] memory reqs)
-    {
+    function _requestsFromPubkeys(bytes[] memory pubkeys, uint64[] memory amountsGwei) internal pure returns (IEigenPod.WithdrawalRequest[] memory reqs) {
         require(pubkeys.length == amountsGwei.length, "test: length mismatch");
         reqs = new IEigenPod.WithdrawalRequest[](pubkeys.length);
         for (uint256 i = 0; i < pubkeys.length; ++i) {
@@ -1014,7 +893,6 @@ contract PreludeTest is Test, ArrayTestHelper {
 
     // ---------- tests for EL exits ----------
     function test_requestExecutionLayerTriggeredWithdrawal_samePod_fullExit_success() public {
-
         bytes[] memory pubkeys = new bytes[](3);
         uint256[] memory legacyIds = new uint256[](3);
         uint64[] memory amounts = new uint64[](3);
@@ -1022,31 +900,30 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[1] = PK_16172;
         pubkeys[2] = PK_16173;
 
-        legacyIds[0] = 51715;
-        legacyIds[1] = 51716;
-        legacyIds[2] = 51717;
+        legacyIds[0] = 51_715;
+        legacyIds[1] = 51_716;
+        legacyIds[2] = 51_717;
 
         vm.startPrank(admin);
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
-        _setExitRateLimit(172800, 2);
+        _setExitRateLimit(172_800, 2);
 
-        ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
-        ( , IEigenPod pod1) = _resolvePod(pubkeys[1]);
-        ( , IEigenPod pod2) = _resolvePod(pubkeys[2]);
+        (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
+        (, IEigenPod pod1) = _resolvePod(pubkeys[1]);
+        (, IEigenPod pod2) = _resolvePod(pubkeys[2]);
         assertEq(address(pod0), address(pod1));
         assertEq(address(pod0), address(pod2));
 
         // Build requests: full exits (amountGwei == 0)
-        amounts[0] = 0; amounts[1] = 0; amounts[2] = 0;
+        amounts[0] = 0;
+        amounts[1] = 0;
+        amounts[2] = 0;
         IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
 
         // Grant role to the triggering EOA
         vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(
-            etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(),
-            elExiter
-        );
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elExiter);
         vm.stopPrank();
 
         // Fetch the current per-request fee from the pod; value = fee * n + small headroom
@@ -1059,11 +936,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         for (uint256 i = 0; i < n; ++i) {
             bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[i]);
             vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-            emit IEtherFiNodesManager.ValidatorWithdrawalRequestSent(
-                address(pod0),
-                pkHash,
-                pubkeys[i]
-            );
+            emit IEtherFiNodesManager.ValidatorWithdrawalRequestSent(address(pod0), pkHash, pubkeys[i]);
         }
 
         vm.prank(elExiter);
@@ -1071,7 +944,6 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_requestExecutionLayerTriggeredWithdrawal_samePod_partialExit_success() public {
-
         bytes[] memory pubkeys = new bytes[](3);
         uint256[] memory legacyIds = new uint256[](3);
         uint64[] memory amounts = new uint64[](3);
@@ -1079,15 +951,15 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[1] = PK_16172;
         pubkeys[2] = PK_16173;
 
-        legacyIds[0] = 51715;
-        legacyIds[1] = 51716;
-        legacyIds[2] = 51717;
+        legacyIds[0] = 51_715;
+        legacyIds[1] = 51_716;
+        legacyIds[2] = 51_717;
 
         // Link and init
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
-        _setExitRateLimit(172800, 2);
+        _setExitRateLimit(172_800, 2);
 
         (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
         (, IEigenPod pod1) = _resolvePod(pubkeys[1]);
@@ -1097,15 +969,12 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Build partial-exit requests (non-zero amounts)
         amounts[0] = 0;
-        amounts[1] = 2_000 gwei;
-        amounts[2] = 3_000 gwei;
+        amounts[1] = 2000 gwei;
+        amounts[2] = 3000 gwei;
         IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
 
         vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(
-            etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(),
-            elExiter
-        );
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elExiter);
         vm.stopPrank();
 
         // exact required ETH for fees
@@ -1118,9 +987,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         for (uint256 i = 0; i < reqs.length; ++i) {
             bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[i]);
             vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-            emit IEtherFiNodesManager.ValidatorWithdrawalRequestSent(
-                address(pod0), pkHash, pubkeys[i]
-            );
+            emit IEtherFiNodesManager.ValidatorWithdrawalRequestSent(address(pod0), pkHash, pubkeys[i]);
         }
 
         vm.prank(elExiter);
@@ -1134,7 +1001,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Unauthorized caller -> revert
         vm.prank(user);
         vm.expectRevert();
-        rateLimiter.setCapacity(limitId, 172800);
+        rateLimiter.setCapacity(limitId, 172_800);
 
         vm.prank(user);
         vm.expectRevert();
@@ -1142,7 +1009,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Authorized caller (admin in fork has the config role) -> success
         vm.startPrank(admin);
-        rateLimiter.setCapacity(limitId, 172800);
+        rateLimiter.setCapacity(limitId, 172_800);
         rateLimiter.setRefillRate(limitId, 2);
         vm.stopPrank();
     }
@@ -1155,9 +1022,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[1] = PK_16172;
         pubkeys[2] = PK_16173;
 
-        legacyIds[0] = 51715;
-        legacyIds[1] = 51716;
-        legacyIds[2] = 51717;
+        legacyIds[0] = 51_715;
+        legacyIds[1] = 51_716;
+        legacyIds[2] = 51_717;
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
@@ -1169,7 +1036,6 @@ contract PreludeTest is Test, ArrayTestHelper {
     }
 
     function test_requestExecutionLayerTriggeredWithdrawal_requires_role_reverts() public {
-
         bytes[] memory pubkeys = new bytes[](3);
         uint256[] memory legacyIds = new uint256[](3);
         uint64[] memory amounts = new uint64[](3);
@@ -1177,14 +1043,14 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[1] = PK_16172;
         pubkeys[2] = PK_16173;
 
-        legacyIds[0] = 51715;
-        legacyIds[1] = 51716;
-        legacyIds[2] = 51717;
+        legacyIds[0] = 51_715;
+        legacyIds[1] = 51_716;
+        legacyIds[2] = 51_717;
 
         vm.startPrank(admin);
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
-        _setExitRateLimit(172800, 2);
+        _setExitRateLimit(172_800, 2);
 
         // All same pod (sanity)
         (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
@@ -1194,7 +1060,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         assertEq(address(pod0), address(pod2));
 
         // full exits
-        amounts[0] = 0; amounts[1] = 0; amounts[2] = 0;
+        amounts[0] = 0;
+        amounts[1] = 0;
+        amounts[2] = 0;
         IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
 
         // No EL_TRIGGER_EXIT role granted to msg.sender -> revert
@@ -1260,8 +1128,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.stopPrank();
 
         // Create withdrawal params with shares (shares = wei, so 15 ether = 15 ETH)
-        IDelegationManager.QueuedWithdrawalParams[] memory params = 
-            new IDelegationManager.QueuedWithdrawalParams[](1);
+        IDelegationManager.QueuedWithdrawalParams[] memory params = new IDelegationManager.QueuedWithdrawalParams[](1);
 
         IStrategy[] memory strategies = new IStrategy[](1);
         strategies[0] = IStrategy(address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0));
@@ -1289,14 +1156,14 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Initialize exit rate limiter with large capacity
         vm.prank(admin);
-        rateLimiter.setCapacity(limitId, 5000_000_000_000); // 5000 ETH
+        rateLimiter.setCapacity(limitId, 5_000_000_000_000); // 5000 ETH
 
         // Setup validator for partial exit
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory legacyIds = new uint256[](1);
         uint64[] memory amounts = new uint64[](1);
         pubkeys[0] = PK_16171;
-        legacyIds[0] = 51715;
+        legacyIds[0] = 51_715;
         amounts[0] = 1_000_000_000; // 1 ETH partial exit
 
         vm.prank(admin);
@@ -1304,10 +1171,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Grant role to the triggering EOA
         vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(
-            etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(),
-            elExiter
-        );
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elExiter);
         vm.stopPrank();
 
         IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
@@ -1349,7 +1213,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         TestValidatorParams memory params = defaultTestValidatorParams;
         params.validatorSize = 100 ether; // Large validator to support multiple withdrawals
         TestValidator memory val = helper_createValidator(params);
-        
+
         bytes32 limitId = etherFiNodesManager.UNRESTAKING_LIMIT_ID();
         // Set capacity to 50 ETH and reset remaining
         vm.startPrank(admin);
@@ -1360,22 +1224,22 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Test consuming within capacity - should succeed
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 30 ether);
-        
+
         // Check remaining capacity is reduced
-        (, uint64 remaining, , ) = rateLimiter.getLimit(limitId);
+        (, uint64 remaining,,) = rateLimiter.getLimit(limitId);
         assertEq(remaining, 20_000_000_000); // 50 - 30 = 20 ETH in gwei
-        
+
         // Test consuming more than remaining capacity - should fail
         vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 25 ether);
-        
+
         // Test consuming exactly remaining capacity - should succeed
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val.pubkeyHash), 20 ether);
-        
+
         // Verify capacity is now exhausted
-        (, remaining, , ) = rateLimiter.getLimit(limitId);
+        (, remaining,,) = rateLimiter.getLimit(limitId);
         assertEq(remaining, 0);
     }
 
@@ -1393,7 +1257,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         rateLimiter.setRefillRate(limitId, 3_000_000_000); // 3 ETH/sec
 
         // Verify the values were set correctly
-        (uint64 capacity, , uint64 refillRate, ) = rateLimiter.getLimit(limitId);
+        (uint64 capacity,, uint64 refillRate,) = rateLimiter.getLimit(limitId);
         assertEq(capacity, 100_000_000_000);
         assertEq(refillRate, 3_000_000_000);
 
@@ -1407,7 +1271,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         rateLimiter.setRefillRate(limitId, 5_000_000_000);
 
         // Verify values remain unchanged after failed attempts
-        (capacity, , refillRate, ) = rateLimiter.getLimit(limitId);
+        (capacity,, refillRate,) = rateLimiter.getLimit(limitId);
         assertEq(capacity, 100_000_000_000);
         assertEq(refillRate, 3_000_000_000);
     }
@@ -1421,7 +1285,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         TestValidator memory val2 = helper_createValidator(params);
         params.validatorSize = 100 ether;
         TestValidator memory val3 = helper_createValidator(params);
-        
+
         bytes32 limitId = etherFiNodesManager.UNRESTAKING_LIMIT_ID();
         // Set capacity to 100 ETH and reset remaining
         vm.startPrank(admin);
@@ -1432,37 +1296,37 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Test multiple consumption attempts within capacity - all should succeed
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 25 ether);
-        
+
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val2.pubkeyHash), 30 ether);
-        
+
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val3.pubkeyHash), 20 ether);
-        
+
         // Check remaining capacity after multiple consumptions (100 - 25 - 30 - 20 = 25 ETH)
-        (, uint64 remaining, , ) = rateLimiter.getLimit(limitId);
+        (, uint64 remaining,,) = rateLimiter.getLimit(limitId);
         assertEq(remaining, 25_000_000_000);
-        
+
         // Test that unauthorized access is blocked by the access control
         vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
         vm.prank(user);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 10 ether);
-        
+
         // Verify remaining capacity is unchanged after failed attempt
-        (, remaining, , ) = rateLimiter.getLimit(limitId);
+        (, remaining,,) = rateLimiter.getLimit(limitId);
         assertEq(remaining, 25_000_000_000);
-        
+
         // Test final consumption that would exceed remaining capacity should fail
         vm.expectRevert(abi.encodeWithSignature("LimitExceeded()"));
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 30 ether);
-        
+
         // Test final consumption within remaining capacity should succeed
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueETHWithdrawal(uint256(val1.pubkeyHash), 25 ether);
-        
+
         // Verify capacity is now exhausted
-        (, remaining, , ) = rateLimiter.getLimit(limitId);
+        (, remaining,,) = rateLimiter.getLimit(limitId);
         assertEq(remaining, 0);
     }
 
@@ -1472,11 +1336,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes[] memory pubkeys = new bytes[](3);
         uint256[] memory legacyIds = new uint256[](3);
         pubkeys[0] = PK_16171;
-        pubkeys[1] = PK_16172; 
+        pubkeys[1] = PK_16172;
         pubkeys[2] = PK_16173;
-        legacyIds[0] = 51715;
-        legacyIds[1] = 51716;
-        legacyIds[2] = 51717;
+        legacyIds[0] = 51_715;
+        legacyIds[1] = 51_716;
+        legacyIds[2] = 51_717;
 
         vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
@@ -1491,35 +1355,17 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Create consolidation requests
         IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](2);
-        reqs[0] = IEigenPodTypes.ConsolidationRequest({
-            srcPubkey: pubkeys[0],
-            targetPubkey: pubkeys[1]
-        });
-        reqs[1] = IEigenPodTypes.ConsolidationRequest({
-            srcPubkey: pubkeys[1], 
-            targetPubkey: pubkeys[2]
-        });
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({srcPubkey: pubkeys[0], targetPubkey: pubkeys[1]});
+        reqs[1] = IEigenPodTypes.ConsolidationRequest({srcPubkey: pubkeys[1], targetPubkey: pubkeys[2]});
 
         uint256 feePer = pod0.getConsolidationRequestFee();
         uint256 valueToSend = feePer * reqs.length;
 
         // Expect consolidation events
         vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-        emit IEtherFiNodesManager.ValidatorConsolidationRequested(
-            address(pod0), 
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]), 
-            pubkeys[0], 
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]), 
-            pubkeys[1]
-        );
+        emit IEtherFiNodesManager.ValidatorConsolidationRequested(address(pod0), etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]), pubkeys[0], etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]), pubkeys[1]);
         vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-        emit IEtherFiNodesManager.ValidatorConsolidationRequested(
-            address(pod0), 
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]), 
-            pubkeys[1], 
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[2]), 
-            pubkeys[2]
-        );
+        emit IEtherFiNodesManager.ValidatorConsolidationRequested(address(pod0), etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]), pubkeys[1], etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[2]), pubkeys[2]);
         vm.deal(admin, 1 ether);
         vm.prank(admin);
         etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
@@ -1530,7 +1376,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory legacyIds = new uint256[](1);
         pubkeys[0] = PK_16171;
-        legacyIds[0] = 51715;
+        legacyIds[0] = 51_715;
 
         vm.prank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
@@ -1548,8 +1394,8 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256[] memory legacyIds = new uint256[](2);
         pubkeys[0] = PK_16171;
         pubkeys[1] = PK_16172;
-        legacyIds[0] = 51715;
-        legacyIds[1] = 51716;
+        legacyIds[0] = 51_715;
+        legacyIds[1] = 51_716;
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
@@ -1565,11 +1411,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](2);
         reqs[0] = IEigenPodTypes.ConsolidationRequest({
             srcPubkey: pubkeys[0],
-            targetPubkey: pubkeys[0]  // Same pubkey = switch to compounding
+            targetPubkey: pubkeys[0] // Same pubkey = switch to compounding
         });
         reqs[1] = IEigenPodTypes.ConsolidationRequest({
             srcPubkey: pubkeys[1],
-            targetPubkey: pubkeys[1]  // Same pubkey = switch to compounding
+            targetPubkey: pubkeys[1] // Same pubkey = switch to compounding
         });
 
         uint256 feePer = pod0.getConsolidationRequestFee();
@@ -1577,17 +1423,9 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Expect switch to compounding events
         vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(
-            address(pod0),
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]),
-            pubkeys[0]
-        );
+        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(address(pod0), etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]), pubkeys[0]);
         vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(
-            address(pod0),
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]),
-            pubkeys[1]
-        );
+        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(address(pod0), etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]), pubkeys[1]);
 
         vm.deal(admin, 1 ether);
         vm.prank(admin);
@@ -1600,9 +1438,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[0] = PK_16171;
         pubkeys[1] = PK_16172;
         pubkeys[2] = PK_16173;
-        legacyIds[0] = 51715;
-        legacyIds[1] = 51716;
-        legacyIds[2] = 51717;
+        legacyIds[0] = 51_715;
+        legacyIds[1] = 51_716;
+        legacyIds[2] = 51_717;
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
@@ -1614,11 +1452,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](2);
         reqs[0] = IEigenPodTypes.ConsolidationRequest({
             srcPubkey: pubkeys[0],
-            targetPubkey: pubkeys[1]  // Consolidation
+            targetPubkey: pubkeys[1] // Consolidation
         });
         reqs[1] = IEigenPodTypes.ConsolidationRequest({
             srcPubkey: pubkeys[2],
-            targetPubkey: pubkeys[2]  // Switch to compounding
+            targetPubkey: pubkeys[2] // Switch to compounding
         });
 
         uint256 feePer = pod0.getConsolidationRequestFee();
@@ -1626,19 +1464,9 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Expect mixed events
         vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-        emit IEtherFiNodesManager.ValidatorConsolidationRequested(
-            address(pod0),
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]),
-            pubkeys[0],
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]),
-            pubkeys[1]
-        );
+        emit IEtherFiNodesManager.ValidatorConsolidationRequested(address(pod0), etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]), pubkeys[0], etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[1]), pubkeys[1]);
         vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(
-            address(pod0),
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[2]),
-            pubkeys[2]
-        );
+        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(address(pod0), etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[2]), pubkeys[2]);
 
         vm.deal(admin, 1 ether);
         vm.prank(admin);
@@ -1649,7 +1477,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory legacyIds = new uint256[](1);
         pubkeys[0] = PK_16171;
-        legacyIds[0] = 51715;
+        legacyIds[0] = 51_715;
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
@@ -1659,10 +1487,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Create consolidation request
         IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](1);
-        reqs[0] = IEigenPodTypes.ConsolidationRequest({
-            srcPubkey: pubkeys[0],
-            targetPubkey: pubkeys[0]
-        });
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({srcPubkey: pubkeys[0], targetPubkey: pubkeys[0]});
 
         uint256 feePer = pod0.getConsolidationRequestFee();
         uint256 valueToSend = feePer * reqs.length;
@@ -1685,8 +1510,8 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256[] memory legacyIds = new uint256[](2);
         pubkeys[0] = PK_16171;
         pubkeys[1] = PK_16172;
-        legacyIds[0] = 51715;
-        legacyIds[1] = 51716;
+        legacyIds[0] = 51_715;
+        legacyIds[1] = 51_716;
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
@@ -1696,14 +1521,8 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Create consolidation requests
         IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](2);
-        reqs[0] = IEigenPodTypes.ConsolidationRequest({
-            srcPubkey: pubkeys[0],
-            targetPubkey: pubkeys[1]
-        });
-        reqs[1] = IEigenPodTypes.ConsolidationRequest({
-            srcPubkey: pubkeys[1],
-            targetPubkey: pubkeys[0]
-        });
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({srcPubkey: pubkeys[0], targetPubkey: pubkeys[1]});
+        reqs[1] = IEigenPodTypes.ConsolidationRequest({srcPubkey: pubkeys[1], targetPubkey: pubkeys[0]});
 
         uint256 feePer = pod0.getConsolidationRequestFee();
         uint256 correctFee = feePer * reqs.length;
@@ -1738,9 +1557,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[0] = PK_16171;
         pubkeys[1] = PK_16172;
         pubkeys[2] = PK_16173;
-        legacyIds[0] = 51715;
-        legacyIds[1] = 51716;
-        legacyIds[2] = 51717;
+        legacyIds[0] = 51_715;
+        legacyIds[1] = 51_716;
+        legacyIds[2] = 51_717;
 
         vm.startPrank(admin);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
@@ -1754,10 +1573,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         for (uint256 batchSize = 1; batchSize <= 3; batchSize++) {
             IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](batchSize);
             for (uint256 i = 0; i < batchSize; i++) {
-                reqs[i] = IEigenPodTypes.ConsolidationRequest({
-                    srcPubkey: pubkeys[i],
-                    targetPubkey: pubkeys[(i + 1) % pubkeys.length]
-                });
+                reqs[i] = IEigenPodTypes.ConsolidationRequest({srcPubkey: pubkeys[i], targetPubkey: pubkeys[(i + 1) % pubkeys.length]});
             }
 
             uint256 expectedFee = feePer * batchSize;
@@ -1767,6 +1583,4 @@ contract PreludeTest is Test, ArrayTestHelper {
             etherFiNodesManager.requestConsolidation{value: expectedFee}(reqs);
         }
     }
-
 }
-

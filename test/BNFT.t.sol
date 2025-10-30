@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 
 contract BNFTTest is TestSetup {
-   function setUp() public {
+    function setUp() public {
         setUpTests();
     }
 

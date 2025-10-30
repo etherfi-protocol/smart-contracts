@@ -5,10 +5,9 @@ import "../../src/eigenlayer-interfaces/IStrategy.sol";
 
 // See MockStrategy contract below this contract for testing overrides
 contract MockStrategyBase is IStrategy {
-
     function version() external view returns (string memory) {}
 
-     /**
+    /**
      * @notice Used to deposit tokens into this Strategy
      * @param token is the ERC20 token being deposited
      * @param amount is the amount of token being deposited
@@ -28,7 +27,6 @@ contract MockStrategyBase is IStrategy {
      */
     function withdraw(address recipient, IERC20 token, uint256 amountShares) external {}
 
-
     /**
      * @notice Used to convert a number of shares to the equivalent amount of underlying tokens for this strategy.
      * @notice In contrast to `sharesToUnderlyingView`, this function **may** make state modifications
@@ -36,9 +34,7 @@ contract MockStrategyBase is IStrategy {
      * @return The amount of underlying tokens corresponding to the input `amountShares`
      * @dev Implementation for these functions in particular may vary significantly for different strategies
      */
-    function sharesToUnderlying(
-        uint256 amountShares
-    ) external virtual returns (uint256) {}
+    function sharesToUnderlying(uint256 amountShares) external virtual returns (uint256) {}
 
     /**
      * @notice Used to convert an amount of underlying tokens to the equivalent amount of shares in this strategy.
@@ -47,25 +43,19 @@ contract MockStrategyBase is IStrategy {
      * @return The amount of underlying tokens corresponding to the input `amountShares`
      * @dev Implementation for these functions in particular may vary significantly for different strategies
      */
-    function underlyingToShares(
-        uint256 amountUnderlying
-    ) external virtual returns (uint256) {}
+    function underlyingToShares(uint256 amountUnderlying) external virtual returns (uint256) {}
 
     /**
      * @notice convenience function for fetching the current underlying value of all of the `user`'s shares in
      * this strategy. In contrast to `userUnderlyingView`, this function **may** make state modifications
      */
-    function userUnderlying(
-        address user
-    ) external returns (uint256) {}
+    function userUnderlying(address user) external returns (uint256) {}
 
     /**
      * @notice convenience function for fetching the current total shares of `user` in this strategy, by
      * querying the `strategyManager` contract
      */
-    function shares(
-        address user
-    ) external view returns (uint256) {}
+    function shares(address user) external view returns (uint256) {}
 
     /**
      * @notice Used to convert a number of shares to the equivalent amount of underlying tokens for this strategy.
@@ -74,9 +64,7 @@ contract MockStrategyBase is IStrategy {
      * @return The amount of shares corresponding to the input `amountUnderlying`
      * @dev Implementation for these functions in particular may vary significantly for different strategies
      */
-    function sharesToUnderlyingView(
-        uint256 amountShares
-    ) external view returns (uint256) {}
+    function sharesToUnderlyingView(uint256 amountShares) external view returns (uint256) {}
 
     /**
      * @notice Used to convert an amount of underlying tokens to the equivalent amount of shares in this strategy.
@@ -85,17 +73,13 @@ contract MockStrategyBase is IStrategy {
      * @return The amount of shares corresponding to the input `amountUnderlying`
      * @dev Implementation for these functions in particular may vary significantly for different strategies
      */
-    function underlyingToSharesView(
-        uint256 amountUnderlying
-    ) external view returns (uint256) {}
+    function underlyingToSharesView(uint256 amountUnderlying) external view returns (uint256) {}
 
     /**
      * @notice convenience function for fetching the current underlying value of all of the `user`'s shares in
      * this strategy. In contrast to `userUnderlying`, this function guarantees no state modifications
      */
-    function userUnderlyingView(
-        address user
-    ) external view returns (uint256) {}
+    function userUnderlyingView(address user) external view returns (uint256) {}
 
     /// @notice The underlying token for shares in this Strategy
     function underlyingToken() external view returns (IERC20) {}
@@ -108,18 +92,20 @@ contract MockStrategyBase is IStrategy {
 }
 
 contract MockStrategy is MockStrategyBase {
-
     // OVERRIDES
 
     //************************************************************
     // sharesToUnderlying()
     //************************************************************
     uint256 internal mock_sharesToUnderlying;
-    function mockSet_sharesToUnderlying(uint256 underlying) public { mock_sharesToUnderlying = underlying; }
-    function sharesToUnderlying(uint256) external override view returns (uint256) {
-        return mock_sharesToUnderlying;
+
+    function mockSet_sharesToUnderlying(uint256 underlying) public {
+        mock_sharesToUnderlying = underlying;
     }
 
+    function sharesToUnderlying(uint256) external view override returns (uint256) {
+        return mock_sharesToUnderlying;
+    }
 
     //************************************************************
     // underlyingToShares()

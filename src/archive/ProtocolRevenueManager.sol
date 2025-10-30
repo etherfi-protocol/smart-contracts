@@ -1,28 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 
-import "../interfaces/IProtocolRevenueManager.sol";
-import "../interfaces/IEtherFiNodesManager.sol";
 import "../interfaces/IAuctionManager.sol";
+import "../interfaces/IEtherFiNodesManager.sol";
+import "../interfaces/IProtocolRevenueManager.sol";
 
-contract ProtocolRevenueManager is
-    Initializable,
-    IProtocolRevenueManager,
-    PausableUpgradeable,
-    OwnableUpgradeable,
-    ReentrancyGuardUpgradeable,
-    UUPSUpgradeable
-{
+contract ProtocolRevenueManager is Initializable, IProtocolRevenueManager, PausableUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
-    
+
     IEtherFiNodesManager public etherFiNodesManager;
     IAuctionManager public auctionManager;
 
@@ -35,7 +28,7 @@ contract ProtocolRevenueManager is
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
-    
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -51,7 +44,6 @@ contract ProtocolRevenueManager is
         DEPRECATED_vestedAuctionFeeSplitForStakers = 50; // 50% of the auction fee is vested
         DEPRECATED_auctionFeeVestingPeriodForStakersInDays = 6 * 7 * 4; // 6 months
     }
-
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  SETTERS   ---------------------------------------
@@ -75,8 +67,13 @@ contract ProtocolRevenueManager is
         auctionManager = IAuctionManager(_auctionManager);
     }
 
-    function pauseContract() external onlyAdmin { _pause(); }
-    function unPauseContract() external onlyAdmin { _unpause(); }
+    function pauseContract() external onlyAdmin {
+        _pause();
+    }
+
+    function unPauseContract() external onlyAdmin {
+        _unpause();
+    }
 
     /// @notice Updates the address of the admin
     /// @param _newAdmin the new address to set as admin

@@ -15,11 +15,7 @@ interface IShareManager {
     /// @notice Used by the DelegationManager to remove a Staker's shares from a particular strategy when entering the withdrawal queue
     /// @dev strategy must be beaconChainETH when talking to the EigenPodManager
     /// @return updatedShares the staker's deposit shares after decrement
-    function removeDepositShares(
-        address staker,
-        IStrategy strategy,
-        uint256 depositSharesToRemove
-    ) external returns (uint256);
+    function removeDepositShares(address staker, IStrategy strategy, uint256 depositSharesToRemove) external returns (uint256);
 
     /// @notice Used by the DelegationManager to award a Staker some shares that have passed through the withdrawal queue
     /// @dev strategy must be beaconChainETH when talking to the EigenPodManager

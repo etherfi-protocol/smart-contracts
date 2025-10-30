@@ -1,20 +1,19 @@
 /// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
+import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./interfaces/ILiquifier.sol";
 import "./interfaces/ILiquidityPool.sol";
+import "./interfaces/ILiquifier.sol";
 
-import "./eigenlayer-interfaces/IStrategyManager.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
-
+import "./eigenlayer-interfaces/IStrategyManager.sol";
 
 /// @title Router token swapping functionality
 /// @notice Functions for swapping tokens via PancakeSwap V3
@@ -79,7 +78,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     IPancackeV3SwapRouter pancakeRouter;
 
     mapping(string => bool) flags;
-    
+
     // To support L2 native minting of weETH
     IERC20[] public dummies;
     address public l1SyncPool;
@@ -112,9 +111,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     /// @notice initialize to set variables on deployment
-    function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
-                        address _stEth, address _cbEth, address _wbEth, address _cbEth_Eth_Pool, address _wbEth_Eth_Pool, address _stEth_Eth_Pool,
-                        uint32 _timeBoundCapRefreshInterval) initializer external {
+    function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, address _stEth, address _cbEth, address _wbEth, address _cbEth_Eth_Pool, address _wbEth_Eth_Pool, address _stEth_Eth_Pool, uint32 _timeBoundCapRefreshInterval) external initializer {
         __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -131,7 +128,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         cbEth_Eth_Pool = ICurvePool(_cbEth_Eth_Pool);
         wbEth_Eth_Pool = ICurvePool(_wbEth_Eth_Pool);
         stEth_Eth_Pool = ICurvePool(_stEth_Eth_Pool);
-        
+
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
         DEPRECATED_eigenLayerWithdrawalClaimGasCost = 150_000;
     }
@@ -148,18 +145,18 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @param _referral The referral address
     /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
     /// If the token is l2Eth, only the l2SyncPool can call this function
-    function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {        
+    function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {
         require(isTokenWhitelisted(_token) && (!tokenInfos[_token].isL2Eth || msg.sender == l1SyncPool), "NOT_ALLOWED");
 
         if (tokenInfos[_token].isL2Eth) {
-            IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);     
+            IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
         } else {
             IERC20(_token).safeTransferFrom(msg.sender, address(etherfiRestaker), _amount);
         }
 
         // The L1SyncPool's `_anticipatedDeposit` should be the only place to mint the `token` and always send its entirety to the Liquifier contract
-        if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
-    
+        if (tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
+
         uint256 dx = quoteByDiscountedValue(_token, _amount);
         require(!isDepositCapReached(_token, dx), "CAPPED");
 
@@ -179,7 +176,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
     function withdrawEther() external onlyAdmin {
         uint256 amountToLiquidityPool = address(this).balance;
-        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
+        (bool sent,) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20_000}("");
         if (!sent) revert EthTransferFailed();
     }
 
@@ -195,7 +192,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
     }
-    
+
     function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyOwner {
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
@@ -255,14 +252,16 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     /* VIEW FUNCTIONS */
 
-    // Given the `_amount` of `_token` token, returns the equivalent amount of ETH 
+    // Given the `_amount` of `_token` token, returns the equivalent amount of ETH
     function quoteByFairValue(address _token, uint256 _amount) public view returns (uint256) {
         if (!isTokenWhitelisted(_token)) revert NotSupportedToken();
 
-        if (_token == address(lido)) return _amount * 1; /// 1:1 from stETH to eETH
+        if (_token == address(lido)) return _amount * 1;
+        /// 1:1 from stETH to eETH
         else if (_token == address(cbEth)) return _amount * cbEth.exchangeRate() / 1e18;
         else if (_token == address(wbEth)) return _amount * wbEth.exchangeRate() / 1e18;
-        else if (tokenInfos[_token].isL2Eth) return _amount * 1; /// 1:1 from l2Eth to eETH
+        else if (tokenInfos[_token].isL2Eth) return _amount * 1;
+        /// 1:1 from l2Eth to eETH
 
         revert NotSupportedToken();
     }
@@ -279,7 +278,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
             if (quoteStEthWithCurve) {
                 return _min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
             } else {
-                return _amount; /// 1:1 from stETH to eETH
+                return _amount;
+                /// 1:1 from stETH to eETH
             }
         } else if (_token == address(cbEth)) {
             return _min(_amount * cbEth.exchangeRate() / 1e18, ICurvePoolQuoter2(address(cbEth_Eth_Pool)).get_dy(1, 0, _amount));
@@ -297,7 +297,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function quoteByDiscountedValue(address _token, uint256 _amount) public view returns (uint256) {
         uint256 marketValue = quoteByMarketValue(_token, _amount);
 
-        return (10000 - tokenInfos[_token].discountInBasisPoints) * marketValue / 10000;
+        return (10_000 - tokenInfos[_token].discountInBasisPoints) * marketValue / 10_000;
     }
 
     function isTokenWhitelisted(address _token) public view returns (bool) {
@@ -324,10 +324,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (!isTokenWhitelisted(_token)) return (0, 0, 0);
 
         if (info.strategy != IStrategy(address(0))) {
-            restaked = quoteByFairValue(_token, info.strategy.sharesToUnderlyingView(info.strategyShare)); /// restaked & pending for withdrawals
+            restaked = quoteByFairValue(_token, info.strategy.sharesToUnderlyingView(info.strategyShare));
+            /// restaked & pending for withdrawals
         }
-        holding = quoteByFairValue(_token, IERC20(_token).balanceOf(address(this))); /// eth value for erc20 holdings
-        pendingForWithdrawals = info.ethAmountPendingForWithdrawals; /// eth pending for withdrawals
+        holding = quoteByFairValue(_token, IERC20(_token).balanceOf(address(this)));
+        /// eth value for erc20 holdings
+        pendingForWithdrawals = info.ethAmountPendingForWithdrawals;
+        /// eth pending for withdrawals
     }
 
     function getTotalPooledEther(address _token) public view returns (uint256) {

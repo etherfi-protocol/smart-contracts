@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "./ISignatureUtilsMixin.sol";
 import "./IPauserRegistry.sol";
+import "./ISignatureUtilsMixin.sol";
 import "./IStrategy.sol";
 
 interface IAVSDirectoryErrors {
@@ -44,9 +44,7 @@ interface IAVSDirectoryEvents is IAVSDirectoryTypes {
      *  @notice Emitted when an operator's registration status with an AVS id updated
      *  @notice Only used by legacy M2 AVSs that have not integrated with operatorSets.
      */
-    event OperatorAVSRegistrationStatusUpdated(
-        address indexed operator, address indexed avs, OperatorAVSRegistrationStatus status
-    );
+    event OperatorAVSRegistrationStatusUpdated(address indexed operator, address indexed avs, OperatorAVSRegistrationStatus status);
 
     /// @notice Emitted when an AVS updates their metadata URI (Uniform Resource Identifier).
     /// @dev The URI is never stored; it is simply emitted through an event for off-chain indexing.
@@ -72,18 +70,14 @@ interface IAVSDirectory is IAVSDirectoryEvents, IAVSDirectoryErrors, ISignatureU
      *
      *  @dev Note that the `metadataURI` is *never stored* and is only emitted in the `AVSMetadataURIUpdated` event.
      */
-    function updateAVSMetadataURI(
-        string calldata metadataURI
-    ) external;
+    function updateAVSMetadataURI(string calldata metadataURI) external;
 
     /**
      * @notice Called by an operator to cancel a salt that has been used to register with an AVS.
      *
      * @param salt A unique and single use value associated with the approver signature.
      */
-    function cancelSalt(
-        bytes32 salt
-    ) external;
+    function cancelSalt(bytes32 salt) external;
 
     /**
      *  @notice Legacy function called by the AVS's service manager contract
@@ -96,10 +90,7 @@ interface IAVSDirectory is IAVSDirectoryEvents, IAVSDirectoryErrors, ISignatureU
      *  @dev msg.sender must be the AVS.
      *  @dev Only used by legacy M2 AVSs that have not integrated with operator sets.
      */
-    function registerOperatorToAVS(
-        address operator,
-        ISignatureUtilsMixinTypes.SignatureWithSaltAndExpiry memory operatorSignature
-    ) external;
+    function registerOperatorToAVS(address operator, ISignatureUtilsMixinTypes.SignatureWithSaltAndExpiry memory operatorSignature) external;
 
     /**
      *  @notice Legacy function called by an AVS to deregister an operator from the AVS.
@@ -110,9 +101,7 @@ interface IAVSDirectory is IAVSDirectoryEvents, IAVSDirectoryErrors, ISignatureU
      *
      *  @dev Only used by legacy M2 AVSs that have not integrated with operator sets.
      */
-    function deregisterOperatorFromAVS(
-        address operator
-    ) external;
+    function deregisterOperatorFromAVS(address operator) external;
 
     /**
      *
@@ -129,12 +118,7 @@ interface IAVSDirectory is IAVSDirectoryEvents, IAVSDirectoryErrors, ISignatureU
      *  @param salt A unique and single-use value associated with the approver's signature.
      *  @param expiry The time after which the approver's signature becomes invalid.
      */
-    function calculateOperatorAVSRegistrationDigestHash(
-        address operator,
-        address avs,
-        bytes32 salt,
-        uint256 expiry
-    ) external view returns (bytes32);
+    function calculateOperatorAVSRegistrationDigestHash(address operator, address avs, bytes32 salt, uint256 expiry) external view returns (bytes32);
 
     /// @notice The EIP-712 typehash for the Registration struct used by the contract.
     function OPERATOR_AVS_REGISTRATION_TYPEHASH() external view returns (bytes32);

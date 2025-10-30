@@ -1,35 +1,38 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
+import {LiquidityPool} from "../../src/LiquidityPool.sol";
+
+import {NodeOperatorManager} from "../../src/NodeOperatorManager.sol";
+
+import {StakingManager} from "../../src/StakingManager.sol";
+import "../../src/interfaces/IAuctionManager.sol";
+import "../../src/interfaces/IEtherFiNode.sol";
+import "../../src/interfaces/IEtherFiNodesManager.sol";
+import "../../src/interfaces/ILiquidityPool.sol";
+
+import "../../src/interfaces/INodeOperatorManager.sol";
+import "../../src/interfaces/IRoleRegistry.sol";
+import "../../src/interfaces/IStakingManager.sol";
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
-import "../../src/interfaces/ILiquidityPool.sol";
-import {LiquidityPool} from "../../src/LiquidityPool.sol";
-import "../../src/interfaces/IStakingManager.sol";
-import "../../src/interfaces/IEtherFiNodesManager.sol";
-import "../../src/interfaces/IAuctionManager.sol";
-import "../../src/interfaces/INodeOperatorManager.sol";
-import {NodeOperatorManager} from "../../src/NodeOperatorManager.sol";
-import "../../src/interfaces/IEtherFiNode.sol";
-import "../../src/interfaces/IRoleRegistry.sol";
-import {StakingManager} from "../../src/StakingManager.sol";
 
 /**
  * @title Staking Part 1: Setup & Get EigenPod Address
  * @notice First part of the staking process - creates everything needed before key generation
- * 
+ *
  * This script will:
  * 1. Deposit ETH to liquidity pool (if needed)
  * 2. Register you as node operator
  * 3. Create your bid
  * 4. Create EtherFi node and get EigenPod address
  * 5. Save all data to a file for Part 2
- * 
- * Usage: 
+ *
+ * Usage:
  * 1. Set environment variables in .env:
  *    PRIVATE_KEY=<your_wallet_private_key>
  *    NODE_OPERATOR_KEY=<your_node_operator_private_key> (can be same as PRIVATE_KEY)
- *    
+ *
  * 2. Run: forge script script/StakingPart1_Setup.s.sol:StakingPart1 --rpc-url https://rpc.hoodi.ethpandaops.io --broadcast
  */
 contract StakingPart1 is Script {
@@ -40,10 +43,10 @@ contract StakingPart1 is Script {
     address constant AUCTION_MANAGER = 0x261315c176864cE29D582f38DdA4930ED17CD95A;
     address constant NODE_OPERATOR_MANAGER = 0x3e17543CaE3366cc67a3CBeD5Aa42d9d09D59b39;
     address constant ROLE_REGISTRY = 0x7279853cA1804d4F705d885FeA7f1662323B5Aab;
-    
+
     // Role definition
     bytes32 constant STAKING_MANAGER_NODE_CREATOR_ROLE = keccak256("STAKING_MANAGER_NODE_CREATOR_ROLE");
-    
+
     // Contract interfaces
     LiquidityPool liquidityPool;
     StakingManager stakingManager;
@@ -51,7 +54,7 @@ contract StakingPart1 is Script {
     IAuctionManager auctionManager;
     NodeOperatorManager nodeOperatorManager;
     IRoleRegistry roleRegistry;
-    
+
     function run() external {
         // Initialize interfaces
         liquidityPool = LiquidityPool(payable(LIQUIDITY_POOL));
@@ -60,43 +63,43 @@ contract StakingPart1 is Script {
         auctionManager = IAuctionManager(AUCTION_MANAGER);
         nodeOperatorManager = NodeOperatorManager(NODE_OPERATOR_MANAGER);
         roleRegistry = IRoleRegistry(ROLE_REGISTRY);
-        
+
         console.log("\n========== EtherFi Staking Setup - Part 1 ==========");
         console.log("This script prepares everything needed before key generation\n");
-        
+
         // Get addresses
         address depositor = vm.addr(vm.envUint("PRIVATE_KEY"));
         address nodeOp = vm.addr(vm.envUint("NODE_OPERATOR_KEY"));
-        
+
         console.log("Depositor address: %s", depositor);
         console.log("Node operator address: %s", nodeOp);
         console.log("Current depositor balance: %s ETH", depositor.balance / 1e18);
-        
+
         // Step 1: Check liquidity pool balance and deposit if needed
         uint256 poolBalance = LIQUIDITY_POOL.balance;
         console.log("\nStep 1: Checking liquidity pool");
         console.log("Current pool balance: %s ETH", poolBalance / 1e18);
-        
+
         if (poolBalance < 32 ether) {
             uint256 needed = 32 ether - poolBalance;
             console.log("Pool needs %s more ETH. Depositing...", needed / 1e18);
-            
+
             vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
             liquidityPool.deposit{value: 32 ether}();
             vm.stopBroadcast();
-            
+
             console.log("Deposited 32 ETH to liquidity pool");
         } else {
             console.log("Pool has sufficient liquidity");
         }
-        
+
         // Step 2: Whitelist and register node operator
         console.log("\nStep 2: Node operator setup");
-        
+
         // Check if already whitelisted
         if (!nodeOperatorManager.isWhitelisted(nodeOp)) {
             console.log("Whitelisting node operator...");
-            
+
             vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
             // Add admin rights if needed
             if (!nodeOperatorManager.admins(depositor)) {
@@ -105,7 +108,7 @@ contract StakingPart1 is Script {
             nodeOperatorManager.addToWhitelist(nodeOp);
             vm.stopBroadcast();
         }
-        
+
         // Register node operator if not already registered
         if (nodeOperatorManager.registered(nodeOp)) {
             console.log("Node operator already registered");
@@ -116,17 +119,17 @@ contract StakingPart1 is Script {
             vm.stopBroadcast();
             console.log("Registered with 10% commission");
         }
-        
+
         // Step 3: Create bid
         console.log("\nStep 3: Creating bid");
         vm.startBroadcast(vm.envUint("NODE_OPERATOR_KEY"));
         uint256[] memory bidIds = auctionManager.createBid{value: 0.001 ether}(1, 0.001 ether);
         uint256 bidId = bidIds[0];
         vm.stopBroadcast();
-        
+
         console.log("Created bid with ID: %s", bidId);
         console.log("Bid amount: 0.001 ETH");
-        
+
         // Step 4: Register as validator spawner if needed
         console.log("\nStep 4: Checking validator spawner registration");
         bool spawner = liquidityPool.validatorSpawner(depositor);
@@ -139,14 +142,14 @@ contract StakingPart1 is Script {
         } else {
             console.log("Already registered as validator spawner");
         }
-        
+
         // Step 5: Create EtherFi node and get EigenPod address
         console.log("\nStep 5: Creating EtherFi node");
-        
+
         // Check if depositor has the required role
         if (!roleRegistry.hasRole(STAKING_MANAGER_NODE_CREATOR_ROLE, depositor)) {
             console.log("Depositor doesn't have STAKING_MANAGER_NODE_CREATOR_ROLE");
-            
+
             // Check if we're the owner and can grant the role
             address owner = roleRegistry.owner();
             if (owner == depositor) {
@@ -163,16 +166,16 @@ contract StakingPart1 is Script {
             console.log("Depositor already has STAKING_MANAGER_NODE_CREATOR_ROLE");
         }
 
-        console.log("Has role?",roleRegistry.hasRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), vm.addr(vm.envUint("PRIVATE_KEY"))));
+        console.log("Has role?", roleRegistry.hasRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), vm.addr(vm.envUint("PRIVATE_KEY"))));
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
-        console.log("Role reg: %s",address(stakingManager.roleRegistry()));
-        console.log("Role Reg: %s",address(roleRegistry));
+        console.log("Role reg: %s", address(stakingManager.roleRegistry()));
+        console.log("Role Reg: %s", address(roleRegistry));
 
         address etherFiNode = stakingManager.instantiateEtherFiNode(true);
         address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
-        
+
         vm.stopBroadcast();
-        
+
         // Save setup data
         console.log("\n========== SETUP COMPLETE ==========");
         console.log("SAVE THIS INFORMATION:");
@@ -190,7 +193,5 @@ contract StakingPart1 is Script {
         console.log("   export ETHERFI_NODE=%s", etherFiNode);
         console.log("\n   forge script script/StakingPart2_CreateValidator.s.sol:StakingPart2 --rpc-url https://rpc.hoodi.ethpandaops.io --broadcast");
         console.log("====================================\n");
-
-       
     }
 }

@@ -14,7 +14,6 @@ interface ICurrentEtherFiNodesManager {
  * @notice Discover what's ACTUALLY whitelisted in the current (pre-upgrade) contract
  */
 contract DiscoverCurrentWhitelist is Script {
-
     ICurrentEtherFiNodesManager constant nodesManager = ICurrentEtherFiNodesManager(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F);
 
     function run() external view {
@@ -95,7 +94,7 @@ contract DiscoverCurrentWhitelist is Script {
         selectors[10] = bytes4(keccak256("claimRewards(address,address)"));
         selectors[11] = bytes4(keccak256("submitRoot(bytes32,uint32)"));
 
-        // DelegationManager functions  
+        // DelegationManager functions
         selectors[12] = bytes4(keccak256("delegate(address)"));
         selectors[13] = bytes4(keccak256("undelegate()"));
         selectors[14] = bytes4(keccak256("queueWithdrawals((address[],uint256[],address)[])"));
@@ -124,7 +123,7 @@ contract DiscoverCurrentWhitelist is Script {
         targets[5] = 0x308861A430be4cce5502d0A12724771Fc6DaF216; // EtherFi LiquidityPool
         targets[6] = 0x25e821b7197B146F7713C3b89B6A4D83516B912d; // EtherFi StakingManager
         targets[7] = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F; // EtherFi NodesManager
-  
+
         return targets;
     }
 

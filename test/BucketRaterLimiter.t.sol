@@ -11,7 +11,7 @@ contract BucketRateLimiterTest is Test {
     BucketRateLimiter limiter;
 
     function setUp() public {
-        address owner = address(10000);
+        address owner = address(10_000);
         vm.startPrank(owner);
         BucketRateLimiter impl = new BucketRateLimiter();
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
@@ -90,7 +90,7 @@ contract BucketRateLimiterTest is Test {
 
         vm.stopPrank();
     }
-    
+
     function test_access_control() public {
         vm.expectRevert("Ownable: caller is not the owner");
         limiter.updateAdmin(address(0), true);
@@ -107,7 +107,7 @@ contract BucketRateLimiterTest is Test {
         vm.expectRevert("Ownable: caller is not the owner");
         limiter.updateConsumer(address(0));
     }
-    
+
     function test_pauser() public {
         address alice = address(1);
         address bob = address(2);
@@ -145,5 +145,4 @@ contract BucketRateLimiterTest is Test {
         vm.prank(bob);
         limiter.unPauseContract();
     }
-
 }

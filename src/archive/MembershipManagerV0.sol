@@ -6,16 +6,14 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
-import "../interfaces/IeETH.sol";
+import "../interfaces/ILiquidityPool.sol";
 import "../interfaces/IMembershipManagerV0.sol";
 import "../interfaces/IMembershipNFT.sol";
-import "../interfaces/ILiquidityPool.sol";
+import "../interfaces/IeETH.sol";
 
 import "../libraries/GlobalIndexLibrary.sol";
 
-
 contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IMembershipManagerV0 {
-
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -26,9 +24,9 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     address public treasury;
     address public protocolRevenueManager;
 
-    mapping (uint256 => uint256) public allTimeHighDepositAmount;
-    mapping (uint256 => TokenDeposit) public tokenDeposits;
-    mapping (uint256 => TokenData) public tokenData;
+    mapping(uint256 => uint256) public allTimeHighDepositAmount;
+    mapping(uint256 => TokenDeposit) public tokenDeposits;
+    mapping(uint256 => TokenData) public tokenData;
     TierDeposit[] public tierDeposits;
     TierData[] public tierData;
 
@@ -37,7 +35,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     uint16 public pointsBoostFactor; // + (X / 10000) more points, if staking rewards are sacrificed
     uint16 public pointsGrowthRate; // + (X / 10000) kwei points are earned per ETH per day
     uint56 public minDepositGwei;
-    uint8  public maxDepositTopUpPercent;
+    uint8 public maxDepositTopUpPercent;
 
     uint16 private mintFee; // fee = 0.001 ETH * 'mintFee'
     uint16 private burnFee; // fee = 0.001 ETH * 'burnFee'
@@ -56,7 +54,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
 
     address public DEPRECATED_admin;
     mapping(address => bool) public admins;
- 
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -90,8 +88,8 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
         treasury = _treasury;
         protocolRevenueManager = _protocolRevenueManager;
 
-        pointsBoostFactor = 10000;
-        pointsGrowthRate = 10000;
+        pointsBoostFactor = 10_000;
+        pointsGrowthRate = 10_000;
         minDepositGwei = (0.1 ether / 1 gwei);
         maxDepositTopUpPercent = 20;
         withdrawalLockBlocks = 3600;
@@ -110,14 +108,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     /// @param _snapshotEthAmount exact balance that the user has in the merkle snapshot
     /// @param _points EAP points that the user has in the merkle snapshot
     /// @param _merkleProof array of hashes forming the merkle proof for the user
-    function wrapEthForEap(
-        uint256 _amount,
-        uint256 _amountForPoints,
-        uint32  _eapDepositBlockNumber,
-        uint256 _snapshotEthAmount,
-        uint256 _points,
-        bytes32[] calldata _merkleProof
-    ) external payable whenNotPaused returns (uint256) {
+    function wrapEthForEap(uint256 _amount, uint256 _amountForPoints, uint32 _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) external payable whenNotPaused returns (uint256) {
         if (_points == 0 || msg.value < _snapshotEthAmount || msg.value > _snapshotEthAmount * 2 || msg.value != _amount + _amountForPoints) revert InvalidEAPRollover();
 
         membershipNFT.processDepositFromEapUser(msg.sender, _eapDepositBlockNumber, _snapshotEthAmount, _points, _merkleProof);
@@ -288,6 +279,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     error TierLimitExceeded();
+
     function addNewTier(uint40 _requiredTierPoints, uint24 _weight) external returns (uint256) {
         _requireAdmin();
         if (tierDeposits.length >= type(uint8).max) revert TierLimitExceeded();
@@ -297,6 +289,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     error OutOfBound();
+
     function updateTier(uint8 _tier, uint40 _requiredTierPoints, uint24 _weight) external {
         _requireAdmin();
         if (_tier >= tierData.length) revert OutOfBound();
@@ -311,7 +304,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     /// @param _tierPoints The number of tier points to set for the specified NFT.
     function setPointsBatch(uint256[] calldata _tokenIds, uint40[] calldata _loyaltyPoints, uint40[] calldata _tierPoints) external {
         for (uint256 i = 0; i < _tokenIds.length; i++) {
-            setPoints(_tokenIds[i], _loyaltyPoints[i], _tierPoints[i]);            
+            setPoints(_tokenIds[i], _loyaltyPoints[i], _tierPoints[i]);
         }
     }
 
@@ -340,7 +333,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     /// @notice Recover the tier points for a given NFT.
     /// @param _tokenId The ID of the membership NFT.
     /// @param _eapDepositBlockNumber the block number at which the user deposited into the EAP
-    function recoverTierPointsForEap(uint256 _tokenId, uint32  _eapDepositBlockNumber) public {
+    function recoverTierPointsForEap(uint256 _tokenId, uint32 _eapDepositBlockNumber) public {
         _requireAdmin();
 
         _claimPoints(_tokenId);
@@ -354,11 +347,12 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     error InvalidWithdraw();
+
     function withdrawFees(uint256 _amount, address _recipient) external {
         _requireAdmin();
         if (_recipient == address(0)) revert InvalidWithdraw();
         if (address(this).balance < _amount) revert InvalidWithdraw();
-        (bool sent, ) = address(_recipient).call{value: _amount}("");
+        (bool sent,) = address(_recipient).call{value: _amount}("");
         if (!sent) revert InvalidWithdraw();
     }
 
@@ -430,14 +424,14 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     error WrongTokenMinted();
 
     /**
-    * @dev Internal function to mint a new membership NFT.
-    * @param _to The address of the recipient of the NFT.
-    * @param _amount The amount of ETH to earn the staking rewards.
-    * @param _amountForPoints The amount of ETH to boost the points earnings.
-    * @param _loyaltyPoints The initial loyalty points for the NFT.
-    * @param _tierPoints The initial tier points for the NFT.
-    * @return tokenId The unique ID of the newly minted NFT.
-    */
+     * @dev Internal function to mint a new membership NFT.
+     * @param _to The address of the recipient of the NFT.
+     * @param _amount The amount of ETH to earn the staking rewards.
+     * @param _amountForPoints The amount of ETH to boost the points earnings.
+     * @param _loyaltyPoints The initial loyalty points for the NFT.
+     * @param _tierPoints The initial tier points for the NFT.
+     * @return tokenId The unique ID of the newly minted NFT.
+     */
     function _mintMembershipNFT(address _to, uint256 _amount, uint256 _amountForPoints, uint40 _loyaltyPoints, uint40 _tierPoints) internal returns (uint256) {
         uint256 tokenId = membershipNFT.nextMintTokenId();
         uint8 tier = tierForPoints(_tierPoints);
@@ -512,40 +506,28 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
         TokenDeposit memory deposit = tokenDeposits[_tokenId];
         uint128 newAmount = deposit.amounts + uint128(_amount);
         uint128 newShare = uint128(liquidityPool.sharesForAmount(newAmount));
-        tokenDeposits[_tokenId] = TokenDeposit(
-            newAmount,
-            newShare
-        );
+        tokenDeposits[_tokenId] = TokenDeposit(newAmount, newShare);
     }
 
     function _decrementTokenDeposit(uint256 _tokenId, uint256 _amount) internal {
         TokenDeposit memory deposit = tokenDeposits[_tokenId];
         uint128 newAmount = deposit.amounts - uint128(_amount);
         uint128 newShare = uint128(liquidityPool.sharesForAmount(newAmount));
-        tokenDeposits[_tokenId] = TokenDeposit(
-            newAmount,
-            newShare
-        );
+        tokenDeposits[_tokenId] = TokenDeposit(newAmount, newShare);
     }
 
     function _incrementTierDeposit(uint256 _tier, uint256 _amount) internal {
         TierDeposit memory deposit = tierDeposits[_tier];
         uint128 newAmount = deposit.amounts + uint128(_amount);
         uint128 newShare = uint128(liquidityPool.sharesForAmount(newAmount));
-        tierDeposits[_tier] = TierDeposit(
-            newAmount,
-            newShare
-        );
+        tierDeposits[_tier] = TierDeposit(newAmount, newShare);
     }
 
     function _decrementTierDeposit(uint256 _tier, uint256 _amount) internal {
         TierDeposit memory deposit = tierDeposits[_tier];
         uint128 newAmount = deposit.amounts - uint128(_amount);
         uint128 newShare = uint128(liquidityPool.sharesForAmount(newAmount));
-        tierDeposits[_tier] = TierDeposit(
-            newAmount,
-            newShare
-        );
+        tierDeposits[_tier] = TierDeposit(newAmount, newShare);
     }
 
     function _claimTier(uint256 _tokenId) internal {
@@ -605,11 +587,13 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     }
 
     error OnlyTokenOwner();
+
     function _requireTokenOwner(uint256 _tokenId) internal {
         if (membershipNFT.balanceOfUser(msg.sender, _tokenId) != 1) revert OnlyTokenOwner();
     }
 
     error OnlyAdmin();
+
     function _requireAdmin() internal {
         if (!admins[msg.sender]) revert OnlyAdmin();
     }
@@ -642,8 +626,8 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
         uint40 degradeTierPenalty = curTierPoints - tierData[prevTier].requiredTierPoints;
 
         // point deduction if scaled proportional to withdrawal amount
-        uint256 ratio = (10000 * _withdrawalAmount) / _prevAmount;
-        uint40 scaledTierPointsPenalty = uint40((ratio * curTierPoints) / 10000);
+        uint256 ratio = (10_000 * _withdrawalAmount) / _prevAmount;
+        uint40 scaledTierPointsPenalty = uint40((ratio * curTierPoints) / 10_000);
 
         uint40 penalty = uint40(_max(degradeTierPenalty, scaledTierPointsPenalty));
 
@@ -661,9 +645,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     function _emitNftUpdateEvent(uint256 _tokenId) internal {
         TokenDeposit memory deposit = tokenDeposits[_tokenId];
         TokenData memory token = tokenData[_tokenId];
-        emit NftUpdated(_tokenId, deposit.amounts, 0,
-                        token.baseLoyaltyPoints, token.baseTierPoints, token.tier,
-                        token.prevTopUpTimestamp, token.rewardsLocalIndex);
+        emit NftUpdated(_tokenId, deposit.amounts, 0, token.baseLoyaltyPoints, token.baseTierPoints, token.tier, token.prevTopUpTimestamp, token.rewardsLocalIndex);
     }
 
     // Finds the corresponding for the tier points
@@ -714,5 +696,4 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
     //--------------------------------------------------------------------------------------
     //------------------------------------  MODIFIER  --------------------------------------
     //--------------------------------------------------------------------------------------
-
 }

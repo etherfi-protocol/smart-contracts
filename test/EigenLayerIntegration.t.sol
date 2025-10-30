@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
 import "../src/EtherFiNode.sol";
+
+import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
+import "../src/eigenlayer-interfaces/IEigenPod.sol";
+import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
+
+import "../src/eigenlayer-libraries/BeaconChainProofs.sol";
+import "./TestSetup.sol";
 import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
-import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
-import "../src/eigenlayer-interfaces/IEigenPod.sol";
-import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
-import "../src/eigenlayer-libraries/BeaconChainProofs.sol";
 
-import "./eigenlayer-utils/ProofParsing.sol";
 import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
+import "./eigenlayer-utils/ProofParsing.sol";
 
-import "forge-std/console2.sol";
 import "forge-std/console.sol";
-
+import "forge-std/console2.sol";
 
 contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
-
     address p2p;
     address dsrv;
     address etherfi_avs_operator_1;
@@ -80,7 +80,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         vm.stopPrank();
 
         */
-
     }
 
     /*
@@ -421,7 +420,6 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         verifyContractByteCodeMatch(etherFiNodesManagerImplAddress, address(etherFiNodesManagerImplementation));
         verifyContractByteCodeMatch(etherFiNodeImplAddress, address(etherFiNodeImplementation));
         verifyContractByteCodeMatch(etherFiRestakerImplAddress, address(etherFiRestakerImplementation));
-   }
-   */
-
+    }
+    */
 }

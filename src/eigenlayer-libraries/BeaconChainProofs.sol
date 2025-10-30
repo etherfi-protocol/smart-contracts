@@ -10,7 +10,6 @@ import "./Endian.sol";
 //BeaconBlockHeader Spec: https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/beacon-chain.md#beaconblockheader
 //BeaconState Spec: https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/beacon-chain.md#beaconstate
 library BeaconChainProofs {
-
     /// @notice Heights of various merkle trees in the beacon chain
     /// - beaconBlockRoot
     /// |                                             HEIGHT: BEACON_BLOCK_HEADER_TREE_HEIGHT
@@ -25,7 +24,7 @@ library BeaconChainProofs {
     uint256 internal constant BEACON_STATE_TREE_HEIGHT = 5;
     uint256 internal constant BALANCE_TREE_HEIGHT = 38;
     uint256 internal constant VALIDATOR_TREE_HEIGHT = 40;
-    
+
     /// @notice Index of the beaconStateRoot in the `BeaconBlockHeader` container
     ///
     /// BeaconBlockHeader = [..., state_root, ...]
@@ -89,35 +88,23 @@ library BeaconChainProofs {
         bytes proof;
     }
 
-    /*******************************************************************************
-                 VALIDATOR FIELDS -> BEACON STATE ROOT -> BEACON BLOCK ROOT
-    *******************************************************************************/
+    /**
+     *
+     *              VALIDATOR FIELDS -> BEACON STATE ROOT -> BEACON BLOCK ROOT
+     *
+     */
 
     /// @notice Verify a merkle proof of the beacon state root against a beacon block root
     /// @param beaconBlockRoot merkle root of the beacon block
     /// @param proof the beacon state root and merkle proof of its inclusion under `beaconBlockRoot`
-    function verifyStateRoot(
-        bytes32 beaconBlockRoot,
-        StateRootProof calldata proof
-    ) internal view {
-        require(
-            proof.proof.length == 32 * (BEACON_BLOCK_HEADER_TREE_HEIGHT),
-            "BeaconChainProofs.verifyStateRoot: Proof has incorrect length"
-        );
+    function verifyStateRoot(bytes32 beaconBlockRoot, StateRootProof calldata proof) internal view {
+        require(proof.proof.length == 32 * (BEACON_BLOCK_HEADER_TREE_HEIGHT), "BeaconChainProofs.verifyStateRoot: Proof has incorrect length");
 
         /// This merkle proof verifies the `beaconStateRoot` under the `beaconBlockRoot`
         /// - beaconBlockRoot
         /// |                            HEIGHT: BEACON_BLOCK_HEADER_TREE_HEIGHT
         /// -- beaconStateRoot
-        require(
-            EigenlayerMerkle.verifyInclusionSha256({
-                proof: proof.proof,
-                root: beaconBlockRoot,
-                leaf: proof.beaconStateRoot,
-                index: STATE_ROOT_INDEX
-            }),
-            "BeaconChainProofs.verifyStateRoot: Invalid state root merkle proof"
-        );
+        require(EigenlayerMerkle.verifyInclusionSha256({proof: proof.proof, root: beaconBlockRoot, leaf: proof.beaconStateRoot, index: STATE_ROOT_INDEX}), "BeaconChainProofs.verifyStateRoot: Invalid state root merkle proof");
     }
 
     /// @notice Verify a merkle proof of a validator container against a `beaconStateRoot`
@@ -130,23 +117,12 @@ library BeaconChainProofs {
     /// which is used as the leaf to prove against `beaconStateRoot`
     /// @param validatorFieldsProof a merkle proof of inclusion of `validatorFields` under `beaconStateRoot`
     /// @param validatorIndex the validator's unique index
-    function verifyValidatorFields(
-        bytes32 beaconStateRoot,
-        bytes32[] calldata validatorFields,
-        bytes calldata validatorFieldsProof,
-        uint40 validatorIndex
-    ) internal view {
-        require(
-            validatorFields.length == VALIDATOR_FIELDS_LENGTH,
-            "BeaconChainProofs.verifyValidatorFields: Validator fields has incorrect length"
-        );
+    function verifyValidatorFields(bytes32 beaconStateRoot, bytes32[] calldata validatorFields, bytes calldata validatorFieldsProof, uint40 validatorIndex) internal view {
+        require(validatorFields.length == VALIDATOR_FIELDS_LENGTH, "BeaconChainProofs.verifyValidatorFields: Validator fields has incorrect length");
 
         /// Note: the reason we use `VALIDATOR_TREE_HEIGHT + 1` here is because the merklization process for
         /// this container includes hashing the root of the validator tree with the length of the validator list
-        require(
-            validatorFieldsProof.length == 32 * ((VALIDATOR_TREE_HEIGHT + 1) + BEACON_STATE_TREE_HEIGHT),
-            "BeaconChainProofs.verifyValidatorFields: Proof has incorrect length"
-        );
+        require(validatorFieldsProof.length == 32 * ((VALIDATOR_TREE_HEIGHT + 1) + BEACON_STATE_TREE_HEIGHT), "BeaconChainProofs.verifyValidatorFields: Proof has incorrect length");
 
         // Merkleize `validatorFields` to get the leaf to prove
         bytes32 validatorRoot = EigenlayerMerkle.merkleizeSha256(validatorFields);
@@ -159,20 +135,14 @@ library BeaconChainProofs {
         /// ---- validatorRoot
         uint256 index = (VALIDATOR_CONTAINER_INDEX << (VALIDATOR_TREE_HEIGHT + 1)) | uint256(validatorIndex);
 
-        require(
-            EigenlayerMerkle.verifyInclusionSha256({
-                proof: validatorFieldsProof,
-                root: beaconStateRoot,
-                leaf: validatorRoot,
-                index: index
-            }),
-            "BeaconChainProofs.verifyValidatorFields: Invalid merkle proof"
-        );
+        require(EigenlayerMerkle.verifyInclusionSha256({proof: validatorFieldsProof, root: beaconStateRoot, leaf: validatorRoot, index: index}), "BeaconChainProofs.verifyValidatorFields: Invalid merkle proof");
     }
 
-    /*******************************************************************************
-             VALIDATOR BALANCE -> BALANCE CONTAINER ROOT -> BEACON BLOCK ROOT
-    *******************************************************************************/
+    /**
+     *
+     *          VALIDATOR BALANCE -> BALANCE CONTAINER ROOT -> BEACON BLOCK ROOT
+     *
+     */
 
     /// @notice Verify a merkle proof of the beacon state's balances container against the beacon block root
     /// @dev This proof starts at the balance container root, proves through the beacon state root, and
@@ -183,14 +153,8 @@ library BeaconChainProofs {
     /// against the same balance container root.
     /// @param beaconBlockRoot merkle root of the beacon block
     /// @param proof a beacon balance container root and merkle proof of its inclusion under `beaconBlockRoot`
-    function verifyBalanceContainer(
-        bytes32 beaconBlockRoot,
-        BalanceContainerProof calldata proof
-    ) internal view {
-        require(
-            proof.proof.length == 32 * (BEACON_BLOCK_HEADER_TREE_HEIGHT + BEACON_STATE_TREE_HEIGHT),
-            "BeaconChainProofs.verifyBalanceContainer: Proof has incorrect length"
-        );
+    function verifyBalanceContainer(bytes32 beaconBlockRoot, BalanceContainerProof calldata proof) internal view {
+        require(proof.proof.length == 32 * (BEACON_BLOCK_HEADER_TREE_HEIGHT + BEACON_STATE_TREE_HEIGHT), "BeaconChainProofs.verifyBalanceContainer: Proof has incorrect length");
 
         /// This proof combines two proofs, so its index accounts for the relative position of leaves in two trees:
         /// - beaconBlockRoot
@@ -199,16 +163,8 @@ library BeaconChainProofs {
         /// |                            HEIGHT: BEACON_STATE_TREE_HEIGHT
         /// ---- balancesContainerRoot
         uint256 index = (STATE_ROOT_INDEX << (BEACON_STATE_TREE_HEIGHT)) | BALANCE_CONTAINER_INDEX;
-        
-        require(
-            EigenlayerMerkle.verifyInclusionSha256({
-                proof: proof.proof,
-                root: beaconBlockRoot,
-                leaf: proof.balanceContainerRoot,
-                index: index
-            }),
-            "BeaconChainProofs.verifyBalanceContainer: invalid balance container proof"
-        );
+
+        require(EigenlayerMerkle.verifyInclusionSha256({proof: proof.proof, root: beaconBlockRoot, leaf: proof.balanceContainerRoot, index: index}), "BeaconChainProofs.verifyBalanceContainer: invalid balance container proof");
     }
 
     /// @notice Verify a merkle proof of a validator's balance against the beacon state's `balanceContainerRoot`
@@ -216,17 +172,10 @@ library BeaconChainProofs {
     /// @param validatorIndex the index of the validator whose balance we are proving
     /// @param proof the validator's associated balance root and a merkle proof of inclusion under `balanceContainerRoot`
     /// @return validatorBalanceGwei the validator's current balance (in gwei)
-    function verifyValidatorBalance(
-        bytes32 balanceContainerRoot,
-        uint40 validatorIndex,
-        BalanceProof calldata proof
-    ) internal view returns (uint64 validatorBalanceGwei) {
+    function verifyValidatorBalance(bytes32 balanceContainerRoot, uint40 validatorIndex, BalanceProof calldata proof) internal view returns (uint64 validatorBalanceGwei) {
         /// Note: the reason we use `BALANCE_TREE_HEIGHT + 1` here is because the merklization process for
         /// this container includes hashing the root of the balances tree with the length of the balances list
-        require(
-            proof.proof.length == 32 * (BALANCE_TREE_HEIGHT + 1),
-            "BeaconChainProofs.verifyValidatorBalance: Proof has incorrect length"
-        );
+        require(proof.proof.length == 32 * (BALANCE_TREE_HEIGHT + 1), "BeaconChainProofs.verifyValidatorBalance: Proof has incorrect length");
 
         /// When merkleized, beacon chain balances are combined into groups of 4 called a `balanceRoot`. The merkle
         /// proof here verifies that this validator's `balanceRoot` is included in the `balanceContainerRoot`
@@ -234,25 +183,17 @@ library BeaconChainProofs {
         /// |                            HEIGHT: BALANCE_TREE_HEIGHT
         /// -- balanceRoot
         uint256 balanceIndex = uint256(validatorIndex / 4);
- 
-        require(
-            EigenlayerMerkle.verifyInclusionSha256({
-                proof: proof.proof,
-                root: balanceContainerRoot,
-                leaf: proof.balanceRoot,
-                index: balanceIndex
-            }),
-            "BeaconChainProofs.verifyValidatorBalance: Invalid merkle proof"
-        );
+
+        require(EigenlayerMerkle.verifyInclusionSha256({proof: proof.proof, root: balanceContainerRoot, leaf: proof.balanceRoot, index: balanceIndex}), "BeaconChainProofs.verifyValidatorBalance: Invalid merkle proof");
 
         /// Extract the individual validator's balance from the `balanceRoot`
         return getBalanceAtIndex(proof.balanceRoot, validatorIndex);
     }
 
     /**
-     * @notice Parses a balanceRoot to get the uint64 balance of a validator.  
-     * @dev During merkleization of the beacon state balance tree, four uint64 values are treated as a single 
-     * leaf in the merkle tree. We use validatorIndex % 4 to determine which of the four uint64 values to 
+     * @notice Parses a balanceRoot to get the uint64 balance of a validator.
+     * @dev During merkleization of the beacon state balance tree, four uint64 values are treated as a single
+     * leaf in the merkle tree. We use validatorIndex % 4 to determine which of the four uint64 values to
      * extract from the balanceRoot.
      * @param balanceRoot is the combination of 4 validator balances being proven for
      * @param validatorIndex is the index of the validator being proven for
@@ -260,8 +201,7 @@ library BeaconChainProofs {
      */
     function getBalanceAtIndex(bytes32 balanceRoot, uint40 validatorIndex) internal pure returns (uint64) {
         uint256 bitShiftAmount = (validatorIndex % 4) * 64;
-        return 
-            Endian.fromLittleEndianUint64(bytes32((uint256(balanceRoot) << bitShiftAmount)));
+        return Endian.fromLittleEndianUint64(bytes32((uint256(balanceRoot) << bitShiftAmount)));
     }
 
     /// @notice Indices for fields in the `Validator` container:
@@ -278,20 +218,17 @@ library BeaconChainProofs {
 
     /// @dev Retrieves a validator's pubkey hash
     function getPubkeyHash(bytes32[] memory validatorFields) internal pure returns (bytes32) {
-        return 
-            validatorFields[VALIDATOR_PUBKEY_INDEX];
+        return validatorFields[VALIDATOR_PUBKEY_INDEX];
     }
 
     /// @dev Retrieves a validator's withdrawal credentials
     function getWithdrawalCredentials(bytes32[] memory validatorFields) internal pure returns (bytes32) {
-        return
-            validatorFields[VALIDATOR_WITHDRAWAL_CREDENTIALS_INDEX];
+        return validatorFields[VALIDATOR_WITHDRAWAL_CREDENTIALS_INDEX];
     }
 
     /// @dev Retrieves a validator's effective balance (in gwei)
     function getEffectiveBalanceGwei(bytes32[] memory validatorFields) internal pure returns (uint64) {
-        return 
-            Endian.fromLittleEndianUint64(validatorFields[VALIDATOR_BALANCE_INDEX]);
+        return Endian.fromLittleEndianUint64(validatorFields[VALIDATOR_BALANCE_INDEX]);
     }
 
     /// @dev Retrieves true IFF a validator is marked slashed
@@ -301,7 +238,6 @@ library BeaconChainProofs {
 
     /// @dev Retrieves a validator's exit epoch
     function getExitEpoch(bytes32[] memory validatorFields) internal pure returns (uint64) {
-        return 
-            Endian.fromLittleEndianUint64(validatorFields[VALIDATOR_EXIT_EPOCH_INDEX]);
+        return Endian.fromLittleEndianUint64(validatorFields[VALIDATOR_EXIT_EPOCH_INDEX]);
     }
 }

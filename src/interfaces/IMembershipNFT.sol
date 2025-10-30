@@ -4,7 +4,6 @@ pragma solidity ^0.8.13;
 import "@openzeppelin-upgradeable/contracts/token/ERC1155/IERC1155Upgradeable.sol";
 
 interface IMembershipNFT is IERC1155Upgradeable {
-
     struct NftData {
         uint32 transferLockedUntil; // in terms of blocck number
         uint8[28] __gap;
@@ -14,8 +13,8 @@ interface IMembershipNFT is IERC1155Upgradeable {
     function initializeOnUpgrade(address _liquidityPoolAddress) external;
     function computeTierPointsForEap(uint32 _eapDepositBlockNumber) external view returns (uint40);
     function setUpForEap(bytes32 _newMerkleRoot, uint64[] calldata _requiredEapPointsPerEapDeposit) external;
-    function processDepositFromEapUser(address _user, uint32  _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) external;
-    
+    function processDepositFromEapUser(address _user, uint32 _eapDepositBlockNumber, uint256 _snapshotEthAmount, uint256 _points, bytes32[] calldata _merkleProof) external;
+
     function incrementLock(uint256 _tokenId, uint32 _blocks) external;
     function mint(address _to, uint256 _amount) external returns (uint256);
     function burn(address _from, uint256 _tokenId, uint256 _amount) external;
@@ -28,7 +27,7 @@ interface IMembershipNFT is IERC1155Upgradeable {
     function claimableTier(uint256 _tokenId) external view returns (uint8);
     function accruedLoyaltyPointsOf(uint256 _tokenId) external view returns (uint40);
     function accruedTierPointsOf(uint256 _tokenId) external view returns (uint40);
-    function accruedStakingRewardsOf(uint256 _tokenId) external view returns (uint);
+    function accruedStakingRewardsOf(uint256 _tokenId) external view returns (uint256);
     function canTopUp(uint256 _tokenId, uint256 _totalAmount, uint128 _amount, uint128 _amountForPoints) external view returns (bool);
     function isWithdrawable(uint256 _tokenId, uint256 _withdrawalAmount) external view returns (bool);
     function allTimeHighDepositOf(uint256 _tokenId) external view returns (uint256);

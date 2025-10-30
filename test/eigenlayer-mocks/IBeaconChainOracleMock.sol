@@ -8,26 +8,24 @@ pragma solidity ^0.8.12;
  */
 interface IBeaconChainOracleMock {
     /// @notice Largest blockNumber that has been confirmed by the oracle.
-    function latestConfirmedOracleBlockNumber() external view returns(uint64);
+    function latestConfirmedOracleBlockNumber() external view returns (uint64);
     /// @notice Mapping: Beacon Chain blockNumber => the Beacon Chain state root at the specified blockNumber.
     /// @dev This will return `bytes32(0)` if the state root is not yet finalized at the blockNumber.
-    function beaconStateRootAtBlockNumber(uint64 blockNumber) external view returns(bytes32);
+    function beaconStateRootAtBlockNumber(uint64 blockNumber) external view returns (bytes32);
 
     /// @notice Mapping: address => whether or not the address is in the set of oracle signers.
-    function isOracleSigner(address _oracleSigner) external view returns(bool);
+    function isOracleSigner(address _oracleSigner) external view returns (bool);
 
     /// @notice Mapping: Beacon Chain blockNumber => oracle signer address => whether or not the oracle signer has voted on the state root at the blockNumber.
-    function hasVoted(uint64 blockNumber, address oracleSigner) external view returns(bool);
+    function hasVoted(uint64 blockNumber, address oracleSigner) external view returns (bool);
 
-    /// @notice Mapping: Beacon Chain blockNumber => state root => total number of oracle signer votes for the state root at the blockNumber. 
-    function stateRootVotes(uint64 blockNumber, bytes32 stateRoot) external view returns(uint256);
+    /// @notice Mapping: Beacon Chain blockNumber => state root => total number of oracle signer votes for the state root at the blockNumber.
+    function stateRootVotes(uint64 blockNumber, bytes32 stateRoot) external view returns (uint256);
 
     /// @notice Total number of members of the set of oracle signers.
-    function totalOracleSigners() external view returns(uint256);
-
+    function totalOracleSigners() external view returns (uint256);
 
     function setOracleBlockRootAtTimestamp(bytes32 beaconChainStateRoot) external;
-
 
     /**
      * @notice Number of oracle signers that must vote for a state root in order for the state root to be confirmed.
@@ -35,7 +33,7 @@ interface IBeaconChainOracleMock {
      * @dev We note that there is an edge case -- when the threshold is adjusted downward, if a state root already has enough votes to meet the *new* threshold,
      * the state root must still receive one additional vote from an oracle signer to be confirmed. This behavior is intended, to minimize unexpected root confirmations.
      */
-    function threshold() external view returns(uint256);
+    function threshold() external view returns (uint256);
 
     /**
      * @notice Owner-only function used to modify the value of the `threshold` variable.

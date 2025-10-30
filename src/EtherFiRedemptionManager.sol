@@ -1,21 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin/contracts/utils/math/SafeCast.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
-import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
+
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
 import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/IeETH.sol";
+
 import "./interfaces/IWeETH.sol";
+import "./interfaces/IeETH.sol";
 
 import "lib/BucketLimiter.sol";
 
@@ -56,7 +58,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         treasury = _treasury;
         liquidityPool = ILiquidityPool(payable(_liquidityPool));
         eEth = IeETH(_eEth);
-        weEth = IWeETH(_weEth); 
+        weEth = IWeETH(_weEth);
 
         _disableInitializers();
     }
@@ -112,7 +114,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      * @param permit The permit params.
      */
     function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit) external whenNotPaused nonReentrant {
-        try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
+        try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
         _redeemWeEth(weEthAmount, receiver);
     }
 
@@ -142,12 +144,12 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
 
         // To Treasury by transferring eETH
         IERC20(address(eEth)).safeTransfer(treasury, eEthFeeAmountToTreasury);
-        
+
         // uint256 totalShares = eEth.totalShares();
         require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
 
         // To Receiver by transferring ETH, using gas 10k for additional safety
-        (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
+        (bool success,) = receiver.call{value: ethReceived, gas: 10_000}("");
         require(success, "EtherFiRedemptionManager: Transfer failed");
 
         // Make sure the liquidity pool balance is correct && total shares are correct
@@ -262,7 +264,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury);
     }
 
-
     function _updateRateLimit(uint256 amount) internal {
         uint64 bucketUnit = _convertToBucketUnit(amount, Math.Rounding.Up);
         require(BucketLimiter.consume(limit, bucketUnit), "BucketRateLimiter: rate limit exceeded");
@@ -276,7 +277,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     function _convertFromBucketUnit(uint64 bucketUnit) internal pure returns (uint256) {
         return bucketUnit * BUCKET_UNIT_SCALE;
     }
-
 
     function _calcRedemption(uint256 ethAmount) internal view returns (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) {
         eEthShares = liquidityPool.sharesForAmount(ethAmount);
@@ -317,5 +317,4 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         _hasRole(role, msg.sender);
         _;
     }
-
 }
