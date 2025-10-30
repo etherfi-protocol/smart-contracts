@@ -1,0 +1,26 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo ""
+echo "🔨 Running Forge formatter on Solidity files..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Run forge fmt
+forge fmt
+
+# Check if formatter made any changes
+if ! git diff --quiet *.sol; then
+    echo ""
+    echo "✨ Code has been formatted!"
+    echo "📝 Adding formatted files to commit..."
+    
+    # Add all Solidity files that were formatted
+    git add *.sol **/*.sol 2>/dev/null || true
+    
+    echo "✅ Formatted files added to commit"
+else
+    echo "✅ No formatting changes needed"
+fi
+
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""

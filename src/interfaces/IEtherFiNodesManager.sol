@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../interfaces/IEtherFiNode.sol";
-import "../interfaces/IStakingManager.sol";
 import "../eigenlayer-interfaces/IDelegationManager.sol";
 import "../eigenlayer-interfaces/IEigenPod.sol";
 import {BeaconChainProofs} from "../eigenlayer-libraries/BeaconChainProofs.sol";
+import "../interfaces/IEtherFiNode.sol";
+import "../interfaces/IStakingManager.sol";
 
 interface IEtherFiNodesManager {
-
     function addressToWithdrawalCredentials(address addr) external pure returns (bytes memory);
     function addressToCompoundingWithdrawalCredentials(address addr) external pure returns (bytes memory);
-    function etherfiNodeAddress(uint256 id) external view returns(address);
+    function etherfiNodeAddress(uint256 id) external view returns (address);
     function etherFiNodeFromPubkeyHash(bytes32 pubkeyHash) external view returns (IEtherFiNode);
     function linkPubkeyToNode(bytes calldata pubkey, address nodeAddress, uint256 legacyId) external;
     function calculateValidatorPubkeyHash(bytes memory pubkey) external pure returns (bytes32);
@@ -41,7 +40,6 @@ interface IEtherFiNodesManager {
     function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable;
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable;
 
-
     // rate limiting constants
     function UNRESTAKING_LIMIT_ID() external view returns (bytes32);
     function EXIT_REQUEST_LIMIT_ID() external view returns (bytes32);
@@ -63,7 +61,8 @@ interface IEtherFiNodesManager {
         // we are continuing to use this field in the short term before we fully transition to using pubkeyhash
         mapping(uint256 => address) DEPRECATED_etherfiNodeAddress;
         uint256[15] legacyPadding2;
-        /*
+    }
+    /*
             |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
             | numberOfValidators                        | uint64                                                        | 301  | 0      | 8     | src/EtherFiNodesManager.sol:EtherFiNodesManager |
             |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
@@ -114,7 +113,6 @@ interface IEtherFiNodesManager {
             | operatingAdmin                            | mapping(address => bool)                                      | 320  | 0      | 32    | src/EtherFiNodesManager.sol:EtherFiNodesManager |
             |-------------------------------------------+---------------------------------------------------------------+------+--------+-------+-------------------------------------------------|
         */
-    }
 
     //---------------------------------------------------------------------------
     //-----------------------------  Events  -----------------------------------

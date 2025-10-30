@@ -5,7 +5,6 @@ import "./TestSetup.sol";
 import "forge-std/console2.sol";
 
 contract MembershipNFTTest is TestSetup {
-
     event MintingPaused(bool isPaused);
 
     function setUp() public {
@@ -20,7 +19,6 @@ contract MembershipNFTTest is TestSetup {
     }
 
     function test_metadata() public {
-
         // only admin can update uri
         vm.expectRevert("Caller is not the admin");
         membershipNftInstance.setMetadataURI("badURI.com");
@@ -71,7 +69,6 @@ contract MembershipNFTTest is TestSetup {
     }
 
     function test_pauseMinting() public {
-
         // only owner can set pause status
         vm.startPrank(owner);
         vm.expectRevert("Caller is not the admin");
@@ -105,12 +102,9 @@ contract MembershipNFTTest is TestSetup {
         // mint should succeed again
         vm.startPrank(address(membershipManagerInstance));
         membershipNftInstance.mint(alice, 1);
-
-
     }
 
     function test_permissions() public {
-
         // only membership manager can update call
         vm.startPrank(alice);
         vm.expectRevert(MembershipNFT.OnlyMembershipManagerContract.selector);

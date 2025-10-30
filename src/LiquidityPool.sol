@@ -3,19 +3,20 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import "./EtherFiRedemptionManager.sol";
-import "./interfaces/IeETH.sol";
-import "./interfaces/IStakingManager.sol";
-import "./interfaces/IWithdrawRequestNFT.sol";
-import "./interfaces/ILiquidityPool.sol";
-import "./interfaces/ILiquifier.sol";
+
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
+import "./interfaces/ILiquidityPool.sol";
+import "./interfaces/ILiquifier.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./interfaces/IStakingManager.sol";
+import "./interfaces/IWithdrawRequestNFT.sol";
+import "./interfaces/IeETH.sol";
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
     using SafeERC20 for IERC20;
@@ -28,7 +29,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     address public DEPRECATED_regulationsManager;
     address public membershipManager;
     address public DEPRECATED_TNFT;
-    IeETH public eETH; 
+    IeETH public eETH;
 
     bool public DEPRECATED_eEthliquidStakingOpened;
 
@@ -85,7 +86,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     event Deposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
     event Withdraw(address indexed sender, address recipient, uint256 amount, SourceOfFunds source);
     event UpdatedWhitelist(address userAddress, bool value);
-    event UpdatedTreasury(address newTreasury); 
+    event UpdatedTreasury(address newTreasury);
     event UpdatedFeeRecipient(address newFeeRecipient);
     event BnftHolderDeregistered(address user, uint256 index);
     event BnftHolderRegistered(address user, uint256 index);
@@ -118,14 +119,18 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     receive() external payable {
-        if (msg.value > type(uint128).max) revert InvalidAmount();
+        if (msg.value > type(uint128).max) {
+            revert InvalidAmount();
+        }
         totalValueOutOfLp -= uint128(msg.value);
         totalValueInLp += uint128(msg.value);
     }
 
     function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external initializer {
-        if (_eEthAddress == address(0) || _stakingManagerAddress == address(0) || _nodesManagerAddress == address(0) || _membershipManagerAddress == address(0) || _tNftAddress == address(0)) revert DataNotSet();
-        
+        if (_eEthAddress == address(0) || _stakingManagerAddress == address(0) || _nodesManagerAddress == address(0) || _membershipManagerAddress == address(0) || _tNftAddress == address(0)) {
+            revert DataNotSet();
+        }
+
         __Ownable_init();
         __UUPSUpgradeable_init();
         eETH = IeETH(_eEthAddress);
@@ -141,7 +146,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         DEPRECATED_isLpBnftHolder = false;
     }
 
-    function initializeOnUpgrade(address _auctionManager, address _liquifier) external onlyOwner { 
+    function initializeOnUpgrade(address _auctionManager, address _liquifier) external onlyOwner {
         require(_auctionManager != address(0) && _liquifier != address(0) && address(DEPRECATED_auctionManager) == address(0) && address(liquifier) == address(0), "Invalid");
 
         DEPRECATED_auctionManager = _auctionManager;
@@ -153,7 +158,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         require(address(etherFiRedemptionManager) == address(0) && _etherFiRedemptionManager != address(0), "Invalid");
         require(address(roleRegistry) == address(0x00), "already initialized");
 
-        etherFiRedemptionManager = EtherFiRedemptionManager(payable(_etherFiRedemptionManager)); 
+        etherFiRedemptionManager = EtherFiRedemptionManager(payable(_etherFiRedemptionManager));
         roleRegistry = IRoleRegistry(_roleRegistry);
 
         //correct splits
@@ -161,7 +166,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         totalValueInLp = uint128(address(this).balance);
         totalValueOutOfLp = tvl - totalValueInLp;
 
-        if(tvl != getTotalPooledEther()) revert();
+        if (tvl != getTotalPooledEther()) {
+            revert();
+        }
     }
 
     // Used by eETH staking flow
@@ -202,8 +209,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function withdraw(address _recipient, uint256 _amount) external whenNotPaused returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);
         require(msg.sender == address(withdrawRequestNFT) || msg.sender == address(membershipManager) || msg.sender == address(etherFiRedemptionManager), "Incorrect Caller");
-        if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
-        if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
+        if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) {
+            revert InsufficientLiquidity();
+        }
+        if (_amount > type(uint128).max || _amount == 0 || share == 0) {
+            revert InvalidAmount();
+        }
 
         totalValueInLp -= uint128(_amount);
         if (msg.sender == address(withdrawRequestNFT)) {
@@ -224,13 +235,15 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @return uint256 requestId of the WithdrawRequestNFT
     function requestWithdraw(address recipient, uint256 amount) public whenNotPaused returns (uint256) {
         uint256 share = sharesForAmount(amount);
-        if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
+        if (amount > type(uint96).max || amount == 0 || share == 0) {
+            revert InvalidAmount();
+        }
 
         // transfer shares to WithdrawRequestNFT contract from this contract
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(withdrawRequestNFT), amount);
 
         uint256 requestId = withdrawRequestNFT.requestWithdraw(uint96(amount), uint96(share), recipient, 0);
-       
+
         emit Withdraw(msg.sender, recipient, amount, SourceOfFunds.EETH);
 
         return requestId;
@@ -242,11 +255,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @param _amount requested amount to withdraw from contract
     /// @param _permit signed permit data to approve transfer of eETH
     /// @return uint256 requestId of the WithdrawRequestNFT
-    function requestWithdrawWithPermit(address _owner, uint256 _amount, PermitInput calldata _permit)
-        external
-        whenNotPaused
-        returns (uint256)
-    {
+    function requestWithdrawWithPermit(address _owner, uint256 _amount, PermitInput calldata _permit) external whenNotPaused returns (uint256) {
         try eETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return requestWithdraw(_owner, _amount);
     }
@@ -258,9 +267,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @param fee the burn fee to be paid by the recipient when the withdrawal is claimed (WithdrawRequestNFT.claimWithdraw)
     /// @return uint256 requestId of the WithdrawRequestNFT
     function requestMembershipNFTWithdraw(address recipient, uint256 amount, uint256 fee) public whenNotPaused returns (uint256) {
-        if (msg.sender != address(membershipManager)) revert IncorrectCaller();
+        if (msg.sender != address(membershipManager)) {
+            revert IncorrectCaller();
+        }
         uint256 share = sharesForAmount(amount);
-        if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
+        if (amount > type(uint96).max || amount == 0 || share == 0) {
+            revert InvalidAmount();
+        }
 
         // transfer shares to WithdrawRequestNFT contract
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(withdrawRequestNFT), amount);
@@ -271,7 +284,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
         return requestId;
     }
-
 
     //---------------------------------------------------------------------------
     //---------------------- Staking/Deposit Flow -------------------------------
@@ -284,11 +296,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     /// @notice claim bids and send 1 eth deposits to deposit contract to create the provided validators.
     /// @dev step 2 of staking flow
-    function batchRegister(
-        IStakingManager.DepositData[] calldata _depositData,
-        uint256[] calldata _bidIds,
-        address _etherFiNode
-    ) external whenNotPaused {
+    function batchRegister(IStakingManager.DepositData[] calldata _depositData, uint256[] calldata _bidIds, address _etherFiNode) external whenNotPaused {
         require(validatorSpawner[msg.sender].registered, "Incorrect Caller");
 
         // liquidity pool supplies 1 eth per validator
@@ -301,13 +309,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @notice send remaining eth to deposit contract to activate the provided validators
     /// @dev step 3 of staking flow. This version exists to remain compatible with existing callers.
     ///   future services should use confirmAndFundBeaconValidators()
-     function batchApproveRegistration(
-        uint256[] memory _validatorIds,
-        bytes[] calldata _pubkeys,
-        bytes[] calldata _signatures
-    ) external whenNotPaused {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, msg.sender)) revert IncorrectRole();
-        if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
+    function batchApproveRegistration(uint256[] memory _validatorIds, bytes[] calldata _pubkeys, bytes[] calldata _signatures) external whenNotPaused {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
+        if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) {
+            revert InvalidValidatorSize();
+        }
 
         // all validators provided should belong to same node
         IEtherFiNode etherFiNode = IEtherFiNode(nodesManager.etherfiNodeAddress(_validatorIds[0]));
@@ -322,20 +330,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             // enforce that all validators are part of same node
-            if (address(etherFiNode) != address(nodesManager.etherfiNodeAddress(_validatorIds[i]))) revert InvalidEtherFiNode();
+            if (address(etherFiNode) != address(nodesManager.etherfiNodeAddress(_validatorIds[i]))) {
+                revert InvalidEtherFiNode();
+            }
 
-            bytes32 confirmDepositDataRoot = stakingManager.generateDepositDataRoot(
-                _pubkeys[i],
-                _signatures[i],
-                withdrawalCredentials,
-                remainingEthPerValidator
-            );
-            IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({
-                publicKey: _pubkeys[i],
-                signature: _signatures[i],
-                depositDataRoot: confirmDepositDataRoot,
-                ipfsHashForEncryptedValidatorKey: ""
-            });
+            bytes32 confirmDepositDataRoot = stakingManager.generateDepositDataRoot(_pubkeys[i], _signatures[i], withdrawalCredentials, remainingEthPerValidator);
+            IStakingManager.DepositData memory confirmDepositData = IStakingManager.DepositData({publicKey: _pubkeys[i], signature: _signatures[i], depositDataRoot: confirmDepositDataRoot, ipfsHashForEncryptedValidatorKey: ""});
             depositData[i] = confirmDepositData;
         }
 
@@ -347,12 +347,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     /// @notice send remaining eth to deposit contract to activate the provided validators
     /// @dev step 3 of staking flow
-    function confirmAndFundBeaconValidators(
-        IStakingManager.DepositData[] calldata _depositData,
-        uint256 _validatorSizeWei
-    ) external whenNotPaused {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, msg.sender)) revert IncorrectRole();
-        if (_validatorSizeWei < 32 ether || _validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
+    function confirmAndFundBeaconValidators(IStakingManager.DepositData[] calldata _depositData, uint256 _validatorSizeWei) external whenNotPaused {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
+        if (_validatorSizeWei < 32 ether || _validatorSizeWei > 2048 ether) {
+            revert InvalidValidatorSize();
+        }
 
         // we have already deposited the initial amount to create the validator on the beacon chain
         uint256 remainingEthPerValidator = _validatorSizeWei - stakingManager.initialDepositAmount();
@@ -367,16 +368,22 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     ///   In a future upgrade this will be a parameter to that call but was done like this to
     ///   to limit changes to other dependent contracts
     function setValidatorSizeWei(uint256 _validatorSizeWei) external {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (_validatorSizeWei < 32 ether || _validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
+        if (_validatorSizeWei < 32 ether || _validatorSizeWei > 2048 ether) {
+            revert InvalidValidatorSize();
+        }
         validatorSizeWei = _validatorSizeWei;
     }
 
     /// @notice The admin can register an address to become a BNFT holder
     /// @param _user The address of the Validator Spawner to register
     function registerValidatorSpawner(address _user) public {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        require(!validatorSpawner[_user].registered, "Already registered");  
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
+        require(!validatorSpawner[_user].registered, "Already registered");
 
         validatorSpawner[_user] = ValidatorSpawner({registered: true});
 
@@ -396,7 +403,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     /// @notice Send the exit requests as the T-NFT holder of the LiquidityPool validators
     function DEPRECATED_sendExitRequests(uint256[] calldata _validatorIds) external {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             emit ValidatorExitRequested(_validatorIds[i]);
@@ -405,7 +414,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     /// @notice Rebase by ether.fi
     function rebase(int128 _accruedRewards) public {
-        if (msg.sender != address(membershipManager)) revert IncorrectCaller();
+        if (msg.sender != address(membershipManager)) {
+            revert IncorrectCaller();
+        }
         totalValueOutOfLp = uint128(int128(totalValueOutOfLp) + _accruedRewards);
 
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
@@ -414,7 +425,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @notice pay protocol fees including 5% to treaury, 5% to node operator and ethfund bnft holders
     /// @param _protocolFees The amount of protocol fees to pay in ether
     function payProtocolFees(uint128 _protocolFees) external {
-        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();   
+        if (msg.sender != address(etherFiAdminContract)) {
+            revert IncorrectCaller();
+        }
         emit ProtocolFeePaid(_protocolFees);
         depositToRecipient(feeRecipient, _protocolFees, address(0));
     }
@@ -422,22 +435,30 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @notice Set the fee recipient address
     /// @param _feeRecipient The address to set as the fee recipient
     function setFeeRecipient(address _feeRecipient) external {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
         feeRecipient = _feeRecipient;
         emit UpdatedFeeRecipient(_feeRecipient);
     }
 
     /// @notice Whether or not nodes created via bNFT deposits should be restaked
     function setRestakeBnftDeposits(bool _restake) external {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
 
         restakeBnftDeposits = _restake;
     }
 
     // Pauses the contract
     function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
-        if (paused) revert("Pausable: already paused");
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) {
+            revert IncorrectRole();
+        }
+        if (paused) {
+            revert("Pausable: already paused");
+        }
 
         paused = true;
         emit Paused(msg.sender);
@@ -445,25 +466,32 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     // Unpauses the contract
     function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
-        if (!paused) revert("Pausable: not paused");
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) {
+            revert IncorrectRole();
+        }
+        if (!paused) {
+            revert("Pausable: not paused");
+        }
 
         paused = false;
         emit Unpaused(msg.sender);
     }
 
     // Deprecated, just existing not to touch EtherFiAdmin contract
-    function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external {
-    }
+    function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external {}
 
     function addEthAmountLockedForWithdrawal(uint128 _amount) external {
-        if (!(msg.sender == address(etherFiAdminContract))) revert IncorrectCaller();
+        if (!(msg.sender == address(etherFiAdminContract))) {
+            revert IncorrectCaller();
+        }
 
         ethAmountLockedForWithdrawal += _amount;
     }
 
     function burnEEthShares(uint256 shares) external {
-        if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
+        if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT)) {
+            revert IncorrectCaller();
+        }
         eETH.burnShares(msg.sender, shares);
     }
 
@@ -476,7 +504,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         totalValueOutOfLp += uint128(_amountOutOfLp);
         uint256 amount = _amountInLp + _amountOutOfLp;
         uint256 share = _sharesForDepositAmount(amount);
-        if (amount > type(uint128).max || amount == 0 || share == 0) revert InvalidAmount();
+        if (amount > type(uint128).max || amount == 0 || share == 0) {
+            revert InvalidAmount();
+        }
 
         eETH.mintShares(_recipient, share);
 
@@ -493,7 +523,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     function _sendFund(address _recipient, uint256 _amount) internal {
         uint256 balance = address(this).balance;
-        (bool sent, ) = _recipient.call{value: _amount}("");
+        (bool sent,) = _recipient.call{value: _amount}("");
         require(sent && address(this).balance >= balance - _amount, "SendFail");
     }
 
@@ -551,7 +581,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         return (_share * getTotalPooledEther()) / totalShares;
     }
 
-    function getImplementation() external view returns (address) {return _getImplementation();}
+    function getImplementation() external view returns (address) {
+        return _getImplementation();
+    }
 
     function _requireNotPaused() internal view virtual {
         require(!paused, "Pausable: paused");

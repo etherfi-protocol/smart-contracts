@@ -1,23 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "../interfaces/IMembershipNFT.sol";
-import "../interfaces/IEtherFiNodesManager.sol";
 import "../interfaces/IEtherFiNode.sol";
+import "../interfaces/IEtherFiNodesManager.sol";
+import "../interfaces/IMembershipNFT.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 
-
 /**
  * @title Escrow
  * @dev A contract for escrowing NFT trades between a multi-sig wallet and a staker.
  */
 contract NFTExchange is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
-
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -26,8 +24,8 @@ contract NFTExchange is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
     IMembershipNFT public membershipNft;
     IEtherFiNodesManager nodesMgr;
 
-    mapping (uint256 => address) public reservedBuyers;
-    mapping (uint256 => uint256) public targetTNftTokenIds;
+    mapping(uint256 => address) public reservedBuyers;
+    mapping(uint256 => uint256) public targetTNftTokenIds;
     address public admin;
 
     //--------------------------------------------------------------------------------------
@@ -87,7 +85,7 @@ contract NFTExchange is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
             require(tnftTokenId == targetTNftTokenIds[mNftTokenId], "The T-NFT is not the target");
 
             // TODO(dave): I think we can delete this entire contract?
-           // require(nodesMgr.phase(tnftTokenId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "The validator is not LIVE");
+            // require(nodesMgr.phase(tnftTokenId) == IEtherFiNode.VALIDATOR_PHASE.LIVE, "The validator is not LIVE");
 
             reservedBuyers[mNftTokenId] = address(0);
             targetTNftTokenIds[mNftTokenId] = 0;
@@ -115,7 +113,7 @@ contract NFTExchange is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    function onERC1155Received(address, address, uint256, uint256, bytes calldata) external pure returns(bytes4) {
+    function onERC1155Received(address, address, uint256, uint256, bytes calldata) external pure returns (bytes4) {
         return this.onERC1155Received.selector;
     }
 
@@ -138,5 +136,4 @@ contract NFTExchange is Initializable, OwnableUpgradeable, ReentrancyGuardUpgrad
         require(msg.sender == admin, "Caller is not the admin");
         _;
     }
-
 }

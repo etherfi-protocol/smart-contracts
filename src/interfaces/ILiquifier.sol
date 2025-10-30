@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../eigenlayer-interfaces/IStrategyManager.sol";
-import "../eigenlayer-interfaces/IStrategy.sol";
 import "../eigenlayer-interfaces/IPauserRegistry.sol";
+import "../eigenlayer-interfaces/IStrategy.sol";
+import "../eigenlayer-interfaces/IStrategyManager.sol";
 
 // cbETH-ETH mainnet: 0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A
 // wBETH-ETH mainnet: 0xBfAb6FA95E0091ed66058ad493189D2cB29385E6
@@ -31,7 +31,7 @@ interface IcbETH is IERC20 {
 
 // mainnet: 0xa2E3356610840701BDf5611a53974510Ae27E2e1
 interface IwBETH is IERC20 {
-    function deposit(address referral) payable external;
+    function deposit(address referral) external payable;
     function mint(address _to, uint256 _amount) external;
     function exchangeRate() external view returns (uint256 _exchangeRate);
 }
@@ -55,7 +55,7 @@ interface IEigenLayerStrategyManager is IStrategyManager {
     function unpause(uint256 newPausedStatus) external;
 
     // For testing
-    function queueWithdrawal( uint256[] calldata strategyIndexes, IStrategy[] calldata strategies, uint256[] calldata shares, address withdrawer, bool undelegateIfPossible ) external returns(bytes32);
+    function queueWithdrawal(uint256[] calldata strategyIndexes, IStrategy[] calldata strategies, uint256[] calldata shares, address withdrawer, bool undelegateIfPossible) external returns (bytes32);
 }
 
 interface IEigenLayerStrategyTVLLimits is IStrategy {
@@ -101,14 +101,13 @@ interface ILidoWithdrawalQueue {
 }
 
 interface ILiquifier {
-    
     struct PermitInput {
         uint256 value;
         uint256 deadline;
         uint8 v;
         bytes32 r;
         bytes32 s;
-    } 
+    }
 
     struct TokenInfo {
         uint128 strategyShare;

@@ -2,17 +2,16 @@
 pragma solidity ^0.8.27;
 
 import "../../src/eigenlayer-interfaces/IEigenPodManager.sol";
-import "./MockShareManagerBase.sol";
+
 import "./MockEigenPod.sol";
 import "./MockPausableBase.sol";
-
+import "./MockShareManagerBase.sol";
 
 // IEigenPodManager but all functions are virtual
 contract MockEigenPodManagerBase is IEigenPodManager, MockShareManagerBase, MockPausableBase {
+    function version() external view virtual returns (string memory) {}
 
-    function version() external virtual view returns (string memory) {}
-
-     /**
+    /**
      * @notice Creates an EigenPod for the sender.
      * @dev Function will revert if the `msg.sender` already has an EigenPod.
      * @dev Returns EigenPod address
@@ -26,7 +25,7 @@ contract MockEigenPodManagerBase is IEigenPodManager, MockShareManagerBase, Mock
      * @param signature The validator's signature of the deposit data.
      * @param depositDataRoot The root/hash of the deposit data for the validator's deposit.
      */
-    function stake(bytes calldata pubkey, bytes calldata signature, bytes32 depositDataRoot) external virtual payable {}
+    function stake(bytes calldata pubkey, bytes calldata signature, bytes32 depositDataRoot) external payable virtual {}
 
     /**
      * @notice Adds any positive share delta to the pod owner's deposit shares, and delegates them to the pod
@@ -39,35 +38,25 @@ contract MockEigenPodManagerBase is IEigenPodManager, MockShareManagerBase, Mock
      * @dev Callable only by the podOwner's EigenPod contract.
      * @dev Reverts if `sharesDelta` is not a whole Gwei amount
      */
-    function recordBeaconChainETHBalanceUpdate(
-        address podOwner,
-        uint256 prevRestakedBalanceWei,
-        int256 balanceDeltaWei
-    ) external virtual {}
+    function recordBeaconChainETHBalanceUpdate(address podOwner, uint256 prevRestakedBalanceWei, int256 balanceDeltaWei) external virtual {}
 
     /// @notice Returns the address of the `podOwner`'s EigenPod if it has been deployed.
-    function ownerToPod(
-        address podOwner
-    ) external virtual view returns (IEigenPod) {}
+    function ownerToPod(address podOwner) external view virtual returns (IEigenPod) {}
 
     /// @notice Returns the address of the `podOwner`'s EigenPod (whether it is deployed yet or not).
-    function getPod(
-        address podOwner
-    ) external virtual view returns (IEigenPod) {}
+    function getPod(address podOwner) external view virtual returns (IEigenPod) {}
 
     /// @notice The ETH2 Deposit Contract
-    function ethPOS() external virtual view returns (IETHPOSDeposit) {}
+    function ethPOS() external view virtual returns (IETHPOSDeposit) {}
 
     /// @notice Beacon proxy to which the EigenPods point
-    function eigenPodBeacon() external virtual view returns (IBeacon) {}
+    function eigenPodBeacon() external view virtual returns (IBeacon) {}
 
     /// @notice Returns 'true' if the `podOwner` has created an EigenPod, and 'false' otherwise.
-    function hasPod(
-        address podOwner
-    ) external virtual view returns (bool) {}
+    function hasPod(address podOwner) external view virtual returns (bool) {}
 
     /// @notice Returns the number of EigenPods that have been created
-    function numPods() external virtual view returns (uint256) {}
+    function numPods() external view virtual returns (uint256) {}
 
     /**
      * @notice Mapping from Pod owner owner to the number of shares they have in the virtual beacon chain ETH strategy.
@@ -77,37 +66,27 @@ contract MockEigenPodManagerBase is IEigenPodManager, MockShareManagerBase, Mock
      * Likewise, when a withdrawal is completed, this "deficit" is decreased and the withdrawal amount is decreased {} We can think of this
      * as the withdrawal "paying off the deficit".
      */
-    function podOwnerDepositShares(
-        address podOwner
-    ) external virtual view returns (int256) {}
+    function podOwnerDepositShares(address podOwner) external view virtual returns (int256) {}
 
     /// @notice returns canonical, virtual beaconChainETH strategy
-    function beaconChainETHStrategy() external virtual view returns (IStrategy) {}
+    function beaconChainETHStrategy() external view virtual returns (IStrategy) {}
 
     /**
      * @notice Returns the historical sum of proportional balance decreases a pod owner has experienced when
      * updating their pod's balance.
      */
-    function beaconChainSlashingFactor(
-        address staker
-    ) external virtual view returns (uint64) {}
+    function beaconChainSlashingFactor(address staker) external view virtual returns (uint64) {}
 
     /// @notice Returns the accumulated amount of beacon chain ETH Strategy shares
-    function burnableETHShares() external virtual view returns (uint256) {}
+    function burnableETHShares() external view virtual returns (uint256) {}
 
     /// @notice Sets the address that can set proof timestamps
-    function setProofTimestampSetter(
-        address newProofTimestampSetter
-    ) external {}
+    function setProofTimestampSetter(address newProofTimestampSetter) external {}
 
     /// @notice Sets the Pectra fork timestamp, only callable by `proofTimestampSetter`
-    function setPectraForkTimestamp(
-        uint64 timestamp
-    ) external {}
+    function setPectraForkTimestamp(uint64 timestamp) external {}
 
     /// @notice Returns the timestamp of the Pectra hard fork
     /// @dev Specifically, this returns the timestamp of the first non-missed slot at or after the Pectra hard fork
     function pectraForkTimestamp() external view returns (uint64) {}
-
-
 }

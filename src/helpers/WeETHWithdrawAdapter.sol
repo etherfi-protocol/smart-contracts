@@ -1,30 +1,28 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {Initializable} from "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {IWeETHWithdrawAdapter} from "../interfaces/IWeETHWithdrawAdapter.sol";
-import {IWeETH} from "../interfaces/IWeETH.sol";
-import {IeETH} from "../interfaces/IeETH.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
 import {ILiquidityPool} from "../interfaces/ILiquidityPool.sol";
-import {IWithdrawRequestNFT} from "../interfaces/IWithdrawRequestNFT.sol";
+
 import {IRoleRegistry} from "../interfaces/IRoleRegistry.sol";
+import {IWeETH} from "../interfaces/IWeETH.sol";
+import {IWeETHWithdrawAdapter} from "../interfaces/IWeETHWithdrawAdapter.sol";
+
+import {IWithdrawRequestNFT} from "../interfaces/IWithdrawRequestNFT.sol";
+import {IeETH} from "../interfaces/IeETH.sol";
 
 /**
  * @title WeETHWithdrawAdapter
  * @notice Adapter contract that allows users to request withdrawals using weETH directly
  * @dev This contract converts weETH to eETH and creates withdrawal requests in the existing system
  */
-contract WeETHWithdrawAdapter is 
-    Initializable, 
-    UUPSUpgradeable, 
-    OwnableUpgradeable, 
-    IWeETHWithdrawAdapter 
-{
+contract WeETHWithdrawAdapter is Initializable, UUPSUpgradeable, OwnableUpgradeable, IWeETHWithdrawAdapter {
     using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
@@ -67,18 +65,8 @@ contract WeETHWithdrawAdapter is
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(
-        address _weETH,
-        address _eETH,
-        address _liquidityPool,
-        address _withdrawRequestNFT,
-        address _roleRegistry
-    ) {
-        if (_weETH == address(0) || 
-            _eETH == address(0) || 
-            _liquidityPool == address(0) || 
-            _withdrawRequestNFT == address(0) ||
-            _roleRegistry == address(0)) {
+    constructor(address _weETH, address _eETH, address _liquidityPool, address _withdrawRequestNFT, address _roleRegistry) {
+        if (_weETH == address(0) || _eETH == address(0) || _liquidityPool == address(0) || _withdrawRequestNFT == address(0) || _roleRegistry == address(0)) {
             revert ZeroAddress();
         }
 
@@ -87,7 +75,7 @@ contract WeETHWithdrawAdapter is
         liquidityPool = ILiquidityPool(_liquidityPool);
         withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
         roleRegistry = IRoleRegistry(_roleRegistry);
-        
+
         _disableInitializers();
     }
 
@@ -96,7 +84,9 @@ contract WeETHWithdrawAdapter is
      * @param _initialOwner Address that will be set as the contract owner
      */
     function initialize(address _initialOwner) external initializer {
-        if (_initialOwner == address(0)) revert ZeroAddress();
+        if (_initialOwner == address(0)) {
+            revert ZeroAddress();
+        }
         __Ownable_init();
         __UUPSUpgradeable_init();
         _transferOwnership(_initialOwner);
@@ -109,26 +99,26 @@ contract WeETHWithdrawAdapter is
      * @param recipient Address that will receive the WithdrawRequestNFT
      * @return requestId The ID of the created withdrawal request
      */
-    function requestWithdraw(uint256 weETHAmount, address recipient) 
-        public 
-        whenNotPaused 
-        returns (uint256 requestId) 
-    {
-        if (weETHAmount == 0) revert ZeroAmount();
-        if (recipient == address(0)) revert ZeroAddress();
+    function requestWithdraw(uint256 weETHAmount, address recipient) public whenNotPaused returns (uint256 requestId) {
+        if (weETHAmount == 0) {
+            revert ZeroAmount();
+        }
+        if (recipient == address(0)) {
+            revert ZeroAddress();
+        }
 
         // Transfer weETH from user to this contract
         IERC20(address(weETH)).safeTransferFrom(msg.sender, address(this), weETHAmount);
-        
+
         // Unwrap weETH to get eETH
         uint256 eETHAmount = weETH.unwrap(weETHAmount);
-        
+
         // Approve eETH to be spent by LiquidityPool
         IERC20(address(eETH)).safeApprove(address(liquidityPool), eETHAmount);
-        
+
         // Create withdrawal request through LiquidityPool
         requestId = liquidityPool.requestWithdraw(recipient, eETHAmount);
-                
+
         return requestId;
     }
 
@@ -139,27 +129,13 @@ contract WeETHWithdrawAdapter is
      * @param permit Permit data for weETH approval
      * @return requestId The ID of the created withdrawal request
      */
-    function requestWithdrawWithPermit(
-        uint256 weETHAmount,
-        address recipient,
-        PermitInput calldata permit
-    ) external whenNotPaused returns (uint256 requestId) {
+    function requestWithdrawWithPermit(uint256 weETHAmount, address recipient, PermitInput calldata permit) external whenNotPaused returns (uint256 requestId) {
         // Use permit to approve weETH transfer
-        try weETH.permit(
-            msg.sender, 
-            address(this), 
-            permit.value, 
-            permit.deadline, 
-            permit.v, 
-            permit.r, 
-            permit.s
-        ) {} catch {}
+        try weETH.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
 
         // Call the regular requestWithdraw function
         return requestWithdraw(weETHAmount, recipient);
     }
-
-
 
     //--------------------------------------------------------------------------------------
     //----------------------------------  ADMIN FUNCTIONS  --------------------------------
@@ -169,8 +145,12 @@ contract WeETHWithdrawAdapter is
      * @notice Pause the contract
      */
     function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
-        if (paused) revert("Pausable: already paused");
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) {
+            revert IncorrectRole();
+        }
+        if (paused) {
+            revert("Pausable: already paused");
+        }
 
         paused = true;
         emit Paused(msg.sender);
@@ -180,8 +160,12 @@ contract WeETHWithdrawAdapter is
      * @notice Unpause the contract
      */
     function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
-        if (!paused) revert("Pausable: not paused");
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) {
+            revert IncorrectRole();
+        }
+        if (!paused) {
+            revert("Pausable: not paused");
+        }
 
         paused = false;
         emit Unpaused(msg.sender);
@@ -215,7 +199,7 @@ contract WeETHWithdrawAdapter is
     /**
      * @notice Authorize contract upgrades
      */
-    function _authorizeUpgrade(address /* newImplementation */) internal view override {
+    function _authorizeUpgrade(address /* newImplementation */ ) internal view override {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
@@ -223,7 +207,9 @@ contract WeETHWithdrawAdapter is
      * @notice Check if contract is not paused
      */
     function _requireNotPaused() internal view {
-        if (paused) revert ContractPaused();
+        if (paused) {
+            revert ContractPaused();
+        }
     }
 
     //--------------------------------------------------------------------------------------

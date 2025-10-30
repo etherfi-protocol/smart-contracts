@@ -65,9 +65,7 @@ interface IPermissionController is IPermissionControllerErrors, IPermissionContr
      * @param account The account to accept the admin role for.
      * @dev Only addresses that were previously set as pending admins can accept the role.
      */
-    function acceptAdmin(
-        address account
-    ) external;
+    function acceptAdmin(address account) external;
 
     /**
      * @notice Removes an active admin from an account.
@@ -121,18 +119,14 @@ interface IPermissionController is IPermissionControllerErrors, IPermissionContr
      * @dev If the account has no admins, returns an array containing only the account address.
      * @return An array of admin addresses.
      */
-    function getAdmins(
-        address account
-    ) external view returns (address[] memory);
+    function getAdmins(address account) external view returns (address[] memory);
 
     /**
      * @notice Retrieves all pending admins for an account.
      * @param account The account to get the pending admins for.
      * @return An array of pending admin addresses.
      */
-    function getPendingAdmins(
-        address account
-    ) external view returns (address[] memory);
+    function getPendingAdmins(address account) external view returns (address[] memory);
 
     /**
      * @notice Checks if a caller has permission to call a specific function.
@@ -153,10 +147,7 @@ interface IPermissionController is IPermissionControllerErrors, IPermissionContr
      * @param appointee The appointee address to check.
      * @return Two arrays: target contract addresses and their corresponding function selectors.
      */
-    function getAppointeePermissions(
-        address account,
-        address appointee
-    ) external returns (address[] memory, bytes4[] memory);
+    function getAppointeePermissions(address account, address appointee) external returns (address[] memory, bytes4[] memory);
 
     /**
      * @notice Retrieves all appointees that can call a specific function for an account.

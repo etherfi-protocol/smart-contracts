@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "./interfaces/IEtherFiRateLimiter.sol";
@@ -10,7 +10,6 @@ import "./interfaces/IRoleRegistry.sol";
 import "lib/BucketLimiter.sol";
 
 contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, PausableUpgradeable {
-
     IRoleRegistry public immutable roleRegistry;
 
     //---------------------------------------------------------------------------
@@ -50,7 +49,9 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param consumer The consumer address to update
     /// @param allowed Whether the consumer is allowed to consume from this limit
     function updateConsumers(bytes32 id, address consumer, bool allowed) external onlyAdmin {
-        if (!limitExists(id)) revert UnknownLimit();
+        if (!limitExists(id)) {
+            revert UnknownLimit();
+        }
         consumers[id][consumer] = allowed;
         emit ConsumerUpdated(id, consumer, allowed);
     }
@@ -60,7 +61,9 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param capacity The maximum capacity of the bucket in gwei
     /// @param refillRate The refill rate per second in gwei
     function createNewLimiter(bytes32 id, uint64 capacity, uint64 refillRate) external onlyAdmin {
-        if (limitExists(id)) revert LimitAlreadyExists();
+        if (limitExists(id)) {
+            revert LimitAlreadyExists();
+        }
 
         limits[id] = BucketLimiter.create(capacity, refillRate);
         emit LimiterCreated(id, capacity, refillRate);
@@ -70,7 +73,9 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param id The rate limit identifier
     /// @param capacity The new maximum capacity in gwei
     function setCapacity(bytes32 id, uint64 capacity) external onlyAdmin {
-        if (!limitExists(id)) revert UnknownLimit();
+        if (!limitExists(id)) {
+            revert UnknownLimit();
+        }
 
         BucketLimiter.setCapacity(limits[id], capacity);
         emit CapacityUpdated(id, capacity);
@@ -80,7 +85,9 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param id The rate limit identifier
     /// @param refillRate The new refill rate per second in gwei
     function setRefillRate(bytes32 id, uint64 refillRate) external onlyAdmin {
-        if (!limitExists(id)) revert UnknownLimit();
+        if (!limitExists(id)) {
+            revert UnknownLimit();
+        }
 
         BucketLimiter.setRefillRate(limits[id], refillRate);
         emit RefillRateUpdated(id, refillRate);
@@ -90,7 +97,9 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param id The rate limit identifier
     /// @param remaining The new remaining capacity in gwei
     function setRemaining(bytes32 id, uint64 remaining) external onlyAdmin {
-        if (!limitExists(id)) revert UnknownLimit();
+        if (!limitExists(id)) {
+            revert UnknownLimit();
+        }
 
         BucketLimiter.setRemaining(limits[id], remaining);
         emit RemainingUpdated(id, remaining);
@@ -98,13 +107,17 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
 
     /// @notice Pauses the contract, preventing consumption operations
     function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) {
+            revert IncorrectRole();
+        }
         _pause();
     }
 
     /// @notice Unpauses the contract, allowing consumption operations
     function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) {
+            revert IncorrectRole();
+        }
         _unpause();
     }
 
@@ -117,11 +130,17 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param amount The amount to consume in gwei
     /// @dev Reverts if the consumer is not whitelisted or if insufficient capacity is available
     function consume(bytes32 id, uint64 amount) external whenNotPaused {
-        if (!limitExists(id)) revert UnknownLimit();
-        if (!consumers[id][msg.sender]) revert InvalidConsumer(); // must be whitelisted consumer
+        if (!limitExists(id)) {
+            revert UnknownLimit();
+        }
+        if (!consumers[id][msg.sender]) {
+            revert InvalidConsumer();
+        } // must be whitelisted consumer
 
         // returns false if full amount cannot be consumed
-        if (!BucketLimiter.consume(limits[id], amount)) revert LimitExceeded();
+        if (!BucketLimiter.consume(limits[id], amount)) {
+            revert LimitExceeded();
+        }
     }
 
     /// @notice Checks if a specific amount can be consumed from a rate limit
@@ -129,7 +148,9 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param amount The amount to check in gwei
     /// @return bool True if the amount can be consumed, false otherwise
     function canConsume(bytes32 id, uint64 amount) external view returns (bool) {
-        if (!limitExists(id)) revert UnknownLimit();
+        if (!limitExists(id)) {
+            revert UnknownLimit();
+        }
         return BucketLimiter.canConsume(limits[id], amount);
     }
 
@@ -137,7 +158,9 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param id The rate limit identifier
     /// @return uint64 The amount that can currently be consumed in gwei
     function consumable(bytes32 id) external view returns (uint64) {
-        if (!limitExists(id)) revert UnknownLimit();
+        if (!limitExists(id)) {
+            revert UnknownLimit();
+        }
         return BucketLimiter.consumable(limits[id]);
     }
 
@@ -152,7 +175,9 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @return refillRate The refill rate per second in gwei
     /// @return lastRefill The timestamp of the last refill operation
     function getLimit(bytes32 id) external view returns (uint64 capacity, uint64 remaining, uint64 refillRate, uint256 lastRefill) {
-        if (!limitExists(id)) revert UnknownLimit();
+        if (!limitExists(id)) {
+            revert UnknownLimit();
+        }
         BucketLimiter.Limit memory limit = limits[id];
         return (limit.capacity, limit.remaining, limit.refillRate, limit.lastRefill);
     }
@@ -178,7 +203,9 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     //--------------------------------------------------------------------------------------
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(ETHERFI_RATE_LIMITER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(ETHERFI_RATE_LIMITER_ADMIN_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
         _;
     }
 }

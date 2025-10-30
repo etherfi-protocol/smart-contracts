@@ -17,10 +17,7 @@ interface IAuctionManager {
 
     function isBidActive(uint256 _bidId) external view returns (bool);
 
-    function createBid(
-        uint256 _bidSize,
-        uint256 _bidAmount
-    ) external payable returns (uint256[] memory);
+    function createBid(uint256 _bidSize, uint256 _bidAmount) external payable returns (uint256[] memory);
 
     function cancelBidBatch(uint256[] calldata _bidIds) external;
 
@@ -32,15 +29,13 @@ interface IAuctionManager {
 
     function processAuctionFeeTransfer(uint256 _validatorId) external;
 
-    function setStakingManagerContractAddress(
-        address _stakingManagerContractAddress
-    ) external;
+    function setStakingManagerContractAddress(address _stakingManagerContractAddress) external;
 
     function setAccumulatedRevenueThreshold(uint128 _newThreshold) external;
 
     function updateAdmin(address _address, bool _isAdmin) external;
     function pauseContract() external;
     function unPauseContract() external;
-    
+
     function transferAccumulatedRevenue() external;
 }

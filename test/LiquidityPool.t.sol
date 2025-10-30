@@ -30,19 +30,13 @@ contract LiquidityPoolTest is TestSetup {
         nodeOperatorManagerInstance.updateAdmin(alice, true);
         // liquidityPoolInstance.updateAdmin(alice, true);
         vm.stopPrank();
-    
+
         vm.startPrank(alice);
         _setUpNodeOperatorWhitelist();
         _approveNodeOperators();
 
-        nodeOperatorManagerInstance.registerNodeOperator(
-            _ipfsHash,
-            10000
-        );
-        bidIds = auctionInstance.createBid{value: 1 ether}(
-            10,
-            0.1 ether
-        );
+        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 10_000);
+        bidIds = auctionInstance.createBid{value: 1 ether}(10, 0.1 ether);
         vm.stopPrank();
     }
 
@@ -63,7 +57,6 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_StakingManagerLiquidityPool() public {
-
         startHoax(alice);
         uint256 aliceBalBefore = alice.balance;
         liquidityPoolInstance.deposit{value: 1 ether}();
@@ -91,7 +84,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.startPrank(alice);
         uint256 aliceNonce = eETHInstance.nonces(alice);
         // create permit with invalid private key (Bob)
-        ILiquidityPool.PermitInput memory permitInput = createPermitInput(3, address(liquidityPoolInstance), 2 ether, aliceNonce+1, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
+        ILiquidityPool.PermitInput memory permitInput = createPermitInput(3, address(liquidityPoolInstance), 2 ether, aliceNonce + 1, 2 ** 256 - 1, eETHInstance.DOMAIN_SEPARATOR());
         vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE"); //even through the reason was invalid permit to prevent griefing attack the allowance fails
         liquidityPoolInstance.requestWithdrawWithPermit(alice, 2 ether, permitInput);
         vm.stopPrank();
@@ -108,12 +101,11 @@ contract LiquidityPoolTest is TestSetup {
         vm.startPrank(alice);
         uint256 aliceNonce = eETHInstance.nonces(alice);
         //  permit with insufficient amount of ETH
-        ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(liquidityPoolInstance), 1 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
+        ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(liquidityPoolInstance), 1 ether, aliceNonce, 2 ** 256 - 1, eETHInstance.DOMAIN_SEPARATOR());
         vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
         liquidityPoolInstance.requestWithdrawWithPermit(alice, 2 ether, permitInput);
         vm.stopPrank();
     }
-
 
     function test_WithdrawLiquidityPoolSuccess() public {
         vm.deal(alice, 3 ether);
@@ -142,12 +134,12 @@ contract LiquidityPoolTest is TestSetup {
         vm.startPrank(alice);
         uint256 aliceNonce = eETHInstance.nonces(alice);
         // alice priv key = 2
-        ILiquidityPool.PermitInput memory permitInputAlice = createPermitInput(2, address(liquidityPoolInstance), 2 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
+        ILiquidityPool.PermitInput memory permitInputAlice = createPermitInput(2, address(liquidityPoolInstance), 2 ether, aliceNonce, 2 ** 256 - 1, eETHInstance.DOMAIN_SEPARATOR());
         uint256 aliceReqId = liquidityPoolInstance.requestWithdrawWithPermit(alice, 2 ether, permitInputAlice);
         vm.stopPrank();
-        
+
         _finalizeWithdrawalRequest(aliceReqId);
-        
+
         vm.startPrank(alice);
         withdrawRequestNFTInstance.claimWithdraw(aliceReqId);
         assertEq(eETHInstance.balanceOf(alice), 1 ether);
@@ -157,7 +149,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.startPrank(bob);
         uint256 bobNonce = eETHInstance.nonces(bob);
         // bob priv key = 3
-        ILiquidityPool.PermitInput memory permitInputBob = createPermitInput(3, address(liquidityPoolInstance), 2 ether, bobNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
+        ILiquidityPool.PermitInput memory permitInputBob = createPermitInput(3, address(liquidityPoolInstance), 2 ether, bobNonce, 2 ** 256 - 1, eETHInstance.DOMAIN_SEPARATOR());
         uint256 bobReqId = liquidityPoolInstance.requestWithdrawWithPermit(bob, 2 ether, permitInputBob);
         vm.stopPrank();
 
@@ -173,7 +165,7 @@ contract LiquidityPoolTest is TestSetup {
     function test_WithdrawLiquidityPoolFails() public {
         vm.deal(bob, 100 ether);
         vm.startPrank(bob);
-        liquidityPoolInstance.deposit{value: 100 ether}();        
+        liquidityPoolInstance.deposit{value: 100 ether}();
         vm.stopPrank();
 
         startHoax(alice);
@@ -186,7 +178,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.deal(alice, 10 ether);
 
         vm.prank(bob);
-        liquidityPoolInstance.deposit{value: 100 ether}();        
+        liquidityPoolInstance.deposit{value: 100 ether}();
 
         vm.prank(bob);
         eETHInstance.approve(address(liquidityPoolInstance), 100 ether);
@@ -244,22 +236,21 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(eETHInstance.balanceOf(alice), 3 ether);
         assertEq(eETHInstance.balanceOf(bob), 3 ether);
 
-        (bool sent, ) = address(liquidityPoolInstance).call{value: 1 ether}("");
+        (bool sent,) = address(liquidityPoolInstance).call{value: 1 ether}("");
         assertEq(sent, true);
         assertEq(eETHInstance.balanceOf(alice), 3 ether);
         assertEq(eETHInstance.balanceOf(bob), 3 ether);
 
-        (sent, ) = address(liquidityPoolInstance).call{value: 1 ether}("");
+        (sent,) = address(liquidityPoolInstance).call{value: 1 ether}("");
         assertEq(sent, true);
         assertEq(eETHInstance.balanceOf(alice), 3 ether);
         assertEq(eETHInstance.balanceOf(bob), 3 ether);
 
-        (sent, ) = address(liquidityPoolInstance).call{value: 1 ether}("");
+        (sent,) = address(liquidityPoolInstance).call{value: 1 ether}("");
         assertEq(sent, false);
         assertEq(eETHInstance.balanceOf(alice), 3 ether);
         assertEq(eETHInstance.balanceOf(bob), 3 ether);
     }
-
 
     function test_sendExitRequestFails() public {
         uint256[] memory newValidators = new uint256[](10);
@@ -285,7 +276,7 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.deal(alice, 3 ether);
         vm.prank(alice);
-        (bool sent, ) = address(liquidityPoolInstance).call{value: 1 ether}("");
+        (bool sent,) = address(liquidityPoolInstance).call{value: 1 ether}("");
         assertEq(address(liquidityPoolInstance).balance, 100 ether + 1 ether);
         assertEq(sent, true);
 
@@ -294,19 +285,19 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_RegisterAsBnftHolder() public {
         //Move past one week
-        vm.warp(804650);
+        vm.warp(804_650);
 
         vm.expectRevert(LiquidityPool.IncorrectRole.selector);
         liquidityPoolInstance.registerValidatorSpawner(alice);
-        
+
         //Let Alice sign up as a BNFT holder
         vm.startPrank(alice);
         registerAsBnftHolder(alice);
         vm.stopPrank();
-        bool registered= liquidityPoolInstance.validatorSpawner(alice);
+        bool registered = liquidityPoolInstance.validatorSpawner(alice);
         assertEq(registered, true);
     }
-    
+
     // TODO(Dave): update for new deposit flow
     /*
     function test_DepositAsBnftHolderSimple() public {
@@ -410,7 +401,6 @@ contract LiquidityPoolTest is TestSetup {
         vm.expectRevert("Incorrect Caller");
         liquidityPoolInstance.unregisterValidatorSpawner(owner);
     }
-
 
     // TODO(Dave): update for new deposit flow
     /*
@@ -669,8 +659,6 @@ contract LiquidityPoolTest is TestSetup {
     }
     */
 
-
-
     // TODO(dave): update when v3 changes finalized
 
     /*
@@ -752,7 +740,7 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.pauseContract();
 
         assertTrue(liquidityPoolInstance.paused());
-        
+
         vm.expectRevert(LiquidityPool.IncorrectRole.selector);
         liquidityPoolInstance.unPauseContract();
 

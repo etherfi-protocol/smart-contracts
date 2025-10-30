@@ -1,18 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-
+import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
-import "./interfaces/IEtherFiOracle.sol";
 import "./interfaces/IEtherFiAdmin.sol";
-
+import "./interfaces/IEtherFiOracle.sol";
 
 contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle {
-
     mapping(address => IEtherFiOracle.CommitteeMemberState) public committeeMemberStates; // committee member wallet address to its State
     mapping(bytes32 => IEtherFiOracle.ConsensusState) public consensusStates; // report's hash -> Consensus State
 
@@ -47,16 +44,12 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     event ReportPublished(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash);
     event ReportSubmitted(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash, address indexed committeeMember);
 
-
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
 
-    function initialize(uint32 _quorumSize, uint32 _reportPeriodSlot, uint32 _reportStartSlot, uint32 _slotsPerEpoch, uint32 _secondsPerSlot, uint32 _genesisTime)
-        external
-        initializer
-    {
+    function initialize(uint32 _quorumSize, uint32 _reportPeriodSlot, uint32 _reportStartSlot, uint32 _slotsPerEpoch, uint32 _secondsPerSlot, uint32 _genesisTime) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
 
@@ -75,7 +68,6 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         require(shouldSubmitReport(msg.sender), "You don't need to submit a report");
         verifyReport(_report);
 
-
         // update the member state
         CommitteeMemberState storage memberState = committeeMemberStates[msg.sender];
         memberState.lastReportRefSlot = _report.refSlotTo;
@@ -84,15 +76,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         // update the consensus state
         ConsensusState storage consenState = consensusStates[reportHash];
 
-        emit ReportSubmitted(
-            _report.consensusVersion,
-            _report.refSlotFrom,
-            _report.refSlotTo,
-            _report.refBlockFrom,
-            _report.refBlockTo,
-            reportHash,
-            msg.sender
-            );
+        emit ReportSubmitted(_report.consensusVersion, _report.refSlotFrom, _report.refSlotTo, _report.refBlockFrom, _report.refBlockTo, reportHash, msg.sender);
 
         // if the consensus reaches
         consenState.support++;
@@ -170,14 +154,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         lastPublishedReportRefBlock = _report.refBlockTo;
 
         // emit report published event
-        emit ReportPublished(
-            _report.consensusVersion,
-            _report.refSlotFrom,
-            _report.refSlotTo,
-            _report.refBlockFrom,
-            _report.refBlockTo,
-            _hash
-            );
+        emit ReportPublished(_report.consensusVersion, _report.refSlotFrom, _report.refSlotTo, _report.refBlockFrom, _report.refBlockTo, _hash);
     }
 
     // Given the last published report AND the current slot number,
@@ -196,31 +173,11 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     }
 
     function generateReportHash(OracleReport calldata _report) public pure returns (bytes32) {
-        bytes32 chunk1 = keccak256(
-            abi.encode(
-                _report.consensusVersion,
-                _report.refSlotFrom,
-                _report.refSlotTo,
-                _report.refBlockFrom,
-                _report.refBlockTo,
-                _report.accruedRewards,
-                _report.protocolFees
-            )
-        );
+        bytes32 chunk1 = keccak256(abi.encode(_report.consensusVersion, _report.refSlotFrom, _report.refSlotTo, _report.refBlockFrom, _report.refBlockTo, _report.accruedRewards, _report.protocolFees));
 
-        bytes32 chunk2 = keccak256(
-            abi.encode(
-                _report.validatorsToApprove
-            )
-        );
+        bytes32 chunk2 = keccak256(abi.encode(_report.validatorsToApprove));
 
-       bytes32 chunk3 = keccak256(
-            abi.encode(
-                _report.withdrawalRequestsToInvalidate,
-                _report.lastFinalizedWithdrawalRequestId,
-                _report.finalizedWithdrawalAmount
-            )
-        );
+        bytes32 chunk3 = keccak256(abi.encode(_report.withdrawalRequestsToInvalidate, _report.lastFinalizedWithdrawalRequestId, _report.finalizedWithdrawalAmount));
         return keccak256(abi.encode(chunk1, chunk2, chunk3));
     }
 
@@ -240,7 +197,9 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     function removeCommitteeMember(address _address) public onlyOwner {
         require(committeeMemberStates[_address].registered == true, "Not registered");
         numCommitteeMembers--;
-        if (committeeMemberStates[_address].enabled) numActiveCommitteeMembers--;
+        if (committeeMemberStates[_address].enabled) {
+            numActiveCommitteeMembers--;
+        }
         delete committeeMemberStates[_address];
 
         emit CommitteeMemberRemoved(_address);
@@ -265,7 +224,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         require(_reportStartSlot > lastPublishedReportRefSlot, "The start slot should be after the last published report");
         require(_reportStartSlot % SLOTS_PER_EPOCH == 0, "The start slot should be at the beginning of the epoch");
         reportStartSlot = _reportStartSlot;
-        
+
         emit ReportStartSlotUpdated(_reportStartSlot);
     }
 
@@ -294,7 +253,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         require(etherFiAdmin == IEtherFiAdmin(address(0)), "EtherFiAdmin is already set");
         etherFiAdmin = IEtherFiAdmin(_etherFiAdminAddress);
     }
-    
+
     function unpublishReport(bytes32 _hash) external isAdmin {
         require(consensusStates[_hash].consensusReached, "Consensus is not reached yet");
         consensusStates[_hash].support = 0;

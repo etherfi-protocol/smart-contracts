@@ -2,20 +2,21 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
-import "forge-std/console.sol";
+
 import "forge-std/StdJson.sol";
+import "forge-std/console.sol";
 
 import "../script/Create2Factory.sol";
 
-import "../src/EtherFiNode.sol";
-import "../src/RoleRegistry.sol";
-import "../src/StakingManager.sol";
-import "../src/EtherFiNodesManager.sol";
-import "../src/LiquidityPool.sol";
-import "../src/WeETH.sol";
 import "../src/EETH.sol";
 import "../src/EtherFiAdmin.sol";
+import "../src/EtherFiNode.sol";
+import "../src/EtherFiNodesManager.sol";
 import "../src/EtherFiOracle.sol";
+import "../src/LiquidityPool.sol";
+import "../src/RoleRegistry.sol";
+import "../src/StakingManager.sol";
+import "../src/WeETH.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);
@@ -57,17 +58,8 @@ contract DeployScript is Script {
         vm.startBroadcast();
         {
             string memory contractName = "EtherFiNode";
-            bytes memory constructorArgs = abi.encode(
-                address(liquidityPool),
-                address(etherFiNodesManager),
-                address(eigenPodManager),
-                address(delegationManager),
-                address(roleRegistry)
-            );
-            bytes memory bytecode = abi.encodePacked(
-                type(EtherFiNode).creationCode,
-                constructorArgs
-            );
+            bytes memory constructorArgs = abi.encode(address(liquidityPool), address(etherFiNodesManager), address(eigenPodManager), address(delegationManager), address(roleRegistry));
+            bytes memory bytecode = abi.encodePacked(type(EtherFiNode).creationCode, constructorArgs);
             address deployedAddress = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true);
             verify(deployedAddress, bytecode, commitHashSalt);
         }
@@ -75,18 +67,8 @@ contract DeployScript is Script {
         // StakingManager
         {
             string memory contractName = "StakingManager";
-            bytes memory constructorArgs = abi.encode(
-                address(liquidityPool),
-                address(etherFiNodesManager),
-                address(stakingDepositContract),
-                address(auctionManager),
-                address(etherFiNodeBeacon),
-                address(roleRegistry)
-            );
-            bytes memory bytecode = abi.encodePacked(
-                type(StakingManager).creationCode,
-                constructorArgs
-            );
+            bytes memory constructorArgs = abi.encode(address(liquidityPool), address(etherFiNodesManager), address(stakingDepositContract), address(auctionManager), address(etherFiNodeBeacon), address(roleRegistry));
+            bytes memory bytecode = abi.encodePacked(type(StakingManager).creationCode, constructorArgs);
             address deployedAddress = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true);
             verify(deployedAddress, bytecode, commitHashSalt);
         }
@@ -94,14 +76,8 @@ contract DeployScript is Script {
         // EtherFiNodesManager
         {
             string memory contractName = "EtherFiNodesManager";
-            bytes memory constructorArgs = abi.encode(
-                address(stakingManager),
-                address(roleRegistry)
-            );
-            bytes memory bytecode = abi.encodePacked(
-                type(EtherFiNodesManager).creationCode,
-                constructorArgs
-            );
+            bytes memory constructorArgs = abi.encode(address(stakingManager), address(roleRegistry));
+            bytes memory bytecode = abi.encodePacked(type(EtherFiNodesManager).creationCode, constructorArgs);
             address deployedAddress = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true);
             verify(deployedAddress, bytecode, commitHashSalt);
         }
@@ -110,10 +86,7 @@ contract DeployScript is Script {
         {
             string memory contractName = "LiquidityPool";
             bytes memory constructorArgs;
-            bytes memory bytecode = abi.encodePacked(
-                type(LiquidityPool).creationCode,
-                constructorArgs
-            );
+            bytes memory bytecode = abi.encodePacked(type(LiquidityPool).creationCode, constructorArgs);
             address deployedAddress = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true);
             verify(deployedAddress, bytecode, commitHashSalt);
         }
@@ -121,13 +94,8 @@ contract DeployScript is Script {
         // WeETH
         {
             string memory contractName = "WeETH";
-            bytes memory constructorArgs = abi.encode(
-                address(roleRegistry)
-            );
-            bytes memory bytecode = abi.encodePacked(
-                type(WeETH).creationCode,
-                constructorArgs
-            );
+            bytes memory constructorArgs = abi.encode(address(roleRegistry));
+            bytes memory bytecode = abi.encodePacked(type(WeETH).creationCode, constructorArgs);
             address deployedAddress = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true);
             verify(deployedAddress, bytecode, commitHashSalt);
         }
@@ -135,13 +103,8 @@ contract DeployScript is Script {
         // eETH
         {
             string memory contractName = "EETH";
-            bytes memory constructorArgs = abi.encode(
-                address(roleRegistry)
-            );
-            bytes memory bytecode = abi.encodePacked(
-                type(EETH).creationCode,
-                constructorArgs
-            );
+            bytes memory constructorArgs = abi.encode(address(roleRegistry));
+            bytes memory bytecode = abi.encodePacked(type(EETH).creationCode, constructorArgs);
             address deployedAddress = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true);
             verify(deployedAddress, bytecode, commitHashSalt);
         }
@@ -150,10 +113,7 @@ contract DeployScript is Script {
         {
             string memory contractName = "EtherFiOracle";
             bytes memory constructorArgs;
-            bytes memory bytecode = abi.encodePacked(
-                type(EtherFiOracle).creationCode,
-                constructorArgs
-            );
+            bytes memory bytecode = abi.encodePacked(type(EtherFiOracle).creationCode, constructorArgs);
             address deployedAddress = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true);
             verify(deployedAddress, bytecode, commitHashSalt);
         }
@@ -162,10 +122,7 @@ contract DeployScript is Script {
         {
             string memory contractName = "EtherFiAdmin";
             bytes memory constructorArgs;
-            bytes memory bytecode = abi.encodePacked(
-                type(EtherFiAdmin).creationCode,
-                constructorArgs
-            );
+            bytes memory bytecode = abi.encodePacked(type(EtherFiAdmin).creationCode, constructorArgs);
             address deployedAddress = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true);
             verify(deployedAddress, bytecode, commitHashSalt);
         }
@@ -180,31 +137,15 @@ contract DeployScript is Script {
         require(deployedAddress == predictedAddress, "Deployment address mismatch");
 
         if (logging) {
-
             // 5. Create JSON deployment log (exact same format)
-            string memory deployLog = string.concat(
-                "{\n",
-                '  "contractName": "', contractName, '",\n',
-                '  "deploymentParameters": {\n',
-                '    "factory": "', vm.toString(address(factory)), '",\n',
-                '    "salt": "', vm.toString(salt), '",\n',
-                formatConstructorArgs(constructorArgs, contractName), '\n',
-                '  },\n',
-                '  "deployedAddress": "', vm.toString(deployedAddress), '"\n',
-                "}"
-            );
+            string memory deployLog = string.concat("{\n", '  "contractName": "', contractName, '",\n', '  "deploymentParameters": {\n', '    "factory": "', vm.toString(address(factory)), '",\n', '    "salt": "', vm.toString(salt), '",\n', formatConstructorArgs(constructorArgs, contractName), "\n", "  },\n", '  "deployedAddress": "', vm.toString(deployedAddress), '"\n', "}");
 
             // 6. Save deployment log
             string memory root = vm.projectRoot();
             string memory logFileDir = string.concat(root, "/deployment/", contractName);
             vm.createDir(logFileDir, true);
 
-            string memory logFileName = string.concat(
-                logFileDir,
-                "/",
-                getTimestampString(),
-                ".json"
-            );
+            string memory logFileName = string.concat(logFileDir, "/", getTimestampString(), ".json");
             vm.writeFile(logFileName, deployLog);
 
             // 7. Console output
@@ -224,11 +165,7 @@ contract DeployScript is Script {
     // Parse and format constructor arguments into JSON
     //-------------------------------------------------------------------------
 
-    function formatConstructorArgs(bytes memory constructorArgs, string memory contractName)
-        internal
-        view
-        returns (string memory)
-    {
+    function formatConstructorArgs(bytes memory constructorArgs, string memory contractName) internal view returns (string memory) {
         // 1. Load artifact JSON
         string memory artifactJson = readArtifact(contractName);
 
@@ -262,11 +199,7 @@ contract DeployScript is Script {
     /**
      * @dev Extracts all `name` and `type` fields from the constructor inputs
      */
-    function getConstructorMetadata(string memory artifactJson, uint256 inputCount)
-        internal
-        pure
-        returns (string[] memory, string[] memory)
-    {
+    function getConstructorMetadata(string memory artifactJson, uint256 inputCount) internal pure returns (string[] memory, string[] memory) {
         string[] memory names = new string[](inputCount);
         string[] memory typesArr = new string[](inputCount);
 
@@ -283,15 +216,7 @@ contract DeployScript is Script {
     /**
      * @dev Decodes each provided constructorArg and builds the JSON lines
      */
-    function decodeParamsJson(
-        bytes memory constructorArgs,
-        string[] memory names,
-        string[] memory typesArr
-    )
-        internal
-        pure
-        returns (string memory)
-    {
+    function decodeParamsJson(bytes memory constructorArgs, string[] memory names, string[] memory typesArr) internal pure returns (string memory) {
         uint256 offset;
         string memory json = '    "constructorArgs": {\n';
 
@@ -299,11 +224,7 @@ contract DeployScript is Script {
             (string memory val, uint256 newOffset) = decodeParam(constructorArgs, offset, typesArr[i]);
             offset = newOffset;
 
-            json = string.concat(
-                json,
-                '      "', names[i], '": "', val, '"',
-                (i < names.length - 1) ? ",\n" : "\n"
-            );
+            json = string.concat(json, '      "', names[i], '": "', val, '"', (i < names.length - 1) ? ",\n" : "\n");
         }
         return string.concat(json, "    }");
     }
@@ -312,11 +233,7 @@ contract DeployScript is Script {
     // Decoder logic (same as before)
     //-------------------------------------------------------------------------
 
-    function decodeParam(bytes memory data, uint256 offset, string memory t)
-        internal
-        pure
-        returns (string memory, uint256)
-    {
+    function decodeParam(bytes memory data, uint256 offset, string memory t) internal pure returns (string memory, uint256) {
         if (!isDynamicType(t)) {
             // For static params, read 32 bytes directly
             bytes memory chunk = slice(data, offset, 32);
@@ -395,7 +312,7 @@ contract DeployScript is Script {
 
     function endsWithArray(string memory t) internal pure returns (bool) {
         bytes memory b = bytes(t);
-        return b.length >= 2 && (b[b.length - 2] == '[' && b[b.length - 1] == ']');
+        return b.length >= 2 && (b[b.length - 2] == "[" && b[b.length - 1] == "]");
     }
 
     //-------------------------------------------------------------------------
@@ -419,8 +336,12 @@ contract DeployScript is Script {
         bytes memory b = bytes(str);
         uint256 start;
         uint256 end = b.length;
-        while (start < b.length && uint8(b[start]) <= 0x20) start++;
-        while (end > start && uint8(b[end - 1]) <= 0x20) end--;
+        while (start < b.length && uint8(b[start]) <= 0x20) {
+            start++;
+        }
+        while (end > start && uint8(b[end - 1]) <= 0x20) {
+            end--;
+        }
         bytes memory out = new bytes(end - start);
         for (uint256 i = 0; i < out.length; i++) {
             out[i] = b[start + i];
@@ -435,9 +356,13 @@ contract DeployScript is Script {
     function startsWith(string memory str, string memory prefix) internal pure returns (bool) {
         bytes memory s = bytes(str);
         bytes memory p = bytes(prefix);
-        if (s.length < p.length) return false;
+        if (s.length < p.length) {
+            return false;
+        }
         for (uint256 i = 0; i < p.length; i++) {
-            if (s[i] != p[i]) return false;
+            if (s[i] != p[i]) {
+                return false;
+            }
         }
         return true;
     }
@@ -449,13 +374,13 @@ contract DeployScript is Script {
     // The timestamp is in UTC (Coordinated Universal Time). This is because block.timestamp returns a Unix timestamp, which is always in UTC.
     function getTimestampString() internal view returns (string memory) {
         uint256 ts = block.timestamp;
-        string memory year = vm.toString((ts / 31536000) + 1970);
-        string memory month = pad(vm.toString(((ts % 31536000) / 2592000) + 1));
-        string memory day = pad(vm.toString(((ts % 2592000) / 86400) + 1));
-        string memory hour = pad(vm.toString((ts % 86400) / 3600));
+        string memory year = vm.toString((ts / 31_536_000) + 1970);
+        string memory month = pad(vm.toString(((ts % 31_536_000) / 2_592_000) + 1));
+        string memory day = pad(vm.toString(((ts % 2_592_000) / 86_400) + 1));
+        string memory hour = pad(vm.toString((ts % 86_400) / 3600));
         string memory minute = pad(vm.toString((ts % 3600) / 60));
         string memory second = pad(vm.toString(ts % 60));
-        return string.concat(year,"-",month,"-",day,"-",hour,"-",minute,"-",second);
+        return string.concat(year, "-", month, "-", day, "-", hour, "-", minute, "-", second);
     }
 
     function pad(string memory n) internal pure returns (string memory) {

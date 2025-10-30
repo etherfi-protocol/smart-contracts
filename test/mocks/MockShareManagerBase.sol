@@ -1,22 +1,18 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import "../../src/eigenlayer-libraries/SlashingLib.sol";
-import "../../src/eigenlayer-interfaces/IStrategy.sol";
 import "../../src/eigenlayer-interfaces/IShareManager.sol";
+import "../../src/eigenlayer-interfaces/IStrategy.sol";
+import "../../src/eigenlayer-libraries/SlashingLib.sol";
+
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 // ShareManager but all calls made virtual
 contract MockShareManagerBase is IShareManager {
-
     /// @notice Used by the DelegationManager to remove a Staker's shares from a particular strategy when entering the withdrawal queue
     /// @dev strategy must be beaconChainETH when talking to the EigenPodManager
     /// @return updatedShares the staker's deposit shares after decrement
-    function removeDepositShares(
-        address staker,
-        IStrategy strategy,
-        uint256 depositSharesToRemove
-    ) external virtual returns (uint256) {}
+    function removeDepositShares(address staker, IStrategy strategy, uint256 depositSharesToRemove) external virtual returns (uint256) {}
 
     /// @notice Used by the DelegationManager to award a Staker some shares that have passed through the withdrawal queue
     /// @dev strategy must be beaconChainETH when talking to the EigenPodManager
@@ -32,7 +28,7 @@ contract MockShareManagerBase is IShareManager {
     /// @notice Returns the current shares of `user` in `strategy`
     /// @dev strategy must be beaconChainETH when talking to the EigenPodManager
     /// @dev returns 0 if the user has negative shares
-    function stakerDepositShares(address user, IStrategy strategy) external virtual view returns (uint256 depositShares) {}
+    function stakerDepositShares(address user, IStrategy strategy) external view virtual returns (uint256 depositShares) {}
 
     /**
      * @notice Increase the amount of burnable shares for a given Strategy. This is called by the DelegationManager

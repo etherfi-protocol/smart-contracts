@@ -1,0 +1,68 @@
+name: Auto Format Solidity Code
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+      - dev
+    paths:
+      - '**.sol'
+  
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+      - dev
+    paths:
+      - '**.sol'
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    name: Format Solidity Code
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: 🔧 Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: 🔨 Run forge fmt
+        run: forge fmt
+
+      - name: 🔍 Check for changes
+        id: verify-changed-files
+        run: |
+          git diff --quiet . || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: 📝 Commit formatted code
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          git commit -m "🤖 style: auto-format Solidity code with forge fmt"
+
+      - name: 🚀 Push changes
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.head_ref }}
+
+      - name: ✅ Success
+        if: steps.verify-changed-files.outputs.changed != 'true'
+        run: echo "✨ Code is already properly formatted!"

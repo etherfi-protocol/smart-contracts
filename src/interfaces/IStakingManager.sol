@@ -4,7 +4,6 @@ pragma solidity ^0.8.13;
 import "./ILiquidityPool.sol";
 
 interface IStakingManager {
-
     struct DepositData {
         bytes publicKey;
         bytes signature;
@@ -31,7 +30,8 @@ interface IStakingManager {
     // prevent storage shift on upgrade
     struct LegacyStakingManagerState {
         uint256[14] legacyState;
-        /*
+    }
+    /*
         |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
         | stakeAmount            | uint128                                               | 301  | 16     | 16    | src/StakingManager.sol:StakingManager |
         |------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------|
@@ -64,7 +64,6 @@ interface IStakingManager {
         | admins                 | mapping(address => bool)                              | 314  | 0      | 32    | src/StakingManager.sol:StakingManager |
         ╰------------------------+-------------------------------------------------------+------+--------+-------+---------------------------------------╯
         */
-    }
 
     //---------------------------------------------------------------------------
     //-----------------------------  Events  -----------------------------------
@@ -92,5 +91,4 @@ interface IStakingManager {
     error InvalidValidatorSize();
     error IncorrectRole();
     error InvalidUpgrade();
-
 }

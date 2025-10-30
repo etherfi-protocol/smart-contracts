@@ -4,7 +4,6 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 
 contract TnftTest is TestSetup {
-
     function setUp() public {
         setUpTests();
 

@@ -4,8 +4,9 @@ pragma solidity >=0.5.0;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "../eigenlayer-libraries/BeaconChainProofs.sol";
-import "./ISemVerMixin.sol";
+
 import "./IEigenPodManager.sol";
+import "./ISemVerMixin.sol";
 
 interface IEigenPodErrors {
     /// @dev Thrown when msg.sender is not the EPM.
@@ -144,9 +145,7 @@ interface IEigenPodEvents is IEigenPodTypes {
     event NonBeaconChainETHReceived(uint256 amountReceived);
 
     /// @notice Emitted when a checkpoint is created
-    event CheckpointCreated(
-        uint64 indexed checkpointTimestamp, bytes32 indexed beaconBlockRoot, uint256 validatorCount
-    );
+    event CheckpointCreated(uint64 indexed checkpointTimestamp, bytes32 indexed beaconBlockRoot, uint256 validatorCount);
 
     /// @notice Emitted when a checkpoint is finalized
     event CheckpointFinalized(uint64 indexed checkpointTimestamp, int256 totalShareDeltaWei);
@@ -168,7 +167,6 @@ interface IEigenPodEvents is IEigenPodTypes {
 
     /// @notice Emitted when a standard consolidation request is initiated
     event ConsolidationRequested(bytes32 indexed sourcePubkeyHash, bytes32 indexed targetPubkeyHash);
-
 }
 
 /**
@@ -180,9 +178,7 @@ interface IEigenPodEvents is IEigenPodTypes {
  */
 interface IEigenPod is IEigenPodErrors, IEigenPodEvents, ISemVerMixin {
     /// @notice Used to initialize the pointers to contracts crucial to the pod's functionality, in beacon proxy construction from EigenPodManager
-    function initialize(
-        address owner
-    ) external;
+    function initialize(address owner) external;
 
     /// @notice Called by EigenPodManager when the owner wants to create another ETH validator.
     /// @dev This function only supports staking to a 0x01 validator. For compounding validators, please interact directly with the deposit contract.
@@ -209,9 +205,7 @@ interface IEigenPod is IEigenPodErrors, IEigenPodEvents, ISemVerMixin {
      * @param revertIfNoBalance Forces a revert if the pod ETH balance is 0. This allows the pod owner
      * to prevent accidentally starting a checkpoint that will not increase their shares
      */
-    function startCheckpoint(
-        bool revertIfNoBalance
-    ) external;
+    function startCheckpoint(bool revertIfNoBalance) external;
 
     /**
      * @dev Progress the current checkpoint towards completion by submitting one or more validator
@@ -223,10 +217,7 @@ interface IEigenPod is IEigenPodErrors, IEigenPodEvents, ISemVerMixin {
      * @param balanceContainerProof proves the beacon's current balance container root against a checkpoint's `beaconBlockRoot`
      * @param proofs Proofs for one or more validator current balances against the `balanceContainerRoot`
      */
-    function verifyCheckpointProofs(
-        BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof,
-        BeaconChainProofs.BalanceProof[] calldata proofs
-    ) external;
+    function verifyCheckpointProofs(BeaconChainProofs.BalanceContainerProof calldata balanceContainerProof, BeaconChainProofs.BalanceProof[] calldata proofs) external;
 
     /**
      * @dev Verify one or more validators have their withdrawal credentials pointed at this EigenPod, and award
@@ -242,13 +233,7 @@ interface IEigenPod is IEigenPodErrors, IEigenPodEvents, ISemVerMixin {
      * @param validatorFields the fields of the beacon chain "Validator" container. See consensus specs for
      * details: https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/beacon-chain.md#validator
      */
-    function verifyWithdrawalCredentials(
-        uint64 beaconTimestamp,
-        BeaconChainProofs.StateRootProof calldata stateRootProof,
-        uint40[] calldata validatorIndices,
-        bytes[] calldata validatorFieldsProofs,
-        bytes32[][] calldata validatorFields
-    ) external;
+    function verifyWithdrawalCredentials(uint64 beaconTimestamp, BeaconChainProofs.StateRootProof calldata stateRootProof, uint40[] calldata validatorIndices, bytes[] calldata validatorFieldsProofs, bytes32[][] calldata validatorFields) external;
 
     /// @notice Allows the owner or proof submitter to initiate one or more requests to
     /// withdraw funds from validators on the beacon chain.
@@ -290,9 +275,7 @@ interface IEigenPod is IEigenPodErrors, IEigenPodEvents, ISemVerMixin {
     /// - The validator MUST be active and MUST NOT have initiated exit
     ///
     /// For further reference: https://github.com/ethereum/consensus-specs/blob/dev/specs/electra/beacon-chain.md#new-process_withdrawal_request
-    function requestWithdrawal(
-        WithdrawalRequest[] calldata requests
-    ) external payable;
+    function requestWithdrawal(WithdrawalRequest[] calldata requests) external payable;
 
     /// @notice Allows the owner or proof submitter to initiate one or more consolidation requests.
     /// @param requests Array of consolidation requests consisting of source and target validator pubkeys
@@ -327,9 +310,7 @@ interface IEigenPod is IEigenPodErrors, IEigenPodEvents, ISemVerMixin {
     /// - The source validator MUST NOT have pending partial withdrawal requests
     ///
     /// For further reference: https://github.com/ethereum/consensus-specs/blob/dev/specs/electra/beacon-chain.md#new-process_consolidation_request
-    function requestConsolidation(
-        ConsolidationRequest[] calldata requests
-    ) external payable;
+    function requestConsolidation(ConsolidationRequest[] calldata requests) external payable;
 
     /**
      * @dev Prove that one of this pod's active validators was slashed on the beacon chain. A successful
@@ -361,11 +342,7 @@ interface IEigenPod is IEigenPodErrors, IEigenPodEvents, ISemVerMixin {
      * - Validator MUST be in `ACTIVE` status in the pod
      * - Validator MUST be slashed on the beacon chain
      */
-    function verifyStaleBalance(
-        uint64 beaconTimestamp,
-        BeaconChainProofs.StateRootProof calldata stateRootProof,
-        BeaconChainProofs.ValidatorProof calldata proof
-    ) external;
+    function verifyStaleBalance(uint64 beaconTimestamp, BeaconChainProofs.StateRootProof calldata stateRootProof, BeaconChainProofs.ValidatorProof calldata proof) external;
 
     /// @notice called by owner of a pod to remove any ERC20s deposited in the pod
     function recoverTokens(IERC20[] memory tokenList, uint256[] memory amountsToWithdraw, address recipient) external;
@@ -377,9 +354,7 @@ interface IEigenPod is IEigenPodErrors, IEigenPodEvents, ISemVerMixin {
     /// only address that can call these methods.
     /// @param newProofSubmitter The new proof submitter address. If set to 0, only the
     /// pod owner will be able to call `startCheckpoint` and `verifyWithdrawalCredentials`
-    function setProofSubmitter(
-        address newProofSubmitter
-    ) external;
+    function setProofSubmitter(address newProofSubmitter) external;
 
     /**
      *
@@ -403,24 +378,16 @@ interface IEigenPod is IEigenPodErrors, IEigenPodEvents, ISemVerMixin {
     function podOwner() external view returns (address);
 
     /// @notice Returns the validatorInfo struct for the provided pubkeyHash
-    function validatorPubkeyHashToInfo(
-        bytes32 validatorPubkeyHash
-    ) external view returns (ValidatorInfo memory);
+    function validatorPubkeyHashToInfo(bytes32 validatorPubkeyHash) external view returns (ValidatorInfo memory);
 
     /// @notice Returns the validatorInfo struct for the provided pubkey
-    function validatorPubkeyToInfo(
-        bytes calldata validatorPubkey
-    ) external view returns (ValidatorInfo memory);
+    function validatorPubkeyToInfo(bytes calldata validatorPubkey) external view returns (ValidatorInfo memory);
 
     /// @notice Returns the validator status for a given validator pubkey hash
-    function validatorStatus(
-        bytes32 pubkeyHash
-    ) external view returns (VALIDATOR_STATUS);
+    function validatorStatus(bytes32 pubkeyHash) external view returns (VALIDATOR_STATUS);
 
     /// @notice Returns the validator status for a given validator pubkey
-    function validatorStatus(
-        bytes calldata validatorPubkey
-    ) external view returns (VALIDATOR_STATUS);
+    function validatorStatus(bytes calldata validatorPubkey) external view returns (VALIDATOR_STATUS);
 
     /// @notice Number of validators with proven withdrawal credentials, who do not have proven full withdrawals
     function activeValidatorCount() external view returns (uint256);
@@ -472,15 +439,11 @@ interface IEigenPod is IEigenPodErrors, IEigenPodEvents, ISemVerMixin {
     /// - The final partial withdrawal for an exited validator will be likely be included in this mapping.
     ///   i.e. if a validator was last checkpointed at 32.1 ETH before exiting, the next checkpoint will calculate their
     ///   "exited" amount to be 32.1 ETH rather than 32 ETH.
-    function checkpointBalanceExitedGwei(
-        uint64
-    ) external view returns (uint64);
+    function checkpointBalanceExitedGwei(uint64) external view returns (uint64);
 
     /// @notice Query the 4788 oracle to get the parent block root of the slot with the given `timestamp`
     /// @param timestamp of the block for which the parent block root will be returned. MUST correspond
     /// to an existing slot within the last 24 hours. If the slot at `timestamp` was skipped, this method
     /// will revert.
-    function getParentBlockRoot(
-        uint64 timestamp
-    ) external view returns (bytes32);
+    function getParentBlockRoot(uint64 timestamp) external view returns (bytes32);
 }

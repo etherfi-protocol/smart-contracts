@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
 import "../src/interfaces/ILiquidityPool.sol";
+import "./TestSetup.sol";
 
 contract NodeOperatorManagerTest is TestSetup {
     event OperatorRegistered(address user, uint64 totalKeys, uint64 keysUsed, bytes ipfsHash);
@@ -20,21 +20,11 @@ contract NodeOperatorManagerTest is TestSetup {
         nodeOperatorManagerInstance.pauseContract();
 
         vm.expectRevert("Pausable: paused");
-        nodeOperatorManagerInstance.registerNodeOperator(
-            aliceIPFS_Hash,
-            uint64(10)
-        );
+        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFS_Hash, uint64(10));
         nodeOperatorManagerInstance.unPauseContract();
 
-        nodeOperatorManagerInstance.registerNodeOperator(
-            aliceIPFS_Hash,
-            uint64(10)
-        );
-        (
-            uint64 totalKeys,
-            uint64 keysUsed,
-            bytes memory aliceHash
-        ) = nodeOperatorManagerInstance.addressToOperatorData(alice);
+        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFS_Hash, uint64(10));
+        (uint64 totalKeys, uint64 keysUsed, bytes memory aliceHash) = nodeOperatorManagerInstance.addressToOperatorData(alice);
 
         assertEq(aliceHash, abi.encodePacked(aliceIPFS_Hash));
         assertEq(totalKeys, 10);
@@ -44,14 +34,10 @@ contract NodeOperatorManagerTest is TestSetup {
         assertEq(nodeOperatorManagerInstance.isWhitelisted(alice), true);
 
         vm.expectRevert("Already registered");
-        nodeOperatorManagerInstance.registerNodeOperator(
-            aliceIPFS_Hash,
-            uint64(10)
-        );
+        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFS_Hash, uint64(10));
     }
 
     function test_RegisterNodeOperatorInMigration() public {
-
         address[] memory operators = new address[](2);
         operators[0] = address(bob);
         operators[1] = address(alice);
@@ -70,26 +56,12 @@ contract NodeOperatorManagerTest is TestSetup {
 
         vm.prank(bob);
         vm.expectRevert("Ownable: caller is not the owner");
-        nodeOperatorManagerInstance.initializeOnUpgrade(
-            operators,
-            hashes,
-            totalKeys,
-            keysUsed
-        );
+        nodeOperatorManagerInstance.initializeOnUpgrade(operators, hashes, totalKeys, keysUsed);
 
         vm.prank(owner);
-        nodeOperatorManagerInstance.initializeOnUpgrade(
-            operators,
-            hashes,
-            totalKeys,
-            keysUsed
-        );
+        nodeOperatorManagerInstance.initializeOnUpgrade(operators, hashes, totalKeys, keysUsed);
 
-        (
-            uint64 totalKeysUser,
-            uint64 keysUsedUser,
-            bytes memory bobHash
-        ) = nodeOperatorManagerInstance.addressToOperatorData(bob);
+        (uint64 totalKeysUser, uint64 keysUsedUser, bytes memory bobHash) = nodeOperatorManagerInstance.addressToOperatorData(bob);
 
         assertEq(bobHash, abi.encodePacked(bobIPFS_Hash));
         assertEq(totalKeysUser, 10);
@@ -99,21 +71,13 @@ contract NodeOperatorManagerTest is TestSetup {
 
         vm.prank(owner);
         vm.expectRevert("Already registered");
-        nodeOperatorManagerInstance.initializeOnUpgrade(
-            operators,
-            hashes,
-            totalKeys,
-            keysUsed
-        );
+        nodeOperatorManagerInstance.initializeOnUpgrade(operators, hashes, totalKeys, keysUsed);
     }
 
     function test_CanAddAddressToWhitelist() public {
         vm.startPrank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            aliceIPFS_Hash,
-            uint64(10)
-        );
-        
+        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFS_Hash, uint64(10));
+
         assertEq(nodeOperatorManagerInstance.isWhitelisted(jess), false);
         vm.stopPrank();
 
@@ -128,10 +92,7 @@ contract NodeOperatorManagerTest is TestSetup {
 
     function test_CanRemoveAddressFromWhitelist() public {
         vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            aliceIPFS_Hash,
-            uint64(10)
-        );
+        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFS_Hash, uint64(10));
 
         vm.expectRevert("Caller is not the admin");
         vm.prank(owner);
@@ -146,38 +107,26 @@ contract NodeOperatorManagerTest is TestSetup {
         vm.expectEmit(false, false, false, true);
         emit OperatorRegistered(address(alice), 10, 0, aliceIPFS_Hash);
         vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            aliceIPFS_Hash,
-            10
-        );
+        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFS_Hash, 10);
     }
 
     function test_FetchNextKeyIndex() public {
         vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            aliceIPFS_Hash,
-            uint64(10)
-        );
+        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFS_Hash, uint64(10));
 
-        (, uint64 keysUsed, ) = nodeOperatorManagerInstance
-            .addressToOperatorData(alice);
+        (, uint64 keysUsed,) = nodeOperatorManagerInstance.addressToOperatorData(alice);
 
         assertEq(keysUsed, 0);
 
         hoax(alice);
         auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
 
-        (, keysUsed, ) = nodeOperatorManagerInstance.addressToOperatorData(
-            alice
-        );
+        (, keysUsed,) = nodeOperatorManagerInstance.addressToOperatorData(alice);
 
         assertEq(keysUsed, 1);
 
         startHoax(0xCd5EBC2dD4Cb3dc52ac66CEEcc72c838B40A5931);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            aliceIPFS_Hash,
-            1
-        );
+        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFS_Hash, 1);
         vm.expectRevert("Insufficient public keys");
         auctionInstance.createBid{value: 0.2 ether}(2, 0.1 ether);
         vm.stopPrank();
@@ -188,25 +137,17 @@ contract NodeOperatorManagerTest is TestSetup {
     }
 
     function test_CanOnlySetAddressesOnce() public {
-         vm.startPrank(owner);
-         vm.expectRevert("Address already set");
-         nodeOperatorManagerInstance.setAuctionContractAddress(
-             address(0)
-        );
+        vm.startPrank(owner);
+        vm.expectRevert("Address already set");
+        nodeOperatorManagerInstance.setAuctionContractAddress(address(0));
     }
 
     function test_SetStakingTypeApprovals() public {
         vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            aliceIPFS_Hash,
-            uint64(10)
-        );
+        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFS_Hash, uint64(10));
 
         vm.prank(bob);
-        nodeOperatorManagerInstance.registerNodeOperator(
-            aliceIPFS_Hash,
-            uint64(10)
-        );
+        nodeOperatorManagerInstance.registerNodeOperator(aliceIPFS_Hash, uint64(10));
 
         address[] memory users = new address[](2);
         users[0] = address(alice);
@@ -257,6 +198,5 @@ contract NodeOperatorManagerTest is TestSetup {
         assertEq(nodeOperatorManagerInstance.operatorApprovedTags(address(alice), ILiquidityPool.SourceOfFunds.ETHER_FAN), true);
         assertEq(nodeOperatorManagerInstance.operatorApprovedTags(address(bob), ILiquidityPool.SourceOfFunds.EETH), true);
         assertEq(nodeOperatorManagerInstance.operatorApprovedTags(address(bob), ILiquidityPool.SourceOfFunds.ETHER_FAN), true);
-
     }
 }

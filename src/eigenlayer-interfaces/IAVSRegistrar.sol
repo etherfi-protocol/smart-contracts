@@ -11,12 +11,7 @@ interface IAVSRegistrar {
      * @param operatorSetIds the list of operator set ids being registered for
      * @param data arbitrary data the operator can provide as part of registration
      */
-    function registerOperator(
-        address operator,
-        address avs,
-        uint32[] calldata operatorSetIds,
-        bytes calldata data
-    ) external;
+    function registerOperator(address operator, address avs, uint32[] calldata operatorSetIds, bytes calldata data) external;
 
     /**
      * @notice Called by the AllocationManager when an operator is deregistered from
@@ -32,7 +27,5 @@ interface IAVSRegistrar {
      * @param avs the AVS to check
      * @return true if the AVS is supported, false otherwise
      */
-    function supportsAVS(
-        address avs
-    ) external view returns (bool);
+    function supportsAVS(address avs) external view returns (bool);
 }

@@ -4,7 +4,6 @@ pragma solidity ^0.8.13;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract LoyaltyPointsMarketSafe is Ownable {
-
     event PointsPurchased(address indexed buyer, uint256 indexed tokenId, uint256 amountWei, uint256 weiPerPoint);
     event BoostToTop(address indexed buyer, uint256 indexed tokenId, uint256 amountWei);
 
@@ -22,7 +21,9 @@ contract LoyaltyPointsMarketSafe is Ownable {
     }
 
     function boostToTop(uint256 tokenId) external payable {
-        if (msg.value != boostPaymentAmount) revert InvalidAmount();
+        if (msg.value != boostPaymentAmount) {
+            revert InvalidAmount();
+        }
         emit BoostToTop(msg.sender, tokenId, msg.value);
     }
 

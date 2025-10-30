@@ -90,7 +90,7 @@ contract EtherFiOracleTest is TestSetup {
         vm.expectRevert("Report is for wrong consensusVersion");
         etherFiOracleInstance.submitReport(reportAtPeriod2C);
 
-       // Update the Consensus Version to 2
+        // Update the Consensus Version to 2
         vm.prank(owner);
         etherFiOracleInstance.setConsensusVersion(2);
 
@@ -117,8 +117,8 @@ contract EtherFiOracleTest is TestSetup {
         vm.expectRevert("You don't need to submit a report");
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtPeriod2B);
-        
-        _moveClock(1024 );
+
+        _moveClock(1024);
         // [timestamp = 25345, period 3]
         // 66 epoch
 
@@ -149,20 +149,20 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_submitReport() public {
         _moveClock(1024 + 2 * slotsPerEpoch);
-        
+
         // Now it's period 2
 
         // alice submits the period 2 report
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
-        
+
         // check the member state
         (bool registered, bool enabled, uint32 lastReportRefSlot, uint32 numReports) = etherFiOracleInstance.committeeMemberStates(alice);
         assertEq(registered, true);
         assertEq(enabled, true);
         assertEq(lastReportRefSlot, reportAtPeriod2A.refSlotTo);
         assertEq(numReports, 1);
-        
+
         // check the consensus state
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
         (uint32 support, bool consensusReached,) = etherFiOracleInstance.consensusStates(reportHash);
@@ -197,7 +197,6 @@ contract EtherFiOracleTest is TestSetup {
         reportAtPeriod3.lastFinalizedWithdrawalRequestId = reportAtPeriod4.lastFinalizedWithdrawalRequestId = 0;
         _executeAdminTasks(reportAtPeriod3);
 
-
         // Now it's period 4
         _moveClock(1024);
 
@@ -213,7 +212,7 @@ contract EtherFiOracleTest is TestSetup {
         bytes[] memory emptySignatures = new bytes[](1);
 
         _executeAdminTasks(reportAtPeriod2A);
-        //execute validator task 
+        //execute validator task
         vm.prank(alice);
         etherFiAdminInstance.executeValidatorApprovalTask(reportHash, reportAtPeriod2A.validatorsToApprove, emptyPubKeys, emptySignatures);
 
@@ -244,7 +243,7 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(report);
     }
 
-    function test_change_report_start_slot1() public { 
+    function test_change_report_start_slot1() public {
         vm.prank(owner);
         bytes[] memory emptyBytes = new bytes[](0);
         etherFiOracleInstance.setQuorumSize(1);
@@ -254,13 +253,13 @@ contract EtherFiOracleTest is TestSetup {
 
         (uint32 slotFrom, uint32 slotTo, uint32 blockFrom) = etherFiOracleInstance.blockStampForNextReport();
         assertEq(slotFrom, 0);
-        assertEq(slotTo, 1024-1);
+        assertEq(slotTo, 1024 - 1);
         assertEq(blockFrom, 0);
 
         report.refSlotFrom = 0;
-        report.refSlotTo = 1024-1;
+        report.refSlotTo = 1024 - 1;
         report.refBlockFrom = 0;
-        report.refBlockTo = 1024-1;
+        report.refBlockTo = 1024 - 1;
 
         vm.startPrank(alice);
         etherFiOracleInstance.submitReport(report);
@@ -298,7 +297,7 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(blockFrom, 2 * 1024 + 512);
     }
 
-    function test_change_report_start_slot2() public { 
+    function test_change_report_start_slot2() public {
         vm.prank(owner);
 
         _moveClock(1024 + 2 * 32);
@@ -347,7 +346,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // 2048 + 1024 + 64 = 3136
         _moveClock(1024 + 2 * slotsPerEpoch);
-        
+
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtSlot3071);
 
@@ -357,7 +356,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // slot 3236
         _moveClock(100);
-        
+
         vm.prank(alice);
         vm.expectRevert("Report Epoch is not finalized yet");
         etherFiOracleInstance.submitReport(reportAtSlot4287);
@@ -399,7 +398,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_pause() public {
         _moveClock(1024 + 2 * slotsPerEpoch);
-        
+
         vm.prank(alice);
         etherFiOracleInstance.pauseContract();
 
@@ -496,13 +495,13 @@ contract EtherFiOracleTest is TestSetup {
 
         vm.prank(owner);
         etherFiOracleInstance.setQuorumSize(5);
-        
+
         _moveClock(1024 + 2 * slotsPerEpoch);
-        
+
         // alice submits the period 2 report
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
-           
+
         // check the consensus state
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
         (uint32 support, bool consensusReached, uint32 consensusTimestamp) = etherFiOracleInstance.consensusStates(reportHash);
@@ -595,13 +594,13 @@ contract EtherFiOracleTest is TestSetup {
 
         (uint32 slotFrom, uint32 slotTo, uint32 blockFrom) = etherFiOracleInstance.blockStampForNextReport();
         assertEq(slotFrom, 0);
-        assertEq(slotTo, 1024-1);
+        assertEq(slotTo, 1024 - 1);
         assertEq(blockFrom, 0);
 
         report.refSlotFrom = 0;
-        report.refSlotTo = 1024-1;
+        report.refSlotTo = 1024 - 1;
         report.refBlockFrom = 0;
-        report.refBlockTo = 1024-1;
+        report.refBlockTo = 1024 - 1;
 
         vm.startPrank(alice);
         etherFiOracleInstance.submitReport(report);
@@ -643,7 +642,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Assume that the accruedRewards must be 1 ether, all the time
 
-        // Alice submited the correct report 
+        // Alice submited the correct report
         vm.prank(alice);
         report.accruedRewards = 1 ether;
         bool consensusReached = etherFiOracleInstance.submitReport(report);
@@ -690,7 +689,7 @@ contract EtherFiOracleTest is TestSetup {
 
         // Assume that the accruedRewards must be 1 ether, all the time
 
-        // Alice submited the correct report 
+        // Alice submited the correct report
         vm.prank(alice);
         report.accruedRewards = 90 ether;
         report.protocolFees = 10 ether;

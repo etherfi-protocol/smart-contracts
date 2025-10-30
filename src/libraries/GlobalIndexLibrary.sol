@@ -1,32 +1,31 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "../MembershipManager.sol";
 import "../LiquidityPool.sol";
+import "../MembershipManager.sol";
 import "forge-std/console.sol";
 
 library globalIndexLibrary {
-    
     error IntegerOverflow();
 
     /**
-    * @dev This function calculates the global index and adjusted shares for each tier used for reward distribution.
-    *
-    * The function performs the following steps:
-    * 1. Iterates over each tier, computing rebased amounts, tier rewards, weighted tier rewards.
-    * 2. Sums all the tier rewards and the weighted tier rewards.
-    * 3. If there are any weighted tier rewards, it iterates over each tier to perform the following actions:
-    *    a. Computes the amounts eligible for rewards.
-    *    b. If there are amounts eligible for rewards, 
-    *       it calculates rescaled tier rewards and updates the global index and adjusted shares for the tier.
-    *
-    * The rescaling of tier rewards is done based on the weight of each tier. 
-    *
-    * @notice This function essentially pools all the staking rewards across tiers and redistributes them proportional to the tier weights
-    * @param _membershipManager the address of the membership manager
-    * @param _liquidityPool the address of the liquidity pool
-    * @return globalIndex A uint96 array containing the updated global index for each tier.
-    */
+     * @dev This function calculates the global index and adjusted shares for each tier used for reward distribution.
+     *
+     * The function performs the following steps:
+     * 1. Iterates over each tier, computing rebased amounts, tier rewards, weighted tier rewards.
+     * 2. Sums all the tier rewards and the weighted tier rewards.
+     * 3. If there are any weighted tier rewards, it iterates over each tier to perform the following actions:
+     *    a. Computes the amounts eligible for rewards.
+     *    b. If there are amounts eligible for rewards,
+     *       it calculates rescaled tier rewards and updates the global index and adjusted shares for the tier.
+     *
+     * The rescaling of tier rewards is done based on the weight of each tier.
+     *
+     * @notice This function essentially pools all the staking rewards across tiers and redistributes them proportional to the tier weights
+     * @param _membershipManager the address of the membership manager
+     * @param _liquidityPool the address of the liquidity pool
+     * @return globalIndex A uint96 array containing the updated global index for each tier.
+     */
     function calculateGlobalIndex(address _membershipManager, address _liquidityPool, uint256 _ethRewardsPerEEthShareBeforeRebase, uint256 _ethRewardsPerEEthShareAfterRebase) public view returns (uint96[] memory) {
         MembershipManager membershipManager = MembershipManager(payable(_membershipManager));
         LiquidityPool liquidityPool = LiquidityPool(payable(_liquidityPool));
@@ -45,8 +44,10 @@ library globalIndexLibrary {
             globalIndex[i] = rewardsGlobalIndex;
             if (shares > 0) {
                 uint256 delta = 1 ether * rescaledTierRewards[i] / shares;
-                if (uint256(rewardsGlobalIndex) + uint256(delta) > type(uint96).max) revert IntegerOverflow();
-                
+                if (uint256(rewardsGlobalIndex) + uint256(delta) > type(uint96).max) {
+                    revert IntegerOverflow();
+                }
+
                 if (isLoss) {
                     globalIndex[i] -= uint96(delta);
                 } else {
@@ -76,7 +77,7 @@ library globalIndexLibrary {
 
         return (tierRewards, tierWeights);
     }
-    
+
     // Compute `rescaledTierRewards` for each tier from `tierRewards` and `weight`
     function calculateRescaledTierRewards(uint256[] memory tierRewards, uint24[] memory tierWeights) public pure returns (uint256[] memory) {
         uint256[] memory weightedTierRewards = new uint256[](tierRewards.length);
@@ -131,12 +132,12 @@ library globalIndexLibrary {
 
         uint128[] memory vaultTotalPooledEEthShares = new uint128[](membershipManager.numberOfTiers());
         for (uint256 i = 0; i < vaultTotalPooledEEthShares.length; i++) {
-            (uint128 totalPooledEEthShares, ) = membershipManager.tierVaults(i);
+            (uint128 totalPooledEEthShares,) = membershipManager.tierVaults(i);
             uint256 prevEthAmount = _ethRewardsPerEEthShareBeforeRebase * totalPooledEEthShares / 1 ether;
             uint256 newEthAmount = prevEthAmount;
             if (isLoss) {
                 newEthAmount -= rescaledTierRewards[i];
-            } else {            
+            } else {
                 newEthAmount += rescaledTierRewards[i];
             }
             vaultTotalPooledEEthShares[i] = uint128(liquidityPool.sharesForAmount(newEthAmount));

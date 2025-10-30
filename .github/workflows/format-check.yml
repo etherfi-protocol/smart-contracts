@@ -1,0 +1,32 @@
+name: Format Check
+
+on:
+  pull_request:
+    paths:
+      - '**.sol'
+
+jobs:
+  check:
+    name: Check Code Formatting
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: 🔍 Check formatting
+        run: |
+          echo "Checking if code is properly formatted..."
+          if ! forge fmt --check; then
+            echo ""
+            echo "❌ Code is not properly formatted!"
+            echo "💡 Run 'forge fmt' locally to fix formatting"
+            echo ""
+            exit 1
+          fi
+          echo "✅ All code is properly formatted!"

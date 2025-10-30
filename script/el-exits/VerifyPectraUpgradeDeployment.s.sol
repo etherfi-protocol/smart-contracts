@@ -4,11 +4,12 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 
+import "../../src/EtherFiNode.sol";
 import "../../src/EtherFiNodesManager.sol";
 import "../../src/EtherFiRateLimiter.sol";
-import "../../src/StakingManager.sol";
 import "../../src/RoleRegistry.sol";
-import "../../src/EtherFiNode.sol";
+import "../../src/StakingManager.sol";
+
 import "../../src/UUPSProxy.sol";
 
 interface ICreate2Factory {
@@ -19,7 +20,7 @@ interface ICreate2Factory {
  * @title VerifyPectraUpgradeDeployment
  * @notice Verification script to check EIP-7002 deployment status
  * @dev Run after deployment to verify all components are properly configured
- * 
+ *
  * Usage: forge script script/el-exits/VerifyPectraUpgradeDeployment.s.sol --rpc-url <mainnet-rpc>
  */
 contract VerifyPectraUpgradeDeployment is Script {
@@ -49,11 +50,9 @@ contract VerifyPectraUpgradeDeployment is Script {
     // === ROLE ADDRESSES ===
     // address constant ETHERFI_ADMIN_EXECUTER = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
     address constant ETHERFI_ADMIN = 0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a;
-    address constant ETHERFI_OPERATING_ADMIN =
-        0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
+    address constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
     address constant POD_PROVER = 0x7835fB36A8143a014A2c381363cD1A4DeE586d2A;
-    address constant EL_TRIGGER_EXITER =
-        0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
+    address constant EL_TRIGGER_EXITER = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
 
     function run() external {
         console2.log("========================================");
@@ -69,7 +68,7 @@ contract VerifyPectraUpgradeDeployment is Script {
 
         printVerificationSummary();
     }
-    
+
     function verifyAddress() internal {
         console2.log("=== VERIFYING ADDRESS ===");
         console2.log("ETHERFI_NODES_MANAGER_PROXY:", ETHERFI_NODES_MANAGER_PROXY);
@@ -83,21 +82,11 @@ contract VerifyPectraUpgradeDeployment is Script {
         address etherFiNodesManagerImpl;
         address etherFiNodeImpl;
 
-                // StakingManager
+        // StakingManager
         {
             string memory contractName = "StakingManager";
-            bytes memory constructorArgs = abi.encode(
-                LIQUIDITY_POOL_PROXY,
-                ETHERFI_NODES_MANAGER_PROXY,
-                ETH_DEPOSIT_CONTRACT,
-                AUCTION_MANAGER,
-                ETHERFI_NODE_BEACON,
-                ROLE_REGISTRY
-            );
-            bytes memory bytecode = abi.encodePacked(
-                type(StakingManager).creationCode,
-                constructorArgs
-            );
+            bytes memory constructorArgs = abi.encode(LIQUIDITY_POOL_PROXY, ETHERFI_NODES_MANAGER_PROXY, ETH_DEPOSIT_CONTRACT, AUCTION_MANAGER, ETHERFI_NODE_BEACON, ROLE_REGISTRY);
+            bytes memory bytecode = abi.encodePacked(type(StakingManager).creationCode, constructorArgs);
             stakingManagerImpl = verifyCreate2Address(contractName, constructorArgs, bytecode, commitHashSalt, true);
             // stakingManagerImpl = deployCreate2(contractName, constructorArgs, bytecode, commitHashSalt, true);
         }
@@ -110,10 +99,7 @@ contract VerifyPectraUpgradeDeployment is Script {
                 ROLE_REGISTRY,
                 address(RATE_LIMITER_PROXY) // New rate limiter integration
             );
-            bytes memory bytecode = abi.encodePacked(
-                type(EtherFiNodesManager).creationCode,
-                constructorArgs
-            );
+            bytes memory bytecode = abi.encodePacked(type(EtherFiNodesManager).creationCode, constructorArgs);
             etherFiNodesManagerImpl = verifyCreate2Address(contractName, constructorArgs, bytecode, commitHashSalt, true);
             // etherFiNodesManagerImpl = deployCreate2(contractName, constructorArgs, bytecode, commitHashSalt, true);
         }
@@ -121,17 +107,8 @@ contract VerifyPectraUpgradeDeployment is Script {
         // EtherFiNode
         {
             string memory contractName = "EtherFiNode";
-            bytes memory constructorArgs = abi.encode(
-                LIQUIDITY_POOL_PROXY,
-                ETHERFI_NODES_MANAGER_PROXY,
-                EIGEN_POD_MANAGER,
-                DELEGATION_MANAGER,
-                ROLE_REGISTRY
-            );
-            bytes memory bytecode = abi.encodePacked(
-                type(EtherFiNode).creationCode,
-                constructorArgs
-            );
+            bytes memory constructorArgs = abi.encode(LIQUIDITY_POOL_PROXY, ETHERFI_NODES_MANAGER_PROXY, EIGEN_POD_MANAGER, DELEGATION_MANAGER, ROLE_REGISTRY);
+            bytes memory bytecode = abi.encodePacked(type(EtherFiNode).creationCode, constructorArgs);
             etherFiNodeImpl = verifyCreate2Address(contractName, constructorArgs, bytecode, commitHashSalt, true);
             // etherFiNodeImpl = deployCreate2(contractName, constructorArgs, bytecode, commitHashSalt, true);
         }
@@ -141,10 +118,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         {
             string memory contractName = "EtherFiRateLimiter";
             bytes memory constructorArgs = abi.encode(ROLE_REGISTRY);
-            bytes memory bytecode = abi.encodePacked(
-                type(EtherFiRateLimiter).creationCode,
-                constructorArgs
-            );
+            bytes memory bytecode = abi.encodePacked(type(EtherFiRateLimiter).creationCode, constructorArgs);
             rateLimiterImpl = verifyCreate2Address(contractName, constructorArgs, bytecode, commitHashSalt, true);
             // rateLimiterImpl = deployCreate2(contractName, constructorArgs, bytecode, commitHashSalt, true);
             console2.log("Rate limiter implementation:", rateLimiterImpl);
@@ -153,19 +127,10 @@ contract VerifyPectraUpgradeDeployment is Script {
         address rateLimiterProxyAddr;
         // Deploy proxy using Create2Factory
         {
-        string memory contractName = "UUPSProxy";
-        bytes memory constructorArgs = abi.encode(address(rateLimiterImpl), "");
-        bytes memory bytecode = abi.encodePacked(
-            type(UUPSProxy).creationCode,
-            constructorArgs
-        );
-        rateLimiterProxyAddr = verifyCreate2Address(
-            contractName,
-            constructorArgs,
-            bytecode,
-            commitHashSalt,
-            true
-        );
+            string memory contractName = "UUPSProxy";
+            bytes memory constructorArgs = abi.encode(address(rateLimiterImpl), "");
+            bytes memory bytecode = abi.encodePacked(type(UUPSProxy).creationCode, constructorArgs);
+            rateLimiterProxyAddr = verifyCreate2Address(contractName, constructorArgs, bytecode, commitHashSalt, true);
         }
 
         console2.log("");
@@ -316,7 +281,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         console2.log("VERIFICATION SUMMARY");
         console2.log("========================================");
         console2.log("");
-        
+
         console2.log("Verified Components:");
         console2.log(unicode"✓ Contract upgrade verification");
         console2.log(unicode"✓ Role assignment verification");
@@ -327,7 +292,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         }
         console2.log(unicode"✓ New functionality availability verification");
         console2.log("");
-        
+
         console2.log("Key Addresses Verified:");
         console2.log("- StakingManager Proxy:", STAKING_MANAGER_PROXY);
         console2.log("- EtherFiNodesManager Proxy:", ETHERFI_NODES_MANAGER_PROXY);
@@ -336,12 +301,12 @@ contract VerifyPectraUpgradeDeployment is Script {
             console2.log("- EtherFiRateLimiter:", RATE_LIMITER_PROXY);
         }
         console2.log("");
-        
+
         console2.log("Key Role Holders:");
         console2.log("- EL Exit Trigger:", EL_TRIGGER_EXITER);
         console2.log("- Rate Limiter Admin:", ETHERFI_OPERATING_ADMIN);
         console2.log("");
-        
+
         console2.log("Manual Testing Recommendations:");
         console2.log("1. Test EL-triggered withdrawal with proper role");
         console2.log("2. Test consolidation request functionality");
@@ -349,7 +314,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         console2.log("4. Test user-specific call forwarding permissions");
         console2.log("5. Verify old whitelist mappings are cleared");
         console2.log("");
-        
+
         console2.log(unicode"✓ EIP-7002 deployment verification complete!");
     }
 
@@ -357,7 +322,7 @@ contract VerifyPectraUpgradeDeployment is Script {
     function checkRateLimiterOnly(address _rateLimiterAddress) external view {
         console2.log("=== RATE LIMITER SPOT CHECK ===");
         console2.log("Rate Limiter Address:", _rateLimiterAddress);
-        
+
         EtherFiRateLimiter rateLimiter = EtherFiRateLimiter(_rateLimiterAddress);
         EtherFiNodesManager nodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER_PROXY));
 
@@ -382,14 +347,8 @@ contract VerifyPectraUpgradeDeployment is Script {
         }
     }
 
-    // Helper function to verify Create2 address    
-    function verifyCreate2Address(
-        string memory contractName, 
-        bytes memory constructorArgs, 
-        bytes memory bytecode, 
-        bytes32 salt, 
-        bool logging
-    ) internal view returns (address) {
+    // Helper function to verify Create2 address
+    function verifyCreate2Address(string memory contractName, bytes memory constructorArgs, bytes memory bytecode, bytes32 salt, bool logging) internal view returns (address) {
         address predictedAddress = factory.computeAddress(salt, bytecode);
         return predictedAddress;
     }

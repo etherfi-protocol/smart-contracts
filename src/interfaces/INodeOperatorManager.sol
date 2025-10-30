@@ -10,38 +10,19 @@ interface INodeOperatorManager {
         bytes ipfsHash;
     }
 
-    function getUserTotalKeys(
-        address _user
-    ) external view returns (uint64 totalKeys);
+    function getUserTotalKeys(address _user) external view returns (uint64 totalKeys);
 
-    function getNumKeysRemaining(
-        address _user
-    ) external view returns (uint64 numKeysRemaining);
+    function getNumKeysRemaining(address _user) external view returns (uint64 numKeysRemaining);
 
-    function isWhitelisted(
-        address _user
-    ) external view returns (bool whitelisted);
+    function isWhitelisted(address _user) external view returns (bool whitelisted);
 
-    function registerNodeOperator(
-        bytes memory ipfsHash,
-        uint64 totalKeys
-    ) external;
+    function registerNodeOperator(bytes memory ipfsHash, uint64 totalKeys) external;
 
-    function initializeOnUpgrade(
-        address[] memory _operator, 
-        bytes[] memory _ipfsHash,
-        uint64[] memory _totalKeys,
-        uint64[] memory _keysUsed
-    ) external; 
+    function initializeOnUpgrade(address[] memory _operator, bytes[] memory _ipfsHash, uint64[] memory _totalKeys, uint64[] memory _keysUsed) external;
 
-    function batchUpdateOperatorsApprovedTags(
-        address[] memory _users, 
-        LiquidityPool.SourceOfFunds[] memory _approvedTags, 
-        bool[] memory _approvals
-    ) external;
+    function batchUpdateOperatorsApprovedTags(address[] memory _users, LiquidityPool.SourceOfFunds[] memory _approvedTags, bool[] memory _approvals) external;
 
     function fetchNextKeyIndex(address _user) external returns (uint64);
 
     function isEligibleToRunValidatorsForSourceOfFund(address _operator, LiquidityPool.SourceOfFunds _source) external view returns (bool approved);
-
 }

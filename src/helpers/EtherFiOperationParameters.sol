@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 contract EtherFiOperationParameters is UUPSUpgradeable, OwnableUpgradeable {
     mapping(string => mapping(address => bool)) public tagAdmins;
@@ -23,14 +23,14 @@ contract EtherFiOperationParameters is UUPSUpgradeable, OwnableUpgradeable {
 
     function updateTagAdmin(string memory tag, address admin, bool allowed) external onlyOwner {
         tagAdmins[tag][admin] = allowed;
-     
+
         emit UpdatedAdmin(tag, admin, allowed);
     }
 
     function updateTagKeyValue(string memory tag, string memory key, string memory value) external onlyAdmin(tag) {
         string memory old_value = tagKeyValues[tag][key];
         tagKeyValues[tag][key] = value;
-     
+
         emit UpdatedKeyValue(tag, key, old_value, value);
     }
 

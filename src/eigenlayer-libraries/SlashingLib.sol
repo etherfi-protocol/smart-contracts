@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin-upgradeable/contracts/utils/math/SafeCastUpgradeable.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 /// @dev All scaling factors have `1e18` as an initial/default value. This value is represented
 /// by the constant `WAD`, which is used to preserve precision with uint256 math.
@@ -57,16 +57,11 @@ library SlashingLib {
 
     // GETTERS
 
-    function scalingFactor(
-        DepositScalingFactor memory dsf
-    ) internal pure returns (uint256) {
+    function scalingFactor(DepositScalingFactor memory dsf) internal pure returns (uint256) {
         return dsf._scalingFactor == 0 ? WAD : dsf._scalingFactor;
     }
 
-    function scaleForQueueWithdrawal(
-        DepositScalingFactor memory dsf,
-        uint256 depositSharesToWithdraw
-    ) internal pure returns (uint256) {
+    function scaleForQueueWithdrawal(DepositScalingFactor memory dsf, uint256 depositSharesToWithdraw) internal pure returns (uint256) {
         return depositSharesToWithdraw.mulWad(dsf.scalingFactor());
     }
 
@@ -80,20 +75,11 @@ library SlashingLib {
      * withdrawal queue.
      * NOTE: max magnitude is guaranteed to only ever decrease.
      */
-    function scaleForBurning(
-        uint256 scaledShares,
-        uint64 prevMaxMagnitude,
-        uint64 newMaxMagnitude
-    ) internal pure returns (uint256) {
+    function scaleForBurning(uint256 scaledShares, uint64 prevMaxMagnitude, uint64 newMaxMagnitude) internal pure returns (uint256) {
         return scaledShares.mulWad(prevMaxMagnitude - newMaxMagnitude);
     }
 
-    function update(
-        DepositScalingFactor storage dsf,
-        uint256 prevDepositShares,
-        uint256 addedShares,
-        uint256 slashingFactor
-    ) internal {
+    function update(DepositScalingFactor storage dsf, uint256 prevDepositShares, uint256 addedShares, uint256 slashingFactor) internal {
         if (prevDepositShares == 0) {
             // If this is the staker's first deposit or they are delegating to an operator,
             // the slashing factor is inverted and applied to the existing DSF. This has the
@@ -143,41 +129,27 @@ library SlashingLib {
     /// A DSF is reset when a staker reduces their deposit shares to 0, either by queueing
     /// a withdrawal, or undelegating from their operator. This ensures that subsequent
     /// delegations/deposits do not use a stale DSF (e.g. from a prior operator).
-    function reset(
-        DepositScalingFactor storage dsf
-    ) internal {
+    function reset(DepositScalingFactor storage dsf) internal {
         dsf._scalingFactor = 0;
     }
 
     // CONVERSION
 
-    function calcWithdrawable(
-        DepositScalingFactor memory dsf,
-        uint256 depositShares,
-        uint256 slashingFactor
-    ) internal pure returns (uint256) {
+    function calcWithdrawable(DepositScalingFactor memory dsf, uint256 depositShares, uint256 slashingFactor) internal pure returns (uint256) {
         /// forgefmt: disable-next-item
         return depositShares
             .mulWad(dsf.scalingFactor())
             .mulWad(slashingFactor);
     }
 
-    function calcDepositShares(
-        DepositScalingFactor memory dsf,
-        uint256 withdrawableShares,
-        uint256 slashingFactor
-    ) internal pure returns (uint256) {
+    function calcDepositShares(DepositScalingFactor memory dsf, uint256 withdrawableShares, uint256 slashingFactor) internal pure returns (uint256) {
         /// forgefmt: disable-next-item
         return withdrawableShares
             .divWad(dsf.scalingFactor())
             .divWad(slashingFactor);
     }
 
-    function calcSlashedAmount(
-        uint256 operatorShares,
-        uint256 prevMaxMagnitude,
-        uint256 newMaxMagnitude
-    ) internal pure returns (uint256) {
+    function calcSlashedAmount(uint256 operatorShares, uint256 prevMaxMagnitude, uint256 newMaxMagnitude) internal pure returns (uint256) {
         // round up mulDiv so we don't overslash
         return operatorShares - operatorShares.mulDiv(newMaxMagnitude, prevMaxMagnitude, Math.Rounding.Up);
     }

@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "forge-std/Script.sol";
-import "forge-std/console2.sol";
-import "../ContractCodeChecker.sol";
 import "../../src/EtherFiNode.sol";
 import "../../src/EtherFiNodesManager.sol";
-import "../../src/StakingManager.sol";
-import "../../src/EtherFiRateLimiter.sol";
 
+import "../../src/EtherFiRateLimiter.sol";
+import "../../src/StakingManager.sol";
+import "../ContractCodeChecker.sol";
+import "forge-std/Script.sol";
+import "forge-std/console2.sol";
 
 contract PectraUpgradeBytecode is Script {
     ContractCodeChecker public contractCodeChecker;
-    address public stakingManagerProxy; 
+    address public stakingManagerProxy;
     address public etherFiNodesManagerProxy;
     address public roleRegistryProxy;
     address public rateLimiterProxy;
@@ -21,7 +21,7 @@ contract PectraUpgradeBytecode is Script {
     address public etherFiNodeBeacon;
     address public delegationManager;
     address public eigenPodManager;
-    address public  stakingDepositContract;
+    address public stakingDepositContract;
 
     address public deployedRateLimiter;
 
@@ -38,7 +38,6 @@ contract PectraUpgradeBytecode is Script {
         eigenPodManager = 0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338;
         stakingDepositContract = 0x00000000219ab540356cBB839Cbe05303d7705Fa;
         deployedRateLimiter = 0x1dd43C32f03f8A74b8160926D559d34358880A89;
-
     }
 
     // Run Script:

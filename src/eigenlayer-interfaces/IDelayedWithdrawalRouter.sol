@@ -14,7 +14,7 @@ interface IDelayedWithdrawalRouter {
         DelayedWithdrawal[] delayedWithdrawals;
     }
 
-     /// @notice event for delayedWithdrawal creation
+    /// @notice event for delayedWithdrawal creation
     event DelayedWithdrawalCreated(address podOwner, address recipient, uint256 amount, uint256 index);
 
     /// @notice event for the claiming of delayedWithdrawals

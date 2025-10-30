@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "forge-std/console2.sol";
 import "./TestSetup.sol";
+import "forge-std/console2.sol";
 
 contract EtherFiRedemptionManagerTest is TestSetup {
-
     address user = vm.addr(999);
     address op_admin = vm.addr(1000);
 
@@ -20,7 +19,6 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), op_admin);
         vm.stopPrank();
-
     }
 
     function test_upgrade_only_by_owner() public {
@@ -49,58 +47,50 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function test_lowwatermark_guardrail() public {
         vm.deal(user, 100 ether);
-        
+
         assertEq(etherFiRedemptionManagerInstance.lowWatermarkInETH(), 0 ether);
 
         vm.prank(user);
         liquidityPoolInstance.deposit{value: 100 ether}();
 
         vm.startPrank(owner);
-        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(1_00); // 1%
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100); // 1%
         assertEq(etherFiRedemptionManagerInstance.lowWatermarkInETH(), 1 ether);
 
-        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(50_00); // 50%
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(5000); // 50%
         assertEq(etherFiRedemptionManagerInstance.lowWatermarkInETH(), 50 ether);
 
-        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100_00); // 100%
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(10_000); // 100%
         assertEq(etherFiRedemptionManagerInstance.lowWatermarkInETH(), 100 ether);
 
         vm.expectRevert("INVALID");
-        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100_01); // 100.01%
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(10_001); // 100.01%
     }
 
     function test_admin_permission() public {
         vm.startPrank(alice);
         vm.expectRevert();
-        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(1_00); // 1%
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100); // 1%
         vm.expectRevert();
-        etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(1_000); // 10%
+        etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(1000); // 10%
         vm.expectRevert();
         etherFiRedemptionManagerInstance.setExitFeeBasisPoints(40); // 0.4%
         vm.expectRevert();
-        etherFiRedemptionManagerInstance.setRefillRatePerSecond(1_00); // 1%
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(100); // 1%
         vm.expectRevert();
-        etherFiRedemptionManagerInstance.setCapacity(1_00); // 1%
+        etherFiRedemptionManagerInstance.setCapacity(100); // 1%
         vm.expectRevert();
-        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(1_00); // 1%
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100); // 1%
         vm.stopPrank();
     }
 
-    function testFuzz_redeemEEth(
-        uint256 depositAmount,
-        uint256 redeemAmount,
-        uint256 exitFeeSplitBps,
-        uint16 exitFeeBps,
-        uint16 lowWatermarkBps
-    ) public {
-        
+    function testFuzz_redeemEEth(uint256 depositAmount, uint256 redeemAmount, uint256 exitFeeSplitBps, uint16 exitFeeBps, uint16 lowWatermarkBps) public {
         vm.assume(depositAmount >= redeemAmount);
         depositAmount = bound(depositAmount, 1 ether, 1000 ether);
         redeemAmount = bound(redeemAmount, 0.1 ether, depositAmount);
-        exitFeeSplitBps = bound(exitFeeSplitBps, 0, 10000);
-        exitFeeBps = uint16(bound(uint256(exitFeeBps), 0, 10000));
-        lowWatermarkBps = uint16(bound(uint256(lowWatermarkBps), 0, 10000));
-
+        exitFeeSplitBps = bound(exitFeeSplitBps, 0, 10_000);
+        exitFeeBps = uint16(bound(uint256(exitFeeBps), 0, 10_000));
+        lowWatermarkBps = uint16(bound(uint256(lowWatermarkBps), 0, 10_000));
 
         vm.deal(user, depositAmount);
         vm.startPrank(user);
@@ -122,25 +112,16 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         if (etherFiRedemptionManagerInstance.canRedeem(redeemAmount)) {
             uint256 userBalanceBefore = address(user).balance;
             uint256 treasuryBalanceBefore = eETHInstance.balanceOf(address(treasuryInstance));
-            
-            IeETH.PermitInput memory permit = eEth_createPermitInput(999, address(etherFiRedemptionManagerInstance), redeemAmount, eETHInstance.nonces(user), 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
+
+            IeETH.PermitInput memory permit = eEth_createPermitInput(999, address(etherFiRedemptionManagerInstance), redeemAmount, eETHInstance.nonces(user), 2 ** 256 - 1, eETHInstance.DOMAIN_SEPARATOR());
             etherFiRedemptionManagerInstance.redeemEEthWithPermit(redeemAmount, user, permit);
 
-            uint256 totalFee = (redeemAmount * exitFeeBps) / 10000;
-            uint256 treasuryFee = (totalFee * exitFeeSplitBps) / 10000;
+            uint256 totalFee = (redeemAmount * exitFeeBps) / 10_000;
+            uint256 treasuryFee = (totalFee * exitFeeSplitBps) / 10_000;
             uint256 userReceives = redeemAmount - totalFee;
 
-            assertApproxEqAbs(
-                eETHInstance.balanceOf(address(treasuryInstance)),
-                treasuryBalanceBefore + treasuryFee,
-                1e2
-            );
-            assertApproxEqAbs(
-                address(user).balance,
-                userBalanceBefore + userReceives,
-                1e2
-            );
-
+            assertApproxEqAbs(eETHInstance.balanceOf(address(treasuryInstance)), treasuryBalanceBefore + treasuryFee, 1e2);
+            assertApproxEqAbs(address(user).balance, userBalanceBefore + userReceives, 1e2);
         } else {
             vm.expectRevert();
             etherFiRedemptionManagerInstance.redeemEEth(redeemAmount, user);
@@ -148,21 +129,14 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.stopPrank();
     }
 
-    function testFuzz_redeemWeEth(
-        uint256 depositAmount,
-        uint256 redeemAmount,
-        uint16 exitFeeSplitBps,
-        int256 rebase,
-        uint16 exitFeeBps,
-        uint16 lowWatermarkBps
-    ) public {
+    function testFuzz_redeemWeEth(uint256 depositAmount, uint256 redeemAmount, uint16 exitFeeSplitBps, int256 rebase, uint16 exitFeeBps, uint16 lowWatermarkBps) public {
         // Bound the parameters
         depositAmount = bound(depositAmount, 1 ether, 1000 ether);
         console2.log(depositAmount);
         redeemAmount = bound(redeemAmount, 0.1 ether, depositAmount);
-        exitFeeSplitBps = uint16(bound(exitFeeSplitBps, 0, 10000));
-        exitFeeBps = uint16(bound(exitFeeBps, 0, 10000));
-        lowWatermarkBps = uint16(bound(lowWatermarkBps, 0, 10000));
+        exitFeeSplitBps = uint16(bound(exitFeeSplitBps, 0, 10_000));
+        exitFeeBps = uint16(bound(exitFeeBps, 0, 10_000));
+        lowWatermarkBps = uint16(bound(lowWatermarkBps, 0, 10_000));
         rebase = bound(rebase, 0, int128(uint128(depositAmount) / 10));
 
         // Deal Ether to user and perform deposit
@@ -197,24 +171,15 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
             uint256 eEthAmount = liquidityPoolInstance.amountForShare(weEthAmount);
 
-            IWeETH.PermitInput memory permit = weEth_createPermitInput(999, address(etherFiRedemptionManagerInstance), weEthAmount, weEthInstance.nonces(user), 2**256 - 1, weEthInstance.DOMAIN_SEPARATOR());
+            IWeETH.PermitInput memory permit = weEth_createPermitInput(999, address(etherFiRedemptionManagerInstance), weEthAmount, weEthInstance.nonces(user), 2 ** 256 - 1, weEthInstance.DOMAIN_SEPARATOR());
             etherFiRedemptionManagerInstance.redeemWeEthWithPermit(weEthAmount, user, permit);
 
-            uint256 totalFee = (eEthAmount * exitFeeBps) / 10000;
-            uint256 treasuryFee = (totalFee * exitFeeSplitBps) / 10000;
+            uint256 totalFee = (eEthAmount * exitFeeBps) / 10_000;
+            uint256 treasuryFee = (totalFee * exitFeeSplitBps) / 10_000;
             uint256 userReceives = eEthAmount - totalFee;
 
-            assertApproxEqAbs(
-                eETHInstance.balanceOf(address(treasuryInstance)),
-                treasuryBalanceBefore + treasuryFee,
-                1e2
-            );
-            assertApproxEqAbs(
-                address(user).balance,
-                userBalanceBefore + userReceives,
-                1e2
-            );
-
+            assertApproxEqAbs(eETHInstance.balanceOf(address(treasuryInstance)), treasuryBalanceBefore + treasuryFee, 1e2);
+            assertApproxEqAbs(address(user).balance, userBalanceBefore + userReceives, 1e2);
         } else {
             vm.expectRevert();
             etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, user);
@@ -296,9 +261,9 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     function test_mainnet_redeem_eEth() public {
         setUp_Fork();
 
-        vm.deal(alice, 100000 ether);
+        vm.deal(alice, 100_000 ether);
         vm.prank(alice);
-        liquidityPoolInstance.deposit{value: 100000 ether}();
+        liquidityPoolInstance.deposit{value: 100_000 ether}();
 
         vm.deal(user, 100 ether);
         vm.startPrank(user);
@@ -329,9 +294,9 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     function test_mainnet_redeem_weEth_with_rebase() public {
         setUp_Fork();
 
-        vm.deal(alice, 50000 ether);
+        vm.deal(alice, 50_000 ether);
         vm.prank(alice);
-        liquidityPoolInstance.deposit{value: 50000 ether}();
+        liquidityPoolInstance.deposit{value: 50_000 ether}();
 
         vm.deal(user, 100 ether);
 
@@ -353,11 +318,11 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 treasuryBalance = eETHInstance.balanceOf(address(treasuryInstance));
         weEthInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
         etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, user);
-        
+
         uint256 totalFee = (eEthAmount * 1e2) / 1e4;
         uint256 treasuryFee = (totalFee * 1e3) / 1e4;
         uint256 userReceives = eEthAmount - totalFee;
-        
+
         assertApproxEqAbs(eETHInstance.balanceOf(address(treasuryInstance)), treasuryBalance + treasuryFee, 1e1);
         assertApproxEqAbs(address(user).balance, userBalance + userReceives, 1e1);
 

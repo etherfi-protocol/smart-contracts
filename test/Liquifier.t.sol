@@ -10,7 +10,6 @@ import "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import "../src/eigenlayer-interfaces/IStrategyManager.sol";
 
 contract DummyERC20 is ERC20BurnableUpgradeable {
-    
     function mint(address to, uint256 amount) public {
         _mint(to, amount);
     }
@@ -26,14 +25,12 @@ interface IWBETH {
 }
 
 contract LiquifierTest is TestSetup {
-
     uint256 public testnetFork;
 
     DummyERC20 public dummyToken;
-    address public l1SyncPool = address(100000);
+    address public l1SyncPool = address(100_000);
 
-    function setUp() public {
-    }
+    function setUp() public {}
 
     function _setUp(uint8 forkEnum) internal {
         initializeTestingFork(forkEnum);
@@ -67,14 +64,14 @@ contract LiquifierTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
-        vm.deal(alice, 1000000000 ether);
+        vm.deal(alice, 1_000_000_000 ether);
 
         vm.startPrank(alice);
-        stEth.submit{value: 100000 ether + 1 ether}(address(0));
-        stEth.approve(address(liquifierInstance), 100000 ether);
+        stEth.submit{value: 100_000 ether + 1 ether}(address(0));
+        stEth.approve(address(liquifierInstance), 100_000 ether);
 
         vm.expectRevert("CAPPED");
-        liquifierInstance.depositWithERC20(address(stEth), 100000 ether, address(0));
+        liquifierInstance.depositWithERC20(address(stEth), 100_000 ether, address(0));
 
         vm.stopPrank();
     }
@@ -132,13 +129,13 @@ contract LiquifierTest is TestSetup {
         assertEq(eETHInstance.balanceOf(alice), 0);
 
         vm.startPrank(alice);
-        
+
         // Alice minted 2 stETH
         stEth.submit{value: 2 ether}(address(0));
 
-        // But, she noticed that eETH is a much better choice 
+        // But, she noticed that eETH is a much better choice
         // and decided to convert her stETH to eETH
-        
+
         // Deposit 1 stETH after approvals
         stEth.approve(address(liquifierInstance), 1 ether - 1);
         vm.expectRevert("ALLOWANCE_EXCEEDED");
@@ -148,12 +145,12 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
 
         // Deposit 1 stETH with the approval signature
-        ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(liquifierInstance), 1 ether - 1, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
+        ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(liquifierInstance), 1 ether - 1, stEth.nonces(alice), 2 ** 256 - 1, stEth.DOMAIN_SEPARATOR());
         ILiquifier.PermitInput memory permitInput2 = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         vm.expectRevert("ALLOWANCE_EXCEEDED");
         liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, address(0), permitInput2);
 
-        permitInput = createPermitInput(2, address(liquifierInstance), 1 ether, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
+        permitInput = createPermitInput(2, address(liquifierInstance), 1 ether, stEth.nonces(alice), 2 ** 256 - 1, stEth.DOMAIN_SEPARATOR());
         permitInput2 = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, address(0), permitInput2);
     }
@@ -165,7 +162,7 @@ contract LiquifierTest is TestSetup {
         vm.startPrank(role);
         eigenLayerStrategyManager.unpause(0);
         strategyTVLLimits.unpause(0);
-        strategyTVLLimits.setTVLLimits(1_000_000_0 ether, 1_000_000_0 ether);
+        strategyTVLLimits.setTVLLimits(10_000_000 ether, 10_000_000 ether);
         vm.stopPrank();
     }
 
@@ -350,7 +347,6 @@ contract LiquifierTest is TestSetup {
 
         vm.prank(owner);
         liquifierInstance.unPauseContract();
-
     }
 
     function test_getTotalPooledEther() public {

@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
 import "./IETHPOSDeposit.sol";
-import "./IStrategyManager.sol";
+
 import "./IEigenPod.sol";
-import "./IShareManager.sol";
+
 import "./IPausable.sol";
-import "./IStrategy.sol";
+
 import "./ISemVerMixin.sol";
+import "./IShareManager.sol";
+import "./IStrategy.sol";
+import "./IStrategyManager.sol";
+import "@openzeppelin/contracts/proxy/beacon/IBeacon.sol";
 
 interface IEigenPodManagerErrors {
     /// @dev Thrown when caller is not a EigenPod.
@@ -44,19 +47,10 @@ interface IEigenPodManagerEvents {
     event NewTotalShares(address indexed podOwner, int256 newTotalShares);
 
     /// @notice Emitted when a withdrawal of beacon chain ETH is completed
-    event BeaconChainETHWithdrawalCompleted(
-        address indexed podOwner,
-        uint256 shares,
-        uint96 nonce,
-        address delegatedAddress,
-        address withdrawer,
-        bytes32 withdrawalRoot
-    );
+    event BeaconChainETHWithdrawalCompleted(address indexed podOwner, uint256 shares, uint96 nonce, address delegatedAddress, address withdrawer, bytes32 withdrawalRoot);
 
     /// @notice Emitted when a staker's beaconChainSlashingFactor is updated
-    event BeaconChainSlashingFactorDecreased(
-        address staker, uint64 prevBeaconChainSlashingFactor, uint64 newBeaconChainSlashingFactor
-    );
+    event BeaconChainSlashingFactorDecreased(address staker, uint64 prevBeaconChainSlashingFactor, uint64 newBeaconChainSlashingFactor);
 
     /// @notice Emitted when an operator is slashed and shares to be burned are increased
     event BurnableETHSharesIncreased(uint256 shares);
@@ -89,14 +83,7 @@ interface IEigenPodManagerTypes {
  * @author Layr Labs, Inc.
  * @notice Terms of Service: https://docs.eigenlayer.xyz/overview/terms-of-service
  */
-interface IEigenPodManager is
-    IEigenPodManagerErrors,
-    IEigenPodManagerEvents,
-    IEigenPodManagerTypes,
-    IShareManager,
-    IPausable,
-    ISemVerMixin
-{
+interface IEigenPodManager is IEigenPodManagerErrors, IEigenPodManagerEvents, IEigenPodManagerTypes, IShareManager, IPausable, ISemVerMixin {
     /**
      * @notice Creates an EigenPod for the sender.
      * @dev Function will revert if the `msg.sender` already has an EigenPod.
@@ -124,31 +111,19 @@ interface IEigenPodManager is
      * @dev Callable only by the podOwner's EigenPod contract.
      * @dev Reverts if `sharesDelta` is not a whole Gwei amount
      */
-    function recordBeaconChainETHBalanceUpdate(
-        address podOwner,
-        uint256 prevRestakedBalanceWei,
-        int256 balanceDeltaWei
-    ) external;
+    function recordBeaconChainETHBalanceUpdate(address podOwner, uint256 prevRestakedBalanceWei, int256 balanceDeltaWei) external;
 
     /// @notice Sets the address that can set proof timestamps
-    function setProofTimestampSetter(
-        address newProofTimestampSetter
-    ) external;
+    function setProofTimestampSetter(address newProofTimestampSetter) external;
 
     /// @notice Sets the Pectra fork timestamp, only callable by `proofTimestampSetter`
-    function setPectraForkTimestamp(
-        uint64 timestamp
-    ) external;
+    function setPectraForkTimestamp(uint64 timestamp) external;
 
     /// @notice Returns the address of the `podOwner`'s EigenPod if it has been deployed.
-    function ownerToPod(
-        address podOwner
-    ) external view returns (IEigenPod);
+    function ownerToPod(address podOwner) external view returns (IEigenPod);
 
     /// @notice Returns the address of the `podOwner`'s EigenPod (whether it is deployed yet or not).
-    function getPod(
-        address podOwner
-    ) external view returns (IEigenPod);
+    function getPod(address podOwner) external view returns (IEigenPod);
 
     /// @notice The ETH2 Deposit Contract
     function ethPOS() external view returns (IETHPOSDeposit);
@@ -157,9 +132,7 @@ interface IEigenPodManager is
     function eigenPodBeacon() external view returns (IBeacon);
 
     /// @notice Returns 'true' if the `podOwner` has created an EigenPod, and 'false' otherwise.
-    function hasPod(
-        address podOwner
-    ) external view returns (bool);
+    function hasPod(address podOwner) external view returns (bool);
 
     /// @notice Returns the number of EigenPods that have been created
     function numPods() external view returns (uint256);
@@ -172,9 +145,7 @@ interface IEigenPodManager is
      * Likewise, when a withdrawal is completed, this "deficit" is decreased and the withdrawal amount is decreased; We can think of this
      * as the withdrawal "paying off the deficit".
      */
-    function podOwnerDepositShares(
-        address podOwner
-    ) external view returns (int256);
+    function podOwnerDepositShares(address podOwner) external view returns (int256);
 
     /// @notice returns canonical, virtual beaconChainETH strategy
     function beaconChainETHStrategy() external view returns (IStrategy);
@@ -183,9 +154,7 @@ interface IEigenPodManager is
      * @notice Returns the historical sum of proportional balance decreases a pod owner has experienced when
      * updating their pod's balance.
      */
-    function beaconChainSlashingFactor(
-        address staker
-    ) external view returns (uint64);
+    function beaconChainSlashingFactor(address staker) external view returns (uint64);
 
     /// @notice Returns the accumulated amount of beacon chain ETH Strategy shares
     function burnableETHShares() external view returns (uint256);

@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "./TestSetup.sol";
 import "../src/EtherFiTimelock.sol";
+import "./TestSetup.sol";
 import "forge-std/console2.sol";
 
 contract TimelockTest is TestSetup {
-
     function test_timelock() public {
         initializeRealisticFork(MAINNET_FORK);
 
@@ -47,10 +46,10 @@ contract TimelockTest is TestSetup {
         vm.expectRevert("TimelockController: operation is not ready");
         tl.execute(
             address(managerInstance), // target
-            0,                        // value
-            data,                     // encoded call data
-            0,                        // optional predecessor
-            0                         // optional salt
+            0, // value
+            data, // encoded call data
+            0, // optional predecessor
+            0 // optional salt
         );
 
         // not allowed to schedule a tx below the minimum delay
@@ -58,22 +57,22 @@ contract TimelockTest is TestSetup {
         vm.expectRevert("TimelockController: insufficient delay");
         tl.schedule(
             address(managerInstance), // target
-            0,                        // value
-            data,                     // encoded call data
-            0,                        // optional predecessor
-            0,                        // optional salt
-            1 days                    // time before operation can be run
+            0, // value
+            data, // encoded call data
+            0, // optional predecessor
+            0, // optional salt
+            1 days // time before operation can be run
         );
 
         // schedule updateAdmin tx
         vm.prank(owner);
         tl.schedule(
             address(managerInstance), // target
-            0,                        // value
-            data,                     // encoded call data
-            0,                        // optional predecessor
-            0,                        // optional salt
-            2 days                    // time before operation can be run
+            0, // value
+            data, // encoded call data
+            0, // optional predecessor
+            0, // optional salt
+            2 days // time before operation can be run
         );
 
         // find operation id by hashing relevant data
@@ -91,21 +90,21 @@ contract TimelockTest is TestSetup {
         vm.expectRevert("TimelockController: operation is not ready");
         tl.execute(
             address(managerInstance), // target
-            0,                        // value
-            data,                     // encoded call data
-            0,                        // optional predecessor
-            0                         // optional salt
+            0, // value
+            data, // encoded call data
+            0, // optional predecessor
+            0 // optional salt
         );
 
         // schedule again and wait
         vm.prank(owner);
         tl.schedule(
             address(managerInstance), // target
-            0,                        // value
-            data,                     // encoded call data
-            0,                        // optional predecessor
-            0,                        // optional salt
-            2 days                    // time before operation can be run
+            0, // value
+            data, // encoded call data
+            0, // optional predecessor
+            0, // optional salt
+            2 days // time before operation can be run
         );
         vm.warp(block.timestamp + 2 days);
 
@@ -114,22 +113,21 @@ contract TimelockTest is TestSetup {
         vm.expectRevert("AccessControl: account 0xcf03dd0a894ef79cb5b601a43c4b25e3ae4c67ed is missing role 0xd8aa0f3194971a2a116679f7c2090f6939c8d4e01a2a8d7e41d55e5351469e63");
         tl.execute(
             address(managerInstance), // target
-            0,                        // value
-            data,                     // encoded call data
-            0,                        // optional predecessor
-            0                         // optional salt
+            0, // value
+            data, // encoded call data
+            0, // optional predecessor
+            0 // optional salt
         );
 
         // exec account should be able to execute tx
         vm.prank(owner);
         tl.execute(
             address(managerInstance), // target
-            0,                        // value
-            data,                     // encoded call data
-            0,                        // optional predecessor
-            0                         // optional salt
+            0, // value
+            data, // encoded call data
+            0, // optional predecessor
+            0 // optional salt
         );
-
 
         // TODO(dave): update test with role registry changes
         /*
@@ -216,7 +214,7 @@ contract TimelockTest is TestSetup {
     }
 
     function test_generate_EtherFiOracle_updateAdmin() public {
-        emit Schedule(address(etherFiOracleInstance), 0, abi.encodeWithSelector(bytes4(keccak256("updateAdmin(address,bool)")), 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, true), bytes32(0), bytes32(0), 259200);
+        emit Schedule(address(etherFiOracleInstance), 0, abi.encodeWithSelector(bytes4(keccak256("updateAdmin(address,bool)")), 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, true), bytes32(0), bytes32(0), 259_200);
     }
 
     function test_registerToken() internal {
@@ -225,12 +223,12 @@ contract TimelockTest is TestSetup {
 
         {
             // MODE
-            bytes memory data = abi.encodeWithSelector(Liquifier.registerToken.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, address(0), true, 0, 2_000, 10_000, true);
+            bytes memory data = abi.encodeWithSelector(Liquifier.registerToken.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, address(0), true, 0, 2000, 10_000, true);
             _execute_timelock(target, data, false, false, true, true);
         }
         {
             // LINEA
-            bytes memory data = abi.encodeWithSelector(Liquifier.registerToken.selector, 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf, address(0), true, 0, 2_000, 10_000, true);
+            bytes memory data = abi.encodeWithSelector(Liquifier.registerToken.selector, 0x61Ff310aC15a517A846DA08ac9f9abf2A0f9A2bf, address(0), true, 0, 2000, 10_000, true);
             _execute_timelock(target, data, false, false, true, true);
         }
     }
@@ -239,19 +237,19 @@ contract TimelockTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         address target = address(liquifierInstance);
         {
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 4_000, 20_000);
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x83998e169026136760bE6AF93e776C2F352D4b28, 4000, 20_000);
             _execute_timelock(target, data, false, false, true, true);
         }
         {
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 4_000, 20_000);
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 4000, 20_000);
             _execute_timelock(target, data, false, false, true, true);
         }
         {
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 1_000, 100_000);
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0x0295E0CE709723FB25A28b8f67C54a488BA5aE46, 1000, 100_000);
             _execute_timelock(target, data, true, true, true, false);
         }
         {
-            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 1_000, 100_000);
+            bytes memory data = abi.encodeWithSelector(Liquifier.updateDepositCap.selector, 0xDc400f3da3ea5Df0B7B6C127aE2e54CE55644CF3, 1000, 100_000);
             _execute_timelock(target, data, true, true, true, false);
         }
     }
@@ -304,7 +302,7 @@ contract TimelockTest is TestSetup {
         bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector, selector, 0x7750d328b314EfFa365A0402CcfD489B80B0adda, true);
         _execute_timelock(target, data, true, true, true, true);
     }
-    
+
     function test_update_treasury() public {
         initializeRealisticFork(MAINNET_FORK);
         {
@@ -317,7 +315,7 @@ contract TimelockTest is TestSetup {
     function test_upgrade_liquifier() public {
         initializeRealisticFork(MAINNET_FORK);
         address new_impl = 0xA1A15FB15cbda9E6c480C5bca6E9ABA9C5E2ff95;
-        {   
+        {
             assertEq(new_impl, computeAddressByCreate2(address(create2factory), type(Liquifier).creationCode, keccak256("ETHER_FI")));
             address target = address(liquifierInstance);
             bytes memory data = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, new_impl);
@@ -366,7 +364,7 @@ contract TimelockTest is TestSetup {
         _execute_timelock(target, data, true, true, true, true);
     }
 
-        function test_update_committee_members() public {
+    function test_update_committee_members() public {
         initializeRealisticFork(MAINNET_FORK);
         address etherfi_oracle1 = address(0x6d850af8e7AB3361CfF28b31C701647414b9C92b);
         address etherfi_oracle2 = address(0x1a9AC2a6fC85A7234f9E21697C75D06B2b350864);
@@ -375,13 +373,12 @@ contract TimelockTest is TestSetup {
         address target = address(etherFiOracleInstance);
         bytes memory data = abi.encodeWithSelector(EtherFiOracle.removeCommitteeMember.selector, etherfi_oracle1);
         _execute_timelock(target, data, true, true, true, true);
-       data = abi.encodeWithSelector(EtherFiOracle.removeCommitteeMember.selector, etherfi_oracle2);
+        data = abi.encodeWithSelector(EtherFiOracle.removeCommitteeMember.selector, etherfi_oracle2);
         _execute_timelock(target, data, true, true, true, true);
         data = abi.encodeWithSelector(EtherFiOracle.addCommitteeMember.selector, avs_etherfi_oracle1);
         _execute_timelock(target, data, true, true, true, true);
         data = abi.encodeWithSelector(EtherFiOracle.addCommitteeMember.selector, avs_etherfi_oracle2);
         _execute_timelock(target, data, true, true, true, true);
-
     }
 
     function test_accept_ownership_role_registry() public {
@@ -398,7 +395,7 @@ contract TimelockTest is TestSetup {
         address target = address(withdrawRequestNFTInstance);
         uint256 remainder = withdrawRequestNFTInstance.getEEthRemainderAmount();
 
-            // Write remainder to a file
+        // Write remainder to a file
         string memory remainderStr = vm.toString(remainder);
         vm.writeFile("./release/logs/txns/remainder.txt", remainderStr);
 
@@ -406,6 +403,5 @@ contract TimelockTest is TestSetup {
         _execute_timelock(target, data, true, true, true, true);
     }
 }
-
 
 // {"version":"1.0","chainId":"1

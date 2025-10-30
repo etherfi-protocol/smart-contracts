@@ -4,7 +4,6 @@ pragma solidity ^0.8.13;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract RegulationsManagerV2 is Ownable {
-
     bytes32 constant TYPEHASH = keccak256("TermsOfService(string message,bytes32 hashOfTerms)");
     bytes32 constant DOMAIN_TYPEHASH = keccak256("EIP712Domain(string name,string version)");
     string public DOMAIN_NAME = "Ether.fi Terms of Service";
@@ -14,16 +13,18 @@ contract RegulationsManagerV2 is Ownable {
         string message;
         bytes32 hashOfTerms;
     }
+
     TermsOfService public currentTerms;
 
     error InvalidTermsAndConditionsSignature();
 
     function verifyTermsSignature(bytes memory signature) external {
-        if (recoverSigner(generateTermsDigest(), signature) != msg.sender) revert InvalidTermsAndConditionsSignature();
+        if (recoverSigner(generateTermsDigest(), signature) != msg.sender) {
+            revert InvalidTermsAndConditionsSignature();
+        }
     }
 
     function generateTermsDigest() public view returns (bytes32) {
-
         // Notice: EIP-712 spec has an exception for string types. If a field is type "string" or "bytes"
         // you hash it instead of using the default encoding.
         bytes2 prefix = "\x19\x01";
@@ -39,7 +40,7 @@ contract RegulationsManagerV2 is Ownable {
     //--------------------------------------------------------------------------------------
 
     function updateTermsOfService(string memory _message, bytes32 _hashOfTerms, string memory _domainVersion) external onlyOwner {
-        currentTerms = TermsOfService({ message: _message, hashOfTerms: _hashOfTerms });
+        currentTerms = TermsOfService({message: _message, hashOfTerms: _hashOfTerms});
         DOMAIN_VERSION = _domainVersion;
     }
 
@@ -47,11 +48,7 @@ contract RegulationsManagerV2 is Ownable {
     //---------------------------  Signature Recovery   ------------------------------------
     //--------------------------------------------------------------------------------------
 
-    function splitSignature(bytes memory sig)
-        internal
-        pure
-        returns (uint8 v, bytes32 r, bytes32 s)
-    {
+    function splitSignature(bytes memory sig) internal pure returns (uint8 v, bytes32 r, bytes32 s) {
         require(sig.length == 65);
 
         assembly {
@@ -66,14 +63,9 @@ contract RegulationsManagerV2 is Ownable {
         return (v, r, s);
     }
 
-    function recoverSigner(bytes32 message, bytes memory sig)
-        internal
-        pure
-        returns (address)
-    {
+    function recoverSigner(bytes32 message, bytes memory sig) internal pure returns (address) {
         (uint8 v, bytes32 r, bytes32 s) = splitSignature(sig);
 
         return ecrecover(message, v, r, s);
     }
-
 }

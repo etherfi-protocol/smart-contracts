@@ -1,21 +1,21 @@
 /// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
+import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-import "./Liquifier.sol";
 import "./LiquidityPool.sol";
+import "./Liquifier.sol";
 
-import "./eigenlayer-interfaces/IStrategyManager.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
 import "./eigenlayer-interfaces/IRewardsCoordinator.sol";
+import "./eigenlayer-interfaces/IStrategyManager.sol";
 
 contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
@@ -40,10 +40,9 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     mapping(address => bool) public admins;
 
     mapping(address => TokenInfo) public tokenInfos;
-    
+
     EnumerableSet.Bytes32Set private withdrawalRootsSet;
     mapping(bytes32 => IDelegationManager.Withdrawal) public DEPRECATED_withdrawalRootToWithdrawal;
-
 
     event QueuedStEthWithdrawals(uint256[] _reqIds);
     event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
@@ -58,14 +57,14 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     error WrongOutput();
     error IncorrectCaller();
 
-     /// @custom:oz-upgrades-unsafe-allow constructor
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _rewardsCoordinator) {
         rewardsCoordinator = IRewardsCoordinator(_rewardsCoordinator);
         _disableInitializers();
     }
 
     /// @notice initialize to set variables on deployment
-    function initialize(address _liquidityPool, address _liquifier) initializer external {
+    function initialize(address _liquidityPool, address _liquifier) external initializer {
         __Ownable_init();
         __Pausable_init();
         __UUPSUpgradeable_init();
@@ -80,10 +79,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         eigenLayerDelegationManager = liquifier.eigenLayerDelegationManager();
 
         (,, IStrategy strategy,,,,,,,,) = liquifier.tokenInfos(address(lido));
-        tokenInfos[address(lido)] = TokenInfo({
-            elStrategy: strategy,
-            elSharesInPendingForWithdrawals: 0
-        });
+        tokenInfos[address(lido)] = TokenInfo({elStrategy: strategy, elSharesInPendingForWithdrawals: 0});
     }
 
     receive() external payable {}
@@ -92,7 +88,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     // |                                   Handling Lido's stETH                                    |
     // |--------------------------------------------------------------------------------------------|
 
-    /// Initiate the redemption of stETH for ETH 
+    /// Initiate the redemption of stETH for ETH
     /// @notice Request for all stETH holdings
     function stEthRequestWithdrawal() external onlyAdmin returns (uint256[] memory) {
         uint256 amount = lido.balanceOf(address(this));
@@ -102,8 +98,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @notice Request for a specific amount of stETH holdings
     /// @param _amount the amount of stETH to request
     function stEthRequestWithdrawal(uint256 _amount) public onlyAdmin returns (uint256[] memory) {
-        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) revert IncorrectAmount();
-        if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
+        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) {
+            revert IncorrectAmount();
+        }
+        if (_amount > lido.balanceOf(address(this))) {
+            revert NotEnoughBalance();
+        }
 
         uint256 maxAmount = lidoWithdrawalQueue.MAX_STETH_WITHDRAWAL_AMOUNT();
         uint256 numReqs = (_amount + maxAmount - 1) / maxAmount;
@@ -134,7 +134,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     // Send the ETH back to the liquidity pool
     function withdrawEther() public onlyAdmin {
         uint256 amountToLiquidityPool = address(this).balance;
-        (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
+        (bool sent,) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20_000}("");
         require(sent, "ETH_SEND_TO_LIQUIDITY_POOL_FAILED");
     }
 
@@ -146,7 +146,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     function setRewardsClaimer(address _claimer) external onlyAdmin {
         rewardsCoordinator.setClaimerFor(_claimer);
     }
-    
+
     // delegate to an AVS operator
     function delegateTo(address operator, IDelegationManager.SignatureWithExpiry memory approverSignatureAndExpiry, bytes32 approverSalt) external onlyAdmin {
         eigenLayerDelegationManager.delegateTo(operator, approverSignatureAndExpiry, approverSalt);
@@ -233,7 +233,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         (uint256 restaked, uint256 unrestaking, uint256 holding, uint256 pendingForWithdrawals) = getTotalPooledEtherSplits(_token);
         return restaked + unrestaking + holding + pendingForWithdrawals;
     }
-    
+
     function getRestakedAmount(address _token) public view returns (uint256) {
         TokenInfo memory info = tokenInfos[_token];
         IStrategy[] memory strategies = new IStrategy[](1);
@@ -241,7 +241,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
         // get the shares locked in the EigenPod
         // - `withdrawableShares` reflects the slashing on 'depositShares'
-        (uint256[] memory withdrawableShares, ) = eigenLayerDelegationManager.getWithdrawableShares(address(this), strategies);
+        (uint256[] memory withdrawableShares,) = eigenLayerDelegationManager.getWithdrawableShares(address(this), strategies);
 
         // convert the share amount to the token's balance amount
         uint256 restaked = info.elStrategy.sharesToUnderlyingView(withdrawableShares[0]);
@@ -265,14 +265,17 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
             restaked = liquifier.quoteByFairValue(_token, restakedTokenAmount); // restaked & pending for withdrawals
             unrestaking = liquifier.quoteByFairValue(_token, unrestakingTokenAmount); // restaked & pending for withdrawals
         }
-        holding = liquifier.quoteByFairValue(_token, IERC20(_token).balanceOf(address(this))); /// eth value for erc20 holdings
+        holding = liquifier.quoteByFairValue(_token, IERC20(_token).balanceOf(address(this)));
+        /// eth value for erc20 holdings
         pendingForWithdrawals = liquifier.quoteByFairValue(_token, getAmountPendingForRedemption(_token));
     }
 
     // get the amount of token restaked in EigenLayer pending for withdrawals
     function getAmountInEigenLayerPendingForWithdrawals(address _token) public view returns (uint256) {
         TokenInfo memory info = tokenInfos[_token];
-        if (info.elStrategy == IStrategy(address(0))) return 0;
+        if (info.elStrategy == IStrategy(address(0))) {
+            return 0;
+        }
         uint256 amount = info.elStrategy.sharesToUnderlyingView(info.elSharesInPendingForWithdrawals);
         return amount;
     }
@@ -318,11 +321,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
         strategies[0] = tokenInfos[_token].elStrategy;
         shares[0] = _shares;
-        params[0] = IDelegationManagerTypes.QueuedWithdrawalParams({
-            strategies: strategies,
-            depositShares: shares,
-            __deprecated_withdrawer: address(this)
-        });
+        params[0] = IDelegationManagerTypes.QueuedWithdrawalParams({strategies: strategies, depositShares: shares, __deprecated_withdrawer: address(this)});
 
         return queueWithdrawalsWithParams(params);
     }
@@ -334,11 +333,15 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     function _requireAdmin() internal view virtual {
-        if (!(admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
+        if (!(admins[msg.sender] || msg.sender == owner())) {
+            revert IncorrectCaller();
+        }
     }
 
     function _requirePauser() internal view virtual {
-        if (!(pausers[msg.sender] || admins[msg.sender] || msg.sender == owner())) revert IncorrectCaller();
+        if (!(pausers[msg.sender] || admins[msg.sender] || msg.sender == owner())) {
+            revert IncorrectCaller();
+        }
     }
 
     /* MODIFIER */

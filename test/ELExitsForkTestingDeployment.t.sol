@@ -1,20 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
+import "../src/AuctionManager.sol";
+import "../src/EtherFiNode.sol";
+import "../src/EtherFiNodesManager.sol";
+import "../src/EtherFiRateLimiter.sol";
+import "../src/EtherFiTimelock.sol";
+import "../src/LiquidityPool.sol";
+import "../src/StakingManager.sol";
+import "../src/UUPSProxy.sol";
+
+import {IEigenPod, IEigenPodTypes} from "../src/eigenlayer-interfaces/IEigenPod.sol";
+import "../src/interfaces/ILiquidityPool.sol";
+import "../src/interfaces/IRoleRegistry.sol";
+import "../src/interfaces/IStakingManager.sol";
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "../src/StakingManager.sol";
-import "../src/EtherFiNodesManager.sol";
-import "../src/EtherFiNode.sol";
-import "../src/EtherFiRateLimiter.sol";
-import "../src/LiquidityPool.sol";
-import "../src/UUPSProxy.sol";
-import "../src/AuctionManager.sol";
-import "../src/EtherFiTimelock.sol";
-import "../src/interfaces/IRoleRegistry.sol";
-import "../src/interfaces/ILiquidityPool.sol";
-import "../src/interfaces/IStakingManager.sol";
-import {IEigenPod, IEigenPodTypes } from "../src/eigenlayer-interfaces/IEigenPod.sol";
 
 interface IUpgradable {
     function upgradeTo(address newImplementation) external;
@@ -26,15 +27,14 @@ interface IUpgradable {
  * @title ELExitsForkTestingDeployment
  * @notice fork test using actual mainnet addresses and roles
  * @dev Run with: forge test --fork-url <mainnet-rpc> --match-path test/ELExitsForkTestingDeployment.t.sol -vvv
- * 
+ *
  * This test simulates the ACTUAL upgrade process using:
  * - mainnet contract addresses
- * - current role holders 
+ * - current role holders
  * - timelock if needed
  * - Actual upgrade permissions
  */
 contract ELExitsForkTestingDeploymentTest is Test {
-
     // === MAINNET CONTRACT ADDRESSES ===
     StakingManager constant stakingManager = StakingManager(0x25e821b7197B146F7713C3b89B6A4D83516B912d);
     ILiquidityPool constant liquidityPool = ILiquidityPool(0x308861A430be4cce5502d0A12724771Fc6DaF216);
@@ -71,7 +71,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
         console2.log("StakingManager Owner:", stakingManagerOwner);
         console2.log("EtherFiNodesManager Owner:", etherFiNodesManagerOwner);
         console2.log(unicode"⚠️  All contracts use timelock - upgrades need governance");
-        
+
         console2.log("");
     }
 
@@ -120,41 +120,24 @@ contract ELExitsForkTestingDeploymentTest is Test {
         console2.log(unicode"✓ Rate limiter deployed and initialized");
         console2.log("");
     }
-    
+
     function _deployNewImplementations() internal {
         console2.log("--- Step 2: Deploying New Contract Implementations (EIP-7002 Only) ---");
 
         // Deploy new StakingManager implementation (minor rate limiter integration)
-        newStakingManagerImpl = new StakingManager(
-            address(liquidityPool),
-            address(etherFiNodesManager),
-            address(stakingDepositContract),
-            address(auctionManager),
-            address(etherFiNodeBeacon),
-            address(roleRegistry)
-        );
+        newStakingManagerImpl = new StakingManager(address(liquidityPool), address(etherFiNodesManager), address(stakingDepositContract), address(auctionManager), address(etherFiNodeBeacon), address(roleRegistry));
         console2.log("New StakingManager implementation:", address(newStakingManagerImpl));
 
         // Deploy new EtherFiNodesManager implementation (with EL exits + rate limiter)
-        newEtherFiNodesManagerImpl = new EtherFiNodesManager(
-            address(stakingManager), 
-            address(roleRegistry), 
-            address(rateLimiter)
-        );
+        newEtherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
         console2.log("New EtherFiNodesManager implementation:", address(newEtherFiNodesManagerImpl));
 
         // Deploy new EtherFiNode implementation (with EL exits + consolidation)
-        newEtherFiNodeImpl = new EtherFiNode(
-            address(liquidityPool),
-            address(etherFiNodesManager),
-            eigenPodManager,
-            delegationManager,
-            address(roleRegistry)
-        );
+        newEtherFiNodeImpl = new EtherFiNode(address(liquidityPool), address(etherFiNodesManager), eigenPodManager, delegationManager, address(roleRegistry));
         console2.log("New EtherFiNode implementation:", address(newEtherFiNodeImpl));
         console2.log("");
     }
-    
+
     function _performRealisticUpgrades() internal {
         console2.log("--- Step 3: Performing Upgrades (EIP-7002 Contracts Only) ---");
 
@@ -163,7 +146,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
         stakingManager.upgradeTo(address(newStakingManagerImpl));
         console2.log(unicode"✓ StakingManager upgraded (rate limiter integration)");
 
-        // Upgrade EtherFiNodesManager - prank the owner (hardcoded timelock)  
+        // Upgrade EtherFiNodesManager - prank the owner (hardcoded timelock)
         vm.prank(etherFiNodesManagerOwner);
         etherFiNodesManager.upgradeTo(address(newEtherFiNodesManagerImpl));
         console2.log(unicode"✓ EtherFiNodesManager upgraded (EL exits + rate limiter)");
@@ -175,7 +158,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
 
         console2.log("");
     }
-    
+
     function _assignNewRoles() internal {
         console2.log("--- Step 4: Assigning New Roles (Following Prelude Pattern) ---");
 
@@ -187,7 +170,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), realElExiter);
         console2.log("Granted ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE to:", realElExiter);
 
-        // Assign rate limiter admin role to a realistic address  
+        // Assign rate limiter admin role to a realistic address
         address realRateLimiterAdmin = 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705; // etherFiAdmin
         roleRegistry.grantRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), realRateLimiterAdmin);
         console2.log("Granted ETHERFI_RATE_LIMITER_ADMIN_ROLE to:", realRateLimiterAdmin);
@@ -234,10 +217,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
 
             // Try to call EL triggered withdrawal (will revert due to no validators, but tests access control)
             IEigenPodTypes.WithdrawalRequest[] memory requests = new IEigenPodTypes.WithdrawalRequest[](1);
-            requests[0] = IEigenPodTypes.WithdrawalRequest({
-                pubkey: hex"b964a67b7272ce6b59243d65ffd7b011363dd99322c88e583f14e34e19dfa249c80c724361ceaee7a9bfbfe1f3822871",
-                amountGwei: 32000000000
-            });
+            requests[0] = IEigenPodTypes.WithdrawalRequest({pubkey: hex"b964a67b7272ce6b59243d65ffd7b011363dd99322c88e583f14e34e19dfa249c80c724361ceaee7a9bfbfe1f3822871", amountGwei: 32_000_000_000});
 
             vm.prank(realElExiter);
             try etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal(requests) {
@@ -279,7 +259,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
 
         console2.log("");
     }
-    
+
     function _printUpgradeSummary() internal view {
         console2.log("=== REALISTIC UPGRADE SUMMARY ===");
         console2.log("");
@@ -326,14 +306,8 @@ contract ELExitsForkTestingDeploymentTest is Test {
         if (hasRole) {
             // Test with a more realistic scenario
             IEigenPodTypes.WithdrawalRequest[] memory requests = new IEigenPodTypes.WithdrawalRequest[](2);
-            requests[0] = IEigenPodTypes.WithdrawalRequest({
-                pubkey: hex"b964a67b7272ce6b59243d65ffd7b011363dd99322c88e583f14e34e19dfa249c80c724361ceaee7a9bfbfe1f3822871",
-                amountGwei: 32000000000
-            });
-            requests[1] = IEigenPodTypes.WithdrawalRequest({
-                pubkey: hex"b22c8896452c858287426b478e76c2bf366f0c139cf54bd07fa7351290e9a9f92cc4f059ea349a441e1cfb60aacd2447", 
-                amountGwei: 32000000000
-            });
+            requests[0] = IEigenPodTypes.WithdrawalRequest({pubkey: hex"b964a67b7272ce6b59243d65ffd7b011363dd99322c88e583f14e34e19dfa249c80c724361ceaee7a9bfbfe1f3822871", amountGwei: 32_000_000_000});
+            requests[1] = IEigenPodTypes.WithdrawalRequest({pubkey: hex"b22c8896452c858287426b478e76c2bf366f0c139cf54bd07fa7351290e9a9f92cc4f059ea349a441e1cfb60aacd2447", amountGwei: 32_000_000_000});
 
             vm.prank(realElExiter);
             vm.expectRevert(); // Will revert due to validators not existing, but tests role system

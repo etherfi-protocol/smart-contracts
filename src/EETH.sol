@@ -1,27 +1,29 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/utils/cryptography/EIP712Upgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/utils/CountersUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 
-import "./interfaces/IeETH.sol";
-import "./interfaces/ILiquidityPool.sol";
+import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/utils/CountersUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/utils/cryptography/EIP712Upgradeable.sol";
+
 import "./AssetRecovery.sol";
+import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./interfaces/IeETH.sol";
 
 contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20PermitUpgradeable, IeETH, AssetRecovery {
     using CountersUpgradeable for CountersUpgradeable.Counter;
+
     ILiquidityPool public liquidityPool;
 
     uint256 public totalShares;
-    mapping (address => uint256) public shares;
-    mapping (address => mapping (address => uint256)) public allowances;
-    mapping (address => CountersUpgradeable.Counter) private _nonces;
+    mapping(address => uint256) public shares;
+    mapping(address => mapping(address => uint256)) public allowances;
+    mapping(address => CountersUpgradeable.Counter) private _nonces;
 
     bytes32 private constant _PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
@@ -39,7 +41,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
 
     bytes32 public constant EETH_OPERATING_ADMIN_ROLE = keccak256("EETH_OPERATING_ADMIN_ROLE");
 
-    event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
+    event TransferShares(address indexed from, address indexed to, uint256 sharesValue);
 
     error IncorrectRole();
 
@@ -58,12 +60,12 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         require(_roleRegistry != address(0), "must set role registry");
         roleRegistry = IRoleRegistry(_roleRegistry);
 
-        _disableInitializers(); 
+        _disableInitializers();
     }
 
     function initialize(address _liquidityPool) external initializer {
         require(_liquidityPool != address(0), "No zero addresses");
-        
+
         __UUPSUpgradeable_init();
         __Ownable_init();
         liquidityPool = ILiquidityPool(_liquidityPool);
@@ -104,7 +106,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     function increaseAllowance(address _spender, uint256 _increaseAmount) external returns (bool) {
         address owner = msg.sender;
         uint256 currentAllowance = allowance(owner, _spender);
-        _approve(owner, _spender,currentAllowance + _increaseAmount);
+        _approve(owner, _spender, currentAllowance + _increaseAmount);
         return true;
     }
 
@@ -128,15 +130,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         return true;
     }
 
-    function permit(
-        address owner,
-        address spender,
-        uint256 value,
-        uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) public virtual override(IeETH, IERC20PermitUpgradeable) {
+    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) public virtual override(IeETH, IERC20PermitUpgradeable) {
         require(block.timestamp <= deadline, "ERC20Permit: expired deadline");
 
         bytes32 structHash = keccak256(abi.encode(_PERMIT_TYPEHASH, owner, spender, value, _useNonce(owner), deadline));
@@ -150,21 +144,27 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     }
 
     function recoverETH(address payable to, uint256 amount) external {
-        if(!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
         _recoverETH(to, amount);
     }
 
     function recoverERC20(address token, address to, uint256 amount) external {
-        if(!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
         _recoverERC20(token, to, amount);
     }
 
     function recoverERC721(address token, address to, uint256 tokenId) external {
-        if(!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
         _recoverERC721(token, to, tokenId);
     }
 
-    // [INTERNAL FUNCTIONS] 
+    // [INTERNAL FUNCTIONS]
     function _transfer(address _sender, address _recipient, uint256 _amount) internal {
         uint256 _sharesToTransfer = liquidityPool.sharesForAmount(_amount);
         _transferShares(_sender, _recipient, _sharesToTransfer);
@@ -190,9 +190,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         emit TransferShares(_sender, _recipient, _sharesAmount);
     }
 
-    function _authorizeUpgrade(
-        address /* newImplementation */
-    ) internal view override {
+    function _authorizeUpgrade(address /* newImplementation */ ) internal view override {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
@@ -203,9 +201,17 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     }
 
     // [GETTERS]
-    function name() public pure returns (string memory) { return "ether.fi ETH"; }
-    function symbol() public pure returns (string memory) { return "eETH"; }
-    function decimals() public pure returns (uint8) { return 18; }
+    function name() public pure returns (string memory) {
+        return "ether.fi ETH";
+    }
+
+    function symbol() public pure returns (string memory) {
+        return "eETH";
+    }
+
+    function decimals() public pure returns (uint8) {
+        return 18;
+    }
 
     function totalSupply() public view returns (uint256) {
         return liquidityPool.getTotalPooledEther();
@@ -235,11 +241,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         }
     }
 
-    function _buildDomainSeparator(
-        bytes32 typeHash,
-        bytes32 nameHash,
-        bytes32 versionHash
-    ) private view returns (bytes32) {
+    function _buildDomainSeparator(bytes32 typeHash, bytes32 nameHash, bytes32 versionHash) private view returns (bytes32) {
         return keccak256(abi.encode(typeHash, nameHash, versionHash, block.chainid, address(this)));
     }
 

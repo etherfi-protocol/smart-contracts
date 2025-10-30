@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "./IStrategyManager.sol";
 import "./IDelegationManager.sol";
+import "./IStrategyManager.sol";
 
 /**
  * @title Interface for the primary 'slashing' contract for EigenLayer.
@@ -30,22 +30,13 @@ interface ISlasher {
     }
 
     /// @notice Emitted when a middleware times is added to `operator`'s array.
-    event MiddlewareTimesAdded(
-        address operator,
-        uint256 index,
-        uint32 stalestUpdateBlock,
-        uint32 latestServeUntilBlock
-    );
+    event MiddlewareTimesAdded(address operator, uint256 index, uint32 stalestUpdateBlock, uint32 latestServeUntilBlock);
 
     /// @notice Emitted when `operator` begins to allow `contractAddress` to slash them.
     event OptedIntoSlashing(address indexed operator, address indexed contractAddress);
 
     /// @notice Emitted when `contractAddress` signals that it will no longer be able to slash `operator` after the `contractCanSlashOperatorUntilBlock`.
-    event SlashingAbilityRevoked(
-        address indexed operator,
-        address indexed contractAddress,
-        uint32 contractCanSlashOperatorUntilBlock
-    );
+    event SlashingAbilityRevoked(address indexed operator, address indexed contractAddress, uint32 contractCanSlashOperatorUntilBlock);
 
     /**
      * @notice Emitted when `slashingContract` 'freezes' the `slashedOperator`.
@@ -95,12 +86,7 @@ interface ISlasher {
      * @dev insertAfter should be calculated offchain before making the transaction that calls this. this is subject to race conditions,
      *      but it is anticipated to be rare and not detrimental.
      */
-    function recordStakeUpdate(
-        address operator,
-        uint32 updateBlock,
-        uint32 serveUntilBlock,
-        uint256 insertAfter
-    ) external;
+    function recordStakeUpdate(address operator, uint32 updateBlock, uint32 serveUntilBlock, uint256 insertAfter) external;
 
     /**
      * @notice this function is a called by middlewares during an operator's deregistration to make sure the operator's stake at deregistration
@@ -132,10 +118,7 @@ interface ISlasher {
     function canSlash(address toBeSlashed, address slashingContract) external view returns (bool);
 
     /// @notice Returns the block until which `serviceContract` is allowed to slash the `operator`.
-    function contractCanSlashOperatorUntilBlock(
-        address operator,
-        address serviceContract
-    ) external view returns (uint32);
+    function contractCanSlashOperatorUntilBlock(address operator, address serviceContract) external view returns (uint32);
 
     /// @notice Returns the block at which the `serviceContract` last updated its view of the `operator`'s stake
     function latestUpdateBlock(address operator, address serviceContract) external view returns (uint32);
@@ -155,11 +138,7 @@ interface ISlasher {
      * @param middlewareTimesIndex Indicates an index in `operatorToMiddlewareTimes[operator]` to consult as proof of the `operator`'s ability to withdraw
      * @dev The correct `middlewareTimesIndex` input should be computable off-chain.
      */
-    function canWithdraw(
-        address operator,
-        uint32 withdrawalStartBlock,
-        uint256 middlewareTimesIndex
-    ) external returns (bool);
+    function canWithdraw(address operator, uint32 withdrawalStartBlock, uint256 middlewareTimesIndex) external returns (bool);
 
     /**
      * operator =>
@@ -170,10 +149,7 @@ interface ISlasher {
      *      )
      *  ]
      */
-    function operatorToMiddlewareTimes(
-        address operator,
-        uint256 arrayIndex
-    ) external view returns (MiddlewareTimes memory);
+    function operatorToMiddlewareTimes(address operator, uint256 arrayIndex) external view returns (MiddlewareTimes memory);
 
     /// @notice Getter function for fetching `operatorToMiddlewareTimes[operator].length`
     function middlewareTimesLength(address operator) external view returns (uint256);
@@ -188,8 +164,5 @@ interface ISlasher {
     function operatorWhitelistedContractsLinkedListSize(address operator) external view returns (uint256);
 
     /// @notice Getter function for fetching a single node in the operator's linked list (`_operatorToWhitelistedContractsByUpdate[operator]`).
-    function operatorWhitelistedContractsLinkedListEntry(
-        address operator,
-        address node
-    ) external view returns (bool, uint256, uint256);
+    function operatorWhitelistedContractsLinkedListEntry(address operator, address node) external view returns (bool, uint256, uint256);
 }

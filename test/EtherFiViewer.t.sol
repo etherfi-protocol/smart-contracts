@@ -4,11 +4,10 @@ pragma solidity ^0.8.13;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
-import "../src/helpers/EtherFiViewer.sol";
 import "../src/UUPSProxy.sol";
+import "../src/helpers/EtherFiViewer.sol";
 
-contract EtherFiViewerTest is Test  {
-
+contract EtherFiViewerTest is Test {
     EtherFiViewer public etherFiViewer;
     address public eigenPodManager = address(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
     address public delegationManager = address(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
@@ -38,11 +37,9 @@ contract EtherFiViewerTest is Test  {
 
     function test_EigenPodManager_podOwnerDepositShares() public {
         uint256[] memory validatorIds = new uint256[](2);
-        validatorIds[0] = 25678;
-        validatorIds[1] = 29208;
+        validatorIds[0] = 25_678;
+        validatorIds[1] = 29_208;
 
         etherFiViewer.EigenPodManager_podOwnerDepositShares(validatorIds);
     }
-
-
 }

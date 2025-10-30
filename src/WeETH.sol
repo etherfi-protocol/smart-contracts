@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol";
-import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRateProvider.sol";
+import "./interfaces/IeETH.sol";
+import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol";
+
+import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol";
 
 import "./AssetRecovery.sol";
 import "./interfaces/IRoleRegistry.sol";
 
 contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
-
     IRoleRegistry public immutable roleRegistry;
 
     error IncorrectRole();
@@ -74,10 +74,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     /// @notice Wraps eEth with PermitInput struct so user does not have to call approve on eeth contract
     /// @param _eETHAmount the amount of eEth to wrap
     /// @return returns the amount of weEth the user receives
-    function wrapWithPermit(uint256 _eETHAmount, ILiquidityPool.PermitInput calldata _permit)
-        external
-        returns (uint256)
-    {
+    function wrapWithPermit(uint256 _eETHAmount, ILiquidityPool.PermitInput calldata _permit) external returns (uint256) {
         try eETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return wrap(_eETHAmount);
     }
@@ -94,18 +91,26 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     }
 
     function recoverETH(address payable to, uint256 amount) external {
-        if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
         _recoverETH(to, amount);
     }
 
     function recoverERC20(address token, address to, uint256 amount) external {
-        if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (token == address(eETH)) revert CannotRecoverEETH();
+        if (!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
+        if (token == address(eETH)) {
+            revert CannotRecoverEETH();
+        }
         _recoverERC20(token, to, amount);
     }
 
     function recoverERC721(address token, address to, uint256 tokenId) external {
-        if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) {
+            revert IncorrectRole();
+        }
         _recoverERC721(token, to, tokenId);
     }
 
@@ -113,12 +118,9 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
 
-    function _authorizeUpgrade(
-        address /* newImplementation */
-    ) internal view override {
+    function _authorizeUpgrade(address /* newImplementation */ ) internal view override {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
-
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------

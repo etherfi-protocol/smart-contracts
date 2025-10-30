@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.27;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../eigenlayer-libraries/OperatorSetLib.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "./IAllocationManager.sol";
 import "./IDelegationManager.sol";
-import "./IStrategyManager.sol";
+
 import "./IPauserRegistry.sol";
 import "./IPermissionController.sol";
-import "./IStrategy.sol";
+
 import "./ISemVerMixin.sol";
+import "./IStrategy.sol";
+import "./IStrategyManager.sol";
 
 interface IRewardsCoordinatorErrors {
     /// @dev Thrown when msg.sender is not allowed to call a function
@@ -278,28 +280,13 @@ interface IRewardsCoordinatorTypes {
 
 interface IRewardsCoordinatorEvents is IRewardsCoordinatorTypes {
     /// @notice emitted when an AVS creates a valid RewardsSubmission
-    event AVSRewardsSubmissionCreated(
-        address indexed avs,
-        uint256 indexed submissionNonce,
-        bytes32 indexed rewardsSubmissionHash,
-        RewardsSubmission rewardsSubmission
-    );
+    event AVSRewardsSubmissionCreated(address indexed avs, uint256 indexed submissionNonce, bytes32 indexed rewardsSubmissionHash, RewardsSubmission rewardsSubmission);
 
     /// @notice emitted when a valid RewardsSubmission is created for all stakers by a valid submitter
-    event RewardsSubmissionForAllCreated(
-        address indexed submitter,
-        uint256 indexed submissionNonce,
-        bytes32 indexed rewardsSubmissionHash,
-        RewardsSubmission rewardsSubmission
-    );
+    event RewardsSubmissionForAllCreated(address indexed submitter, uint256 indexed submissionNonce, bytes32 indexed rewardsSubmissionHash, RewardsSubmission rewardsSubmission);
 
     /// @notice emitted when a valid RewardsSubmission is created when rewardAllStakersAndOperators is called
-    event RewardsSubmissionForAllEarnersCreated(
-        address indexed tokenHopper,
-        uint256 indexed submissionNonce,
-        bytes32 indexed rewardsSubmissionHash,
-        RewardsSubmission rewardsSubmission
-    );
+    event RewardsSubmissionForAllEarnersCreated(address indexed tokenHopper, uint256 indexed submissionNonce, bytes32 indexed rewardsSubmissionHash, RewardsSubmission rewardsSubmission);
 
     /**
      * @notice Emitted when an AVS creates a valid `OperatorDirectedRewardsSubmission`
@@ -309,13 +296,7 @@ interface IRewardsCoordinatorEvents is IRewardsCoordinatorTypes {
      * @param submissionNonce Current nonce of the avs. Used to generate a unique submission hash.
      * @param operatorDirectedRewardsSubmission The Operator-Directed Rewards Submission. Contains the token, start timestamp, duration, operator rewards, description and, strategy and multipliers.
      */
-    event OperatorDirectedAVSRewardsSubmissionCreated(
-        address indexed caller,
-        address indexed avs,
-        bytes32 indexed operatorDirectedRewardsSubmissionHash,
-        uint256 submissionNonce,
-        OperatorDirectedRewardsSubmission operatorDirectedRewardsSubmission
-    );
+    event OperatorDirectedAVSRewardsSubmissionCreated(address indexed caller, address indexed avs, bytes32 indexed operatorDirectedRewardsSubmissionHash, uint256 submissionNonce, OperatorDirectedRewardsSubmission operatorDirectedRewardsSubmission);
 
     /**
      * @notice Emitted when an AVS creates a valid `OperatorDirectedRewardsSubmission` for an operator set.
@@ -325,20 +306,12 @@ interface IRewardsCoordinatorEvents is IRewardsCoordinatorTypes {
      * @param submissionNonce Current nonce of the avs. Used to generate a unique submission hash.
      * @param operatorDirectedRewardsSubmission The Operator-Directed Rewards Submission. Contains the token, start timestamp, duration, operator rewards, description and, strategy and multipliers.
      */
-    event OperatorDirectedOperatorSetRewardsSubmissionCreated(
-        address indexed caller,
-        bytes32 indexed operatorDirectedRewardsSubmissionHash,
-        OperatorSet operatorSet,
-        uint256 submissionNonce,
-        OperatorDirectedRewardsSubmission operatorDirectedRewardsSubmission
-    );
+    event OperatorDirectedOperatorSetRewardsSubmissionCreated(address indexed caller, bytes32 indexed operatorDirectedRewardsSubmissionHash, OperatorSet operatorSet, uint256 submissionNonce, OperatorDirectedRewardsSubmission operatorDirectedRewardsSubmission);
 
     /// @notice rewardsUpdater is responsible for submitting DistributionRoots, only owner can set rewardsUpdater
     event RewardsUpdaterSet(address indexed oldRewardsUpdater, address indexed newRewardsUpdater);
 
-    event RewardsForAllSubmitterSet(
-        address indexed rewardsForAllSubmitter, bool indexed oldValue, bool indexed newValue
-    );
+    event RewardsForAllSubmitterSet(address indexed rewardsForAllSubmitter, bool indexed oldValue, bool indexed newValue);
 
     event ActivationDelaySet(uint32 oldActivationDelay, uint32 newActivationDelay);
     event DefaultOperatorSplitBipsSet(uint16 oldDefaultOperatorSplitBips, uint16 newDefaultOperatorSplitBips);
@@ -352,14 +325,7 @@ interface IRewardsCoordinatorEvents is IRewardsCoordinatorTypes {
      * @param oldOperatorAVSSplitBips The old split for the operator for the AVS.
      * @param newOperatorAVSSplitBips The new split for the operator for the AVS.
      */
-    event OperatorAVSSplitBipsSet(
-        address indexed caller,
-        address indexed operator,
-        address indexed avs,
-        uint32 activatedAt,
-        uint16 oldOperatorAVSSplitBips,
-        uint16 newOperatorAVSSplitBips
-    );
+    event OperatorAVSSplitBipsSet(address indexed caller, address indexed operator, address indexed avs, uint32 activatedAt, uint16 oldOperatorAVSSplitBips, uint16 newOperatorAVSSplitBips);
 
     /**
      * @notice Emitted when the operator split for Programmatic Incentives is set.
@@ -369,13 +335,7 @@ interface IRewardsCoordinatorEvents is IRewardsCoordinatorTypes {
      * @param oldOperatorPISplitBips The old split for the operator for Programmatic Incentives.
      * @param newOperatorPISplitBips The new split for the operator for Programmatic Incentives.
      */
-    event OperatorPISplitBipsSet(
-        address indexed caller,
-        address indexed operator,
-        uint32 activatedAt,
-        uint16 oldOperatorPISplitBips,
-        uint16 newOperatorPISplitBips
-    );
+    event OperatorPISplitBipsSet(address indexed caller, address indexed operator, uint32 activatedAt, uint16 oldOperatorPISplitBips, uint16 newOperatorPISplitBips);
 
     /**
      * @notice Emitted when the operator split for a given operatorSet is set.
@@ -386,36 +346,17 @@ interface IRewardsCoordinatorEvents is IRewardsCoordinatorTypes {
      * @param oldOperatorSetSplitBips The old split for the operator for the operatorSet.
      * @param newOperatorSetSplitBips The new split for the operator for the operatorSet.
      */
-    event OperatorSetSplitBipsSet(
-        address indexed caller,
-        address indexed operator,
-        OperatorSet operatorSet,
-        uint32 activatedAt,
-        uint16 oldOperatorSetSplitBips,
-        uint16 newOperatorSetSplitBips
-    );
+    event OperatorSetSplitBipsSet(address indexed caller, address indexed operator, OperatorSet operatorSet, uint32 activatedAt, uint16 oldOperatorSetSplitBips, uint16 newOperatorSetSplitBips);
 
     event ClaimerForSet(address indexed earner, address indexed oldClaimer, address indexed claimer);
 
     /// @notice rootIndex is the specific array index of the newly created root in the storage array
-    event DistributionRootSubmitted(
-        uint32 indexed rootIndex,
-        bytes32 indexed root,
-        uint32 indexed rewardsCalculationEndTimestamp,
-        uint32 activatedAt
-    );
+    event DistributionRootSubmitted(uint32 indexed rootIndex, bytes32 indexed root, uint32 indexed rewardsCalculationEndTimestamp, uint32 activatedAt);
 
     event DistributionRootDisabled(uint32 indexed rootIndex);
 
     /// @notice root is one of the submitted distribution roots that was claimed against
-    event RewardsClaimed(
-        bytes32 root,
-        address indexed earner,
-        address indexed claimer,
-        address indexed recipient,
-        IERC20 token,
-        uint256 claimedAmount
-    );
+    event RewardsClaimed(bytes32 root, address indexed earner, address indexed claimer, address indexed recipient, IERC20 token, uint256 claimedAmount);
 }
 
 /**
@@ -432,13 +373,7 @@ interface IRewardsCoordinator is IRewardsCoordinatorErrors, IRewardsCoordinatorE
      * @dev Initializes the addresses of the initial owner, pauser registry, rewardsUpdater and
      * configures the initial paused status, activationDelay, and defaultOperatorSplitBips.
      */
-    function initialize(
-        address initialOwner,
-        uint256 initialPausedStatus,
-        address _rewardsUpdater,
-        uint32 _activationDelay,
-        uint16 _defaultSplitBips
-    ) external;
+    function initialize(address initialOwner, uint256 initialPausedStatus, address _rewardsUpdater, uint32 _activationDelay, uint16 _defaultSplitBips) external;
 
     /**
      * @notice Creates a new rewards submission on behalf of an AVS, to be split amongst the
@@ -452,9 +387,7 @@ interface IRewardsCoordinator is IRewardsCoordinatorErrors, IRewardsCoordinatorE
      * @dev This function will revert if the `rewardsSubmission` is malformed,
      * e.g. if the `strategies` and `weights` arrays are of non-equal lengths
      */
-    function createAVSRewardsSubmission(
-        RewardsSubmission[] calldata rewardsSubmissions
-    ) external;
+    function createAVSRewardsSubmission(RewardsSubmission[] calldata rewardsSubmissions) external;
 
     /**
      * @notice similar to `createAVSRewardsSubmission` except the rewards are split amongst *all* stakers
@@ -462,9 +395,7 @@ interface IRewardsCoordinator is IRewardsCoordinatorErrors, IRewardsCoordinatorE
      * a permissioned call based on isRewardsForAllSubmitter mapping.
      * @param rewardsSubmissions The rewards submissions being created
      */
-    function createRewardsForAllSubmission(
-        RewardsSubmission[] calldata rewardsSubmissions
-    ) external;
+    function createRewardsForAllSubmission(RewardsSubmission[] calldata rewardsSubmissions) external;
 
     /**
      * @notice Creates a new rewards submission for all earners across all AVSs.
@@ -473,9 +404,7 @@ interface IRewardsCoordinator is IRewardsCoordinatorErrors, IRewardsCoordinatorE
      * by the token hopper contract from the Eigen Foundation
      * @param rewardsSubmissions The rewards submissions being created
      */
-    function createRewardsForAllEarners(
-        RewardsSubmission[] calldata rewardsSubmissions
-    ) external;
+    function createRewardsForAllEarners(RewardsSubmission[] calldata rewardsSubmissions) external;
 
     /**
      * @notice Creates a new operator-directed rewards submission on behalf of an AVS, to be split amongst the operators and
@@ -491,10 +420,7 @@ interface IRewardsCoordinator is IRewardsCoordinatorErrors, IRewardsCoordinatorE
      * @dev Operators must be in ascending order of addresses to check for duplicates.
      * @dev This function will revert if the `operatorDirectedRewardsSubmissions` is malformed.
      */
-    function createOperatorDirectedAVSRewardsSubmission(
-        address avs,
-        OperatorDirectedRewardsSubmission[] calldata operatorDirectedRewardsSubmissions
-    ) external;
+    function createOperatorDirectedAVSRewardsSubmission(address avs, OperatorDirectedRewardsSubmission[] calldata operatorDirectedRewardsSubmissions) external;
 
     /**
      * @notice Creates a new operator-directed rewards submission for an operator set, to be split amongst the operators and
@@ -510,10 +436,7 @@ interface IRewardsCoordinator is IRewardsCoordinatorErrors, IRewardsCoordinatorE
      * @dev Operators must be in ascending order of addresses to check for duplicates
      * @dev This function will revert if the `operatorDirectedRewardsSubmissions` is malformed
      */
-    function createOperatorDirectedOperatorSetRewardsSubmission(
-        OperatorSet calldata operatorSet,
-        OperatorDirectedRewardsSubmission[] calldata operatorDirectedRewardsSubmissions
-    ) external;
+    function createOperatorDirectedOperatorSetRewardsSubmission(OperatorSet calldata operatorSet, OperatorDirectedRewardsSubmission[] calldata operatorDirectedRewardsSubmissions) external;
 
     /**
      * @notice Claim rewards against a given root (read from _distributionRoots[claim.rootIndex]).
@@ -556,18 +479,14 @@ interface IRewardsCoordinator is IRewardsCoordinatorErrors, IRewardsCoordinatorE
      * @notice allow the rewardsUpdater to disable/cancel a pending root submission in case of an error
      * @param rootIndex The index of the root to be disabled
      */
-    function disableRoot(
-        uint32 rootIndex
-    ) external;
+    function disableRoot(uint32 rootIndex) external;
 
     /**
      * @notice Sets the address of the entity that can call `processClaim` on ehalf of an earner
      * @param claimer The address of the entity that can call `processClaim` on behalf of the earner
      * @dev Assumes msg.sender is the earner
      */
-    function setClaimerFor(
-        address claimer
-    ) external;
+    function setClaimerFor(address claimer) external;
 
     /**
      * @notice Sets the address of the entity that can call `processClaim` on behalf of an earner
@@ -583,18 +502,14 @@ interface IRewardsCoordinator is IRewardsCoordinatorErrors, IRewardsCoordinatorE
      * @dev Only callable by the contract owner
      * @param _activationDelay The new value for activationDelay
      */
-    function setActivationDelay(
-        uint32 _activationDelay
-    ) external;
+    function setActivationDelay(uint32 _activationDelay) external;
 
     /**
      * @notice Sets the default split for all operators across all avss.
      * @param split The default split for all operators across all avss in bips.
      * @dev Only callable by the contract owner.
      */
-    function setDefaultOperatorSplit(
-        uint16 split
-    ) external;
+    function setDefaultOperatorSplit(uint16 split) external;
 
     /**
      * @notice Sets the split for a specific operator for a specific avs
@@ -633,9 +548,7 @@ interface IRewardsCoordinator is IRewardsCoordinatorErrors, IRewardsCoordinatorE
      * @dev Only callable by the contract owner
      * @param _rewardsUpdater The address of the new rewardsUpdater
      */
-    function setRewardsUpdater(
-        address _rewardsUpdater
-    ) external;
+    function setRewardsUpdater(address _rewardsUpdater) external;
 
     /**
      * @notice Sets the permissioned `rewardsForAllSubmitter` address which can submit createRewardsForAllSubmission
@@ -658,9 +571,7 @@ interface IRewardsCoordinator is IRewardsCoordinatorErrors, IRewardsCoordinatorE
     function currRewardsCalculationEndTimestamp() external view returns (uint32);
 
     /// @notice Mapping: earner => the address of the entity who can call `processClaim` on behalf of the earner
-    function claimerFor(
-        address earner
-    ) external view returns (address);
+    function claimerFor(address earner) external view returns (address);
 
     /// @notice Mapping: claimer => token => total amount claimed
     function cumulativeClaimed(address claimer, IERC20 token) external view returns (uint256);
@@ -672,36 +583,26 @@ interface IRewardsCoordinator is IRewardsCoordinatorErrors, IRewardsCoordinatorE
     function getOperatorAVSSplit(address operator, address avs) external view returns (uint16);
 
     /// @notice the split for a specific `operator` for Programmatic Incentives
-    function getOperatorPISplit(
-        address operator
-    ) external view returns (uint16);
+    function getOperatorPISplit(address operator) external view returns (uint16);
 
     /// @notice Returns the split for a specific `operator` for a given `operatorSet`
     function getOperatorSetSplit(address operator, OperatorSet calldata operatorSet) external view returns (uint16);
 
     /// @notice return the hash of the earner's leaf
-    function calculateEarnerLeafHash(
-        EarnerTreeMerkleLeaf calldata leaf
-    ) external pure returns (bytes32);
+    function calculateEarnerLeafHash(EarnerTreeMerkleLeaf calldata leaf) external pure returns (bytes32);
 
     /// @notice returns the hash of the earner's token leaf
-    function calculateTokenLeafHash(
-        TokenTreeMerkleLeaf calldata leaf
-    ) external pure returns (bytes32);
+    function calculateTokenLeafHash(TokenTreeMerkleLeaf calldata leaf) external pure returns (bytes32);
 
     /// @notice returns 'true' if the claim would currently pass the check in `processClaims`
     /// but will revert if not valid
-    function checkClaim(
-        RewardsMerkleClaim calldata claim
-    ) external view returns (bool);
+    function checkClaim(RewardsMerkleClaim calldata claim) external view returns (bool);
 
     /// @notice returns the number of distribution roots posted
     function getDistributionRootsLength() external view returns (uint256);
 
     /// @notice returns the distributionRoot at the specified index
-    function getDistributionRootAtIndex(
-        uint256 index
-    ) external view returns (DistributionRoot memory);
+    function getDistributionRootAtIndex(uint256 index) external view returns (DistributionRoot memory);
 
     /// @notice returns the current distributionRoot
     function getCurrentDistributionRoot() external view returns (DistributionRoot memory);
@@ -711,9 +612,7 @@ interface IRewardsCoordinator is IRewardsCoordinatorErrors, IRewardsCoordinatorE
     function getCurrentClaimableDistributionRoot() external view returns (DistributionRoot memory);
 
     /// @notice loop through distribution roots from reverse and return index from hash
-    function getRootIndexFromHash(
-        bytes32 rootHash
-    ) external view returns (uint32);
+    function getRootIndexFromHash(bytes32 rootHash) external view returns (uint32);
 
     /// @notice The address of the entity that can update the contract with new merkle roots
     function rewardsUpdater() external view returns (address);

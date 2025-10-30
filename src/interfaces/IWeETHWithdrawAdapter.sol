@@ -4,7 +4,6 @@ pragma solidity ^0.8.13;
 import "./ILiquidityPool.sol";
 
 interface IWeETHWithdrawAdapter {
-    
     struct PermitInput {
         uint256 value;
         uint256 deadline;
@@ -28,13 +27,7 @@ interface IWeETHWithdrawAdapter {
      * @param permit Permit data for weETH approval
      * @return requestId The ID of the created withdrawal request
      */
-    function requestWithdrawWithPermit(
-        uint256 weETHAmount, 
-        address recipient, 
-        PermitInput calldata permit
-    ) external returns (uint256 requestId);
-
-
+    function requestWithdrawWithPermit(uint256 weETHAmount, address recipient, PermitInput calldata permit) external returns (uint256 requestId);
 
     /**
      * @notice Get the equivalent eETH amount for a given weETH amount

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity >=0.5.0;
 
-import "../../src/eigenlayer-interfaces/IPauserRegistry.sol";
 import "../../src/eigenlayer-interfaces/IPausable.sol";
+import "../../src/eigenlayer-interfaces/IPauserRegistry.sol";
 
 /**
  * @title Adds pausability to a contract, with pausing & unpausing controlled by the `pauser` and `unpauser` of a PauserRegistry contract.
@@ -23,9 +23,8 @@ import "../../src/eigenlayer-interfaces/IPausable.sol";
 
 // IPausible but all functions are virtual
 contract MockPausableBase is IPausable {
-
     /// @notice Address of the `PauserRegistry` contract that this contract defers to for determining access control (for pausing).
-    function pauserRegistry() external virtual view returns (IPauserRegistry) {}
+    function pauserRegistry() external view virtual returns (IPauserRegistry) {}
 
     /**
      * @notice This function is used to pause an EigenLayer contract's functionality.
@@ -33,9 +32,7 @@ contract MockPausableBase is IPausable {
      * @param newPausedStatus represents the new value for `_paused` to take, which means it may flip several bits at once.
      * @dev This function can only pause functionality, and thus cannot 'unflip' any bit in `_paused` from 1 to 0.
      */
-    function pause(
-        uint256 newPausedStatus
-    ) external virtual {}
+    function pause(uint256 newPausedStatus) external virtual {}
 
     /**
      * @notice Alias for `pause(type(uint256).max)`.
@@ -48,15 +45,11 @@ contract MockPausableBase is IPausable {
      * @param newPausedStatus represents the new value for `_paused` to take, which means it may flip several bits at once.
      * @dev This function can only unpause functionality, and thus cannot 'flip' any bit in `_paused` from 0 to 1.
      */
-    function unpause(
-        uint256 newPausedStatus
-    ) external virtual {}
+    function unpause(uint256 newPausedStatus) external virtual {}
 
     /// @notice Returns the current paused status as a uint256.
-    function paused() external virtual view returns (uint256) {}
+    function paused() external view virtual returns (uint256) {}
 
     /// @notice Returns 'true' if the `indexed`th bit of `_paused` is 1, and 'false' otherwise
-    function paused(
-        uint8 index
-    ) external virtual view returns (bool) {}
+    function paused(uint8 index) external view virtual returns (bool) {}
 }

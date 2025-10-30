@@ -6,7 +6,6 @@ interface EtherFiProxy {
 }
 
 contract AddressProvider {
-
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -38,10 +37,7 @@ contract AddressProvider {
     /// @param _name the name of the contract for reference
     function addContract(address _contractAddress, string memory _name) external onlyOwner {
         require(contracts[_name].contractAddress == address(0), "Contract already exists");
-        contracts[_name] = ContractData({
-            contractAddress: _contractAddress,
-            name: _name
-        });
+        contracts[_name] = ContractData({contractAddress: _contractAddress, name: _name});
         numberOfContracts++;
 
         emit ContractAdded(_contractAddress, _name);
@@ -53,7 +49,7 @@ contract AddressProvider {
     function removeContract(string memory _name) external onlyOwner {
         ContractData memory contractData = contracts[_name];
         require(contracts[_name].contractAddress != address(0), "Contract does not exist");
-        
+
         address contractAddress = contractData.contractAddress;
         delete contracts[_name];
         numberOfContracts--;

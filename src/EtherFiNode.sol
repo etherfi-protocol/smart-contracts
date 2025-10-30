@@ -3,13 +3,15 @@ pragma solidity ^0.8.27;
 
 import {IEtherFiNode} from "../src/interfaces/IEtherFiNode.sol";
 import {IEtherFiNodesManager} from "../src/interfaces/IEtherFiNodesManager.sol";
-import {IRoleRegistry} from "../src/interfaces/IRoleRegistry.sol";
+
 import {ILiquidityPool} from "../src/interfaces/ILiquidityPool.sol";
+import {IRoleRegistry} from "../src/interfaces/IRoleRegistry.sol";
 
 import {IDelegationManager} from "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import {IDelegationManagerTypes} from "../src/eigenlayer-interfaces/IDelegationManager.sol";
-import {IEigenPodManager} from "../src/eigenlayer-interfaces/IEigenPodManager.sol";
+
 import {IEigenPod} from "../src/eigenlayer-interfaces/IEigenPod.sol";
+import {IEigenPodManager} from "../src/eigenlayer-interfaces/IEigenPodManager.sol";
 import {IStrategy} from "../src/eigenlayer-interfaces/IStrategy.sol";
 import {BeaconChainProofs} from "../src/eigenlayer-libraries/BeaconChainProofs.sol";
 
@@ -17,7 +19,6 @@ import {IERC20} from "../lib/openzeppelin-contracts/contracts/interfaces/IERC20.
 import {LibCall} from "../lib/solady/src/utils/LibCall.sol";
 
 contract EtherFiNode is IEtherFiNode {
-
     ILiquidityPool public immutable liquidityPool;
     IEtherFiNodesManager public immutable etherFiNodesManager;
     IRoleRegistry public immutable roleRegistry;
@@ -25,7 +26,7 @@ contract EtherFiNode is IEtherFiNode {
     // eigenlayer core contracts
     IEigenPodManager public immutable eigenPodManager;
     IDelegationManager public immutable delegationManager;
-    uint32 public constant EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS = 100800;
+    uint32 public constant EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS = 100_800;
     address public constant BEACON_ETH_STRATEGY_ADDRESS = address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0);
 
     //---------------------------------------------------------------------------
@@ -83,7 +84,6 @@ contract EtherFiNode is IEtherFiNode {
     /// @dev convenience function to queue a beaconETH withdrawal from eigenlayer. You must wait EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS before claiming.
     ///   It is fine to queue a withdrawal before validators have finished exiting on the beacon chain.
     function queueETHWithdrawal(uint256 amount) external onlyEtherFiNodesManager returns (bytes32 withdrawalRoot) {
-
         // beacon eth is always 1 to 1 with deposit shares
         uint256[] memory depositShares = new uint256[](1);
         depositShares[0] = amount;
@@ -100,36 +100,43 @@ contract EtherFiNode is IEtherFiNode {
         return delegationManager.queueWithdrawals(paramsArray)[0];
     }
 
-
     /// @dev completes all queued beaconETH withdrawals that are currently claimable.
     ///   Note that since the node is usually delegated to an operator,
     ///   most of the time this should be called with "receiveAsTokens" = true because
     ///   receiving shares while delegated will simply redelegate the shares.
     function completeQueuedETHWithdrawals(bool receiveAsTokens) external onlyEtherFiNodesManager returns (uint256 balance) {
-
         // because we are just dealing with beacon eth we don't need to populate the tokens[] array
         IERC20[] memory tokens = new IERC20[](1);
 
         bool anyWithdrawalsCompleted = false;
-        (IDelegationManager.Withdrawal[] memory queuedWithdrawals, ) = delegationManager.getQueuedWithdrawals(address(this));
+        (IDelegationManager.Withdrawal[] memory queuedWithdrawals,) = delegationManager.getQueuedWithdrawals(address(this));
         for (uint256 i = 0; i < queuedWithdrawals.length; i++) {
-
             // skip this withdrawal if not enough time has passed or if it is not a simple beaconETH withdrawal
             uint32 slashableUntil = queuedWithdrawals[i].startBlock + EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS;
-            if (uint32(block.number) <= slashableUntil) continue;
-            if (queuedWithdrawals[i].strategies.length != 1) continue;
-            if (queuedWithdrawals[i].strategies[0] != IStrategy(BEACON_ETH_STRATEGY_ADDRESS)) continue;
+            if (uint32(block.number) <= slashableUntil) {
+                continue;
+            }
+            if (queuedWithdrawals[i].strategies.length != 1) {
+                continue;
+            }
+            if (queuedWithdrawals[i].strategies[0] != IStrategy(BEACON_ETH_STRATEGY_ADDRESS)) {
+                continue;
+            }
 
             delegationManager.completeQueuedWithdrawal(queuedWithdrawals[i], tokens, receiveAsTokens);
             anyWithdrawalsCompleted = true;
         }
-        if (!anyWithdrawalsCompleted) revert NoCompleteableWithdrawals(); // bad dev experience if function completes but nothing happened
+        if (!anyWithdrawalsCompleted) {
+            revert NoCompleteableWithdrawals();
+        } // bad dev experience if function completes but nothing happened
 
         // if there are available rewards, forward them to the liquidityPool
         uint256 balance = address(this).balance;
         if (balance > 0) {
-            (bool sent, ) = payable(address(liquidityPool)).call{value: balance, gas: 20000}("");
-            if (!sent) revert TransferFailed();
+            (bool sent,) = payable(address(liquidityPool)).call{value: balance, gas: 20_000}("");
+            if (!sent) {
+                revert TransferFailed();
+            }
             emit FundsTransferred(address(liquidityPool), balance);
         }
         return balance;
@@ -143,11 +150,7 @@ contract EtherFiNode is IEtherFiNode {
 
     /// @dev complete an arbitrary withdrawal from eigenlayer.
     ///   For the general case of claiming beaconETH withdrawals you can use completeQueuedETHWithdrawals instead.
-    function completeQueuedWithdrawals(
-        IDelegationManager.Withdrawal[] calldata withdrawals,
-        IERC20[][] calldata tokens,
-        bool[] calldata receiveAsTokens
-    ) external onlyEtherFiNodesManager {
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEtherFiNodesManager {
         delegationManager.completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
     }
 
@@ -157,8 +160,10 @@ contract EtherFiNode is IEtherFiNode {
     function sweepFunds() external onlyEtherFiNodesManager returns (uint256 balance) {
         uint256 balance = address(this).balance;
         if (balance > 0) {
-            (bool sent, ) = payable(address(liquidityPool)).call{value: balance, gas: 20000}("");
-            if (!sent) revert TransferFailed();
+            (bool sent,) = payable(address(liquidityPool)).call{value: balance, gas: 20_000}("");
+            if (!sent) {
+                revert TransferFailed();
+            }
             emit FundsTransferred(address(liquidityPool), balance);
         }
         return balance;
@@ -196,8 +201,9 @@ contract EtherFiNode is IEtherFiNode {
     //--------------------------------------------------------------------------------------
 
     modifier onlyEtherFiNodesManager() {
-        if (msg.sender != address(etherFiNodesManager)) revert InvalidCaller();
+        if (msg.sender != address(etherFiNodesManager)) {
+            revert InvalidCaller();
+        }
         _;
     }
-
 }

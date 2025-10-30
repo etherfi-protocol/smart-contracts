@@ -7,7 +7,6 @@ import "../eigenlayer-interfaces/IDelegationManager.sol";
 import "../eigenlayer-interfaces/IEigenPod.sol";
 
 interface IEtherFiNode {
-
     // eigenlayer
     function createEigenPod() external returns (address);
     function getEigenPod() external view returns (IEigenPod);
@@ -22,14 +21,14 @@ interface IEtherFiNode {
     function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable;
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable;
 
-
     // call forwarding
     function forwardEigenPodCall(bytes memory data) external returns (bytes memory);
     function forwardExternalCall(address to, bytes memory data) external returns (bytes memory);
 
     struct LegacyNodeState {
         uint256[10] legacyPadding;
-            /*
+    }
+    /*
             ╭---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------╮
             | Name                                              | Type                              | Slot | Offset | Bytes | Contract                        |
             +=================================================================================================================================================+
@@ -74,7 +73,6 @@ interface IEtherFiNode {
             | DEPRECATED_restakingObservedExitBlocks            | mapping(uint256 => uint32)        | 9    | 0      | 32    | src/EtherFiNode.sol:EtherFiNode |
             ╰---------------------------------------------------+-----------------------------------+------+--------+-------+---------------------------------╯
         */
-    }
 
     //---------------------------------------------------------------------------
     //-----------------------------  Events  -----------------------------------
@@ -95,5 +93,4 @@ interface IEtherFiNode {
     error InvalidForwardedCall();
     error InvalidCaller();
     error NoCompleteableWithdrawals();
-
 }

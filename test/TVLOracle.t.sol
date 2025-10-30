@@ -4,13 +4,11 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 
 contract TVLOracleTest is TestSetup {
-
     function setUp() public {
         setUpTests();
     }
 
     function test_SetTvlCorrectly() public {
-
         vm.prank(alice);
         uint256 newTvl = 1000;
         tvlOracle.setTvl(newTvl);
@@ -32,7 +30,6 @@ contract TVLOracleTest is TestSetup {
     }
 
     function test_SetTVLAggregator() public {
-    
         address newAggregator = bob;
         vm.prank(owner);
         tvlOracle.setTVLAggregator(newAggregator);
@@ -67,7 +64,6 @@ contract TVLOracleTest is TestSetup {
     }
 
     function test_OnlyAggregatorCanSetTvlAggregator() public {
-
         vm.prank(bob);
         vm.expectRevert("Ownable: caller is not the owner");
         tvlOracle.setTVLAggregator(bob);

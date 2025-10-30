@@ -1,16 +1,15 @@
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/utils/math/SafeCast.sol";
-import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import "src/interfaces/IRateLimiter.sol";
 import "lib/BucketLimiter.sol";
+import "src/interfaces/IRateLimiter.sol";
 
 contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
-
     BucketLimiter.Limit public limit;
     address public consumer;
 
@@ -109,5 +108,4 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
 }
