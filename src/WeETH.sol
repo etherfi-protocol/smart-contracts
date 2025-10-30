@@ -110,7 +110,13 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     //-------------------------------  INTERNAL FUNCTIONS  ---------------------------------
     //--------------------------------------------------------------------------------------
 
-    function _authorizeUpgrade(address /* newImplementation */ ) internal view override {
+    function _authorizeUpgrade(
+        address /* newImplementation */
+    )
+        internal
+        view
+        override
+    {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 

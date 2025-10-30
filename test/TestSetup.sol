@@ -1048,7 +1048,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         bytes[] memory,
         /*_signature*/
         string memory _revertMessage
-    ) internal {
+    )
+        internal
+    {
         _initReportBlockStamp(_report);
 
         uint32 currentSlot = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);

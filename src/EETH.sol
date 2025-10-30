@@ -184,7 +184,13 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         emit TransferShares(_sender, _recipient, _sharesAmount);
     }
 
-    function _authorizeUpgrade(address /* newImplementation */ ) internal view override {
+    function _authorizeUpgrade(
+        address /* newImplementation */
+    )
+        internal
+        view
+        override
+    {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 

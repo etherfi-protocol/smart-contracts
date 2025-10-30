@@ -169,7 +169,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         // create a new node if none provided
         if (params.etherFiNode == address(0)) {
             vm.prank(admin);
-            params.etherFiNode = stakingManager.instantiateEtherFiNode( /*createEigenPod=*/ true);
+            params.etherFiNode = stakingManager.instantiateEtherFiNode( /*createEigenPod=*/
+                true
+            );
         }
         // default validator size if not provided
         if (params.validatorSize == 0) params.validatorSize = 32 ether;
@@ -284,7 +286,9 @@ contract PreludeTest is Test, ArrayTestHelper {
     function test_forwardingWhitelist() public {
         // create a node + pod
         vm.prank(admin);
-        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/ );
+        address etherFiNode = stakingManager.instantiateEtherFiNode(
+            true /*createEigenPod*/
+        );
 
         // link it to an arbitrary id
         uint256 legacyID = 10_885;
@@ -347,7 +351,9 @@ contract PreludeTest is Test, ArrayTestHelper {
     function test_granularForwardingWhitelist() public {
         // Setup: create node + pod
         vm.prank(admin);
-        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/ );
+        address etherFiNode = stakingManager.instantiateEtherFiNode(
+            true /*createEigenPod*/
+        );
 
         // Setup: link to legacy ID
         uint256 legacyID = 10_886;
@@ -388,8 +394,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Note: We're not testing the actual execution, just that the whitelist allows the call
         // In production, this would include proper parameters for processClaim
         try etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), processClaimData, rewardsCoordinator) {
-            // Call went through whitelist check
-        } catch {
+        // Call went through whitelist check
+        }
+            catch {
             // If it fails, it's due to the actual call, not the whitelist
         }
 
@@ -496,7 +503,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
 
         vm.prank(admin);
-        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/ );
+        address etherFiNode = stakingManager.instantiateEtherFiNode(
+            true /*createEigenPod*/
+        );
 
         address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
         bytes32 initialDepositRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod), 1 ether);
@@ -707,14 +716,22 @@ contract PreludeTest is Test, ArrayTestHelper {
         // new node that doesn't have existing eigenpod
         // should return zero address
         vm.prank(admin);
-        IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode( /*createEigenPod=*/ false));
+        IEtherFiNode newNode = IEtherFiNode(
+            stakingManager.instantiateEtherFiNode( /*createEigenPod=*/
+                false
+            )
+        );
         assertEq(address(newNode.getEigenPod()), address(0));
     }
 
     function test_createEigenPod() public {
         // create pod without eigenpod
         vm.prank(admin);
-        IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode( /*createEigenPod=*/ false));
+        IEtherFiNode newNode = IEtherFiNode(
+            stakingManager.instantiateEtherFiNode( /*createEigenPod=*/
+                false
+            )
+        );
         assertEq(address(newNode.getEigenPod()), address(0));
 
         // admin creates one and it should be connected
@@ -726,7 +743,11 @@ contract PreludeTest is Test, ArrayTestHelper {
 
     function test_setProofSubmitter() public {
         vm.prank(admin);
-        IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode( /*createEigenPod=*/ true));
+        IEtherFiNode newNode = IEtherFiNode(
+            stakingManager.instantiateEtherFiNode( /*createEigenPod=*/
+                true
+            )
+        );
         address newSubmitter = vm.addr(0xabc123);
 
         vm.prank(eigenlayerAdmin);

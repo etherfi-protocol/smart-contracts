@@ -23,7 +23,6 @@ interface IAVSDirectoryTypes {
     enum OperatorAVSRegistrationStatus {
         UNREGISTERED, // Operator not registered to AVS
         REGISTERED // Operator registered to AVS
-
     }
 
     /**

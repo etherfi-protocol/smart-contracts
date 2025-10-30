@@ -271,7 +271,7 @@ contract AuctionManagerTest is TestSetup {
 
         vm.expectRevert("Incorrect bid value");
         hoax(alice);
-        auctionInstance.createBid{value: 0.00001 ether}(1, 0.00001 ether);
+        auctionInstance.createBid{value: 0.000_01 ether}(1, 0.000_01 ether);
 
         vm.expectRevert("Incorrect bid value");
         hoax(alice);
@@ -286,7 +286,7 @@ contract AuctionManagerTest is TestSetup {
 
         vm.expectRevert("Incorrect bid value");
         hoax(alice);
-        auctionInstance.createBid{value: 0.00001 ether}(1, 0.00001 ether);
+        auctionInstance.createBid{value: 0.000_01 ether}(1, 0.000_01 ether);
 
         vm.expectRevert("Incorrect bid value");
         hoax(jess);

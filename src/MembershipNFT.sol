@@ -283,11 +283,8 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
 
         uint8 tierId;
         if (_eapDepositBlockNumber <= lastBlockNumbers[3]) tierId = 3; // PLATINUM
-
         else if (_eapDepositBlockNumber <= lastBlockNumbers[2]) tierId = 2; // GOLD
-
         else if (_eapDepositBlockNumber <= lastBlockNumbers[1]) tierId = 1; // SILVER
-
         else tierId = 0; // BRONZE
 
         uint8 nextTierId = (tierId < numTiers - 1) ? tierId + 1 : tierId;

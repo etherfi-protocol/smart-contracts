@@ -14,11 +14,23 @@ contract BeaconChainOracleMock is IBeaconChainOracle {
         mockBeaconChainStateRoot = beaconChainStateRoot;
     }
 
-    function timestampToBlockRoot(uint256 /*blockNumber*/ ) external view returns (bytes32) {
+    function timestampToBlockRoot(
+        uint256 /*blockNumber*/
+    )
+        external
+        view
+        returns (bytes32)
+    {
         return mockBeaconChainStateRoot;
     }
 
-    function isOracleSigner(address /*_oracleSigner*/ ) external pure returns (bool) {
+    function isOracleSigner(
+        address /*_oracleSigner*/
+    )
+        external
+        pure
+        returns (bool)
+    {
         return true;
     }
 
@@ -26,7 +38,11 @@ contract BeaconChainOracleMock is IBeaconChainOracle {
         uint64,
         /*blockNumber*/
         address /*oracleSigner*/
-    ) external pure returns (bool) {
+    )
+        external
+        pure
+        returns (bool)
+    {
         return true;
     }
 
@@ -34,7 +50,11 @@ contract BeaconChainOracleMock is IBeaconChainOracle {
         uint64,
         /*blockNumber*/
         bytes32 /*stateRoot*/
-    ) external pure returns (uint256) {
+    )
+        external
+        pure
+        returns (uint256)
+    {
         return 0;
     }
 
@@ -46,17 +66,31 @@ contract BeaconChainOracleMock is IBeaconChainOracle {
         return 0;
     }
 
-    function setThreshold(uint256 /*_threshold*/ ) external pure {}
+    function setThreshold(
+        uint256 /*_threshold*/
+    )
+        external
+        pure {}
 
-    function addOracleSigners(address[] memory /*_oracleSigners*/ ) external pure {}
+    function addOracleSigners(
+        address[] memory /*_oracleSigners*/
+    )
+        external
+        pure {}
 
-    function removeOracleSigners(address[] memory /*_oracleSigners*/ ) external pure {}
+    function removeOracleSigners(
+        address[] memory /*_oracleSigners*/
+    )
+        external
+        pure {}
 
     function voteForBeaconChainStateRoot(
         uint64,
         /*blockNumber*/
         bytes32 /*stateRoot*/
-    ) external pure {}
+    )
+        external
+        pure {}
 
     function latestConfirmedOracleBlockNumber() external pure returns (uint64) {}
 }
