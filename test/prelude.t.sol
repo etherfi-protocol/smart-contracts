@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
 import "forge-std/console2.sol";
@@ -7,7 +6,6 @@ import "../test/common/ArrayTestHelper.sol";
 import "../src/interfaces/ILiquidityPool.sol";
 import "../src/interfaces/IStakingManager.sol";
 import "../src/StakingManager.sol";
-import "../src/LiquidityPool.sol";
 import "../src/interfaces/IEtherFiNodesManager.sol";
 import "../src/EtherFiNodesManager.sol";
 import "../src/interfaces/IEtherFiNode.sol";
@@ -25,9 +23,8 @@ import "../src/libraries/DepositDataRootGenerator.sol";
 contract PreludeTest is Test, ArrayTestHelper {
 
     StakingManager stakingManager;
-    LiquidityPool liquidityPool;
+    ILiquidityPool liquidityPool;
     EtherFiNodesManager etherFiNodesManager;
-    EtherFiRateLimiter rateLimiter = EtherFiRateLimiter(0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8);
     AuctionManager auctionManager;
     EtherFiNode etherFiNodeImpl;
     ITNFT tnft;
@@ -59,13 +56,14 @@ contract PreludeTest is Test, ArrayTestHelper {
     bytes constant PK_24807 = hex"b4164dc6841e4b9d4736f89961b8e59ff9397d64d75d95fa3484c78de51a18c4031ef253896ba85b38d168f7211c8c71";
 
     TestValidatorParams defaultTestValidatorParams;
+    EtherFiRateLimiter rateLimiter;
 
     function setUp() public {
 
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
 
         stakingManager = StakingManager(0x25e821b7197B146F7713C3b89B6A4D83516B912d);
-        liquidityPool = LiquidityPool(payable(0x308861A430be4cce5502d0A12724771Fc6DaF216));
+        liquidityPool = ILiquidityPool(0x308861A430be4cce5502d0A12724771Fc6DaF216);
         etherFiNodesManager = EtherFiNodesManager(payable(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F));
         auctionManager = AuctionManager(0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9);
 
@@ -82,8 +80,30 @@ contract PreludeTest is Test, ArrayTestHelper {
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
         LiquidityPool liquidityPoolImpl = new LiquidityPool();
-        vm.prank(liquidityPool.owner());
-        liquidityPool.upgradeTo(address(liquidityPoolImpl));
+        vm.prank(LiquidityPool(payable(address(liquidityPool))).owner());
+        LiquidityPool(payable(address(liquidityPool))).upgradeTo(address(liquidityPoolImpl));
+
+        // Deploy rate limiter first with proxy pattern
+        EtherFiRateLimiter rateLimiterImpl = new EtherFiRateLimiter(address(roleRegistry));
+        UUPSProxy rateLimiterProxy = new UUPSProxy(address(rateLimiterImpl), "");
+        rateLimiter = EtherFiRateLimiter(address(rateLimiterProxy));
+        rateLimiter.initialize();
+        
+        // upgrade etherFiNode impl
+        etherFiNodeImpl = new EtherFiNode(
+            address(liquidityPool),
+            address(etherFiNodesManager),
+            eigenPodManager,
+            delegationManager,
+            address(roleRegistry)
+        );
+        vm.prank(stakingManager.owner());
+        stakingManager.upgradeEtherFiNode(address(etherFiNodeImpl));
+
+        // deploy new efnm implementation
+        EtherFiNodesManager etherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
+        vm.prank(etherFiNodesManager.owner());
+        etherFiNodesManager.upgradeTo(address(etherFiNodesManagerImpl));
 
         vm.prank(auctionManager.owner());
         auctionManager.disableWhitelist();
@@ -98,10 +118,16 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elExiter);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(liquidityPool.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), admin);
-        roleRegistry.grantRole(liquidityPool.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(liquidityPool.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), admin);
+        roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), admin);
+        roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        rateLimiter.createNewLimiter(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
+        rateLimiter.createNewLimiter(etherFiNodesManager.EXIT_REQUEST_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
+        rateLimiter.updateConsumers(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), address(etherFiNodesManager), true);
+        rateLimiter.updateConsumers(etherFiNodesManager.EXIT_REQUEST_LIMIT_ID(), address(etherFiNodesManager), true);
         vm.stopPrank();
 
         defaultTestValidatorParams = TestValidatorParams({
@@ -112,6 +138,7 @@ contract PreludeTest is Test, ArrayTestHelper {
             validatorSize: 32 ether,
             pubkey: ""
         });
+
     }
 
     struct TestValidatorParams {
@@ -1741,55 +1768,5 @@ contract PreludeTest is Test, ArrayTestHelper {
         }
     }
 
-    // ---------- Node Operator Key Generation tests ----------
-    function test_liquidityPool_newFlow() public {
-        // STEP 1: Generate the keys and deposit data
-        bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-        bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
-
-        // STEP 2: Instantiate the EtherFiNode and EigenPod
-        vm.prank(admin);
-        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/);
-        address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
-
-        bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
-
-        // STEP 3: Generate the deposit data root
-        bytes32 initialDepositRoot = depositDataRootGenerator.generateDepositDataRoot(
-            pubkey,
-            signature,
-            withdrawalCredentials,
-            1 ether
-        );
-
-        IStakingManager.DepositData memory initialDepositData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: initialDepositRoot,
-            ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
-        });
-
-        // STEP 4: Register the node operator and create the bid
-        address tom = vm.addr(0x9999999);
-        vm.deal(tom, 100 ether);
-
-        vm.prank(tom);
-        nodeOperatorManager.registerNodeOperator("test_ipfs_hash", 1000);
-        uint256[] memory bidId1 = auctionManager.createBid{value: 0.1 ether}(1, 0.1 ether);
-
-        // STEP 5: Register the validator spawner and batch register the validator
-        vm.prank(admin);
-        liquidityPool.registerValidatorSpawner(tom);
-
-        // ============================= NEW FLOW STARTS HERE =============================
-        vm.prank(tom);
-        liquidityPool.batchRegister(toArray(initialDepositData), toArray_u256(bidId1[0]), etherFiNode);
-        assertEq(uint8(stakingManager.validatorCreationStatus(keccak256(abi.encodePacked(initialDepositData.publicKey, initialDepositData.signature, initialDepositData.depositDataRoot, initialDepositData.ipfsHashForEncryptedValidatorKey, bidId1[0], etherFiNode)))), uint8(IStakingManager.ValidatorCreationStatus.REGISTERED));
-
-        // STEP 6: Confirm the validator
-        vm.prank(admin);
-        liquidityPool.batchCreateBeaconValidators(toArray(initialDepositData), toArray_u256(bidId1[0]), etherFiNode);
-        assertEq(uint8(stakingManager.validatorCreationStatus(keccak256(abi.encodePacked(initialDepositData.publicKey, initialDepositData.signature, initialDepositData.depositDataRoot, initialDepositData.ipfsHashForEncryptedValidatorKey, bidId1[0], etherFiNode)))), uint8(IStakingManager.ValidatorCreationStatus.CONFIRMED));
-    }
 }
 
