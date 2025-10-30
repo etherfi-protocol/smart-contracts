@@ -58,6 +58,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(liquidityPool.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), admin);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
+        roleRegistry.grantRole(stakingManager.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), admin);
         auctionManager.updateAdmin(admin, true);
         vm.stopPrank();
     }
@@ -551,5 +552,174 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
                 uint8(IStakingManager.ValidatorCreationStatus.CONFIRMED)
             );
         }
+    }
+
+    // ==================== invalidateRegisteredBeaconValidator Tests ====================
+
+    function test_invalidateRegisteredBeaconValidator_revertsWhenNoRole() public {
+        address unauthorizedUser = vm.addr(0xDEAD);
+        
+        // Setup a registered validator
+        address spawner = vm.addr(0x1234);
+        vm.prank(admin);
+        nodeOperatorManager.addToWhitelist(spawner);
+
+        vm.prank(operatingTimelock);
+        liquidityPool.registerValidatorSpawner(spawner);
+
+        vm.deal(spawner, 100 ether);
+        vm.prank(spawner);
+        nodeOperatorManager.registerNodeOperator("ipfs_hash", 1000);
+
+        vm.prank(spawner);
+        uint256[] memory createdBids = auctionManager.createBid{value: 0.1 ether}(1, 0.1 ether);
+
+        (bytes memory pubkey, bytes memory signature, bytes memory withdrawalCredentials, bytes32 depositDataRoot, IStakingManager.DepositData memory depositData, address etherFiNode) = helper_getDataForValidatorKeyGen();
+
+        // Register the validator first
+        vm.prank(spawner);
+        liquidityPool.batchRegister(toArray(depositData), createdBids, etherFiNode);
+
+        // Try to invalidate without the role
+        vm.prank(unauthorizedUser);
+        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        stakingManager.invalidateRegisteredBeaconValidator(depositData, createdBids[0], etherFiNode);
+    }
+
+    function test_invalidateRegisteredBeaconValidator_revertsWhenNotRegistered() public {
+        address spawner = vm.addr(0x1234);
+        
+        vm.prank(admin);
+        nodeOperatorManager.addToWhitelist(spawner);
+
+        vm.prank(operatingTimelock);
+        liquidityPool.registerValidatorSpawner(spawner);
+
+        vm.deal(spawner, 100 ether);
+        vm.prank(spawner);
+        nodeOperatorManager.registerNodeOperator("ipfs_hash", 1000);
+
+        vm.prank(spawner);
+        uint256[] memory createdBids = auctionManager.createBid{value: 0.1 ether}(1, 0.1 ether);
+
+        (,,, , IStakingManager.DepositData memory depositData, address etherFiNode) = helper_getDataForValidatorKeyGen();
+
+        // Don't register - validator doesn't exist
+        vm.prank(admin);
+        vm.expectRevert(IStakingManager.InvalidValidatorCreationStatus.selector);
+        stakingManager.invalidateRegisteredBeaconValidator(depositData, createdBids[0], etherFiNode);
+    }
+
+    function test_invalidateRegisteredBeaconValidator_revertsWhenAlreadyConfirmed() public {
+        address spawner = vm.addr(0x1234);
+        
+        vm.prank(admin);
+        nodeOperatorManager.addToWhitelist(spawner);
+
+        vm.prank(operatingTimelock);
+        liquidityPool.registerValidatorSpawner(spawner);
+
+        vm.deal(spawner, 100 ether);
+        vm.prank(spawner);
+        nodeOperatorManager.registerNodeOperator("ipfs_hash", 1000);
+
+        vm.prank(spawner);
+        uint256[] memory createdBids = auctionManager.createBid{value: 0.1 ether}(1, 0.1 ether);
+
+        (,,, , IStakingManager.DepositData memory depositData, address etherFiNode) = helper_getDataForValidatorKeyGen();
+
+        vm.prank(spawner);
+        liquidityPool.batchRegister(toArray(depositData), createdBids, etherFiNode);
+
+        // Confirm the validator
+        vm.deal(address(liquidityPool), 100 ether);
+        vm.prank(admin);
+        liquidityPool.batchCreateBeaconValidators(toArray(depositData), createdBids, etherFiNode);
+
+        // Try to invalidate a confirmed validator - should revert
+        vm.prank(admin);
+        vm.expectRevert(IStakingManager.InvalidValidatorCreationStatus.selector);
+        stakingManager.invalidateRegisteredBeaconValidator(depositData, createdBids[0], etherFiNode);
+    }
+
+    function test_invalidateRegisteredBeaconValidator_revertsWhenAlreadyInvalidated() public {
+        address spawner = vm.addr(0x1234);
+        
+        vm.prank(admin);
+        nodeOperatorManager.addToWhitelist(spawner);
+
+        vm.prank(operatingTimelock);
+        liquidityPool.registerValidatorSpawner(spawner);
+
+        vm.deal(spawner, 100 ether);
+        vm.prank(spawner);
+        nodeOperatorManager.registerNodeOperator("ipfs_hash", 1000);
+
+        vm.prank(spawner);
+        uint256[] memory createdBids = auctionManager.createBid{value: 0.1 ether}(1, 0.1 ether);
+
+        (,,, , IStakingManager.DepositData memory depositData, address etherFiNode) = helper_getDataForValidatorKeyGen();
+
+        vm.prank(spawner);
+        liquidityPool.batchRegister(toArray(depositData), createdBids, etherFiNode);
+
+        // Invalidate the validator first time
+        vm.prank(admin);
+        stakingManager.invalidateRegisteredBeaconValidator(depositData, createdBids[0], etherFiNode);
+
+        // Try to invalidate again - should revert
+        vm.prank(admin);
+        vm.expectRevert(IStakingManager.InvalidValidatorCreationStatus.selector);
+        stakingManager.invalidateRegisteredBeaconValidator(depositData, createdBids[0], etherFiNode);
+    }
+
+    function test_invalidateRegisteredBeaconValidator_succeeds() public {
+        address spawner = vm.addr(0x1234);
+        
+        vm.prank(admin);
+        nodeOperatorManager.addToWhitelist(spawner);
+
+        vm.prank(operatingTimelock);
+        liquidityPool.registerValidatorSpawner(spawner);
+
+        vm.deal(spawner, 100 ether);
+        vm.prank(spawner);
+        nodeOperatorManager.registerNodeOperator("ipfs_hash", 1000);
+
+        vm.prank(spawner);
+        uint256[] memory createdBids = auctionManager.createBid{value: 0.1 ether}(1, 0.1 ether);
+
+        (,,, , IStakingManager.DepositData memory depositData, address etherFiNode) = helper_getDataForValidatorKeyGen();
+
+        vm.prank(spawner);
+        liquidityPool.batchRegister(toArray(depositData), createdBids, etherFiNode);
+
+        // Verify status is REGISTERED
+        bytes32 validatorHash = keccak256(abi.encodePacked(
+            depositData.publicKey,
+            depositData.signature,
+            depositData.depositDataRoot,
+            depositData.ipfsHashForEncryptedValidatorKey,
+            createdBids[0],
+            etherFiNode
+        ));
+        
+        assertEq(
+            uint8(stakingManager.validatorCreationStatus(validatorHash)),
+            uint8(IStakingManager.ValidatorCreationStatus.REGISTERED)
+        );
+
+        // Invalidate the validator
+        vm.expectEmit(true, true, true, true);
+        emit IStakingManager.ValidatorCreationStatusUpdated(depositData, createdBids[0], etherFiNode, validatorHash, IStakingManager.ValidatorCreationStatus.INVALIDATED);
+
+        vm.prank(admin);
+        stakingManager.invalidateRegisteredBeaconValidator(depositData, createdBids[0], etherFiNode);
+
+        // Verify status is INVALIDATED
+        assertEq(
+            uint8(stakingManager.validatorCreationStatus(validatorHash)),
+            uint8(IStakingManager.ValidatorCreationStatus.INVALIDATED)
+        );
     }
 }
