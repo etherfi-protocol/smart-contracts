@@ -29,7 +29,7 @@ contract EtherFiViewerTest is Test {
         address[] memory etherFiNodeAddresses = etherFiViewer.EtherFiNodesManager_etherFiNodeAddress(validatorIds);
         assertEq(etherFiNodeAddresses[0], 0x31db9021ec8E1065e1f55553c69e1B1ea9d20533);
         assertEq(etherFiNodeAddresses[1], 0xC3D3662A44c0d80080D3AF0eea752369c504724e);
-        
+
         etherFiViewer.EtherFiNodesManager_splitBalanceInExecutionLayer(validatorIds);
         etherFiViewer.EtherFiNodesManager_withdrawableBalanceInExecutionLayer(validatorIds);
     }

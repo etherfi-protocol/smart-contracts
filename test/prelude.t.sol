@@ -169,7 +169,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         // create a new node if none provided
         if (params.etherFiNode == address(0)) {
             vm.prank(admin);
-            params.etherFiNode = stakingManager.instantiateEtherFiNode( /*createEigenPod=*/ true);
+            params.etherFiNode = stakingManager.instantiateEtherFiNode( /*createEigenPod=*/
+                true
+            );
         }
         // default validator size if not provided
         if (params.validatorSize == 0) {
@@ -199,7 +201,12 @@ contract PreludeTest is Test, ArrayTestHelper {
             // Poke some withdrawable funds into the restakedExecutionLayerGwei storage slot of the eigenpod.
             // This is much easier than trying to do the full proof based workflow which relies on beacon state.
             address eigenpod = etherFiNodesManager.getEigenPod(uint256(params.bidId));
-            vm.store(eigenpod, bytes32(uint256(52)), /*slot*/ bytes32(uint256(params.validatorSize / 1 gwei)));
+            vm.store(
+                eigenpod,
+                bytes32(uint256(52)),
+                /*slot*/
+                bytes32(uint256(params.validatorSize / 1 gwei))
+            );
 
             // grant shares via delegation manager so that withdrawals work
             vm.prank(delegationManager);
@@ -281,7 +288,9 @@ contract PreludeTest is Test, ArrayTestHelper {
     function test_forwardingWhitelist() public {
         // create a node + pod
         vm.prank(admin);
-        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/ );
+        address etherFiNode = stakingManager.instantiateEtherFiNode(
+            true /*createEigenPod*/
+        );
 
         // link it to an arbitrary id
         uint256 legacyID = 10_885;
@@ -344,7 +353,9 @@ contract PreludeTest is Test, ArrayTestHelper {
     function test_granularForwardingWhitelist() public {
         // Setup: create node + pod
         vm.prank(admin);
-        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/ );
+        address etherFiNode = stakingManager.instantiateEtherFiNode(
+            true /*createEigenPod*/
+        );
 
         // Setup: link to legacy ID
         uint256 legacyID = 10_886;
@@ -385,8 +396,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Note: We're not testing the actual execution, just that the whitelist allows the call
         // In production, this would include proper parameters for processClaim
         try etherFiNodesManager.forwardExternalCall(toArray(etherFiNode), processClaimData, rewardsCoordinator) {
-            // Call went through whitelist check
-        } catch {
+        // Call went through whitelist check
+        }
+            catch {
             // If it fails, it's due to the actual call, not the whitelist
         }
 
@@ -493,7 +505,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
 
         vm.prank(admin);
-        address etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/ );
+        address etherFiNode = stakingManager.instantiateEtherFiNode(
+            true /*createEigenPod*/
+        );
 
         address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
         bytes32 initialDepositRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod), 1 ether);
@@ -537,7 +551,12 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // poke some withdrawable funds into the restakedExecutionLayerGwei storage slot of the eigenpod
         address eigenpod = etherFiNodesManager.getEigenPod(uint256(pubkeyHash));
-        vm.store(eigenpod, bytes32(uint256(52)), /*slot*/ bytes32(uint256(50 ether / 1 gwei)));
+        vm.store(
+            eigenpod,
+            bytes32(uint256(52)),
+            /*slot*/
+            bytes32(uint256(50 ether / 1 gwei))
+        );
 
         uint256 startingBalance = address(liquidityPool).balance;
 
@@ -699,14 +718,22 @@ contract PreludeTest is Test, ArrayTestHelper {
         // new node that doesn't have existing eigenpod
         // should return zero address
         vm.prank(admin);
-        IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode( /*createEigenPod=*/ false));
+        IEtherFiNode newNode = IEtherFiNode(
+            stakingManager.instantiateEtherFiNode( /*createEigenPod=*/
+                false
+            )
+        );
         assertEq(address(newNode.getEigenPod()), address(0));
     }
 
     function test_createEigenPod() public {
         // create pod without eigenpod
         vm.prank(admin);
-        IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode( /*createEigenPod=*/ false));
+        IEtherFiNode newNode = IEtherFiNode(
+            stakingManager.instantiateEtherFiNode( /*createEigenPod=*/
+                false
+            )
+        );
         assertEq(address(newNode.getEigenPod()), address(0));
 
         // admin creates one and it should be connected
@@ -718,7 +745,11 @@ contract PreludeTest is Test, ArrayTestHelper {
 
     function test_setProofSubmitter() public {
         vm.prank(admin);
-        IEtherFiNode newNode = IEtherFiNode(stakingManager.instantiateEtherFiNode( /*createEigenPod=*/ true));
+        IEtherFiNode newNode = IEtherFiNode(
+            stakingManager.instantiateEtherFiNode( /*createEigenPod=*/
+                true
+            )
+        );
         address newSubmitter = vm.addr(0xabc123);
 
         vm.prank(eigenlayerAdmin);
@@ -756,7 +787,12 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         //Need to store activeValidatorCount > 0 so that proofsSubmitted isn't 0
         //If it is 0 then currentCheckpointTimestamp is reset to 0 as no proofs are needed.
-        vm.store(val.eigenPod, bytes32(uint256(57)), /*slot*/ bytes32(uint256(1)));
+        vm.store(
+            val.eigenPod,
+            bytes32(uint256(57)),
+            /*slot*/
+            bytes32(uint256(1))
+        );
 
         // only POD_PROVER can start checkpoint
         vm.prank(eigenlayerAdmin);
@@ -827,7 +863,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.roll(block.number + (7200 * 15));
 
         vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.completeQueuedETHWithdrawals(uint256(val1.pubkeyHash), /*receiveAsTokens=*/ true);
+        etherFiNodesManager.completeQueuedETHWithdrawals(
+            uint256(val1.pubkeyHash),
+            /*receiveAsTokens=*/
+            true
+        );
 
         // liquidity pool should have received the withdrawal
         assertEq(address(liquidityPool).balance, startingLPBalance + 1234 ether);
@@ -861,7 +901,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         // all outstanding withdrawals should have been completed at once
         uint256 startingLPBalance = address(liquidityPool).balance;
         vm.prank(eigenlayerAdmin);
-        etherFiNodesManager.completeQueuedETHWithdrawals(uint256(val.pubkeyHash), /*receiveAsTokens=*/ true);
+        etherFiNodesManager.completeQueuedETHWithdrawals(
+            uint256(val.pubkeyHash),
+            /*receiveAsTokens=*/
+            true
+        );
 
         assertEq(address(liquidityPool).balance, startingLPBalance + 3 ether);
     }

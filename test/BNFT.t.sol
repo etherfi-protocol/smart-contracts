@@ -51,7 +51,7 @@ contract BNFTTest is TestSetup {
                 depositDataRoot: root,
                 ipfsHashForEncryptedValidatorKey: "test_ipfs"
             });
-        
+
         depositDataArray[0] = depositData;
 
 

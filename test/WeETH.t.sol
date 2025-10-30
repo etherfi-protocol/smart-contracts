@@ -220,13 +220,13 @@ contract WeETHTest is TestSetup {
         startHoax(alice);
         eETHInstance.approve(address(weEthInstance), 500 ether);
         weEthInstance.wrap(10 ether);
-        assertEq(eETHInstance.shares(alice), 1.666666666666666667 ether);
-        assertEq(eETHInstance.shares(address(weEthInstance)), 8.333333333333333333 ether);
+        assertEq(eETHInstance.shares(alice), 1.666_666_666_666_666_667 ether);
+        assertEq(eETHInstance.shares(address(weEthInstance)), 8.333_333_333_333_333_333 ether);
         assertEq(eETHInstance.balanceOf(alice), 2 ether);
 
         //Not sure what happens to the 0.000000000000000001 ether
-        assertEq(eETHInstance.balanceOf(address(weEthInstance)), 9.999999999999999999 ether);
-        assertEq(weEthInstance.balanceOf(alice), 8.333333333333333333 ether);
+        assertEq(eETHInstance.balanceOf(address(weEthInstance)), 9.999_999_999_999_999_999 ether);
+        assertEq(weEthInstance.balanceOf(alice), 8.333_333_333_333_333_333 ether);
         vm.stopPrank();
 
         //----------------------------------------------------------------------------------------------------------
@@ -236,17 +236,17 @@ contract WeETHTest is TestSetup {
 
         _transferTo(address(liquidityPoolInstance), 50 ether);
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 110 ether);
-        assertEq(eETHInstance.balanceOf(alice), 3.666666666666666667 ether);
+        assertEq(eETHInstance.balanceOf(alice), 3.666_666_666_666_666_667 ether);
 
         //----------------------------------------------------------------------------------------------------------
 
         startHoax(alice);
         weEthInstance.unwrap(6 ether);
-        assertEq(eETHInstance.balanceOf(alice), 16.866666666666666667 ether);
-        assertEq(eETHInstance.shares(alice), 7.666666666666666667 ether);
-        assertEq(eETHInstance.balanceOf(address(weEthInstance)), 5.133333333333333332 ether);
-        assertEq(eETHInstance.shares(address(weEthInstance)), 2.333333333333333333 ether);
-        assertEq(weEthInstance.balanceOf(alice), 2.333333333333333333 ether);
+        assertEq(eETHInstance.balanceOf(alice), 16.866_666_666_666_666_667 ether);
+        assertEq(eETHInstance.shares(alice), 7.666_666_666_666_666_667 ether);
+        assertEq(eETHInstance.balanceOf(address(weEthInstance)), 5.133_333_333_333_333_332 ether);
+        assertEq(eETHInstance.shares(address(weEthInstance)), 2.333_333_333_333_333_333 ether);
+        assertEq(weEthInstance.balanceOf(alice), 2.333_333_333_333_333_333 ether);
     }
 
     function test_UnwrappingWithRewards() public {
@@ -278,18 +278,18 @@ contract WeETHTest is TestSetup {
         _transferTo(address(liquidityPoolInstance), 1 ether);
         assertEq(address(liquidityPoolInstance).balance, 4 ether);
 
-        assertEq(weEthInstance.getRate(), 1.333333333333333333 ether);
+        assertEq(weEthInstance.getRate(), 1.333_333_333_333_333_333 ether);
 
         // Alice now has 2.666666666666666666 ether
         // Bob should still have 1 ether weETH because it doesn't rebase
-        assertEq(eETHInstance.balanceOf(alice), 2.666666666666666666 ether);
+        assertEq(eETHInstance.balanceOf(alice), 2.666_666_666_666_666_666 ether);
         assertEq(weEthInstance.balanceOf(bob), 1 ether);
 
         // Bob unwraps his weETH and should get his principal + rewards
         // Bob should get 1.333333333333333333 ether
         vm.startPrank(bob);
         weEthInstance.unwrap(1 ether);
-        assertEq(eETHInstance.balanceOf(bob), 1.333333333333333332 ether);
+        assertEq(eETHInstance.balanceOf(bob), 1.333_333_333_333_333_332 ether);
     }
 
     function test_WrapWithPermitGriefingAttack() public {

@@ -63,7 +63,7 @@ contract StakingManagerTest is TestSetup {
             0.1 ether
         );
         vm.stopPrank();
-        
+
         startHoax(alice);
         processedBids = liquidityPoolInstance.batchDeposit(bidIds, 4);
 
@@ -156,7 +156,7 @@ contract StakingManagerTest is TestSetup {
             managerInstance.addressToWithdrawalCredentials(etherFiNode),
             32 ether
         );
-       
+
         IStakingManager.DepositData memory depositData = IStakingManager
             .DepositData({
                 publicKey: hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
@@ -215,7 +215,7 @@ contract StakingManagerTest is TestSetup {
         bidIdArray[7] = 12;
         bidIdArray[8] = 19;
         bidIdArray[9] = 20;
-    
+
         vm.expectRevert("NOT_ENOUGH_BIDS");
         stakingManagerInstance.batchDepositWithBidIds{value: 32 ether}(
             bidIdArray,
@@ -646,7 +646,7 @@ contract StakingManagerTest is TestSetup {
 
         assertEq(address(auctionInstance).balance, 3 ether, "Auction balance should be 3");
 
-        stakingManagerInstance.batchRegisterValidators(_getDepositRoot(), 
+        stakingManagerInstance.batchRegisterValidators(_getDepositRoot(),
             processedBidIds,
             depositDataArray
         );
@@ -732,10 +732,10 @@ contract StakingManagerTest is TestSetup {
         );
 
         assertEq(address(auctionInstance).balance, 3 ether);
-        
+
         bytes32 root = _getDepositRoot();
         vm.expectRevert("WRONG_PARAMS");
-        stakingManagerInstance.batchRegisterValidators(root, 
+        stakingManagerInstance.batchRegisterValidators(root,
             bidIdArray,
             depositDataArray
         );
@@ -775,7 +775,7 @@ contract StakingManagerTest is TestSetup {
                 hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
                 managerInstance.addressToWithdrawalCredentials(etherFiNode),
                 32 ether
-            );        
+            );
             depositDataArray[i] = IStakingManager.DepositData({
                     publicKey: hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
                     signature: hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
@@ -784,14 +784,14 @@ contract StakingManagerTest is TestSetup {
             });
         }
 
-        stakingManagerInstance.batchRegisterValidators(_getDepositRoot(), 
+        stakingManagerInstance.batchRegisterValidators(_getDepositRoot(),
             processedBidIds,
             depositDataArray
         );
 
         root = _getDepositRoot();
         vm.expectRevert("INVALID_PHASE_TRANSITION");
-        stakingManagerInstance.batchRegisterValidators(root, 
+        stakingManagerInstance.batchRegisterValidators(root,
             bidIdArray,
             depositDataArray
         );
@@ -869,7 +869,7 @@ contract StakingManagerTest is TestSetup {
 
         root = _getDepositRoot();
         vm.expectRevert("WRONG_PARAMS");
-        stakingManagerInstance.batchRegisterValidators(root, 
+        stakingManagerInstance.batchRegisterValidators(root,
             bidIdArray,
             depositDataArray
         );

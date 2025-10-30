@@ -120,8 +120,8 @@ contract ElExitsTransactions is Script {
         External forwarded calls
         // ------------------------------------------------------------------------------------------------
         King rewards claiming from eigen
-        caller: `0x7835fB36A8143a014A2c381363cD1A4DeE586d2A` 
-        target = eigenlayerRewardsCoordinator: 0x7750d328b314EfFa365A0402CcfD489B80B0adda 
+        caller: `0x7835fB36A8143a014A2c381363cD1A4DeE586d2A`
+        target = eigenlayerRewardsCoordinator: 0x7750d328b314EfFa365A0402CcfD489B80B0adda
         method: `processClaim((uint32,uint32,bytes,(address,bytes32),uint32[],bytes[],(address,uint256)[]) claim, address recipient)`
 
         cast sig "processClaim((uint32,uint32,bytes,(address,bytes32),uint32[],bytes[],(address,uint256)[]),address)"

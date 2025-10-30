@@ -199,7 +199,13 @@ contract WeETHWithdrawAdapter is Initializable, UUPSUpgradeable, OwnableUpgradea
     /**
      * @notice Authorize contract upgrades
      */
-    function _authorizeUpgrade(address /* newImplementation */ ) internal view override {
+    function _authorizeUpgrade(
+        address /* newImplementation */
+    )
+        internal
+        view
+        override
+    {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 

@@ -10,7 +10,6 @@ import "./IStrategy.sol";
 
 interface IAllocationManagerErrors {
     /// Input Validation
-
     /// @dev Thrown when `wadToSlash` is zero or greater than 1e18
     error InvalidWadToSlash();
     /// @dev Thrown when two array parameters have mismatching lengths.

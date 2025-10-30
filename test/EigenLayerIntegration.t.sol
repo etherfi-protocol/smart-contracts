@@ -100,7 +100,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     function _beacon_process_1ETH_deposit() internal {
         setJSON("./test/eigenlayer-utils/test-data/ValidatorFieldsProof_1293592_8654000.json");
-        
+
         _setWithdrawalCredentialParams();
     }
 
@@ -110,7 +110,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         oracleTimestamp = 1712964563;
         // timestamp doesn't seem to get set by custom RPC for even though block does
         vm.warp(1712974563);
-        
+
         _setWithdrawalCredentialParams();
     }
 
@@ -118,7 +118,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         // TODO
     }
 
-    function create_validator() public returns (uint256, address, EtherFiNode) {        
+    function create_validator() public returns (uint256, address, EtherFiNode) {
         uint256[] memory validatorIds = launch_validator(1, 0, true);
         address nodeAddress = managerInstance.etherfiNodeAddress(validatorIds[0]);
         EtherFiNode node = EtherFiNode(payable(nodeAddress));
@@ -128,7 +128,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
 
     function test_verifyAndProcessWithdrawals_OnlyOnce() public {
         test_verifyWithdrawalCredentials_32ETH();
-        
+
         bytes4 selector = bytes4(keccak256("verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])"));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector, oracleTimestamp, stateRootProof, validatorIndices, withdrawalCredentialProofs, validatorFields);
@@ -316,12 +316,12 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
                 startBlock: uint32(block.number),
                 strategies: strategies,
                 scaledShares: shares
-            });      
+            });
         }
-        
+
         vm.prank(owner);
         managerInstance.processNodeExit(validatorIds, timeStamps);
-    
+
         // 3. Wait
         // Wait 'minDelayBlock' after the `verifyAndProcessWithdrawals`
         {
@@ -330,7 +330,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
         }
 
 
-        // 4. DelegationManager.completeQueuedWithdrawal            
+        // 4. DelegationManager.completeQueuedWithdrawal
         bytes32 withdrawalRoot = mgr.calculateWithdrawalRoot(withdrawal);
 
         IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
@@ -352,7 +352,7 @@ contract EigenLayerIntegraitonTest is TestSetup, ProofParsing {
     function test_access_control() public {
         address el_operating_admin = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
         vm.startPrank(el_operating_admin);
-        
+
         bytes4 selector = bytes4(keccak256(""));
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encodeWithSelector(selector);

@@ -7,7 +7,6 @@ import "./IStrategy.sol";
 
 interface IAVSDirectoryErrors {
     /// Operator Status
-
     /// @dev Thrown when an operator does not exist in the DelegationManager
     error OperatorNotRegisteredToEigenLayer();
     /// @dev Thrown when an operator is already registered to an AVS.
@@ -24,7 +23,6 @@ interface IAVSDirectoryTypes {
     enum OperatorAVSRegistrationStatus {
         UNREGISTERED, // Operator not registered to AVS
         REGISTERED // Operator registered to AVS
-
     }
 
     /**
@@ -57,7 +55,6 @@ interface IAVSDirectory is IAVSDirectoryEvents, IAVSDirectoryErrors, ISignatureU
      *                         EXTERNAL FUNCTIONS
      *
      */
-
     /**
      * @dev Initializes the addresses of the initial owner and paused status.
      */

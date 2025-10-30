@@ -301,7 +301,7 @@ contract LiquidityPoolTest is TestSetup {
     // TODO(Dave): update for new deposit flow
     /*
     function test_DepositAsBnftHolderSimple() public {
-        
+
         //Sets up the list of BNFT holders
         setUpBnftHolders();
 
@@ -321,14 +321,14 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         vm.prank(elvis);
-        //Making sure if a user is assigned they send in the correct amount (This will be updated 
+        //Making sure if a user is assigned they send in the correct amount (This will be updated
         //as we will allow users to specify how many validator they want to spin up)
         vm.expectRevert("Not enough balance");
         liquidityPoolInstance.batchDeposit(bidIds, 4);
 
         //Move way more in the future
         _moveClock(100000);
-        
+
 
         //This triggers the number of active holders to be updated to include the previous bnft holders
         //However, Chad will not be included in this weeks duty
@@ -408,7 +408,7 @@ contract LiquidityPoolTest is TestSetup {
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         _executeAdminTasks(report);
-        
+
         //Sets up the list of BNFT holders
         setUpBnftHolders();
 
@@ -416,16 +416,16 @@ contract LiquidityPoolTest is TestSetup {
 
         //Move to a random time in the future
         vm.warp(1731561615);
-        
+
         //Alice deposits funds into the LP to allow for validators to be spun and the calculations can work in dutyForWeek
-        liquidityPoolInstance.deposit{value: 630 ether}();    
+        liquidityPoolInstance.deposit{value: 630 ether}();
 
         vm.stopPrank();
 
 
         vm.startPrank(owner);
         //Owner de registers themselves
-     
+
         vm.expectEmit(true, true, false, false);
         emit LiquidityPool.ValidatorSpawnerUnregistered(owner);
         liquidityPoolInstance.unregisterValidatorSpawner(owner);
@@ -465,7 +465,7 @@ contract LiquidityPoolTest is TestSetup {
             0.1 ether
         );
         vm.stopPrank();
-        
+
         startHoax(alice);
         processedBids = liquidityPoolInstance.batchDeposit(bidIds, 4);
 
@@ -608,7 +608,7 @@ contract LiquidityPoolTest is TestSetup {
             0.1 ether
         );
         vm.stopPrank();
-        
+
         startHoax(alice);
         processedBids = liquidityPoolInstance.batchDeposit(bidIds, 4);
 
@@ -664,7 +664,7 @@ contract LiquidityPoolTest is TestSetup {
     /*
     function test_any_bnft_staker() public {
         _moveClock(1 days);
-        
+
         vm.deal(alice, 1000 ether);
         vm.deal(bob, 1000 ether);
 

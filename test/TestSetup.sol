@@ -1045,7 +1045,15 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         _executeAdminTasks(_report, emptyBytes, emptyBytes, _revertMessage);
     }
 
-    function _executeAdminTasks(IEtherFiOracle.OracleReport memory _report, bytes[] memory _pubKey, bytes[] memory, /*_signature*/ string memory _revertMessage) internal {
+    function _executeAdminTasks(
+        IEtherFiOracle.OracleReport memory _report,
+        bytes[] memory _pubKey,
+        bytes[] memory,
+        /*_signature*/
+        string memory _revertMessage
+    )
+        internal
+    {
         _initReportBlockStamp(_report);
 
         uint32 currentSlot = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
@@ -1482,7 +1490,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             );
 
             sig[i] = hex"ad899d85dcfcc2506a8749020752f81353dd87e623b2982b7bbfbbdd7964790eab4e06e226917cba1253f063d64a7e5407d8542776631b96c4cea78e0968833b36d4e0ae0b94de46718f905ca6d9b8279e1044a41875640f8cb34dc3f6e4de65";
-        
+
         }
 
         return (depositDataArray, depositDataRootsForApproval, sig, pubKey);

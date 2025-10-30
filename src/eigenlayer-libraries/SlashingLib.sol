@@ -15,9 +15,9 @@ uint64 constant WAD = 1e18;
  * There are 2 types of shares:
  *      1. deposit shares
  *          - These can be converted to an amount of tokens given a strategy
- *              - by calling `sharesToUnderlying` on the strategy address (they're already tokens 
+ *              - by calling `sharesToUnderlying` on the strategy address (they're already tokens
  *              in the case of EigenPods)
- *          - These live in the storage of the EigenPodManager and individual StrategyManager strategies 
+ *          - These live in the storage of the EigenPodManager and individual StrategyManager strategies
  *      2. withdrawable shares
  *          - For a staker, this is the amount of shares that they can withdraw
  *          - For an operator, the shares delegated to them are equal to the sum of their stakers'
