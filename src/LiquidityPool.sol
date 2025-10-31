@@ -115,6 +115,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     error IncorrectRole();
     error InvalidEtherFiNode();
     error InvalidValidatorSize();
+    error AlreadyPaused();
+    error NotPaused();
+    error AlreadyRegistered();
+    error NotRegistered();
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -145,7 +149,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     // Used by eETH staking flow through Liquifier contract; deVamp or to pay protocol fees
     function depositToRecipient(address _recipient, uint256 _amount, address _referral) public whenNotPaused returns (uint256) {
-        require(msg.sender == LIQUIFIER || msg.sender == ETHERFI_ADMIN_CONTRACT, "Incorrect Caller");
+        if (msg.sender != LIQUIFIER && msg.sender != ETHERFI_ADMIN_CONTRACT) revert IncorrectCaller();
 
         emit Deposit(_recipient, _amount, SourceOfFunds.EETH, _referral);
 
@@ -154,7 +158,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     // Used by ether.fan staking flow
     function deposit(address _user, address _referral) external payable whenNotPaused returns (uint256) {
-        require(msg.sender == MEMBERSHIP_MANAGER, "Incorrect Caller");
+        if (msg.sender != MEMBERSHIP_MANAGER) revert IncorrectCaller();
 
         emit Deposit(msg.sender, msg.value, SourceOfFunds.ETHER_FAN, _referral);
 
@@ -168,7 +172,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// it returns the amount of shares burned
     function withdraw(address _recipient, uint256 _amount) external whenNotPaused returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);
-        require(msg.sender == address(withdrawRequestNFT) || msg.sender == MEMBERSHIP_MANAGER || msg.sender == ETHERFI_REDEMPTION_MANAGER, "Incorrect Caller");
+        if (msg.sender != address(withdrawRequestNFT) && msg.sender != MEMBERSHIP_MANAGER && msg.sender != ETHERFI_REDEMPTION_MANAGER) revert IncorrectCaller();
         if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
 
@@ -257,7 +261,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         uint256[] calldata _bidIds,
         address _etherFiNode
     ) external whenNotPaused {
-        require(validatorSpawner[msg.sender].registered, "Incorrect Caller");
+        if (!validatorSpawner[msg.sender].registered) revert NotRegistered();
         stakingManager.registerBeaconValidators(_depositData, _bidIds, _etherFiNode);
     }
 
@@ -353,7 +357,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @param _user The address of the Validator Spawner to register
     function registerValidatorSpawner(address _user) public {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        require(!validatorSpawner[_user].registered, "Already registered");  
+        if (validatorSpawner[_user].registered) revert AlreadyRegistered();  
 
         validatorSpawner[_user] = ValidatorSpawner({registered: true});
 
@@ -363,8 +367,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @notice Removes a Validator Spawner
     /// @param _user the address of the Validator Spawner to remove
     function unregisterValidatorSpawner(address _user) external {
-        require(validatorSpawner[_user].registered, "Not registered");
-        require(roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender), "Incorrect Caller");
+        if (!validatorSpawner[_user].registered) revert NotRegistered();
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
 
         delete validatorSpawner[_user];
 
@@ -414,7 +418,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     // Pauses the contract
     function pauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
-        if (paused) revert("Pausable: already paused");
+        if (paused) revert AlreadyPaused();
 
         paused = true;
         emit Paused(msg.sender);
@@ -423,7 +427,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     // Unpauses the contract
     function unPauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
-        if (!paused) revert("Pausable: not paused");
+        if (!paused) revert NotPaused();
 
         paused = false;
         emit Unpaused(msg.sender);
@@ -434,7 +438,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function addEthAmountLockedForWithdrawal(uint128 _amount) external {
-        if (!(msg.sender == ETHERFI_ADMIN_CONTRACT)) revert IncorrectCaller();
+        if (msg.sender != ETHERFI_ADMIN_CONTRACT) revert IncorrectCaller();
 
         ethAmountLockedForWithdrawal += _amount;
     }
@@ -471,7 +475,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function _sendFund(address _recipient, uint256 _amount) internal {
         uint256 balance = address(this).balance;
         (bool sent, ) = _recipient.call{value: _amount}("");
-        require(sent && address(this).balance >= balance - _amount, "SendFail");
+        if (!sent || address(this).balance < balance - _amount) revert SendFail();
     }
 
     function _accountForEthSentOut(uint256 _amount) internal {
@@ -531,7 +535,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function getImplementation() external view returns (address) {return _getImplementation();}
 
     function _requireNotPaused() internal view virtual {
-        require(!paused, "Pausable: paused");
+        if (paused) revert AlreadyPaused();
     }
 
     //--------------------------------------------------------------------------------------
