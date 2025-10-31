@@ -19,54 +19,61 @@ import "./interfaces/IRoleRegistry.sol";
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
     using SafeERC20 for IERC20;
+
+    address public constant MEMBERSHIP_MANAGER = 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000;
+    address public constant ETHERFI_ADMIN_CONTRACT = 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705;
+    address public constant LIQUIFIER = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
+    address public constant ETHERFI_REDEMPTION_MANAGER = 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0;
+
+    IStakingManager public constant stakingManager = IStakingManager(0x25e821b7197B146F7713C3b89B6A4D83516B912d);
+    IRoleRegistry public constant roleRegistry = IRoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
+    IEtherFiNodesManager public constant nodesManager = IEtherFiNodesManager(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F);
+    IeETH public constant eETH = IeETH(0x35fA164735182de50811E8e2E824cFb9B6118ac2);
+    IWithdrawRequestNFT public constant withdrawRequestNFT = IWithdrawRequestNFT(0x7d5706f6ef3F89B3951E23e557CDFBC3239D4E2c);
+
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    IStakingManager public stakingManager;
-    IEtherFiNodesManager public nodesManager;
+    IStakingManager public DEPRECATED_stakingManager;
+    IEtherFiNodesManager public DEPRECATED_nodesManager;
     address public DEPRECATED_regulationsManager;
-    address public membershipManager;
+    address public DEPRECATED_membershipManager;
     address public DEPRECATED_TNFT;
-    IeETH public eETH; 
-
+    IeETH public DEPRECATED_eETH; 
     bool public DEPRECATED_eEthliquidStakingOpened;
 
     uint128 public totalValueOutOfLp;
     uint128 public totalValueInLp;
-
     address public feeRecipient;
-
     uint32 public numPendingDeposits; // number of validator deposits, which needs 'registerValidator'
 
     address public DEPRECATED_bNftTreasury;
-    IWithdrawRequestNFT public withdrawRequestNFT;
-
+    IWithdrawRequestNFT public DEPRECATED_withdrawRequestNFT;
     BnftHolder[] public DEPRECATED_bnftHolders;
     uint128 public DEPRECATED_maxValidatorsPerOwner;
     uint128 public DEPRECATED_schedulingPeriodInSeconds;
-
     HoldersUpdate public DEPRECATED_holdersUpdate;
-
     mapping(address => bool) public DEPRECATED_admins;
     mapping(SourceOfFunds => FundStatistics) public DEPRECATED_fundStatistics;
+    
     mapping(uint256 => bytes32) public depositDataRootForApprovalDeposits;
-    address public etherFiAdminContract;
+    
+    address public DEPRECATED_etherFiAdminContract;
     bool public DEPRECATED_whitelistEnabled;
     mapping(address => bool) public DEPRECATED_whitelisted;
+    
     mapping(address => ValidatorSpawner) public validatorSpawner;
-
     bool public restakeBnftDeposits;
     uint128 public ethAmountLockedForWithdrawal;
     bool public paused;
+
     address public DEPRECATED_auctionManager;
-    ILiquifier public liquifier;
-
+    ILiquifier public DEPRECATED_liquifier;
     bool private DEPRECATED_isLpBnftHolder;
+    EtherFiRedemptionManager public DEPRECATED_etherFiRedemptionManager;
+    IRoleRegistry public DEPRECATED_roleRegistry;
 
-    EtherFiRedemptionManager public etherFiRedemptionManager;
-
-    IRoleRegistry public roleRegistry;
     uint256 public validatorSizeWei;
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
@@ -124,47 +131,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         totalValueInLp += uint128(msg.value);
     }
 
-    function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external initializer {
-        if (_eEthAddress == address(0) || _stakingManagerAddress == address(0) || _nodesManagerAddress == address(0) || _membershipManagerAddress == address(0) || _tNftAddress == address(0)) revert DataNotSet();
-        
-        __Ownable_init();
-        __UUPSUpgradeable_init();
-        eETH = IeETH(_eEthAddress);
-        stakingManager = IStakingManager(_stakingManagerAddress);
-        nodesManager = IEtherFiNodesManager(_nodesManagerAddress);
-        membershipManager = _membershipManagerAddress;
-        DEPRECATED_TNFT = _tNftAddress;
-        paused = true;
-        restakeBnftDeposits = false;
-        ethAmountLockedForWithdrawal = 0;
-        etherFiAdminContract = _etherFiAdminContract;
-        withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
-        DEPRECATED_isLpBnftHolder = false;
-    }
-
-    function initializeOnUpgrade(address _auctionManager, address _liquifier) external onlyOwner { 
-        require(_auctionManager != address(0) && _liquifier != address(0) && address(DEPRECATED_auctionManager) == address(0) && address(liquifier) == address(0), "Invalid");
-
-        DEPRECATED_auctionManager = _auctionManager;
-        liquifier = ILiquifier(_liquifier);
-    }
-
-    // Note: Call this function when no validators to approve
-    function initializeVTwoDotFourNine(address _roleRegistry, address _etherFiRedemptionManager) external onlyOwner {
-        require(address(etherFiRedemptionManager) == address(0) && _etherFiRedemptionManager != address(0), "Invalid");
-        require(address(roleRegistry) == address(0x00), "already initialized");
-
-        etherFiRedemptionManager = EtherFiRedemptionManager(payable(_etherFiRedemptionManager)); 
-        roleRegistry = IRoleRegistry(_roleRegistry);
-
-        //correct splits
-        uint128 tvl = uint128(getTotalPooledEther());
-        totalValueInLp = uint128(address(this).balance);
-        totalValueOutOfLp = tvl - totalValueInLp;
-
-        if(tvl != getTotalPooledEther()) revert();
-    }
-
     // Used by eETH staking flow
     function deposit() external payable returns (uint256) {
         return deposit(address(0));
@@ -179,7 +145,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     // Used by eETH staking flow through Liquifier contract; deVamp or to pay protocol fees
     function depositToRecipient(address _recipient, uint256 _amount, address _referral) public whenNotPaused returns (uint256) {
-        require(msg.sender == address(liquifier) || msg.sender == address(etherFiAdminContract), "Incorrect Caller");
+        require(msg.sender == LIQUIFIER || msg.sender == ETHERFI_ADMIN_CONTRACT, "Incorrect Caller");
 
         emit Deposit(_recipient, _amount, SourceOfFunds.EETH, _referral);
 
@@ -188,7 +154,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     // Used by ether.fan staking flow
     function deposit(address _user, address _referral) external payable whenNotPaused returns (uint256) {
-        require(msg.sender == address(membershipManager), "Incorrect Caller");
+        require(msg.sender == MEMBERSHIP_MANAGER, "Incorrect Caller");
 
         emit Deposit(msg.sender, msg.value, SourceOfFunds.ETHER_FAN, _referral);
 
@@ -202,7 +168,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// it returns the amount of shares burned
     function withdraw(address _recipient, uint256 _amount) external whenNotPaused returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);
-        require(msg.sender == address(withdrawRequestNFT) || msg.sender == address(membershipManager) || msg.sender == address(etherFiRedemptionManager), "Incorrect Caller");
+        require(msg.sender == address(withdrawRequestNFT) || msg.sender == MEMBERSHIP_MANAGER || msg.sender == ETHERFI_REDEMPTION_MANAGER, "Incorrect Caller");
         if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
 
@@ -259,7 +225,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @param fee the burn fee to be paid by the recipient when the withdrawal is claimed (WithdrawRequestNFT.claimWithdraw)
     /// @return uint256 requestId of the WithdrawRequestNFT
     function requestMembershipNFTWithdraw(address recipient, uint256 amount, uint256 fee) public whenNotPaused returns (uint256) {
-        if (msg.sender != address(membershipManager)) revert IncorrectCaller();
+        if (msg.sender != MEMBERSHIP_MANAGER) revert IncorrectCaller();
         uint256 share = sharesForAmount(amount);
         if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
 
@@ -416,7 +382,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     /// @notice Rebase by ether.fi
     function rebase(int128 _accruedRewards) public {
-        if (msg.sender != address(membershipManager)) revert IncorrectCaller();
+        if (msg.sender != MEMBERSHIP_MANAGER) revert IncorrectCaller();
         totalValueOutOfLp = uint128(int128(totalValueOutOfLp) + _accruedRewards);
 
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
@@ -425,7 +391,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// @notice pay protocol fees including 5% to treaury, 5% to node operator and ethfund bnft holders
     /// @param _protocolFees The amount of protocol fees to pay in ether
     function payProtocolFees(uint128 _protocolFees) external {
-        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();   
+        if (msg.sender != ETHERFI_ADMIN_CONTRACT) revert IncorrectCaller();   
         emit ProtocolFeePaid(_protocolFees);
         depositToRecipient(feeRecipient, _protocolFees, address(0));
     }
@@ -468,13 +434,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function addEthAmountLockedForWithdrawal(uint128 _amount) external {
-        if (!(msg.sender == address(etherFiAdminContract))) revert IncorrectCaller();
+        if (!(msg.sender == ETHERFI_ADMIN_CONTRACT)) revert IncorrectCaller();
 
         ethAmountLockedForWithdrawal += _amount;
     }
 
     function burnEEthShares(uint256 shares) external {
-        if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
+        if (msg.sender != ETHERFI_REDEMPTION_MANAGER && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
         eETH.burnShares(msg.sender, shares);
     }
 
