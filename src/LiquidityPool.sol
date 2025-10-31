@@ -109,7 +109,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     error IncorrectCaller();
     error InvalidAmount();
-    error DataNotSet();
     error InsufficientLiquidity();
     error SendFail();
     error IncorrectRole();

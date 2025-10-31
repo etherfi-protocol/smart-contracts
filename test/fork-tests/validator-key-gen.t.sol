@@ -250,7 +250,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         bidIds[0] = 1; 
 
         vm.prank(unregisteredUser);
-        vm.expectRevert("Incorrect Caller");
+        vm.expectRevert(LiquidityPool.NotRegistered.selector);
         liquidityPool.batchRegister(depositDataArray, bidIds, etherFiNode);
     }
 
@@ -275,7 +275,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         liquidityPool.pauseContract();
 
         vm.prank(spawner);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(LiquidityPool.AlreadyPaused.selector);
         liquidityPool.batchRegister(depositDataArray, bidIds, etherFiNode);
     }
 
@@ -481,7 +481,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         liquidityPool.pauseContract();
 
         vm.prank(admin);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(LiquidityPool.AlreadyPaused.selector);
         liquidityPool.batchCreateBeaconValidators(depositDataArray, bidIds, etherFiNode);
     }
 
