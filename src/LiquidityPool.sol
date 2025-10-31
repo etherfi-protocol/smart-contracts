@@ -118,7 +118,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     error NotPaused();
     error AlreadyRegistered();
     error NotRegistered();
-
+    error ContractPaused();
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
@@ -534,7 +534,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function getImplementation() external view returns (address) {return _getImplementation();}
 
     function _requireNotPaused() internal view virtual {
-        if (paused) revert AlreadyPaused();
+        if (paused) revert ContractPaused();
     }
 
     //--------------------------------------------------------------------------------------

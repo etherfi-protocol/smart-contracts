@@ -275,7 +275,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         liquidityPool.pauseContract();
 
         vm.prank(spawner);
-        vm.expectRevert(LiquidityPool.AlreadyPaused.selector);
+        vm.expectRevert(LiquidityPool.ContractPaused.selector);
         liquidityPool.batchRegister(depositDataArray, bidIds, etherFiNode);
     }
 
@@ -481,7 +481,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         liquidityPool.pauseContract();
 
         vm.prank(admin);
-        vm.expectRevert(LiquidityPool.AlreadyPaused.selector);
+        vm.expectRevert(LiquidityPool.ContractPaused.selector);
         liquidityPool.batchCreateBeaconValidators(depositDataArray, bidIds, etherFiNode);
     }
 
