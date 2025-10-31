@@ -52,7 +52,7 @@ contract StETHWithdrawalsTransactions is Script, Utils {
     address constant treasury = 0x0c83EAe1FE72c390A02E426572854931EefF93BA;
     address constant etherFiRestaker = 0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf;
 
-    address constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
+    // address constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
     address constant TIMELOCK_CONTROLLER = 0xcdd57D11476c22d265722F68390b036f3DA48c21;
 
     //--------------------------------------------------------------------------------------
