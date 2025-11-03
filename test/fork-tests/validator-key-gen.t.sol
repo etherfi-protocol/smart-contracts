@@ -320,6 +320,67 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         );
     }
 
+    function test_batchRegister_revertsWhenAlreadyRegistered() public {
+        address spawner = vm.addr(0x1234);
+        
+        vm.prank(admin);
+        nodeOperatorManager.addToWhitelist(spawner);
+
+        vm.prank(operatingTimelock);
+        liquidityPool.registerValidatorSpawner(spawner);
+
+        vm.deal(spawner, 100 ether);
+        vm.prank(spawner);
+        nodeOperatorManager.registerNodeOperator("ipfs_hash", 1000);
+
+        vm.prank(spawner);
+        uint256[] memory createdBids = auctionManager.createBid{value: 0.1 ether}(1, 0.1 ether);
+
+        (,,, , IStakingManager.DepositData memory depositData, address etherFiNode) = helper_getDataForValidatorKeyGen();
+
+        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
+        depositDataArray[0] = depositData;
+
+        vm.prank(spawner);
+        liquidityPool.batchRegister(depositDataArray, createdBids, etherFiNode);
+
+        vm.prank(spawner);
+        vm.expectRevert(IStakingManager.InvalidValidatorCreationStatus.selector);
+        liquidityPool.batchRegister(depositDataArray, createdBids, etherFiNode);
+    }
+
+    function test_batchRegister_revertsAfterInvalidation() public {
+        address spawner = vm.addr(0x1234);
+        
+        vm.prank(admin);
+        nodeOperatorManager.addToWhitelist(spawner);
+
+        vm.prank(operatingTimelock);
+        liquidityPool.registerValidatorSpawner(spawner);
+
+        vm.deal(spawner, 100 ether);
+        vm.prank(spawner);
+        nodeOperatorManager.registerNodeOperator("ipfs_hash", 1000);
+
+        vm.prank(spawner);
+        uint256[] memory createdBids = auctionManager.createBid{value: 0.1 ether}(1, 0.1 ether);
+
+        (bytes memory pubkey, bytes memory signature, bytes memory withdrawalCredentials, bytes32 depositDataRoot, IStakingManager.DepositData memory depositData, address etherFiNode) = helper_getDataForValidatorKeyGen();
+
+        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
+        depositDataArray[0] = depositData;
+
+        vm.prank(spawner);
+        liquidityPool.batchRegister(toArray(depositData), createdBids, etherFiNode);
+
+        vm.prank(admin);
+        stakingManager.invalidateRegisteredBeaconValidator(depositData, createdBids[0], etherFiNode);
+
+        vm.prank(spawner);
+        vm.expectRevert(IStakingManager.InvalidValidatorCreationStatus.selector);
+        liquidityPool.batchRegister(toArray(depositData), createdBids, etherFiNode);
+    }
+
     function test_roleGrant_succeeds() public {
         assertEq(roleRegistry.hasRole(keccak256("STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE"), address(admin)), true);
     }

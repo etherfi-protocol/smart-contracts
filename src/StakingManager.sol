@@ -150,6 +150,7 @@ contract StakingManager is
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
             bytes32 validatorCreationDataHash = keccak256(abi.encodePacked(depositData[i].publicKey, depositData[i].signature, depositData[i].depositDataRoot, depositData[i].ipfsHashForEncryptedValidatorKey, bidIds[i], etherFiNode));
+            if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.NOT_REGISTERED) revert InvalidValidatorCreationStatus();
             validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.REGISTERED;
             emit ValidatorCreationStatusUpdated(depositData[i], bidIds[i], etherFiNode, validatorCreationDataHash, ValidatorCreationStatus.REGISTERED);
         }
