@@ -97,7 +97,7 @@ contract ContractCodeChecker {
         bytes memory localBytecode = address(localDeployed).code;
         bytes memory onchainRuntimeBytecode = address(deployedImpl).code;
 
-        if (compareBytes(localBytecode, onchainRuntimeBytecode)) {
+        if (compareBytes(onchainRuntimeBytecode, localBytecode)) {
             console2.log("-> Full Bytecode Match: Success\n");
         } else {
             console2.log("-> Full Bytecode Match: Fail\n");
@@ -126,7 +126,7 @@ contract ContractCodeChecker {
         }
 
         // Compare trimmed arrays byte-by-byte
-        if (compareBytes(trimmedLocal, trimmedOnchain)) {
+        if (compareBytes(trimmedOnchain, trimmedLocal)) {
             console2.log("-> Partial Bytecode Match: Success\n");
         } else {
             console2.log("-> Partial Bytecode Match: Fail\n");

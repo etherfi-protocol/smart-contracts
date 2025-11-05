@@ -84,6 +84,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     event Deposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
     event Withdraw(address indexed sender, address recipient, uint256 amount, SourceOfFunds source);
+    event EEthSharesBurnedForNonETHWithdrawal(uint256 amountSharesToBurn, uint256 withdrawalValueInETH);
     event UpdatedWhitelist(address userAddress, bool value);
     event UpdatedTreasury(address newTreasury); 
     event UpdatedFeeRecipient(address newFeeRecipient);
@@ -465,6 +466,20 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     function burnEEthShares(uint256 shares) external {
         if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
         eETH.burnShares(msg.sender, shares);
+    }
+
+    function burnEEthSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external {
+        uint256 share = sharesForWithdrawalAmount(_withdrawalValueInETH);
+        if (msg.sender != address(etherFiRedemptionManager)) revert IncorrectCaller();
+        if (_amountSharesToBurn == 0 || _withdrawalValueInETH == 0) revert InvalidAmount();
+
+        // Verify the share price will not go down
+        if (share > _amountSharesToBurn) revert InvalidAmount();
+
+        totalValueOutOfLp -= uint128(_withdrawalValueInETH);
+
+        eETH.burnShares(msg.sender, _amountSharesToBurn);
+        emit EEthSharesBurnedForNonETHWithdrawal(_amountSharesToBurn, _withdrawalValueInETH);
     }
 
     //--------------------------------------------------------------------------------------
