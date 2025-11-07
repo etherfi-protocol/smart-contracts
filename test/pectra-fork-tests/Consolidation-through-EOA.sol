@@ -15,7 +15,7 @@ import {IEigenPod, IEigenPodTypes } from "../../src/eigenlayer-interfaces/IEigen
 /**
  * @title ConsolidationThroughEOATest
  * @notice test for request consolidation
- * @dev Run with: forge test --fork-url <mainnet-rpc> --match-path test/pectra-fork-tests/Request-consolidation.t.sol -vvvv
+ * @dev Run with: forge test --fork-url <mainnet-rpc> --match-path test/pectra-fork-tests/Consolidation-through-EOA.sol -vvvv
  */
 
 contract ConsolidationThroughEOATest is Test {
@@ -92,114 +92,6 @@ contract ConsolidationThroughEOATest is Test {
                 targetPubkey: pubkeys[i] // switch to compounding
             }); // same pubkey = switch to compounding
         }
-    }
-
-    function test_RequestConsolidation() public {
-        console2.log("=== REQUEST CONSOLIDATION TEST ===");
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), realElExiter);
-        require(hasRole, "test: realElExiter does not have the EL Trigger Exit Role");
-
-        bytes[] memory pubkeys = new bytes[](3);
-        pubkeys[0] = PK_80143;
-        pubkeys[1] = PK_80194;
-        pubkeys[2] = PK_89936;
-
-        uint256[] memory legacyIdsForOneValidator = new uint256[](1);
-        legacyIdsForOneValidator[0] = 80143;
-        bytes[] memory pubkeysForOneValidator = new bytes[](1);
-        pubkeysForOneValidator[0] = PK_80143;
-        
-        vm.prank(address(etherFiOperatingTimelock));
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIdsForOneValidator, pubkeysForOneValidator); 
-        vm.stopPrank();
-        console.log("Linking legacy validator ids for one validator complete");  
-
-        ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
-
-        IEigenPodTypes.ConsolidationRequest[] memory reqs = _consolidationRequestsFromPubkeys(pubkeys);
-
-        uint256 feePer = pod0.getConsolidationRequestFee();
-        uint256 n = reqs.length;
-        uint256 valueToSend = feePer * n;
-
-        // console.log("Fee per request:", feePer);
-        // console.log("Number of requests:", n);
-        // console.log("Value to send:", valueToSend);
-
-        // Fund the timelock with enough ETH to pay consolidation fees
-        vm.deal(address(etherFiOperatingTimelock), valueToSend + 1 ether);
-
-        vm.prank(address(etherFiOperatingTimelock));
-        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
-    }
-
-    function test_switchToCompounding() public {
-        console2.log("=== SWITCH TO COMPOUNDING TEST ===");
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), realElExiter);
-        require(hasRole, "test: realElExiter does not have the EL Trigger Exit Role");
-
-        bytes[] memory pubkeys = new bytes[](1);
-        uint256[] memory legacyIds = new uint256[](1);
-        pubkeys[0] = PK_28689;
-        legacyIds[0] = 28689;
-
-        vm.prank(address(etherFiOperatingTimelock));
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
-        vm.stopPrank();  
-
-        ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
-
-        IEigenPodTypes.ConsolidationRequest[] memory reqs = _switchToCompoundingRequestsFromPubkeys(pubkeys);
-
-        uint256 feePer = pod0.getConsolidationRequestFee();
-        uint256 n = reqs.length;
-        uint256 valueToSend = feePer * n;
-
-        // Fund the timelock with enough ETH to pay consolidation fees
-        vm.deal(address(etherFiOperatingTimelock), valueToSend + 1 ether);
-
-        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
-        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(
-            address(pod0),
-            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]),
-            pubkeys[0]
-        );
-        vm.prank(address(etherFiOperatingTimelock));
-        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
-
-    }
-
-    function test_multiple_switchToCompounding() public {
-        console2.log("=== MULTIPLE SWITCH TO COMPOUNDING TEST ===");
-
-        bytes[] memory pubkeys = new bytes[](3);
-        uint256[] memory legacyIds = new uint256[](3);
-        pubkeys[0] = PK_80143;
-        legacyIds[0] = 80143;
-        pubkeys[1] = PK_80194;
-        legacyIds[1] = 80194;
-        pubkeys[2] = PK_89936;
-        legacyIds[2] = 89936;
-
-        uint256[] memory linkOnlyOneValidatorlegacyId = new uint256[](1);
-        linkOnlyOneValidatorlegacyId[0] = 80143;
-        bytes[] memory linkOnlyOneValidatorPubkeys = new bytes[](1);
-        linkOnlyOneValidatorPubkeys[0] = PK_80143;
-
-        ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
-
-        IEigenPodTypes.ConsolidationRequest[] memory reqs = _switchToCompoundingRequestsFromPubkeys(pubkeys);
-        
-        uint256 feePer = pod0.getConsolidationRequestFee();
-        uint256 n = reqs.length;
-        uint256 valueToSend = feePer * n;
-
-        vm.deal(address(etherFiOperatingTimelock), valueToSend + 1 ether);
-
-        vm.expectRevert(); // because all validators are not active
-        vm.prank(address(etherFiOperatingTimelock));
-        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
-
     }
 
     function test_ConsolidationThroughEOA() public {
