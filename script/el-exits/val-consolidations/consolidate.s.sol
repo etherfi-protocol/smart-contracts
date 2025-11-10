@@ -45,7 +45,7 @@ contract ConsolidateValidators is Script, Utils {
             return;
         }
 
-        // Link validators at indices 0, 250, 500, 750 (1st, 251st, 501st, 751st)
+        // Link validators at indices 0, 350, 700 (1st, 351st, 701st)
         _linkLegacyValidatorIds(ids, pubkeys);
         
         // Verify target pod
@@ -55,11 +55,11 @@ contract ConsolidateValidators is Script, Utils {
         
         console2.log("Target EigenPod:", address(targetPod));
 
-        // Split into 4 batches: 250, 250, 250, 253
-        uint256[4] memory batchSizes = [uint256(250), 250, 250, 253];
+        // Split into 3 batches: 350, 350, 303
+        uint256[3] memory batchSizes = [uint256(350), 350, 303];
         uint256 startIndex = 0;
         
-        for (uint256 batchNum = 0; batchNum < 4; batchNum++) {
+        for (uint256 batchNum = 0; batchNum < 3; batchNum++) {
             uint256 batchSize = batchSizes[batchNum];
             uint256 endIndex = startIndex + batchSize;
             
@@ -93,13 +93,13 @@ contract ConsolidateValidators is Script, Utils {
     }
 
     function _linkLegacyValidatorIds(uint256[] memory ids, bytes[] memory pubkeys) internal {
-        // Link validators at indices 0, 250, 500, 750 (1st, 251st, 501st, 751st)
-        uint256[4] memory indices = [uint256(0), 250, 500, 750];
-        uint256[] memory legacyIds = new uint256[](4);
-        bytes[] memory legacyPubkeys = new bytes[](4);
+        // Link validators at indices 0, 350, 700 (1st, 351st, 701st)
+        uint256[3] memory indices = [uint256(0), 350, 700];
+        uint256[] memory legacyIds = new uint256[](3);
+        bytes[] memory legacyPubkeys = new bytes[](3);
         uint256 legacyCount = 0;
         
-        for (uint256 i = 0; i < 4; i++) {
+        for (uint256 i = 0; i < 3; i++) {
             uint256 idx = indices[i];
             if (idx < ids.length && idx < pubkeys.length) {
                 legacyIds[legacyCount] = ids[idx];
@@ -114,8 +114,8 @@ contract ConsolidateValidators is Script, Utils {
         }
         
         // Resize arrays to actual count
-        uint256[] memory finalLegacyIds = new uint256[](4);
-        bytes[] memory finalLegacyPubkeys = new bytes[](4);
+        uint256[] memory finalLegacyIds = new uint256[](3);
+        bytes[] memory finalLegacyPubkeys = new bytes[](3);
         for (uint256 i = 0; i < legacyCount; i++) {
             console2.log("Linking legacy validator ID:", legacyIds[i]);
             console2.log("Linking legacy validator pubkey:");
@@ -124,7 +124,7 @@ contract ConsolidateValidators is Script, Utils {
             finalLegacyPubkeys[i] = legacyPubkeys[i];
         }
         
-        console2.log("Linking", legacyCount, "legacy validator IDs (indices 0, 250, 500, 750)...");
+        console2.log("Linking", legacyCount, "legacy validator IDs (indices 0, 350, 700)...");
         _executeTimelockBatch(
             address(etherFiNodesManager),
             0,
