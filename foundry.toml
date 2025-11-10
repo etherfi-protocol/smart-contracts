@@ -2,7 +2,7 @@
 src = 'src'
 out = 'out'
 libs = ['lib']
-fs_permissions = [{ access = "read-write", path = "./out"}, { access = "read-write", path = "./release"}, { access = "read", path = "./test" }, { access = "read-write", path = "./deployment" }, { access = "read-write", path = "./operations" },  { access = "read-write", path = "./deployment" }]
+fs_permissions = [{ access = "read-write", path = "./out"}, { access = "read-write", path = "./release"}, { access = "read", path = "./test" }, { access = "read-write", path = "./deployment" }, { access = "read-write", path = "./operations" },{ access = "read-write", path = "./deployment" }, { access = "read", path = "./script/el-exits/val-consolidations" }]
 gas_reports = ["*"]
 optimizer_runs = 1500
 extra_output = ["storageLayout"]
