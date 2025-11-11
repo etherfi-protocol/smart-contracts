@@ -9,6 +9,8 @@ import "../../src/LiquidityPool.sol";
 import "../../src/EtherFiTimelock.sol";
 import "forge-std/Test.sol";
 
+// Command to run this script: forge script script/stETH-withdrawals/config.s.sol --fork-url $MAINNET_RPC_URL -vvvv
+
 contract StETHWithdrawalsConfig is Script, Utils, Test {
     EtherFiRedemptionManager constant etherFiRedemptionManager = EtherFiRedemptionManager(payable(ETHERFI_REDEMPTION_MANAGER));
     EtherFiTimelock constant etherfiOperatingTimelock = EtherFiTimelock(payable(OPERATING_TIMELOCK));
