@@ -93,7 +93,7 @@ contract StakingManager is
     
     function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external {
         if (!roleRegistry.hasRole(STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE, msg.sender)) revert IncorrectRole();
-        bytes32 validatorCreationDataHash = keccak256(abi.encodePacked(depositData.publicKey, depositData.signature, depositData.depositDataRoot, depositData.ipfsHashForEncryptedValidatorKey, bidId, etherFiNode));
+        bytes32 validatorCreationDataHash = keccak256(abi.encode(depositData.publicKey, depositData.signature, depositData.depositDataRoot, depositData.ipfsHashForEncryptedValidatorKey, bidId, etherFiNode));
         if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.REGISTERED) revert InvalidValidatorCreationStatus();
         validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.INVALIDATED;
         emit ValidatorCreationStatusUpdated(depositData, bidId, etherFiNode, validatorCreationDataHash, ValidatorCreationStatus.INVALIDATED);
@@ -107,11 +107,13 @@ contract StakingManager is
 
         for (uint256 i = 0; i < depositData.length; i++) {
             DepositData memory d = depositData[i];
-            bytes32 validatorCreationDataHash = keccak256(abi.encodePacked(d.publicKey, d.signature, d.depositDataRoot, d.ipfsHashForEncryptedValidatorKey, bidIds[i], etherFiNode));
+            bytes32 validatorCreationDataHash = keccak256(abi.encode(d.publicKey, d.signature, d.depositDataRoot, d.ipfsHashForEncryptedValidatorKey, bidIds[i], etherFiNode));
             if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.REGISTERED) revert InvalidValidatorCreationStatus();
 
             bytes memory withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(address(IEtherFiNode(etherFiNode).getEigenPod()));
             bytes32 computedDataRoot = generateDepositDataRoot(d.publicKey, d.signature, withdrawalCredentials, initialDepositAmount);
+            if (computedDataRoot != d.depositDataRoot) revert IncorrectBeaconRoot();
+
             validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.CONFIRMED;
             auctionManager.updateSelectedBidInformation(bidIds[i]);
 
@@ -149,7 +151,7 @@ contract StakingManager is
             bytes32 computedDataRoot = generateDepositDataRoot(depositData[i].publicKey, depositData[i].signature, withdrawalCredentials, initialDepositAmount);
             if (computedDataRoot != depositData[i].depositDataRoot) revert IncorrectBeaconRoot();
 
-            bytes32 validatorCreationDataHash = keccak256(abi.encodePacked(depositData[i].publicKey, depositData[i].signature, depositData[i].depositDataRoot, depositData[i].ipfsHashForEncryptedValidatorKey, bidIds[i], etherFiNode));
+            bytes32 validatorCreationDataHash = keccak256(abi.encode(depositData[i].publicKey, depositData[i].signature, depositData[i].depositDataRoot, depositData[i].ipfsHashForEncryptedValidatorKey, bidIds[i], etherFiNode));
             if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.NOT_REGISTERED) revert InvalidValidatorCreationStatus();
             validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.REGISTERED;
             emit ValidatorCreationStatusUpdated(depositData[i], bidIds[i], etherFiNode, validatorCreationDataHash, ValidatorCreationStatus.REGISTERED);

@@ -104,12 +104,12 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
 
         vm.prank(tom);
         liquidityPool.batchRegister(toArray(depositData), toArray_u256(bidId1[0]), etherFiNode);
-        assertEq(uint8(stakingManager.validatorCreationStatus(keccak256(abi.encodePacked(depositData.publicKey, depositData.signature, depositData.depositDataRoot, depositData.ipfsHashForEncryptedValidatorKey, bidId1[0], etherFiNode)))), uint8(IStakingManager.ValidatorCreationStatus.REGISTERED));
+        assertEq(uint8(stakingManager.validatorCreationStatus(keccak256(abi.encode(depositData.publicKey, depositData.signature, depositData.depositDataRoot, depositData.ipfsHashForEncryptedValidatorKey, bidId1[0], etherFiNode)))), uint8(IStakingManager.ValidatorCreationStatus.REGISTERED));
 
         // STEP 5: Confirm the validator
         vm.prank(admin);
         liquidityPool.batchCreateBeaconValidators(toArray(depositData), toArray_u256(bidId1[0]), etherFiNode);
-        assertEq(uint8(stakingManager.validatorCreationStatus(keccak256(abi.encodePacked(depositData.publicKey, depositData.signature, depositData.depositDataRoot, depositData.ipfsHashForEncryptedValidatorKey, bidId1[0], etherFiNode)))), uint8(IStakingManager.ValidatorCreationStatus.CONFIRMED));
+        assertEq(uint8(stakingManager.validatorCreationStatus(keccak256(abi.encode(depositData.publicKey, depositData.signature, depositData.depositDataRoot, depositData.ipfsHashForEncryptedValidatorKey, bidId1[0], etherFiNode)))), uint8(IStakingManager.ValidatorCreationStatus.CONFIRMED));
     }
 
     function test_batchRegister_revertsWhenNotRegisteredSpawner() public {
@@ -305,7 +305,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         liquidityPool.batchRegister(depositDataArray, createdBids, etherFiNode);
 
         // Verify validator status is REGISTERED
-        bytes32 validatorHash = keccak256(abi.encodePacked(
+        bytes32 validatorHash = keccak256(abi.encode(
             depositData.publicKey,
             depositData.signature,
             depositData.depositDataRoot,
@@ -488,7 +488,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         liquidityPool.batchCreateBeaconValidators(depositDataArray, createdBids, etherFiNode);
 
         // Verify validator status is CONFIRMED
-        bytes32 validatorHash = keccak256(abi.encodePacked(
+        bytes32 validatorHash = keccak256(abi.encode(
             depositData.publicKey,
             depositData.signature,
             depositData.depositDataRoot,
@@ -605,7 +605,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
 
         // Verify all are confirmed
         for (uint256 i = 0; i < 3; i++) {
-            bytes32 validatorHash = keccak256(abi.encodePacked(
+            bytes32 validatorHash = keccak256(abi.encode(
                 depositData[i].publicKey,
                 depositData[i].signature,
                 depositData[i].depositDataRoot,
@@ -762,7 +762,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         liquidityPool.batchRegister(toArray(depositData), createdBids, etherFiNode);
 
         // Verify status is REGISTERED
-        bytes32 validatorHash = keccak256(abi.encodePacked(
+        bytes32 validatorHash = keccak256(abi.encode(
             depositData.publicKey,
             depositData.signature,
             depositData.depositDataRoot,
