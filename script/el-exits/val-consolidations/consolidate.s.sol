@@ -84,7 +84,7 @@ contract ConsolidateValidators is Script, Utils {
             }
             
             // Execute consolidation for this batch
-            _executeConsolidationBatch(batchPubkeys, targetPod);
+            _executeConsolidationBatch(batchPubkeys, pubkeys[0], targetPod);
             
             startIndex = endIndex;
         }
@@ -181,17 +181,9 @@ contract ConsolidateValidators is Script, Utils {
             ids[validatorCount] = id;
             validatorCount++;
         }
-        
-        // // Create properly sized arrays
-        // pubkeys = new bytes[](validatorCount);
-        // ids = new uint256[](validatorCount);
-        // for (uint256 i = 0; i < validatorCount; i++) {
-        //     pubkeys[i] = tempPubkeys[i];
-        //     ids[i] = tempIds[i];
-        // }
     }
 
-    function _consolidationRequestsFromPubkeys(bytes[] memory pubkeys)
+    function _consolidationRequestsFromPubkeys(bytes[] memory pubkeys, bytes memory targetPubkey)
         internal
         pure
         returns (IEigenPodTypes.ConsolidationRequest[] memory reqs) {
@@ -199,7 +191,7 @@ contract ConsolidateValidators is Script, Utils {
         for (uint256 i = 0; i < pubkeys.length; ++i) {
             reqs[i] = IEigenPodTypes.ConsolidationRequest({
                 srcPubkey: pubkeys[i],
-                targetPubkey: pubkeys[0] // same pod consolidation
+                targetPubkey: targetPubkey // same pod consolidation
             });
         }
     }
@@ -211,9 +203,9 @@ contract ConsolidateValidators is Script, Utils {
         require(address(pod) != address(0), "_resolvePod: node has no pod");
     }
     
-    function _executeConsolidationBatch(bytes[] memory batchPubkeys, IEigenPod targetPod) internal {
+    function _executeConsolidationBatch(bytes[] memory batchPubkeys, bytes memory targetPubkey, IEigenPod targetPod) internal {
         // Create consolidation requests
-        IEigenPodTypes.ConsolidationRequest[] memory reqs = _consolidationRequestsFromPubkeys(batchPubkeys);
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = _consolidationRequestsFromPubkeys(batchPubkeys, targetPubkey);
         
         // Calculate fees
         uint256 feePer = targetPod.getConsolidationRequestFee();
