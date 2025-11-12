@@ -56,27 +56,13 @@ contract VerifyValidatorKeyGen is Script {
         LiquidityPool newLiquidityPoolImplementation = new LiquidityPool();
         StakingManager newStakingManagerImplementation = new StakingManager(address(LIQUIDITY_POOL_PROXY), address(ETHERFI_NODES_MANAGER_PROXY), address(ETH_DEPOSIT_CONTRACT), address(AUCTION_MANAGER), address(ETHERFI_NODE_BEACON), address(ROLE_REGISTRY));
 
-        address deployedLiquidityPool = address(0x4C6767A0afDf06c55DAcb03cB26aaB34Eed281fc);
-        address deployedStakingManager = address(0xF73996bceDE56AD090024F2Fd4ca545A3D06c8E3);
+        contractCodeChecker.verifyContractByteCodeMatch(LIQUIDITY_POOL_IMPL, address(newLiquidityPoolImplementation));
+        contractCodeChecker.verifyContractByteCodeMatch(STAKING_MANAGER_IMPL, address(newStakingManagerImplementation));
 
-        console2.log("deployedLiquidityPool:", deployedLiquidityPool);
-        console2.log("deployedStakingManager:", deployedStakingManager);
-        console2.log("newLiquidityPoolImplementation:", address(newLiquidityPoolImplementation));
-        console2.log("newStakingManagerImplementation:", address(newStakingManagerImplementation));
-
-        contractCodeChecker.verifyContractByteCodeMatch(deployedLiquidityPool, address(newLiquidityPoolImplementation));
-        contractCodeChecker.verifyContractByteCodeMatch(deployedStakingManager, address(newStakingManagerImplementation));
-
-        console2.log("Bytecode verified successfully");
-        console2.log("================================================");
-        console2.log("");
+        console2.log(unicode"✓ Bytecode verified successfully");
     }
 
     function verifyAddress() public view {
-        console2.log("=== VERIFYING ADDRESS ===");
-        console2.log("================================================");
-        console2.log("");
-
         // LiquidityPool
         {
             bytes memory constructorArgs = abi.encode();
@@ -99,15 +85,10 @@ contract VerifyValidatorKeyGen is Script {
             require(STAKING_MANAGER_IMPL == predictedAddress, "StakingManager deployment address mismatch");
         }
 
-        console2.log("================================================");
-        console2.log("");
+        console2.log(unicode"✓ Address verified successfully");
     }
 
     function verifyNewFunctionality() public {
-        console2.log("=== VERIFYING NEW FUNCTIONALITY ===");
-        console2.log("================================================");
-        console2.log("");
-
         IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
         depositDataArray[0] = IStakingManager.DepositData({
             publicKey: vm.randomBytes(48),
@@ -119,25 +100,18 @@ contract VerifyValidatorKeyGen is Script {
 
         // Verify that the new functionality is exists and is role restricted
         {
-            console2.log("LiquidityPool new functionality:");
-            console2.log("================================================");
-            console2.log("");
-
             vm.expectRevert(IStakingManager.IncorrectRole.selector);
             liquidityPool.batchCreateBeaconValidators(depositDataArray, new uint256[](1), etherFiNode);
         }
 
         {
-            console2.log("StakingManager new functionality:");
-            console2.log("================================================");
-            console2.log("");
-
             vm.expectRevert(IStakingManager.IncorrectRole.selector);
             stakingManager.invalidateRegisteredBeaconValidator(depositDataArray[0], 1, etherFiNode);
+
+            vm.expectRevert(IStakingManager.InvalidCaller.selector);
+            stakingManager.registerBeaconValidators(depositDataArray, new uint256[](1), etherFiNode);
         }
 
-        console2.log("New functionality verified successfully");
-        console2.log("================================================");
-        console2.log("");
+        console2.log(unicode"✓ New functionality verified successfully");
     }
 }
