@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import {LiquidityPool} from "../../src/LiquidityPool.sol";
 import {StakingManager} from "../../src/StakingManager.sol";
+import {EtherFiNodesManager} from "../../src/EtherFiNodesManager.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);
@@ -16,7 +17,7 @@ contract DeployValidatorKeyGen is Script {
 
     address stakingManagerImpl;
     address liquidityPoolImpl;
-
+    address etherFiNodesManagerImpl;
     bytes32 commitHashSalt = bytes32(bytes20(hex"700dc0d12131a52a6c530b7550842ead4bb0a834"));
 
     // === MAINNET CONTRACT ADDRESSES ===
@@ -27,6 +28,7 @@ contract DeployValidatorKeyGen is Script {
     address constant ETHERFI_NODE_BEACON = 0x3c55986Cfee455E2533F4D29006634EcF9B7c03F;
     address constant ROLE_REGISTRY = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
     address constant ETH_DEPOSIT_CONTRACT = 0x00000000219ab540356cBB839Cbe05303d7705Fa;
+    address constant RATE_LIMITER_PROXY = 0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8;
 
     function run() public {
         console2.log("================================================");
@@ -64,6 +66,21 @@ contract DeployValidatorKeyGen is Script {
                 constructorArgs
             );
             liquidityPoolImpl = deployCreate2(contractName, constructorArgs, bytecode, commitHashSalt, true);
+        }
+
+        // EtherFiNodesManager
+        {
+            string memory contractName = "EtherFiNodesManager";
+            bytes memory constructorArgs = abi.encode(
+                STAKING_MANAGER_PROXY,
+                ROLE_REGISTRY,
+                RATE_LIMITER_PROXY
+            );
+            bytes memory bytecode = abi.encodePacked(
+                type(EtherFiNodesManager).creationCode,
+                constructorArgs
+            );
+            etherFiNodesManagerImpl = deployCreate2(contractName, constructorArgs, bytecode, commitHashSalt, true);
         }
         vm.stopBroadcast();
     }
