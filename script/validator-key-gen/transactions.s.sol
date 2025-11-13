@@ -20,11 +20,15 @@ import "forge-std/console2.sol";
 
 contract ValidatorKeyGenTransactions is Script {
     EtherFiTimelock etherFiTimelock = EtherFiTimelock(payable(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761));
+    address constant operatingTimelock = 0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a;
 
     address constant STAKING_MANAGER_PROXY = 0x25e821b7197B146F7713C3b89B6A4D83516B912d;
     address constant LIQUIDITY_POOL_PROXY = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
     address constant ETHERFI_NODES_MANAGER_PROXY = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
     address constant ROLE_REGISTRY = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
+    NodeOperatorManager public constant nodeOperatorManager = NodeOperatorManager(0xd5edf7730ABAd812247F6F54D7bd31a52554e35E);
+    AuctionManager public constant auctionManager = AuctionManager(0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9);
+    RoleRegistry public constant roleRegistry = RoleRegistry(ROLE_REGISTRY);
 
     address constant nodesManagerImpl = 0x0f366dF7af5003fC7C6524665ca58bDeAdDC3745;
     
@@ -45,6 +49,7 @@ contract ValidatorKeyGenTransactions is Script {
 
     LiquidityPool constant liquidityPool = LiquidityPool(payable(LIQUIDITY_POOL_PROXY));
     StakingManager constant stakingManager = StakingManager(STAKING_MANAGER_PROXY);
+    EtherFiNodesManager constant etherFiNodesManager = EtherFiNodesManager(ETHERFI_NODES_MANAGER_PROXY);
 
     function run() public {
         console2.log("================================================");
@@ -52,9 +57,8 @@ contract ValidatorKeyGenTransactions is Script {
         console2.log("================================================");
         console2.log("");
 
-        // vm.startBroadcast();
         executeUpgrade();
-        // vm.stopBroadcast();
+        forkTest(); // set the correct rpc url for the fork
     }
 
     function executeUpgrade() public {
@@ -138,6 +142,52 @@ contract ValidatorKeyGenTransactions is Script {
         console2.log("================================================");
     }
 
+    function forkTest() public {
+        string memory forkUrl = vm.envString("TENDERLY_TEST_RPC");
+        vm.selectFork(vm.createFork(forkUrl));
+        vm.prank(auctionManager.owner());
+        auctionManager.updateAdmin(ETHERFI_OPERATING_ADMIN, true);
+
+        address spawner = vm.addr(0x1234);
+        
+        vm.prank(ETHERFI_OPERATING_ADMIN);
+        nodeOperatorManager.addToWhitelist(spawner);
+
+        vm.prank(operatingTimelock);
+        liquidityPool.registerValidatorSpawner(spawner);
+
+        vm.deal(spawner, 100 ether);
+        vm.prank(spawner);
+        nodeOperatorManager.registerNodeOperator("ipfs_hash", 1000);
+
+        vm.prank(spawner);
+        uint256[] memory createdBids = auctionManager.createBid{value: 0.1 ether}(1, 0.1 ether);
+
+        (bytes memory pubkey, bytes memory signature, bytes memory withdrawalCredentials, bytes32 depositDataRoot, IStakingManager.DepositData memory depositData, address etherFiNode) = helper_getDataForValidatorKeyGen();
+
+        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
+        depositDataArray[0] = depositData;
+
+        vm.prank(spawner);
+        liquidityPool.batchRegister(depositDataArray, createdBids, etherFiNode);
+
+        // Verify validator status is REGISTERED
+        bytes32 validatorHash = keccak256(abi.encode(
+            depositData.publicKey,
+            depositData.signature,
+            depositData.depositDataRoot,
+            depositData.ipfsHashForEncryptedValidatorKey,
+            createdBids[0],
+            etherFiNode
+        ));
+        
+        require(uint8(stakingManager.validatorCreationStatus(validatorHash)) == uint8(IStakingManager.ValidatorCreationStatus.REGISTERED), "Validator status is not REGISTERED");
+    
+        console2.log("Forking Test completed successfully on ", forkUrl);
+        console2.log("================================================");
+        console2.log("");
+    }
+
     //--------------------------------------------------------------------------------------
     //------------------------------- HELPER FUNCTIONS  -----------------------------------
     //--------------------------------------------------------------------------------------
@@ -152,5 +202,22 @@ contract ValidatorKeyGenTransactions is Script {
                 role,
                 account
             );
+    }
+
+    function helper_getDataForValidatorKeyGen() public returns (bytes memory pubkey, bytes memory signature, bytes memory withdrawalCredentials, bytes32 depositDataRoot, IStakingManager.DepositData memory depositData, address etherFiNode) {
+        pubkey = vm.randomBytes(48);
+        signature = vm.randomBytes(96);
+
+        vm.prank(operatingTimelock);
+        etherFiNode = stakingManager.instantiateEtherFiNode(true /*createEigenPod*/);
+        address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
+
+        withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
+        depositDataRoot = depositDataRootGenerator.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, 1 ether);
+        depositData = IStakingManager.DepositData({
+            publicKey: pubkey, signature: signature, depositDataRoot: depositDataRoot, ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
+        });
+
+        return (pubkey, signature, withdrawalCredentials, depositDataRoot, depositData, etherFiNode);
     }
 }

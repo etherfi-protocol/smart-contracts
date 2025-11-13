@@ -5,6 +5,10 @@ import "forge-std/Test.sol";
 import {ContractCodeChecker} from "../ContractCodeChecker.sol";
 import {LiquidityPool} from "../../src/LiquidityPool.sol";
 import {StakingManager} from "../../src/StakingManager.sol";
+import {EtherFiNodesManager} from "../../src/EtherFiNodesManager.sol";
+import {RoleRegistry} from "../../src/RoleRegistry.sol";
+
+import {IEtherFiNodesManager} from "../../src/interfaces/IEtherFiNodesManager.sol";
 import {IStakingManager} from "../../src/interfaces/IStakingManager.sol";
 
 interface ICreate2Factory {
@@ -27,14 +31,17 @@ contract VerifyValidatorKeyGen is Script {
     address constant ETHERFI_NODE_BEACON = 0x3c55986Cfee455E2533F4D29006634EcF9B7c03F;
     address constant ROLE_REGISTRY = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
     address constant ETH_DEPOSIT_CONTRACT = 0x00000000219ab540356cBB839Cbe05303d7705Fa;
-    address constant EIGEN_POD_MANAGER = 0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338;
-    address constant DELEGATION_MANAGER = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
+
+    address constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
 
     // === IMPLEMENTATION ADDRESSES ===
     address constant LIQUIDITY_POOL_IMPL = 0x4C6767A0afDf06c55DAcb03cB26aaB34Eed281fc;
     LiquidityPool liquidityPool = LiquidityPool(payable(LIQUIDITY_POOL_PROXY));
     address constant STAKING_MANAGER_IMPL = 0xF73996bceDE56AD090024F2Fd4ca545A3D06c8E3;
     StakingManager stakingManager = StakingManager(STAKING_MANAGER_PROXY);
+
+    EtherFiNodesManager constant etherFiNodesManager = EtherFiNodesManager(ETHERFI_NODES_MANAGER_PROXY);
+    RoleRegistry constant roleRegistry = RoleRegistry(ROLE_REGISTRY);
 
     LiquidityPool constant liquidityPoolImplementation = LiquidityPool(payable(LIQUIDITY_POOL_IMPL));
     StakingManager constant stakingManagerImplementation = StakingManager(STAKING_MANAGER_IMPL);
@@ -98,6 +105,12 @@ contract VerifyValidatorKeyGen is Script {
         });
         address etherFiNode = address(0x1234);
 
+        {
+            require(roleRegistry.hasRole(liquidityPoolImplementation.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE");
+            require(roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager)), "StakingManager does not have ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
+            require(roleRegistry.hasRole(stakingManagerImplementation.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have STAKING_MANAGER_NODE_CREATOR_ROLE");
+        }
+
         // Verify that the new functionality is exists and is role restricted
         {
             vm.expectRevert(IStakingManager.IncorrectRole.selector);
@@ -110,6 +123,12 @@ contract VerifyValidatorKeyGen is Script {
 
             vm.expectRevert(IStakingManager.InvalidCaller.selector);
             stakingManager.registerBeaconValidators(depositDataArray, new uint256[](1), etherFiNode);
+        }
+
+        {
+            vm.expectRevert(IEtherFiNodesManager.UnknownNode.selector); // Proves that role has been granted to stakingManager
+            vm.prank(address(stakingManager));
+            etherFiNodesManager.createEigenPod(etherFiNode);
         }
 
         console2.log(unicode"✓ New functionality verified successfully");
