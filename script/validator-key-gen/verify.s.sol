@@ -10,6 +10,7 @@ import {RoleRegistry} from "../../src/RoleRegistry.sol";
 
 import {IEtherFiNodesManager} from "../../src/interfaces/IEtherFiNodesManager.sol";
 import {IStakingManager} from "../../src/interfaces/IStakingManager.sol";
+import {IEigenPodTypes} from "../../src/eigenlayer-interfaces/IEigenPod.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);
@@ -33,7 +34,7 @@ contract VerifyValidatorKeyGen is Script {
     address constant ETH_DEPOSIT_CONTRACT = 0x00000000219ab540356cBB839Cbe05303d7705Fa;
 
     address constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
-
+    address constant realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
     // === IMPLEMENTATION ADDRESSES ===
     address constant LIQUIDITY_POOL_IMPL = 0x4C6767A0afDf06c55DAcb03cB26aaB34Eed281fc;
     LiquidityPool liquidityPool = LiquidityPool(payable(LIQUIDITY_POOL_PROXY));
@@ -129,6 +130,10 @@ contract VerifyValidatorKeyGen is Script {
             vm.expectRevert(IEtherFiNodesManager.UnknownNode.selector); // Proves that role has been granted to stakingManager
             vm.prank(address(stakingManager));
             etherFiNodesManager.createEigenPod(etherFiNode);
+
+            vm.expectRevert(IEtherFiNodesManager.EmptyConsolidationRequest.selector); // Does not revert on IncorrectRole
+            vm.prank(realElExiter); // Proves that role has been granted to realElExiter
+            etherFiNodesManager.requestConsolidation{value: 0}(new IEigenPodTypes.ConsolidationRequest[](0));
         }
 
         console2.log(unicode"✓ New functionality verified successfully");
