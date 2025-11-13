@@ -21,6 +21,7 @@ import "forge-std/console2.sol";
 contract ValidatorKeyGenTransactions is Script {
     EtherFiTimelock etherFiTimelock = EtherFiTimelock(payable(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761));
     address constant operatingTimelock = 0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a;
+    address constant realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
 
     address constant STAKING_MANAGER_PROXY = 0x25e821b7197B146F7713C3b89B6A4D83516B912d;
     address constant LIQUIDITY_POOL_PROXY = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
@@ -30,18 +31,21 @@ contract ValidatorKeyGenTransactions is Script {
     AuctionManager public constant auctionManager = AuctionManager(0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9);
     RoleRegistry public constant roleRegistry = RoleRegistry(ROLE_REGISTRY);
 
-    address constant nodesManagerImpl = 0x0f366dF7af5003fC7C6524665ca58bDeAdDC3745;
+    string constant forkUrl = vm.envString("TENDERLY_TEST_RPC"); // Replace with MAINNET_RPC_URL if needed
+
+    // address constant nodesManagerImpl = 0x0f366dF7af5003fC7C6524665ca58bDeAdDC3745;
     
     //--------------------------------------------------------------------------------------
     //---------------------------- New Deployments -----------------------------------------
     //--------------------------------------------------------------------------------------
     address constant stakingManagerImpl = 0xF73996bceDE56AD090024F2Fd4ca545A3D06c8E3;
     address constant liquidityPoolImpl = 0x4C6767A0afDf06c55DAcb03cB26aaB34Eed281fc;
+    address constant etherFiNodesManagerImpl = 0x337e1B30B2B434955FCc6C025010465b091CC452;
 
     bytes32 LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = LiquidityPool(payable(liquidityPoolImpl)).LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE();
-    bytes32 ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = EtherFiNodesManager(payable(nodesManagerImpl)).ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE();
+    bytes32 ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE();
     bytes32 STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE = StakingManager(payable(stakingManagerImpl)).STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE();
-
+    bytes32 ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE();
     //--------------------------------------------------------------------------------------
     address constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
     address constant UPGRADE_ADMIN = 0xcdd57D11476c22d265722F68390b036f3DA48c21;
@@ -58,16 +62,17 @@ contract ValidatorKeyGenTransactions is Script {
         console2.log("");
 
         executeUpgrade();
-        forkTest(); // set the correct rpc url for the fork
+        forkTestOne();
+        forkTestTwo();
     }
 
     function executeUpgrade() public {
         console2.log("Executing Upgrade");
         console2.log("================================================");
 
-        address[] memory targets = new address[](5);
-        bytes[] memory data = new bytes[](5);
-        uint256[] memory values = new uint256[](5); // Default to 0
+        address[] memory targets = new address[](7);
+        bytes[] memory data = new bytes[](7);
+        uint256[] memory values = new uint256[](7); // Default to 0
         
         //--------------------------------------------------------------------------------------
         //------------------------------- CONTRACT UPGRADES  -----------------------------------
@@ -78,23 +83,31 @@ contract ValidatorKeyGenTransactions is Script {
         targets[1] = LIQUIDITY_POOL_PROXY;
         data[1] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, liquidityPoolImpl);
 
+        targets[2] = ETHERFI_NODES_MANAGER_PROXY;
+        data[2] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiNodesManagerImpl);
+
         //--------------------------------------------------------------------------------------
         //---------------------------------- Grant Roles ---------------------------------------
         //--------------------------------------------------------------------------------------
 
-        targets[2] = ROLE_REGISTRY;
-        data[2] = _encodeRoleGrant(
+        targets[3] = ROLE_REGISTRY;
+        data[3] = _encodeRoleGrant(
             LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE,
             ETHERFI_OPERATING_ADMIN
         );
-        targets[3] = ROLE_REGISTRY;
-        data[3] = _encodeRoleGrant(
+        targets[4] = ROLE_REGISTRY;
+        data[4] = _encodeRoleGrant(
             ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE,
             address(stakingManager)
         );
-        targets[4] = ROLE_REGISTRY;
-        data[4] = _encodeRoleGrant(
+        targets[5] = ROLE_REGISTRY;
+        data[5] = _encodeRoleGrant(
             STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE,
+            ETHERFI_OPERATING_ADMIN
+        );
+        targets[6] = ROLE_REGISTRY;
+        data[6] = _encodeRoleGrant(
+            ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE,
             ETHERFI_OPERATING_ADMIN
         );
 
@@ -142,8 +155,7 @@ contract ValidatorKeyGenTransactions is Script {
         console2.log("================================================");
     }
 
-    function forkTest() public {
-        string memory forkUrl = vm.envString("TENDERLY_TEST_RPC");
+    function forkTestOne() public {
         vm.selectFork(vm.createFork(forkUrl));
         vm.prank(auctionManager.owner());
         auctionManager.updateAdmin(ETHERFI_OPERATING_ADMIN, true);
@@ -184,6 +196,68 @@ contract ValidatorKeyGenTransactions is Script {
         require(uint8(stakingManager.validatorCreationStatus(validatorHash)) == uint8(IStakingManager.ValidatorCreationStatus.REGISTERED), "Validator status is not REGISTERED");
     
         console2.log("Forking Test completed successfully on ", forkUrl);
+        console2.log("================================================");
+        console2.log("");
+    }
+
+    function forkTestTwo() public {
+        vm.selectFork(vm.createFork(forkUrl));
+        // Consolidate the following validators:
+        bytes memory PK_80143 = hex"811cd0bb7dd301afbbddd1d5db15ff0ca9d5f8ada78c0b1223f75b524aca1ca9ff1ba205d9efd7c37c2174576cc123e2";
+        bytes memory PK_80194 = hex"b86cb11d564b29a38cdc8a3f1f9c35e6dcd2d0f85f40da60f745e479ba42b4548c83a2b049cf02277fceaa9b421d0039";
+        bytes memory PK_89936 = hex"b8786ec7945d737698e374193f05a5498e932e2941263a7842837e9e3fac033af285e53a90afecf994585d178b5eedaa";
+        require(roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE, ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
+
+        bytes[] memory pubkeys = new bytes[](3);
+        pubkeys[0] = PK_80143;
+        pubkeys[1] = PK_80194;
+        pubkeys[2] = PK_89936;
+
+        bytes[] memory pubkeysonlyOneValidator = new bytes[](1);
+        uint256[] memory legacyIdsonlyOneValidator = new uint256[](1);
+        pubkeysonlyOneValidator[0] = PK_80143;
+        legacyIdsonlyOneValidator[0] = 80143;
+
+        // Link legacy validator id (requires admin role, so use timelock)
+        vm.prank(operatingTimelock);
+        etherFiNodesManager.linkLegacyValidatorIds(legacyIdsonlyOneValidator, pubkeysonlyOneValidator);
+        vm.stopPrank();
+        console2.log("Linking legacy validator ids complete");
+
+        (, IEigenPod pod0) = etherFiNodesManager.resolvePod(pubkeys[0]);
+
+        IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](3);
+        reqs[0] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[0],
+            targetPubkey: pubkeys[0]
+        });
+        reqs[1] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[1],
+            targetPubkey: pubkeys[0]
+        });
+        reqs[2] = IEigenPodTypes.ConsolidationRequest({
+            srcPubkey: pubkeys[2],
+            targetPubkey: pubkeys[0]
+        });
+
+        uint256 feePer = pod0.getConsolidationRequestFee();
+        uint256 n = reqs.length;
+        uint256 valueToSend = feePer * n;
+
+        // Fund the EOA with enough ETH to pay consolidation fees
+        vm.deal(realElExiter, valueToSend + 1 ether);
+
+        // Test that EOA can successfully call requestConsolidation
+        vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(
+            address(pod0),
+            etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]),
+            pubkeys[0]
+        );
+        vm.prank(realElExiter);
+        etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
+        
+        console2.log("EOA successfully requested consolidation");
         console2.log("================================================");
         console2.log("");
     }
