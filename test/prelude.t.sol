@@ -2,7 +2,7 @@ pragma solidity ^0.8.27;
 
 import "forge-std/console2.sol";
 import "forge-std/Test.sol";
-import "./common/ArrayTestHelper.sol";
+import "../test/common/ArrayTestHelper.sol";
 import "../src/interfaces/ILiquidityPool.sol";
 import "../src/interfaces/IStakingManager.sol";
 import "../src/StakingManager.sol";
