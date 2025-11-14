@@ -104,7 +104,7 @@ contract ValidatorKeyGenTransactions is Script {
         targets[3] = ROLE_REGISTRY;
         data[3] = _encodeRoleGrant(
             LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE,
-            ETHERFI_OPERATING_ADMIN
+            realElExiter
         );
         targets[4] = ROLE_REGISTRY;
         data[4] = _encodeRoleGrant(
@@ -114,7 +114,7 @@ contract ValidatorKeyGenTransactions is Script {
         targets[5] = ROLE_REGISTRY;
         data[5] = _encodeRoleGrant(
             STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE,
-            ETHERFI_OPERATING_ADMIN
+            realElExiter
         );
         targets[6] = ROLE_REGISTRY;
         data[6] = _encodeRoleGrant(
