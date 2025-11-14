@@ -34,7 +34,7 @@ contract TVLOracleTest is TestSetup {
     function test_SetTVLAggregator() public {
     
         address newAggregator = bob;
-        vm.prank(owner);
+        vm.prank(tvlOracle.owner());
         tvlOracle.setTVLAggregator(newAggregator);
 
         address currentAggregator = tvlOracle.tvlAggregator();
@@ -43,7 +43,7 @@ contract TVLOracleTest is TestSetup {
 
     function test_SetTVLAggregatorShouldRequireNonZeroAddress() public {
         address newAggregator = address(0);
-        vm.prank(owner);
+        vm.prank(tvlOracle.owner());
 
         vm.expectRevert("No zero addresses");
         tvlOracle.setTVLAggregator(newAggregator);
@@ -56,7 +56,7 @@ contract TVLOracleTest is TestSetup {
         vm.expectRevert("Only TVL Aggregator can call this message");
         tvlOracle.setTvl(newTvl);
 
-        vm.prank(owner);
+        vm.prank(tvlOracle.owner());
         vm.expectRevert("Only TVL Aggregator can call this message");
         tvlOracle.setTvl(newTvl);
 
@@ -76,7 +76,7 @@ contract TVLOracleTest is TestSetup {
         vm.expectRevert("Ownable: caller is not the owner");
         tvlOracle.setTVLAggregator(bob);
 
-        vm.prank(owner);
+        vm.prank(tvlOracle.owner());
         tvlOracle.setTVLAggregator(bob);
     }
 }
