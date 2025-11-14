@@ -2,22 +2,22 @@ pragma solidity ^0.8.27;
 
 import "forge-std/console2.sol";
 import "forge-std/Test.sol";
-import "../common/ArrayTestHelper.sol";
-import "../../src/interfaces/ILiquidityPool.sol";
-import "../../src/interfaces/IStakingManager.sol";
-import "../../src/StakingManager.sol";
-import "../../src/interfaces/IEtherFiNodesManager.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/interfaces/IEtherFiNode.sol";
-import {IEigenPod, IEigenPodTypes } from "../../src/eigenlayer-interfaces/IEigenPod.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/EtherFiRateLimiter.sol";
-import "../../src/UUPSProxy.sol";
-import "../../src/NodeOperatorManager.sol";
-import "../../src/interfaces/ITNFT.sol";
-import "../../src/interfaces/IBNFT.sol";
-import "../../src/AuctionManager.sol";
-import "../../src/libraries/DepositDataRootGenerator.sol";
+import "./common/ArrayTestHelper.sol";
+import "../src/interfaces/ILiquidityPool.sol";
+import "../src/interfaces/IStakingManager.sol";
+import "../src/StakingManager.sol";
+import "../src/interfaces/IEtherFiNodesManager.sol";
+import "../src/EtherFiNodesManager.sol";
+import "../src/interfaces/IEtherFiNode.sol";
+import {IEigenPod, IEigenPodTypes } from "../src/eigenlayer-interfaces/IEigenPod.sol";
+import "../src/EtherFiNode.sol";
+import "../src/EtherFiRateLimiter.sol";
+import "../src/UUPSProxy.sol";
+import "../src/NodeOperatorManager.sol";
+import "../src/interfaces/ITNFT.sol";
+import "../src/interfaces/IBNFT.sol";
+import "../src/AuctionManager.sol";
+import "../src/libraries/DepositDataRootGenerator.sol";
 
 
 contract PreludeTest is Test, ArrayTestHelper {
