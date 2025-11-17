@@ -50,7 +50,6 @@ import "../src/EtherFiTimelock.sol";
 
 import "../src/BucketRateLimiter.sol";
 import "../src/EtherFiRedemptionManager.sol";
-// import "../src/EtherFiRedemptionManagerTemp.sol";
 
 import "../script/ContractCodeChecker.sol";
 import "../script/Create2Factory.sol";
@@ -425,13 +424,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     function upgradeEtherFiRedemptionManager() public {
         console.log("upgradeEtherFiRedemptionManager");
         address ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
-        // EtherFiRedemptionManagerTemp EtherFiRedemptionManagerTempInstance = EtherFiRedemptionManagerTemp(payable(address(0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0)));
-        // EtherFiRedemptionManagerTemp tempImplementation = new EtherFiRedemptionManagerTemp(address(payable(liquidityPoolInstance)), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance));
         EtherFiRedemptionManager Implementation = new EtherFiRedemptionManager(address(payable(liquidityPoolInstance)), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance));
         EtherFiRestaker restakerImplementation = new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance));
         vm.startPrank(owner);
-        // EtherFiRedemptionManagerTempInstance.upgradeTo(address(tempImplementation));
-        // EtherFiRedemptionManagerTempInstance.clearOutSlotForUpgrade();
         etherFiRestakerInstance.upgradeTo(address(restakerImplementation));
         vm.stopPrank();
         vm.prank(owner);
