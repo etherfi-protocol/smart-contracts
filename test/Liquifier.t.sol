@@ -127,6 +127,9 @@ contract LiquifierTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
+        // Clear any code at alice's address to make it act like an EOA (External Owned Account)
+        vm.etch(alice, "");
+
         vm.deal(alice, 100 ether);
 
         assertEq(eETHInstance.balanceOf(alice), 0);
