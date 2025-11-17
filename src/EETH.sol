@@ -42,6 +42,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
 
     error IncorrectRole();
+    error ZeroSharesTransfer();
 
     // TODO: Figure our what `name` and `version` are for
     constructor(address _roleRegistry) {
@@ -168,6 +169,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     function _transfer(address _sender, address _recipient, uint256 _amount) internal {
         uint256 _sharesToTransfer = liquidityPool.sharesForAmount(_amount);
         _transferShares(_sender, _recipient, _sharesToTransfer);
+
+        // while the transfer of zero share is ok, emitting the Transfer event with non-zero amount can lead to confusion
+        if (_sharesToTransfer == 0) revert ZeroSharesTransfer();
+
         emit Transfer(_sender, _recipient, _amount);
     }
 
