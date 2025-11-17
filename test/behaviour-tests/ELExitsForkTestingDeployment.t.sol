@@ -3,18 +3,18 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "../src/StakingManager.sol";
-import "../src/EtherFiNodesManager.sol";
-import "../src/EtherFiNode.sol";
-import "../src/EtherFiRateLimiter.sol";
-import "../src/LiquidityPool.sol";
-import "../src/UUPSProxy.sol";
-import "../src/AuctionManager.sol";
-import "../src/EtherFiTimelock.sol";
-import "../src/interfaces/IRoleRegistry.sol";
-import "../src/interfaces/ILiquidityPool.sol";
-import "../src/interfaces/IStakingManager.sol";
-import {IEigenPod, IEigenPodTypes } from "../src/eigenlayer-interfaces/IEigenPod.sol";
+import "../../src/StakingManager.sol";
+import "../../src/EtherFiNodesManager.sol";
+import "../../src/EtherFiNode.sol";
+import "../../src/EtherFiRateLimiter.sol";
+import "../../src/LiquidityPool.sol";
+import "../../src/UUPSProxy.sol";
+import "../../src/AuctionManager.sol";
+import "../../src/EtherFiTimelock.sol";
+import "../../src/interfaces/IRoleRegistry.sol";
+import "../../src/interfaces/ILiquidityPool.sol";
+import "../../src/interfaces/IStakingManager.sol";
+import {IEigenPod, IEigenPodTypes } from "../../src/eigenlayer-interfaces/IEigenPod.sol";
 
 interface IUpgradable {
     function upgradeTo(address newImplementation) external;
