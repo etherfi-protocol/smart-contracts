@@ -1694,7 +1694,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         */
     }
     function _execute_timelock(address target, bytes memory data, bool _schedule, bool _log_schedule, bool _execute, bool _log_execute) internal {
-        if(address(0xcdd57D11476c22d265722F68390b036f3DA48c21) == address(etherFiTimelockInstance)) { // 3 Day Timelock
+        if(address(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761) == address(etherFiTimelockInstance)) { // 3 Day Timelock
             vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
         } else { // 8hr Timelock
             vm.startPrank(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC);
@@ -1767,6 +1767,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
         string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        vm.createDir("./release/logs/txns", true);
         stdJson.write(output, output_path);
     }
 
@@ -1781,6 +1782,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
         string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        vm.createDir("./release/logs/txns", true);
         stdJson.write(output, output_path);
     }
 
@@ -1795,6 +1797,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
         string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        vm.createDir("./release/logs/txns", true);
         stdJson.write(output, output_path);
     }
 
@@ -1809,6 +1812,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
         string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        vm.createDir("./release/logs/txns", true);
         stdJson.write(output, output_path);
     }
 

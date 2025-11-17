@@ -299,6 +299,7 @@ contract TimelockTest is TestSetup {
 
     function test_whitelist_RewardsCoordinator_processClaim() public {
         initializeRealisticFork(MAINNET_FORK);
+        console2.log("===============================================================================");
         address target = address(managerInstance);
         bytes4 selector = 0x3ccc861d;
         bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.updateAllowedForwardedExternalCalls.selector, selector, 0x7750d328b314EfFa365A0402CcfD489B80B0adda, true);
@@ -388,8 +389,13 @@ contract TimelockTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         roleRegistryInstance = RoleRegistry(address(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9));
         address target = address(roleRegistryInstance);
-        bytes memory data = abi.encodeWithSelector(Ownable2StepUpgradeable.acceptOwnership.selector);
-        _execute_timelock(target, data, true, true, true, true);
+        address[] memory targets = new address[](2);
+        targets[0] = address(roleRegistryInstance);
+        targets[1] = address(roleRegistryInstance);
+        bytes[] memory data = new bytes[](2);
+        data[0] = abi.encodeWithSelector(Ownable2StepUpgradeable.transferOwnership.selector, 0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761);
+        data[1] = abi.encodeWithSelector(Ownable2StepUpgradeable.acceptOwnership.selector);
+        _batch_execute_timelock(targets, data, new uint256[](2), true, true, true, true);
     }
 
     function test_handle_remainder() public {
