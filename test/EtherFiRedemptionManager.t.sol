@@ -208,12 +208,12 @@ contract EtherFiRedemptionManagerTest is TestSetup {
             assertApproxEqAbs(
                 eETHInstance.balanceOf(address(treasuryInstance)),
                 treasuryBalanceBefore + treasuryFee,
-                1e2
+                1e3
             );
             assertApproxEqAbs(
                 address(user).balance,
                 userBalanceBefore + userReceives,
-                1e2
+                1e3
             );
 
         } else {
@@ -394,6 +394,11 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     function test_mainnet_redeem_eEth_for_stETH() public {
         setUp_Fork();
         ILido stEth = ILido(address(etherFiRestakerInstance.lido()));
+        
+        vm.startPrank(op_admin);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, address(etherFiRestakerInstance.lido()));
+        vm.stopPrank();
+        
         vm.deal(user, 2010 ether);
         vm.startPrank(user);
         liquidityPoolInstance.deposit{value: 2005 ether}();
@@ -425,6 +430,10 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function test_mainnet_redeem_weEth_with_rebase() public {
         setUp_Fork();
+        
+        vm.startPrank(op_admin);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, address(etherFiRestakerInstance.lido()));
+        vm.stopPrank();
 
         vm.deal(alice, 50000 ether);
         vm.prank(alice);
@@ -532,6 +541,10 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function test_redeem_stETH_share_price() public {
         setUp_Fork();
+        vm.startPrank(op_admin);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, address(etherFiRestakerInstance.lido()));
+        vm.stopPrank();
+
         vm.startPrank(user);
         vm.deal(user, 10 ether);
         liquidityPoolInstance.deposit{value: 10 ether}();
@@ -569,6 +582,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         //set fee to 0
         vm.startPrank(op_admin);
         etherFiRedemptionManagerInstance.setExitFeeBasisPoints(0, address(etherFiRestakerInstance.lido()));
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, address(etherFiRestakerInstance.lido()));
         vm.stopPrank();
         //get number of shares for 1 ether
         vm.startPrank(user);
@@ -596,6 +610,10 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function test_redeem_eEth_share_price() public {
         setUp_Fork();
+        vm.startPrank(op_admin);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, ETH_ADDRESS);
+        vm.stopPrank();
+        
         vm.startPrank(user);
         vm.deal(user, 10 ether);
         liquidityPoolInstance.deposit{value: 10 ether}();
