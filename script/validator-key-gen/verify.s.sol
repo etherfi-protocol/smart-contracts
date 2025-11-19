@@ -18,6 +18,8 @@ interface ICreate2Factory {
     function computeAddress(bytes32 salt, bytes memory code) external view returns (address);
 }
 
+// forge script script/validator-key-gen/verify.s.sol --fork-url $MAINNET_RPC_URL
+
 contract VerifyValidatorKeyGen is Script {
     bytes32 commitHashSalt = bytes32(bytes20(hex"700dc0d12131a52a6c530b7550842ead4bb0a834"));
     ICreate2Factory constant factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
@@ -109,7 +111,8 @@ contract VerifyValidatorKeyGen is Script {
         {
             require(roleRegistry.hasRole(liquidityPoolImplementation.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE");
             require(roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager)), "StakingManager does not have ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
-            require(roleRegistry.hasRole(stakingManagerImplementation.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have STAKING_MANAGER_NODE_CREATOR_ROLE");
+            require(roleRegistry.hasRole(stakingManagerImplementation.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), realElExiter), "realElExiter does not have STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE");
+            require(roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), realElExiter), "realElExiter does not have ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
         }
 
         // Verify that the new functionality is exists and is role restricted

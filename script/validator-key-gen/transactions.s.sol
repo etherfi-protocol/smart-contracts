@@ -25,6 +25,8 @@ import "../../lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSU
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 
+// forge script script/validator-key-gen/transactions.s.sol --fork-url $MAINNET_RPC_URL
+
 contract ValidatorKeyGenTransactions is Script {
     EtherFiTimelock etherFiTimelock = EtherFiTimelock(payable(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761));
     address constant operatingTimelock = 0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a;
@@ -104,7 +106,7 @@ contract ValidatorKeyGenTransactions is Script {
         targets[3] = ROLE_REGISTRY;
         data[3] = _encodeRoleGrant(
             LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE,
-            realElExiter
+            ETHERFI_OPERATING_ADMIN
         );
         targets[4] = ROLE_REGISTRY;
         data[4] = _encodeRoleGrant(
