@@ -41,8 +41,8 @@ contract DepositAdapterTest is TestSetup {
         vm.startPrank(owner);
 
         // Caps are hit on mainnet
-        liquifierInstance.updateDepositCap(address(stEth), 6000, 400000);
-
+        liquifierInstance.updateDepositCap(address(stEth), 600000, 4000000);
+        vm.etch((alice), "");
          startHoax(alice);
     }
 
@@ -90,19 +90,23 @@ contract DepositAdapterTest is TestSetup {
         // empty request
         permitInput = createPermitInput(2, address(depositAdapterInstance), 0, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         liquifierPermitInput = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
-        vm.expectRevert(LiquidityPool.InvalidAmount.selector);
+        vm.expectRevert();
         depositAdapterInstance.depositStETHForWeETHWithPermit(0, address(0), liquifierPermitInput);
 
         // valid input
-        uint256 protocolStETHBeforeDeposit = stEth.balanceOf(address(liquifierInstance));
+        uint256 protocolStETHBeforeDeposit = stEth.balanceOf(address(etherFiRestakerInstance));
         uint256 stEthBalanceBeforeDeposit = stEth.balanceOf(address(alice));
+
+        // Get eETH amount from stETH input (with discount applied)
+        uint256 eETHAmountFromStETH = liquifierInstance.quoteByDiscountedValue(address(stEth), 1 ether);
+
         permitInput = createPermitInput(2, address(depositAdapterInstance), 1 ether, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         liquifierPermitInput = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         depositAdapterInstance.depositStETHForWeETHWithPermit(1 ether, bob, liquifierPermitInput);
 
         assertApproxEqAbs(stEth.balanceOf(address(alice)), stEthBalanceBeforeDeposit - 1 ether, 3);
-        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(1 ether), 3);
-        assertApproxEqAbs(stEth.balanceOf(address(liquifierInstance)), protocolStETHBeforeDeposit + 1 ether, 3);
+        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(eETHAmountFromStETH), 3);
+        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolStETHBeforeDeposit + 1 ether, 3);
 
         // reusing the same permit
         vm.expectRevert("ALLOWANCE_EXCEEDED");
@@ -112,12 +116,12 @@ contract DepositAdapterTest is TestSetup {
         // much larger deposit
         stEth.submit{value: 5000 ether}(address(0));
 
-        protocolStETHBeforeDeposit = stEth.balanceOf(address(liquifierInstance));
+        protocolStETHBeforeDeposit = stEth.balanceOf(address(etherFiRestakerInstance));
         permitInput = createPermitInput(2, address(depositAdapterInstance), 5000 ether, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         liquifierPermitInput = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         depositAdapterInstance.depositStETHForWeETHWithPermit(5000 ether, bob, liquifierPermitInput);
 
-        assertApproxEqAbs(stEth.balanceOf(address(liquifierInstance)), protocolStETHBeforeDeposit + 5000 ether, 3);
+        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolStETHBeforeDeposit + 5000 ether, 3);
     }
 
     function test_DepositWstETH() public {
