@@ -339,14 +339,22 @@ contract TimelockTest is TestSetup {
     function test_accept_ownership_role_registry() public {
         initializeRealisticFork(MAINNET_FORK);
         roleRegistryInstance = RoleRegistry(address(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9));
-        address target = address(roleRegistryInstance);
-        address[] memory targets = new address[](2);
-        targets[0] = address(roleRegistryInstance);
-        targets[1] = address(roleRegistryInstance);
-        bytes[] memory data = new bytes[](2);
-        data[0] = abi.encodeWithSelector(Ownable2StepUpgradeable.transferOwnership.selector, 0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761);
-        data[1] = abi.encodeWithSelector(Ownable2StepUpgradeable.acceptOwnership.selector);
-        _batch_execute_timelock(targets, data, new uint256[](2), true, true, true, true);
+        address testOwner = makeAddr("testOwner");
+        
+        // First transaction: Transfer ownership to testOwner via timelock
+        bytes memory transferData = abi.encodeWithSelector(Ownable2StepUpgradeable.transferOwnership.selector, testOwner);
+        _execute_timelock(address(roleRegistryInstance), transferData, true, true, true, true);
+        
+        // Verify pending owner is set
+        assertEq(roleRegistryInstance.pendingOwner(), testOwner);
+        
+        // Second transaction: testOwner accepts ownership directly
+        vm.prank(testOwner);
+        roleRegistryInstance.acceptOwnership();
+        
+        // Verify ownership was transferred
+        assertEq(roleRegistryInstance.owner(), testOwner);
+        assertEq(roleRegistryInstance.pendingOwner(), address(0));
     }
 }
 
