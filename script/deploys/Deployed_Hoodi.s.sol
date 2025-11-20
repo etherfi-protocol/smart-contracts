@@ -74,7 +74,7 @@ contract Deployed_Hoodi {
     address public constant REWARDS_COORDINATOR = 0x29e8572678e0c272350aa0b4B8f304E47EBcd5e7;
     address public constant BEACON_ORACLE = 0x5e1577f8efB21b229cD5Eb4C5Aa3d6C4b228f650;
     address public constant STRATEGY_MANAGER = 0xeE45e76ddbEDdA2918b8C7E3035cd37Eab3b5D41;
-    address public constant CREATE2_FACTORY = 0x29bd9fc3E826f10288D58bEa41d1258FB3ecF4F0;
+    address public constant CREATE2_FACTORY_HOODI = 0x29bd9fc3E826f10288D58bEa41d1258FB3ecF4F0;
 
     mapping(address => address) public timelockToAdmin;
 
