@@ -415,7 +415,6 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         liquidityPoolInstance.deposit{value: 2005 ether}();
 
         uint256 redeemableAmount = etherFiRedemptionManagerInstance.totalRedeemableAmount(address(etherFiRestakerInstance.lido()));
-        console2.log("redeemableAmount", redeemableAmount);
         uint256 userBalance = address(user).balance;
         uint256 treasuryBalance = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
 
@@ -423,7 +422,6 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.redeemEEth(2000 ether, user, address(etherFiRestakerInstance.lido()));
 
         redeemableAmount = etherFiRedemptionManagerInstance.totalRedeemableAmount(address(etherFiRestakerInstance.lido()));
-        console2.log("redeemableAmount", redeemableAmount);
 
         uint256 totalFee = (2000 ether * 1e2) / 1e4;
         uint256 treasuryFee = (totalFee * 1e3) / 1e4;
