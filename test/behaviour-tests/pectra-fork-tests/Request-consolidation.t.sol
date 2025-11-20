@@ -3,20 +3,20 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/EtherFiTimelock.sol";
-import "../../src/RoleRegistry.sol";
-import "../../src/interfaces/IRoleRegistry.sol";
-import {IEigenPod, IEigenPodTypes } from "../../src/eigenlayer-interfaces/IEigenPod.sol";
-
+import "../../../src/EtherFiNodesManager.sol";
+import "../../../src/EtherFiNode.sol";
+import "../../../src/EtherFiTimelock.sol";
+import "../../../src/RoleRegistry.sol";
+import "../../../src/interfaces/IRoleRegistry.sol";
+import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
+import "../../TestSetup.sol";
 /**
  * @title RequestConsolidationTest
  * @notice test for request consolidation
  * @dev Run with: forge test --fork-url <mainnet-rpc> --match-path test/pectra-fork-tests/Request-consolidation.t.sol -vvvv
  */
 
-contract RequestConsolidationTest is Test {
+contract RequestConsolidationTest is TestSetup {
     // === MAINNET CONTRACT ADDRESSES ===
     EtherFiNodesManager constant etherFiNodesManager = EtherFiNodesManager(payable(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F));
     RoleRegistry constant roleRegistry = RoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
@@ -32,7 +32,9 @@ contract RequestConsolidationTest is Test {
     bytes constant PK_89936 = hex"b8786ec7945d737698e374193f05a5498e932e2941263a7842837e9e3fac033af285e53a90afecf994585d178b5eedaa";
     // bytes constant PK_75208 = hex"b87882da67b89b06a59ec23b955ade930b534752153de08a50aa53172ea3439768dce39f547acfee53e55d985d6c4283";
 
-    function setUp() public {}
+    function setUp() public {
+        initializeRealisticFork(MAINNET_FORK);
+    }
 
     function _resolvePod(bytes memory pubkey) internal view returns (IEtherFiNode etherFiNode, IEigenPod pod) {
         bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkey);
@@ -172,6 +174,10 @@ contract RequestConsolidationTest is Test {
         bytes[] memory linkOnlyOneValidatorPubkeys = new bytes[](1);
         linkOnlyOneValidatorPubkeys[0] = PK_80143;
 
+        vm.prank(address(etherFiOperatingTimelock));
+        etherFiNodesManager.linkLegacyValidatorIds(linkOnlyOneValidatorlegacyId, linkOnlyOneValidatorPubkeys); 
+        vm.stopPrank();  
+
         ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
 
         IEigenPodTypes.ConsolidationRequest[] memory reqs = _switchToCompoundingRequestsFromPubkeys(pubkeys);
@@ -182,7 +188,6 @@ contract RequestConsolidationTest is Test {
 
         vm.deal(address(etherFiOperatingTimelock), valueToSend + 1 ether);
 
-        vm.expectRevert(); // because all validators are not active
         vm.prank(address(etherFiOperatingTimelock));
         etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
 
