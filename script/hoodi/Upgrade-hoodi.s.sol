@@ -10,24 +10,20 @@ pragma solidity ^0.8.27;
  *   2. Ensure Create2Factory is deployed at CREATE2_FACTORY_HOODI address
  *   3. Set HOODI_RPC_URL environment variable or use --fork-url flag
  *   4. Set HOODI_PRIVATE_KEY environment variable (must be protocol upgrader for most contracts, owner for some)
- *   5. Run: `forge script script/hoodi/Upgrade-hoodi.s.sol --fork-url $HOODI_RPC_URL -vvv --broadcast`
- * 
- * @dev Create2 Deployment:
- *   - Uses Create2Factory for deterministic addresses
- *   - Salts are defined in Hoodi-Salts.s.sol
- *   - All implementations are deployed using Create2 before upgrading proxies
+ *   5. Run: `forge script script/hoodi/Upgrade-hoodi.s.sol --fork-url $HOODI_RPC_URL -vvvv`
  */
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import {Deployed_Hoodi} from "../deploys/Deployed_Hoodi.s.sol";
-import {HoodiSalts} from "./Hoodi-Salts.s.sol";
+import {HoodiSalts} from "./Hoodi-Salts.s.sol"; 
 import {IRoleRegistry} from "../../src/interfaces/IRoleRegistry.sol";
 import {IStakingManager} from "../../src/interfaces/IStakingManager.sol";
 import {StakingManager} from "../../src/StakingManager.sol";
 import {EtherFiNodesManager} from "../../src/EtherFiNodesManager.sol";
 import {EtherFiRedemptionManager} from "../../src/EtherFiRedemptionManager.sol";
 import {EtherFiNode} from "../../src/EtherFiNode.sol";
+import {EtherFiRedemptionManagerTemp} from "./EtherFiRedemptionManagerTemp.sol";
 
 interface IUpgradeable {
     function upgradeTo(address newImplementation) external;
@@ -51,6 +47,7 @@ contract UpgradeHoodi is Script, Deployed_Hoodi, HoodiSalts {
     string constant ETHERFI_NODE_NAME = "EtherFiNode";
     string constant ETHERFI_NODES_MANAGER_NAME = "EtherFiNodesManager";
     string constant ETHERFI_REDEMPTION_MANAGER_NAME = "EtherFiRedemptionManager";
+    string constant ETHERFI_REDEMPTION_MANAGER_TEMP_NAME = "EtherFiRedemptionManagerTemp";
 
     struct UpgradeResult {
         string name;
@@ -97,6 +94,7 @@ contract UpgradeHoodi is Script, Deployed_Hoodi, HoodiSalts {
         console2.log("Deployer is protocol upgrader: %s\n", isProtocolUpgrader ? "YES" : "NO");
 
         vm.startBroadcast(deployerPrivateKey);
+        // vm.startPrank(deployer);
         console2.log("Broadcasting from: %s", vm.toString(deployer));
 
         // Upgrade contracts that require protocol upgrader
@@ -110,6 +108,7 @@ contract UpgradeHoodi is Script, Deployed_Hoodi, HoodiSalts {
         }
 
         vm.stopBroadcast();
+        // vm.stopPrank();
 
         // Print summary
         printSummary();
@@ -133,6 +132,14 @@ contract UpgradeHoodi is Script, Deployed_Hoodi, HoodiSalts {
     }
 
     function upgradeEtherFiRedemptionManager() internal {
+        address tempImpl = _deployEtherFiRedemptionManagerTemp();
+        IUpgradeable(ETHERFI_REDEMPTION_MANAGER_PROXY).upgradeTo(tempImpl);
+        console2.log("  [OK] ETHERFI_REDEMPTION_MANAGER_TEMP upgraded: %s\n", vm.toString(tempImpl));
+
+        console2.log("Clearnig out slot for upgrade...");
+        EtherFiRedemptionManagerTemp(payable(ETHERFI_REDEMPTION_MANAGER_PROXY)).clearOutSlotForUpgrade();
+        console2.log("  [OK] ETHERFI_REDEMPTION_MANAGER_TEMP slot cleared \n");
+
         console2.log("Upgrading ETHERFI_REDEMPTION_MANAGER...");
         address impl = _deployEtherFiRedemptionManager();
         IUpgradeable(ETHERFI_REDEMPTION_MANAGER_PROXY).upgradeTo(impl);
@@ -212,6 +219,39 @@ contract UpgradeHoodi is Script, Deployed_Hoodi, HoodiSalts {
         }
         
         address deployedAddress = factory.deploy(bytecode, ETHERFI_NODES_MANAGER_NAME);
+        require(deployedAddress == predictedAddress, "Deployment address mismatch");
+        console2.log("  Deployed address: %s", vm.toString(deployedAddress));
+        return deployedAddress;
+    }
+
+    function _deployEtherFiRedemptionManagerTemp() internal returns (address) {
+        bytes memory constructorArgs = abi.encode(
+            LIQUIDITY_POOL,
+            EETH,
+            WEETH,
+            TREASURY,
+            ROLE_REGISTRY
+        );
+        bytes memory bytecode = abi.encodePacked(
+            type(EtherFiRedemptionManagerTemp).creationCode,
+            constructorArgs
+        );
+
+        bytes32 salt = keccak256(abi.encodePacked(ETHERFI_REDEMPTION_MANAGER_TEMP_NAME));
+        bytes32 initCodeHash = keccak256(bytecode);
+        address predictedAddress = vm.computeCreate2Address(salt, initCodeHash, address(factory));
+        console2.log("  Predicted address: %s", vm.toString(predictedAddress));
+        
+        // Check if contract already exists at this address
+        uint256 codeSize;
+        assembly {
+            codeSize := extcodesize(predictedAddress)
+        }
+        if (codeSize > 0) {
+            console2.log("  Contract already deployed, skipping deployment");
+            return predictedAddress;
+        }
+        address deployedAddress = factory.deploy(bytecode, ETHERFI_REDEMPTION_MANAGER_TEMP_NAME);
         require(deployedAddress == predictedAddress, "Deployment address mismatch");
         console2.log("  Deployed address: %s", vm.toString(deployedAddress));
         return deployedAddress;
