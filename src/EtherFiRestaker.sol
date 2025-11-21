@@ -285,9 +285,10 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         
         // Calculate by summing up shares from all pending withdrawals for this token
         uint256 totalShares = 0;
-        bytes32[] memory pendingRoots = withdrawalRootsSet.values();
-        for (uint256 i = 0; i < pendingRoots.length; i++) {
-            (IDelegationManager.Withdrawal memory withdrawal, uint256[] memory shares) = eigenLayerDelegationManager.getQueuedWithdrawal(pendingRoots[i]);
+        (IDelegationManager.Withdrawal[] memory queuedWithdrawals, ) = eigenLayerDelegationManager.getQueuedWithdrawals(address(this));
+        for (uint256 i = 0; i < queuedWithdrawals.length; i++) {
+            bytes32 withdrawalRoot = eigenLayerDelegationManager.calculateWithdrawalRoot(queuedWithdrawals[i]);
+            (IDelegationManager.Withdrawal memory withdrawal, uint256[] memory shares) = eigenLayerDelegationManager.getQueuedWithdrawal(withdrawalRoot);
             
             // Check if this withdrawal involves the specified token
             for (uint256 j = 0; j < withdrawal.strategies.length; j++) {
