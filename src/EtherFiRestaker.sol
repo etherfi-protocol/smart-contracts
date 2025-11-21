@@ -284,7 +284,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         if (info.elStrategy == IStrategy(address(0))) return 0;
         
         // Calculate by summing up shares from all pending withdrawals for this token
-        uint256 amount = 0;
+        uint256 totalShares = 0;
         bytes32[] memory pendingRoots = withdrawalRootsSet.values();
         for (uint256 i = 0; i < pendingRoots.length; i++) {
             (IDelegationManager.Withdrawal memory withdrawal, uint256[] memory shares) = eigenLayerDelegationManager.getQueuedWithdrawal(pendingRoots[i]);
@@ -293,12 +293,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
             for (uint256 j = 0; j < withdrawal.strategies.length; j++) {
                 address token = address(withdrawal.strategies[j].underlyingToken());
                 if (token == _token && info.elStrategy == withdrawal.strategies[j]) {
-                    amount += info.elStrategy.sharesToUnderlyingView(shares[j]);
+                    totalShares += shares[j];
                 }
             }
         }
 
-        return amount;
+        return info.elStrategy.sharesToUnderlyingView(totalShares);
     }
 
     // get the amount of token pending for redemption. e.g., pending in Lido's withdrawal queue
