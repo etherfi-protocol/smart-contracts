@@ -1,15 +1,34 @@
 {
+  "description": "Configuration details for the deployment of the EtherFiNode staking contract.",
+  "network": "Ethereum Mainnet (or specific chain ID, e.g., 1)",
   "contractName": "EtherFiNode",
+  
   "deploymentParameters": {
-    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    // Contract factory address used for deployment (e.g., CREATE2 mechanism).
+    "factory": "0x356d1b83970cef2018f2c9337cddb67dff5aef99", 
+    
+    // 32-byte salt used to pre-determine the deployed address via CREATE2.
+    // The salt value is often specific to a version or purpose.
     "salt": "0x7972bd777a339ca98eff1677484aacc816b24d87000000000000000000000000",
+    
     "constructorArgs": {
-      "_liquidityPool": "0x308861A430be4cce5502d0A12724771Fc6DaF216",
-      "_etherFiNodesManager": "0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F",
-      "_eigenPodManager": "0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338",
-      "_delegationManager": "0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A",
-      "_roleRegistry": "0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9"
+      // Address of the centralized liquidity pool contract.
+      "_liquidityPool": "0x308861a430be4cce5502d0a12724771fc6daf216", 
+      
+      // Address of the manager contract overseeing all EtherFiNode instances.
+      "_etherFiNodesManager": "0x8b71140ad2e5d1e7018d2a7f8a288bd3cd38916f",
+      
+      // Address of the EigenPod manager contract (likely for restaking mechanisms).
+      "_eigenPodManager": "0x91e677b07f7af907ec9a428aafa9fc14a0d3a338",
+      
+      // Address of the delegation manager handling staking delegation logic.
+      "_delegationManager": "0x39053d51b77dc0d36036fc1fcc8cb819df8ef37a",
+      
+      // Address of the contract handling permission management and roles.
+      "_roleRegistry": "0x62247d29b4b9becf4bb73e0c722cf6445cfc7ce9"
     }
   },
-  "deployedAddress": "0x5Dae50e686f7CB980E4d0c5E4492c56bC73eD9a2"
+  
+  // The final calculated address after successful deployment.
+  "deployedAddress": "0x5dae50e686f7cb980e4d0c5e4492c56bc73ed9a2"
 }
