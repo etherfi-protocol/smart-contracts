@@ -2,23 +2,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/EtherFiTimelock.sol";
-import "../../src/interfaces/IRoleRegistry.sol";
-import "../../src/RoleRegistry.sol";
+import "../../../src/EtherFiNodesManager.sol";
+import "../../../src/EtherFiNode.sol";
+import "../../../src/EtherFiTimelock.sol";
+import "../../../src/interfaces/IRoleRegistry.sol";
+import "../../../src/RoleRegistry.sol";
 
-import {IEigenPod, IEigenPodTypes } from "../../src/eigenlayer-interfaces/IEigenPod.sol";
-
+import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
+import "../../TestSetup.sol";
 /**
  * @title ELExitsTest
  * @notice test for EL exits
  * @dev Run with: forge test --fork-url <mainnet-rpc> --match-path test/pectra-fork-tests/EL-exits.t.sol -vvvv
  */
 
-contract ELExitsTest is Test {
+contract ELExitsTest is TestSetup {
     // === MAINNET CONTRACT ADDRESSES ===
     EtherFiNodesManager constant etherFiNodesManager = EtherFiNodesManager(payable(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F));
     RoleRegistry constant roleRegistry = RoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
@@ -33,7 +32,9 @@ contract ELExitsTest is Test {
     bytes constant PK_80194 = hex"b86cb11d564b29a38cdc8a3f1f9c35e6dcd2d0f85f40da60f745e479ba42b4548c83a2b049cf02277fceaa9b421d0039";
     bytes constant PK_89936 = hex"b8786ec7945d737698e374193f05a5498e932e2941263a7842837e9e3fac033af285e53a90afecf994585d178b5eedaa";
 
-    function setUp() public {}
+    function setUp() public {
+        initializeRealisticFork(MAINNET_FORK);
+    }
 
     function _resolvePod(bytes memory pubkey) internal view returns (IEtherFiNode etherFiNode, IEigenPod pod) {
         bytes32 pkHash = etherFiNodesManager.calculateValidatorPubkeyHash(pubkey);
