@@ -328,7 +328,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function initializeRealisticFork(uint8 forkEnum) public {
-        console.log("initializeRealisticFork");
         initializeRealisticForkWithBlock(forkEnum, 0);
     }
 
@@ -423,7 +422,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function upgradeEtherFiRedemptionManager() public {
-        console.log("upgradeEtherFiRedemptionManager");
         address ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
         EtherFiRedemptionManagerTemp EtherFiRedemptionManagerTempInstance = EtherFiRedemptionManagerTemp(payable(address(0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0)));
         EtherFiRedemptionManagerTemp tempImplementation = new EtherFiRedemptionManagerTemp(address(payable(liquidityPoolInstance)), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance));
@@ -532,12 +530,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         auctionManagerProxy = new UUPSProxy(address(auctionImplementation), "");
         auctionInstance = AuctionManager(address(auctionManagerProxy));
         auctionInstance.initialize(address(nodeOperatorManagerInstance));
-        console.log("auctionInstance", address(auctionInstance));
         auctionInstance.updateAdmin(alice, true);
 
         stakingManagerImplementation = new StakingManager(address(liquidityPoolInstance), address(managerInstance), address(depositContractEth2), address(auctionInstance), address(node), address(roleRegistryInstance));
         stakingManagerProxy = new UUPSProxy(address(stakingManagerImplementation), "");
-        console.log("stakingManagerProxy", address(stakingManagerProxy));
         stakingManagerInstance = StakingManager(address(stakingManagerProxy));
         //stakingManagerInstance.initialize(address(auctionInstance), address(mockDepositContractEth2));
         //stakingManagerInstance.updateAdmin(alice, true);

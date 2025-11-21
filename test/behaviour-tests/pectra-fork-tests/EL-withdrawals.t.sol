@@ -9,7 +9,7 @@ import "../../../src/EtherFiTimelock.sol";
 import "../../../src/interfaces/IRoleRegistry.sol";
 import "../../../src/RoleRegistry.sol";
 
-import {IEigenPod, IEigenPodTypes } from "../../../../src/eigenlayer-interfaces/IEigenPod.sol";
+import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
 import "../../TestSetup.sol";
 /**
  * @title ELExitsTest
