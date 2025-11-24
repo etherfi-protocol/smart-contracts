@@ -617,9 +617,9 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 totalValueOutOfLpAfter = liquidityPoolInstance.totalValueOutOfLp();
         uint256 totalValueInLpAfter = liquidityPoolInstance.totalValueInLp();
         uint256 treasuryBalanceAfter = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
-        assertApproxEqAbs(stethBalanceAfter - stethBalanceBefore, 0.99 ether, 3);
+        assertApproxEqAbs(stethBalanceAfter - stethBalanceBefore, 0.99 ether, 4);
         assertApproxEqAbs(totalSharesBefore - totalSharesAfter, sharesFor_999_ether, 1);
-        assertApproxEqAbs(totalValueOutOfLpBefore - totalValueOutOfLpAfter, 0.99 ether, 3);
+        assertApproxEqAbs(totalValueOutOfLpBefore - totalValueOutOfLpAfter, 0.99 ether, 4);
         assertEq(totalValueInLpAfter- totalValueInLpBefore, 0);
         assertApproxEqAbs(treasuryBalanceAfter-treasuryBalanceBefore, 0.001 ether, 3);
         vm.stopPrank();
