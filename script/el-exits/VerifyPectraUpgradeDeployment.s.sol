@@ -172,29 +172,29 @@ contract VerifyPectraUpgradeDeployment is Script {
         console2.log("=== VERIFYING COMPUTED IMPLEMENTATION ADDRESSES ===");
         console2.log("");
         if (stakingManagerImpl != NEW_STAKING_MANAGER_IMPL) {
-            console2.log(unicode"✗ StakingManager implementation mismatch");
+            console2.log("[FAIL] StakingManager implementation mismatch");
         } else {
-            console2.log(unicode"✓ StakingManager implementation matches");
+            console2.log("[OK] StakingManager implementation matches");
         }
         if (etherFiNodesManagerImpl != NEW_ETHERFI_NODES_MANAGER_IMPL) {
-            console2.log(unicode"✗ EtherFiNodesManager implementation mismatch");
+            console2.log("[FAIL] EtherFiNodesManager implementation mismatch");
         } else {
-            console2.log(unicode"✓ EtherFiNodesManager implementation matches");
+            console2.log("[OK] EtherFiNodesManager implementation matches");
         }
         if (etherFiNodeImpl != NEW_ETHERFI_NODE_IMPL) {
-            console2.log(unicode"✗ EtherFiNode implementation mismatch");
+            console2.log("[FAIL] EtherFiNode implementation mismatch");
         } else {
-            console2.log(unicode"✓ EtherFiNode implementation matches");
+            console2.log("[OK] EtherFiNode implementation matches");
         }
         if (rateLimiterProxyAddr != NEW_RATE_LIMITER_PROXY) {
-            console2.log(unicode"✗ Rate limiter implementation mismatch");
+            console2.log("[FAIL] Rate limiter implementation mismatch");
         } else {
-            console2.log(unicode"✓ Rate limiter implementation matches");
+            console2.log("[OK] Rate limiter implementation matches");
         }
         if (rateLimiterImpl != NEW_RATE_LIMITER_IMPL) {
-            console2.log(unicode"✗ Rate limiter implementation mismatch");
+            console2.log("[FAIL] Rate limiter implementation mismatch");
         } else {
-            console2.log(unicode"✓ Rate limiter implementation matches");
+            console2.log("[OK] Rate limiter implementation matches");
         }
         console2.log("");
     }
@@ -207,33 +207,33 @@ contract VerifyPectraUpgradeDeployment is Script {
 
         // Check if new functions exist (will revert if not upgraded)
         try nodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE() returns (bytes32 role) {
-            console2.log(unicode"✓ EtherFiNodesManager upgraded - EL exit role exists:", vm.toString(role));
+            console2.log("[OK] EtherFiNodesManager upgraded - EL exit role exists:", vm.toString(role));
         } catch {
-            console2.log(unicode"✗ EtherFiNodesManager not upgraded - EL exit role missing");
+            console2.log("[FAIL] EtherFiNodesManager not upgraded - EL exit role missing");
         }
 
         try nodesManager.UNRESTAKING_LIMIT_ID() returns (bytes32 limitId) {
-            console2.log(unicode"✓ EtherFiNodesManager rate limiter integration - UNRESTAKING_LIMIT_ID:", vm.toString(limitId));
+            console2.log("[OK] EtherFiNodesManager rate limiter integration - UNRESTAKING_LIMIT_ID:", vm.toString(limitId));
         } catch {
-            console2.log(unicode"✗ EtherFiNodesManager rate limiter integration missing");
+            console2.log("[FAIL] EtherFiNodesManager rate limiter integration missing");
         }
 
         try nodesManager.EXIT_REQUEST_LIMIT_ID() returns (bytes32 limitId) {
-            console2.log(unicode"✓ EtherFiNodesManager rate limiter integration - EXIT_REQUEST_LIMIT_ID:", vm.toString(limitId));
+            console2.log("[OK] EtherFiNodesManager rate limiter integration - EXIT_REQUEST_LIMIT_ID:", vm.toString(limitId));
         } catch {
-            console2.log(unicode"✗ EtherFiNodesManager rate limiter integration missing");
+            console2.log("[FAIL] EtherFiNodesManager rate limiter integration missing");
         }
 
         // Check rate limiter address integration
         if (RATE_LIMITER_PROXY != address(0)) {
             try nodesManager.rateLimiter() returns (IEtherFiRateLimiter limiter) {
                 if (address(limiter) == RATE_LIMITER_PROXY) {
-                    console2.log(unicode"✓ Rate limiter correctly integrated:", address(limiter));
+                    console2.log("[OK] Rate limiter correctly integrated:", address(limiter));
                 } else {
-                    console2.log(unicode"✗ Rate limiter mismatch - expected:", RATE_LIMITER_PROXY, "got:", address(limiter));
+                    console2.log("[FAIL] Rate limiter mismatch - expected:", RATE_LIMITER_PROXY, "got:", address(limiter));
                 }
             } catch {
-                console2.log(unicode"✗ Rate limiter integration not accessible");
+                console2.log("[FAIL] Rate limiter integration not accessible");
             }
         }
 
@@ -250,12 +250,12 @@ contract VerifyPectraUpgradeDeployment is Script {
         try nodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE() returns (bytes32 elTriggerExitRole) {
             bool hasRole = roleRegistry.hasRole(elTriggerExitRole, EL_TRIGGER_EXITER);
             if (hasRole) {
-                console2.log(unicode"✓ EL Trigger Exit role assigned to:", EL_TRIGGER_EXITER);
+                console2.log("[OK] EL Trigger Exit role assigned to:", EL_TRIGGER_EXITER);
             } else {
-                console2.log(unicode"✗ EL Trigger Exit role NOT assigned to:", EL_TRIGGER_EXITER);
+                console2.log("[FAIL] EL Trigger Exit role NOT assigned to:", EL_TRIGGER_EXITER);
             }
         } catch {
-            console2.log(unicode"✗ Cannot check EL Trigger Exit role - contract not upgraded?");
+            console2.log("[FAIL] Cannot check EL Trigger Exit role - contract not upgraded?");
         }
 
         // Check Rate Limiter Admin Role
@@ -264,12 +264,12 @@ contract VerifyPectraUpgradeDeployment is Script {
             try rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE() returns (bytes32 rateLimiterAdminRole) {
                 bool hasRole = roleRegistry.hasRole(rateLimiterAdminRole, ETHERFI_OPERATING_ADMIN);
                 if (hasRole) {
-                    console2.log(unicode"✓ Rate Limiter Admin role assigned to:", ETHERFI_OPERATING_ADMIN);
+                    console2.log("[OK] Rate Limiter Admin role assigned to:", ETHERFI_OPERATING_ADMIN);
                 } else {
-                    console2.log(unicode"✗ Rate Limiter Admin role NOT assigned to:", ETHERFI_OPERATING_ADMIN);
+                    console2.log("[FAIL] Rate Limiter Admin role NOT assigned to:", ETHERFI_OPERATING_ADMIN);
                 }
             } catch {
-                console2.log(unicode"✗ Cannot check Rate Limiter Admin role");
+                console2.log("[FAIL] Cannot check Rate Limiter Admin role");
             }
         }
 
@@ -277,9 +277,9 @@ contract VerifyPectraUpgradeDeployment is Script {
         bytes32 nodesManagerAdminRole = nodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE();
         bool hasAdminRole = roleRegistry.hasRole(nodesManagerAdminRole, ETHERFI_ADMIN);
         if (hasAdminRole) {
-            console2.log(unicode"✓ Nodes Manager Admin role assigned to:", ETHERFI_ADMIN);
+            console2.log("[OK] Nodes Manager Admin role assigned to:", ETHERFI_ADMIN);
         } else {
-            console2.log(unicode"✗ Nodes Manager Admin role NOT assigned to:", ETHERFI_ADMIN);
+            console2.log("[FAIL] Nodes Manager Admin role NOT assigned to:", ETHERFI_ADMIN);
         }
 
         console2.log("");
@@ -295,18 +295,18 @@ contract VerifyPectraUpgradeDeployment is Script {
 
         // Check EL-triggered withdrawal function
         bytes4 selector1 = nodesManager.requestExecutionLayerTriggeredWithdrawal.selector;
-        console2.log(unicode"✓ requestExecutionLayerTriggeredWithdrawal exists:", vm.toString(selector1));
+        console2.log("[OK] requestExecutionLayerTriggeredWithdrawal exists:", vm.toString(selector1));
 
         // Check consolidation function
         bytes4 selector2 = nodesManager.requestConsolidation.selector;
-        console2.log(unicode"✓ requestConsolidation exists:", vm.toString(selector2));
+        console2.log("[OK] requestConsolidation exists:", vm.toString(selector2));
 
         // Check new call forwarding functions
         bytes4 selector3 = nodesManager.updateAllowedForwardedEigenpodCalls.selector;
-        console2.log(unicode"✓ updateAllowedForwardedEigenpodCalls (user-specific) exists:", vm.toString(selector3));
+        console2.log("[OK] updateAllowedForwardedEigenpodCalls (user-specific) exists:", vm.toString(selector3));
 
         bytes4 selector4 = nodesManager.updateAllowedForwardedExternalCalls.selector;
-        console2.log(unicode"✓ updateAllowedForwardedExternalCalls (user-specific) exists:", vm.toString(selector4));
+        console2.log("[OK] updateAllowedForwardedExternalCalls (user-specific) exists:", vm.toString(selector4));
 
         console2.log("");
     }
@@ -318,14 +318,14 @@ contract VerifyPectraUpgradeDeployment is Script {
         console2.log("");
         
         console2.log("Verified Components:");
-        console2.log(unicode"✓ Contract upgrade verification");
-        console2.log(unicode"✓ Role assignment verification");
+        console2.log("[OK] Contract upgrade verification");
+        console2.log("[OK] Role assignment verification");
         if (RATE_LIMITER_PROXY != address(0)) {
-            console2.log(unicode"✓ Rate limiter configuration verification");
+            console2.log("[OK] Rate limiter configuration verification");
         } else {
-            console2.log(unicode"⚠ Rate limiter verification skipped (address not provided)");
+            console2.log("[WARN] Rate limiter verification skipped (address not provided)");
         }
-        console2.log(unicode"✓ New functionality availability verification");
+        console2.log("[OK] New functionality availability verification");
         console2.log("");
         
         console2.log("Key Addresses Verified:");
@@ -350,7 +350,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         console2.log("5. Verify old whitelist mappings are cleared");
         console2.log("");
         
-        console2.log(unicode"✓ EIP-7002 deployment verification complete!");
+        console2.log("[OK] EIP-7002 deployment verification complete!");
     }
 
     // Helper function to check specific rate limiter address
