@@ -5,6 +5,7 @@ import "forge-std/Script.sol";
 import {LiquidityPool} from "../../src/LiquidityPool.sol";
 import {StakingManager} from "../../src/StakingManager.sol";
 import {EtherFiNodesManager} from "../../src/EtherFiNodesManager.sol";
+import {EtherFiRestaker} from "../../src/EtherFiRestaker.sol";
 
 interface ICreate2Factory {
     function deploy(bytes memory code, bytes32 salt) external payable returns (address);
@@ -18,6 +19,7 @@ contract DeployValidatorKeyGen is Script {
     address stakingManagerImpl;
     address liquidityPoolImpl;
     address etherFiNodesManagerImpl;
+    address etherFiRestakerImpl;
     bytes32 commitHashSalt = bytes32(bytes20(hex"700dc0d12131a52a6c530b7550842ead4bb0a834"));
 
     // === MAINNET CONTRACT ADDRESSES ===
@@ -29,6 +31,7 @@ contract DeployValidatorKeyGen is Script {
     address constant ROLE_REGISTRY = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
     address constant ETH_DEPOSIT_CONTRACT = 0x00000000219ab540356cBB839Cbe05303d7705Fa;
     address constant RATE_LIMITER_PROXY = 0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8;
+    address constant REWARDS_COORDINATOR = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
 
     function run() public {
         console2.log("================================================");
@@ -36,7 +39,8 @@ contract DeployValidatorKeyGen is Script {
         console2.log("================================================");
         console2.log("");
 
-        vm.startBroadcast();
+        // vm.startBroadcast();
+        vm.startPrank(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC);
 
         console2.log("Deploying StakingManager implementation...");
         // StakingManager
@@ -82,7 +86,21 @@ contract DeployValidatorKeyGen is Script {
             );
             etherFiNodesManagerImpl = deployCreate2(contractName, constructorArgs, bytecode, commitHashSalt, true);
         }
-        vm.stopBroadcast();
+
+        // EtherFiRestaker
+        {
+            string memory contractName = "EtherFiRestaker";
+            bytes memory constructorArgs = abi.encode(
+                REWARDS_COORDINATOR
+            );
+            bytes memory bytecode = abi.encodePacked(
+                type(EtherFiRestaker).creationCode,
+                constructorArgs
+            );
+            etherFiRestakerImpl = deployCreate2(contractName, constructorArgs, bytecode, commitHashSalt, true);
+        }
+        // vm.stopBroadcast();
+        vm.stopPrank();
     }
 
     // === CREATE2 DEPLOYMENT HELPER (following DeployV3Prelude pattern) ===
