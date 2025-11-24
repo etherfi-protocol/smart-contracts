@@ -36,6 +36,7 @@ contract ValidatorKeyGenTransactions is Script {
     address constant LIQUIDITY_POOL_PROXY = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
     address constant ETHERFI_NODES_MANAGER_PROXY = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
     address constant ROLE_REGISTRY = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
+    address constant ETHERFI_RESTAKER_PROXY = 0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf;
     NodeOperatorManager public constant nodeOperatorManager = NodeOperatorManager(0xd5edf7730ABAd812247F6F54D7bd31a52554e35E);
     AuctionManager public constant auctionManager = AuctionManager(0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9);
     RoleRegistry public constant roleRegistry = RoleRegistry(ROLE_REGISTRY);
@@ -46,6 +47,7 @@ contract ValidatorKeyGenTransactions is Script {
     address constant stakingManagerImpl = 0xF73996bceDE56AD090024F2Fd4ca545A3D06c8E3;
     address constant liquidityPoolImpl = 0x4C6767A0afDf06c55DAcb03cB26aaB34Eed281fc;
     address constant etherFiNodesManagerImpl = 0x69B35625A66424cBA28bEd328E1CbFD239714cD7;
+    address constant etherFiRestakerImpl = 0x6fDF76c039654f46b9d7e851Fb8135569080C033;
 
     bytes32 public LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE;
     bytes32 public ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE;
@@ -83,9 +85,9 @@ contract ValidatorKeyGenTransactions is Script {
         console2.log("Executing Upgrade");
         console2.log("================================================");
 
-        address[] memory targets = new address[](7);
-        bytes[] memory data = new bytes[](7);
-        uint256[] memory values = new uint256[](7); // Default to 0
+        address[] memory targets = new address[](8);
+        bytes[] memory data = new bytes[](8);
+        uint256[] memory values = new uint256[](8); // Default to 0
         
         //--------------------------------------------------------------------------------------
         //------------------------------- CONTRACT UPGRADES  -----------------------------------
@@ -99,27 +101,29 @@ contract ValidatorKeyGenTransactions is Script {
         targets[2] = ETHERFI_NODES_MANAGER_PROXY;
         data[2] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiNodesManagerImpl);
 
+        targets[3] = ETHERFI_RESTAKER_PROXY;
+        data[3] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiRestakerImpl);
         //--------------------------------------------------------------------------------------
         //---------------------------------- Grant Roles ---------------------------------------
         //--------------------------------------------------------------------------------------
 
-        targets[3] = ROLE_REGISTRY;
-        data[3] = _encodeRoleGrant(
+        targets[4] = ROLE_REGISTRY;
+        data[4] = _encodeRoleGrant(
             LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE,
             ETHERFI_OPERATING_ADMIN
         );
-        targets[4] = ROLE_REGISTRY;
-        data[4] = _encodeRoleGrant(
+        targets[5] = ROLE_REGISTRY;
+        data[5] = _encodeRoleGrant(
             ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE,
             address(stakingManager)
         );
-        targets[5] = ROLE_REGISTRY;
-        data[5] = _encodeRoleGrant(
+        targets[6] = ROLE_REGISTRY;
+        data[6] = _encodeRoleGrant(
             STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE,
             realElExiter
         );
-        targets[6] = ROLE_REGISTRY;
-        data[6] = _encodeRoleGrant(
+        targets[7] = ROLE_REGISTRY;
+        data[7] = _encodeRoleGrant(
             ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE,
             realElExiter
         );
