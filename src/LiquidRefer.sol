@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.22;
 
-import {UUPSUpgradeable} from "lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {Initializable} from "lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC20Permit} from "lib/openzeppelin-contracts/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import {SafeERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ILayerZeroTellerWithRateLimiting} from "./liquid-interfaces/ILayerZeroTellerWithRateLimiting.sol";
+import {PausableUpgradeable} from "lib/openzeppelin-contracts-upgradeable/contracts/security/PausableUpgradeable.sol";
 
-contract LiquidRefer is Initializable, UUPSUpgradeable, OwnableUpgradeable {
+
+contract LiquidRefer is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable {
     using SafeERC20 for IERC20;
 
     event Referral(address indexed vault, address indexed referrer, uint256 amount);
@@ -19,8 +21,9 @@ contract LiquidRefer is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         _disableInitializers();
     }
 
-    function initialize() public initializer {
+    function initialize(address owner) public initializer {
         __Ownable_init();
+        transferOwnership(owner);
     }
 
     function deposit(
@@ -69,5 +72,10 @@ contract LiquidRefer is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit Referral(vault, referrer, depositAmount);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+   function _authorizeUpgrade(address /* newImplementation */) internal view override {
+        _checkOwner();
+    }
+     function getImplementation() external view returns (address) {
+        return _getImplementation();
+    }
 }

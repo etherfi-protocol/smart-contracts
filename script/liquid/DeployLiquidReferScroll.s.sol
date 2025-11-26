@@ -6,71 +6,57 @@ import "forge-std/console.sol";
 import "forge-std/StdJson.sol";
 import  "src/LiquidRefer.sol";
 import "../../src/UUPSProxy.sol";
-
-interface ICreate2Factory {
-    function deploy(bytes memory code, bytes32 salt) external payable returns (address);
-    function verify(address addr, bytes32 salt, bytes memory code) external view returns (bool);
-    function computeAddress(bytes32 salt, bytes memory code) external view returns (address);
-}
+import "../Create2Factory.sol";
 
 /**
- * @title Deploy WeETH Withdraw Adapter
- * @notice Deploys the WeETHWithdrawAdapter implementation and UUPS proxy using Create2Factory
- * 
+ * @title Deploy LiquidRefer on Scroll
+ * @notice Deploys the LiquidRefer implementation and UUPS proxy using Create2Factory on Scroll
+ *
  * This script will:
  * 1. Compute and display predicted deployment addresses (deterministic across all chains)
- * 2. Deploy the WeETHWithdrawAdapter implementation using Create2
+ * 2. Deploy the LiquidRefer implementation using Create2
  * 3. Deploy the UUPSProxy with initialization using Create2
- * 4. Transfer ownership to the EtherFi Timelock
+ * 4. Set ownership to the Scroll Contract Controller
  * 5. Verify the deployment
  * 6. Save deployment logs to ./deployment/{contractName}/{timestamp}.json
- * 
+ *
  * Key Features:
  * - Uses Create2Factory (0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99) for deterministic addresses
- * - Same addresses across all EVM chains (Mainnet, Base, Arbitrum, etc.)
- * - Commit hash salt: 5bb56076faac983d51c2145b4de117335f6e4fa5
- * 
+ * - Same addresses across all EVM chains (Mainnet, Scroll, Base, Arbitrum, etc.)
+ *
  * Usage:
- * 
+ *
  * 1. Dry run (compute addresses without deploying):
- *    forge script ./script/DeployWeETHWithdrawAdapter.s.sol:DeployWeETHWithdrawAdapter
+ *    forge script ./script/liquid/DeployLiquidReferScroll.s.sol:DeployLiquidReferScroll
  *    Note: Will fail at deployment step but shows predicted addresses
- * 
- * 2. Mainnet deployment:
- *    source .env && forge script ./script/DeployWeETHWithdrawAdapter.s.sol:DeployWeETHWithdrawAdapter \
- *      --rpc-url $MAINNET_RPC_URL \
+ *
+ * 2. Scroll deployment:
+ *    source .env && forge script ./script/liquid/DeployLiquidReferScroll.s.sol:DeployLiquidReferScroll \
+ *      --rpc-url $SCROLL_RPC_URL \
  *      --broadcast \
  *      --verify \
- *      --etherscan-api-key $ETHERSCAN_API_KEY \
+ *      --verifier-url https://api.scrollscan.com/api \
+ *      --etherscan-api-key $SCROLLSCAN_API_KEY \
  *      --slow \
  *      -vvvv
- * 
- * 3. Other chains (Base, Arbitrum, etc.):
- *    forge script ./script/DeployWeETHWithdrawAdapter.s.sol:DeployWeETHWithdrawAdapter \
- *      --rpc-url $CHAIN_RPC_URL \
- *      --broadcast \
- *      --verify \
- *      -vvvv
- * 
+ *
  * Important: The contract addresses MUST match across all chains for the deployment to work.
- *            Update the constants if deploying to chains with different addresses.
  */
-contract DeployWeETHWithdrawAdapter is Script {
+contract DeployLiquidReferScroll is Script {
     using stdJson for string;
-    
-    // Create2Factory address (same as in DeployV3Prelude.s.sol)
-    ICreate2Factory constant factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
 
-    // Mainnet contract controller (owner)
-    address constant mainnetContractController = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
+    // Create2Factory - will be deployed in this script
+    Create2Factory public factory;
+
+    // Scroll contract controller (owner)
+    address constant scrollContractController = 0x3cD08f51D0EA86ac93368DE31822117cd70CECA3;
 
     // Salt - sha256sum of src/LiquidRefer.sol
-    bytes32 commitHashSalt = bytes32((hex"da57a51d4edaff4a8ab070f9c5691910280f3c577c7667fc3d97555e9ec0fa04")); 
+    bytes32 commitHashSalt = bytes32((hex"da57a51d4edaff4a8ab070f9c5691910280f3c577c7667fc3d97555e9ec0fa04"));
 
     function run() external {
         console.log("\n========================================");
-        console.log("LiquidRefer Deployment");
-        console.log("Using Create2Factory for deterministic addresses");
+        console.log("LiquidRefer Scroll Deployment");
         console.log("========================================\n");
 
         // Load deployer private key
@@ -78,19 +64,26 @@ contract DeployWeETHWithdrawAdapter is Script {
         address deployer = vm.addr(deployerPrivateKey);
         console.log("Deployer address:", deployer);
 
+        // Start deployment
+        vm.startBroadcast(deployerPrivateKey);
+
+        // Step 1: Deploy Create2Factory
+        console.log("\n--- Step 1: Deploying Create2Factory ---");
+        factory = new Create2Factory();
+        console.log("Create2Factory deployed at:", address(factory));
+        saveCreate2FactoryLog(address(factory));
+
         // Display addresses for verification
         displayAddresses();
-        
+
         // Compute and display predicted addresses
         console.log("\n========================================");
         console.log("Predicted Deployment Addresses");
         console.log("========================================");
         computePredictedAddresses();
-        
-        // Start deployment
-        vm.startBroadcast(deployerPrivateKey);
-        
-        // Deploy LiquidRefer implementation
+
+        // Step 2: Deploy LiquidRefer implementation
+        console.log("\n--- Step 2: Deploying LiquidRefer Implementation ---");
         address implementationAddress;
         {
             string memory contractName = "LiquidRefer_Implementation";
@@ -101,14 +94,15 @@ contract DeployWeETHWithdrawAdapter is Script {
             verifyContract(implementationAddress, bytecode, commitHashSalt);
         }
 
-        // Deploy UUPSProxy
+        // Step 3: Deploy UUPSProxy
+        console.log("\n--- Step 3: Deploying LiquidRefer Proxy ---");
         {
             string memory contractName = "LiquidRefer_Proxy";
 
-            // Prepare initialization data with mainnet contract controller as initial owner
+            // Prepare initialization data with scroll contract controller as initial owner
             bytes memory initializerData = abi.encodeWithSelector(
                 LiquidRefer.initialize.selector,
-                mainnetContractController
+                scrollContractController
             );
 
             bytes memory constructorArgs = abi.encode(
@@ -125,24 +119,24 @@ contract DeployWeETHWithdrawAdapter is Script {
             // Wrap proxy in implementation interface
             LiquidRefer liquidRefer = LiquidRefer(proxyAddress);
 
-            // Verify ownership is already set to mainnet contract controller (no transfer needed)
+            // Verify ownership is already set to scroll contract controller (no transfer needed)
             console.log("\nVerifying ownership...");
             address currentOwner = liquidRefer.owner();
-            require(currentOwner == mainnetContractController, "Owner should be mainnet contract controller");
-            console.log("Owner correctly set to mainnet contract controller:", currentOwner);
+            require(currentOwner == scrollContractController, "Owner should be scroll contract controller");
+            console.log("Owner correctly set to scroll contract controller:", currentOwner);
 
             // Final verification
             console.log("\nVerifying deployment...");
             verifyDeployment(liquidRefer, implementationAddress);
         }
-        
+
         vm.stopBroadcast();
     }
-    
+
     function displayAddresses() internal view {
-        console.log("\nUsing Mainnet Contract Addresses:");
+        console.log("\nUsing Scroll Contract Addresses:");
         console.log("-------------------");
-        console.log("Contract Controller:", mainnetContractController);
+        console.log("Contract Controller:", scrollContractController);
         console.log("\nCreate2Factory:     ", address(factory));
         console.log("Commit Hash Salt:   ", vm.toString(commitHashSalt));
     }
@@ -155,10 +149,10 @@ contract DeployWeETHWithdrawAdapter is Script {
         address predictedImpl = factory.computeAddress(commitHashSalt, implBytecode);
         console.log("Implementation:     ", predictedImpl);
 
-        // Compute proxy address (with mainnet contract controller as initial owner)
+        // Compute proxy address (with scroll contract controller as initial owner)
         bytes memory initializerData = abi.encodeWithSelector(
             LiquidRefer.initialize.selector,
-            mainnetContractController
+            scrollContractController
         );
         bytes memory proxyConstructorArgs = abi.encode(
             predictedImpl,
@@ -170,11 +164,11 @@ contract DeployWeETHWithdrawAdapter is Script {
         );
         address predictedProxy = factory.computeAddress(commitHashSalt, proxyBytecode);
         console.log("Proxy:              ", predictedProxy);
-        console.log("Initial Owner:      ", mainnetContractController);
+        console.log("Initial Owner:      ", scrollContractController);
         console.log("-------------------");
         console.log("Note: These addresses are deterministic across all EVM chains");
     }
-    
+
     function deployContract(
         string memory contractName,
         bytes memory constructorArgs,
@@ -184,25 +178,25 @@ contract DeployWeETHWithdrawAdapter is Script {
         address predictedAddress = factory.computeAddress(salt, bytecode);
         console.log("\nDeploying", contractName);
         console.log("Predicted address:", predictedAddress);
-        
+
         address deployedAddress = factory.deploy(bytecode, salt);
         require(deployedAddress == predictedAddress, "Deployment address mismatch");
-        
+
         console.log("Deployed at:", deployedAddress);
-        
+
         // Save deployment log
         saveDeploymentLog(contractName, deployedAddress, constructorArgs, salt);
-        
+
         return deployedAddress;
     }
-    
+
     function verifyContract(address addr, bytes memory bytecode, bytes32 salt) internal view returns (bool) {
         bool verified = factory.verify(addr, salt, bytecode);
         require(verified, "Contract verification failed");
         console.log("Verification: PASS");
         return verified;
     }
-    
+
     function saveDeploymentLog(
         string memory contractName,
         address deployedAddress,
@@ -212,6 +206,7 @@ contract DeployWeETHWithdrawAdapter is Script {
         string memory deployLog = string.concat(
             "{\n",
             '  "contractName": "', contractName, '",\n',
+            '  "network": "scroll",\n',
             '  "deploymentParameters": {\n',
             '    "factory": "', vm.toString(address(factory)), '",\n',
             '    "salt": "', vm.toString(salt), '",\n',
@@ -220,22 +215,46 @@ contract DeployWeETHWithdrawAdapter is Script {
             '  "deployedAddress": "', vm.toString(deployedAddress), '"\n',
             "}"
         );
-        
+
         string memory root = vm.projectRoot();
         string memory logFileDir = string.concat(root, "/deployment/", contractName);
         vm.createDir(logFileDir, true);
-        
+
         string memory logFileName = string.concat(
             logFileDir,
-            "/",
+            "/scroll-",
             getTimestampString(),
             ".json"
         );
         vm.writeFile(logFileName, deployLog);
-        
+
         console.log("Deployment log saved to:", logFileName);
     }
-    
+
+    function saveCreate2FactoryLog(address deployedAddress) internal {
+        string memory deployLog = string.concat(
+            "{\n",
+            '  "contractName": "Create2Factory",\n',
+            '  "network": "scroll",\n',
+            '  "deployedAddress": "', vm.toString(deployedAddress), '"\n',
+            "}"
+        );
+
+        string memory root = vm.projectRoot();
+        string memory logFileDir = string.concat(root, "/deployment/Create2Factory");
+        vm.createDir(logFileDir, true);
+
+        string memory logFileName = string.concat(
+            logFileDir,
+            "/scroll-",
+            getTimestampString(),
+            ".json"
+        );
+        vm.writeFile(logFileName, deployLog);
+
+        console.log("Deployment log saved to:", logFileName);
+    }
+
     function verifyDeployment(LiquidRefer liquidRefer, address implementationAddress) internal view {
         console.log("-------------------");
 
@@ -243,8 +262,8 @@ contract DeployWeETHWithdrawAdapter is Script {
         require(!liquidRefer.paused(), "Contract should not be paused");
         console.log("[PASS] Contract is not paused");
 
-        require(liquidRefer.owner() == mainnetContractController, "Owner should be mainnet contract controller");
-        console.log("[PASS] Owner is mainnet contract controller");
+        require(liquidRefer.owner() == scrollContractController, "Owner should be scroll contract controller");
+        console.log("[PASS] Owner is scroll contract controller");
 
         // Verify implementation
         address actualImpl = liquidRefer.getImplementation();
@@ -253,7 +272,7 @@ contract DeployWeETHWithdrawAdapter is Script {
 
         console.log("\n[PASS] All verifications passed!");
     }
-    
+
     function getTimestampString() internal view returns (string memory) {
         uint256 ts = block.timestamp;
         string memory year = vm.toString((ts / 31536000) + 1970);
@@ -264,9 +283,8 @@ contract DeployWeETHWithdrawAdapter is Script {
         string memory second = pad(vm.toString(ts % 60));
         return string.concat(year, "-", month, "-", day, "-", hour, "-", minute, "-", second);
     }
-    
+
     function pad(string memory n) internal pure returns (string memory) {
         return bytes(n).length == 1 ? string.concat("0", n) : n;
     }
 }
-
