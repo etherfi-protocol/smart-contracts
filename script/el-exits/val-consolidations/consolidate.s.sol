@@ -18,9 +18,8 @@ import "../../../src/eigenlayer-interfaces/IEigenPod.sol";
  * 
  * Usage:
    forge script script/el-exits/val-consolidations/consolidate.s.sol:ConsolidateValidators \
-     --rpc-url $MAINNET_RPC_URL \
+     --fork-url $MAINNET_RPC_URL \
      -- --fs script/el-exits/val-consolidations \
-     --broadcast \
      -vvvv
 */
 
@@ -36,7 +35,8 @@ contract ConsolidateValidators is Script, Utils {
         console2.log("=== CONSOLIDATION SCRIPT ===");
         
         // Parse validators from JSON
-        (bytes[] memory pubkeys, uint256[] memory ids, address targetEigenPod) = _parseValidatorsFromJson();
+        // (bytes[] memory pubkeys, uint256[] memory ids, address targetEigenPod) = _parseValidatorsFromJson();
+        (bytes[] memory pubkeys, uint256[] memory ids, address targetEigenPod) = _parseValidatorsFromConsolidateTwoJson();
         
         console2.log("Found", pubkeys.length, "validators");
         
@@ -49,14 +49,13 @@ contract ConsolidateValidators is Script, Utils {
         _linkLegacyValidatorIds(ids, pubkeys);
         
         // Verify target pod
-        (IEtherFiNode firstNode, IEigenPod targetPod) = _resolvePod(pubkeys[0]);
+        (, IEigenPod targetPod) = _resolvePod(pubkeys[0]);
         require(address(targetPod) != address(0), "First validator has no pod");
         require(address(targetPod) == targetEigenPod, "Pod address mismatch");
         
-        console2.log("Target EigenPod:", address(targetPod));
 
-        // Split into 4 batches: 350, 300, 180, 173
-        uint256[4] memory batchSizes = [uint256(350), 300, 180, 173];
+        // Split into 4 batches: 350, 300, 180, 150
+        uint256[4] memory batchSizes = [uint256(350), 300, 180, 150];
         uint256 startIndex = 0;
         
         for (uint256 batchNum = 0; batchNum < 4; batchNum++) {
@@ -180,6 +179,28 @@ contract ConsolidateValidators is Script, Utils {
             pubkeys[validatorCount] = pubkey;
             ids[validatorCount] = id;
             validatorCount++;
+        }
+    }
+
+    function _parseValidatorsFromConsolidateTwoJson() internal view returns (bytes[] memory pubkeys, uint256[] memory ids, address targetEigenPod) {
+        string memory root = vm.projectRoot();
+        string memory jsonFilePath = string.concat(
+            root,
+            "/script/el-exits/val-consolidations/consolidation-two.json"
+        );
+        string memory jsonData = vm.readFile(jsonFilePath);
+        bytes memory withdrawalCredentials = stdJson.readBytes(jsonData, "$[0].withdrawal_credentials");
+        targetEigenPod = address(uint160(uint256(bytes32(withdrawalCredentials))));
+        console2.log("Target EigenPod from withdrawal credentials:", targetEigenPod);
+        uint256 validatorCount = 980; // 980 validators in the consolidation-two.json file
+
+        pubkeys = new bytes[](validatorCount);
+        ids = new uint256[](validatorCount);
+
+        for (uint256 i = 0; i < validatorCount; i++) {
+            string memory basePath = string.concat("$[", vm.toString(i), "]");
+            ids[i] = stdJson.readUint(jsonData, string.concat(basePath, ".id"));
+            pubkeys[i] = stdJson.readBytes(jsonData, string.concat(basePath, ".pubkey"));
         }
     }
 
