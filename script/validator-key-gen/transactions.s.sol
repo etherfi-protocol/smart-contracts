@@ -47,7 +47,7 @@ contract ValidatorKeyGenTransactions is Script {
     address constant stakingManagerImpl = 0xF73996bceDE56AD090024F2Fd4ca545A3D06c8E3;
     address constant liquidityPoolImpl = 0x4C6767A0afDf06c55DAcb03cB26aaB34Eed281fc;
     address constant etherFiNodesManagerImpl = 0x69B35625A66424cBA28bEd328E1CbFD239714cD7;
-    address constant etherFiRestakerImpl = 0x6fDF76c039654f46b9d7e851Fb8135569080C033;
+    address constant etherFiRestakerImpl = 0x2BbeA11Cc05A836D9a55680966767b03c6FF0527;
 
     bytes32 public LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE;
     bytes32 public ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE;
@@ -79,6 +79,7 @@ contract ValidatorKeyGenTransactions is Script {
         executeUpgrade();
         forkTestOne();
         forkTestTwo();
+        forkTestThree();
     }
 
     function executeUpgrade() public {
@@ -275,6 +276,18 @@ contract ValidatorKeyGenTransactions is Script {
         etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
         
         console2.log("EOA successfully requested consolidation");
+        console2.log("================================================");
+        console2.log("");
+    }
+
+    function forkTestThree() public {
+        console2.log("Forking Test Three");
+        console2.log("================================================");
+        console2.log("");
+
+        require(EtherFiRestaker(payable(ETHERFI_RESTAKER_PROXY)).isDelegated(), "Can't find EigenLayer Delegation Manager");
+
+        console2.log("Forking Test Three completed successfully");
         console2.log("================================================");
         console2.log("");
     }

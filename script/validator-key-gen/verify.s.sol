@@ -31,7 +31,7 @@ contract VerifyValidatorKeyGen is Script {
     address constant STAKING_MANAGER_PROXY = 0x25e821b7197B146F7713C3b89B6A4D83516B912d;
     address constant LIQUIDITY_POOL_PROXY = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
     address constant ETHERFI_NODES_MANAGER_PROXY = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
-    address constant ETHERFI_RESTAKER_PROXY = 0x6fDF76c039654f46b9d7e851Fb8135569080C033;
+    address constant ETHERFI_RESTAKER_PROXY = 0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf;
 
     address constant AUCTION_MANAGER = 0x00C452aFFee3a17d9Cecc1Bcd2B8d5C7635C4CB9;
     address constant ETHERFI_NODE_BEACON = 0x3c55986Cfee455E2533F4D29006634EcF9B7c03F;
@@ -39,7 +39,8 @@ contract VerifyValidatorKeyGen is Script {
     address constant ETH_DEPOSIT_CONTRACT = 0x00000000219ab540356cBB839Cbe05303d7705Fa;
     address constant RATE_LIMITER_PROXY = 0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8;
     address constant REWARDS_COORDINATOR = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
-
+    address constant ETHERFI_REDEMPTION_MANAGER = 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0;
+    
     address constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
     address constant realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
 
@@ -50,7 +51,7 @@ contract VerifyValidatorKeyGen is Script {
     StakingManager stakingManager = StakingManager(STAKING_MANAGER_PROXY);
     address constant ETHERFI_NODES_MANAGER_IMPL = 0x69B35625A66424cBA28bEd328E1CbFD239714cD7;
     EtherFiNodesManager etherFiNodesManager = EtherFiNodesManager(ETHERFI_NODES_MANAGER_PROXY);
-    address constant ETHERFI_RESTAKER_IMPL = 0x6fDF76c039654f46b9d7e851Fb8135569080C033;
+    address constant ETHERFI_RESTAKER_IMPL = 0x2BbeA11Cc05A836D9a55680966767b03c6FF0527;
     EtherFiRestaker constant etherFiRestaker = EtherFiRestaker(payable(ETHERFI_RESTAKER_PROXY));
 
     RoleRegistry constant roleRegistry = RoleRegistry(ROLE_REGISTRY);
@@ -77,7 +78,7 @@ contract VerifyValidatorKeyGen is Script {
         LiquidityPool newLiquidityPoolImplementation = new LiquidityPool();
         StakingManager newStakingManagerImplementation = new StakingManager(address(LIQUIDITY_POOL_PROXY), address(ETHERFI_NODES_MANAGER_PROXY), address(ETH_DEPOSIT_CONTRACT), address(AUCTION_MANAGER), address(ETHERFI_NODE_BEACON), address(ROLE_REGISTRY));
         EtherFiNodesManager newEtherFiNodesManagerImplementation = new EtherFiNodesManager(address(STAKING_MANAGER_PROXY), address(ROLE_REGISTRY), address(RATE_LIMITER_PROXY));
-        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(REWARDS_COORDINATOR));
+        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER));
 
         contractCodeChecker.verifyContractByteCodeMatch(LIQUIDITY_POOL_IMPL, address(newLiquidityPoolImplementation));
         contractCodeChecker.verifyContractByteCodeMatch(STAKING_MANAGER_IMPL, address(newStakingManagerImplementation));
@@ -123,7 +124,7 @@ contract VerifyValidatorKeyGen is Script {
 
         // EtherFiRestaker
         {
-            bytes memory constructorArgs = abi.encode(REWARDS_COORDINATOR);
+            bytes memory constructorArgs = abi.encode(REWARDS_COORDINATOR, ETHERFI_REDEMPTION_MANAGER);
             bytes memory bytecode = abi.encodePacked(
                 type(EtherFiRestaker).creationCode,
                 constructorArgs
@@ -150,6 +151,7 @@ contract VerifyValidatorKeyGen is Script {
             require(roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager)), "StakingManager does not have ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
             require(roleRegistry.hasRole(stakingManagerImplementation.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), realElExiter), "realElExiter does not have STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE");
             require(roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), realElExiter), "realElExiter does not have ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
+            require(EtherFiRestaker(payable(ETHERFI_RESTAKER_PROXY)).isDelegated(), "Can't find EigenLayer Delegation Manager");
         }
 
         // Verify that the new functionality is exists and is role restricted
