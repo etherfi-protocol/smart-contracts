@@ -32,7 +32,8 @@ contract DeployValidatorKeyGen is Script {
     address constant ETH_DEPOSIT_CONTRACT = 0x00000000219ab540356cBB839Cbe05303d7705Fa;
     address constant RATE_LIMITER_PROXY = 0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8;
     address constant REWARDS_COORDINATOR = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
-
+    address constant ETHERFI_REDEMPTION_MANAGER = 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0;
+    
     function run() public {
         console2.log("================================================");
         console2.log("======================== Running Deploy Validator Key Gen ========================");
@@ -42,7 +43,6 @@ contract DeployValidatorKeyGen is Script {
         // vm.startBroadcast();
         vm.startPrank(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC);
 
-        console2.log("Deploying StakingManager implementation...");
         // StakingManager
         {
             string memory contractName = "StakingManager";
@@ -91,7 +91,8 @@ contract DeployValidatorKeyGen is Script {
         {
             string memory contractName = "EtherFiRestaker";
             bytes memory constructorArgs = abi.encode(
-                REWARDS_COORDINATOR
+                REWARDS_COORDINATOR,
+                ETHERFI_REDEMPTION_MANAGER
             );
             bytes memory bytecode = abi.encodePacked(
                 type(EtherFiRestaker).creationCode,
@@ -99,8 +100,8 @@ contract DeployValidatorKeyGen is Script {
             );
             etherFiRestakerImpl = deployCreate2(contractName, constructorArgs, bytecode, commitHashSalt, true);
         }
-        // vm.stopBroadcast();
-        vm.stopPrank();
+        vm.stopBroadcast();
+        // vm.stopPrank();
     }
 
     // === CREATE2 DEPLOYMENT HELPER (following DeployV3Prelude pattern) ===
