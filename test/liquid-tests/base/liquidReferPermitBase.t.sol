@@ -3,7 +3,7 @@ pragma solidity ^0.8.22;
 
 import {IERC20Permit} from "lib/openzeppelin-contracts/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import {LiquidReferBaseTest} from "./liquidReferBaseTest.t.sol";
-import {LiquidRefer} from "src/LiquidRefer.sol";
+import {LiquidRefer} from "src/helpers/LiquidRefer.sol";
 
 abstract contract LiquidReferPermitFuzzBaseTest is LiquidReferBaseTest {
     bytes32 internal constant EIP712_DOMAIN_TYPEHASH =

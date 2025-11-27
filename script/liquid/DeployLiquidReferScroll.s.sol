@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
 import "forge-std/StdJson.sol";
-import  "src/LiquidRefer.sol";
+import  "src/helpers/LiquidRefer.sol";
 import "../../src/UUPSProxy.sol";
 import "../Create2Factory.sol";
 

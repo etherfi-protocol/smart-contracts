@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
 import "forge-std/StdJson.sol";
-import  "src/LiquidRefer.sol";
+import  "src/helpers/LiquidRefer.sol";
 import "../../src/UUPSProxy.sol";
 
 interface ICreate2Factory {
@@ -108,7 +108,7 @@ contract DeployWeETHWithdrawAdapter is Script {
             // Prepare initialization data with mainnet contract controller as initial owner
             bytes memory initializerData = abi.encodeWithSelector(
                 LiquidRefer.initialize.selector,
-                mainnetContractController
+                mainnetContractController // pass the owner
             );
 
             bytes memory constructorArgs = abi.encode(
