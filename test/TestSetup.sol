@@ -447,7 +447,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function deployEtherFiRestaker() internal {
-        etherFiRestakerImplementation = new EtherFiRestaker(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf));
+        etherFiRestakerImplementation = new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
@@ -638,13 +638,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
 
-        etherFiRestakerImplementation = new EtherFiRestaker(address(0x0));
-        etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
-        etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
-
         etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance))), "");
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
         etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether);
+
+        etherFiRestakerImplementation = new EtherFiRestaker(address(0x0), address(etherFiRedemptionManagerInstance));
+        etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
+        etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), owner);
         
