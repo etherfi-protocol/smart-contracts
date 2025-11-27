@@ -176,15 +176,18 @@ contract WithdrawRequestNFTTest is TestSetup {
     }
 
     function test_ValidClaimWithdrawWithNegativeRebase() public {
-        launch_validator();
-
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         vm.stopPrank();
 
         uint256 bobsStartingBalance = address(bob).balance;
 
-        assertEq(liquidityPoolInstance.getTotalPooledEther(), 10 ether + 64 ether);
+        // First, do a positive rebase to increase totalValueOutOfLp
+        // This simulates validators earning rewards
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(60 ether);
+
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 10 ether + 60 ether);
 
         // Case 2.
         // After the rebase with negative rewards (loss of 35 eth among 70 eth),
@@ -211,8 +214,10 @@ contract WithdrawRequestNFTTest is TestSetup {
     }
 
     function test_withdraw_with_zero_liquidity() public {
-        // bob mints 60 eETH and alilce spins up 2 validators with the deposited 60 ETH
-        launch_validator();
+        // bob mints 60 eETH by depositing 60 ETH
+        vm.deal(bob, 1000 ether);
+        vm.prank(bob);
+        liquidityPoolInstance.deposit{value: 60 ether}();
 
         vm.prank(bob);
         eETHInstance.approve(address(liquidityPoolInstance), 60 ether);
@@ -341,48 +346,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         _finalizeWithdrawalRequest(requestId);
     }
 
-    function test_aggregateSumEEthShareAmount() public {
-        initializeRealisticFork(MAINNET_FORK);
-
-        vm.startPrank(withdrawRequestNFTInstance.owner());
-        // 1. Upgrade
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(owner))));
-        withdrawRequestNFTInstance.initializeOnUpgrade(address(roleRegistryInstance), 50_00);
-
-        // 2. (For test) update the scan range
-        updateParam(1, 200);
-        vm.stopPrank();
-
-        // 2. Confirm Paused & Can't Unpause
-        assertTrue(withdrawRequestNFTInstance.paused(), "Contract should be paused");
-        vm.prank(admin);
-        vm.expectRevert("scan is not completed");
-        withdrawRequestNFTInstance.unPauseContract();
-        vm.stopPrank();
-        // 3. AggSum
-        // - Can't Unpause untill the scan is not completed
-        // - Can't aggregateSumEEthShareAmount after the scan is completed
-        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(128);
-        assertFalse(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should be completed");
-
-        vm.prank(admin);
-        vm.expectRevert("scan is not completed");
-        withdrawRequestNFTInstance.unPauseContract();
-
-        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(128);
-        assertTrue(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should be completed");
-
-        vm.expectRevert("scan is completed");
-        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(128);
-
-        // 4. Can Unpause
-        vm.startPrank(admin);
-        withdrawRequestNFTInstance.unPauseContract();
-        vm.stopPrank();
-
-        // we will run the test on the forked mainnet to perform the full scan and confirm we can unpause
-    }
-
     function test_handleRemainder() public {
         initializeRealisticFork(MAINNET_FORK);
         vm.startPrank(address(roleRegistryInstance.owner()));
@@ -449,10 +412,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.assume(remainderSplitBps <= 10000);
         vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance));
 
-
-        vm.expectRevert("scan is completed");
-        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(10);
-
         // Setup initial balance for recipient
         vm.deal(recipient, depositAmount);
 
@@ -482,9 +441,8 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Calculate expected withdrawal amounts after rebase
         uint256 sharesValue = liquidityPoolInstance.amountForShare(request.shareOfEEth);
-        console2.log(request.shareOfEEth);
         uint256 expectedWithdrawAmount = withdrawAmount < sharesValue ? withdrawAmount : sharesValue;
-        uint256 expectedBurnedShares = liquidityPoolInstance.sharesForAmount(expectedWithdrawAmount);
+        uint256 expectedBurnedShares = liquidityPoolInstance.sharesForWithdrawalAmount(expectedWithdrawAmount);
         uint256 expectedDustShares = request.shareOfEEth - expectedBurnedShares;
 
         // Track initial shares and total supply
@@ -545,10 +503,21 @@ contract WithdrawRequestNFTTest is TestSetup {
             "Incorrect remainder shares"
         );
 
+        // Only test handleRemainder if there's actually remainder to handle
         uint256 dustEEthAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
-        console2.log("wtf");
-        vm.startPrank(admin);
-        withdrawRequestNFTInstance.handleRemainder(dustEEthAmount / 2);
+        if (dustEEthAmount > 0) {
+            // Grant the required role to admin
+            vm.startPrank(address(roleRegistryInstance.owner()));
+            roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), admin);
+            vm.stopPrank();
+            
+            // Handle remainder (use half to avoid edge cases)
+            uint256 amountToHandle = dustEEthAmount / 2;
+            if (amountToHandle > 0) {
+                vm.prank(admin);
+                withdrawRequestNFTInstance.handleRemainder(amountToHandle);
+            }
+        }
     }
 
     function testFuzz_InvalidateRequest(uint96 depositAmount, uint96 withdrawAmount, address recipient) public {

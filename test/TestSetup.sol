@@ -327,7 +327,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function initializeRealisticFork(uint8 forkEnum) public {
-        console.log("initializeRealisticFork");
         initializeRealisticForkWithBlock(forkEnum, 0);
     }
 
@@ -413,7 +412,45 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
+        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(address(0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0)));
+        etherFiRestakerInstance = EtherFiRestaker(payable(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf)));
         roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
+
+        ///remove after steth instant withdrawal is live
+        upgradeEtherFiRedemptionManager();
+    }
+
+    function upgradeEtherFiRedemptionManager() public {
+        address ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+        EtherFiRedemptionManager Implementation = new EtherFiRedemptionManager(address(payable(liquidityPoolInstance)), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance));
+        EtherFiRestaker restakerImplementation = new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance));
+        vm.startPrank(owner);
+        etherFiRestakerInstance.upgradeTo(address(restakerImplementation));
+        vm.stopPrank();
+        vm.prank(owner);
+        etherFiRedemptionManagerInstance.upgradeTo(address(Implementation));
+        address[] memory _tokens = new address[](2);
+        _tokens[0] = ETH_ADDRESS;
+        _tokens[1] = address(etherFiRestakerInstance.lido());
+        uint16[] memory _exitFeeSplitToTreasuryInBps = new uint16[](2);
+        _exitFeeSplitToTreasuryInBps[0] = 10_00;
+        _exitFeeSplitToTreasuryInBps[1] = 10_00;
+        uint16[] memory _exitFeeInBps = new uint16[](2);
+        _exitFeeInBps[0] = 1_00;
+        _exitFeeInBps[1] = 1_00;
+        uint16[] memory _lowWatermarkInBpsOfTvl = new uint16[](2);
+        _lowWatermarkInBpsOfTvl[0] = 1_00;
+        _lowWatermarkInBpsOfTvl[1] = 50;
+        uint256[] memory _bucketCapacity = new uint256[](2);
+        _bucketCapacity[0] = 2000 ether;
+        _bucketCapacity[1] = 2000 ether;
+        uint256[] memory _bucketRefillRate = new uint256[](2);
+        _bucketRefillRate[0] = 0.3 ether;
+        _bucketRefillRate[1] = 0.3 ether;
+        vm.startPrank(owner);
+        roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), owner);
+        etherFiRedemptionManagerInstance.initializeTokenParameters(_tokens, _exitFeeSplitToTreasuryInBps, _exitFeeInBps, _lowWatermarkInBpsOfTvl, _bucketCapacity, _bucketRefillRate);
+        vm.stopPrank();
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
@@ -488,12 +525,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         auctionManagerProxy = new UUPSProxy(address(auctionImplementation), "");
         auctionInstance = AuctionManager(address(auctionManagerProxy));
         auctionInstance.initialize(address(nodeOperatorManagerInstance));
-        console.log("auctionInstance", address(auctionInstance));
         auctionInstance.updateAdmin(alice, true);
 
         stakingManagerImplementation = new StakingManager(address(liquidityPoolInstance), address(managerInstance), address(depositContractEth2), address(auctionInstance), address(node), address(roleRegistryInstance));
         stakingManagerProxy = new UUPSProxy(address(stakingManagerImplementation), "");
-        console.log("stakingManagerProxy", address(stakingManagerProxy));
         stakingManagerInstance = StakingManager(address(stakingManagerProxy));
         //stakingManagerInstance.initialize(address(auctionInstance), address(mockDepositContractEth2));
         //stakingManagerInstance.updateAdmin(alice, true);
@@ -631,6 +666,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(address(cumulativeMerkleRewardsDistributorProxy));
         cumulativeMerkleRewardsDistributorInstance.initialize();
 
+        roleRegistryInstance.grantRole(cumulativeMerkleRewardsDistributorInstance.CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(cumulativeMerkleRewardsDistributorInstance.CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE(), admin);
+
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
 
@@ -640,14 +678,14 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance))), "");
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
-        etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether);
 
         etherFiRestakerImplementation = new EtherFiRestaker(address(0x0), address(etherFiRedemptionManagerInstance));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), owner);
-        
+        etherFiRedemptionManagerInstance.initializeTokenParameters(_tokens, _exitFeeSplitToTreasuryInBps, _exitFeeInBps, _lowWatermarkInBpsOfTvl, _bucketCapacity, _bucketRefillRate);
+
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
         liquidityPoolInstance.initializeVTwoDotFourNine(address(roleRegistryInstance), address(etherFiRedemptionManagerInstance));
 
@@ -749,6 +787,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));
         roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
@@ -859,7 +898,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             // upgrade our existing contracts to utilize `roleRegistry`
             vm.stopPrank();
             vm.startPrank(owner);
-            EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance));
+            EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance));
             etherFiRedemptionManagerProxy = new UUPSProxy(address(etherFiRedemptionManagerImplementation), "");
             etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
             etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark
@@ -893,7 +932,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         uint256[] memory exitedValidators = new uint256[](0);
         uint32[] memory  exitTimestamps = new uint32[](0);
         uint256[] memory withdrawalRequestsToInvalidate = new uint256[](0);
-        reportAtPeriod2A = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, withdrawalRequestsToInvalidate, 1, 0);
+        reportAtPeriod2A = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, withdrawalRequestsToInvalidate, 0, 0);
         reportAtPeriod2B = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, withdrawalRequestsToInvalidate, 1, 0);
         reportAtPeriod2C = IEtherFiOracle.OracleReport(2, 0, 1024 - 1, 0, 1024 - 1, 1, 0, validatorsToApprove, withdrawalRequestsToInvalidate, 1, 0);
         reportAtPeriod3 = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 0, 2048 - 1, 1, 0, validatorsToApprove, withdrawalRequestsToInvalidate, 1, 0);
@@ -1627,7 +1666,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         */
     }
     function _execute_timelock(address target, bytes memory data, bool _schedule, bool _log_schedule, bool _execute, bool _log_execute) internal {
-        if(address(0xcdd57D11476c22d265722F68390b036f3DA48c21) == address(etherFiTimelockInstance)) { // 3 Day Timelock
+        if(address(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761) == address(etherFiTimelockInstance)) { // 3 Day Timelock
             vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
         } else { // 8hr Timelock
             vm.startPrank(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC);
@@ -1700,6 +1739,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
         string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        vm.createDir("./release/logs/txns", true);
         stdJson.write(output, output_path);
     }
 
@@ -1714,6 +1754,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
         string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        vm.createDir("./release/logs/txns", true);
         stdJson.write(output, output_path);
     }
 
@@ -1728,6 +1769,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
         string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        vm.createDir("./release/logs/txns", true);
         stdJson.write(output, output_path);
     }
 
@@ -1742,6 +1784,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         string memory prefix = string.concat(vm.toString(block.number), string.concat(".", vm.toString(block.timestamp)));
         string memory output_path = string.concat(string("./release/logs/txns/"), string.concat(prefix, string(".json"))); // releast/logs/$(block_number)_{$(block_timestamp)}json
+        vm.createDir("./release/logs/txns", true);
         stdJson.write(output, output_path);
     }
 
