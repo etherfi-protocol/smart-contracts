@@ -12,9 +12,6 @@ import {IDelegationManagerTypes} from "../src/eigenlayer-interfaces/IDelegationM
 import {IEigenPodTypes} from "../src/eigenlayer-interfaces/IEigenPod.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
-import {Deployed} from "../script/deploys/Deployed.s.sol";
-
-
 contract EtherFiNodesManagerTest is TestSetup {
     address public eigenlayerAdmin;
     address public podProver;
@@ -24,7 +21,6 @@ contract EtherFiNodesManagerTest is TestSetup {
     bytes public testPubkey;
     bytes32 public testPubkeyHash;
     uint256 public testLegacyId = 1;
-    Deployed public deployed;
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
@@ -33,8 +29,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         // Get rate limiter from manager instance and set it for use in tests
         // rateLimiterInstance might not be set when using initializeRealisticFork
         rateLimiterInstance = EtherFiRateLimiter(address(managerInstance.rateLimiter()));
-
-        deployed = new Deployed();
         
         // Setup roles
         eigenlayerAdmin = vm.addr(100);

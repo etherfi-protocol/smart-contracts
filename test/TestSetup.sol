@@ -57,6 +57,7 @@ import "../src/RoleRegistry.sol";
 import "../src/EtherFiRewardsRouter.sol";
 
 import "../src/CumulativeMerkleRewardsDistributor.sol";
+import "../script/deploys/Deployed.s.sol";
 
 contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
@@ -205,6 +206,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     EtherFiTimelock public etherFiTimelockInstance;
     BucketRateLimiter public bucketRateLimiter;
 
+    Deployed public deployed;
+
     bool public shouldSetupRoleRegistry = true;
 
     bytes32 root;
@@ -334,7 +337,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     // the associated network. This allows you to realistically test new transactions against
     // testnet or mainnet.
     function initializeRealisticForkWithBlock(uint8 forkEnum, uint256 blockNo) public {
-        Deployed deployed = new Deployed();
+        deployed = new Deployed();
         if (forkEnum == MAINNET_FORK) {
             if (blockNo == 0) {
                 vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
@@ -416,9 +419,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiRestakerInstance = EtherFiRestaker(payable(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf)));
         roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
         cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(deployed.CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR()));
-
-        ///remove after steth instant withdrawal is live
-        // upgradeEtherFiRedemptionManager();
     }
 
     function upgradeEtherFiRedemptionManager() public {
