@@ -1375,14 +1375,15 @@ contract StakingManagerTest is TestSetup {
     function test_instantiateEtherFiNode() public {
         vm.startPrank(owner);
         roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), alice);
+        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManagerInstance));
         vm.stopPrank();
         
-        vm.prank(address(liquidityPoolInstance));
+        vm.prank(alice);
         address etherFiNode = stakingManagerInstance.instantiateEtherFiNode(true);
         assertTrue(etherFiNode != address(0));
         assertTrue(stakingManagerInstance.deployedEtherFiNodes(etherFiNode));
     }
-
+    
     function test_instantiateEtherFiNodeFailsIfNotAuthorized() public {
         vm.expectRevert(IStakingManager.IncorrectRole.selector);
         stakingManagerInstance.instantiateEtherFiNode(false);
@@ -1429,24 +1430,23 @@ contract StakingManagerTest is TestSetup {
 
     function test_unPauseContract() public {
         address pauser = roleRegistryInstance.roleHolders(roleRegistryInstance.PROTOCOL_PAUSER())[0];
-        console2.log("pauser", pauser);
-        address unpauser = roleRegistryInstance.roleHolders(roleRegistryInstance.PROTOCOL_UNPAUSER())[0];
-        console2.log("unpauser", unpauser);
         vm.startPrank(pauser);
         stakingManagerInstance.pauseContract();
         vm.stopPrank();
         assertTrue(stakingManagerInstance.paused());
         
-        vm.startPrank(unpauser);
+        address unpauser = roleRegistryInstance.roleHolders(roleRegistryInstance.PROTOCOL_UNPAUSER())[0];
+        vm.prank(unpauser);
         stakingManagerInstance.unPauseContract();
-        vm.stopPrank();
         assertFalse(stakingManagerInstance.paused());
     }
 
     function test_unPauseContractFailsIfNotAuthorized() public {
-        vm.prank(alice);
+        address pauser = roleRegistryInstance.roleHolders(roleRegistryInstance.PROTOCOL_PAUSER())[0];
+        vm.prank(pauser);
         stakingManagerInstance.pauseContract();
         
+        vm.prank(bob);
         vm.expectRevert(IStakingManager.IncorrectRole.selector);
         stakingManagerInstance.unPauseContract();
     }
@@ -1469,15 +1469,26 @@ contract StakingManagerTest is TestSetup {
     }
 
     function test_upgradeEtherFiNodeFailsIfZeroAddress() public {
+        vm.prank(stakingManagerInstance.owner());
         vm.expectRevert(IStakingManager.InvalidUpgrade.selector);
         stakingManagerInstance.upgradeEtherFiNode(address(0));
     } 
 
     function test_createBeaconValidators() public {
-        vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 100);
-        
+        vm.startPrank(owner);
+        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManagerInstance));
+        vm.stopPrank();
+
+        vm.prank(admin);
+        nodeOperatorManagerInstance.addToWhitelist(alice);
+
+        vm.prank(deployed.OPERATING_TIMELOCK());
+        liquidityPoolInstance.registerValidatorSpawner(alice);
+
         vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 1000);
+
         vm.prank(alice);
         uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
         
@@ -1494,12 +1505,17 @@ contract StakingManagerTest is TestSetup {
     function test_createBeaconValidatorsFailsIfInvalidCaller() public {
         // Use an existing node address (the node from test setup) instead of creating a new one
         // This avoids the beacon setup issue
-        address etherFiNode = address(node); // Use the node from test setup
-        
-        vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 100);
-        
+        address etherFiNode = address(node); // Use the node from test setup;
+        vm.prank(admin);
+        nodeOperatorManagerInstance.addToWhitelist(alice);
+
+        vm.prank(deployed.OPERATING_TIMELOCK());
+        liquidityPoolInstance.registerValidatorSpawner(alice);
+
         vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 1000);
+
         vm.prank(alice);
         uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
         
@@ -1512,7 +1528,7 @@ contract StakingManagerTest is TestSetup {
 
     function test_createBeaconValidatorsFailsIfInvalidDepositDataLength() public {
         // Use the implementation's stored liquidityPool address (set in constructor)
-        address liquidityPoolAddr = stakingManagerImplementation.liquidityPool();
+        address liquidityPoolAddr = address(liquidityPoolInstance);
         vm.deal(liquidityPoolAddr, 10 ether);
         
         uint256[] memory bidIds = new uint256[](1);
@@ -1571,10 +1587,16 @@ contract StakingManagerTest is TestSetup {
         address etherFiNode = address(node); // Use the node from test setup
         address liquidityPoolAddr = address(liquidityPoolInstance);
         
-        vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 100);
-        
+        vm.prank(admin);
+        nodeOperatorManagerInstance.addToWhitelist(alice);
+
+        vm.prank(deployed.OPERATING_TIMELOCK());
+        liquidityPoolInstance.registerValidatorSpawner(alice);
+
         vm.deal(alice, 100 ether);
+        vm.prank(alice);
+
+        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 1000);
         vm.prank(alice);
         uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
         
@@ -1671,7 +1693,7 @@ contract StakingManagerTest is TestSetup {
     function test_confirmAndFundBeaconValidatorsFailsIfInvalidValidatorSize() public {
         IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
         // Use the implementation's stored liquidityPool address (set in constructor)
-        address liquidityPoolAddr = stakingManagerImplementation.liquidityPool();
+        address liquidityPoolAddr = address(liquidityPoolInstance);
         vm.deal(liquidityPoolAddr, 100 ether);
         
         // First check passes (caller is liquidityPool), then validator size check fails
