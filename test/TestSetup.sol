@@ -2,7 +2,7 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
-
+import "../script/deploys/Deployed.s.sol";
 import "../src/eigenlayer-interfaces/IDelayedWithdrawalRouter.sol";
 import "../src/eigenlayer-interfaces/IEigenPodManager.sol";
 import "../src/eigenlayer-interfaces/IBeaconChainOracle.sol";
@@ -334,7 +334,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     // the associated network. This allows you to realistically test new transactions against
     // testnet or mainnet.
     function initializeRealisticForkWithBlock(uint8 forkEnum, uint256 blockNo) public {
-
+        Deployed deployed = new Deployed();
         if (forkEnum == MAINNET_FORK) {
             if (blockNo == 0) {
                 vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
@@ -415,9 +415,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(address(0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0)));
         etherFiRestakerInstance = EtherFiRestaker(payable(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf)));
         roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
+        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(deployed.CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR()));
 
         ///remove after steth instant withdrawal is live
-        upgradeEtherFiRedemptionManager();
+        // upgradeEtherFiRedemptionManager();
     }
 
     function upgradeEtherFiRedemptionManager() public {

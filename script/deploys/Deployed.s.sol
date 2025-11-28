@@ -49,6 +49,7 @@ contract Deployed {
     address public constant ETHERFI_RATE_LIMITER = 0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8;
 
     address public constant EARLY_ADOPTER_POOL = 0x7623e9DC0DA6FF821ddb9EbABA794054E078f8c4;
+    address public constant CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = 0x9A8c5046a290664Bf42D065d33512fe403484534;
 
     // role registry & multi-sig
     address public constant ROLE_REGISTRY = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
