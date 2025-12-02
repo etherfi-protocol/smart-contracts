@@ -16,16 +16,26 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IWeETH.sol";
+import "./interfaces/ILiquifier.sol";
+import "./EtherFiRestaker.sol";
 
 import "lib/BucketLimiter.sol";
 
 import "./RoleRegistry.sol";
 
 /*
-    The contract allows instant redemption of eETH and weETH tokens to ETH with an exit fee.
+    The contract allows instant redemption of eETH and weETH tokens to ETH or stETH with an exit fee.
     - It has the exit fee as a percentage of the total amount redeemed.
     - It has a rate limiter to limit the total amount that can be redeemed in a given time period.
 */
+
+struct RedemptionInfo {
+    BucketLimiter.Limit limit;
+    uint16 exitFeeSplitToTreasuryInBps;
+    uint16 exitFeeInBps;
+    uint16 lowWatermarkInBpsOfTvl;
+}
+
 contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
     using Math for uint256;
@@ -34,29 +44,36 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     uint256 private constant BASIS_POINT_SCALE = 1e4;
 
     bytes32 public constant ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE");
+    address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     RoleRegistry public immutable roleRegistry;
     address public immutable treasury;
     IeETH public immutable eEth;
     IWeETH public immutable weEth;
     ILiquidityPool public immutable liquidityPool;
+    EtherFiRestaker public immutable etherFiRestaker;
+    ILido public immutable lido;
 
-    BucketLimiter.Limit public limit;
-    uint16 public exitFeeSplitToTreasuryInBps;
-    uint16 public exitFeeInBps;
-    uint16 public lowWatermarkInBpsOfTvl; // bps of TVL
+    mapping(address => RedemptionInfo) public tokenToRedemptionInfo;
 
-    event Redeemed(address indexed receiver, uint256 redemptionAmount, uint256 feeAmountToTreasury, uint256 feeAmountToStakers);
+
+    event Redeemed(address indexed receiver, uint256 redemptionAmount, uint256 feeAmountToTreasury, uint256 feeAmountToStakers, address token);
+
+    error InvalidAmount();
+    error InvalidOutputToken();
+
 
     receive() external payable {}
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _liquidityPool, address _eEth, address _weEth, address _treasury, address _roleRegistry) {
+    constructor(address _liquidityPool, address _eEth, address _weEth, address _treasury, address _roleRegistry, address _etherFiRestaker) {
         roleRegistry = RoleRegistry(_roleRegistry);
         treasury = _treasury;
         liquidityPool = ILiquidityPool(payable(_liquidityPool));
         eEth = IeETH(_eEth);
         weEth = IWeETH(_weEth); 
+        etherFiRestaker = EtherFiRestaker(payable(_etherFiRestaker));
+        lido = etherFiRestaker.lido();
 
         _disableInitializers();
     }
@@ -69,66 +86,72 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         __UUPSUpgradeable_init();
         __Pausable_init();
         __ReentrancyGuard_init();
+    }
 
-        limit = BucketLimiter.create(_convertToBucketUnit(_bucketCapacity, Math.Rounding.Down), _convertToBucketUnit(_bucketRefillRate, Math.Rounding.Down));
-        exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
-        exitFeeInBps = _exitFeeInBps;
-        lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
+    function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate)  external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
+        for(uint256 i = 0; i < _exitFeeSplitToTreasuryInBps.length; i++) {
+            require(_exitFeeSplitToTreasuryInBps[i] <= BASIS_POINT_SCALE, "INVALID");
+            require(_exitFeeInBps[i] <= BASIS_POINT_SCALE, "INVALID");
+            require(_lowWatermarkInBpsOfTvl[i] <= BASIS_POINT_SCALE, "INVALID");
+            tokenToRedemptionInfo[address(_tokens[i])] = RedemptionInfo({
+                limit: BucketLimiter.create(_convertToBucketUnit(_bucketCapacity[i], Math.Rounding.Down), _convertToBucketUnit(_bucketRefillRate[i], Math.Rounding.Down)),
+                exitFeeSplitToTreasuryInBps: _exitFeeSplitToTreasuryInBps[i],
+                exitFeeInBps: _exitFeeInBps[i],
+                lowWatermarkInBpsOfTvl: _lowWatermarkInBpsOfTvl[i]
+            });
+        }
     }
 
     /**
-     * @notice Redeems eETH for ETH.
+     * @notice Redeems eETH for outputToken (ETH or stETH).
      * @param eEthAmount The amount of eETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed ETH.
+     * @param receiver The address to receive the redeemed outputToken.
+     * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEth(uint256 eEthAmount, address receiver) public whenNotPaused nonReentrant {
-        _redeemEEth(eEthAmount, receiver);
+    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
+        _redeemEEth(eEthAmount, receiver, outputToken);
     }
 
     /**
-     * @notice Redeems weETH for ETH.
+     * @notice Redeems weETH for outputToken (ETH or stETH).
      * @param weEthAmount The amount of weETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed ETH.
+     * @param receiver The address to receive the redeemed outputToken.
+     * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEth(uint256 weEthAmount, address receiver) public whenNotPaused nonReentrant {
-        _redeemWeEth(weEthAmount, receiver);
+    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
+        _redeemWeEth(weEthAmount, receiver, outputToken);
     }
 
     /**
-     * @notice Redeems eETH for ETH with permit.
+     * @notice Redeems eETH for outputToken (ETH or stETH) with permit.
      * @param eEthAmount The amount of eETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed ETH.
+     * @param receiver The address to receive the redeemed outputToken.
      * @param permit The permit params.
+     * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit) external whenNotPaused nonReentrant {
+    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
         try eEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
-        _redeemEEth(eEthAmount, receiver);
+        _redeemEEth(eEthAmount, receiver, outputToken);
     }
 
     /**
-     * @notice Redeems weETH for ETH.
+     * @notice Redeems weETH for outputToken (ETH or stETH).
      * @param weEthAmount The amount of weETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed ETH.
+     * @param receiver The address to receive the redeemed outputToken.
      * @param permit The permit params.
+     * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit) external whenNotPaused nonReentrant {
+    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
         try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
-        _redeemWeEth(weEthAmount, receiver);
+        _redeemWeEth(weEthAmount, receiver, outputToken);
     }
 
-    /**
-     * @notice Redeems ETH.
-     * @param ethAmount The amount of ETH to redeem after the exit fee.
-     * @param receiver The address to receive the redeemed ETH.
-     */
-    function _redeem(uint256 ethAmount, uint256 eEthShares, address receiver, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) internal {
-        _updateRateLimit(ethAmount);
-
-        // Derive additionals
-        uint256 eEthShareFee = eEthShares - sharesToBurn;
-        uint256 feeShareToStakers = eEthShareFee - feeShareToTreasury;
-
-        // Snapshot balances & shares for sanity check at the end
+    function _processETHRedemption(
+        address receiver,
+        uint256 eEthAmountToReceiver,
+        uint256 sharesToBurn,
+        uint256 feeShareToStakers
+    ) internal {
         uint256 prevBalance = address(this).balance;
         uint256 prevLpBalance = address(liquidityPool).balance;
         uint256 totalEEthShare = eEth.totalShares();
@@ -139,11 +162,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
 
         // To Stakers by burning shares
         liquidityPool.burnEEthShares(feeShareToStakers);
-
-        // To Treasury by transferring eETH
-        IERC20(address(eEth)).safeTransfer(treasury, eEthFeeAmountToTreasury);
-        
-        // uint256 totalShares = eEth.totalShares();
         require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
 
         // To Receiver by transferring ETH, using gas 10k for additional safety
@@ -152,82 +170,157 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
 
         // Make sure the liquidity pool balance is correct && total shares are correct
         require(address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiRedemptionManager: Invalid liquidity pool balance");
-        // require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
+    }
 
-        emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver);
+    /**
+     * @notice Processes stETH-specific redemption logic.
+     */
+    function _processStETHRedemption(
+        address receiver,
+        uint256 stEthAmountToReceiver,
+        uint256 sharesToBurn,
+        uint256 feeShareToStakers
+    ) internal {
+        uint256 eEthAmountToReceiver = stEthAmountToReceiver; // 1 stETH = 1 eETH
+        if (eEthAmountToReceiver > type(uint128).max || eEthAmountToReceiver == 0 || sharesToBurn == 0) revert InvalidAmount();
+        uint256 totalEEthShare = eEth.totalShares();
+        uint256 totalValueOutOfLpBefore = liquidityPool.totalValueOutOfLp();
+
+        // Burn shares for non ETH withdrawal (stETH)
+        // - sharesToBurn: eETH shares to burn for withdrawal
+        // - feeShareToStakers: eETH shares to burn for stakers
+        liquidityPool.burnEEthSharesForNonETHWithdrawal(sharesToBurn, eEthAmountToReceiver);
+        liquidityPool.burnEEthShares(feeShareToStakers);
+
+        // Validate total shares and total value out of lp
+        require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
+        require(liquidityPool.totalValueOutOfLp() == totalValueOutOfLpBefore - eEthAmountToReceiver, "EtherFiRedemptionManager: Invalid total value out of lp");
+
+        etherFiRestaker.transferStETH(receiver, eEthAmountToReceiver);
+    }
+
+    /**
+     * @notice Redeems outputToken (ETH or stETH).
+     * The receiver will receive the ETH or stETH after the exit fee.
+     * The fee will be split between the treasury and the stakers.
+     * - the portion to the treasury will be transferred to the treasury in eETH.
+     * - the portion to the stakers will be distributed by burning eETH shares.
+     * @param ethAmount The amount of outputToken to redeem after the exit fee.
+     * @param eEthShares The total amount of eETH shares corresponding to the `ethAmount` (= liquidityPool.sharesForAmount(ethAmount))
+     * @param eEthAmountToReceiver The amount of ETH or stETH to receiver.
+     * @param eEthFeeAmountToTreasury The amount of eETH to treasury.
+     * @param sharesToBurn The amount of eETH shares to burn.
+     * @param feeShareToTreasury The amount of eETH to treasury.
+     * @param outputToken The token to redeem (ETH or stETH).
+     * @param receiver The address to receive the redeemed outputToken.
+     */
+    function _redeem(uint256 ethAmount, uint256 eEthShares, address receiver, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury, address outputToken) internal {
+        _updateRateLimit(ethAmount, outputToken);
+        uint256 eEthShareFee = eEthShares - sharesToBurn;
+        uint256 feeShareToStakers = eEthShareFee - feeShareToTreasury;
+
+        if(outputToken == ETH_ADDRESS) {
+            _processETHRedemption(receiver, eEthAmountToReceiver, sharesToBurn, feeShareToStakers);
+        } else if(outputToken == address(lido)) {
+            _processStETHRedemption(receiver, eEthAmountToReceiver, sharesToBurn, feeShareToStakers);
+        } else {
+            revert InvalidOutputToken();
+        }
+        // Common fee handling: Transfer to Treasury
+        IERC20(address(eEth)).safeTransfer(treasury, eEthFeeAmountToTreasury);
+
+        emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver, outputToken);
     }
 
     /**
      * @dev if the contract has less than the low watermark, it will not allow any instant redemption.
      */
-    function lowWatermarkInETH() public view returns (uint256) {
-        return liquidityPool.getTotalPooledEther().mulDiv(lowWatermarkInBpsOfTvl, BASIS_POINT_SCALE);
+    function lowWatermarkInETH(address token) public view returns (uint256) {
+        return liquidityPool.getTotalPooledEther().mulDiv(tokenToRedemptionInfo[token].lowWatermarkInBpsOfTvl, BASIS_POINT_SCALE);
+    }
+
+    function getInstantLiquidityAmount(address token) public view returns (uint256) {
+        if(token == ETH_ADDRESS) {
+            return address(liquidityPool).balance - liquidityPool.ethAmountLockedForWithdrawal();
+        } else if (token == address(lido)) {
+            return lido.balanceOf(address(etherFiRestaker));
+        }
     }
 
     /**
      * @dev Returns the total amount that can be redeemed.
      */
-    function totalRedeemableAmount() external view returns (uint256) {
-        uint256 liquidEthAmount = address(liquidityPool).balance - liquidityPool.ethAmountLockedForWithdrawal();
-        if (liquidEthAmount < lowWatermarkInETH()) {
+    function totalRedeemableAmount(address token) external view returns (uint256) {
+        uint256 liquidEthAmount = getInstantLiquidityAmount(token);
+
+        if (liquidEthAmount < lowWatermarkInETH(token)) {
             return 0;
         }
-        uint64 consumableBucketUnits = BucketLimiter.consumable(limit);
+        uint64 consumableBucketUnits = BucketLimiter.consumable(tokenToRedemptionInfo[token].limit);
         uint256 consumableAmount = _convertFromBucketUnit(consumableBucketUnits);
         return Math.min(consumableAmount, liquidEthAmount);
     }
 
     /**
      * @dev Returns whether the given amount can be redeemed.
-     * @param amount The ETH or eETH amount to check.
+     * @param amount The ETH or stETH amount to check
+     * @param token The token to check to redeem
      */
-    function canRedeem(uint256 amount) public view returns (bool) {
-        uint256 liquidEthAmount = address(liquidityPool).balance - liquidityPool.ethAmountLockedForWithdrawal();
-        if (liquidEthAmount < lowWatermarkInETH()) {
+    function canRedeem(uint256 amount, address token) public view returns (bool) {
+        uint256 liquidEthAmount = getInstantLiquidityAmount(token);
+        uint256 lowWatermark = lowWatermarkInETH(token);
+        if (liquidEthAmount  < lowWatermark) {
+            return false;
+        }
+        uint256 availableAmount = liquidEthAmount - lowWatermark;
+        if (availableAmount < amount) {
             return false;
         }
         uint64 bucketUnit = _convertToBucketUnit(amount, Math.Rounding.Up);
-        bool consumable = BucketLimiter.canConsume(limit, bucketUnit);
+        bool consumable = BucketLimiter.canConsume(tokenToRedemptionInfo[token].limit, bucketUnit);
         return consumable && amount <= liquidEthAmount;
     }
 
     /**
      * @dev Sets the maximum size of the bucket that can be consumed in a given time period.
      * @param capacity The capacity of the bucket.
+     * @param token The token to set the capacity for
      */
-    function setCapacity(uint256 capacity) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
+    function setCapacity(uint256 capacity, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 bucketUnit = _convertToBucketUnit(capacity, Math.Rounding.Down);
-        BucketLimiter.setCapacity(limit, bucketUnit);
+        BucketLimiter.setCapacity(tokenToRedemptionInfo[token].limit, bucketUnit);
     }
 
     /**
      * @dev Sets the rate at which the bucket is refilled per second.
      * @param refillRate The rate at which the bucket is refilled per second.
+     * @param token The token to set the refill rate for
      */
-    function setRefillRatePerSecond(uint256 refillRate) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
+    function setRefillRatePerSecond(uint256 refillRate, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 bucketUnit = _convertToBucketUnit(refillRate, Math.Rounding.Down);
-        BucketLimiter.setRefillRate(limit, bucketUnit);
+        BucketLimiter.setRefillRate(tokenToRedemptionInfo[token].limit, bucketUnit);
     }
 
     /**
      * @dev Sets the exit fee.
      * @param _exitFeeInBps The exit fee.
+     * @param token The token to set the exit fee for
      */
-    function setExitFeeBasisPoints(uint16 _exitFeeInBps) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
+    function setExitFeeBasisPoints(uint16 _exitFeeInBps, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         require(_exitFeeInBps <= BASIS_POINT_SCALE, "INVALID");
-        exitFeeInBps = _exitFeeInBps;
+        tokenToRedemptionInfo[token].exitFeeInBps = _exitFeeInBps;
     }
 
-    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
+    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         require(_lowWatermarkInBpsOfTvl <= BASIS_POINT_SCALE, "INVALID");
-        lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
+        tokenToRedemptionInfo[token].lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
     }
 
-    function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
+    function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         require(_exitFeeSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
-        exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
+        tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
     }
 
     function pauseContract() external hasRole(roleRegistry.PROTOCOL_PAUSER()) {
@@ -238,34 +331,34 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         _unpause();
     }
 
-    function _redeemEEth(uint256 eEthAmount, address receiver) internal {
+    function _redeemEEth(uint256 eEthAmount, address receiver, address outputToken) internal {
         require(eEthAmount <= eEth.balanceOf(msg.sender), "EtherFiRedemptionManager: Insufficient balance");
-        require(canRedeem(eEthAmount), "EtherFiRedemptionManager: Exceeded total redeemable amount");
+        require(canRedeem(eEthAmount, outputToken), "EtherFiRedemptionManager: Exceeded total redeemable amount");
 
-        (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount);
+        (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount, outputToken);
 
         IERC20(address(eEth)).safeTransferFrom(msg.sender, address(this), eEthAmount);
 
-        _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury);
+        _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury, outputToken);
     }
 
-    function _redeemWeEth(uint256 weEthAmount, address receiver) internal {
+    function _redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) internal {
         uint256 eEthAmount = weEth.getEETHByWeETH(weEthAmount);
         require(weEthAmount <= weEth.balanceOf(msg.sender), "EtherFiRedemptionManager: Insufficient balance");
-        require(canRedeem(eEthAmount), "EtherFiRedemptionManager: Exceeded total redeemable amount");
+        require(canRedeem(eEthAmount, outputToken), "EtherFiRedemptionManager: Exceeded total redeemable amount");
 
-        (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount);
+        (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount, outputToken);
 
         IERC20(address(weEth)).safeTransferFrom(msg.sender, address(this), weEthAmount);
         weEth.unwrap(weEthAmount);
 
-        _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury);
+        _redeem(eEthAmount, eEthShares, receiver, eEthAmountToReceiver, eEthFeeAmountToTreasury, sharesToBurn, feeShareToTreasury, outputToken);
     }
 
 
-    function _updateRateLimit(uint256 amount) internal {
+    function _updateRateLimit(uint256 amount, address token) internal {
         uint64 bucketUnit = _convertToBucketUnit(amount, Math.Rounding.Up);
-        require(BucketLimiter.consume(limit, bucketUnit), "BucketRateLimiter: rate limit exceeded");
+        require(BucketLimiter.consume(tokenToRedemptionInfo[token].limit, bucketUnit), "BucketRateLimiter: rate limit exceeded");
     }
 
     function _convertToBucketUnit(uint256 amount, Math.Rounding rounding) internal pure returns (uint64) {
@@ -278,13 +371,13 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     }
 
 
-    function _calcRedemption(uint256 ethAmount) internal view returns (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) {
+    function _calcRedemption(uint256 ethAmount, address token) internal view returns (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) {
         eEthShares = liquidityPool.sharesForAmount(ethAmount);
-        eEthAmountToReceiver = liquidityPool.amountForShare(eEthShares.mulDiv(BASIS_POINT_SCALE - exitFeeInBps, BASIS_POINT_SCALE)); // ethShareToReceiver
+        eEthAmountToReceiver = liquidityPool.amountForShare(eEthShares.mulDiv(BASIS_POINT_SCALE - tokenToRedemptionInfo[token].exitFeeInBps, BASIS_POINT_SCALE)); // ethShareToReceiver
 
         sharesToBurn = liquidityPool.sharesForWithdrawalAmount(eEthAmountToReceiver);
         uint256 eEthShareFee = eEthShares - sharesToBurn;
-        feeShareToTreasury = eEthShareFee.mulDiv(exitFeeSplitToTreasuryInBps, BASIS_POINT_SCALE);
+        feeShareToTreasury = eEthShareFee.mulDiv(tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps, BASIS_POINT_SCALE);
         eEthFeeAmountToTreasury = liquidityPool.amountForShare(feeShareToTreasury);
     }
 
@@ -292,9 +385,9 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      * @dev Preview taking an exit fee on redeem. See {IERC4626-previewRedeem}.
      */
     // redeemable amount after exit fee
-    function previewRedeem(uint256 shares) public view returns (uint256) {
+    function previewRedeem(uint256 shares, address token) public view returns (uint256) {
         uint256 amountInEth = liquidityPool.amountForShare(shares);
-        return amountInEth - _fee(amountInEth, exitFeeInBps);
+        return amountInEth - _fee(amountInEth, tokenToRedemptionInfo[token].exitFeeInBps);
     }
 
     function _fee(uint256 assets, uint256 feeBasisPoints) internal pure virtual returns (uint256) {
