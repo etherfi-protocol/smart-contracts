@@ -47,6 +47,7 @@ contract EtherFiNodesManager is
     bytes32 public constant ETHERFI_NODES_MANAGER_POD_PROVER_ROLE = keccak256("ETHERFI_NODES_MANAGER_POD_PROVER_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
+    bytes32 public constant ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
 
     //-------------------------------------------------------------------------
     //-----------------------------  Rate Limiter Buckets ---------------------
@@ -256,7 +257,8 @@ contract EtherFiNodesManager is
      * @dev EigenLayer validates that validators belong to the pod automatically.
      * @custom:fee Send EXACT ETH to cover consolidation fees.
      */
-    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable whenNotPaused nonReentrant onlyAdmin {
+    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable whenNotPaused nonReentrant {
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE, msg.sender)) revert IncorrectRole();
         if (requests.length == 0) revert EmptyConsolidationRequest();
 
         // eigenlayer will revert if all validators don't belong to the same pod
