@@ -301,6 +301,21 @@ contract TimelockTest is TestSetup {
         }
     }
 
+    function test_set_capacity_zero() public {
+        initializeRealisticFork(MAINNET_FORK);
+        address target = address(etherFiRedemptionManagerInstance);
+        bytes memory data = abi.encodeWithSelector(EtherFiRedemptionManager.setCapacity.selector, 0, address(etherFiRedemptionManagerInstance.lido()));
+        _execute_timelock(target, data, true, true, true, true);
+        //test instant wd of steth fails
+        deal(address(weEthInstance), alice, 1 ether);
+        vm.startPrank(0x97BD75506c31530a1fDc994B53434461ED1D6653);
+        IERC20(address(etherFiRedemptionManagerInstance.lido())).transfer(address(etherFiRestakerInstance), 10 ether);
+        vm.startPrank(alice);
+        weEthInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
+        etherFiRedemptionManagerInstance.redeemWeEth(1 ether, alice, address(etherFiRedemptionManagerInstance.lido()));
+        vm.stopPrank();
+    }
+
     function test_update_committee_members() public {
         initializeRealisticFork(MAINNET_FORK);
         address etherfi_oracle1 = address(0x6d850af8e7AB3361CfF28b31C701647414b9C92b);
