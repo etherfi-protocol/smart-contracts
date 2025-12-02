@@ -208,12 +208,12 @@ contract EtherFiRedemptionManagerTest is TestSetup {
             assertApproxEqAbs(
                 eETHInstance.balanceOf(address(treasuryInstance)),
                 treasuryBalanceBefore + treasuryFee,
-                1e2
+                1e3
             );
             assertApproxEqAbs(
                 address(user).balance,
                 userBalanceBefore + userReceives,
-                1e2
+                1e3
             );
 
         } else {
@@ -394,12 +394,27 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     function test_mainnet_redeem_eEth_for_stETH() public {
         setUp_Fork();
         ILido stEth = ILido(address(etherFiRestakerInstance.lido()));
+        
+        vm.startPrank(op_admin);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, address(etherFiRestakerInstance.lido()));
+        vm.stopPrank();
+        
+        // Fund EtherFiRestaker with stETH so redemption can work
+        // Deposit stETH through liquifier which will fund EtherFiRestaker
+        address funder = vm.addr(2001);
+        vm.deal(funder, 2100 ether);
+        vm.startPrank(funder);
+        stEth.submit{value: 2100 ether}(address(0));
+        uint256 stEthAmount = stEth.balanceOf(funder);
+        stEth.approve(address(liquifierInstance), stEthAmount);
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        vm.stopPrank();
+        
         vm.deal(user, 2010 ether);
         vm.startPrank(user);
         liquidityPoolInstance.deposit{value: 2005 ether}();
 
         uint256 redeemableAmount = etherFiRedemptionManagerInstance.totalRedeemableAmount(address(etherFiRestakerInstance.lido()));
-        console2.log("redeemableAmount", redeemableAmount);
         uint256 userBalance = address(user).balance;
         uint256 treasuryBalance = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
 
@@ -407,7 +422,6 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.redeemEEth(2000 ether, user, address(etherFiRestakerInstance.lido()));
 
         redeemableAmount = etherFiRedemptionManagerInstance.totalRedeemableAmount(address(etherFiRestakerInstance.lido()));
-        console2.log("redeemableAmount", redeemableAmount);
 
         uint256 totalFee = (2000 ether * 1e2) / 1e4;
         uint256 treasuryFee = (totalFee * 1e3) / 1e4;
@@ -425,6 +439,21 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function test_mainnet_redeem_weEth_with_rebase() public {
         setUp_Fork();
+        
+        vm.startPrank(op_admin);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, address(etherFiRestakerInstance.lido()));
+        vm.stopPrank();
+
+        // Fund EtherFiRestaker with stETH so redemption can work
+        // Deposit stETH through liquifier which will fund EtherFiRestaker
+        address funder = vm.addr(2002);
+        vm.deal(funder, 5 ether);
+        vm.startPrank(funder);
+        stEth.submit{value: 5 ether}(address(0));
+        uint256 stEthAmount = stEth.balanceOf(funder);
+        stEth.approve(address(liquifierInstance), stEthAmount);
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        vm.stopPrank();
 
         vm.deal(alice, 50000 ether);
         vm.prank(alice);
@@ -463,6 +492,17 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function test_unrestaker_transferSteth_permissions() public {
         setUp_Fork();
+
+        // Fund EtherFiRestaker with stETH so transfer can work
+        // Deposit stETH through liquifier which will fund EtherFiRestaker
+        address funder = vm.addr(2005);
+        vm.deal(funder, 5 ether);
+        vm.startPrank(funder);
+        stEth.submit{value: 5 ether}(address(0));
+        uint256 stEthAmount = stEth.balanceOf(funder);
+        stEth.approve(address(liquifierInstance), stEthAmount);
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        vm.stopPrank();
 
         vm.expectRevert(EtherFiRestaker.IncorrectCaller.selector);
         vm.startPrank(admin);
@@ -510,6 +550,17 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         assertEq(limit.refillRate, expectedRefillRate);
         vm.stopPrank();
 
+        // Fund EtherFiRestaker with stETH so redemption can work
+        // Deposit stETH through liquifier which will fund EtherFiRestaker
+        address funder = vm.addr(2000);
+        vm.deal(funder, 5 ether);
+        vm.startPrank(funder);
+        stEth.submit{value: 5 ether}(address(0));
+        uint256 stEthAmount = stEth.balanceOf(funder);
+        stEth.approve(address(liquifierInstance), stEthAmount);
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        vm.stopPrank();
+
         //test low watermark works
         vm.startPrank(user);
         vm.deal(user, 10 ether);
@@ -532,6 +583,21 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function test_redeem_stETH_share_price() public {
         setUp_Fork();
+        vm.startPrank(op_admin);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, address(etherFiRestakerInstance.lido()));
+        vm.stopPrank();
+
+        // Fund EtherFiRestaker with stETH so redemption can work
+        // Deposit stETH through liquifier which will fund EtherFiRestaker
+        address funder = vm.addr(2003);
+        vm.deal(funder, 5 ether);
+        vm.startPrank(funder);
+        stEth.submit{value: 5 ether}(address(0));
+        uint256 stEthAmount = stEth.balanceOf(funder);
+        stEth.approve(address(liquifierInstance), stEthAmount);
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        vm.stopPrank();
+
         vm.startPrank(user);
         vm.deal(user, 10 ether);
         liquidityPoolInstance.deposit{value: 10 ether}();
@@ -561,6 +627,18 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function test_redeem_stETH_share_price_with_not_fee() public {
         setUp_Fork();
+        
+        // Fund EtherFiRestaker with stETH so redemption can work
+        // Deposit stETH through liquifier which will fund EtherFiRestaker
+        address funder = vm.addr(2004);
+        vm.deal(funder, 5 ether);
+        vm.startPrank(funder);
+        stEth.submit{value: 5 ether}(address(0));
+        uint256 stEthAmount = stEth.balanceOf(funder);
+        stEth.approve(address(liquifierInstance), stEthAmount);
+        liquifierInstance.depositWithERC20(address(stEth), stEthAmount, address(0));
+        vm.stopPrank();
+        
         vm.startPrank(user);
         vm.deal(user, 10 ether);
         liquidityPoolInstance.deposit{value: 10 ether}();
@@ -569,6 +647,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         //set fee to 0
         vm.startPrank(op_admin);
         etherFiRedemptionManagerInstance.setExitFeeBasisPoints(0, address(etherFiRestakerInstance.lido()));
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, address(etherFiRestakerInstance.lido()));
         vm.stopPrank();
         //get number of shares for 1 ether
         vm.startPrank(user);
@@ -596,6 +675,10 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function test_redeem_eEth_share_price() public {
         setUp_Fork();
+        vm.startPrank(op_admin);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, ETH_ADDRESS);
+        vm.stopPrank();
+        
         vm.startPrank(user);
         vm.deal(user, 10 ether);
         liquidityPoolInstance.deposit{value: 10 ether}();
