@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -74,6 +74,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     bytes32 public constant LIQUIDITY_POOL_ADMIN_ROLE = keccak256("LIQUIDITY_POOL_ADMIN_ROLE");
     bytes32 public constant LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE = keccak256("LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE");
+    bytes32 public constant LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = keccak256("LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE");
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -280,8 +281,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     // [Liquidty Pool Staking flow]
     // Step 1: (Off-chain) create the keys using the desktop app
-    // Step 2: create validators with 1 eth deposits to official deposit contract
-    // Step 3: oracle approves and funds the remaining balance for the validator
+    // Step 2: register validator deposit data for later confirmation from the oracle before the 1eth deposit
+    // Step 3: create validators with 1 eth deposits to official deposit contract
+    // Step 4: oracle approves and funds the remaining balance for the validator
 
     /// @notice claim bids and send 1 eth deposits to deposit contract to create the provided validators.
     /// @dev step 2 of staking flow
@@ -291,6 +293,15 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         address _etherFiNode
     ) external whenNotPaused {
         require(validatorSpawner[msg.sender].registered, "Incorrect Caller");
+        stakingManager.registerBeaconValidators(_depositData, _bidIds, _etherFiNode);
+    }
+
+    function batchCreateBeaconValidators(
+        IStakingManager.DepositData[] calldata _depositData,
+        uint256[] calldata _bidIds,
+        address _etherFiNode
+    ) external whenNotPaused {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE, msg.sender)) revert IncorrectRole();
 
         // liquidity pool supplies 1 eth per validator
         uint256 outboundEthAmountFromLp = 1 ether * _bidIds.length;
