@@ -33,10 +33,6 @@ interface ILiquidityPool {
         uint32 startOfSlotNumOwners;
     }
 
-    struct BnftHolder {
-        address holder;
-    }
-
     struct ValidatorSpawner {
         bool registered;
     }
@@ -68,6 +64,7 @@ interface ILiquidityPool {
     function DEPRECATED_sendExitRequests(uint256[] calldata _validatorIds) external;
 
     function registerValidatorSpawner(address _user) external;
+    function registerAsBnftHolder(address _user) external;
     function unregisterValidatorSpawner(address _user) external;
 
     function rebase(int128 _accruedRewards) external;

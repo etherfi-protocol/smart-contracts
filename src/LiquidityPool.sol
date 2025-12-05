@@ -19,6 +19,11 @@ import "./interfaces/IRoleRegistry.sol";
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
     using SafeERC20 for IERC20;
+
+    // Deprecated legacy holder struct kept to maintain storage layout.
+    struct BnftHolder {
+        address holder;
+    }
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -124,8 +129,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         totalValueInLp += uint128(msg.value);
     }
 
-    function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external initializer {
-        if (_eEthAddress == address(0) || _stakingManagerAddress == address(0) || _nodesManagerAddress == address(0) || _membershipManagerAddress == address(0) || _tNftAddress == address(0)) revert DataNotSet();
+    function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external initializer {
+        if (_eEthAddress == address(0) || _stakingManagerAddress == address(0) || _nodesManagerAddress == address(0) || _membershipManagerAddress == address(0)) revert DataNotSet();
         
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -133,7 +138,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         stakingManager = IStakingManager(_stakingManagerAddress);
         nodesManager = IEtherFiNodesManager(_nodesManagerAddress);
         membershipManager = _membershipManagerAddress;
-        DEPRECATED_TNFT = _tNftAddress;
         paused = true;
         restakeBnftDeposits = false;
         ethAmountLockedForWithdrawal = 0;
@@ -373,7 +377,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         validatorSizeWei = _validatorSizeWei;
     }
 
-    /// @notice The admin can register an address to become a BNFT holder
+    /// @notice The admin can register an address to become a validator spawner (legacy bNFT role)
     /// @param _user The address of the Validator Spawner to register
     function registerValidatorSpawner(address _user) public {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
@@ -382,6 +386,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         validatorSpawner[_user] = ValidatorSpawner({registered: true});
 
         emit ValidatorSpawnerRegistered(_user);
+    }
+
+    /// @notice Backwards-compatible alias for legacy bNFT flow.
+    /// @dev Calls `registerValidatorSpawner` under the hood to preserve role checks and events.
+    function registerAsBnftHolder(address _user) external {
+        registerValidatorSpawner(_user);
     }
 
     /// @notice Removes a Validator Spawner
@@ -412,7 +422,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
     }
 
-    /// @notice pay protocol fees including 5% to treaury, 5% to node operator and ethfund bnft holders
+    /// @notice pay protocol fees including treasury and node operator splits (legacy bnft logic removed)
     /// @param _protocolFees The amount of protocol fees to pay in ether
     function payProtocolFees(uint128 _protocolFees) external {
         if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();   

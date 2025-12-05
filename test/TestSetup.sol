@@ -23,8 +23,6 @@ import "../src/NodeOperatorManager.sol";
 import "../src/archive/RegulationsManager.sol";
 import "../src/AuctionManager.sol";
 import "../src/archive/ProtocolRevenueManager.sol";
-import "../src/BNFT.sol";
-import "../src/TNFT.sol";
 import "../src/EtherFiNode.sol";
 import "../src/EtherFiRateLimiter.sol";
 import "../src/LiquidityPool.sol";
@@ -103,8 +101,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     UUPSProxy public etherFiNodeManagerProxy;
     UUPSProxy public rateLimiterProxy;
     UUPSProxy public protocolRevenueManagerProxy;
-    UUPSProxy public TNFTProxy;
-    UUPSProxy public BNFTProxy;
     UUPSProxy public liquidityPoolProxy;
     UUPSProxy public liquifierProxy;
     UUPSProxy public etherFiRestakerProxy;
@@ -149,11 +145,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     RoleRegistry public roleRegistryImplementation;
     RoleRegistry public roleRegistryInstance;
 
-    TNFT public TNFTImplementation;
-    TNFT public TNFTInstance;
-
-    BNFT public BNFTImplementation;
-    BNFT public BNFTInstance;
 
     LiquidityPool public liquidityPoolImplementation;
     LiquidityPool public liquidityPoolInstance;
@@ -243,7 +234,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     address superAdmin;
 
     address[] public actors;
-    address[] public bnftHoldersArray;
     uint256[] public whitelistIndices;
 
     bytes aliceIPFSHash = "AliceIPFS";
@@ -405,8 +395,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         membershipNftInstance = MembershipNFT(addressProviderInstance.getContractAddress("MembershipNFT"));
         auctionInstance = AuctionManager(addressProviderInstance.getContractAddress("AuctionManager"));
         stakingManagerInstance = StakingManager(addressProviderInstance.getContractAddress("StakingManager"));
-        TNFTInstance = TNFT(addressProviderInstance.getContractAddress("TNFT"));
-        BNFTInstance = BNFT(addressProviderInstance.getContractAddress("BNFT"));
         nodeOperatorManagerInstance = NodeOperatorManager(addressProviderInstance.getContractAddress("NodeOperatorManager"));
         node = EtherFiNode(payable(addressProviderInstance.getContractAddress("EtherFiNode")));
         earlyAdopterPoolInstance = EarlyAdopterPool(payable(addressProviderInstance.getContractAddress("EarlyAdopterPool")));
@@ -534,16 +522,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         //stakingManagerInstance.initialize(address(auctionInstance), address(mockDepositContractEth2));
         //stakingManagerInstance.updateAdmin(alice, true);
 
-        TNFTImplementation = new TNFT();
-        TNFTProxy = new UUPSProxy(address(TNFTImplementation), "");
-        TNFTInstance = TNFT(address(TNFTProxy));
-        TNFTInstance.initialize(address(stakingManagerInstance));
-
-        BNFTImplementation = new BNFT();
-        BNFTProxy = new UUPSProxy(address(BNFTImplementation), "");
-        BNFTInstance = BNFT(address(BNFTProxy));
-        BNFTInstance.initialize(address(stakingManagerInstance));
-
         protocolRevenueManagerImplementation = new ProtocolRevenueManager();
         protocolRevenueManagerProxy = new UUPSProxy(address(protocolRevenueManagerImplementation), "");
         protocolRevenueManagerInstance = ProtocolRevenueManager(payable(address(protocolRevenueManagerProxy)));
@@ -554,9 +532,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiNodeManagerProxy = new UUPSProxy(address(managerImplementation), "");
         managerInstance = EtherFiNodesManager(payable(address(etherFiNodeManagerProxy)));
         
-
-        TNFTInstance.initializeOnUpgrade(address(managerInstance));
-        BNFTInstance.initializeOnUpgrade(address(managerInstance));
 
         regulationsManagerImplementation = new RegulationsManager();
         vm.expectRevert("Initializable: contract is already initialized");
@@ -707,7 +682,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), owner);
         etherFiRedemptionManagerInstance.initializeTokenParameters(_tokens, _exitFeeSplitToTreasuryInBps, _exitFeeInBps, _lowWatermarkInBpsOfTvl, _bucketCapacity, _bucketRefillRate);
 
-        liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
+        liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
         liquidityPoolInstance.initializeVTwoDotFourNine(address(roleRegistryInstance), address(etherFiRedemptionManagerInstance));
 
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
@@ -739,8 +714,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(treasuryInstance),
             address(auctionInstance),
             address(stakingManagerInstance),
-            address(TNFTInstance),
-            address(BNFTInstance),
             address(eigenLayerEigenPodManager),
             address(eigenLayerDelayedWithdrawalRouter),
             address(eigenLayerDelegationManager)
@@ -874,8 +847,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         //stakingManagerInstance.setEtherFiNodesManagerAddress(address(managerInstance));
         //stakingManagerInstance.setLiquidityPoolAddress(address(liquidityPoolInstance));
         //stakingManagerInstance.registerEtherFiNodeImplementationContract(address(node));
-        //stakingManagerInstance.registerTNFTContract(address(TNFTInstance));
-        //stakingManagerInstance.registerBNFTContract(address(BNFTInstance));
+        //stakingManagerInstance.registerTNFTContract(address(0));
+        //stakingManagerInstance.registerBNFTContract(address(0));
 
         vm.stopPrank();
 
@@ -1249,7 +1222,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         return permitInput;
     }
 
-    function registerAsBnftHolder(address _user) internal {
+    function registerValidatorSpawnerForTest(address _user) internal {
         bool registered = liquidityPoolInstance.validatorSpawner(_user);
 
         vm.expectEmit(true, true, false, true);
@@ -1257,17 +1230,17 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         if (!registered) liquidityPoolInstance.registerValidatorSpawner(_user);
     }
 
-    function setUpBnftHolders() internal {
+    function setUpValidatorSpawners() internal {
         vm.startPrank(alice);
-        registerAsBnftHolder(alice);
-        registerAsBnftHolder(greg);
-        registerAsBnftHolder(bob);
-        registerAsBnftHolder(owner);
-        registerAsBnftHolder(shonee);
-        registerAsBnftHolder(dan);
-        registerAsBnftHolder(elvis);
-        registerAsBnftHolder(henry);
-        registerAsBnftHolder(address(liquidityPoolInstance));
+        registerValidatorSpawnerForTest(alice);
+        registerValidatorSpawnerForTest(greg);
+        registerValidatorSpawnerForTest(bob);
+        registerValidatorSpawnerForTest(owner);
+        registerValidatorSpawnerForTest(shonee);
+        registerValidatorSpawnerForTest(dan);
+        registerValidatorSpawnerForTest(elvis);
+        registerValidatorSpawnerForTest(henry);
+        registerValidatorSpawnerForTest(address(liquidityPoolInstance));
         vm.stopPrank();
 
         vm.deal(alice, 100000 ether);
@@ -1332,21 +1305,21 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         return launch_validator(2, 0, false, alice);
     }
 
-    function launch_validator(uint256 _numValidators, uint256 _validatorIdToCoUseWithdrawalSafe, bool _isLpBnftHolder) internal returns (uint256[] memory) {
-        return launch_validator(_numValidators, _validatorIdToCoUseWithdrawalSafe, _isLpBnftHolder, alice, alice);
+    function launch_validator(uint256 _numValidators, uint256 _validatorIdToCoUseWithdrawalSafe, bool _restakeFlag) internal returns (uint256[] memory) {
+        return launch_validator(_numValidators, _validatorIdToCoUseWithdrawalSafe, _restakeFlag, alice, alice);
     }
 
-    function launch_validator(uint256 _numValidators, uint256 _validatorIdToCoUseWithdrawalSafe, bool _isLpBnftHolder, address _bnftStaker) internal returns (uint256[] memory) {
-        return launch_validator(_numValidators, _validatorIdToCoUseWithdrawalSafe, _isLpBnftHolder, _bnftStaker, alice);
+    function launch_validator(uint256 _numValidators, uint256 _validatorIdToCoUseWithdrawalSafe, bool _restakeFlag, address _staker) internal returns (uint256[] memory) {
+        return launch_validator(_numValidators, _validatorIdToCoUseWithdrawalSafe, _restakeFlag, _staker, alice);
     }
 
-    function launch_validator(uint256 _numValidators, uint256 _validatorIdToCoUseWithdrawalSafe, bool _isLpBnftHolder, address _bnftStaker, address _nodeOperator) internal returns (uint256[] memory) {
+    function launch_validator(uint256 _numValidators, uint256 _validatorIdToCoUseWithdrawalSafe, bool _restakeFlag, address _staker, address _nodeOperator) internal returns (uint256[] memory) {
         bytes32 rootForApproval;
 
         vm.deal(owner, 10000 ether);
         vm.deal(alice, 10000 ether);
         vm.deal(bob, 10000 ether);
-        vm.deal(_bnftStaker, 10000 ether);
+        vm.deal(_staker, 10000 ether);
 
         address admin;
         if (block.chainid == 1) {
@@ -1357,7 +1330,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             admin = alice;
         }
         vm.startPrank(admin);
-        registerAsBnftHolder(_nodeOperator);
+        registerValidatorSpawnerForTest(_nodeOperator);
         // liquidityPoolInstance.updateBnftMode(_isLpBnftHolder);
         vm.stopPrank();
 
@@ -1393,7 +1366,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.stopPrank();
 
         startHoax(bob);
-        if (_isLpBnftHolder) {
+        if (_restakeFlag) {
             liquidityPoolInstance.deposit{value: 32 ether * _numValidators}();
         } else {
             liquidityPoolInstance.deposit{value: 32 ether * _numValidators}();
@@ -1401,7 +1374,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.stopPrank();
 
         // TODO(dave): rework test setup
-        //vm.prank(_bnftStaker);
+        //vm.prank(_staker);
         //uint256[] memory newValidators = liquidityPoolInstance.batchDeposit(bidIds, _numValidators, _validatorIdToCoUseWithdrawalSafe);
         //uint256[] memory newValidators = new uint256[](_numValidators);
         uint256[] memory newValidators = bidIds;
@@ -1444,7 +1417,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             pubKey[i] = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
         }
 
-        vm.startPrank(_bnftStaker);
+        vm.startPrank(_staker);
         bytes32 depositRoot = zeroRoot;
         // TODO(Dave): fix for new deposit flow
         address fix_nodeAddress = address(0x1234AABB);

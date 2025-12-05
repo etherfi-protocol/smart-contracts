@@ -16,6 +16,7 @@ contract Deployed {
     // Membership & NFTs
     address public constant MEMBERSHIP_MANAGER = 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000;
     address public constant MEMBERSHIP_NFT = 0xb49e4420eA6e35F98060Cd133842DbeA9c27e479;
+    // Deprecated legacy NFT contracts retained for historical reference only.
     address public constant TNFT = 0x7B5ae07E2AF1C861BcC4736D23f5f66A61E0cA5e;
     address public constant BNFT = 0x6599861e55abd28b91dd9d86A826eC0cC8D72c2c;
     address public constant WITHDRAW_REQUEST_NFT = 0x7d5706f6ef3F89B3951E23e557CDFBC3239D4E2c;
