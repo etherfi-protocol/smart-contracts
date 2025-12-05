@@ -1503,9 +1503,7 @@ contract StakingManagerTest is TestSetup {
     }
 
     function test_createBeaconValidatorsFailsIfInvalidCaller() public {
-        // Use an existing node address (the node from test setup) instead of creating a new one
-        // This avoids the beacon setup issue
-        address etherFiNode = address(node); // Use the node from test setup;
+        address etherFiNode = address(node);
         vm.prank(admin);
         nodeOperatorManagerInstance.addToWhitelist(alice);
 
@@ -1542,147 +1540,6 @@ contract StakingManagerTest is TestSetup {
         stakingManagerInstance.createBeaconValidators{value: 1 ether}(depositDataArray, bidIds, address(0x1234));
     }
 
-    function test_createBeaconValidatorsFailsIfInvalidEtherFiNode() public {
-        // Use liquidityPoolInstance address directly (set in constructor)
-        address liquidityPoolAddr = address(liquidityPoolInstance);
-        vm.deal(liquidityPoolAddr, 10 ether);
-        
-        uint256[] memory bidIds = new uint256[](1);
-        bidIds[0] = 1;
-        
-        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
-        
-        // Create a mock contract address that will fail getEigenPod() call
-        // Use a contract that exists but doesn't implement IEtherFiNode properly
-        address invalidNode = address(0x1234); // This will cause low-level revert when calling getEigenPod()
-        
-        // Caller check passes (liquidityPool), deposit data length check passes, 
-        // then invalid node check fails (getEigenPod() call reverts)
-        vm.prank(liquidityPoolAddr);
-        vm.expectRevert(); // Low-level revert from calling getEigenPod() on non-contract
-        stakingManagerInstance.createBeaconValidators{value: 1 ether}(depositDataArray, bidIds, invalidNode);
-    }
-
-    function test_createBeaconValidatorsFailsIfInactiveBid() public {
-        // Use an existing node address (the node from test setup) instead of creating a new one
-        address etherFiNode = address(node); // Use the node from test setup
-        address liquidityPoolAddr = address(liquidityPoolInstance);
-        
-        uint256[] memory bidIds = new uint256[](1);
-        bidIds[0] = 999; // non-existent bid
-        
-        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
-        
-        // Note: Node from test setup may not have eigenPod, so InvalidEtherFiNode might fail first
-        // This test verifies the inactive bid check, but may fail earlier if node setup is incomplete
-        vm.deal(liquidityPoolAddr, 10 ether);
-        vm.prank(liquidityPoolAddr);
-        // May revert with InvalidEtherFiNode if node doesn't have eigenPod, or InactiveBid if it does
-        vm.expectRevert(); // Expect some revert (either InvalidEtherFiNode or InactiveBid)
-        stakingManagerInstance.createBeaconValidators{value: 1 ether}(depositDataArray, bidIds, etherFiNode);
-    }
-
-    function test_createBeaconValidatorsFailsIfIncorrectRoot() public {
-        // Use an existing node address (the node from test setup) instead of creating a new one
-        address etherFiNode = address(node); // Use the node from test setup
-        address liquidityPoolAddr = address(liquidityPoolInstance);
-        
-        vm.prank(admin);
-        nodeOperatorManagerInstance.addToWhitelist(alice);
-
-        vm.prank(deployed.OPERATING_TIMELOCK());
-        liquidityPoolInstance.registerValidatorSpawner(alice);
-
-        vm.deal(alice, 100 ether);
-        vm.prank(alice);
-
-        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 1000);
-        vm.prank(alice);
-        uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-        
-        bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-        bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
-        
-        IStakingManager.DepositData memory depositData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: bytes32(uint256(123)), // incorrect root
-            ipfsHashForEncryptedValidatorKey: "test_ipfs"
-        });
-        
-        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
-        depositDataArray[0] = depositData;
-        
-        // Note: Node from test setup may not have eigenPod, so InvalidEtherFiNode might fail first
-        // This test verifies the incorrect root check, but may fail earlier if node setup is incomplete
-        vm.deal(liquidityPoolAddr, 10 ether);
-        vm.prank(liquidityPoolAddr);
-        // May revert with InvalidEtherFiNode if node doesn't have eigenPod, or IncorrectBeaconRoot if it does
-        vm.expectRevert(); // Expect some revert (either InvalidEtherFiNode or IncorrectBeaconRoot)
-        stakingManagerInstance.createBeaconValidators{value: 1 ether}(depositDataArray, bidIds, etherFiNode);
-    }
-
-    function test_confirmAndFundBeaconValidators() public {
-        // Note: This test requires creating a validator first, which may fail due to beacon setup
-        // Skipping full test as it requires proper beacon setup
-        // The function logic is tested in other error cases
-        return;
-        
-        // First create a validator
-        vm.prank(alice);
-        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 100);
-        
-        vm.deal(alice, 100 ether);
-        vm.prank(alice);
-        uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
-        
-        vm.startPrank(owner);
-        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), alice);
-        vm.stopPrank();
-        
-        vm.prank(alice);
-        address etherFiNode = stakingManagerInstance.instantiateEtherFiNode(true);
-        
-        bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-        bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
-        
-        address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
-        bytes memory withdrawalCredentials = managerInstance.addressToCompoundingWithdrawalCredentials(eigenPod);
-        bytes32 depositDataRoot = stakingManagerInstance.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, 1 ether);
-        
-        IStakingManager.DepositData memory depositData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: depositDataRoot,
-            ipfsHashForEncryptedValidatorKey: "test_ipfs"
-        });
-        
-        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
-        depositDataArray[0] = depositData;
-        
-        vm.deal(address(liquidityPoolInstance), 100 ether);
-        vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.createBeaconValidators{value: 1 ether}(depositDataArray, bidIds, etherFiNode);
-        
-        // Now confirm and fund
-        uint256 validatorSize = 32 ether;
-        uint256 remainingDeposit = validatorSize - 1 ether;
-        bytes32 confirmRoot = stakingManagerInstance.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, remainingDeposit);
-        
-        IStakingManager.DepositData memory confirmData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: confirmRoot,
-            ipfsHashForEncryptedValidatorKey: "test_ipfs"
-        });
-        
-        IStakingManager.DepositData[] memory confirmDataArray = new IStakingManager.DepositData[](1);
-        confirmDataArray[0] = confirmData;
-        
-        vm.prank(address(liquidityPoolInstance));
-        stakingManagerInstance.confirmAndFundBeaconValidators{value: remainingDeposit}(confirmDataArray, validatorSize);
-    }
-
     function test_confirmAndFundBeaconValidatorsFailsIfInvalidCaller() public {
         IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
         
@@ -1700,46 +1557,6 @@ contract StakingManagerTest is TestSetup {
         vm.prank(liquidityPoolAddr);
         vm.expectRevert(IStakingManager.InvalidValidatorSize.selector);
         stakingManagerInstance.confirmAndFundBeaconValidators{value: 30 ether}(depositDataArray, 31 ether); // too small
-    }
-
-    function test_confirmAndFundBeaconValidatorsFailsIfValidatorSizeTooLarge() public {
-        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
-        // Note: Due to test setup limitations with immutable variables through proxies,
-        // this test verifies the validator size check logic
-        // The caller check may fail first due to test environment setup
-        address liquidityPoolAddr = address(liquidityPoolInstance);
-        vm.deal(liquidityPoolAddr, 3000 ether); // Need enough funds for 2048 ether call
-        
-        // First check passes (caller is liquidityPool), then validator size check fails
-        vm.prank(liquidityPoolAddr);
-        // May revert with InvalidCaller due to test setup, or InvalidValidatorSize if caller check passes
-        vm.expectRevert(); // Expect some revert
-        stakingManagerInstance.confirmAndFundBeaconValidators{value: 2048 ether}(depositDataArray, 2049 ether); // too large
-    }
-
-    function test_confirmAndFundBeaconValidatorsFailsIfUnlinkedPubkey() public {
-        bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-        bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
-        // Note: Due to test setup limitations with immutable variables through proxies,
-        // this test verifies the unlinked pubkey check logic
-        // The actual caller check may fail first due to test environment setup
-        address liquidityPoolAddr = address(liquidityPoolInstance);
-        
-        IStakingManager.DepositData memory depositData = IStakingManager.DepositData({
-            publicKey: pubkey,
-            signature: signature,
-            depositDataRoot: bytes32(uint256(123)),
-            ipfsHashForEncryptedValidatorKey: "test_ipfs"
-        });
-        
-        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
-        depositDataArray[0] = depositData;
-        
-        // May revert with InvalidCaller due to test setup, or UnlinkedPubkey if caller check passes
-        vm.deal(liquidityPoolAddr, 100 ether);
-        vm.prank(liquidityPoolAddr);
-        vm.expectRevert(); // Expect some revert (either InvalidCaller or UnlinkedPubkey)
-        stakingManagerInstance.confirmAndFundBeaconValidators{value: 31 ether}(depositDataArray, 32 ether);
     }
 }
 

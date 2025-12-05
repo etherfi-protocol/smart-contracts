@@ -275,7 +275,6 @@ contract EtherFiRestakerTest is TestSetup {
         restaker.setRewardsClaimer(_claimer);
 
         vm.stopPrank();
-        vm.prank(deployed.OPERATING_TIMELOCK());
         assertEq(eigenLayerRewardsCoordinator.claimerFor(address(restaker)), _claimer);
     }
 

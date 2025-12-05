@@ -24,7 +24,6 @@ contract EtherFiNodesManagerTest is TestSetup {
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
-        console2.log("managerInstance.rateLimiter()", address(managerInstance.rateLimiter()));
 
         // Get rate limiter from manager instance and set it for use in tests
         // rateLimiterInstance might not be set when using initializeRealisticFork
@@ -601,7 +600,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         vm.prank(deployed.OPERATING_TIMELOCK());
         managerInstance.linkLegacyValidatorIds(legacyIdsForOneValidator, pubkeysForOneValidator); 
         vm.stopPrank();
-        console.log("Linking legacy validator ids for one validator complete");  
 
         bytes32 pkHash = managerInstance.calculateValidatorPubkeyHash(pubkeys[0]);
         IEtherFiNode etherFiNode = managerInstance.etherFiNodeFromPubkeyHash(pkHash);
