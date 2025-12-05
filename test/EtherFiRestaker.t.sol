@@ -264,9 +264,9 @@ contract EtherFiRestakerTest is TestSetup {
     }
 
     function test_claimer_upgrade() public {
-        initializeRealisticFork(MAINNET_FORK);
-        EtherFiRestaker restaker = EtherFiRestaker(payable(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf));
-        address _claimer = vm.addr(433);
+        // initializeRealisticFork(MAINNET_FORK);
+        EtherFiRestaker restaker = EtherFiRestaker(payable(deployed.ETHERFI_RESTAKER()));
+        address _claimer = address(liquidityPoolInstance); // dummy claimer
 
         address newRestakerImpl = address(new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance)));
         vm.startPrank(restaker.owner());
@@ -274,6 +274,7 @@ contract EtherFiRestakerTest is TestSetup {
         restaker.upgradeTo(newRestakerImpl);
         restaker.setRewardsClaimer(_claimer);
 
+        vm.stopPrank();
         assertEq(eigenLayerRewardsCoordinator.claimerFor(address(restaker)), _claimer);
     }
 

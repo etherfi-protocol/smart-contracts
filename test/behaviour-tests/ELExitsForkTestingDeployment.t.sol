@@ -70,7 +70,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
         console2.log("Role Registry Owner:", roleRegistryOwner);
         console2.log("StakingManager Owner:", stakingManagerOwner);
         console2.log("EtherFiNodesManager Owner:", etherFiNodesManagerOwner);
-        console2.log(unicode"⚠️  All contracts use timelock - upgrades need governance");
+        console2.log("[WARN] All contracts use timelock - upgrades need governance");
         
         console2.log("");
     }
@@ -117,7 +117,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
         console2.log("Rate limiter proxy:", address(rateLimiter));
 
         rateLimiter.initialize();
-        console2.log(unicode"✓ Rate limiter deployed and initialized");
+        console2.log("[OK] Rate limiter deployed and initialized");
         console2.log("");
     }
     
@@ -161,17 +161,17 @@ contract ELExitsForkTestingDeploymentTest is Test {
         // Upgrade StakingManager - prank the owner (hardcoded timelock)
         vm.prank(stakingManagerOwner);
         stakingManager.upgradeTo(address(newStakingManagerImpl));
-        console2.log(unicode"✓ StakingManager upgraded (rate limiter integration)");
+        console2.log("[OK] StakingManager upgraded (rate limiter integration)");
 
         // Upgrade EtherFiNodesManager - prank the owner (hardcoded timelock)  
         vm.prank(etherFiNodesManagerOwner);
         etherFiNodesManager.upgradeTo(address(newEtherFiNodesManagerImpl));
-        console2.log(unicode"✓ EtherFiNodesManager upgraded (EL exits + rate limiter)");
+        console2.log("[OK] EtherFiNodesManager upgraded (EL exits + rate limiter)");
 
         // Upgrade EtherFiNode beacon - prank stakingManager owner (hardcoded timelock)
         vm.prank(stakingManagerOwner);
         stakingManager.upgradeEtherFiNode(address(newEtherFiNodeImpl));
-        console2.log(unicode"✓ EtherFiNode beacon upgraded (EL exits + consolidation)");
+        console2.log("[OK] EtherFiNode beacon upgraded (EL exits + consolidation)");
 
         console2.log("");
     }
@@ -198,7 +198,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
         roleRegistry.grantRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
 
         vm.stopPrank();
-        console2.log(unicode"✓ All roles granted");
+        console2.log("[OK] All roles granted");
         console2.log("");
     }
 
@@ -215,8 +215,8 @@ contract ELExitsForkTestingDeploymentTest is Test {
         rateLimiter.updateConsumers(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), address(etherFiNodesManager), true);
         rateLimiter.updateConsumers(etherFiNodesManager.EXIT_REQUEST_LIMIT_ID(), address(etherFiNodesManager), true);
 
-        console2.log(unicode"✓ UNRESTAKING_LIMIT_ID bucket initialized");
-        console2.log(unicode"✓ EXIT_REQUEST_LIMIT_ID bucket initialized");
+        console2.log("[OK] UNRESTAKING_LIMIT_ID bucket initialized");
+        console2.log("[OK] EXIT_REQUEST_LIMIT_ID bucket initialized");
 
         vm.stopPrank();
         console2.log("");
@@ -230,7 +230,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
         bool hasElExitRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), realElExiter);
 
         if (hasElExitRole) {
-            console2.log(unicode"✓ EL Exit role correctly assigned to real address");
+            console2.log("[OK] EL Exit role correctly assigned to real address");
 
             // Try to call EL triggered withdrawal (will revert due to no validators, but tests access control)
             IEigenPodTypes.WithdrawalRequest[] memory requests = new IEigenPodTypes.WithdrawalRequest[](1);
@@ -241,23 +241,23 @@ contract ELExitsForkTestingDeploymentTest is Test {
 
             vm.prank(realElExiter);
             try etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal(requests) {
-                console2.log(unicode"✓ EL withdrawal call succeeded");
+                console2.log("[OK] EL withdrawal call succeeded");
             } catch {
-                console2.log(unicode"✓ EL withdrawal access control working (expected revert)");
+                console2.log("[OK] EL withdrawal access control working (expected revert)");
             }
         } else {
-            console2.log(unicode"✗ EL Exit role not properly assigned");
+            console2.log("[FAIL] EL Exit role not properly assigned");
         }
 
         // Test 2: Rate limiter functionality
         try rateLimiter.getLimit(etherFiNodesManager.UNRESTAKING_LIMIT_ID()) returns (uint64 capacity, uint64, uint64, uint256) {
             if (capacity > 0) {
-                console2.log(unicode"✓ Rate limiter buckets properly initialized");
+                console2.log("[OK] Rate limiter buckets properly initialized");
             } else {
-                console2.log(unicode"✗ Rate limiter buckets not initialized");
+                console2.log("[FAIL] Rate limiter buckets not initialized");
             }
         } catch {
-            console2.log(unicode"✗ Rate limiter not accessible");
+            console2.log("[FAIL] Rate limiter not accessible");
         }
 
         // Test 3: Call forwarding (set up a realistic example)
@@ -269,12 +269,12 @@ contract ELExitsForkTestingDeploymentTest is Test {
             address testUser = address(0x1234567890123456789012345678901234567890);
             vm.prank(realAdmin);
             try etherFiNodesManager.updateAllowedForwardedEigenpodCalls(testUser, eigenPodSelector, true) {
-                console2.log(unicode"✓ Call forwarding permissions can be set by real admin");
+                console2.log("[OK] Call forwarding permissions can be set by real admin");
             } catch {
-                console2.log(unicode"✗ Call forwarding setup failed");
+                console2.log("[FAIL] Call forwarding setup failed");
             }
         } else {
-            console2.log(unicode"⚠️  No real admin found for call forwarding test");
+            console2.log("[WARN] No real admin found for call forwarding test");
         }
 
         console2.log("");
@@ -297,11 +297,11 @@ contract ELExitsForkTestingDeploymentTest is Test {
         console2.log("");
 
         console2.log("New Features Deployed:");
-        console2.log(unicode"✓ EL-triggered exits with real role assignment");
-        console2.log(unicode"✓ Consolidation requests");
-        console2.log(unicode"✓ Rate limiting with bucket system");
-        console2.log(unicode"✓ Enhanced user-specific call forwarding");
-        console2.log(unicode"✓ New roles: ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, ETHERFI_RATE_LIMITER_ADMIN_ROLE");
+        console2.log("[OK] EL-triggered exits with real role assignment");
+        console2.log("[OK] Consolidation requests");
+        console2.log("[OK] Rate limiting with bucket system");
+        console2.log("[OK] Enhanced user-specific call forwarding");
+        console2.log("[OK] New roles: ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, ETHERFI_RATE_LIMITER_ADMIN_ROLE");
         console2.log("");
 
         console2.log("This simulation shows how the upgrade would work in production!");
@@ -339,7 +339,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
             vm.expectRevert(); // Will revert due to validators not existing, but tests role system
             etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal(requests);
 
-            console2.log(unicode"✓ EL withdrawal function accessible with correct role");
+            console2.log("[OK] EL withdrawal function accessible with correct role");
             console2.log("  (Reverts due to non-existent validators - expected behavior)");
         }
     }

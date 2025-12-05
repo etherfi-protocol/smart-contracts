@@ -21,6 +21,10 @@ ignored_warnings_from = [
 [fuzz]
 max_shrink_iters = 100
 
+# Coverage configuration
+# To run coverage only on src/ contracts (excluding scripts, mocks, helpers, interfaces, etc.):
+# forge coverage --no-match-coverage '(script/|test/|src/helpers/|src/interfaces/|src/eigenlayer|src/libraries/|src/archive/)' 
+
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 [rpc_endpoints]
 mainnet = "${MAINNET_RPC_URL}"

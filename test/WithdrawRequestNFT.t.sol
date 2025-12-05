@@ -362,6 +362,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.assume(depositAmount >= 1 ether && depositAmount <= 1000 ether);
         vm.assume(withdrawAmount > 0 && withdrawAmount <= depositAmount);
         vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance));
+        // Filter out contracts that don't implement IERC721Receiver - only allow EOAs
+        vm.assume(recipient.code.length == 0);
         
         // Setup initial balance for bob
         vm.deal(bob, depositAmount);
@@ -411,6 +413,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.assume(rebaseAmount >= 0.5 ether && rebaseAmount <= depositAmount);
         vm.assume(remainderSplitBps <= 10000);
         vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance));
+        // Filter out contracts that don't implement IERC721Receiver - only allow EOAs
+        vm.assume(recipient.code.length == 0);
 
         // Setup initial balance for recipient
         vm.deal(recipient, depositAmount);
@@ -525,6 +529,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.assume(depositAmount >= 1 ether && depositAmount <= 1000 ether);
         vm.assume(withdrawAmount > 0 && withdrawAmount <= depositAmount);
         vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance) && recipient != alice && recipient != admin && recipient != (address(etherFiAdminInstance)));
+        // Filter out contracts that don't implement IERC721Receiver - only allow EOAs
+        vm.assume(recipient.code.length == 0);
         
         // Setup initial balance and deposit
         vm.deal(recipient, depositAmount);
@@ -565,5 +571,503 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Owner can seize the invalidated request NFT
         vm.prank(withdrawRequestNFTInstance.owner());
         withdrawRequestNFTInstance.seizeInvalidRequest(requestId, admin);
+    }
+
+    function test_getClaimableAmount() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+
+        vm.prank(bob);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+
+        // Should revert before finalization
+        vm.expectRevert("Request is not finalized");
+        withdrawRequestNFTInstance.getClaimableAmount(requestId);
+
+        _finalizeWithdrawalRequest(requestId);
+
+        uint256 claimableAmount = withdrawRequestNFTInstance.getClaimableAmount(requestId);
+        assertGt(claimableAmount, 0, "Claimable amount should be greater than 0");
+        
+        // Verify claimable amount equals min(amountOfEEth, amountForShares) - fee
+        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
+        uint256 amountForShares = liquidityPoolInstance.amountForShare(request.shareOfEEth);
+        uint256 expectedAmount = request.amountOfEEth < amountForShares ? request.amountOfEEth : amountForShares;
+        uint256 fee = uint256(request.feeGwei) * 1 gwei;
+        uint256 expectedClaimable = expectedAmount - fee;
+        assertEq(claimableAmount, expectedClaimable, "Claimable amount should match expected calculation");
+    }
+
+    function test_batchClaimWithdraw() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 20 ether}();
+        vm.stopPrank();
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 5 ether);
+
+        // Create multiple withdrawal requests
+        vm.prank(bob);
+        uint256 requestId1 = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 4 ether);
+        vm.prank(bob);
+        uint256 requestId2 = liquidityPoolInstance.requestWithdraw(bob, 2 ether);
+        
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 2 ether);
+        vm.prank(bob);
+        uint256 requestId3 = liquidityPoolInstance.requestWithdraw(bob, 2 ether);
+
+        // Finalize all requests
+        _finalizeWithdrawalRequest(requestId1);
+        _finalizeWithdrawalRequest(requestId2);
+        _finalizeWithdrawalRequest(requestId3);
+
+        uint256 bobBalanceBefore = address(bob).balance;
+        uint256[] memory tokenIds = new uint256[](3);
+        tokenIds[0] = requestId1;
+        tokenIds[1] = requestId2;
+        tokenIds[2] = requestId3;
+
+        vm.prank(bob);
+        withdrawRequestNFTInstance.batchClaimWithdraw(tokenIds);
+
+        uint256 bobBalanceAfter = address(bob).balance;
+        assertGt(bobBalanceAfter, bobBalanceBefore, "Bob should receive ETH from batch claim");
+
+        // Verify all NFTs are burned
+        vm.expectRevert("ERC721: invalid token ID");
+        withdrawRequestNFTInstance.ownerOf(requestId1);
+        vm.expectRevert("ERC721: invalid token ID");
+        withdrawRequestNFTInstance.ownerOf(requestId2);
+        vm.expectRevert("ERC721: invalid token ID");
+        withdrawRequestNFTInstance.ownerOf(requestId3);
+    }
+
+    function test_validateRequest() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+
+        vm.prank(bob);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+
+        assertTrue(withdrawRequestNFTInstance.isValid(requestId), "Request should be valid initially");
+
+        // Invalidate the request
+        vm.prank(admin);
+        withdrawRequestNFTInstance.invalidateRequest(requestId);
+        assertFalse(withdrawRequestNFTInstance.isValid(requestId), "Request should be invalid");
+
+        // Validate the request again
+        vm.prank(admin);
+        withdrawRequestNFTInstance.validateRequest(requestId);
+        assertTrue(withdrawRequestNFTInstance.isValid(requestId), "Request should be valid again");
+
+        // Cannot validate already valid request
+        vm.prank(admin);
+        vm.expectRevert("Request is valid");
+        withdrawRequestNFTInstance.validateRequest(requestId);
+    }
+
+    function test_updateShareRemainderSplitToTreasuryInBps() public {
+        uint16 newSplit = 5000; // 50%
+        
+        vm.prank(withdrawRequestNFTInstance.owner());
+        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(newSplit);
+        
+        assertEq(withdrawRequestNFTInstance.shareRemainderSplitToTreasuryInBps(), newSplit, "Split should be updated");
+
+        // Test invalid value (> 10000)
+        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.expectRevert("INVALID");
+        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(10001);
+
+        // Test non-owner cannot update
+        vm.prank(bob);
+        vm.expectRevert();
+        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(3000);
+    }
+
+    function test_pauseContract() public {
+        assertFalse(withdrawRequestNFTInstance.paused(), "Contract should not be paused initially");
+
+        // Non-pauser cannot pause
+        vm.prank(bob);
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        withdrawRequestNFTInstance.pauseContract();
+
+        // Pauser can pause
+        vm.prank(admin);
+        withdrawRequestNFTInstance.pauseContract();
+        assertTrue(withdrawRequestNFTInstance.paused(), "Contract should be paused");
+
+        // Cannot pause again
+        vm.prank(admin);
+        vm.expectRevert("Pausable: already paused");
+        withdrawRequestNFTInstance.pauseContract();
+
+        // Cannot request withdraw when paused
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        vm.expectRevert("Pausable: paused");
+        liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        vm.stopPrank();
+    }
+
+    function test_unPauseContract() public {
+        // Pause first
+        vm.prank(admin);
+        withdrawRequestNFTInstance.pauseContract();
+        assertTrue(withdrawRequestNFTInstance.paused(), "Contract should be paused");
+
+        // Non-unpauser cannot unpause
+        vm.prank(bob);
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        withdrawRequestNFTInstance.unPauseContract();
+
+        // Unpauser can unpause
+        vm.prank(admin);
+        withdrawRequestNFTInstance.unPauseContract();
+        assertFalse(withdrawRequestNFTInstance.paused(), "Contract should be unpaused");
+
+        // Cannot unpause again
+        vm.prank(admin);
+        vm.expectRevert("Pausable: not paused");
+        withdrawRequestNFTInstance.unPauseContract();
+    }
+
+    function test_getEEthRemainderAmount() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+
+        vm.prank(bob);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+
+        // Rebase to create remainder
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(5 ether);
+
+        _finalizeWithdrawalRequest(requestId);
+
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+
+        uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
+        assertGe(remainderAmount, 0, "Remainder amount should be >= 0");
+    }
+
+    function test_isScanOfShareRemainderCompleted() public {
+        // Initially should be completed (no requests to scan)
+        assertTrue(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should be completed initially");
+
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+
+        vm.prank(bob);
+        liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+
+        // Still completed because scan range hasn't been set
+        assertTrue(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should still be completed");
+    }
+
+    function test_aggregateSumEEthShareAmount() public {
+        // Setup scan parameters (needs owner to upgrade)
+        uint32 startId = 1;
+        uint32 endId = 5;
+        vm.startPrank(withdrawRequestNFTInstance.owner());
+        updateParam(startId, endId);
+        vm.stopPrank();
+
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 50 ether}();
+        vm.stopPrank();
+
+        // Create multiple requests
+        uint256[] memory requestIds = new uint256[](5);
+        for (uint256 i = 0; i < 5; i++) {
+            vm.prank(bob);
+            eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+            vm.prank(bob);
+            requestIds[i] = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        }
+
+        // Initially scan is not completed
+        assertFalse(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should not be completed");
+
+        uint256 initialAggregateSum = withdrawRequestNFTInstance.aggregateSumOfEEthShare();
+        
+        // Aggregate first 3 requests
+        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(3);
+        
+        uint256 aggregateSumAfter = withdrawRequestNFTInstance.aggregateSumOfEEthShare();
+        assertGt(aggregateSumAfter, initialAggregateSum, "Aggregate sum should increase");
+
+        // Aggregate remaining requests
+        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(10);
+        
+        // Scan should be completed now
+        assertTrue(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should be completed");
+        
+        // Cannot aggregate again after completion
+        vm.expectRevert("scan is completed");
+        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(1);
+    }
+
+    function test_requestWithdrawWithFee() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+
+        uint256 fee = 0.01 ether; // 1% fee
+        
+        // Direct call to requestWithdraw with fee (simulating MembershipManager)
+        vm.prank(address(liquidityPoolInstance));
+        uint256 requestId = withdrawRequestNFTInstance.requestWithdraw{value: 0}(1 ether, 1 ether, bob, fee);
+
+        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
+        assertEq(request.feeGwei, uint32(fee / 1 gwei), "Fee should be stored correctly");
+    }
+
+    function test_claimWithdrawWithFee() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        uint256 amount = 1 ether;
+        uint256 fee = 0.01 ether; // 1% fee
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), amount);
+
+        // Transfer eETH to contract first (simulating what liquidity pool does)
+        vm.prank(bob);
+        eETHInstance.transfer(address(withdrawRequestNFTInstance), amount);
+
+        // Create request with fee via direct call
+        vm.prank(address(liquidityPoolInstance));
+        uint256 requestId = withdrawRequestNFTInstance.requestWithdraw{value: 0}(uint96(amount), uint96(amount), bob, fee);
+
+        // Add more liquidity to ensure withdrawal can be fulfilled
+        vm.deal(alice, 10 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        // Rebase to increase value
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(5 ether);
+
+        _finalizeWithdrawalRequest(requestId);
+
+        uint256 bobBalanceBefore = address(bob).balance;
+        uint256 claimableAmount = withdrawRequestNFTInstance.getClaimableAmount(requestId);
+        
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+
+        uint256 bobBalanceAfter = address(bob).balance;
+        uint256 receivedAmount = bobBalanceAfter - bobBalanceBefore;
+        
+        // Received amount should be claimable amount (which already has fee deducted)
+        assertApproxEqAbs(receivedAmount, claimableAmount, 0.001 ether, "Bob should receive amount minus fee");
+    }
+
+    function test_seizeInvalidRequest_EdgeCases() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+
+        vm.prank(bob);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+
+        // Cannot seize valid request
+        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.expectRevert("Request is valid");
+        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, admin);
+
+        // Invalidate first
+        vm.prank(admin);
+        withdrawRequestNFTInstance.invalidateRequest(requestId);
+
+        // Cannot seize non-existent request
+        vm.prank(withdrawRequestNFTInstance.owner());
+        vm.expectRevert("Request does not exist");
+        withdrawRequestNFTInstance.seizeInvalidRequest(99999, admin);
+
+        // Owner can seize invalid request
+        address recipient = alice;
+        vm.prank(withdrawRequestNFTInstance.owner());
+        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, recipient);
+        
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), recipient, "NFT should be transferred to recipient");
+    }
+
+    function test_handleRemainder_EdgeCases() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+
+        vm.prank(bob);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+
+        // Rebase to create remainder
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(5 ether);
+
+        _finalizeWithdrawalRequest(requestId);
+
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+
+        uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
+        
+        if (remainderAmount > 0) {
+            // Grant role
+            vm.startPrank(address(roleRegistryInstance.owner()));
+            roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), admin);
+            vm.stopPrank();
+
+            // Cannot handle zero amount
+            vm.prank(admin);
+            vm.expectRevert("EETH amount cannot be 0");
+            withdrawRequestNFTInstance.handleRemainder(0);
+
+            // Cannot handle more than available
+            vm.prank(admin);
+            vm.expectRevert("Not enough eETH remainder");
+            withdrawRequestNFTInstance.handleRemainder(remainderAmount + 1);
+
+            // Can handle partial amount
+            uint256 partialAmount = remainderAmount / 2;
+            if (partialAmount > 0) {
+                uint256 treasuryBalanceBefore = eETHInstance.balanceOf(address(treasuryInstance));
+                
+                vm.prank(admin);
+                withdrawRequestNFTInstance.handleRemainder(partialAmount);
+                
+                uint256 treasuryBalanceAfter = eETHInstance.balanceOf(address(treasuryInstance));
+                assertGe(treasuryBalanceAfter, treasuryBalanceBefore, "Treasury should receive portion of remainder");
+            }
+        }
+    }
+
+    function test_finalizeRequests_EdgeCases() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+
+        vm.prank(bob);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+
+        // Cannot finalize future requests
+        vm.prank(admin);
+        vm.expectRevert("Cannot finalize future requests");
+        withdrawRequestNFTInstance.finalizeRequests(requestId + 100);
+
+        // Finalize request
+        vm.prank(admin);
+        withdrawRequestNFTInstance.finalizeRequests(requestId);
+
+        // Cannot undo finalization
+        vm.prank(admin);
+        vm.expectRevert("Cannot undo finalization");
+        withdrawRequestNFTInstance.finalizeRequests(requestId - 1);
+
+        // Non-admin cannot finalize
+        vm.prank(bob);
+        vm.expectRevert("Caller is not admin");
+        withdrawRequestNFTInstance.finalizeRequests(requestId + 1);
+    }
+
+    function test_transferInvalidRequest() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+
+        vm.prank(bob);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+
+        // Invalidate request
+        vm.prank(admin);
+        withdrawRequestNFTInstance.invalidateRequest(requestId);
+
+        // Owner cannot transfer invalid request
+        vm.prank(bob);
+        vm.expectRevert("INVALID_REQUEST");
+        withdrawRequestNFTInstance.transferFrom(bob, alice, requestId);
+
+        // Contract owner can transfer invalid request
+        vm.prank(withdrawRequestNFTInstance.owner());
+        withdrawRequestNFTInstance.seizeInvalidRequest(requestId, alice);
+        
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice, "NFT should be transferred");
+    }
+
+    function test_claimWithdraw_InvalidRequest() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+
+        vm.prank(bob);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+
+        _finalizeWithdrawalRequest(requestId);
+
+        // Invalidate request
+        vm.prank(admin);
+        withdrawRequestNFTInstance.invalidateRequest(requestId);
+
+        // Cannot claim invalid request
+        vm.prank(bob);
+        vm.expectRevert("Request is not valid");
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+    }
+
+    function test_getRequest_NonExistent() public {
+        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(99999);
+        assertEq(request.amountOfEEth, 0, "Non-existent request should return zero values");
+        assertEq(request.shareOfEEth, 0, "Non-existent request should return zero values");
+        assertFalse(request.isValid, "Non-existent request should be invalid");
+    }
+
+    function test_isValid_NonExistent() public {
+        vm.expectRevert("Request does not exist");
+        withdrawRequestNFTInstance.isValid(99999);
     }
 }

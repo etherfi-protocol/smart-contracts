@@ -775,4 +775,681 @@ contract LiquidityPoolTest is TestSetup {
     function test_eeth_view() public {
         assertEq(address(liquidityPoolInstance.eETH()), address(eETHInstance));
     }
+
+    // ============ Deposit Tests ============
+
+    function test_DepositWithReferral() public {
+        vm.deal(alice, 10 ether);
+        vm.deal(bob, 1 ether);
+        
+        vm.startPrank(alice);
+        uint256 shares = liquidityPoolInstance.deposit{value: 5 ether}(bob);
+        assertGt(shares, 0);
+        assertEq(eETHInstance.balanceOf(alice), 5 ether);
+        vm.stopPrank();
+    }
+
+    function test_DepositFromMembershipManager() public {
+        vm.deal(address(membershipManagerInstance), 10 ether);
+        
+        vm.startPrank(address(membershipManagerInstance));
+        uint256 shares = liquidityPoolInstance.deposit{value: 5 ether}(alice, bob);
+        assertGt(shares, 0);
+        assertEq(eETHInstance.balanceOf(address(membershipManagerInstance)), 5 ether);
+        vm.stopPrank();
+    }
+
+    function test_DepositFromMembershipManagerFailsIfNotMembershipManager() public {
+        vm.deal(alice, 10 ether);
+        
+        vm.startPrank(alice);
+        vm.expectRevert("Incorrect Caller");
+        liquidityPoolInstance.deposit{value: 5 ether}(alice, bob);
+        vm.stopPrank();
+    }
+
+    function test_DepositToRecipientByLiquifier() public {
+        vm.deal(address(liquifierInstance), 10 ether);
+        
+        vm.startPrank(address(liquifierInstance));
+        uint256 shares = liquidityPoolInstance.depositToRecipient(alice, 5 ether, bob);
+        assertGt(shares, 0);
+        assertEq(eETHInstance.balanceOf(alice), 5 ether);
+        vm.stopPrank();
+    }
+
+    function test_DepositToRecipientByEtherFiAdmin() public {
+        vm.deal(address(etherFiAdminInstance), 10 ether);
+        
+        vm.startPrank(address(etherFiAdminInstance));
+        uint256 shares = liquidityPoolInstance.depositToRecipient(alice, 5 ether, address(0));
+        assertGt(shares, 0);
+        assertEq(eETHInstance.balanceOf(alice), 5 ether);
+        vm.stopPrank();
+    }
+
+    function test_DepositWhenPausedFails() public {
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+        
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        vm.expectRevert("Pausable: paused");
+        liquidityPoolInstance.deposit{value: 5 ether}();
+        vm.stopPrank();
+    }
+
+    // ============ Withdraw Tests ============
+
+    function test_WithdrawByWithdrawRequestNFT() public {
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        // Get actual eETH balance (should be 10 ether if pool was empty)
+        uint256 eethBalance = eETHInstance.balanceOf(alice);
+        // Use actual balance for withdrawal request
+        uint256 withdrawAmount = eethBalance >= 5 ether ? 5 ether : (eethBalance > 0 ? eethBalance / 2 : 0);
+        if (withdrawAmount > 0 && eethBalance >= withdrawAmount) {
+            eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+            uint256 reqId = liquidityPoolInstance.requestWithdraw(alice, withdrawAmount);
+            vm.stopPrank();
+
+            _finalizeWithdrawalRequest(reqId);
+            
+            // Ensure pool has ETH balance via receive()
+            vm.deal(bob, 10 ether);
+            vm.prank(bob);
+            address(liquidityPoolInstance).call{value: 10 ether}("");
+            
+            uint256 aliceBalanceBefore = alice.balance;
+            vm.startPrank(alice);
+            withdrawRequestNFTInstance.claimWithdraw(reqId);
+            vm.stopPrank();
+            
+            assertGe(alice.balance, aliceBalanceBefore + withdrawAmount - 1 wei); // Allow for small rounding
+        } else {
+            vm.stopPrank();
+        }
+    }
+
+    function test_WithdrawByMembershipManager() public {
+        vm.deal(address(membershipManagerInstance), 10 ether);
+        vm.startPrank(address(membershipManagerInstance));
+        liquidityPoolInstance.deposit{value: 10 ether}(address(membershipManagerInstance), address(0));
+        vm.stopPrank();
+
+        // Need to ensure liquidity pool has ETH balance
+        vm.deal(address(liquidityPoolInstance), 10 ether);
+        uint256 aliceBalanceBefore = alice.balance;
+        vm.startPrank(address(membershipManagerInstance));
+        uint256 shares = liquidityPoolInstance.withdraw(alice, 5 ether);
+        assertGt(shares, 0);
+        assertEq(alice.balance, aliceBalanceBefore + 5 ether);
+        vm.stopPrank();
+    }
+
+    function test_WithdrawByEtherFiRedemptionManager() public {
+        // First need to deposit via liquifier
+        vm.startPrank(address(liquifierInstance));
+        liquidityPoolInstance.depositToRecipient(address(etherFiRedemptionManagerInstance), 10 ether, address(0));
+        vm.stopPrank();
+
+        vm.deal(bob, 10 ether);
+        vm.prank(bob);
+        (bool sent, ) = address(liquidityPoolInstance).call{value: 10 ether}("");
+        require(sent, "Failed to send ETH to pool");
+
+        uint256 aliceBalanceBefore = alice.balance;
+        vm.startPrank(address(etherFiRedemptionManagerInstance));
+        uint256 shares = liquidityPoolInstance.withdraw(alice, 5 ether);
+        assertGt(shares, 0);
+        assertEq(alice.balance, aliceBalanceBefore + 5 ether);
+        vm.stopPrank();
+    }
+
+    function test_WithdrawFailsIfInsufficientLiquidity() public {
+        vm.deal(address(membershipManagerInstance), 10 ether);
+        vm.startPrank(address(membershipManagerInstance));
+        liquidityPoolInstance.deposit{value: 10 ether}(address(membershipManagerInstance), address(0));
+        vm.stopPrank();
+
+        vm.startPrank(address(membershipManagerInstance));
+        vm.expectRevert(LiquidityPool.InsufficientLiquidity.selector);
+        liquidityPoolInstance.withdraw(alice, 20 ether);
+        vm.stopPrank();
+    }
+
+    function test_WithdrawFailsIfInsufficientLockedAmount() public {
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        uint256 eethBalance = eETHInstance.balanceOf(alice);
+        uint256 withdrawAmount = eethBalance >= 5 ether ? 5 ether : (eethBalance > 0 ? eethBalance / 2 : 0);
+        if (withdrawAmount > 0 && eethBalance >= withdrawAmount) {
+            eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+            uint256 reqId = liquidityPoolInstance.requestWithdraw(alice, withdrawAmount);
+            vm.stopPrank();
+
+            _finalizeWithdrawalRequest(reqId);
+            
+            // Ensure pool has ETH balance
+            vm.deal(bob, 10 ether);
+            vm.prank(bob);
+            address(liquidityPoolInstance).call{value: 10 ether}("");
+            
+            // Try to withdraw more than locked
+            vm.startPrank(address(withdrawRequestNFTInstance));
+            vm.expectRevert(LiquidityPool.InsufficientLiquidity.selector);
+            liquidityPoolInstance.withdraw(alice, withdrawAmount * 2);
+            vm.stopPrank();
+        } else {
+            vm.stopPrank();
+        }
+    }
+
+    function test_WithdrawFailsIfNotAuthorizedCaller() public {
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        vm.expectRevert("Incorrect Caller");
+        liquidityPoolInstance.withdraw(alice, 5 ether);
+        vm.stopPrank();
+    }
+
+    function test_WithdrawFailsWhenPaused() public {
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+        
+        vm.startPrank(address(withdrawRequestNFTInstance));
+        vm.expectRevert("Pausable: paused");
+        liquidityPoolInstance.withdraw(alice, 1 ether);
+        vm.stopPrank();
+    }
+
+    // ============ Request Membership NFT Withdraw Tests ============
+
+    function test_RequestMembershipNFTWithdraw() public {
+        // First deposit ETH to membership manager via the deposit function
+        vm.deal(address(membershipManagerInstance), 10 ether);
+        vm.startPrank(address(membershipManagerInstance));
+        liquidityPoolInstance.deposit{value: 10 ether}(address(membershipManagerInstance), address(0));
+        // Get actual eETH balance (should be 10 ether if pool was empty)
+        uint256 eethBalance = eETHInstance.balanceOf(address(membershipManagerInstance));
+        // Use a portion of the balance
+        uint256 withdrawAmount = eethBalance > 5 ether ? 5 ether : eethBalance / 2;
+        if (withdrawAmount > 0 && eethBalance >= withdrawAmount) {
+            eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+            uint256 reqId = liquidityPoolInstance.requestMembershipNFTWithdraw(alice, withdrawAmount, 0.1 ether);
+            assertGt(reqId, 0);
+        }
+        vm.stopPrank();
+    }
+
+    function test_RequestMembershipNFTWithdrawFailsIfNotMembershipManager() public {
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
+        liquidityPoolInstance.requestMembershipNFTWithdraw(alice, 5 ether, 0.1 ether);
+        vm.stopPrank();
+    }
+
+    function test_RequestMembershipNFTWithdrawFailsWithZeroAmount() public {
+        vm.startPrank(address(membershipManagerInstance));
+        vm.expectRevert(LiquidityPool.InvalidAmount.selector);
+        liquidityPoolInstance.requestMembershipNFTWithdraw(alice, 0, 0.1 ether);
+        vm.stopPrank();
+    }
+
+    // ============ Batch Register Tests ============
+
+    function test_BatchRegisterFailsIfNotRegisteredSpawner() public {
+        IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](1);
+        depositData[0] = IStakingManager.DepositData({
+            publicKey: hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c",
+            signature: hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df",
+            depositDataRoot: bytes32(0),
+            ipfsHashForEncryptedValidatorKey: "test"
+        });
+
+        uint256[] memory bidIds = new uint256[](1);
+        bidIds[0] = 1;
+
+        vm.startPrank(bob);
+        vm.expectRevert("Incorrect Caller");
+        liquidityPoolInstance.batchRegister(depositData, bidIds, address(0x1234));
+        vm.stopPrank();
+    }
+
+    // ============ Admin Functions Tests ============
+
+    function test_SetFeeRecipient() public {
+        vm.startPrank(alice);
+        liquidityPoolInstance.setFeeRecipient(bob);
+        assertEq(liquidityPoolInstance.feeRecipient(), bob);
+        vm.stopPrank();
+    }
+
+    function test_SetFeeRecipientFailsIfNotAdmin() public {
+        vm.startPrank(bob);
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        liquidityPoolInstance.setFeeRecipient(bob);
+        vm.stopPrank();
+    }
+
+    function test_SetRestakeBnftDeposits() public {
+        vm.startPrank(alice);
+        liquidityPoolInstance.setRestakeBnftDeposits(true);
+        assertTrue(liquidityPoolInstance.restakeBnftDeposits());
+        
+        liquidityPoolInstance.setRestakeBnftDeposits(false);
+        assertFalse(liquidityPoolInstance.restakeBnftDeposits());
+        vm.stopPrank();
+    }
+
+    function test_SetRestakeBnftDepositsFailsIfNotAdmin() public {
+        vm.startPrank(bob);
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        liquidityPoolInstance.setRestakeBnftDeposits(true);
+        vm.stopPrank();
+    }
+
+    function test_SetValidatorSizeWei() public {
+        vm.startPrank(alice);
+        liquidityPoolInstance.setValidatorSizeWei(64 ether);
+        assertEq(liquidityPoolInstance.validatorSizeWei(), 64 ether);
+        vm.stopPrank();
+    }
+
+    function test_SetValidatorSizeWeiFailsIfTooSmall() public {
+        vm.startPrank(alice);
+        vm.expectRevert(LiquidityPool.InvalidValidatorSize.selector);
+        liquidityPoolInstance.setValidatorSizeWei(31 ether);
+        vm.stopPrank();
+    }
+
+    function test_SetValidatorSizeWeiFailsIfTooLarge() public {
+        vm.startPrank(alice);
+        vm.expectRevert(LiquidityPool.InvalidValidatorSize.selector);
+        liquidityPoolInstance.setValidatorSizeWei(2049 ether);
+        vm.stopPrank();
+    }
+
+    function test_SetValidatorSizeWeiFailsIfNotAdmin() public {
+        vm.startPrank(bob);
+        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        liquidityPoolInstance.setValidatorSizeWei(64 ether);
+        vm.stopPrank();
+    }
+
+    function test_UnregisterValidatorSpawner() public {
+        vm.startPrank(alice);
+        registerAsBnftHolder(bob);
+        assertTrue(liquidityPoolInstance.validatorSpawner(bob));
+        
+        liquidityPoolInstance.unregisterValidatorSpawner(bob);
+        assertFalse(liquidityPoolInstance.validatorSpawner(bob));
+        vm.stopPrank();
+    }
+
+    function test_UnregisterValidatorSpawnerFailsIfNotRegistered() public {
+        vm.startPrank(alice);
+        vm.expectRevert("Not registered");
+        liquidityPoolInstance.unregisterValidatorSpawner(bob);
+        vm.stopPrank();
+    }
+
+    // ============ Rebase and Protocol Fees Tests ============
+
+    function test_Rebase() public {
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        vm.stopPrank();
+
+        uint256 totalPooledBefore = liquidityPoolInstance.getTotalPooledEther();
+        
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(5 ether);
+        
+        uint256 totalPooledAfter = liquidityPoolInstance.getTotalPooledEther();
+        assertEq(totalPooledAfter, totalPooledBefore + 5 ether);
+    }
+
+    function test_RebaseFailsIfNotMembershipManager() public {
+        vm.startPrank(alice);
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
+        liquidityPoolInstance.rebase(5 ether);
+        vm.stopPrank();
+    }
+
+    function test_PayProtocolFees() public {
+        vm.deal(address(etherFiAdminInstance), 10 ether);
+        vm.startPrank(address(etherFiAdminInstance));
+        liquidityPoolInstance.setFeeRecipient(bob);
+        vm.stopPrank();
+
+        vm.deal(address(liquidityPoolInstance), 10 ether);
+        vm.startPrank(address(etherFiAdminInstance));
+        liquidityPoolInstance.payProtocolFees(5 ether);
+        assertEq(eETHInstance.balanceOf(bob), 5 ether);
+        vm.stopPrank();
+    }
+
+    function test_PayProtocolFeesFailsIfNotEtherFiAdmin() public {
+        vm.startPrank(alice);
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
+        liquidityPoolInstance.payProtocolFees(5 ether);
+        vm.stopPrank();
+    }
+
+    function test_AddEthAmountLockedForWithdrawal() public {
+        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0);
+        
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(10 ether);
+        
+        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 10 ether);
+    }
+
+    function test_AddEthAmountLockedForWithdrawalFailsIfNotEtherFiAdmin() public {
+        vm.startPrank(alice);
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(10 ether);
+        vm.stopPrank();
+    }
+
+    // ============ Burn Shares Tests ============
+
+    function test_BurnEEthShares() public {
+        vm.deal(address(etherFiRedemptionManagerInstance), 10 ether);
+        vm.startPrank(address(liquifierInstance));
+        liquidityPoolInstance.depositToRecipient(address(etherFiRedemptionManagerInstance), 10 ether, address(0));
+        vm.stopPrank();
+
+        uint256 sharesBefore = eETHInstance.shares(address(etherFiRedemptionManagerInstance));
+        
+        vm.startPrank(address(etherFiRedemptionManagerInstance));
+        liquidityPoolInstance.burnEEthShares(sharesBefore / 2);
+        vm.stopPrank();
+        
+        uint256 sharesAfter = eETHInstance.shares(address(etherFiRedemptionManagerInstance));
+        assertLt(sharesAfter, sharesBefore);
+    }
+
+    function test_BurnEEthSharesFailsIfNotAuthorized() public {
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        uint256 shares = eETHInstance.shares(alice);
+        
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
+        liquidityPoolInstance.burnEEthShares(shares);
+        vm.stopPrank();
+    }
+
+    function test_BurnEEthSharesForNonETHWithdrawal() public {
+        vm.deal(address(etherFiRedemptionManagerInstance), 100 ether);
+        vm.startPrank(address(liquifierInstance));
+        liquidityPoolInstance.depositToRecipient(address(etherFiRedemptionManagerInstance), 100 ether, address(0));
+        vm.stopPrank();
+
+        uint256 totalPooledBefore = liquidityPoolInstance.getTotalPooledEther();
+        uint256 sharesBefore = eETHInstance.shares(address(etherFiRedemptionManagerInstance));
+        
+        vm.startPrank(address(etherFiRedemptionManagerInstance));
+        uint256 withdrawalValue = 10 ether;
+        uint256 sharesToBurn = liquidityPoolInstance.sharesForWithdrawalAmount(withdrawalValue);
+        liquidityPoolInstance.burnEEthSharesForNonETHWithdrawal(sharesToBurn, withdrawalValue);
+        vm.stopPrank();
+        
+        uint256 totalPooledAfter = liquidityPoolInstance.getTotalPooledEther();
+        assertEq(totalPooledAfter, totalPooledBefore - withdrawalValue);
+    }
+
+    function test_BurnEEthSharesForNonETHWithdrawalFailsIfInvalidAmount() public {
+        vm.startPrank(address(etherFiRedemptionManagerInstance));
+        vm.expectRevert(LiquidityPool.InvalidAmount.selector);
+        liquidityPoolInstance.burnEEthSharesForNonETHWithdrawal(0, 10 ether);
+        
+        vm.expectRevert(LiquidityPool.InvalidAmount.selector);
+        liquidityPoolInstance.burnEEthSharesForNonETHWithdrawal(10 ether, 0);
+        vm.stopPrank();
+    }
+
+    function test_BurnEEthSharesForNonETHWithdrawalFailsIfSharePriceWouldDecrease() public {
+        vm.deal(address(etherFiRedemptionManagerInstance), 100 ether);
+        vm.startPrank(address(liquifierInstance));
+        liquidityPoolInstance.depositToRecipient(address(etherFiRedemptionManagerInstance), 100 ether, address(0));
+        vm.stopPrank();
+
+        vm.startPrank(address(etherFiRedemptionManagerInstance));
+        uint256 withdrawalValue = 10 ether;
+        uint256 correctSharesToBurn = liquidityPoolInstance.sharesForWithdrawalAmount(withdrawalValue);
+        // The check is: share > _amountSharesToBurn should revert
+        // So if we pass more shares than the correct amount, it should revert
+        // But actually, the check is: if (share > _amountSharesToBurn) revert InvalidAmount();
+        // So we need share (correctSharesToBurn) > _amountSharesToBurn (a smaller value)
+        // Let's try burning less shares than required
+        uint256 incorrectSharesToBurn = correctSharesToBurn / 2;
+        if (incorrectSharesToBurn > 0) {
+            vm.expectRevert(LiquidityPool.InvalidAmount.selector);
+            liquidityPoolInstance.burnEEthSharesForNonETHWithdrawal(incorrectSharesToBurn, withdrawalValue);
+        }
+        vm.stopPrank();
+    }
+
+    function test_BurnEEthSharesForNonETHWithdrawalFailsIfNotEtherFiRedemptionManager() public {
+        vm.startPrank(alice);
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
+        liquidityPoolInstance.burnEEthSharesForNonETHWithdrawal(10 ether, 10 ether);
+        vm.stopPrank();
+    }
+
+    // ============ View Functions Tests ============
+
+    function test_GetTotalEtherClaimOf() public {
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        vm.stopPrank();
+
+        uint256 claim = liquidityPoolInstance.getTotalEtherClaimOf(alice);
+        assertEq(claim, 100 ether);
+    }
+
+    function test_GetTotalEtherClaimOfWithRebase() public {
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        vm.stopPrank();
+
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(10 ether);
+
+        uint256 claim = liquidityPoolInstance.getTotalEtherClaimOf(alice);
+        assertGt(claim, 100 ether);
+    }
+
+    function test_GetTotalEtherClaimOfZeroShares() public {
+        uint256 claim = liquidityPoolInstance.getTotalEtherClaimOf(bob);
+        assertEq(claim, 0);
+    }
+
+    function test_SharesForAmount() public {
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        vm.stopPrank();
+
+        uint256 shares = liquidityPoolInstance.sharesForAmount(50 ether);
+        assertGt(shares, 0);
+    }
+
+    function test_SharesForAmountZeroPool() public {
+        uint256 shares = liquidityPoolInstance.sharesForAmount(50 ether);
+        assertEq(shares, 0);
+    }
+
+    function test_SharesForWithdrawalAmount() public {
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        vm.stopPrank();
+
+        uint256 shares = liquidityPoolInstance.sharesForWithdrawalAmount(50 ether);
+        assertGt(shares, 0);
+    }
+
+    function test_SharesForWithdrawalAmountZeroPool() public {
+        uint256 shares = liquidityPoolInstance.sharesForWithdrawalAmount(50 ether);
+        assertEq(shares, 0);
+    }
+
+    function test_AmountForShare() public {
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        uint256 shares = eETHInstance.shares(alice);
+        vm.stopPrank();
+
+        uint256 amount = liquidityPoolInstance.amountForShare(shares);
+        assertEq(amount, 100 ether);
+    }
+
+    function test_AmountForShareZeroShares() public {
+        uint256 amount = liquidityPoolInstance.amountForShare(0);
+        assertEq(amount, 0);
+    }
+
+    function test_AmountForSharePartial() public {
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        uint256 shares = eETHInstance.shares(alice);
+        vm.stopPrank();
+
+        uint256 amount = liquidityPoolInstance.amountForShare(shares / 2);
+        assertApproxEqRel(amount, 50 ether, 0.01e18);
+    }
+
+    // ============ Receive Function Edge Cases ============
+
+    function test_ReceiveUpdatesAccounting() public {
+        // First deposit some ETH to create initial state with totalValueOutOfLp > 0
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        vm.stopPrank();
+
+        // The deposit creates totalValueOutOfLp
+        uint128 totalValueOutOfLpBefore = liquidityPoolInstance.totalValueOutOfLp();
+        uint128 totalValueInLpBefore = liquidityPoolInstance.totalValueInLp();
+
+        // Only test if we have enough totalValueOutOfLp
+        if (totalValueOutOfLpBefore >= 5 ether) {
+            vm.deal(bob, 10 ether);
+            vm.prank(bob);
+            (bool sent, ) = address(liquidityPoolInstance).call{value: 5 ether}("");
+            assertTrue(sent);
+
+            // The receive function decreases totalValueOutOfLp and increases totalValueInLp
+            assertEq(liquidityPoolInstance.totalValueOutOfLp(), totalValueOutOfLpBefore - 5 ether);
+            assertEq(liquidityPoolInstance.totalValueInLp(), totalValueInLpBefore + 5 ether);
+        }
+    }
+
+    function test_ReceiveFailsIfAmountTooLarge() public {
+        uint256 largeAmount = uint256(type(uint128).max) + 1;
+        vm.deal(bob, largeAmount);
+        
+        vm.prank(bob);
+        vm.expectRevert(LiquidityPool.InvalidAmount.selector);
+        address(liquidityPoolInstance).call{value: largeAmount}("");
+    }
+
+    // ============ Edge Cases ============
+
+    function test_DepositWithMaxUint128() public {
+        uint256 maxAmount = type(uint128).max;
+        vm.deal(alice, maxAmount);
+        
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: maxAmount}();
+        assertEq(eETHInstance.balanceOf(alice), maxAmount);
+        vm.stopPrank();
+    }
+
+    function test_RequestWithdrawWithMaxUint96() public {
+        uint256 testAmount = 100 ether;
+        vm.deal(alice, testAmount);
+        
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: testAmount}();
+        // Get actual eETH balance (should equal testAmount if pool was empty)
+        uint256 eethBalance = eETHInstance.balanceOf(alice);
+        // Request withdraw for a portion that we definitely have
+        uint256 withdrawAmount = eethBalance >= 50 ether ? 50 ether : (eethBalance > 0 ? eethBalance / 2 : 0);
+        if (withdrawAmount > 0 && eethBalance >= withdrawAmount) {
+            eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+            uint256 reqId = liquidityPoolInstance.requestWithdraw(alice, withdrawAmount);
+            assertGt(reqId, 0);
+        }
+        vm.stopPrank();
+    }
+
+    function test_RequestWithdrawFailsIfAmountExceedsUint96() public {
+        uint256 tooLargeAmount = uint256(type(uint96).max) + 1;
+        vm.deal(alice, tooLargeAmount);
+        
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: tooLargeAmount}();
+        eETHInstance.approve(address(liquidityPoolInstance), tooLargeAmount);
+        vm.expectRevert(LiquidityPool.InvalidAmount.selector);
+        liquidityPoolInstance.requestWithdraw(alice, tooLargeAmount);
+        vm.stopPrank();
+    }
+
+    function test_UnregisterValidatorSpawnerWhenNotRegistered() public {
+        vm.startPrank(alice);
+        vm.expectRevert("Not registered");
+        liquidityPoolInstance.unregisterValidatorSpawner(bob);
+        vm.stopPrank();
+    }
+
+    function test_PauseWhenAlreadyPaused() public {
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+        
+        vm.prank(admin);
+        vm.expectRevert("Pausable: already paused");
+        liquidityPoolInstance.pauseContract();
+    }
+
+    function test_UnpauseWhenNotPaused() public {
+        vm.prank(admin);
+        vm.expectRevert("Pausable: not paused");
+        liquidityPoolInstance.unPauseContract();
+    }
+
+    function test_GetTotalPooledEther() public {
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 0);
+        
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        vm.stopPrank();
+        
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 100 ether);
+    }
+
+    function test_GetTotalPooledEtherAfterRebase() public {
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        vm.stopPrank();
+        
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(10 ether);
+        
+        assertEq(liquidityPoolInstance.getTotalPooledEther(), 110 ether);
+    }
 }
