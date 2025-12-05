@@ -11,7 +11,6 @@ import "../src/interfaces/IEtherFiOracle.sol";
 import "../src/interfaces/IEtherFiAdmin.sol";
 import "../src/interfaces/IeETH.sol";
 import "../src/interfaces/IWeETH.sol";
-import "../src/interfaces/ITNFT.sol";
 import "../src/StakingManager.sol";
 import "../src/EtherFiNodesManager.sol";
 import "../src/EtherFiNode.sol";
@@ -46,7 +45,6 @@ contract VerifyV3Upgrade is Script {
     address etherFiAdmin = 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705;
     address eETH = 0x35fA164735182de50811E8e2E824cFb9B6118ac2;
     address weETH = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
-    address TNFT = 0x7B5ae07E2AF1C861BcC4736D23f5f66A61E0cA5e;
 
     // ERC1967 storage slot for implementation address
     bytes32 constant IMPLEMENTATION_SLOT =
@@ -86,7 +84,7 @@ contract VerifyV3Upgrade is Script {
         console2.log("----------------------------------------");
         verifyContractInteractions();
 
-        // 5. Verify Additional Contracts (Oracle, Admin, eETH, weETH, TNFT)
+        // 5. Verify Additional Contracts (Oracle, Admin, eETH, weETH)
         console2.log("\n5. VERIFYING ADDITIONAL CONTRACTS");
         console2.log("----------------------------------------");
         verifyAdditionalContracts();
@@ -387,9 +385,6 @@ contract VerifyV3Upgrade is Script {
         console2.log("Checking weETH...");
         verifyProxyUpgradeability(weETH, "weETH");
 
-        // Verify TNFT upgradeability
-        console2.log("Checking TNFT...");
-        verifyProxyUpgradeability(TNFT, "TNFT");
 
         // Additional specific checks for these contracts
         console2.log("\nChecking EtherFiOracle specific functionality...");

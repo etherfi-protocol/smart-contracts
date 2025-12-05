@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/token/ERC721/IERC721Upgradeable.sol";
 
+// Deprecated: legacy tNFT interface retained for storage/ABI compatibility only.
 interface ITNFT is IERC721Upgradeable {
 
     function burnFromWithdrawal(uint256 _validatorId) external;

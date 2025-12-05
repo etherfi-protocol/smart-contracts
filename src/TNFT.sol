@@ -7,7 +7,7 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import "./interfaces/IEtherFiNodesManager.sol";
 
-
+// Deprecated legacy tNFT contract retained for historical storage compatibility. Do not use in new flows.
 contract TNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------

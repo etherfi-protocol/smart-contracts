@@ -14,8 +14,6 @@ import "../../src/EtherFiNode.sol";
 import "../../src/EtherFiRateLimiter.sol";
 import "../../src/UUPSProxy.sol";
 import "../../src/NodeOperatorManager.sol";
-import "../../src/interfaces/ITNFT.sol";
-import "../../src/interfaces/IBNFT.sol";
 import "../../src/AuctionManager.sol";
 import "../../src/libraries/DepositDataRootGenerator.sol";
 
@@ -27,8 +25,6 @@ contract PreludeTest is Test, ArrayTestHelper {
     EtherFiNodesManager etherFiNodesManager;
     AuctionManager auctionManager;
     EtherFiNode etherFiNodeImpl;
-    ITNFT tnft;
-    IBNFT bnft;
     NodeOperatorManager nodeOperatorManager = NodeOperatorManager(0xd5edf7730ABAd812247F6F54D7bd31a52554e35E);
 
     address admin = vm.addr(0x9876543210);

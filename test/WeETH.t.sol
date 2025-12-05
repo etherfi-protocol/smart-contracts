@@ -362,7 +362,7 @@ contract WeETHTest is TestSetup {
 
     function test_RecoverERC721() public {
         // Create a mock ERC721 token
-        TestERC721 mockNFT = new TestERC721("Test NFT", "TNFT");
+        TestERC721 mockNFT = new TestERC721("Test NFT", "TEST");
         
         // Mint NFT to alice and send to eETH contract
         uint256 tokenId = mockNFT.mint(alice);
@@ -438,7 +438,7 @@ contract WeETHTest is TestSetup {
     }
 
     function test_RecoverERC721_ErrorConditions() public {
-        TestERC721 mockNFT = new TestERC721("Test NFT", "TNFT");
+        TestERC721 mockNFT = new TestERC721("Test NFT", "TEST");
         uint256 tokenId = mockNFT.mint(alice);
         
         // Send NFT to eETH contract
