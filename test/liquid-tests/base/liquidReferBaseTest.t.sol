@@ -2,7 +2,7 @@
 pragma solidity ^0.8.22;
 
 import {Test} from "forge-std/Test.sol";
-import {LiquidRefer} from "src/LiquidRefer.sol";
+import {LiquidRefer} from "src/helpers/LiquidRefer.sol";
 import {ERC1967Proxy} from "lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {ILayerZeroTellerWithRateLimiting} from "src/liquid-interfaces/ILayerZeroTellerWithRateLimiting.sol";
 import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
@@ -41,6 +41,9 @@ abstract contract LiquidReferBaseTest is Test {
         liquidRefer = LiquidRefer(payable(proxy));
 
         asset = _assetConfig();
+
+        vm.prank(owner);
+        liquidRefer.toggleWhiteList(address(asset.teller), true);
     }
 
     function _setup() internal virtual {

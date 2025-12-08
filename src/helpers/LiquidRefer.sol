@@ -16,6 +16,13 @@ contract LiquidRefer is Initializable, UUPSUpgradeable, OwnableUpgradeable, Paus
 
     event Referral(address indexed vault, address indexed referrer, uint256 amount);
 
+    mapping(address => bool) public tellerWhiteList;
+
+    modifier onlyWhitelistedTeller(address teller) {
+        require(tellerWhiteList[teller], "Teller not whitelisted");
+        _;
+    }   
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -23,6 +30,8 @@ contract LiquidRefer is Initializable, UUPSUpgradeable, OwnableUpgradeable, Paus
 
     function initialize(address owner) public initializer {
         __Ownable_init();
+        __Pausable_init();
+        __UUPSUpgradeable_init();
         transferOwnership(owner);
     }
 
@@ -32,14 +41,14 @@ contract LiquidRefer is Initializable, UUPSUpgradeable, OwnableUpgradeable, Paus
         uint256 depositAmount,
         uint256 minimumMint,
         address referrer
-    ) external payable returns (uint256 shares) {
+    )whenNotPaused onlyWhitelistedTeller(address(teller)) external payable returns (uint256 shares) {
         address vault = teller.vault();
 
         IERC20(depositAsset).safeTransferFrom(msg.sender, address(this), depositAmount);
 
         IERC20(depositAsset).safeIncreaseAllowance(vault, depositAmount);
 
-        shares = teller.deposit{value: msg.value}(depositAsset, depositAmount, minimumMint);
+        shares = teller.deposit(depositAsset, depositAmount, minimumMint);
 
         IERC20(vault).safeTransfer(msg.sender, shares);
 
@@ -56,7 +65,7 @@ contract LiquidRefer is Initializable, UUPSUpgradeable, OwnableUpgradeable, Paus
         bytes32 r,
         bytes32 s,
         address referrer
-    ) external returns (uint256 shares) {
+    ) whenNotPaused onlyWhitelistedTeller(address(teller)) external returns (uint256 shares) {
         address vault = teller.vault();
 
         IERC20Permit(depositAsset).permit(msg.sender, address(this), depositAmount, deadline, v, r, s);
@@ -72,10 +81,24 @@ contract LiquidRefer is Initializable, UUPSUpgradeable, OwnableUpgradeable, Paus
         emit Referral(vault, referrer, depositAmount);
     }
 
+    function toggleWhiteList(address teller, bool status) external onlyOwner {
+        tellerWhiteList[teller] = status;
+    }
+
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
    function _authorizeUpgrade(address /* newImplementation */) internal view override {
         _checkOwner();
     }
      function getImplementation() external view returns (address) {
         return _getImplementation();
     }
+
+    
 }
