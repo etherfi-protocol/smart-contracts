@@ -3,14 +3,14 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
 import "forge-std/console2.sol";
-import "../../src/EtherFiNodesManager.sol";
-import "../../src/EtherFiNode.sol";
-import "../../src/EtherFiTimelock.sol";
-import "../../src/RoleRegistry.sol";
-import "../../src/interfaces/IRoleRegistry.sol";
-import "../../src/interfaces/IStakingManager.sol";
-import "../../src/interfaces/IEtherFiRateLimiter.sol";
-import {IEigenPod, IEigenPodTypes } from "../../src/eigenlayer-interfaces/IEigenPod.sol";
+import "../../../src/EtherFiNodesManager.sol";
+import "../../../src/EtherFiNode.sol";
+import "../../../src/EtherFiTimelock.sol";
+import "../../../src/RoleRegistry.sol";
+import "../../../src/interfaces/IRoleRegistry.sol";
+import "../../../src/interfaces/IStakingManager.sol";
+import "../../../src/interfaces/IEtherFiRateLimiter.sol";
+import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
 
 /**
  * @title ConsolidationThroughEOATest
