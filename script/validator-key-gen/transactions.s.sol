@@ -68,7 +68,7 @@ contract ValidatorKeyGenTransactions is Script {
         console2.log("================================================");
         console2.log("");
 
-        string memory forkUrl = vm.envString("TENDERLY_TEST_RPC"); // TODO: change to mainnet fork
+        string memory forkUrl = vm.envString("MAINNET_RPC_URL"); // TODO: change to mainnet fork
         vm.selectFork(vm.createFork(forkUrl));
 
         LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = LiquidityPool(payable(liquidityPoolImpl)).LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE();
