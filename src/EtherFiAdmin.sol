@@ -198,7 +198,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit AdminOperationsExecuted(msg.sender, reportHash);
     }
 
-    function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external {
+    function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, IStakingManager.DepositData[] calldata _depositData, uint256 _validatorSizeWei) external {
         if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
 
         require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
@@ -207,7 +207,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(!validatorApprovalTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
 
         validatorApprovalTaskStatus[taskHash].completed = true;
-        liquidityPool.batchApproveRegistration(_validators, _pubKeys, _signatures);
+        liquidityPool.confirmAndFundBeaconValidators(_depositData, _validatorSizeWei);
         emit ValidatorApprovalTaskCompleted(taskHash, _reportHash, _validators);
     }
 
