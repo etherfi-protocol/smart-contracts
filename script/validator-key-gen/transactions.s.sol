@@ -126,7 +126,7 @@ contract ValidatorKeyGenTransactions is Script {
         targets[7] = ROLE_REGISTRY;
         data[7] = _encodeRoleGrant(
             ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE,
-            realElExiter
+            ETHERFI_OPERATING_ADMIN
         );
 
         bytes32 timelockSalt = keccak256(abi.encode(targets, data, block.number));
@@ -221,7 +221,7 @@ contract ValidatorKeyGenTransactions is Script {
         bytes memory PK_80143 = hex"811cd0bb7dd301afbbddd1d5db15ff0ca9d5f8ada78c0b1223f75b524aca1ca9ff1ba205d9efd7c37c2174576cc123e2";
         bytes memory PK_80194 = hex"b86cb11d564b29a38cdc8a3f1f9c35e6dcd2d0f85f40da60f745e479ba42b4548c83a2b049cf02277fceaa9b421d0039";
         bytes memory PK_89936 = hex"b8786ec7945d737698e374193f05a5498e932e2941263a7842837e9e3fac033af285e53a90afecf994585d178b5eedaa";
-        require(roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE, realElExiter), "realElExiter does not have ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
+        require(roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE, ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
 
         bytes[] memory pubkeys = new bytes[](3);
         pubkeys[0] = PK_80143;
@@ -263,7 +263,7 @@ contract ValidatorKeyGenTransactions is Script {
         uint256 valueToSend = feePer * n;
 
         // Fund the EOA with enough ETH to pay consolidation fees
-        vm.deal(realElExiter, valueToSend + 1 ether);
+        vm.deal(ETHERFI_OPERATING_ADMIN, valueToSend + 1 ether);
 
         // Test that EOA can successfully call requestConsolidation
         vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
@@ -272,7 +272,7 @@ contract ValidatorKeyGenTransactions is Script {
             etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]),
             pubkeys[0]
         );
-        vm.prank(realElExiter);
+        vm.prank(ETHERFI_OPERATING_ADMIN);
         etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
         
         console2.log("EOA successfully requested consolidation");
