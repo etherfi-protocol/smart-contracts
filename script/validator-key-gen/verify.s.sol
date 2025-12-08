@@ -174,7 +174,7 @@ contract VerifyValidatorKeyGen is Script {
             etherFiNodesManager.createEigenPod(etherFiNode);
 
             vm.expectRevert(IEtherFiNodesManager.EmptyConsolidationRequest.selector); // Does not revert on IncorrectRole
-            vm.prank(realElExiter); // Proves that role has been granted to realElExiter
+            vm.prank(ETHERFI_OPERATING_ADMIN); // Proves that role has been granted to realElExiter
             etherFiNodesManager.requestConsolidation{value: 0}(new IEigenPodTypes.ConsolidationRequest[](0));
         }
 
