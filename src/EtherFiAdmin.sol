@@ -64,7 +64,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event ValidatorApprovalTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
 
     error IncorrectRole();
-    error ArrayLengthMismatch();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -199,9 +198,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit AdminOperationsExecuted(msg.sender, reportHash);
     }
 
-    function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, IStakingManager.DepositData[] calldata _depositData, uint256 _validatorSizeWei) external {
+    function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external {
         if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
-        if (_depositData.length != _validators.length) revert ArrayLengthMismatch();
 
         require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
@@ -209,7 +207,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(!validatorApprovalTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
 
         validatorApprovalTaskStatus[taskHash].completed = true;
-        liquidityPool.confirmAndFundBeaconValidators(_depositData, _validatorSizeWei);
+        liquidityPool.batchApproveRegistration(_validators, _pubKeys, _signatures);
         emit ValidatorApprovalTaskCompleted(taskHash, _reportHash, _validators);
     }
 
