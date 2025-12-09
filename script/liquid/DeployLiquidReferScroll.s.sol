@@ -51,6 +51,10 @@ contract DeployLiquidReferScroll is Script {
     // Scroll contract controller (owner)
     address constant scrollContractController = 0x3cD08f51D0EA86ac93368DE31822117cd70CECA3;
 
+    address internal constant LIQUID_ETH_TELLER = 0x9AA79C84b79816ab920bBcE20f8f74557B514734;
+    address internal constant LIQUID_USD_TELLER = 0x4DE413a26fC24c3FC27Cc983be70aA9c5C299387;
+    address internal constant LIQUID_BTC_TELLER = 0x8Ea0B382D054dbEBeB1d0aE47ee4AC433C730353;
+
     // Salt - sha256sum of src/LiquidRefer.sol
     bytes32 commitHashSalt = bytes32((hex"da57a51d4edaff4a8ab070f9c5691910280f3c577c7667fc3d97555e9ec0fa04"));
 
@@ -59,7 +63,7 @@ contract DeployLiquidReferScroll is Script {
         console.log("LiquidRefer Scroll Deployment");
         console.log("========================================\n");
 
-        // Load deployer private key
+        // Load deployer private key, we are assuming you are deploying with scrollContractController
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
         console.log("Deployer address:", deployer);
@@ -128,7 +132,12 @@ contract DeployLiquidReferScroll is Script {
             // Final verification
             console.log("\nVerifying deployment...");
             verifyDeployment(liquidRefer, implementationAddress);
+
+            liquidRefer.toggleWhiteList(LIQUID_ETH_TELLER, true);
+            liquidRefer.toggleWhiteList(LIQUID_USD_TELLER, true);
+            liquidRefer.toggleWhiteList(LIQUID_BTC_TELLER, true);
         }
+
 
         vm.stopBroadcast();
     }
