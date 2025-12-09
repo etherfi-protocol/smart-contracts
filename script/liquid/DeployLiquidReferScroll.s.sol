@@ -48,28 +48,24 @@ contract DeployLiquidReferScroll is Script {
     // Create2Factory - will be deployed in this script
     Create2Factory public factory;
 
-    // Scroll contract controller (owner)
-    address constant scrollContractController = 0x3cD08f51D0EA86ac93368DE31822117cd70CECA3;
+    // Deployment Legder
+    address constant deploymentLegder = 0x8D5AAc5d3d5cda4c404fA7ee31B0822B648Bb150;
+    address constant SCROLL_CONTRACT_CONTROLLER = 0x3cD08f51D0EA86ac93368DE31822117cd70CECA3;
 
     address internal constant LIQUID_ETH_TELLER = 0x9AA79C84b79816ab920bBcE20f8f74557B514734;
     address internal constant LIQUID_USD_TELLER = 0x4DE413a26fC24c3FC27Cc983be70aA9c5C299387;
     address internal constant LIQUID_BTC_TELLER = 0x8Ea0B382D054dbEBeB1d0aE47ee4AC433C730353;
 
-    // Salt - sha256sum of src/LiquidRefer.sol
-    bytes32 commitHashSalt = bytes32((hex"da57a51d4edaff4a8ab070f9c5691910280f3c577c7667fc3d97555e9ec0fa04"));
+    // Audited commit hash salt
+    bytes32 commitHashSalt = bytes32((hex"639b4d9717c799be1f06750668ea0067e7ecec8f"));
 
     function run() external {
         console.log("\n========================================");
-        console.log("LiquidRefer Scroll Deployment");
+        console.log("LiquidRefer Scrollnet Deployment");
         console.log("========================================\n");
 
-        // Load deployer private key, we are assuming you are deploying with scrollContractController
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address deployer = vm.addr(deployerPrivateKey);
-        console.log("Deployer address:", deployer);
-
         // Start deployment
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast(deploymentLegder);
 
         // Step 1: Deploy Create2Factory
         console.log("\n--- Step 1: Deploying Create2Factory ---");
@@ -103,10 +99,10 @@ contract DeployLiquidReferScroll is Script {
         {
             string memory contractName = "LiquidRefer_Proxy";
 
-            // Prepare initialization data with scroll contract controller as initial owner
+            // Prepare initialization data with deploymentLegder as initial owner
             bytes memory initializerData = abi.encodeWithSelector(
                 LiquidRefer.initialize.selector,
-                scrollContractController
+                deploymentLegder
             );
 
             bytes memory constructorArgs = abi.encode(
@@ -123,19 +119,21 @@ contract DeployLiquidReferScroll is Script {
             // Wrap proxy in implementation interface
             LiquidRefer liquidRefer = LiquidRefer(proxyAddress);
 
-            // Verify ownership is already set to scroll contract controller (no transfer needed)
+            // Verify ownership is already set to deploymentLegder (no transfer needed)
             console.log("\nVerifying ownership...");
             address currentOwner = liquidRefer.owner();
-            require(currentOwner == scrollContractController, "Owner should be scroll contract controller");
-            console.log("Owner correctly set to scroll contract controller:", currentOwner);
-
-            // Final verification
-            console.log("\nVerifying deployment...");
-            verifyDeployment(liquidRefer, implementationAddress);
+            require(currentOwner == deploymentLegder, "Owner should be deploymentLegder");
+            console.log("Owner correctly set to deploymentLegder:", currentOwner);
 
             liquidRefer.toggleWhiteList(LIQUID_ETH_TELLER, true);
             liquidRefer.toggleWhiteList(LIQUID_USD_TELLER, true);
             liquidRefer.toggleWhiteList(LIQUID_BTC_TELLER, true);
+            liquidRefer.transferOwnership(SCROLL_CONTRACT_CONTROLLER);
+            console.log("Owner transferred to SCROLL_CONTRACT_CONTROLLER:", SCROLL_CONTRACT_CONTROLLER);
+
+            // Final verification
+            console.log("\nVerifying deployment...");
+            verifyDeployment(liquidRefer, implementationAddress);
         }
 
 
@@ -143,9 +141,12 @@ contract DeployLiquidReferScroll is Script {
     }
 
     function displayAddresses() internal view {
-        console.log("\nUsing Scroll Contract Addresses:");
+        console.log("\nUsing Deployed Contract Addresses:");
         console.log("-------------------");
-        console.log("Contract Controller:", scrollContractController);
+        console.log("Contract Controller:", deploymentLegder);
+        console.log("Liquid ETH Teller:  ", LIQUID_ETH_TELLER);
+        console.log("Liquid USD Teller:  ", LIQUID_USD_TELLER);
+        console.log("Liquid BTC Teller:  ", LIQUID_BTC_TELLER);
         console.log("\nCreate2Factory:     ", address(factory));
         console.log("Commit Hash Salt:   ", vm.toString(commitHashSalt));
     }
@@ -158,10 +159,10 @@ contract DeployLiquidReferScroll is Script {
         address predictedImpl = factory.computeAddress(commitHashSalt, implBytecode);
         console.log("Implementation:     ", predictedImpl);
 
-        // Compute proxy address (with scroll contract controller as initial owner)
+        // Compute proxy address (with deploymentLegder as initial owner)
         bytes memory initializerData = abi.encodeWithSelector(
             LiquidRefer.initialize.selector,
-            scrollContractController
+            deploymentLegder
         );
         bytes memory proxyConstructorArgs = abi.encode(
             predictedImpl,
@@ -173,7 +174,7 @@ contract DeployLiquidReferScroll is Script {
         );
         address predictedProxy = factory.computeAddress(commitHashSalt, proxyBytecode);
         console.log("Proxy:              ", predictedProxy);
-        console.log("Initial Owner:      ", scrollContractController);
+        console.log("Initial Owner:      ", deploymentLegder);
         console.log("-------------------");
         console.log("Note: These addresses are deterministic across all EVM chains");
     }
@@ -226,7 +227,7 @@ contract DeployLiquidReferScroll is Script {
         );
 
         string memory root = vm.projectRoot();
-        string memory logFileDir = string.concat(root, "/deployment/", contractName);
+        string memory logFileDir = string.concat(root, "/deployment/scroll/", contractName);
         vm.createDir(logFileDir, true);
 
         string memory logFileName = string.concat(
@@ -271,13 +272,20 @@ contract DeployLiquidReferScroll is Script {
         require(!liquidRefer.paused(), "Contract should not be paused");
         console.log("[PASS] Contract is not paused");
 
-        require(liquidRefer.owner() == scrollContractController, "Owner should be scroll contract controller");
-        console.log("[PASS] Owner is scroll contract controller");
+        require(liquidRefer.owner() == SCROLL_CONTRACT_CONTROLLER, "Owner should be SCROLL_CONTRACT_CONTROLLER");
+        console.log("[PASS] Owner is SCROLL_CONTRACT_CONTROLLER");
 
         // Verify implementation
         address actualImpl = liquidRefer.getImplementation();
         require(actualImpl == implementationAddress, "Implementation address mismatch");
         console.log("[PASS] Implementation address verified:", actualImpl);
+
+        require(liquidRefer.tellerWhiteList(LIQUID_ETH_TELLER), "LIQUID_ETH_TELLER should be whitelisted");
+        console.log("[PASS] LIQUID_ETH_TELLER is whitelisted");
+        require(liquidRefer.tellerWhiteList(LIQUID_USD_TELLER), "LIQUID_USD_TELLER should be whitelisted");
+        console.log("[PASS] LIQUID_USD_TELLER is whitelisted");
+        require(liquidRefer.tellerWhiteList(LIQUID_BTC_TELLER), "LIQUID_BTC_TELLER should be whitelisted");
+        console.log("[PASS] LIQUID_BTC_TELLER is whitelisted");
 
         console.log("\n[PASS] All verifications passed!");
     }
