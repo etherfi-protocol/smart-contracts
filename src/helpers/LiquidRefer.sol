@@ -41,7 +41,7 @@ contract LiquidRefer is Initializable, UUPSUpgradeable, OwnableUpgradeable, Paus
         uint256 depositAmount,
         uint256 minimumMint,
         address referrer
-    )whenNotPaused onlyWhitelistedTeller(address(teller)) external payable returns (uint256 shares) {
+    )whenNotPaused onlyWhitelistedTeller(address(teller)) external returns (uint256 shares) {
         address vault = teller.vault();
 
         IERC20(depositAsset).safeTransferFrom(msg.sender, address(this), depositAmount);
