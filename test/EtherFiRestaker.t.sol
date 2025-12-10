@@ -183,6 +183,9 @@ contract EtherFiRestakerTest is TestSetup {
             etherFiRestakerInstance.undelegate();
         }
 
+        uint32 timeBoundCapRefreshInterval = liquifierInstance.timeBoundCapRefreshInterval();
+        vm.warp(block.timestamp + timeBoundCapRefreshInterval + 1);
+
         _deposit_stEth(10 ether);
 
         ISignatureUtilsMixinTypes.SignatureWithExpiry memory signature = ISignatureUtilsMixinTypes.SignatureWithExpiry({

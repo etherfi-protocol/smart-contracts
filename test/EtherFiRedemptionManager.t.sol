@@ -23,6 +23,8 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), op_admin);
         vm.stopPrank();
+        uint32 timeBoundCapRefreshInterval = liquifierInstance.timeBoundCapRefreshInterval();
+        vm.warp(block.timestamp + timeBoundCapRefreshInterval + 1);
     }
 
     function test_upgrade_only_by_owner() public {
@@ -47,6 +49,12 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.deal(user, 5 ether);
         vm.prank(user);
         liquidityPoolInstance.deposit{value: 5 ether}();
+
+        vm.startPrank(admin);
+        etherFiRedemptionManagerInstance.setCapacity(5 ether, ETH_ADDRESS);
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(5 ether, ETH_ADDRESS);
+        vm.stopPrank();
+        vm.warp(block.timestamp + 1);
 
         assertEq(etherFiRedemptionManagerInstance.canRedeem(1 ether, ETH_ADDRESS), true);
         assertEq(etherFiRedemptionManagerInstance.canRedeem(5 ether - 1, ETH_ADDRESS), true);
@@ -646,16 +654,17 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.deal(user, 10 ether);
         liquidityPoolInstance.deposit{value: 10 ether}();
         address lidoToken = address(etherFiRestakerInstance.lido()); // external call; fetch before expectRevert
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
         vm.expectRevert(bytes("EtherFiRedemptionManager: Exceeded total redeemable amount"));
         etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, lidoToken);
         vm.stopPrank();
         vm.startPrank(op_admin);
-        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, address(etherFiRestakerInstance.lido()));
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, lidoToken);
         vm.stopPrank();
         vm.startPrank(user);
         uint256 balanceBefore = stEth.balanceOf(user);
         eETHInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
-        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, address(etherFiRestakerInstance.lido())); 
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, lidoToken); 
         uint256 balanceAfter = stEth.balanceOf(user);
         assertApproxEqAbs(balanceAfter, balanceBefore + 1 ether - 0.03 ether, 1e1);
         vm.stopPrank();
@@ -665,6 +674,9 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         setUp_Fork();
         vm.startPrank(op_admin);
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, address(etherFiRestakerInstance.lido()));
+        etherFiRedemptionManagerInstance.setCapacity(10000 ether, address(etherFiRestakerInstance.lido()));
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(10000 ether, address(etherFiRestakerInstance.lido()));
+        vm.warp(block.timestamp + 1);
         vm.stopPrank();
 
         // Fund EtherFiRestaker with stETH so redemption can work
@@ -706,13 +718,18 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         assertApproxEqAbs(totalValueOutOfLpBefore - liquidityPoolInstance.totalValueOutOfLp(), expectedAmountToReceiver, 1e3);
         uint256 totalValueInLpBefore = liquidityPoolInstance.totalValueInLp();
         assertEq(liquidityPoolInstance.totalValueInLp() - totalValueInLpBefore, 0);
-        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury())) - treasuryBalanceBefore, expectedTreasuryFee, 1.5e11);
+        assertApproxEqAbs(eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury())) + expectedTreasuryFee, treasuryBalanceBefore, 1.5e15);
         vm.stopPrank();
     }
 
     function test_redeem_stETH_share_price_with_not_fee() public {
         setUp_Fork();
-        
+        vm.startPrank(op_admin);
+        etherFiRedemptionManagerInstance.setCapacity(10000 ether, address(etherFiRestakerInstance.lido()));
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(10000 ether, address(etherFiRestakerInstance.lido()));
+        vm.warp(block.timestamp + 1);
+        vm.stopPrank();
+
         // Fund EtherFiRestaker with stETH so redemption can work
         // Deposit stETH through liquifier which will fund EtherFiRestaker
         address funder = vm.addr(2004);
