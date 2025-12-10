@@ -40,6 +40,8 @@ contract ConsolidationThroughEOATest is Test {
 
     function setUp() public {
         console2.log("=== SETUP ===");
+        vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+
         //upgrade the etherfi nodes manager contract
         newEtherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
         vm.prank(roleRegistry.owner());
