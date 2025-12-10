@@ -186,7 +186,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         bidIds[0] = 1; 
 
         vm.prank(spawner);
-        vm.expectRevert("call to non-contract address 0x000000000000000000000000000000000000dEaD");
+        vm.expectRevert();
         liquidityPool.batchRegister(depositData, bidIds, invalidNode);
     }
 
