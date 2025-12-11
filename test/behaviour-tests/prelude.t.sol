@@ -116,6 +116,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_POD_PROVER_ROLE(), address(podProver));
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elExiter);
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), admin);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), admin);
@@ -209,6 +210,10 @@ contract PreludeTest is Test, ArrayTestHelper {
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
         vm.deal(address(liquidityPool), 10000 ether);
+
+        vm.prank(address(liquidityPool));
+        stakingManager.registerBeaconValidators(toArray(initialDepositData), toArray_u256(params.bidId), params.etherFiNode);
+
         vm.prank(address(liquidityPool));
         stakingManager.createBeaconValidators{value: 1 ether}(toArray(initialDepositData), toArray_u256(params.bidId), params.etherFiNode);
 
@@ -574,6 +579,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         });
 
         vm.deal(address(liquidityPool), 100 ether);
+        vm.prank(address(liquidityPool));
+        stakingManager.registerBeaconValidators(toArray(initialDepositData), bidIds, etherFiNode);
+        
         vm.prank(address(liquidityPool));
         stakingManager.createBeaconValidators{value: 1 ether}(toArray(initialDepositData), bidIds, etherFiNode);
 
