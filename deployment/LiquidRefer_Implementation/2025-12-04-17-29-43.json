@@ -1,0 +1,9 @@
+{
+  "contractName": "LiquidRefer_Implementation",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x639b4d9717c799be1f06750668ea0067e7ecec8f000000000000000000000000",
+    "constructorArgsEncoded": "0x"
+  },
+  "deployedAddress": "0xc1210B06ba09964c4d25F0012cd5682D3Ff0A0CA"
+}
