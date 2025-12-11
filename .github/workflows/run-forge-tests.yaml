@@ -29,3 +29,7 @@ jobs:
           MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
           HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL: ${{ secrets.HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL }}
           HISTORICAL_PROOF_RPC_URL: ${{ secrets.HISTORICAL_PROOF_RPC_URL }}
+      - name: Generate coverage report
+        run: forge coverage --report summary --no-match-coverage '(script/|test/|src/helpers/|src/interfaces/|src/eigenlayer|src/libraries/|src/archive/)'
+        env:
+          MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
