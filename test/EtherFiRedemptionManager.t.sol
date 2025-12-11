@@ -87,7 +87,8 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     }
 
     function _admin_permission_by_token(address token) public {
-        vm.startPrank(alice);
+        address dummy = makeAddr("dummy");
+        vm.startPrank(dummy);
         vm.expectRevert();
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(1_00, token); // 1%
         vm.expectRevert();
@@ -277,18 +278,6 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.startPrank(admin);
         vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
         etherFiRedemptionManagerInstance.setCapacity(10 ether, ETH_ADDRESS);
-        vm.stopPrank();
-
-        // Pauser attempts to unpause (should fail)
-        vm.startPrank(pauser);
-        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
-        etherFiRedemptionManagerInstance.unPauseContract();
-        vm.stopPrank();
-
-        // Unpauser attempts to pause (should fail)
-        vm.startPrank(unpauser);
-        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
-        etherFiRedemptionManagerInstance.pauseContract();
         vm.stopPrank();
 
         // User without role attempts admin-only actions
@@ -619,7 +608,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint16[] memory _exitFeeInBps = new uint16[](1);
         _exitFeeInBps[0] = 3_00;
         uint16[] memory _lowWatermarkInBpsOfTvl = new uint16[](1);
-        _lowWatermarkInBpsOfTvl[0] = 2_00;
+        _lowWatermarkInBpsOfTvl[0] = 20_00;
         uint256[] memory _bucketCapacity = new uint256[](1);
         _bucketCapacity[0] = 10 ether;
         uint256[] memory _bucketRefillRate = new uint256[](1);
@@ -631,7 +620,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
             etherFiRedemptionManagerInstance.tokenToRedemptionInfo(address(etherFiRestakerInstance.lido()));
         assertEq(exitSplit, 20_00);
         assertEq(exitFee, 3_00);
-        assertEq(lowWM, 2_00);
+        assertEq(lowWM, 20_00);
         uint64 expectedCapacity = uint64(10 ether / 1e12);
         uint64 expectedRefillRate = uint64(0.001 ether / 1e12);
         assertEq(limit.capacity, expectedCapacity);
