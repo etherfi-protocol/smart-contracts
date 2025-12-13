@@ -9,7 +9,7 @@ contract DepositAdapterTest is TestSetup {
 
     event Deposit(address indexed sender, uint256 amount, uint8 source, address referral);
 
-    DepositAdapter depositAdapterInstance;
+    // DepositAdapter depositAdapterInstance;
 
     IWETH public wETH;
     IERC20Upgradeable public stETHmainnet;
@@ -22,21 +22,21 @@ contract DepositAdapterTest is TestSetup {
         stETHmainnet = IERC20Upgradeable(0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84);
         wstETHmainnet = IwstETH(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
 
-        // deploying+initializing the deposit adapter 
-        address depositAdapterImpl = address(
-            new DepositAdapter(
-                address(liquidityPoolInstance), 
-                address(liquifierInstance),
-                address(weEthInstance), 
-                address(eETHInstance), 
-                address(wETH),
-                address(stETHmainnet),
-                address(wstETHmainnet)
-            )
-        );
-        address depositAdapterProxy = address(new UUPSProxy(depositAdapterImpl, ""));
-        depositAdapterInstance = DepositAdapter(payable(depositAdapterProxy));
-        depositAdapterInstance.initialize();
+        // // deploying+initializing the deposit adapter 
+        // address depositAdapterImpl = address(
+        //     new DepositAdapter(
+        //         address(liquidityPoolInstance), 
+        //         address(liquifierInstance),
+        //         address(weEthInstance), 
+        //         address(eETHInstance), 
+        //         address(wETH),
+        //         address(stETHmainnet),
+        //         address(wstETHmainnet)
+        //     )
+        // );
+        // address depositAdapterProxy = address(new UUPSProxy(depositAdapterImpl, ""));
+        // depositAdapterInstance = DepositAdapter(payable(depositAdapterProxy));
+        // depositAdapterInstance.initialize();
 
         vm.startPrank(owner);
 
