@@ -59,6 +59,7 @@ import "../src/EtherFiRewardsRouter.sol";
 import "../src/CumulativeMerkleRewardsDistributor.sol";
 import "../script/deploys/Deployed.s.sol";
 
+import "../src/DepositAdapter.sol";
 contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
@@ -195,6 +196,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     EtherFiAdmin public etherFiAdminImplementation;
     EtherFiAdmin public etherFiAdminInstance;
+
+    DepositAdapter public depositAdapterImplementation;
+    DepositAdapter public depositAdapterInstance;
 
     EtherFiRewardsRouter public etherFiRewardsRouterInstance = EtherFiRewardsRouter(payable(0x73f7b1184B5cD361cC0f7654998953E2a251dd58));
 
@@ -367,6 +371,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             eigenLayerRewardsCoordinator = IRewardsCoordinator(0x7750d328b314EfFa365A0402CcfD489B80B0adda);
 
             eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
+            depositAdapterInstance = DepositAdapter(payable(deployed.DEPOSIT_ADAPTER()));
 
         } else if (forkEnum == TESTNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("TESTNET_RPC_URL")));
