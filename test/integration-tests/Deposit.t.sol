@@ -232,4 +232,31 @@ contract DepositIntegrationTest is TestSetup {
         uint256 stEthPerToken = abi.decode(data, (uint256));
         return (wstEthAmount * stEthPerToken) / 1e18;
     }
+
+// No role of EETH in this flow.
+    function test_Deposit_EtherFiRestaker_depositIntoStrategy() public {
+        vm.deal(alice, 10 ether);
+
+        vm.prank(alice);
+        stEth.submit{value: 1 ether}(address(0));
+
+        uint256 stEthAmount = stEth.balanceOf(alice);
+
+        address eigenLayerRestakingStrategy = address(etherFiRestakerInstance.getEigenLayerRestakingStrategy(address(stEth)));
+        uint256 stETHBalanceOfStrategyBeforeDeposit = stEth.balanceOf(eigenLayerRestakingStrategy);
+        console.log("eigenLayerRestakingStrategy", eigenLayerRestakingStrategy);
+
+        // transfer stETH from alice to the restaker
+        vm.prank(alice);
+        stEth.transfer(address(etherFiRestakerInstance), stEthAmount);
+
+        uint256 stETHAmountOfRestakerBeforeDeposit = stEth.balanceOf(address(etherFiRestakerInstance));
+        vm.prank(etherFiRestakerInstance.owner());
+        uint256 shares = etherFiRestakerInstance.depositIntoStrategy(address(stEth), stEthAmount);
+
+        assertGt(shares, 0);
+        assertApproxEqAbs(stEth.balanceOf(eigenLayerRestakingStrategy), stETHBalanceOfStrategyBeforeDeposit + stEthAmount, 1e3);
+        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), stETHAmountOfRestakerBeforeDeposit - stEthAmount, 1e3);
+        assertApproxEqAbs(stEth.balanceOf(alice), 0, 1e3);
+    }
 }
