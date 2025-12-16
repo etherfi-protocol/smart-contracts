@@ -65,8 +65,8 @@ contract TopUpFork is Script, Deployed, Utils, ArrayTestHelper {
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
 
-        report.validatorsToApprove = new uint256[](1);
-        report.validatorsToApprove[0] = BID_ID;
+        (bytes[] memory pubkeys, uint256[] memory ids, bytes[] memory signatures, address targetEigenPod) = _parseValidatorsFromForkJson();
+        report.validatorsToApprove = ids;
         report.lastFinalizedWithdrawalRequestId = withdrawRequestNFTInstance.lastFinalizedRequestId();
 
         // Need to advance time so that the report epoch is finalized
@@ -98,21 +98,39 @@ contract TopUpFork is Script, Deployed, Utils, ArrayTestHelper {
 
         vm.prank(ADMIN_EOA);
         etherFiAdminInstance.executeTasks(report);
+        (bool completed, bool exists) = _executeValidatorApprovalTask(report, pubkeys, signatures);
+        console.log("completed", completed);
+        console.log("exists", exists);
+    }
 
+    function _executeValidatorApprovalTask(IEtherFiOracle.OracleReport memory report, bytes[] memory pubkeys, bytes[] memory signatures) internal returns (bool completed, bool exists) {
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(report);
         bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove));
-        (bool completed, bool exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
-
-        bytes[] memory pubKeys = new bytes[](1);
-        bytes[] memory signatures = new bytes[](1);
-        pubKeys[0] = PUBKEY;
-        signatures[0] = SIGNATURE;
-
+        (completed, exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
         vm.prank(ADMIN_EOA);
-        try etherFiAdminInstance.executeValidatorApprovalTask(reportHash, report.validatorsToApprove, pubKeys, signatures) {
-            (completed, exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
-        } catch {
-            console.log("error");
+        etherFiAdminInstance.executeValidatorApprovalTask(reportHash, report.validatorsToApprove, pubkeys, signatures);
+        return (completed, exists);
+    }
+
+    function _parseValidatorsFromForkJson() internal view returns (bytes[] memory pubkeys, uint256[] memory ids, bytes[] memory signatures, address targetEigenPod) {
+        string memory root = vm.projectRoot();
+        string memory jsonFilePath = string.concat(
+            root,
+            "/script/el-exits/val-consolidations/LugaNodes.json"
+        );
+        string memory jsonData = vm.readFile(jsonFilePath);
+        bytes memory withdrawalCredentials = stdJson.readBytes(jsonData, "$[0].withdrawal_credentials");
+        targetEigenPod = address(uint160(uint256(bytes32(withdrawalCredentials))));
+        uint256 validatorCount = 10; // First 10 validators from LugaNodes.json
+
+        pubkeys = new bytes[](validatorCount);
+        ids = new uint256[](validatorCount);
+        signatures = new bytes[](validatorCount);
+        for (uint256 i = 0; i < validatorCount; i++) {
+            string memory basePath = string.concat("$[", vm.toString(i), "]");
+            ids[i] = stdJson.readUint(jsonData, string.concat(basePath, ".id"));
+            pubkeys[i] = stdJson.readBytes(jsonData, string.concat(basePath, ".pubkey"));
+            signatures[i] = SIGNATURE;
         }
     }
 }
