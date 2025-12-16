@@ -418,7 +418,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(address(0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0)));
         etherFiRestakerInstance = EtherFiRestaker(payable(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf)));
         roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
-        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(deployed.CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR()));
+        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(0x9A8c5046a290664Bf42D065d33512fe403484534));
+        treasuryInstance = 0x0c83EAe1FE72c390A02E426572854931EefF93BA;
     }
 
     function upgradeEtherFiRedemptionManager() public {
