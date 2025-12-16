@@ -14,6 +14,9 @@ import "../../../test/common/ArrayTestHelper.sol";
 import "../../deploys/Deployed.s.sol";
 import "../../../src/WithdrawRequestNFT.sol";
 
+// Commands:
+// forge script script/el-exits/val-consolidations/topUpFork.s.sol --fork-url $MAINNET_RPC_URL -vvvv
+
 /**
 Transactions:
 1. Set validator size to 2000 ether
