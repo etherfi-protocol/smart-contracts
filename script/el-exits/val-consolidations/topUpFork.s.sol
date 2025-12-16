@@ -57,6 +57,18 @@ contract TopUpFork is Script, Deployed, Utils, ArrayTestHelper {
         vm.prank(OPERATING_TIMELOCK);
         liquidityPool.setValidatorSizeWei(2000 ether);
 
+        // Advance time until the oracle considers the next report epoch finalized.
+        // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
+        while (true) {
+            uint32 slot = etherFiOracleInstance.slotForNextReport();
+            uint32 curr = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+            uint32 min = ((slot / 32) + 3) * 32;
+            if (curr >= min) break;
+            uint256 d = min - curr;
+            vm.roll(block.number + d);
+            vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (curr + uint32(d)));
+        }
+
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
@@ -65,18 +77,9 @@ contract TopUpFork is Script, Deployed, Utils, ArrayTestHelper {
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
 
-        (bytes[] memory pubkeys, uint256[] memory ids, bytes[] memory signatures, address targetEigenPod) = _parseValidatorsFromForkJson();
+        (bytes[] memory pubkeys, uint256[] memory ids, bytes[] memory signatures) = _parseValidatorsFromForkJson();
         report.validatorsToApprove = ids;
         report.lastFinalizedWithdrawalRequestId = withdrawRequestNFTInstance.lastFinalizedRequestId();
-
-        // Need to advance time so that the report epoch is finalized
-        // Report epoch must be at least 2 epochs behind current epoch (i.e., current epoch >= report epoch + 3)
-        uint32 minCurrentSlot = ((report.refSlotTo / 32) + 3) * 32;
-        uint32 currentSlot = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
-        uint256 slotsToAdvance = minCurrentSlot > currentSlot ? minCurrentSlot - currentSlot : 100;
-        
-        vm.roll(block.number + slotsToAdvance);
-        vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (currentSlot + slotsToAdvance));
         
         // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
         report.refBlockTo = uint32(block.number - 1);
@@ -112,15 +115,13 @@ contract TopUpFork is Script, Deployed, Utils, ArrayTestHelper {
         return (completed, exists);
     }
 
-    function _parseValidatorsFromForkJson() internal view returns (bytes[] memory pubkeys, uint256[] memory ids, bytes[] memory signatures, address targetEigenPod) {
+    function _parseValidatorsFromForkJson() internal view returns (bytes[] memory pubkeys, uint256[] memory ids, bytes[] memory signatures) {
         string memory root = vm.projectRoot();
         string memory jsonFilePath = string.concat(
             root,
             "/script/el-exits/val-consolidations/LugaNodes.json"
         );
         string memory jsonData = vm.readFile(jsonFilePath);
-        bytes memory withdrawalCredentials = stdJson.readBytes(jsonData, "$[0].withdrawal_credentials");
-        targetEigenPod = address(uint160(uint256(bytes32(withdrawalCredentials))));
         uint256 validatorCount = 10; // First 10 validators from LugaNodes.json
 
         pubkeys = new bytes[](validatorCount);
