@@ -57,6 +57,7 @@ contract Deployed {
     address public constant OPERATING_TIMELOCK = address(0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a); // operating timelock
     address public constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC; // operating admin
     address public constant ETHERFI_UPGRADE_ADMIN = 0xcdd57D11476c22d265722F68390b036f3DA48c21; // upgrade admin
+    address public constant ADMIN_EOA = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F; // admin eoa
 
     mapping(address => address) public timelockToAdmin;
 
