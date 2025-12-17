@@ -48,14 +48,11 @@ contract DepositIntegrationTest is TestSetup {
     }
 
     function test_Deposit_Liquifier_depositWithERC20WithPermit_stETH() public {
-        if (!liquifierInstance.isDepositCapReached(address(stEth), 1 ether)) {
+        if (liquifierInstance.isDepositCapReached(address(stEth), 1 ether)) {
             vm.startPrank(liquifierInstance.owner());
             liquifierInstance.updateDepositCap(address(stEth), type(uint32).max, type(uint32).max);
             vm.stopPrank();
         }
-        bytes memory privateKey = vm.envBytes("PRIVATE_KEY");
-        address tom = vm.addr(uint256(keccak256(abi.encodePacked(privateKey))));
-
         vm.deal(tom, 10 ether);
         vm.prank(tom);
         stEth.submit{value: 1 ether}(address(0));
@@ -64,7 +61,7 @@ contract DepositIntegrationTest is TestSetup {
         uint256 beforeShares = eETHInstance.shares(tom);
 
         ILiquifier.PermitInput memory permitInput = _permitInputForStEth(
-            privateKey, address(liquifierInstance), stEthAmount, stEth.nonces(tom), 2**256 - 1, stEth.DOMAIN_SEPARATOR()
+            1202, address(liquifierInstance), stEthAmount, stEth.nonces(tom), 2**256 - 1, stEth.DOMAIN_SEPARATOR() // tom = vm.addr(1202)
         );
 
         vm.prank(tom);
@@ -130,8 +127,6 @@ contract DepositIntegrationTest is TestSetup {
     }
 
     function test_Deposit_DepositAdapter_depositStETHForWeETHWithPermit() public {
-        bytes memory privateKey = vm.envBytes("PRIVATE_KEY");
-        address tom = vm.addr(uint256(keccak256(abi.encodePacked(privateKey))));
         vm.deal(tom, 10 ether);
         vm.prank(tom);
         stEth.submit{value: 1 ether}(address(0));
@@ -144,7 +139,7 @@ contract DepositIntegrationTest is TestSetup {
 
         (uint256 weETHAmountForEETHAmount, uint256 eETHAmountForShares) = _expectedWeETHOutAndEETHAmountForStEth(stEthAmount);
 
-        ILiquifier.PermitInput memory permitInput = _permitInputForStEth(privateKey, address(depositAdapterInstance), stEthAmount, stEth.nonces(tom), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
+        ILiquifier.PermitInput memory permitInput = _permitInputForStEth(1202, address(depositAdapterInstance), stEthAmount, stEth.nonces(tom), 2**256 - 1, stEth.DOMAIN_SEPARATOR()); // tom = vm.addr(1202)
 
         vm.prank(tom);
         uint256 weEthOut = depositAdapterInstance.depositStETHForWeETHWithPermit(stEthAmount, address(0), permitInput);
@@ -156,14 +151,14 @@ contract DepositIntegrationTest is TestSetup {
         assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), beforeStETHBalance + stEthAmount, 1e3); // stETH is transferred to the etherFiRestakerInstance
     }
 
-    function _permitInputForStEth(bytes memory privateKey, address spender, uint256 value, uint256 nonce, uint256 deadline, bytes32 domainSeparator)
+    function _permitInputForStEth(uint256 privateKey, address spender, uint256 value, uint256 nonce, uint256 deadline, bytes32 domainSeparator)
         internal
         view
         returns (ILiquifier.PermitInput memory permitInput)
     {
-        address _owner = vm.addr(uint256(keccak256(abi.encodePacked(privateKey))));
+        address _owner = vm.addr(privateKey);
         bytes32 digest = calculatePermitDigest(_owner, spender, value, nonce, deadline, domainSeparator);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(uint256(keccak256(abi.encodePacked(privateKey))), digest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, digest);
         permitInput = ILiquifier.PermitInput({value: value, deadline: deadline, v: v, r: r, s: s});
         return permitInput;
     }
@@ -180,8 +175,6 @@ contract DepositIntegrationTest is TestSetup {
     }
 
     function test_Deposit_DepositAdapter_depositWstETHForWeETHWithPermit() public {
-        bytes memory privateKey = vm.envBytes("PRIVATE_KEY");
-        address tom = vm.addr(uint256(keccak256(abi.encodePacked(privateKey))));
         vm.deal(tom, 10 ether);
         vm.prank(tom);
         stEth.submit{value: 1 ether}(address(0));
@@ -202,7 +195,7 @@ contract DepositIntegrationTest is TestSetup {
             _expectedWeETHOutAndEETHAmountForStEth(stEthAmountForWstEthAmount);
 
         ILiquifier.PermitInput memory permitInput = _permitInputForStEth(
-            privateKey,
+            1202, // tom = vm.addr(1202)
             address(depositAdapterInstance),
             wstEthAmount,
             IERC20PermitUpgradeable(MAINNET_WSTETH).nonces(tom),

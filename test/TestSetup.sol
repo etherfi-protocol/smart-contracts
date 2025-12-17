@@ -240,6 +240,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     address liquidityPool = vm.addr(9);
     address shonee = vm.addr(1200);
     address jess = vm.addr(1201);
+    address tom = vm.addr(1202);
     address committeeMember = address(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
     address timelock = address(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761);
     address buybackWallet = address(0x2f5301a3D59388c509C65f8698f521377D41Fd0F);
