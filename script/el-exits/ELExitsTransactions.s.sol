@@ -99,24 +99,24 @@ contract ElExitsTransactions is Script {
     uint256 MIN_DELAY_TIMELOCK = 259200; // 72 hours
 
     // External calls selectors
-    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_ONE = 0x9a15bf92;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_TWO = 0xa9059cbb;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_THREE = 0x3ccc861d;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_FOUR = 0xeea9064b;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_FIVE = 0x7f548071;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_SIX = 0xda8be864;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_SEVEN = 0x0dd8dd02;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_EIGHT = 0x33404396;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_NINE = 0x9435bb43;
+    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_ONE = 0x9a15bf92; // claim(uint256,bytes32[],bytes)
+    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_TWO = 0xa9059cbb; // transfer(address,uint256)
+    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_THREE = 0x3ccc861d; // processClaim((uint32,uint32,bytes,(address,bytes32),uint32[],bytes[],(address,uint256)[]),address)
+    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_FOUR = 0xeea9064b; // delegateTo(address,(bytes,uint256),bytes32)
+    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_FIVE = 0x7f548071; // delegateToBySignature(address,address,(bytes,uint256),(bytes,uint256),bytes32
+    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_SIX = 0xda8be864; // undelegate(address)
+    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_SEVEN = 0x0dd8dd02; // queueWithdrawals((address[],uint256[],address)[])
+    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_EIGHT = 0x33404396; // completeQueuedWithdrawals((address,address,address,uint256,uint32,address[],uint256[])[],address[][],uint256[],bool[])
+    bytes4 UPDATE_ALLOWED_FORWARDED_EXTERNAL_CALLS_SELECTOR_NINE = 0x9435bb43; // completeQueuedWithdrawals((address,address,address,uint256,uint32,address[],uint256[])[],address[][],bool[])
 
     // Eigenpod calls selectors
-    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_ONE = 0x88676cad;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_TWO = 0xf074ba62;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_THREE = 0x039157d2;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FOUR = 0x3f65cf19;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FIVE = 0xc4907442;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SIX = 0x0dd8dd02;
-    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SEVEN = 0x9435bb43;
+    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_ONE = 0x88676cad; // startCheckpoint(bool)
+    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_TWO = 0xf074ba62; // verifyCheckpointProofs((bytes32,bytes),(bytes32,bytes32,bytes)[])
+    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_THREE = 0x039157d2; // verifyStaleBalance(uint64,(bytes32,bytes),(bytes32[],bytes))
+    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FOUR = 0x3f65cf19; // verifyWithdrawalCredentials(uint64,(bytes32,bytes),uint40[],bytes[],bytes32[][])
+    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_FIVE = 0xc4907442; // withdrawRestakedBeaconChainETH(address,uint256)
+    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SIX = 0x0dd8dd02; // queueWithdrawals((address[],uint256[],address)[])
+    bytes4 UPDATE_ALLOWED_FORWARDED_EIGENPOD_CALLS_SELECTOR_SEVEN = 0x9435bb43; // completeQueuedWithdrawals((address,address,address,uint256,uint32,address[],uint256[])[],address[][],bool[])
 
 
     //--------------------------------------------------------------------------------------
