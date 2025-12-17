@@ -10,6 +10,8 @@ import "../../../src/LiquidityPool.sol";
 import "../../../src/EtherFiOracle.sol";
 import "../../../src/EtherFiAdmin.sol";
 import "../../../src/RoleRegistry.sol";
+import "../../../src/StakingManager.sol";
+import "../../../src/EtherFiRateLimiter.sol";
 import "../../../test/common/ArrayTestHelper.sol";
 
 contract HoodiTestTopUp is Script, ArrayTestHelper {
@@ -18,10 +20,12 @@ contract HoodiTestTopUp is Script, ArrayTestHelper {
 
     EtherFiNodesManager constant etherFiNodesManager = EtherFiNodesManager(payable(0x7579194b8265e3Aa7df451c6BD2aff5B1FC5F945));
     RoleRegistry constant roleRegistry = RoleRegistry(0x7279853cA1804d4F705d885FeA7f1662323B5Aab);
-    // EtherFiTimelock constant etherFiOperatingTimelock = EtherFiTimelock(payable(OPERATING_TIMELOCK));
     LiquidityPool constant liquidityPool = LiquidityPool(payable(0x4a8081095549e63153a61D21F92ff079fe39858E));
     EtherFiOracle constant etherFiOracleInstance = EtherFiOracle(payable(0x1888Fd1914af6980204AA0424f550d9bE35735e1));
     EtherFiAdmin constant etherFiAdminInstance = EtherFiAdmin(payable(0x0CF5ddcF6861Efd8C498466d162F231E44eB85Dd));
+    StakingManager constant stakingManagerInstance = StakingManager(payable(0xDbE50E32Ed95f539F36bA315a75377FBc35aBc12));
+    EtherFiRateLimiter constant etherFiRateLimiterInstance = EtherFiRateLimiter(payable(0x1e6881572e7bB49B4737ac650bce5587085a4d48));
+
     address constant ORACLE_ADMIN = 0x100007b3D3DeFCa2D3ECD1b9c52872c93Ad995c5;
     address constant NODE_ADDRESS = 0xfbD914e11dF3DB8f475ae9C36ED46eE0c48f6B79;
     address constant ADMIN_EOA = 0x001000621b95AA950c1a27Bb2e1273e10d8dfF68;
@@ -32,9 +36,16 @@ contract HoodiTestTopUp is Script, ArrayTestHelper {
 
     function run() external {
         console2.log("=== HOODI TEST TOPUP ===");
+        uint256 ADMIN_EOA_PRIVATE_KEY = vm.envUint("HOODI_PRIVATE_KEY");
+        uint256 ORACLE_ADMIN_PRIVATE_KEY = vm.envUint("HOODI_ORACLE_PRIVATE_KEY");
 
-        vm.prank(ADMIN_EOA);
-        liquidityPool.setValidatorSizeWei(2 ether);
+        vm.startBroadcast(ADMIN_EOA_PRIVATE_KEY);
+        EtherFiNodesManager newNodesManagerImpl = new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistry), address(etherFiRateLimiterInstance));
+        etherFiNodesManager.upgradeTo(address(newNodesManagerImpl));
+        // Backfill legacy state
+        etherFiNodesManager.backfillLegacyState(BID_ID, NODE_ADDRESS);
+        liquidityPool.setValidatorSizeWei(32 ether);
+        vm.stopBroadcast();
         
         // Advance time until the oracle considers the next report epoch finalized.
         // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
@@ -65,8 +76,9 @@ contract HoodiTestTopUp is Script, ArrayTestHelper {
             report.refBlockTo = etherFiAdminInstance.lastAdminExecutionBlock() + 1;
         }
 
-        vm.prank(ORACLE_ADMIN);
+        vm.startBroadcast(ORACLE_ADMIN_PRIVATE_KEY);
         etherFiOracleInstance.submitReport(report);
+        vm.stopBroadcast();
 
         // Advance time for postReportWaitTimeInSlots
         uint256 slotsToWait = uint256(etherFiAdminInstance.postReportWaitTimeInSlots() + 1);
@@ -74,7 +86,8 @@ contract HoodiTestTopUp is Script, ArrayTestHelper {
         vm.roll(block.number + slotsToWait);
         vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (slotAfterReport + slotsToWait));
 
-        vm.prank(etherFiOracleInstance.owner());
+        // vm.startPrank(ADMIN_EOA);
+        vm.startBroadcast(ADMIN_EOA_PRIVATE_KEY);
         etherFiAdminInstance.executeTasks(report);
 
         bytes[] memory pubkeys = new bytes[](1);
@@ -90,9 +103,8 @@ contract HoodiTestTopUp is Script, ArrayTestHelper {
     function _executeValidatorApprovalTask(IEtherFiOracle.OracleReport memory report, bytes[] memory pubkeys, bytes[] memory signatures) internal returns (bool completed, bool exists) {
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(report);
         bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove));
-        (completed, exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
-        vm.prank(ADMIN_EOA);
         etherFiAdminInstance.executeValidatorApprovalTask(reportHash, report.validatorsToApprove, pubkeys, signatures);
+        (completed, exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
         return (completed, exists);
     }
 }
