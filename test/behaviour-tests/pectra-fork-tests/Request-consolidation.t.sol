@@ -10,13 +10,14 @@ import "../../../src/RoleRegistry.sol";
 import "../../../src/interfaces/IRoleRegistry.sol";
 import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
 import "../../TestSetup.sol";
+import "../../../script/deploys/Deployed.s.sol";
 /**
  * @title RequestConsolidationTest
  * @notice test for request consolidation
  * @dev Run with: forge test --fork-url <mainnet-rpc> --match-path test/pectra-fork-tests/Request-consolidation.t.sol -vvvv
  */
 
-contract RequestConsolidationTest is TestSetup {
+contract RequestConsolidationTest is TestSetup, Deployed {
     // === MAINNET CONTRACT ADDRESSES ===
     EtherFiNodesManager constant etherFiNodesManager = EtherFiNodesManager(payable(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F));
     RoleRegistry constant roleRegistry = RoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
@@ -84,8 +85,8 @@ contract RequestConsolidationTest is TestSetup {
 
     function test_RequestConsolidation() public {
         console2.log("=== REQUEST CONSOLIDATION TEST ===");
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), realElExiter);
-        require(hasRole, "test: realElExiter does not have the EL Trigger Exit Role");
+        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), ETHERFI_OPERATING_ADMIN);
+        require(hasRole, "test: ETHERFI_OPERATING_ADMIN does not have the Consolidation Role");
 
         bytes[] memory pubkeys = new bytes[](3);
         pubkeys[0] = PK_80143;
@@ -115,16 +116,16 @@ contract RequestConsolidationTest is TestSetup {
         // console.log("Value to send:", valueToSend);
 
         // Fund the timelock with enough ETH to pay consolidation fees
-        vm.deal(address(etherFiOperatingTimelock), valueToSend + 1 ether);
+        vm.deal(address(ETHERFI_OPERATING_ADMIN), valueToSend + 1 ether);
 
-        vm.prank(address(etherFiOperatingTimelock));
+        vm.prank(address(ETHERFI_OPERATING_ADMIN));
         etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
     }
 
     function test_switchToCompounding() public {
         console2.log("=== SWITCH TO COMPOUNDING TEST ===");
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), realElExiter);
-        require(hasRole, "test: realElExiter does not have the EL Trigger Exit Role");
+        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), ETHERFI_OPERATING_ADMIN);
+        require(hasRole, "test: ETHERFI_OPERATING_ADMIN does not have the Consolidation Role");
 
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory legacyIds = new uint256[](1);
@@ -144,7 +145,7 @@ contract RequestConsolidationTest is TestSetup {
         uint256 valueToSend = feePer * n;
 
         // Fund the timelock with enough ETH to pay consolidation fees
-        vm.deal(address(etherFiOperatingTimelock), valueToSend + 1 ether);
+        vm.deal(address(ETHERFI_OPERATING_ADMIN), valueToSend + 1 ether);
 
         vm.expectEmit(true, true, true, true, address(etherFiNodesManager));
         emit IEtherFiNodesManager.ValidatorSwitchToCompoundingRequested(
@@ -152,7 +153,7 @@ contract RequestConsolidationTest is TestSetup {
             etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]),
             pubkeys[0]
         );
-        vm.prank(address(etherFiOperatingTimelock));
+        vm.prank(address(ETHERFI_OPERATING_ADMIN));
         etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
 
     }
@@ -186,9 +187,9 @@ contract RequestConsolidationTest is TestSetup {
         uint256 n = reqs.length;
         uint256 valueToSend = feePer * n;
 
-        vm.deal(address(etherFiOperatingTimelock), valueToSend + 1 ether);
+        vm.deal(address(ETHERFI_OPERATING_ADMIN), valueToSend + 1 ether);
 
-        vm.prank(address(etherFiOperatingTimelock));
+        vm.prank(address(ETHERFI_OPERATING_ADMIN));
         etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
 
     }
