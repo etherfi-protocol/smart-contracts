@@ -33,7 +33,6 @@ jobs:
         if: always()
         shell: bash
         run: |
-          # Always write coverage.txt so the comment step can't ENOENT.
           if forge coverage --report summary --no-match-coverage '(script/|test/|src/helpers/|src/interfaces/|src/eigenlayer|src/libraries/|src/archive/)' > coverage.txt 2>&1; then
             echo "" >> coverage.txt
           else
@@ -43,38 +42,49 @@ jobs:
           MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
           HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL: ${{ secrets.HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL }}
           HISTORICAL_PROOF_RPC_URL: ${{ secrets.HISTORICAL_PROOF_RPC_URL }}
-
-const marker = '<!-- forge-coverage-comment -->';
-
-const comments = await github.rest.issues.listComments({
-  owner,
-  repo,
-  issue_number,
-});
-
-const existing = comments.data.find(c => c.body.includes(marker));
-
-const body = `
-${marker}
-### 🧪 Forge Coverage (PR Diff)
-
-\`\`\`
-${coverage}
-\`\`\`
-`;
-
-if (existing) {
-  await github.rest.issues.updateComment({
-    owner,
-    repo,
-    comment_id: existing.id,
-    body,
-  });
-} else {
-  await github.rest.issues.createComment({
-    owner,
-    repo,
-    issue_number,
-    body,
-  });
-}
+      
+      - name: Comment coverage on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+      
+            const coverage = fs.readFileSync('coverage.txt', 'utf8');
+            const marker = '<!-- forge-coverage-comment -->';
+      
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+      
+            const comments = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+            });
+      
+            const existing = comments.data.find(c => c.body.includes(marker));
+      
+            const body = `
+            ${marker}
+            ### 🧪 Forge Coverage (PR Diff)
+      
+            \`\`\`
+            ${coverage}
+            \`\`\`
+            `;
+      
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }
