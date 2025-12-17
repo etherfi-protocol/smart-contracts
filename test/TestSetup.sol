@@ -59,6 +59,7 @@ import "../src/EtherFiRewardsRouter.sol";
 import "../src/CumulativeMerkleRewardsDistributor.sol";
 import "../script/deploys/Deployed.s.sol";
 
+import "../src/DepositAdapter.sol";
 contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
@@ -196,6 +197,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     EtherFiAdmin public etherFiAdminImplementation;
     EtherFiAdmin public etherFiAdminInstance;
 
+    DepositAdapter public depositAdapterImplementation;
+    DepositAdapter public depositAdapterInstance;
+
     EtherFiRewardsRouter public etherFiRewardsRouterInstance = EtherFiRewardsRouter(payable(0x73f7b1184B5cD361cC0f7654998953E2a251dd58));
 
     EtherFiNode public node;
@@ -236,6 +240,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     address liquidityPool = vm.addr(9);
     address shonee = vm.addr(1200);
     address jess = vm.addr(1201);
+    address tom = vm.addr(1202);
     address committeeMember = address(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
     address timelock = address(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761);
     address buybackWallet = address(0x2f5301a3D59388c509C65f8698f521377D41Fd0F);
@@ -367,6 +372,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             eigenLayerRewardsCoordinator = IRewardsCoordinator(0x7750d328b314EfFa365A0402CcfD489B80B0adda);
 
             eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
+            depositAdapterInstance = DepositAdapter(payable(deployed.DEPOSIT_ADAPTER()));
 
         } else if (forkEnum == TESTNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("TESTNET_RPC_URL")));
