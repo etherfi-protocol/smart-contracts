@@ -237,16 +237,6 @@ contract RequestELTriggeredWithdrawals is Script, Utils {
         if (b.length == 0) revert("INPUT_JSON: empty pubkeys blob");
 
         // Locate '{'
-    }
-
-    /**
-     * @dev Parses a string formatted like "{0x<hex>,0x<hex>,...}" into bytes[] pubkeys.
-     */
-    function _parsePubkeysBlob(string memory blob) internal view returns (bytes[] memory out) {
-        bytes memory b = bytes(blob);
-        if (b.length == 0) revert("INPUT_JSON: empty pubkeys blob");
-
-        // Locate '{'
         uint256 lbrace = 0;
         while (lbrace < b.length && b[lbrace] != 0x7b) lbrace++; // '{'
         if (lbrace == b.length) revert("INPUT_JSON: pubkeys blob missing '{'");
