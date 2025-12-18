@@ -55,7 +55,7 @@ contract TopUpFork is Script, Deployed, Utils, ArrayTestHelper {
         console2.log("=== TOP UP FORK ===");
 
         vm.prank(OPERATING_TIMELOCK);
-        liquidityPool.setValidatorSizeWei(2000 ether);
+        liquidityPool.setValidatorSizeWei(2001 ether);
 
         // Advance time until the oracle considers the next report epoch finalized.
         // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
@@ -109,9 +109,9 @@ contract TopUpFork is Script, Deployed, Utils, ArrayTestHelper {
     function _executeValidatorApprovalTask(IEtherFiOracle.OracleReport memory report, bytes[] memory pubkeys, bytes[] memory signatures) internal returns (bool completed, bool exists) {
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(report);
         bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove));
-        (completed, exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
         vm.prank(ADMIN_EOA);
         etherFiAdminInstance.executeValidatorApprovalTask(reportHash, report.validatorsToApprove, pubkeys, signatures);
+        (completed, exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
         return (completed, exists);
     }
 
@@ -122,13 +122,15 @@ contract TopUpFork is Script, Deployed, Utils, ArrayTestHelper {
             "/script/el-exits/val-consolidations/LugaNodes.json"
         );
         string memory jsonData = vm.readFile(jsonFilePath);
-        uint256 validatorCount = 10; // First 10 validators from LugaNodes.json
+        // Choose the index here.
+        uint256 startIndex = 0;
+        uint256 validatorCount = 40;
 
         pubkeys = new bytes[](validatorCount);
         ids = new uint256[](validatorCount);
         signatures = new bytes[](validatorCount);
         for (uint256 i = 0; i < validatorCount; i++) {
-            string memory basePath = string.concat("$[", vm.toString(i), "]");
+            string memory basePath = string.concat("$[", vm.toString(startIndex + i), "]");
             ids[i] = stdJson.readUint(jsonData, string.concat(basePath, ".id"));
             pubkeys[i] = stdJson.readBytes(jsonData, string.concat(basePath, ".pubkey"));
             signatures[i] = SIGNATURE;
