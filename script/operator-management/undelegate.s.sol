@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
+import "forge-std/Script.sol";
 
-import {IEtherFiNodesManager} from "../../src/interfaces/IEtherFiNodesManager.sol";
+import "../utils/utils.sol";
+
+import {EtherFiTimelock} from "../../src/EtherFiTimelock.sol";
+import {EtherFiNodesManager} from "../../src/EtherFiNodesManager.sol";
+import {RoleRegistry} from "../../src/RoleRegistry.sol";
 import {IDelegationManager} from "../../src/eigenlayer-interfaces/IDelegationManager.sol";
 
 /**
@@ -13,111 +17,134 @@ import {IDelegationManager} from "../../src/eigenlayer-interfaces/IDelegationMan
  * @notice Calls EigenLayer `DelegationManager.undelegate(staker)` for a list of EtherFi node "stakers".
  * @dev Uses `EtherFiNodesManager.forwardExternalCall()` so the EtherFiNode is the caller (i.e. the staker),
  *      avoiding per-staker private keys.
+ * @dev This script is designed for the Operating Timelock:
+ *      it prints the calldata for `EtherFiTimelock.scheduleBatch(...)` and `EtherFiTimelock.executeBatch(...)`
+ *      targeting `EtherFiNodesManager.forwardExternalCall(...)`.
  *
- * Input JSON (set with env `INPUT_JSON`, default: `<repo>/script/operator-management/undelegate.json`)
- * - Either:
- *   { "validator_ids": [21397, 338, ...] }
- * - Or:
- *   { "nodes": ["0x...", "0x...", ...] }
- * - Or:
- *   [ { "node_address": "0x..." }, ... ]  (your `a41-node-address.json` format)
+ * Input JSON (env `INPUT_JSON`, default: `<repo>/script/operator-management/a41-node-address.json`)
+ * - Expected: [ { "node_address": "0x..." }, ... ]
  *
- * Env:
- * - PRIVATE_KEY (required): broadcaster with CALL_FORWARDER_ROLE on EtherFiNodesManager.
- * - AUTO_WHITELIST (optional, default false): if true, attempts to call
- *   `updateAllowedForwardedExternalCalls(broadcaster, undelegateSelector, delegationManager, true)` first.
- * - NODES_MANAGER (optional): EtherFiNodesManager address (default mainnet).
- * - DELEGATION_MANAGER (optional): EigenLayer DelegationManager address (default mainnet).
- * - BATCH_SIZE (optional, default 20): number of nodes per `forwardExternalCall` tx.
+ * Env (optional):
+ * - NODES_MANAGER: EtherFiNodesManager address (default mainnet)
+ * - DELEGATION_MANAGER: EigenLayer DelegationManager address (default mainnet)
+ * - OPERATING_TIMELOCK: EtherFi Operating Timelock address (default mainnet)
  */
-contract UndelegateAllStakers is Script {
+contract UndelegateAllStakers is Script, Utils {
     using stdJson for string;
 
-    // Mainnet defaults
-    address internal constant _MAINNET_ETHERFI_NODES_MANAGER = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
     address internal constant _MAINNET_EIGENLAYER_DELEGATION_MANAGER = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
 
     bytes4 internal constant _UNDELEGATE_SELECTOR = IDelegationManager.undelegate.selector;
 
-    IEtherFiNodesManager internal _nodesManager;
+    EtherFiNodesManager internal _nodesManager;
     IDelegationManager internal _delegationManager;
+    EtherFiTimelock internal _operatingTimelock;
+    RoleRegistry internal _roleRegistry;
+    address internal _nodesManagerAddr;
     address internal _delegationManagerAddr;
-    address internal _broadcaster;
-    uint256 internal _batchSize;
+    address internal _operatingTimelockAddr;
 
     function run() external {
-        uint256 pk = vm.envUint("PRIVATE_KEY");
-        _broadcaster = vm.addr(pk);
-
-        address nodesManagerAddr = vm.envOr("NODES_MANAGER", _MAINNET_ETHERFI_NODES_MANAGER);
-        _delegationManagerAddr = vm.envOr("DELEGATION_MANAGER", _MAINNET_EIGENLAYER_DELEGATION_MANAGER);
-
-        _nodesManager = IEtherFiNodesManager(nodesManagerAddr);
-        _delegationManager = IDelegationManager(_delegationManagerAddr);
-
-        _batchSize = vm.envOr("BATCH_SIZE", uint256(20));
-        bool autoWhitelist = vm.envOr("AUTO_WHITELIST", false);
+        _initAddresses();
 
         string memory jsonPath = vm.envOr("INPUT_JSON", _defaultInputPath());
-        string memory jsonData = vm.readFile(jsonPath);
+        address[] memory nodesAll = _loadNodesFromNodeAddressArray(vm.readFile(jsonPath));
 
-        address[] memory nodes = _loadNodes(jsonData);
-
-        console2.log("=== UNDELEGATE ALL STAKERS ===");
-        console2.log("Broadcaster:", _broadcaster);
-        console2.log("EtherFiNodesManager:", nodesManagerAddr);
+        console2.log("=== UNDELEGATE (OPERATING TIMELOCK) ===");
+        console2.log("NodesManager:", _nodesManagerAddr);
         console2.log("DelegationManager:", _delegationManagerAddr);
-        console2.log("Undelegate selector:", vm.toString(_UNDELEGATE_SELECTOR));
+        console2.log("OperatingTimelock:", _operatingTimelockAddr);
         console2.log("Input:", jsonPath);
-        console2.log("Nodes in input:", nodes.length);
-        console2.log("Batch size:", _batchSize);
+        console2.log("Nodes in input:", nodesAll.length);
         console2.log("");
 
-        vm.startBroadcast(pk);
+        _validateTimelockCanForward();
 
-        _ensureWhitelistedOrRevert(autoWhitelist);
-        (uint256 considered, uint256 skipped, uint256 attempted) = _processAll(nodes);
-
-        vm.stopBroadcast();
-
+        // Filter nodes to only those currently delegated (avoid guaranteed revert).
+        (address[] memory nodes, bytes[] memory batchData, uint256 skipped) = _buildUndelegateBatch(nodesAll, _delegationManager);
+        console2.log("Skipped (not delegated / operator / zero):", skipped);
+        console2.log("Attempting undelegate for nodes:", nodes.length);
         console2.log("");
-        console2.log("=== DONE ===");
-        console2.log("Considered:", considered);
-        console2.log("Skipped:", skipped);
-        console2.log("Attempted:", attempted);
+        if (nodes.length == 0) revert("NO_NODES_TO_UNDELEGATE");
+
+        _printTimelockScheduleExecute(nodes, batchData);
+    }
+
+    function _initAddresses() internal {
+        _nodesManagerAddr = vm.envOr("NODES_MANAGER", ETHERFI_NODES_MANAGER);
+        _delegationManagerAddr = vm.envOr("DELEGATION_MANAGER", _MAINNET_EIGENLAYER_DELEGATION_MANAGER);
+        _operatingTimelockAddr = vm.envOr("OPERATING_TIMELOCK", OPERATING_TIMELOCK);
+
+        _nodesManager = EtherFiNodesManager(payable(_nodesManagerAddr));
+        _delegationManager = IDelegationManager(_delegationManagerAddr);
+        _operatingTimelock = EtherFiTimelock(payable(_operatingTimelockAddr));
+        _roleRegistry = RoleRegistry(address(_nodesManager.roleRegistry()));
+    }
+
+    function _validateTimelockCanForward() internal view {
+        bytes32 forwarderRole = _nodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE();
+        if (!_roleRegistry.hasRole(forwarderRole, _operatingTimelockAddr)) revert("OPERATING_TIMELOCK_MISSING_CALL_FORWARDER_ROLE");
+
+        if (!_nodesManager.allowedForwardedExternalCalls(_operatingTimelockAddr, _UNDELEGATE_SELECTOR, _delegationManagerAddr)) {
+            revert("OPERATING_TIMELOCK_NOT_WHITELISTED_FOR_UNDELEGATE");
+        }
+    }
+
+    function _printTimelockScheduleExecute(address[] memory nodes, bytes[] memory batchData) internal view {
+        bytes memory forwardExternalCallData = abi.encodeWithSelector(
+            _nodesManager.forwardExternalCall.selector,
+            nodes,
+            batchData,
+            _delegationManagerAddr
+        );
+
+        address[] memory targets = new address[](1);
+        targets[0] = _nodesManagerAddr;
+        uint256[] memory values = new uint256[](1);
+        values[0] = 0;
+        bytes[] memory payloads = new bytes[](1);
+        payloads[0] = forwardExternalCallData;
+
+        bytes32 predecessor = bytes32(0);
+        bytes32 timelockSalt = keccak256(abi.encode(targets, payloads, block.number));
+
+        bytes memory scheduleCalldata = abi.encodeWithSelector(
+            _operatingTimelock.scheduleBatch.selector,
+            targets,
+            values,
+            payloads,
+            predecessor,
+            timelockSalt,
+            MIN_DELAY_OPERATING_TIMELOCK
+        );
+
+        bytes memory executeCalldata = abi.encodeWithSelector(
+            _operatingTimelock.executeBatch.selector,
+            targets,
+            values,
+            payloads,
+            predecessor,
+            timelockSalt
+        );
+
+        console2.log("=== Schedule undelegate batch (Operating Timelock) ===");
+        console2.log("timelockSalt:");
+        console2.logBytes32(timelockSalt);
+        console2.log("calldata:");
+        console2.logBytes(scheduleCalldata);
+        console2.log("====================================================");
+        console2.log("");
+
+        console2.log("=== Execute undelegate batch (Operating Timelock) ===");
+        console2.log("timelockSalt:");
+        console2.logBytes32(timelockSalt);
+        console2.log("calldata:");
+        console2.logBytes(executeCalldata);
+        console2.log("===================================================");
     }
 
     function _defaultInputPath() internal view returns (string memory) {
-        return string.concat(vm.projectRoot(), "/script/operator-management/undelegate.json");
-    }
-
-    function _loadNodes(string memory jsonData) internal view returns (address[] memory nodes) {
-        // Format 1: raw array like: [ { "node_address": "0x..." }, ... ]
-        // (this is the shape of `script/operator-management/a41-node-address.json`)
-        if (stdJson.keyExists(jsonData, "$[0].node_address")) {
-            return _loadNodesFromNodeAddressArray(jsonData);
-        }
-
-        bool hasNodes = stdJson.keyExists(jsonData, ".nodes");
-        bool hasValidatorIds = stdJson.keyExists(jsonData, ".validator_ids");
-
-        if (!hasNodes && !hasValidatorIds) {
-            revert("INPUT_JSON missing `.nodes` or `.validator_ids` (or $[0].node_address)");
-        }
-        if (hasNodes && hasValidatorIds) {
-            revert("INPUT_JSON must contain only one of `.nodes` or `.validator_ids`");
-        }
-
-        if (hasNodes) {
-            nodes = abi.decode(vm.parseJson(jsonData, ".nodes"), (address[]));
-            return nodes;
-        }
-
-        uint256[] memory validatorIds = abi.decode(vm.parseJson(jsonData, ".validator_ids"), (uint256[]));
-        nodes = new address[](validatorIds.length);
-        for (uint256 i = 0; i < validatorIds.length; i++) {
-            nodes[i] = _nodesManager.etherfiNodeAddress(validatorIds[i]);
-        }
+        return string.concat(vm.projectRoot(), "/script/operator-management/a41-node-address.json");
     }
 
     function _loadNodesFromNodeAddressArray(string memory jsonData) internal view returns (address[] memory nodes) {
@@ -138,119 +165,47 @@ contract UndelegateAllStakers is Script {
         }
     }
 
-    function _ensureWhitelistedOrRevert(bool autoWhitelist) internal {
-        // Ensure the call-forwarding whitelist is enabled for this broadcaster (optional).
-        if (_nodesManager.allowedForwardedExternalCalls(_broadcaster, _UNDELEGATE_SELECTOR, _delegationManagerAddr)) {
-            return;
-        }
-        if (!autoWhitelist) {
-            revert("NOT_WHITELISTED: set AUTO_WHITELIST=true or whitelist manually");
-        }
-        _nodesManager.updateAllowedForwardedExternalCalls(_broadcaster, _UNDELEGATE_SELECTOR, _delegationManagerAddr, true);
-        console2.log("[OK] Whitelisted undelegate for broadcaster");
-        console2.log("");
-    }
-
-    function _processAll(address[] memory nodes) internal returns (uint256 considered, uint256 skipped, uint256 attempted) {
-        uint256 i = 0;
-        while (i < nodes.length) {
-            uint256 end = _min(nodes.length, i + _batchSize);
-
-            (address[] memory batchNodes, bytes[] memory batchData, uint256 consideredBatch, uint256 skippedBatch) =
-                _buildBatch(nodes, i, end);
-            considered += consideredBatch;
-            skipped += skippedBatch;
-
-            if (batchNodes.length == 0) {
-                i = end;
-                continue;
-            }
-
-            console2.log("Batch start:", i);
-            console2.log("Batch end:", end);
-            console2.log("Attempting:", batchNodes.length);
-
-            try _nodesManager.forwardExternalCall(batchNodes, batchData, _delegationManagerAddr) returns (bytes[] memory returnData) {
-                attempted += batchNodes.length;
-                _logWithdrawalRoots(batchNodes, returnData);
-            } catch (bytes memory err) {
-                console2.log("[BATCH REVERT]");
-                console2.log("  start:", i);
-                console2.log("  end:", end);
-                console2.log("  len:", batchNodes.length);
-                console2.logBytes(err);
-                revert("BATCH_REVERT: rerun with smaller BATCH_SIZE or fix underlying revert");
-            }
-
-            i = end;
-        }
-    }
-
-    function _buildBatch(
-        address[] memory nodes,
-        uint256 start,
-        uint256 end
+    function _buildUndelegateBatch(
+        address[] memory nodesAll,
+        IDelegationManager delegationManager
     )
         internal
         view
-        returns (address[] memory batchNodes, bytes[] memory batchData, uint256 considered, uint256 skipped)
+        returns (address[] memory nodes, bytes[] memory data, uint256 skipped)
     {
-        uint256 maxLen = end - start;
-        batchNodes = new address[](maxLen);
-        batchData = new bytes[](maxLen);
+        uint256 n = nodesAll.length;
+        nodes = new address[](n);
+        data = new bytes[](n);
 
         uint256 k = 0;
-        for (uint256 j = start; j < end; j++) {
-            address node = nodes[j];
-            considered++;
+        for (uint256 i = 0; i < n; i++) {
+            address node = nodesAll[i];
 
             if (node == address(0)) {
                 skipped++;
                 continue;
             }
-            if (!_delegationManager.isDelegated(node)) {
+            if (!delegationManager.isDelegated(node)) {
                 skipped++;
                 continue;
             }
-            if (_delegationManager.isOperator(node)) {
+            // DelegationManager.undelegate(staker) reverts if staker is also an operator.
+            if (delegationManager.isOperator(node)) {
                 skipped++;
                 continue;
             }
 
-            batchNodes[k] = node;
-            batchData[k] = abi.encodeWithSelector(_UNDELEGATE_SELECTOR, node);
+            nodes[k] = node;
+            data[k] = abi.encodeWithSelector(_UNDELEGATE_SELECTOR, node);
             unchecked {
                 ++k;
             }
         }
 
-        // Shrink arrays to actual size `k`.
         assembly {
-            mstore(batchNodes, k)
-            mstore(batchData, k)
+            mstore(nodes, k)
+            mstore(data, k)
         }
-    }
-
-    function _logWithdrawalRoots(address[] memory nodes, bytes[] memory returnData) internal pure {
-        // Each element should be the raw returndata from DelegationManager.undelegate(staker)
-        // i.e. abi-encoded `bytes32[] withdrawalRoots`.
-        if (nodes.length != returnData.length) return;
-        for (uint256 i = 0; i < nodes.length; i++) {
-            bytes memory ret = returnData[i];
-            // If return data can't be decoded, just skip logging roots.
-            if (ret.length == 0) {
-                continue;
-            }
-            // NOTE: if this decode reverts due to unexpected returndata, it will bubble up.
-            bytes32[] memory roots = abi.decode(ret, (bytes32[]));
-            // Minimal logging, but enough to diff outcomes.
-            console2.log("  node:", nodes[i]);
-            console2.log("  withdrawalRoots:", roots.length);
-        }
-    }
-
-    function _min(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a < b ? a : b;
     }
 }
 
