@@ -49,17 +49,6 @@ contract RequestELTriggeredWithdrawals is Script, Utils {
         console2.log("Broadcaster:", EL_EXIT_TRIGGERER);
         console2.log("");
 
-        console2.log("");
-        console2.log("Linking Legacy Validator IDs");
-        console2.log("===================================");
-        console2.log("");
-        vm.startPrank(OPERATING_TIMELOCK);
-        linkLegacyValidatorIds(jsonData);
-        vm.stopPrank();
-        vm.startPrank(ETHERFI_OPERATING_ADMIN);
-        updateRateLimiterCapacity();
-        vm.stopPrank();
-
         vm.startPrank(EL_EXIT_TRIGGERER);
         for (uint256 i = 0; i < nodeCount; i++) {
             address nodeAddr = stdJson.readAddress(jsonData, string.concat("$[", vm.toString(i), "].node_address"));
@@ -92,8 +81,12 @@ contract RequestELTriggeredWithdrawals is Script, Utils {
 
             uint256 valueToSend = feePerRequest * pubkeys.length;
             console2.log("Value:", valueToSend);
+            bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.requestExecutionLayerTriggeredWithdrawal.selector, reqs);
+            console2.log("Data:");
+            console2.logBytes(data);
+            console2.log("===================================");
+            console2.log("");
             _nodesManager.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
-
             console2.log("");
         }
         vm.stopPrank();
