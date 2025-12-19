@@ -86,7 +86,7 @@ contract Configurations is Script, Utils {
         // c) Whitelist forwarded undelegate on DelegationManager for Operating Timelock
         // d) Link legacy validator ids
         // e) Forward batched redelegate calls for the nodes (for the A41 nodes)
-        address[] memory targets = new address[](6);
+        address[] memory targets = new address[](5);
         bytes[] memory payloads = new bytes[](targets.length);
         payloads[0] = abi.encodeWithSelector(
             _nodesManager.updateAllowedForwardedExternalCalls.selector,
