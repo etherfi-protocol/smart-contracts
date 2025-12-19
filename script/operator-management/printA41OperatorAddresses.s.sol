@@ -10,21 +10,23 @@ import {IDelegationManager} from "../../src/eigenlayer-interfaces/IDelegationMan
 import "../utils/utils.sol";
 
 /**
- * @notice Prints EigenLayer operator addresses for every node in `a41-node_address.json`.
+ * @notice Prints EigenLayer operator addresses for every node in `etherFiNodes.json`.
  *
  * Operator is fetched from EigenLayer `DelegationManager.delegatedTo(node)`.
+ * Also prints a separate array of nodes whose operator == `_A41_OPERATOR_MANAGER`.
  *
  * Command (mainnet fork dry-run):
  * forge script script/operator-management/printA41OperatorAddresses.s.sol:PrintA41OperatorAddresses \
  *   --fork-url $MAINNET_RPC_URL -vvvv
  *
  * Optional env:
- * - INPUT_JSON: path to JSON file (default: `<repo>/script/operator-management/a41-node_address.json`)
+ * - INPUT_JSON: path to JSON file (default: `<repo>/script/operator-management/etherFiNodes.json`)
  */
 contract PrintA41OperatorAddresses is Script, Utils {
     using stdJson for string;
 
     address internal constant _MAINNET_EIGENLAYER_DELEGATION_MANAGER = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
+    address internal constant _A41_OPERATOR_MANAGER = 0xe0156eF2905c2Ea8B1F7571cAEE85fdF1657Ab38;
 
     function run() external {
         IDelegationManager delegationManager = IDelegationManager(_MAINNET_EIGENLAYER_DELEGATION_MANAGER);
@@ -35,6 +37,7 @@ contract PrintA41OperatorAddresses is Script, Utils {
         uint256 nodeCount = _countNodeEntries(jsonData);
         address[] memory nodes = new address[](nodeCount);
         address[] memory operators = new address[](nodeCount);
+        address[] memory a41OperatorNodesTmp = new address[](nodeCount);
 
         console2.log("=== A41 NODE -> OPERATOR (EIGENLAYER) ===");
         console2.log("DelegationManager:", _MAINNET_EIGENLAYER_DELEGATION_MANAGER);
@@ -42,11 +45,19 @@ contract PrintA41OperatorAddresses is Script, Utils {
         console2.log("Entries:", nodeCount);
         console2.log("");
 
+        uint256 a41OperatorCount = 0;
         for (uint256 i = 0; i < nodeCount; i++) {
             address node = stdJson.readAddress(jsonData, string.concat("$[", vm.toString(i), "].node_address"));
             address operator = delegationManager.delegatedTo(node);
 
             nodes[i] = node;
+            if (operator == _A41_OPERATOR_MANAGER) {
+                a41OperatorNodesTmp[a41OperatorCount] = node;
+                unchecked {
+                    ++a41OperatorCount;
+                }
+            }
+
             operators[i] = operator;
 
             console2.log("idx:", i);
@@ -61,10 +72,19 @@ contract PrintA41OperatorAddresses is Script, Utils {
         console2.log("");
         console2.log("=== Nodes array ===");
         console2.log(formatAddressArray(nodes));
+
+        address[] memory a41OperatorNodes = new address[](a41OperatorCount);
+        for (uint256 i = 0; i < a41OperatorCount; i++) {
+            a41OperatorNodes[i] = a41OperatorNodesTmp[i];
+        }
+
+        console2.log("");
+        console2.log("=== A41 Operator Nodes array ===");
+        console2.log(formatAddressArray(a41OperatorNodes));
     }
 
     function _defaultInputPath() internal view returns (string memory) {
-        return string.concat(vm.projectRoot(), "/script/operator-management/a41-node_address.json");
+        return string.concat(vm.projectRoot(), "/script/operator-management/etherFiNodes.json");
     }
 
     function _countNodeEntries(string memory jsonData) internal view returns (uint256 n) {
