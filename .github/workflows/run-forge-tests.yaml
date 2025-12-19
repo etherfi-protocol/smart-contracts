@@ -36,7 +36,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          if forge coverage --report summary --no-match-coverage '(script/|test/|src/helpers/|src/interfaces/|src/eigenlayer|src/libraries/|src/archive/)' > coverage.txt 2>&1; then
+          if forge coverage --report summary --no-match-coverage '(script/|test/|src/helpers/|src/interfaces/|src/eigenlayer|src/libraries/|src/archive/)' 2>&1 | sed -n '/^|/p; /^Total/p' > coverage.txt; then
             echo "" >> coverage.txt
           else
             echo "forge coverage failed; see logs above (tests step is the gate)." > coverage.txt
