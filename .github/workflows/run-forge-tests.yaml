@@ -50,12 +50,13 @@ jobs:
           HISTORICAL_PROOF_RPC_URL: ${{ secrets.HISTORICAL_PROOF_RPC_URL }}
       
       - name: Upload coverage artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: forge-coverage
           path: coverage.txt
       - name: Post coverage comment on PR
-        if: github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
