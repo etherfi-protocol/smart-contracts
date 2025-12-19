@@ -36,8 +36,11 @@ jobs:
         if: always()
         shell: bash
         run: |
-          if forge coverage --report summary --no-match-coverage '(script/|test/|src/helpers/|src/interfaces/|src/eigenlayer|src/libraries/|src/archive/)' 2>&1 | sed -n '/^|/p; /^Total/p' > coverage.txt; then
+          set -o pipefail
+          if forge coverage --report summary --no-match-coverage '(script/|test/|src/helpers/|src/interfaces/|src/eigenlayer|src/libraries/|src/archive/)' 2>&1 | tee full_output.txt | sed -n '/^|/p; /^Total/p' > coverage.txt; then
             echo "" >> coverage.txt
+            echo "---" >> coverage.txt
+            grep -E "^(Ran|Suite result:|Test result:)" full_output.txt >> coverage.txt || true
           else
             echo "forge coverage failed; see logs above (tests step is the gate)." > coverage.txt
           fi
