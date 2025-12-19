@@ -31,8 +31,8 @@ contract RequestELTriggeredWithdrawals is Script, Utils {
     address internal constant EL_EXIT_TRIGGERER = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
     // NOTE: Rate limiter units are **gwei** (not wei). This needs to be >= max `totalExitGwei` per tx.
     // If you only change `remaining` but not `capacity`, `setRemaining()` will clamp to `capacity` and you’ll still revert.
-    uint64 internal constant EXIT_REQUEST_BUCKET_CAPACITY_GWEI = 50_000_000_000_000_000; // 50,000,000 ETH in gwei
-    uint64 internal constant EXIT_REQUEST_BUCKET_REMAINING_GWEI = 50_000_000_000_000_000; // 50,000,000 ETH in gwei
+    uint64 internal constant EXIT_REQUEST_BUCKET_CAPACITY_GWEI = 5_400_000_000_000_000; // 50,000,000 ETH in gwei
+    uint64 internal constant EXIT_REQUEST_BUCKET_REMAINING_GWEI = 5_400_000_000_000_000; // 50,000,000 ETH in gwei
 
     function run() external {
         _nodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER));
@@ -60,7 +60,6 @@ contract RequestELTriggeredWithdrawals is Script, Utils {
         updateRateLimiterCapacity();
         vm.stopPrank();
 
-        // vm.startBroadcast(EL_EXIT_TRIGGERER);
         vm.startPrank(EL_EXIT_TRIGGERER);
         for (uint256 i = 0; i < nodeCount; i++) {
             address nodeAddr = stdJson.readAddress(jsonData, string.concat("$[", vm.toString(i), "].node_address"));
@@ -125,10 +124,6 @@ contract RequestELTriggeredWithdrawals is Script, Utils {
             bytes memory firstPubkey = pubkeys[0];
             if (firstPubkey.length != 48) revert("INPUT_JSON: pubkey must be 48 bytes");
 
-            // uint256[] memory ids = new uint256[](1);
-            // bytes[] memory pks = new bytes[](1);
-            // ids[0] = firstValidatorId;
-            // pks[0] = firstPubkey;
             ids[i] = firstValidatorId;
             pks[i] = firstPubkey;
 
@@ -185,16 +180,6 @@ contract RequestELTriggeredWithdrawals is Script, Utils {
 
         vm.startPrank(ETHERFI_OPERATING_ADMIN);
         EtherFiRateLimiter limiter = EtherFiRateLimiter(payable(rateLimiterAddr));
-
-        // // Ensure bucket exists
-        // if (!limiter.limitExists(limitId)) {
-        //     limiter.createNewLimiter(limitId, EXIT_REQUEST_BUCKET_CAPACITY_GWEI, 0);
-        // }
-
-        // // Ensure NodesManager can consume from this bucket (consumer is msg.sender of `consume()`, i.e. NodesManager)
-        // if (!limiter.isConsumerAllowed(limitId, address(_nodesManager))) {
-        //     limiter.updateConsumers(limitId, address(_nodesManager), true);
-        // }
 
         (uint64 capBefore, uint64 remBefore, uint64 rateBefore, uint256 lastBefore) = limiter.getLimit(limitId);
         console2.log("Before.capacity:", capBefore);
