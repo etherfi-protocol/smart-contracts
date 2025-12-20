@@ -46,46 +46,201 @@ contract RequestELTriggeredWithdrawals is Script, Utils {
         console2.log("");
 
         vm.startBroadcast(EL_EXIT_TRIGGERER);
+        // nodeCount = 1;
         for (uint256 i = 0; i < nodeCount; i++) {
-            address nodeAddr = stdJson.readAddress(jsonData, string.concat("$[", vm.toString(i), "].node_address"));
-            uint256 expectedCount = 0;
-            if (stdJson.keyExists(jsonData, string.concat("$[", vm.toString(i), "].validator_count"))) {
-                expectedCount = stdJson.readUint(jsonData, string.concat("$[", vm.toString(i), "].validator_count"));
-            }
+            _processNode(jsonData, i, true);
+        }
+        vm.stopBroadcast();
+    }
 
-            string memory pubkeysBlob = stdJson.readString(jsonData, string.concat("$[", vm.toString(i), "].pubkeys"));
-            bytes[] memory pubkeys = _parsePubkeysBlob(pubkeysBlob);
+    /**
+     * @notice Broadcasts `requestExecutionLayerTriggeredWithdrawal` for a single node index.
+     *         Used by bash script to send transactions with delays between each node.
+     * @param nodeIndex The index of the node in the JSON file (0-based)
+     */
+    function runSingleNode(uint256 nodeIndex) external {
+        _nodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER));
 
-            if (expectedCount != 0 && expectedCount != pubkeys.length) {
-                revert(string.concat("INPUT_JSON: validator_count mismatch at index=", vm.toString(i)));
-            }
+        string memory jsonPath = string.concat(vm.projectRoot(), "/script/operator-management/a41-data.json");
+        string memory jsonData = vm.readFile(jsonPath);
 
-            IEigenPod pod = IEtherFiNode(nodeAddr).getEigenPod();
-            uint256 feePerRequest = pod.getWithdrawalRequestFee();
+        uint256 nodeCount = _countNodeEntries(jsonData);
+        if (nodeIndex >= nodeCount) {
+            revert(string.concat("Node index out of bounds: ", vm.toString(nodeIndex), " >= ", vm.toString(nodeCount)));
+        }
 
+        vm.startBroadcast(EL_EXIT_TRIGGERER);
+        _processNode(jsonData, nodeIndex, false);
+        vm.stopBroadcast();
+
+        console2.log("Transaction broadcasted successfully");
+        console2.log("");
+    }
+
+    /**
+     * @dev Internal function to process a single node and broadcast the withdrawal request.
+     * @param jsonData The JSON data string containing node information
+     * @param nodeIndex The index of the node to process
+     * @param logCalldata Whether to log the calldata (used in batch mode)
+     */
+    function _processNode(string memory jsonData, uint256 nodeIndex, bool logCalldata) internal {
+        address nodeAddr = stdJson.readAddress(jsonData, string.concat("$[", vm.toString(nodeIndex), "].node_address"));
+        
+        uint256 expectedCount = 0;
+        if (stdJson.keyExists(jsonData, string.concat("$[", vm.toString(nodeIndex), "].validator_count"))) {
+            expectedCount = stdJson.readUint(jsonData, string.concat("$[", vm.toString(nodeIndex), "].validator_count"));
+        }
+
+        string memory pubkeysBlob = stdJson.readString(jsonData, string.concat("$[", vm.toString(nodeIndex), "].pubkeys"));
+        bytes[] memory pubkeys = _parsePubkeysBlob(pubkeysBlob);
+
+        if (expectedCount != 0 && expectedCount != pubkeys.length) {
+            revert(string.concat("INPUT_JSON: validator_count mismatch at index=", vm.toString(nodeIndex)));
+        }
+
+        IEigenPod pod = IEtherFiNode(nodeAddr).getEigenPod();
+        uint256 feePerRequest = pod.getWithdrawalRequestFee();
+
+        if (logCalldata) {
             console2.log("Node:", nodeAddr);
             console2.log("Pod:", address(pod));
             console2.log("Pubkeys:", pubkeys.length);
             console2.log("FeePerRequest:", feePerRequest);
+        } else {
+            console2.log("=== Node Index:", nodeIndex, "===");
+            console2.log("Node:", nodeAddr);
+            console2.log("Pod:", address(pod));
+            console2.log("Pubkeys:", pubkeys.length);
+            console2.log("FeePerRequest:", feePerRequest);
+        }
 
-            IEigenPodTypes.WithdrawalRequest[] memory reqs = new IEigenPodTypes.WithdrawalRequest[](pubkeys.length);
-            for (uint256 j = 0; j < pubkeys.length; j++) {
-                bytes memory pk = pubkeys[j];
-                if (pk.length != 48) revert("INPUT_JSON: pubkey must be 48 bytes");
-                reqs[j] = IEigenPodTypes.WithdrawalRequest({pubkey: pk, amountGwei: 0});
-            }
+        uint256 cnt = pubkeys.length;
+        IEigenPodTypes.WithdrawalRequest[] memory reqs = new IEigenPodTypes.WithdrawalRequest[](cnt);
+        for (uint256 j = 0; j < cnt; j++) {
+            bytes memory pk = pubkeys[j];
+            if (pk.length != 48) revert("INPUT_JSON: pubkey must be 48 bytes");
+            reqs[j] = IEigenPodTypes.WithdrawalRequest({pubkey: pk, amountGwei: 0});
+        }
 
-            uint256 valueToSend = feePerRequest * pubkeys.length;
-            console2.log("Value:", valueToSend);
+        uint256 valueToSend = feePerRequest * pubkeys.length;
+        console2.log("Value:", valueToSend);
+        
+        if (logCalldata) {
             bytes memory data = abi.encodeWithSelector(EtherFiNodesManager.requestExecutionLayerTriggeredWithdrawal.selector, reqs);
             console2.log("Data:");
             console2.logBytes(data);
             console2.log("===================================");
             console2.log("");
-            _nodesManager.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
+        } else {
             console2.log("");
         }
-        vm.stopBroadcast();
+        
+        _nodesManager.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
+        console2.log("");
+    }
+
+    /// @notice For each node entry, links (first validator id) <-> (first pubkey).
+    /// @dev Uses `EtherFiNodesManager.linkLegacyValidatorIds` (admin-only).
+    function linkLegacyValidatorIds(string memory jsonData) internal {
+        console2.log("=== Link Legacy Validator IDs ===");
+        console2.log("===================================");
+        console2.log("");
+
+        uint256 nodeCount = _countNodeEntries(jsonData);
+        uint256[] memory ids = new uint256[](nodeCount);
+        bytes[] memory pks = new bytes[](nodeCount);
+
+        for (uint256 i = 0; i < nodeCount; i++) {
+            address nodeAddr = stdJson.readAddress(jsonData, string.concat("$[", vm.toString(i), "].node_address"));
+
+            string memory validatorIdsBlob =
+                stdJson.readString(jsonData, string.concat("$[", vm.toString(i), "].validator_ids"));
+            uint256 firstValidatorId = _parseFirstValidatorIdBlob(validatorIdsBlob);
+
+            string memory pubkeysBlob = stdJson.readString(jsonData, string.concat("$[", vm.toString(i), "].pubkeys"));
+            bytes[] memory pubkeys = _parsePubkeysBlob(pubkeysBlob);
+            if (pubkeys.length == 0) revert("INPUT_JSON: empty pubkeys array");
+
+            bytes memory firstPubkey = pubkeys[0];
+            if (firstPubkey.length != 48) revert("INPUT_JSON: pubkey must be 48 bytes");
+
+            ids[i] = firstValidatorId;
+            pks[i] = firstPubkey;
+
+            console2.log("linked: node=", nodeAddr, " validatorId=", firstValidatorId);
+        }
+        _nodesManager.linkLegacyValidatorIds(ids, pks);
+        console2.log("Legacy Validator IDs linked successfully");
+        console2.log("===================================");
+        console2.log("");
+    }
+
+    function _parseFirstValidatorIdBlob(string memory blob) internal pure returns (uint256) {
+        bytes memory b = bytes(blob);
+        if (b.length == 0) revert("INPUT_JSON: empty validator_ids blob");
+
+        // find '{'
+        uint256 l = 0;
+        while (l < b.length && b[l] != 0x7b) l++; // '{'
+        if (l == b.length) revert("INPUT_JSON: validator_ids missing '{'");
+
+        // scan first number after '{' (skip spaces)
+        uint256 i = l + 1;
+        while (i < b.length && _isSpace(b[i])) i++;
+        if (i >= b.length) revert("INPUT_JSON: validator_ids missing number");
+
+        uint256 val = 0;
+        bool sawDigit = false;
+        while (i < b.length) {
+            uint8 c = uint8(b[i]);
+            if (c >= 48 && c <= 57) {
+                sawDigit = true;
+                val = val * 10 + (c - 48);
+                unchecked { ++i; }
+                continue;
+            }
+            break; // stop on ',' or '}' or whitespace
+        }
+
+        if (!sawDigit) revert("INPUT_JSON: validator_ids first token not a uint");
+        return val;
+    }
+
+    function updateRateLimiterCapacity() internal {
+        console2.log("=== Update Rate Limiter Capacity ===");
+        bytes32 limitId = _nodesManager.EXIT_REQUEST_LIMIT_ID();
+        address rateLimiterAddr = address(_nodesManager.rateLimiter());
+
+        console2.log("NodesManager.rateLimiter():", rateLimiterAddr);
+        console2.log("Deployed.ETHERFI_RATE_LIMITER:", ETHERFI_RATE_LIMITER);
+        console2.log("limitId (EXIT_REQUEST_LIMIT_ID):", vm.toString(limitId));
+        console2.log("targetCapacityGwei:", EXIT_REQUEST_BUCKET_CAPACITY_GWEI);
+        console2.log("targetRemainingGwei:", EXIT_REQUEST_BUCKET_REMAINING_GWEI);
+        console2.log("===================================");
+
+        vm.startPrank(ETHERFI_OPERATING_ADMIN);
+        EtherFiRateLimiter limiter = EtherFiRateLimiter(payable(rateLimiterAddr));
+
+        (uint64 capBefore, uint64 remBefore, uint64 rateBefore, uint256 lastBefore) = limiter.getLimit(limitId);
+        console2.log("Before.capacity:", capBefore);
+        console2.log("Before.remaining:", remBefore);
+        console2.log("Before.refillRate:", rateBefore);
+        console2.log("Before.lastRefill:", lastBefore);
+
+        // IMPORTANT: must raise capacity first; setRemaining clamps to capacity.
+        limiter.setCapacity(limitId, EXIT_REQUEST_BUCKET_CAPACITY_GWEI);
+        limiter.setRemaining(limitId, EXIT_REQUEST_BUCKET_REMAINING_GWEI);
+
+        (uint64 capAfter, uint64 remAfter, uint64 rateAfter, uint256 lastAfter) = limiter.getLimit(limitId);
+        console2.log("After.capacity:", capAfter);
+        console2.log("After.remaining:", remAfter);
+        console2.log("After.refillRate:", rateAfter);
+        console2.log("After.lastRefill:", lastAfter);
+        vm.stopPrank();
+
+        console2.log("Rate Limiter capacity updated successfully");
+        console2.log("===================================");
+        console2.log("");
     }
 
     function _countNodeEntries(string memory jsonData) internal view returns (uint256 n) {
@@ -189,5 +344,6 @@ contract RequestELTriggeredWithdrawals is Script, Utils {
         }
         return string(out);
     }
+
 }
 
