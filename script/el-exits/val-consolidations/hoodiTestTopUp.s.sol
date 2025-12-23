@@ -43,7 +43,7 @@ contract HoodiTestTopUp is Script, ArrayTestHelper {
         EtherFiNodesManager newNodesManagerImpl = new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistry), address(etherFiRateLimiterInstance));
         etherFiNodesManager.upgradeTo(address(newNodesManagerImpl));
         // Backfill legacy state
-        etherFiNodesManager.backfillLegacyState(BID_ID, NODE_ADDRESS);
+        // etherFiNodesManager.backfillLegacyState(BID_ID, NODE_ADDRESS);
         liquidityPool.setValidatorSizeWei(32 ether);
         vm.stopBroadcast();
         
