@@ -33,26 +33,31 @@ contract CompoundValidators is Script, Utils {
     
     function run() external {
         console2.log("=== COMPOUNDING SCRIPT ===");
+        string memory jsonFilePath = string.concat(vm.projectRoot(), "/script/el-exits/val-consolidations/ebunker.json");
+
+        // OPTION 1: filter by withdrawal credentials and take first N matches
+        bytes memory withdrawalCredentials = bytes("0x010000000000000000000000499867d2d9c3eb250bb6db5cdaa1e600e75272d7");
+        uint256 validatorCount = 100;
+        compound_with_withdrawal_credentials(jsonFilePath, withdrawalCredentials, validatorCount);
+
+        // OPTION 2: compound validators from the json file with start and end index
+        uint256 startIndex = 0;
+        uint256 endIndex = 40;
+        require(endIndex > startIndex, "END_INDEX must be > START_INDEX");
+        console2.log("Slice start (inclusive):", startIndex);
+        console2.log("Slice end (exclusive):", endIndex);
         
-        // Parse validators from JSON
-        (bytes[] memory pubkeys, uint256[] memory ids, address targetEigenPod) = _parseValidatorsFromConsolidateTwoJson();
-        
+        (bytes[] memory pubkeys, uint256[] memory ids, address[] memory podAddrs) =
+            _parseValidatorsFromConsolidateTwoJson(jsonFilePath, startIndex, endIndex);
+
         console2.log("Found", pubkeys.length, "validators");
-        
         if (pubkeys.length == 0) {
             console2.log("No validators to compound");
             return;
         }
-        
-        // linking all validators
+
         _linkAllValidatorIds(ids, pubkeys);
-
-        // Verify target pod
-        (, IEigenPod targetPod) = _resolvePod(pubkeys[0]);
-        require(address(targetPod) != address(0), "First validator has no pod");
-        require(address(targetPod) == targetEigenPod, "Pod address mismatch");
-
-        _executeCompoundingBatch(pubkeys, pubkeys[0], targetPod);
+        _compoundByPod(pubkeys, podAddrs);
     }
 
     function _linkAllValidatorIds(uint256[] memory ids, bytes[] memory pubkeys) internal {
@@ -83,26 +88,200 @@ contract CompoundValidators is Script, Utils {
         console2.log("All validator IDs linked successfully");
     }
 
-    // === HELPER FUNCTIONS ===
-    function _parseValidatorsFromConsolidateTwoJson() internal view returns (bytes[] memory pubkeys, uint256[] memory ids, address targetEigenPod) {
-        string memory root = vm.projectRoot();
-        string memory jsonFilePath = string.concat(
-            root,
-            "/script/el-exits/val-consolidations/LugaNodes.json"
-        );
-        string memory jsonData = vm.readFile(jsonFilePath);
-        bytes memory withdrawalCredentials = stdJson.readBytes(jsonData, "$[0].withdrawal_credentials");
-        targetEigenPod = address(uint160(uint256(bytes32(withdrawalCredentials))));
-        console2.log("Target EigenPod from withdrawal credentials:", targetEigenPod);
-        uint256 validatorCount = 50; // First 50 validators from LugaNodes.json
+    function _compoundByPod(bytes[] memory pubkeys, address[] memory podAddrs) internal {
+        require(pubkeys.length == podAddrs.length, "pubkeys/pods length mismatch");
+        if (pubkeys.length == 0) return;
 
+        // unique pod set (O(n^2) but small batches)
+        address[] memory uniqPods = new address[](pubkeys.length);
+        uint256 uniqCount = 0;
+        for (uint256 i = 0; i < pubkeys.length; i++) {
+            address podAddr = podAddrs[i];
+            bool seen = false;
+            for (uint256 j = 0; j < uniqCount; j++) {
+                if (uniqPods[j] == podAddr) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen) {
+                uniqPods[uniqCount] = podAddr;
+                unchecked { ++uniqCount; }
+            }
+        }
+
+        console2.log("Unique EigenPods in input:", uniqCount);
+
+        for (uint256 p = 0; p < uniqCount; p++) {
+            address expectedPodAddr = uniqPods[p];
+
+            bytes[] memory podPubkeysTmp = new bytes[](pubkeys.length);
+            uint256 podCount = 0;
+
+            for (uint256 i = 0; i < pubkeys.length; i++) {
+                if (podAddrs[i] != expectedPodAddr) continue;
+                podPubkeysTmp[podCount] = pubkeys[i];
+                unchecked { ++podCount; }
+            }
+
+            if (podCount == 0) continue;
+
+            bytes[] memory podPubkeys = _shrinkPubkeys(podPubkeysTmp, podCount);
+
+            console2.log("------------------------------------------------");
+            console2.log("EigenPod (from withdrawal credentials):", expectedPodAddr);
+            console2.log("Validators in pod:", podPubkeys.length);
+
+            // Sanity check: resolved pod matches withdrawal-credentials-derived pod.
+            (, IEigenPod targetPod) = _resolvePod(podPubkeys[0]);
+            require(address(targetPod) == expectedPodAddr, "Pod address mismatch in group");
+
+            _executeCompoundingBatch(podPubkeys, podPubkeys[0], targetPod);
+        }
+    }
+
+    function _shrinkPubkeys(bytes[] memory pubkeys, uint256 count) internal pure returns (bytes[] memory out) {
+        out = new bytes[](count);
+        for (uint256 i = 0; i < count; i++) out[i] = pubkeys[i];
+    }
+
+    // === HELPER FUNCTIONS ===
+    function _parseValidatorsFromConsolidateTwoJson(string memory jsonFilePath, uint256 startIndex, uint256 endIndex)
+        internal
+        view
+        returns (bytes[] memory pubkeys, uint256[] memory ids, address[] memory podAddrs)
+    {
+        return _parseFirstNFromJson(jsonFilePath, startIndex, endIndex);
+    }
+
+    /// @notice Helper to build compounding calldata for the first `validatorCount`
+    ///         validators in the input json matching `withdrawalCredentials`.
+    /// @dev This links *all* selected legacy IDs in one call, then batches consolidation per-pod.
+    function compound_with_withdrawal_credentials(string memory jsonFilePath, bytes memory withdrawalCredentials, uint256 validatorCount) internal {
+        string memory jsonData = vm.readFile(jsonFilePath);
+
+        bytes memory normalized = _normalizeWithdrawalCredentials(withdrawalCredentials);
+        (bytes[] memory pubkeys, uint256[] memory ids, address[] memory podAddrs) =
+            _parseFirstNByWithdrawalCredentials(jsonData, normalized, validatorCount);
+
+        console2.log("Input file:", jsonFilePath);
+        console2.log("Target withdrawal credentials:");
+        console2.logBytes(normalized);
+        console2.log("Found", pubkeys.length, "validators for withdrawal credentials");
+
+        if (pubkeys.length == 0) return;
+        _linkAllValidatorIds(ids, pubkeys);
+        _compoundByPod(pubkeys, podAddrs);
+    }
+
+    /// @dev Accepts either real bytes (32 bytes) OR ASCII-encoded hex string bytes (e.g. bytes("0x01..")).
+    function _normalizeWithdrawalCredentials(bytes memory withdrawalCredentials) internal view returns (bytes memory out) {
+        if (withdrawalCredentials.length >= 2 && withdrawalCredentials[0] == bytes1("0") && withdrawalCredentials[1] == bytes1("x")) {
+            // bytes("0x...") case
+            out = vm.parseBytes(string(withdrawalCredentials));
+        } else {
+            out = withdrawalCredentials;
+        }
+    }
+
+    function _parseFirstNFromJson(
+        string memory jsonFilePath,
+        uint256 startIndex,
+        uint256 endIndex
+    ) internal view returns (bytes[] memory pubkeys, uint256[] memory ids, address[] memory podAddrs) {
+        string memory jsonData = vm.readFile(jsonFilePath);
+        pubkeys = new bytes[](endIndex - startIndex);
+        ids = new uint256[](endIndex - startIndex);
+        podAddrs = new address[](endIndex - startIndex);
+        uint256 count = 0;
+        for (uint256 i = startIndex; i < endIndex; i++) {
+            string memory basePath = string.concat("$[", vm.toString(i), "]");
+            string memory idPath = string.concat(basePath, ".id");
+            if (!stdJson.keyExists(jsonData, idPath)) break;
+
+            ids[count] = stdJson.readUint(jsonData, idPath);
+            pubkeys[count] = stdJson.readBytes(jsonData, string.concat(basePath, ".pubkey"));
+            bytes memory wc = stdJson.readBytes(jsonData, string.concat(basePath, ".withdrawal_credentials"));
+            podAddrs[count] = address(uint160(uint256(bytes32(wc))));
+            unchecked { ++count; }
+        }
+
+        if (count == endIndex - startIndex) return (pubkeys, ids, podAddrs);
+        return _shrinkSlice(pubkeys, ids, podAddrs, endIndex - startIndex);
+    }
+
+    /// @notice Finds the first `validatorCount` entries matching `withdrawalCredentials`.
+    /// @dev `withdrawalCredentials` should be 32 bytes (as emitted by beacon node exports).
+    function _parseFirstNByWithdrawalCredentials(
+        string memory jsonData,
+        bytes memory withdrawalCredentials,
+        uint256 validatorCount
+    )
+        internal
+        view
+        returns (bytes[] memory pubkeys, uint256[] memory ids, address[] memory podAddrs)
+    {
         pubkeys = new bytes[](validatorCount);
         ids = new uint256[](validatorCount);
+        podAddrs = new address[](validatorCount);
 
-        for (uint256 i = 0; i < validatorCount; i++) {
+        withdrawalCredentials = _normalizeWithdrawalCredentials(withdrawalCredentials);
+        require(withdrawalCredentials.length == 32, "withdrawalCredentials must be 32 bytes");
+
+        bytes32 want = keccak256(withdrawalCredentials);
+        uint256 found = 0;
+
+        for (uint256 i = 0; found < validatorCount; i++) {
             string memory basePath = string.concat("$[", vm.toString(i), "]");
-            ids[i] = stdJson.readUint(jsonData, string.concat(basePath, ".id"));
-            pubkeys[i] = stdJson.readBytes(jsonData, string.concat(basePath, ".pubkey"));
+            string memory idPath = string.concat(basePath, ".id");
+            if (!stdJson.keyExists(jsonData, idPath)) break;
+
+            string memory wcPath = string.concat(basePath, ".withdrawal_credentials");
+            if (!stdJson.keyExists(jsonData, wcPath)) {
+                console2.log("Skip: missing withdrawal_credentials at index", i);
+                continue;
+            }
+
+            bytes memory wc = stdJson.readBytes(jsonData, wcPath);
+            if (wc.length != 32) {
+                console2.log("Skip: bad withdrawal_credentials length at index", i, "len", wc.length);
+                continue;
+            }
+            if (keccak256(wc) != want) continue;
+
+            string memory pkPath = string.concat(basePath, ".pubkey");
+            if (!stdJson.keyExists(jsonData, pkPath)) {
+                console2.log("Skip: missing pubkey at index", i);
+                continue;
+            }
+
+            ids[found] = stdJson.readUint(jsonData, idPath);
+            pubkeys[found] = stdJson.readBytes(jsonData, pkPath);
+            podAddrs[found] = address(uint160(uint256(bytes32(wc))));
+            unchecked { ++found; }
+        }
+
+        if (found == validatorCount) return (pubkeys, ids, podAddrs);
+        return _shrinkSlice(pubkeys, ids, podAddrs, found);
+    }
+
+    function _shrinkSlice(
+        bytes[] memory pubkeys,
+        uint256[] memory ids,
+        address[] memory podAddrs,
+        uint256 count
+    )
+        internal
+        pure
+        returns (bytes[] memory outPubkeys, uint256[] memory outIds, address[] memory outPods)
+    {
+        outPubkeys = new bytes[](count);
+        outIds = new uint256[](count);
+        outPods = new address[](count);
+        for (uint256 i = 0; i < count; i++) {
+            outPubkeys[i] = pubkeys[i];
+            outIds[i] = ids[i];
+            outPods[i] = podAddrs[i];
         }
     }
 
