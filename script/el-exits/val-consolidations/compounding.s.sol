@@ -17,47 +17,94 @@ import "../../../src/eigenlayer-interfaces/IEigenPod.sol";
  * @dev Reads validator public keys from consolidate.json and consolidates them
  * 
  * Usage:
-   forge script script/el-exits/val-consolidations/compounding.s.sol:CompoundValidators \
-     --fork-url $MAINNET_RPC_URL \
-     -- --fs script/el-exits/val-consolidations \
-     -vvvv
+ * 
+ * Option 1 (filter by withdrawal credentials, first N matches):
+ *   forge script script/el-exits/val-consolidations/compounding.s.sol:CompoundValidators \
+ *     --fork-url $MAINNET_RPC_URL \
+ *     --sig "run(uint8,string,uint256,uint256,bytes,uint256)" \
+ *     1 "/script/el-exits/val-consolidations/ebunker.json" 0 0 \
+ *     0x0100...<32 bytes total>... 100 \
+ *     -- --fs script/el-exits/val-consolidations -vvvv
+ *
+ * Option 2 (slice by index [start,end)):
+ *   forge script script/el-exits/val-consolidations/compounding.s.sol:CompoundValidators \
+ *     --fork-url $MAINNET_RPC_URL \
+ *     --sig "run(uint8,string,uint256,uint256,bytes,uint256)" \
+ *     2 "/script/el-exits/val-consolidations/ebunker.json" 0 40 0x 0 \
+ *     -- --fs script/el-exits/val-consolidations -vvvv
+ *
+ * Env wrapper (calls option via env vars):
+ * - OPTION (1|2), INPUT_JSON, START_INDEX, END_INDEX, WITHDRAWAL_CREDENTIALS, VALIDATOR_COUNT
+ *   forge script script/el-exits/val-consolidations/compounding.s.sol:CompoundValidators \
+ *     --fork-url $MAINNET_RPC_URL \
+ *     -- --fs script/el-exits/val-consolidations -vvvv
 */
 
 contract CompoundValidators is Script, Utils {
     using stdJson for string;
     
+    error InvalidOption();
+
     // === MAINNET CONTRACT ADDRESSES ===
     EtherFiNodesManager constant etherFiNodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER));
     RoleRegistry constant roleRegistry = RoleRegistry(ROLE_REGISTRY);
     EtherFiTimelock constant etherFiOperatingTimelock = EtherFiTimelock(payable(OPERATING_TIMELOCK));
     
     function run() external {
+        // Env-based wrapper so you can still run without --sig.
+        // Prefer calling the typed entrypoint with: --sig "run(uint8,string,uint256,uint256,bytes,uint256)" ...
+        uint8 option = uint8(vm.envOr("OPTION", uint256(2))); // 1 or 2
+        string memory jsonPath = vm.envOr("INPUT_JSON", string("/script/el-exits/val-consolidations/ebunker.json"));
+        uint256 startIndex = vm.envOr("START_INDEX", uint256(0));
+        uint256 endIndex = vm.envOr("END_INDEX", uint256(40));
+        bytes memory withdrawalCredentials = vm.envOr("WITHDRAWAL_CREDENTIALS", bytes(""));
+        uint256 validatorCount = vm.envOr("VALIDATOR_COUNT", uint256(100));
+
+        run(option, jsonPath, startIndex, endIndex, withdrawalCredentials, validatorCount);
+    }
+
+    /// @notice Entry point with args (use `--sig`).
+    /// @param option 1 = filter by withdrawal credentials, 2 = slice by index
+    /// @param jsonPath Absolute path OR repo-relative path (with or without leading `/`)
+    /// @param startIndex Option 2 only (inclusive)
+    /// @param endIndex Option 2 only (exclusive)
+    /// @param withdrawalCredentials Option 1 only (32 bytes or ASCII "0x..." bytes)
+    /// @param validatorCount Option 1 only (first N matches)
+    function run(
+        uint8 option,
+        string memory jsonPath,
+        uint256 startIndex,
+        uint256 endIndex,
+        bytes memory withdrawalCredentials,
+        uint256 validatorCount
+    ) public {
         console2.log("=== COMPOUNDING SCRIPT ===");
-        string memory jsonFilePath = string.concat(vm.projectRoot(), "/script/el-exits/val-consolidations/ebunker.json");
 
-        // OPTION 1: filter by withdrawal credentials and take first N matches
-        bytes memory withdrawalCredentials = bytes("0x010000000000000000000000499867d2d9c3eb250bb6db5cdaa1e600e75272d7");
-        uint256 validatorCount = 100;
-        compound_with_withdrawal_credentials(jsonFilePath, withdrawalCredentials, validatorCount);
+        string memory jsonFilePath = _resolveJsonFilePath(jsonPath);
+        console2.log("Input file:", jsonFilePath);
 
-        // OPTION 2: compound validators from the json file with start and end index
-        uint256 startIndex = 0;
-        uint256 endIndex = 40;
-        require(endIndex > startIndex, "END_INDEX must be > START_INDEX");
-        console2.log("Slice start (inclusive):", startIndex);
-        console2.log("Slice end (exclusive):", endIndex);
-        
-        (bytes[] memory pubkeys, uint256[] memory ids, address[] memory podAddrs) =
-            _parseValidatorsFromConsolidateTwoJson(jsonFilePath, startIndex, endIndex);
-
-        console2.log("Found", pubkeys.length, "validators");
-        if (pubkeys.length == 0) {
-            console2.log("No validators to compound");
+        if (option == 1) {
+            compound_with_withdrawal_credentials(jsonFilePath, withdrawalCredentials, validatorCount);
             return;
         }
 
-        _linkAllValidatorIds(ids, pubkeys);
-        _compoundByPod(pubkeys, podAddrs);
+        if (option == 2) {
+            require(endIndex > startIndex, "END_INDEX must be > START_INDEX");
+            console2.log("Slice start (inclusive):", startIndex);
+            console2.log("Slice end (exclusive):", endIndex);
+
+            (bytes[] memory pubkeys, uint256[] memory ids, address[] memory podAddrs) =
+                _parseValidatorsFromConsolidateTwoJson(jsonFilePath, startIndex, endIndex);
+
+            console2.log("Found", pubkeys.length, "validators");
+            if (pubkeys.length == 0) return;
+
+            _linkAllValidatorIds(ids, pubkeys);
+            _compoundByPod(pubkeys, podAddrs);
+            return;
+        }
+
+        revert InvalidOption();
     }
 
     function _linkAllValidatorIds(uint256[] memory ids, bytes[] memory pubkeys) internal {
@@ -154,6 +201,32 @@ contract CompoundValidators is Script, Utils {
         return _parseFirstNFromJson(jsonFilePath, startIndex, endIndex);
     }
 
+    function _resolveJsonFilePath(string memory jsonPath) internal view returns (string memory out) {
+        // Rules:
+        // - if empty => default repo-relative
+        // - if starts with projectRoot => treat as absolute already
+        // - else treat as repo-relative; allow with/without leading "/"
+        if (bytes(jsonPath).length == 0) {
+            return string.concat(vm.projectRoot(), "/script/el-exits/val-consolidations/ebunker.json");
+        }
+
+        string memory root = vm.projectRoot();
+        if (_startsWith(jsonPath, root)) return jsonPath;
+
+        if (bytes(jsonPath)[0] == bytes1("/")) return string.concat(root, jsonPath);
+        return string.concat(root, "/", jsonPath);
+    }
+
+    function _startsWith(string memory s, string memory prefix) internal pure returns (bool) {
+        bytes memory a = bytes(s);
+        bytes memory p = bytes(prefix);
+        if (p.length > a.length) return false;
+        for (uint256 i = 0; i < p.length; i++) {
+            if (a[i] != p[i]) return false;
+        }
+        return true;
+    }
+
     /// @notice Helper to build compounding calldata for the first `validatorCount`
     ///         validators in the input json matching `withdrawalCredentials`.
     /// @dev This links *all* selected legacy IDs in one call, then batches consolidation per-pod.
@@ -199,15 +272,30 @@ contract CompoundValidators is Script, Utils {
             string memory idPath = string.concat(basePath, ".id");
             if (!stdJson.keyExists(jsonData, idPath)) break;
 
+            string memory pkPath = string.concat(basePath, ".pubkey");
+            if (!stdJson.keyExists(jsonData, pkPath)) {
+                console2.log("Skip: missing pubkey at index", i);
+                continue;
+            }
+            string memory wcPath = string.concat(basePath, ".withdrawal_credentials");
+            if (!stdJson.keyExists(jsonData, wcPath)) {
+                console2.log("Skip: missing withdrawal_credentials at index", i);
+                continue;
+            }
+
             ids[count] = stdJson.readUint(jsonData, idPath);
-            pubkeys[count] = stdJson.readBytes(jsonData, string.concat(basePath, ".pubkey"));
-            bytes memory wc = stdJson.readBytes(jsonData, string.concat(basePath, ".withdrawal_credentials"));
+            pubkeys[count] = stdJson.readBytes(jsonData, pkPath);
+            bytes memory wc = stdJson.readBytes(jsonData, wcPath);
+            if (wc.length != 32) {
+                console2.log("Skip: bad withdrawal_credentials length at index", i, "len", wc.length);
+                continue;
+            }
             podAddrs[count] = address(uint160(uint256(bytes32(wc))));
             unchecked { ++count; }
         }
 
         if (count == endIndex - startIndex) return (pubkeys, ids, podAddrs);
-        return _shrinkSlice(pubkeys, ids, podAddrs, endIndex - startIndex);
+        return _shrinkSlice(pubkeys, ids, podAddrs, count);
     }
 
     /// @notice Finds the first `validatorCount` entries matching `withdrawalCredentials`.
