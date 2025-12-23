@@ -183,7 +183,7 @@ contract CompoundValidators is Script, Utils {
             (, IEigenPod targetPod) = _resolvePod(podPubkeys[0]);
             require(address(targetPod) == expectedPodAddr, "Pod address mismatch in group");
 
-            _executeCompoundingBatch(podPubkeys, podPubkeys[0], targetPod);
+            _executeCompoundingBatch(podPubkeys, targetPod);
         }
     }
 
@@ -406,7 +406,7 @@ contract CompoundValidators is Script, Utils {
         require(address(pod) != address(0), "_resolvePod: node has no pod");
     }
     
-    function _executeCompoundingBatch(bytes[] memory batchPubkeys, bytes memory targetPubkey, IEigenPod targetPod) internal {
+    function _executeCompoundingBatch(bytes[] memory batchPubkeys, IEigenPod targetPod) internal {
         IEigenPodTypes.ConsolidationRequest[] memory reqs = _autoCompoundAllPubkeys(batchPubkeys);
 
         
