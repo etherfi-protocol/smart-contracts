@@ -5,13 +5,16 @@ import "forge-std/console2.sol";
 import "../TestSetup.sol";
 import "lib/BucketLimiter.sol";
 import "../../script/deploys/Deployed.s.sol";
+import "../../src/interfaces/IWeETHWithdrawAdapter.sol";
 
 contract WithdrawIntegrationTest is TestSetup, Deployed {
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address public constant LIDO_ADDRESS = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
+    address public constant ADMIN_EOA = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
+        vm.etch(alice, bytes(""));
     }
 
     function test_Withdraw_EtherFiRedemptionManager_redeemEEth() public {
@@ -177,6 +180,304 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         
         assertApproxEqAbs(eETHInstance.balanceOf(treasury), treasuryBalanceBefore + expectedTreasuryFee, 1e11); // treasury gets ETH
         assertApproxEqAbs(address(receiver).balance, receiverBalance + expectedAmountToReceiver, 1e11); // receiver gets ETH
+        vm.stopPrank();
+    }
+
+    function test_LiquidityPool_requestWithdraw() public {
+        vm.deal(alice, 100 ether);
+        uint256 amountToWithdraw = 1 ether;
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: amountToWithdraw}();
+
+        uint256 nextRequestId = withdrawRequestNFTInstance.nextRequestId();
+
+        uint256 beforeAliceBalance = alice.balance;
+        eETHInstance.approve(address(liquidityPoolInstance), amountToWithdraw);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(alice, amountToWithdraw);
+        assertEq(requestId, nextRequestId);
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
+        vm.stopPrank();
+
+        IEtherFiOracle.OracleReport memory report;
+        uint256[] memory emptyVals = new uint256[](0);
+        report = IEtherFiOracle.OracleReport(
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+        );
+        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+
+        (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
+        // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
+        report.refBlockTo = uint32(block.number - 1);
+        if (report.refBlockTo <= etherFiAdminInstance.lastAdminExecutionBlock()) {
+            report.refBlockTo = etherFiAdminInstance.lastAdminExecutionBlock() + 1;
+        }
+
+        vm.prank(AVS_OPERATOR_1);
+        etherFiOracleInstance.submitReport(report);
+
+        vm.prank(AVS_OPERATOR_2);
+        etherFiOracleInstance.submitReport(report);
+
+        // Advance time for postReportWaitTimeInSlots
+        uint256 slotsToWait = uint256(etherFiAdminInstance.postReportWaitTimeInSlots() + 1);
+        uint32 slotAfterReport = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+        vm.roll(block.number + slotsToWait);
+        vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (slotAfterReport + slotsToWait));
+
+        vm.prank(ADMIN_EOA);
+        etherFiAdminInstance.executeTasks(report);
+
+        vm.startPrank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertApproxEqAbs(alice.balance, beforeAliceBalance + amountToWithdraw, 1e3);
+        vm.stopPrank();
+    }
+
+    function test_LiquidityPool_requestWithdrawWithPermit() public {
+        vm.deal(alice, 100 ether);
+        uint256 amountToWithdraw = 1 ether;
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: amountToWithdraw}();
+
+        uint256 nextRequestId = withdrawRequestNFTInstance.nextRequestId();
+
+        ILiquidityPool.PermitInput memory permit = createPermitInput(2, address(liquidityPoolInstance), amountToWithdraw, eETHInstance.nonces(alice), 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR()); // alice = vm.addr(2)
+
+        uint256 beforeAliceBalance = alice.balance;
+        uint256 requestId = liquidityPoolInstance.requestWithdrawWithPermit(alice, amountToWithdraw, permit);
+        assertEq(requestId, nextRequestId);
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
+        vm.stopPrank();
+
+                IEtherFiOracle.OracleReport memory report;
+        uint256[] memory emptyVals = new uint256[](0);
+        report = IEtherFiOracle.OracleReport(
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+        );
+        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+
+        (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
+        // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
+        report.refBlockTo = uint32(block.number - 1);
+        if (report.refBlockTo <= etherFiAdminInstance.lastAdminExecutionBlock()) {
+            report.refBlockTo = etherFiAdminInstance.lastAdminExecutionBlock() + 1;
+        }
+
+        vm.prank(AVS_OPERATOR_1);
+        etherFiOracleInstance.submitReport(report);
+
+        vm.prank(AVS_OPERATOR_2);
+        etherFiOracleInstance.submitReport(report);
+
+        // Advance time for postReportWaitTimeInSlots
+        uint256 slotsToWait = uint256(etherFiAdminInstance.postReportWaitTimeInSlots() + 1);
+        uint32 slotAfterReport = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+        vm.roll(block.number + slotsToWait);
+        vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (slotAfterReport + slotsToWait));
+
+        vm.prank(ADMIN_EOA);
+        etherFiAdminInstance.executeTasks(report);
+
+        vm.startPrank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertApproxEqAbs(alice.balance, beforeAliceBalance + amountToWithdraw, 1e3);
+        vm.stopPrank();
+    }
+
+    function test_LiquidityPool_requestWithdraw_batchClaimWithdraw() public {
+        vm.deal(alice, 100 ether);
+        uint256 numRequests = 3;
+        uint256 amountPerRequest = 1 ether;
+        uint256 totalAmountToWithdraw = amountPerRequest * numRequests;
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: totalAmountToWithdraw}();
+
+        uint256 nextRequestId = withdrawRequestNFTInstance.nextRequestId();
+
+        uint256 beforeAliceBalance = alice.balance;
+        eETHInstance.approve(address(liquidityPoolInstance), totalAmountToWithdraw);
+
+        uint256[] memory tokenIds = new uint256[](numRequests);
+        uint256 requestId;
+        for (uint256 i = 0; i < numRequests; i++) {
+            requestId = liquidityPoolInstance.requestWithdraw(alice, amountPerRequest);
+            tokenIds[i] = requestId;
+
+            assertEq(requestId, nextRequestId + i);
+            assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice);
+            assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
+            assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
+        }
+        vm.stopPrank();
+
+        IEtherFiOracle.OracleReport memory report;
+        uint256[] memory emptyVals = new uint256[](0);
+        report = IEtherFiOracle.OracleReport(
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+        );
+        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+
+        (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
+        // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
+        report.refBlockTo = uint32(block.number - 1);
+        if (report.refBlockTo <= etherFiAdminInstance.lastAdminExecutionBlock()) {
+            report.refBlockTo = etherFiAdminInstance.lastAdminExecutionBlock() + 1;
+        }
+
+        vm.prank(AVS_OPERATOR_1);
+        etherFiOracleInstance.submitReport(report);
+
+        vm.prank(AVS_OPERATOR_2);
+        etherFiOracleInstance.submitReport(report);
+
+        // Advance time for postReportWaitTimeInSlots
+        uint256 slotsToWait = uint256(etherFiAdminInstance.postReportWaitTimeInSlots() + 1);
+        uint32 slotAfterReport = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+        vm.roll(block.number + slotsToWait);
+        vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (slotAfterReport + slotsToWait));
+
+        vm.prank(ADMIN_EOA);
+        etherFiAdminInstance.executeTasks(report);
+
+        vm.startPrank(alice);
+        withdrawRequestNFTInstance.batchClaimWithdraw(tokenIds);
+        assertApproxEqAbs(alice.balance, beforeAliceBalance + totalAmountToWithdraw, 1e3);
+        vm.stopPrank();
+    }
+
+    function test_Withdraw_WeETHWithdrawAdapter_requestWithdraw() public {
+        vm.deal(alice, 100 ether);
+
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}(); // mint eETH for wrapping
+
+        uint256 eEthToWrap = 1 ether;
+        eETHInstance.approve(address(weEthInstance), eEthToWrap);
+        weEthInstance.wrap(eEthToWrap);
+
+        uint256 weEthAmountToWithdraw = weEthInstance.balanceOf(alice);
+        weEthInstance.approve(address(weEthWithdrawAdapterInstance), weEthAmountToWithdraw);
+
+        uint256 nextRequestId = withdrawRequestNFTInstance.nextRequestId();
+        uint256 requestId = weEthWithdrawAdapterInstance.requestWithdraw(weEthAmountToWithdraw, alice);
+        assertEq(requestId, nextRequestId);
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
+        vm.stopPrank();
+
+        IEtherFiOracle.OracleReport memory report;
+        uint256[] memory emptyVals = new uint256[](0);
+        report = IEtherFiOracle.OracleReport(
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+        );
+        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+
+        (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
+        // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
+        report.refBlockTo = uint32(block.number - 1);
+        if (report.refBlockTo <= etherFiAdminInstance.lastAdminExecutionBlock()) {
+            report.refBlockTo = etherFiAdminInstance.lastAdminExecutionBlock() + 1;
+        }
+
+        vm.prank(AVS_OPERATOR_1);
+        etherFiOracleInstance.submitReport(report);
+
+        vm.prank(AVS_OPERATOR_2);
+        etherFiOracleInstance.submitReport(report);
+
+        // Advance time for postReportWaitTimeInSlots
+        uint256 slotsToWait = uint256(etherFiAdminInstance.postReportWaitTimeInSlots() + 1);
+        uint32 slotAfterReport = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+        vm.roll(block.number + slotsToWait);
+        vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (slotAfterReport + slotsToWait));
+
+        vm.prank(ADMIN_EOA);
+        etherFiAdminInstance.executeTasks(report);
+
+        vm.startPrank(alice);
+        uint256 claimableAmount = withdrawRequestNFTInstance.getClaimableAmount(requestId);
+        uint256 beforeClaimBalance = alice.balance;
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertApproxEqAbs(alice.balance, beforeClaimBalance + claimableAmount, 1e3);
+        vm.stopPrank();
+    }
+
+    function test_Withdraw_WeETHWithdrawAdapter_requestWithdrawWithPermit() public {
+        vm.deal(alice, 100 ether);
+
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}(); // mint eETH for wrapping
+
+        uint256 eEthToWrap = 1 ether;
+        eETHInstance.approve(address(weEthInstance), eEthToWrap);
+        weEthInstance.wrap(eEthToWrap);
+
+        uint256 weEthAmountToWithdraw = weEthInstance.balanceOf(alice);
+
+        IWeETH.PermitInput memory weEthPermit = weEth_createPermitInput(
+            2,
+            address(weEthWithdrawAdapterInstance),
+            weEthAmountToWithdraw,
+            weEthInstance.nonces(alice),
+            2 ** 256 - 1,
+            weEthInstance.DOMAIN_SEPARATOR()
+        );
+
+        IWeETHWithdrawAdapter.PermitInput memory permit = IWeETHWithdrawAdapter.PermitInput({
+            value: weEthPermit.value,
+            deadline: weEthPermit.deadline,
+            v: weEthPermit.v,
+            r: weEthPermit.r,
+            s: weEthPermit.s
+        });
+
+        uint256 nextRequestId = withdrawRequestNFTInstance.nextRequestId();
+        uint256 requestId = weEthWithdrawAdapterInstance.requestWithdrawWithPermit(weEthAmountToWithdraw, alice, permit);
+        assertEq(requestId, nextRequestId);
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
+        vm.stopPrank();
+
+        IEtherFiOracle.OracleReport memory report;
+        uint256[] memory emptyVals = new uint256[](0);
+        report = IEtherFiOracle.OracleReport(
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+        );
+        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+
+        (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
+        // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
+        report.refBlockTo = uint32(block.number - 1);
+        if (report.refBlockTo <= etherFiAdminInstance.lastAdminExecutionBlock()) {
+            report.refBlockTo = etherFiAdminInstance.lastAdminExecutionBlock() + 1;
+        }
+
+        vm.prank(AVS_OPERATOR_1);
+        etherFiOracleInstance.submitReport(report);
+
+        vm.prank(AVS_OPERATOR_2);
+        etherFiOracleInstance.submitReport(report);
+
+        // Advance time for postReportWaitTimeInSlots
+        uint256 slotsToWait = uint256(etherFiAdminInstance.postReportWaitTimeInSlots() + 1);
+        uint32 slotAfterReport = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+        vm.roll(block.number + slotsToWait);
+        vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (slotAfterReport + slotsToWait));
+
+        vm.prank(ADMIN_EOA);
+        etherFiAdminInstance.executeTasks(report);
+
+        vm.startPrank(alice);
+        uint256 claimableAmount = withdrawRequestNFTInstance.getClaimableAmount(requestId);
+        uint256 beforeClaimBalance = alice.balance;
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertApproxEqAbs(alice.balance, beforeClaimBalance + claimableAmount, 1e3);
         vm.stopPrank();
     }
 }
