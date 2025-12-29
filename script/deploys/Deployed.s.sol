@@ -27,6 +27,7 @@ contract Deployed {
     address public constant ETHERFI_NODE_BEACON = 0x3c55986Cfee455E2533F4D29006634EcF9B7c03F;
     address public constant ETHERFI_NODES_MANAGER = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
     address public constant ETHERFI_REDEMPTION_MANAGER = 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0;
+    address public constant WEETH_WITHDRAW_ADAPTER = 0xFbfe6b9cEe0E555Bad7e2E7309EFFC75200cBE38;
     
     // Oracle
     address public constant ETHERFI_ORACLE = 0x57AaF0004C716388B21795431CD7D5f9D3Bb6a41;
@@ -59,6 +60,9 @@ contract Deployed {
     address public constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC; // operating admin
     address public constant ETHERFI_UPGRADE_ADMIN = 0xcdd57D11476c22d265722F68390b036f3DA48c21; // upgrade admin
     address public constant ADMIN_EOA = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F; // admin eoa
+
+    address public constant AVS_OPERATOR_1 = 0xDd777e5158Cb11DB71B4AF93C75A96eA11A2A615;
+    address public constant AVS_OPERATOR_2 = 0x2c7cB7d5dC4aF9caEE654553a144C76F10D4b320;
 
     mapping(address => address) public timelockToAdmin;
 
