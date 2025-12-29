@@ -382,6 +382,39 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         vm.stopPrank();
     }
 
+    function test_EtherFiRestaker_withdrawEther_sendsEthToLiquidityPool() public {
+        uint256 amount = 3 ether;
+        vm.deal(address(etherFiRestakerInstance), amount);
+
+        uint256 lpBalanceBefore = address(liquidityPoolInstance).balance;
+        uint256 restakerBalanceBefore = address(etherFiRestakerInstance).balance;
+        assertEq(restakerBalanceBefore, amount);
+
+        vm.prank(etherFiRestakerInstance.owner());
+        etherFiRestakerInstance.withdrawEther();
+
+        assertEq(address(etherFiRestakerInstance).balance, 0);
+        assertEq(address(liquidityPoolInstance).balance, lpBalanceBefore + amount);
+    }
+
+    function test_EtherFiRestaker_undelegate_tracksWithdrawalRoots() public {
+        bool delegatedBefore = etherFiRestakerInstance.isDelegated();
+
+        vm.prank(etherFiRestakerInstance.owner());
+        if (!delegatedBefore) {
+            vm.expectRevert();
+            etherFiRestakerInstance.undelegate();
+            return;
+        }
+
+        bytes32[] memory roots = etherFiRestakerInstance.undelegate();
+
+        assertEq(etherFiRestakerInstance.isDelegated(), false);
+        for (uint256 i = 0; i < roots.length; i++) {
+            assertEq(etherFiRestakerInstance.isPendingWithdrawal(roots[i]), true);
+        }
+    }
+
     function test_Withdraw_WeETHWithdrawAdapter_requestWithdraw() public {
         vm.deal(alice, 100 ether);
 
