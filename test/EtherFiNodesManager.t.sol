@@ -567,7 +567,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         
         vm.expectRevert(IEtherFiNodesManager.InsufficientWithdrawalFees.selector);
         vm.prank(elTriggerExit);
-        managerInstance.requestExecutionLayerTriggeredWithdrawal{value: fee - 1}(requests);
+        managerInstance.requestExecutionLayerTriggeredWithdrawal(requests);
     }
     
     function test_requestExecutionLayerTriggeredWithdrawal_unauthorized() public {

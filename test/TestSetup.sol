@@ -222,8 +222,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     bytes32[] public dataForVerification;
     bytes32[] public dataForVerification2;
 
-    IStakingManager.DepositData public test_data;
-    IStakingManager.DepositData public test_data_2;
+    // IStakingManager.DepositData public test_data;
+    // IStakingManager.DepositData public test_data_2;
 
     address owner = vm.addr(1);
     address alice = vm.addr(2);
