@@ -60,6 +60,8 @@ import "../src/CumulativeMerkleRewardsDistributor.sol";
 import "../script/deploys/Deployed.s.sol";
 
 import "../src/DepositAdapter.sol";
+import "../src/interfaces/IWeETHWithdrawAdapter.sol";
+
 contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
@@ -199,6 +201,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     DepositAdapter public depositAdapterImplementation;
     DepositAdapter public depositAdapterInstance;
+
+    IWeETHWithdrawAdapter public weEthWithdrawAdapterInstance;
+    IWeETHWithdrawAdapter public weEthWithdrawAdapterImplementation;
 
     EtherFiRewardsRouter public etherFiRewardsRouterInstance = EtherFiRewardsRouter(payable(0x73f7b1184B5cD361cC0f7654998953E2a251dd58));
 
@@ -426,6 +431,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
         cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(0x9A8c5046a290664Bf42D065d33512fe403484534));
         treasuryInstance = 0x0c83EAe1FE72c390A02E426572854931EefF93BA;
+        weEthWithdrawAdapterInstance = IWeETHWithdrawAdapter(deployed.WEETH_WITHDRAW_ADAPTER());
     }
 
     function upgradeEtherFiRedemptionManager() public {
