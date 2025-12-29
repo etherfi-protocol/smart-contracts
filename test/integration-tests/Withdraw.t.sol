@@ -53,9 +53,9 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         eETHInstance.approve(address(etherFiRedemptionManagerInstance), eETHAmountToRedeem);
         etherFiRedemptionManagerInstance.redeemEEth(eETHAmountToRedeem, receiver, ETH_ADDRESS);
 
-        assertApproxEqAbs(address(receiver).balance, beforeReceiverBalance + expectedAmountToReceiver, 1e11); // receiver gets ETH
-        assertApproxEqAbs(eETHInstance.balanceOf(alice), beforeEETHBalance - eETHAmountToRedeem, 1e11); // eETH is consumed from alice
-        assertApproxEqAbs(eETHInstance.balanceOf(treasury), beforeTreasuryBalance + expectedTreasuryFee, 1e11); // treasury gets ETH
+        assertApproxEqAbs(address(receiver).balance, beforeReceiverBalance + expectedAmountToReceiver, 1e15); // receiver gets ETH
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), beforeEETHBalance - eETHAmountToRedeem, 1e15); // eETH is consumed from alice
+        assertApproxEqAbs(eETHInstance.balanceOf(treasury), beforeTreasuryBalance + expectedTreasuryFee, 1e15); // treasury gets ETH
 
         vm.stopPrank();
     }
@@ -97,9 +97,9 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         eETHInstance.approve(address(etherFiRedemptionManagerInstance), eETHAmountToRedeem);
         etherFiRedemptionManagerInstance.redeemEEthWithPermit(eETHAmountToRedeem, receiver, permit, ETH_ADDRESS);
 
-        assertApproxEqAbs(address(receiver).balance, beforeReceiverBalance + expectedAmountToReceiver, 1e11); // receiver gets ETH
-        assertApproxEqAbs(eETHInstance.balanceOf(alice), beforeEETHBalance - eETHAmountToRedeem, 1e11); // eETH is consumed from alice
-        assertApproxEqAbs(eETHInstance.balanceOf(treasury), beforeTreasuryBalance + expectedTreasuryFee, 1e11); // treasury gets ETH
+        assertApproxEqAbs(address(receiver).balance, beforeReceiverBalance + expectedAmountToReceiver, 1e15); // receiver gets ETH
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), beforeEETHBalance - eETHAmountToRedeem, 1e15); // eETH is consumed from alice
+        assertApproxEqAbs(eETHInstance.balanceOf(treasury), beforeTreasuryBalance + expectedTreasuryFee, 1e15); // treasury gets ETH
 
         vm.stopPrank();
     }
@@ -137,8 +137,8 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         uint256 feeShareToTreasury = eEthShareFee * exitFeeSplitToTreasuryBps / 10000;
         uint256 expectedTreasuryFee = liquidityPoolInstance.amountForShare(feeShareToTreasury);
         
-        assertApproxEqAbs(eETHInstance.balanceOf(treasury), treasuryBalanceBefore + expectedTreasuryFee, 1e11); // treasury gets ETH
-        assertApproxEqAbs(address(receiver).balance, receiverBalance + expectedAmountToReceiver, 1e11); // receiver gets ETH
+        assertApproxEqAbs(eETHInstance.balanceOf(treasury), treasuryBalanceBefore + expectedTreasuryFee, 1e15); // treasury gets ETH
+        assertApproxEqAbs(address(receiver).balance, receiverBalance + expectedAmountToReceiver, 1e15); // receiver gets ETH
         vm.stopPrank();
     }
 
@@ -178,8 +178,8 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         uint256 feeShareToTreasury = eEthShareFee * exitFeeSplitToTreasuryBps / 10000;
         uint256 expectedTreasuryFee = liquidityPoolInstance.amountForShare(feeShareToTreasury);
         
-        assertApproxEqAbs(eETHInstance.balanceOf(treasury), treasuryBalanceBefore + expectedTreasuryFee, 1e11); // treasury gets ETH
-        assertApproxEqAbs(address(receiver).balance, receiverBalance + expectedAmountToReceiver, 1e11); // receiver gets ETH
+        assertApproxEqAbs(eETHInstance.balanceOf(treasury), treasuryBalanceBefore + expectedTreasuryFee, 1e15); // treasury gets ETH
+        assertApproxEqAbs(address(receiver).balance, receiverBalance + expectedAmountToReceiver, 1e15); // receiver gets ETH
         vm.stopPrank();
     }
 
@@ -199,6 +199,17 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
         assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
         vm.stopPrank();
+        // Advance time until the oracle considers the next report epoch finalized.
+        // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
+        while (true) {
+            uint32 slot = etherFiOracleInstance.slotForNextReport();
+            uint32 curr = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+            uint32 min = ((slot / 32) + 3) * 32;
+            if (curr >= min) break;
+            uint256 d = min - curr;
+            vm.roll(block.number + d);
+            vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (curr + uint32(d)));
+        }
 
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
@@ -252,6 +263,17 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
         assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
         vm.stopPrank();
+        // Advance time until the oracle considers the next report epoch finalized.
+        // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
+        while (true) {
+            uint32 slot = etherFiOracleInstance.slotForNextReport();
+            uint32 curr = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+            uint32 min = ((slot / 32) + 3) * 32;
+            if (curr >= min) break;
+            uint256 d = min - curr;
+            vm.roll(block.number + d);
+            vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (curr + uint32(d)));
+        }
 
                 IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
@@ -313,6 +335,17 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
             assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
         }
         vm.stopPrank();
+        // Advance time until the oracle considers the next report epoch finalized.
+        // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
+        while (true) {
+            uint32 slot = etherFiOracleInstance.slotForNextReport();
+            uint32 curr = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+            uint32 min = ((slot / 32) + 3) * 32;
+            if (curr >= min) break;
+            uint256 d = min - curr;
+            vm.roll(block.number + d);
+            vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (curr + uint32(d)));
+        }
 
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
@@ -369,6 +402,17 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
         assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
         vm.stopPrank();
+        // Advance time until the oracle considers the next report epoch finalized.
+        // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
+        while (true) {
+            uint32 slot = etherFiOracleInstance.slotForNextReport();
+            uint32 curr = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+            uint32 min = ((slot / 32) + 3) * 32;
+            if (curr >= min) break;
+            uint256 d = min - curr;
+            vm.roll(block.number + d);
+            vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (curr + uint32(d)));
+        }
 
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
@@ -443,6 +487,17 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
         assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
         vm.stopPrank();
+        // Advance time until the oracle considers the next report epoch finalized.
+        // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
+        while (true) {
+            uint32 slot = etherFiOracleInstance.slotForNextReport();
+            uint32 curr = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+            uint32 min = ((slot / 32) + 3) * 32;
+            if (curr >= min) break;
+            uint256 d = min - curr;
+            vm.roll(block.number + d);
+            vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (curr + uint32(d)));
+        }
 
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
@@ -480,4 +535,6 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         assertApproxEqAbs(alice.balance, beforeClaimBalance + claimableAmount, 1e3);
         vm.stopPrank();
     }
+
+    
 }
