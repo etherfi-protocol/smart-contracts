@@ -30,6 +30,11 @@ contract RequestELTriggeredWithdrawals is Script, Utils {
     EtherFiNodesManager internal _nodesManager;
     address internal constant EL_EXIT_TRIGGERER = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
 
+    // FULL_EXIT_GWEI = 2_048_000_000_000 = 2,048 ETH
+    // 2616 vals * FULL_EXIT_GWEI = 5,400,000 ETH in gwei
+    uint64 internal constant EXIT_REQUEST_BUCKET_CAPACITY_GWEI = 5_400_000_000_000_000; // 5,400,000 ETH in gwei
+    uint64 internal constant EXIT_REQUEST_BUCKET_REMAINING_GWEI = 5_400_000_000_000_000; // 5,400,000 ETH in gwei
+
     function run() external {
         _nodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER));
 

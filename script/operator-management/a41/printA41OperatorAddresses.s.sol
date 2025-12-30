@@ -5,9 +5,9 @@ import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import "forge-std/StdJson.sol";
 
-import {IDelegationManager} from "../../src/eigenlayer-interfaces/IDelegationManager.sol";
+import {IDelegationManager} from "../../../src/eigenlayer-interfaces/IDelegationManager.sol";
 
-import "../utils/utils.sol";
+import "../../utils/utils.sol";
 
 /**
  * @notice Prints EigenLayer operator addresses for every node in `etherFiNodes.json`.
