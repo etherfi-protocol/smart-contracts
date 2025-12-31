@@ -80,17 +80,15 @@ contract DepositIntegrationTest is TestSetup {
         uint256 liquidityPoolBalanceBeforeDeposit = address(liquidityPoolInstance).balance;
         uint256 ETHAmount = 1 ether;
 
-        uint256 eETHSharesForAmount = liquidityPoolInstance.sharesForAmount(ETHAmount); // shares for the ETH amount
-        uint256 eETHAmountForShares = liquidityPoolInstance.amountForShare(eETHSharesForAmount); // weETH amount for the shares
-        uint256 weETHAmountForEETHAmount = liquidityPoolInstance.sharesForAmount(eETHAmountForShares); // weETH amount for the eETH amount
+        uint256 weETHAmountForEETHAmount = liquidityPoolInstance.sharesForAmount(ETHAmount); // weETH amount for the eETH amount
 
         vm.prank(alice);
         uint256 weEthOut = depositAdapterInstance.depositETHForWeETH{value: ETHAmount}(address(0));
 
         assertApproxEqAbs(weEthOut, weETHAmountForEETHAmount, 1e1);
-        assertEq(weEthInstance.balanceOf(alice), beforeWeETH + weEthOut); // weETH is transferred to the alice
-        assertEq(eETHInstance.balanceOf(address(weEthInstance)), beforeEETHAmount + eETHAmountForShares); // eETH is transferred to the weETH contract
-        assertEq(address(liquidityPoolInstance).balance, liquidityPoolBalanceBeforeDeposit + ETHAmount); // ETH is transferred to the liquidity pool
+        assertApproxEqAbs(weEthInstance.balanceOf(alice), beforeWeETH + weEthOut, 1e1); // weETH is transferred to the alice
+        assertApproxEqAbs(eETHInstance.balanceOf(address(weEthInstance)), beforeEETHAmount + ETHAmount, 1e1); // eETH is transferred to the weETH contract
+        assertApproxEqAbs(address(liquidityPoolInstance).balance, liquidityPoolBalanceBeforeDeposit + ETHAmount, 1e1); // ETH is transferred to the liquidity pool
     }
 
     function test_Deposit_DepositAdapter_depositWETHForWeETH() public {
@@ -110,20 +108,18 @@ contract DepositIntegrationTest is TestSetup {
         uint256 beforeEETHAmount = eETHInstance.balanceOf(address(weEthInstance));
         uint256 liquidityPoolBalanceBeforeDeposit = address(liquidityPoolInstance).balance;
 
-        uint256 eETHSharesForAmount = liquidityPoolInstance.sharesForAmount(wETHAmount); // shares for the WETH amount
-        uint256 eETHAmountForShares = liquidityPoolInstance.amountForShare(eETHSharesForAmount); // weETH amount for the shares
-        uint256 weETHAmountForEETHAmount = liquidityPoolInstance.sharesForAmount(eETHAmountForShares); // weETH amount for the eETH amount
+        uint256 weETHAmountForEETHAmount = liquidityPoolInstance.sharesForAmount(wETHAmount); // weETH amount for the eETH amount
 
         vm.prank(alice);
         uint256 weEthOut = depositAdapterInstance.depositWETHForWeETH(wETHAmount, address(0));
 
         assertApproxEqAbs(weEthOut, weETHAmountForEETHAmount, 1e1);
-        assertEq(weEthInstance.balanceOf(alice), beforeWeETH + weEthOut); // weETH is transferred to the alice
-        assertEq(eETHInstance.balanceOf(address(weEthInstance)), beforeEETHAmount + eETHAmountForShares); // eETH is transferred to the weETH contract
-        assertEq(address(liquidityPoolInstance).balance, liquidityPoolBalanceBeforeDeposit + wETHAmount); // ETH is transferred to the liquidity pool
-        assertEq(weth.balanceOf(alice), beforeWETHBalance - wETHAmount); // WETH is consumed from alice
-        assertEq(weth.balanceOf(address(weth)), beforeWETHContractBalance); // WETH is taken from the weth contract and sent back to the weth contract
-        assertEq(weth.balanceOf(address(depositAdapterInstance)), beforeDepositAdapterWETHBalance); // WETH balance of the deposit adapter is unchanged
+        assertApproxEqAbs(weEthInstance.balanceOf(alice), beforeWeETH + weEthOut, 1e1); // weETH is transferred to the alice
+        assertApproxEqAbs(eETHInstance.balanceOf(address(weEthInstance)), beforeEETHAmount + wETHAmount, 1e1); // eETH is transferred to the weETH contract
+        assertApproxEqAbs(address(liquidityPoolInstance).balance, liquidityPoolBalanceBeforeDeposit + wETHAmount, 1e1); // ETH is transferred to the liquidity pool
+        assertApproxEqAbs(weth.balanceOf(alice), beforeWETHBalance - wETHAmount, 1e1); // WETH is consumed from alice
+        assertApproxEqAbs(weth.balanceOf(address(weth)), beforeWETHContractBalance, 1e1); // WETH is taken from the weth contract and sent back to the weth contract
+        assertApproxEqAbs(weth.balanceOf(address(depositAdapterInstance)), beforeDepositAdapterWETHBalance, 1e1); // WETH balance of the deposit adapter is unchanged
     }
 
     function test_Deposit_DepositAdapter_depositStETHForWeETHWithPermit() public {

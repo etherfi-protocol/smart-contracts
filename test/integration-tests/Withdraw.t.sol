@@ -5,17 +5,20 @@ import "forge-std/console2.sol";
 import "../TestSetup.sol";
 import "lib/BucketLimiter.sol";
 import "../../script/deploys/Deployed.s.sol";
+import "../../src/interfaces/IWeETHWithdrawAdapter.sol";
 
-contract WithdrawTest is TestSetup, Deployed {
+contract WithdrawIntegrationTest is TestSetup, Deployed {
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address public constant LIDO_ADDRESS = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
+    address public constant ADMIN_EOA = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
+        vm.etch(alice, bytes(""));
     }
 
-    function test_Withdraw_EtherFiRedemptionManager_redeemEEthForETH() public {
-        setUp();
+    function test_Withdraw_EtherFiRedemptionManager_redeemEEth() public {
+        // setUp();
         vm.startPrank(OPERATING_TIMELOCK);
         // Ensure bucket limiter has enough capacity and is fully refilled
         etherFiRedemptionManagerInstance.setCapacity(3000 ether, ETH_ADDRESS);
@@ -24,38 +27,40 @@ contract WithdrawTest is TestSetup, Deployed {
         
         // Warp time forward to ensure bucket is fully refilled
         vm.warp(block.timestamp + 1);
-
-        vm.deal(alice, 100000 ether);
-        vm.prank(alice);
-        liquidityPoolInstance.deposit{value: 100000 ether}();
-
         vm.deal(alice, 2010 ether);
         vm.startPrank(alice);
 
         liquidityPoolInstance.deposit{value: 2005 ether}();
+        address receiver = makeAddr("withdraw-receiver");
+        vm.etch(receiver, bytes(""));
 
-        uint256 redeemableAmount = etherFiRedemptionManagerInstance.totalRedeemableAmount(ETH_ADDRESS);
-        uint256 aliceBalance = address(alice).balance;
-        uint256 treasuryBalance = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
+        uint256 beforeEETHBalance = eETHInstance.balanceOf(alice);
+        uint256 eETHAmountToRedeem = 2000 ether;
+        uint256 beforeReceiverBalance = address(receiver).balance;
+        uint256 beforeTreasuryBalance = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
+        address treasury = address(etherFiRedemptionManagerInstance.treasury());
 
         // Get actual fee configuration from contract
         (, uint16 exitFeeSplitToTreasuryBps, uint16 exitFeeBps, ) = 
             etherFiRedemptionManagerInstance.tokenToRedemptionInfo(ETH_ADDRESS);
         
         // Calculate expected values using shares (more accurate)
-        uint256 eEthShares = liquidityPoolInstance.sharesForAmount(2000 ether);
+        uint256 eEthShares = liquidityPoolInstance.sharesForAmount(eETHAmountToRedeem);
         uint256 expectedAmountToReceiver = liquidityPoolInstance.amountForShare((eEthShares * (10000 - exitFeeBps)) / 10000);
         uint256 eEthShareFee = eEthShares - liquidityPoolInstance.sharesForWithdrawalAmount(expectedAmountToReceiver);
         uint256 expectedTreasuryFee = liquidityPoolInstance.amountForShare((eEthShareFee * exitFeeSplitToTreasuryBps) / 10000);
 
-        eETHInstance.approve(address(etherFiRedemptionManagerInstance), 2000 ether);
-        etherFiRedemptionManagerInstance.redeemEEth(2000 ether, alice, ETH_ADDRESS);
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), eETHAmountToRedeem);
+        etherFiRedemptionManagerInstance.redeemEEth(eETHAmountToRedeem, receiver, ETH_ADDRESS);
+
+        assertApproxEqAbs(address(receiver).balance, beforeReceiverBalance + expectedAmountToReceiver, 1e15); // receiver gets ETH
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), beforeEETHBalance - eETHAmountToRedeem, 1e15); // eETH is consumed from alice
+        assertApproxEqAbs(eETHInstance.balanceOf(treasury), beforeTreasuryBalance + expectedTreasuryFee, 1e15); // treasury gets ETH
 
         vm.stopPrank();
     }
 
-    function test_Withdraw_EtherFiRedemptionManager_redeemWeEthForETH() public {
-        setUp();
+    function test_Withdraw_EtherFiRedemptionManager_redeemEEthWithPermit() public {
         vm.startPrank(OPERATING_TIMELOCK);
         // Ensure bucket limiter has enough capacity and is fully refilled
         etherFiRedemptionManagerInstance.setCapacity(3000 ether, ETH_ADDRESS);
@@ -64,99 +69,505 @@ contract WithdrawTest is TestSetup, Deployed {
         
         // Warp time forward to ensure bucket is fully refilled
         vm.warp(block.timestamp + 1);
-
-        vm.deal(alice, 100000 ether);
-        vm.prank(alice);
-        liquidityPoolInstance.deposit{value: 100000 ether}();
-
         vm.deal(alice, 2010 ether);
         vm.startPrank(alice);
 
         liquidityPoolInstance.deposit{value: 2005 ether}();
+        address receiver = makeAddr("withdraw-receiver");
+        vm.etch(receiver, bytes(""));
+
+        uint256 beforeEETHBalance = eETHInstance.balanceOf(alice);
+        uint256 eETHAmountToRedeem = 2000 ether;
+        uint256 beforeReceiverBalance = address(receiver).balance;
+        uint256 beforeTreasuryBalance = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
+        address treasury = address(etherFiRedemptionManagerInstance.treasury());
+
+        IeETH.PermitInput memory permit = eEth_createPermitInput(2, address(etherFiRedemptionManagerInstance), eETHAmountToRedeem, eETHInstance.nonces(alice), 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR()); // alice = vm.addr(2)
 
         // Get actual fee configuration from contract
         (, uint16 exitFeeSplitToTreasuryBps, uint16 exitFeeBps, ) = 
             etherFiRedemptionManagerInstance.tokenToRedemptionInfo(ETH_ADDRESS);
         
         // Calculate expected values using shares (more accurate)
+        uint256 eEthShares = liquidityPoolInstance.sharesForAmount(eETHAmountToRedeem);
         uint256 expectedAmountToReceiver = liquidityPoolInstance.amountForShare((eEthShares * (10000 - exitFeeBps)) / 10000);
         uint256 eEthShareFee = eEthShares - liquidityPoolInstance.sharesForWithdrawalAmount(expectedAmountToReceiver);
+        uint256 expectedTreasuryFee = liquidityPoolInstance.amountForShare((eEthShareFee * exitFeeSplitToTreasuryBps) / 10000);
 
-        eETHInstance.approve(address(etherFiRedemptionManagerInstance), 2000 ether);
-        etherFiRedemptionManagerInstance.redeemWeEth(2000 ether, alice, ETH_ADDRESS);
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), eETHAmountToRedeem);
+        etherFiRedemptionManagerInstance.redeemEEthWithPermit(eETHAmountToRedeem, receiver, permit, ETH_ADDRESS);
+
+        assertApproxEqAbs(address(receiver).balance, beforeReceiverBalance + expectedAmountToReceiver, 1e15); // receiver gets ETH
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), beforeEETHBalance - eETHAmountToRedeem, 1e15); // eETH is consumed from alice
+        assertApproxEqAbs(eETHInstance.balanceOf(treasury), beforeTreasuryBalance + expectedTreasuryFee, 1e15); // treasury gets ETH
 
         vm.stopPrank();
     }
 
-    // function testFuzz_redeemWeEthForETH(uint256 depositAmount,uint256 redeemAmount,uint16 exitFeeSplitBps,int256 rebase,uint16 exitFeeBps,uint16 lowWatermarkBps) public {
-    //     // Bound the parameters
-    //     depositAmount = bound(depositAmount, 1 ether, 1000 ether);
-    //     redeemAmount = bound(redeemAmount, 0.1 ether, depositAmount);
-    //     exitFeeSplitBps = uint16(bound(exitFeeSplitBps, 0, 10000));
-    //     exitFeeBps = uint16(bound(exitFeeBps, 0, 10000));
-    //     lowWatermarkBps = uint16(bound(lowWatermarkBps, 0, 10000));
-    //     rebase = bound(rebase, 0, int128(uint128(depositAmount) / 10));
+    function test_Withdraw_EtherFiRedemptionManager_redeemWeEth() public {
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}(); // to get eETH to generate weETH
+        eETHInstance.approve(address(weEthInstance), 10 ether);
+        weEthInstance.wrap(1 ether); // to get weETH to redeem
 
-    //     // Deal Ether to alice and perform deposit
-    //     vm.deal(alice, depositAmount);
-    //     vm.prank(alice);
-    //     liquidityPoolInstance.deposit{value: depositAmount}();
+        uint256 weEthAmount = weEthInstance.balanceOf(alice);
+        uint256 eEthAmount = weEthInstance.getEETHByWeETH(weEthAmount);
+        uint256 eEthShares = liquidityPoolInstance.sharesForAmount(eEthAmount);
+        // NOTE: on mainnet forks, vm.addr(N) can map to an address that already has code
+        // and may forward ETH in its receive/fallback, making balance-based asserts flaky.
+        address receiver = makeAddr("withdraw-receiver");
+        vm.etch(receiver, bytes(""));
+        uint256 receiverBalance = address(receiver).balance;
+        address treasury = etherFiRedemptionManagerInstance.treasury();
+        uint256 treasuryBalanceBefore = eETHInstance.balanceOf(treasury);
+        uint256 beforeWeETHBalance = weEthInstance.balanceOf(alice);
 
-    //     // Set fee and watermark configurations
-    //     vm.startPrank(OPERATING_TIMELOCK);
-    //     etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(uint16(exitFeeSplitBps), ETH_ADDRESS);
-    //     etherFiRedemptionManagerInstance.setExitFeeBasisPoints(exitFeeBps, ETH_ADDRESS);
-    //     etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(lowWatermarkBps, ETH_ADDRESS);
-    //     vm.stopPrank();
+        weEthInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
+        etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, receiver, ETH_ADDRESS);
 
-    //     // // Apply rebase
-    //     // vm.prank(address(membershipManagerV1Instance));
-    //     // liquidityPoolInstance.rebase(int128(rebase));
+        // Use exact same calculation flow as _calcRedemption to account for rounding differences
+        (, uint16 exitFeeSplitToTreasuryBps, uint16 exitFeeBps, ) = 
+            etherFiRedemptionManagerInstance.tokenToRedemptionInfo(ETH_ADDRESS);
+        uint256 expectedAmountToReceiver = liquidityPoolInstance.amountForShare(
+            eEthShares * (10000 - exitFeeBps) / 10000
+        );
+        uint256 sharesToBurn = liquidityPoolInstance.sharesForWithdrawalAmount(expectedAmountToReceiver);
+        uint256 eEthShareFee = eEthShares - sharesToBurn;
+        uint256 feeShareToTreasury = eEthShareFee * exitFeeSplitToTreasuryBps / 10000;
+        uint256 expectedTreasuryFee = liquidityPoolInstance.amountForShare(feeShareToTreasury);
+        
+        assertApproxEqAbs(eETHInstance.balanceOf(treasury), treasuryBalanceBefore + expectedTreasuryFee, 1e15); // treasury gets ETH
+        assertApproxEqAbs(address(receiver).balance, receiverBalance + expectedAmountToReceiver, 1e15); // receiver gets ETH
+        vm.stopPrank();
+    }
 
-    //     // Convert redeemAmount from ETH to weETH
-    //     vm.startPrank(alice);
-    //     eETHInstance.approve(address(weEthInstance), redeemAmount);
-    //     weEthInstance.wrap(redeemAmount);
-    //     uint256 weEthAmount = weEthInstance.balanceOf(alice);
+    function test_Withdraw_EtherFiRedemptionManager_redeemWeEthWithPermit() public {
 
-    //     if (etherFiRedemptionManagerInstance.canRedeem(redeemAmount, ETH_ADDRESS)) {
-    //         uint256 aliceBalanceBefore = address(alice).balance;
-    //         uint256 treasuryBalanceBefore = eETHInstance.balanceOf(address(treasuryInstance));
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}(); // to get eETH to generate weETH
+        eETHInstance.approve(address(weEthInstance), 10 ether);
+        weEthInstance.wrap(1 ether); // to get weETH to redeem
 
-    //         uint256 eEthAmount = liquidityPoolInstance.amountForShare(weEthAmount);
+        uint256 weEthAmount = weEthInstance.balanceOf(alice);
+        uint256 eEthAmount = weEthInstance.getEETHByWeETH(weEthAmount);
+        uint256 eEthShares = liquidityPoolInstance.sharesForAmount(eEthAmount);
+        // NOTE: on mainnet forks, vm.addr(N) can map to an address that already has code
+        // and may forward ETH in its receive/fallback, making balance-based asserts flaky.
+        address receiver = makeAddr("withdraw-receiver");
+        vm.etch(receiver, bytes(""));
+        uint256 receiverBalance = address(receiver).balance;
+        address treasury = etherFiRedemptionManagerInstance.treasury();
+        uint256 treasuryBalanceBefore = eETHInstance.balanceOf(treasury);
+        uint256 beforeWeETHBalance = weEthInstance.balanceOf(alice);
 
-    //         uint256 alicePrivateKey = 2; // alice = vm.addr(2);
-    //         IWeETH.PermitInput memory permit = weEth_createPermitInput(alicePrivateKey, address(etherFiRedemptionManagerInstance), weEthAmount, weEthInstance.nonces(alice), 2**256 - 1, weEthInstance.DOMAIN_SEPARATOR());
-    //         etherFiRedemptionManagerInstance.redeemWeEthWithPermit(weEthAmount, alice, permit, ETH_ADDRESS);
+        IWeETH.PermitInput memory permit = weEth_createPermitInput(2, address(etherFiRedemptionManagerInstance), weEthAmount, weEthInstance.nonces(alice), 2**256 - 1, weEthInstance.DOMAIN_SEPARATOR()); // alice = vm.addr(2)
 
-    //         uint256 totalFee = (eEthAmount * exitFeeBps) / 10000;
-    //         uint256 treasuryFee = (totalFee * exitFeeSplitBps) / 10000;
-    //         console2.log("treasuryFee --------", treasuryFee);
-    //         uint256 aliceReceives = eEthAmount - totalFee;
+        weEthInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
+        etherFiRedemptionManagerInstance.redeemWeEthWithPermit(weEthAmount, receiver, permit, ETH_ADDRESS);
 
-    //         //weeth balance of alice
-    //         assertApproxEqAbs(
-    //             weEthInstance.balanceOf(alice),
-    //             0,
-    //             1e3
-    //         );
-    //         assertApproxEqAbs(
-    //             eETHInstance.balanceOf(address(treasuryInstance)),
-    //             treasuryBalanceBefore + treasuryFee,
-    //             1e3
-    //         );
-    //         assertApproxEqAbs(
-    //             address(alice).balance,
-    //             aliceBalanceBefore + aliceReceives,
-    //             1e3
-    //         );
+        // Use exact same calculation flow as _calcRedemption to account for rounding differences
+        (, uint16 exitFeeSplitToTreasuryBps, uint16 exitFeeBps, ) = 
+            etherFiRedemptionManagerInstance.tokenToRedemptionInfo(ETH_ADDRESS);
+        uint256 expectedAmountToReceiver = liquidityPoolInstance.amountForShare(
+            eEthShares * (10000 - exitFeeBps) / 10000
+        );
+        uint256 sharesToBurn = liquidityPoolInstance.sharesForWithdrawalAmount(expectedAmountToReceiver);
+        uint256 eEthShareFee = eEthShares - sharesToBurn;
+        uint256 feeShareToTreasury = eEthShareFee * exitFeeSplitToTreasuryBps / 10000;
+        uint256 expectedTreasuryFee = liquidityPoolInstance.amountForShare(feeShareToTreasury);
+        
+        assertApproxEqAbs(eETHInstance.balanceOf(treasury), treasuryBalanceBefore + expectedTreasuryFee, 1e15); // treasury gets ETH
+        assertApproxEqAbs(address(receiver).balance, receiverBalance + expectedAmountToReceiver, 1e15); // receiver gets ETH
+        vm.stopPrank();
+    }
 
-    //     } else {
-    //         vm.expectRevert();
-    //         etherFiRedemptionManagerInstance.redeemWeEth(weEthAmount, alice, ETH_ADDRESS);
-    //     }
-    //     vm.stopPrank();
-    // }
+    function test_LiquidityPool_requestWithdraw() public {
+        vm.deal(alice, 100 ether);
+        uint256 amountToWithdraw = 1 ether;
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: amountToWithdraw}();
 
-    // 
+        uint256 nextRequestId = withdrawRequestNFTInstance.nextRequestId();
+
+        uint256 beforeAliceBalance = alice.balance;
+        eETHInstance.approve(address(liquidityPoolInstance), amountToWithdraw);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(alice, amountToWithdraw);
+        assertEq(requestId, nextRequestId);
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
+        vm.stopPrank();
+        // Advance time until the oracle considers the next report epoch finalized.
+        // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
+        while (true) {
+            uint32 slot = etherFiOracleInstance.slotForNextReport();
+            uint32 curr = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+            uint32 min = ((slot / 32) + 3) * 32;
+            if (curr >= min) break;
+            uint256 d = min - curr;
+            vm.roll(block.number + d);
+            vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (curr + uint32(d)));
+        }
+
+        IEtherFiOracle.OracleReport memory report;
+        uint256[] memory emptyVals = new uint256[](0);
+        report = IEtherFiOracle.OracleReport(
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+        );
+        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+
+        (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
+        // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
+        report.refBlockTo = uint32(block.number - 1);
+        if (report.refBlockTo <= etherFiAdminInstance.lastAdminExecutionBlock()) {
+            report.refBlockTo = etherFiAdminInstance.lastAdminExecutionBlock() + 1;
+        }
+
+        vm.prank(AVS_OPERATOR_1);
+        etherFiOracleInstance.submitReport(report);
+
+        vm.prank(AVS_OPERATOR_2);
+        etherFiOracleInstance.submitReport(report);
+
+        // Advance time for postReportWaitTimeInSlots
+        uint256 slotsToWait = uint256(etherFiAdminInstance.postReportWaitTimeInSlots() + 1);
+        uint32 slotAfterReport = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+        vm.roll(block.number + slotsToWait);
+        vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (slotAfterReport + slotsToWait));
+
+        vm.prank(ADMIN_EOA);
+        etherFiAdminInstance.executeTasks(report);
+
+        vm.startPrank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertApproxEqAbs(alice.balance, beforeAliceBalance + amountToWithdraw, 1e3);
+        vm.stopPrank();
+    }
+
+    function test_LiquidityPool_requestWithdrawWithPermit() public {
+        vm.deal(alice, 100 ether);
+        uint256 amountToWithdraw = 1 ether;
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: amountToWithdraw}();
+
+        uint256 nextRequestId = withdrawRequestNFTInstance.nextRequestId();
+
+        ILiquidityPool.PermitInput memory permit = createPermitInput(2, address(liquidityPoolInstance), amountToWithdraw, eETHInstance.nonces(alice), 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR()); // alice = vm.addr(2)
+
+        uint256 beforeAliceBalance = alice.balance;
+        uint256 requestId = liquidityPoolInstance.requestWithdrawWithPermit(alice, amountToWithdraw, permit);
+        assertEq(requestId, nextRequestId);
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
+        vm.stopPrank();
+        // Advance time until the oracle considers the next report epoch finalized.
+        // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
+        while (true) {
+            uint32 slot = etherFiOracleInstance.slotForNextReport();
+            uint32 curr = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+            uint32 min = ((slot / 32) + 3) * 32;
+            if (curr >= min) break;
+            uint256 d = min - curr;
+            vm.roll(block.number + d);
+            vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (curr + uint32(d)));
+        }
+
+                IEtherFiOracle.OracleReport memory report;
+        uint256[] memory emptyVals = new uint256[](0);
+        report = IEtherFiOracle.OracleReport(
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+        );
+        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+
+        (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
+        // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
+        report.refBlockTo = uint32(block.number - 1);
+        if (report.refBlockTo <= etherFiAdminInstance.lastAdminExecutionBlock()) {
+            report.refBlockTo = etherFiAdminInstance.lastAdminExecutionBlock() + 1;
+        }
+
+        vm.prank(AVS_OPERATOR_1);
+        etherFiOracleInstance.submitReport(report);
+
+        vm.prank(AVS_OPERATOR_2);
+        etherFiOracleInstance.submitReport(report);
+
+        // Advance time for postReportWaitTimeInSlots
+        uint256 slotsToWait = uint256(etherFiAdminInstance.postReportWaitTimeInSlots() + 1);
+        uint32 slotAfterReport = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+        vm.roll(block.number + slotsToWait);
+        vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (slotAfterReport + slotsToWait));
+
+        vm.prank(ADMIN_EOA);
+        etherFiAdminInstance.executeTasks(report);
+
+        vm.startPrank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertApproxEqAbs(alice.balance, beforeAliceBalance + amountToWithdraw, 1e3);
+        vm.stopPrank();
+    }
+
+    function test_LiquidityPool_requestWithdraw_batchClaimWithdraw() public {
+        vm.deal(alice, 100 ether);
+        uint256 numRequests = 3;
+        uint256 amountPerRequest = 1 ether;
+        uint256 totalAmountToWithdraw = amountPerRequest * numRequests;
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: totalAmountToWithdraw}();
+
+        uint256 nextRequestId = withdrawRequestNFTInstance.nextRequestId();
+
+        uint256 beforeAliceBalance = alice.balance;
+        eETHInstance.approve(address(liquidityPoolInstance), totalAmountToWithdraw);
+
+        uint256[] memory tokenIds = new uint256[](numRequests);
+        uint256 requestId;
+        for (uint256 i = 0; i < numRequests; i++) {
+            requestId = liquidityPoolInstance.requestWithdraw(alice, amountPerRequest);
+            tokenIds[i] = requestId;
+
+            assertEq(requestId, nextRequestId + i);
+            assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice);
+            assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
+            assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
+        }
+        vm.stopPrank();
+        // Advance time until the oracle considers the next report epoch finalized.
+        // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
+        while (true) {
+            uint32 slot = etherFiOracleInstance.slotForNextReport();
+            uint32 curr = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+            uint32 min = ((slot / 32) + 3) * 32;
+            if (curr >= min) break;
+            uint256 d = min - curr;
+            vm.roll(block.number + d);
+            vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (curr + uint32(d)));
+        }
+
+        IEtherFiOracle.OracleReport memory report;
+        uint256[] memory emptyVals = new uint256[](0);
+        report = IEtherFiOracle.OracleReport(
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+        );
+        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+
+        (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
+        // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
+        report.refBlockTo = uint32(block.number - 1);
+        if (report.refBlockTo <= etherFiAdminInstance.lastAdminExecutionBlock()) {
+            report.refBlockTo = etherFiAdminInstance.lastAdminExecutionBlock() + 1;
+        }
+
+        vm.prank(AVS_OPERATOR_1);
+        etherFiOracleInstance.submitReport(report);
+
+        vm.prank(AVS_OPERATOR_2);
+        etherFiOracleInstance.submitReport(report);
+
+        // Advance time for postReportWaitTimeInSlots
+        uint256 slotsToWait = uint256(etherFiAdminInstance.postReportWaitTimeInSlots() + 1);
+        uint32 slotAfterReport = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+        vm.roll(block.number + slotsToWait);
+        vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (slotAfterReport + slotsToWait));
+
+        vm.prank(ADMIN_EOA);
+        etherFiAdminInstance.executeTasks(report);
+
+        vm.startPrank(alice);
+        withdrawRequestNFTInstance.batchClaimWithdraw(tokenIds);
+        assertApproxEqAbs(alice.balance, beforeAliceBalance + totalAmountToWithdraw, 1e3);
+        vm.stopPrank();
+    }
+
+    function test_EtherFiRestaker_withdrawEther_sendsEthToLiquidityPool() public {
+        uint256 amount = 3 ether;
+        vm.deal(address(etherFiRestakerInstance), amount);
+
+        uint256 lpBalanceBefore = address(liquidityPoolInstance).balance;
+        uint256 restakerBalanceBefore = address(etherFiRestakerInstance).balance;
+        assertEq(restakerBalanceBefore, amount);
+
+        vm.prank(etherFiRestakerInstance.owner());
+        etherFiRestakerInstance.withdrawEther();
+
+        assertEq(address(etherFiRestakerInstance).balance, 0);
+        assertEq(address(liquidityPoolInstance).balance, lpBalanceBefore + amount);
+    }
+
+    function test_EtherFiRestaker_undelegate_tracksWithdrawalRoots() public {
+        bool delegatedBefore = etherFiRestakerInstance.isDelegated();
+
+        vm.prank(etherFiRestakerInstance.owner());
+        if (!delegatedBefore) {
+            vm.expectRevert();
+            etherFiRestakerInstance.undelegate();
+            return;
+        }
+
+        bytes32[] memory roots = etherFiRestakerInstance.undelegate();
+
+        assertEq(etherFiRestakerInstance.isDelegated(), false);
+        for (uint256 i = 0; i < roots.length; i++) {
+            assertEq(etherFiRestakerInstance.isPendingWithdrawal(roots[i]), true);
+        }
+    }
+
+    function test_Withdraw_WeETHWithdrawAdapter_requestWithdraw() public {
+        vm.deal(alice, 100 ether);
+
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}(); // mint eETH for wrapping
+
+        uint256 eEthToWrap = 1 ether;
+        eETHInstance.approve(address(weEthInstance), eEthToWrap);
+        weEthInstance.wrap(eEthToWrap);
+
+        uint256 weEthAmountToWithdraw = weEthInstance.balanceOf(alice);
+        weEthInstance.approve(address(weEthWithdrawAdapterInstance), weEthAmountToWithdraw);
+
+        uint256 nextRequestId = withdrawRequestNFTInstance.nextRequestId();
+        uint256 requestId = weEthWithdrawAdapterInstance.requestWithdraw(weEthAmountToWithdraw, alice);
+        assertEq(requestId, nextRequestId);
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
+        vm.stopPrank();
+        // Advance time until the oracle considers the next report epoch finalized.
+        // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
+        while (true) {
+            uint32 slot = etherFiOracleInstance.slotForNextReport();
+            uint32 curr = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+            uint32 min = ((slot / 32) + 3) * 32;
+            if (curr >= min) break;
+            uint256 d = min - curr;
+            vm.roll(block.number + d);
+            vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (curr + uint32(d)));
+        }
+
+        IEtherFiOracle.OracleReport memory report;
+        uint256[] memory emptyVals = new uint256[](0);
+        report = IEtherFiOracle.OracleReport(
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+        );
+        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+
+        (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
+        // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
+        report.refBlockTo = uint32(block.number - 1);
+        if (report.refBlockTo <= etherFiAdminInstance.lastAdminExecutionBlock()) {
+            report.refBlockTo = etherFiAdminInstance.lastAdminExecutionBlock() + 1;
+        }
+
+        vm.prank(AVS_OPERATOR_1);
+        etherFiOracleInstance.submitReport(report);
+
+        vm.prank(AVS_OPERATOR_2);
+        etherFiOracleInstance.submitReport(report);
+
+        // Advance time for postReportWaitTimeInSlots
+        uint256 slotsToWait = uint256(etherFiAdminInstance.postReportWaitTimeInSlots() + 1);
+        uint32 slotAfterReport = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+        vm.roll(block.number + slotsToWait);
+        vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (slotAfterReport + slotsToWait));
+
+        vm.prank(ADMIN_EOA);
+        etherFiAdminInstance.executeTasks(report);
+
+        vm.startPrank(alice);
+        uint256 claimableAmount = withdrawRequestNFTInstance.getClaimableAmount(requestId);
+        uint256 beforeClaimBalance = alice.balance;
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertApproxEqAbs(alice.balance, beforeClaimBalance + claimableAmount, 1e3);
+        vm.stopPrank();
+    }
+
+    function test_Withdraw_WeETHWithdrawAdapter_requestWithdrawWithPermit() public {
+        vm.deal(alice, 100 ether);
+
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}(); // mint eETH for wrapping
+
+        uint256 eEthToWrap = 1 ether;
+        eETHInstance.approve(address(weEthInstance), eEthToWrap);
+        weEthInstance.wrap(eEthToWrap);
+
+        uint256 weEthAmountToWithdraw = weEthInstance.balanceOf(alice);
+
+        IWeETH.PermitInput memory weEthPermit = weEth_createPermitInput(
+            2,
+            address(weEthWithdrawAdapterInstance),
+            weEthAmountToWithdraw,
+            weEthInstance.nonces(alice),
+            2 ** 256 - 1,
+            weEthInstance.DOMAIN_SEPARATOR()
+        );
+
+        IWeETHWithdrawAdapter.PermitInput memory permit = IWeETHWithdrawAdapter.PermitInput({
+            value: weEthPermit.value,
+            deadline: weEthPermit.deadline,
+            v: weEthPermit.v,
+            r: weEthPermit.r,
+            s: weEthPermit.s
+        });
+
+        uint256 nextRequestId = withdrawRequestNFTInstance.nextRequestId();
+        uint256 requestId = weEthWithdrawAdapterInstance.requestWithdrawWithPermit(weEthAmountToWithdraw, alice, permit);
+        assertEq(requestId, nextRequestId);
+        assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).isValid, true);
+        assertEq(withdrawRequestNFTInstance.getRequest(requestId).feeGwei, 0);
+        vm.stopPrank();
+        // Advance time until the oracle considers the next report epoch finalized.
+        // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
+        while (true) {
+            uint32 slot = etherFiOracleInstance.slotForNextReport();
+            uint32 curr = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+            uint32 min = ((slot / 32) + 3) * 32;
+            if (curr >= min) break;
+            uint256 d = min - curr;
+            vm.roll(block.number + d);
+            vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (curr + uint32(d)));
+        }
+
+        IEtherFiOracle.OracleReport memory report;
+        uint256[] memory emptyVals = new uint256[](0);
+        report = IEtherFiOracle.OracleReport(
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+        );
+        report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+
+        (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
+        // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
+        report.refBlockTo = uint32(block.number - 1);
+        if (report.refBlockTo <= etherFiAdminInstance.lastAdminExecutionBlock()) {
+            report.refBlockTo = etherFiAdminInstance.lastAdminExecutionBlock() + 1;
+        }
+
+        vm.prank(AVS_OPERATOR_1);
+        etherFiOracleInstance.submitReport(report);
+
+        vm.prank(AVS_OPERATOR_2);
+        etherFiOracleInstance.submitReport(report);
+
+        // Advance time for postReportWaitTimeInSlots
+        uint256 slotsToWait = uint256(etherFiAdminInstance.postReportWaitTimeInSlots() + 1);
+        uint32 slotAfterReport = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+        vm.roll(block.number + slotsToWait);
+        vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (slotAfterReport + slotsToWait));
+
+        vm.prank(ADMIN_EOA);
+        etherFiAdminInstance.executeTasks(report);
+
+        vm.startPrank(alice);
+        uint256 claimableAmount = withdrawRequestNFTInstance.getClaimableAmount(requestId);
+        uint256 beforeClaimBalance = alice.balance;
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertApproxEqAbs(alice.balance, beforeClaimBalance + claimableAmount, 1e3);
+        vm.stopPrank();
+    }
+
+    
 }
