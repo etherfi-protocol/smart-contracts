@@ -9,7 +9,8 @@ import "../../src/interfaces/IEtherFiNode.sol";
 
 import "../../src/libraries/DepositDataRootGenerator.sol";
 
-contract ValCreationIntegrationTest is TestSetup, Deployed {
+contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
+    address constant ADMIN_EOA = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
     }
@@ -84,6 +85,15 @@ contract ValCreationIntegrationTest is TestSetup, Deployed {
         });
     }
 
+    function _executeValidatorApprovalTask(IEtherFiOracle.OracleReport memory report, bytes[] memory pubkeys, bytes[] memory signatures) internal returns (bool completed, bool exists) {
+        bytes32 reportHash = etherFiOracleInstance.generateReportHash(report);
+        bytes32 taskHash = keccak256(abi.encode(reportHash, report.validatorsToApprove));
+        vm.prank(ADMIN_EOA);
+        etherFiAdminInstance.executeValidatorApprovalTask(reportHash, report.validatorsToApprove, pubkeys, signatures);
+        (completed, exists) = etherFiAdminInstance.validatorApprovalTaskStatus(taskHash);
+        return (completed, exists);
+    }
+
     function test_ValCreation_batchRegisterAndCreateBeaconValidators_succeeds() public {
         address spawner = vm.addr(0x1234);
 
@@ -105,7 +115,7 @@ contract ValCreationIntegrationTest is TestSetup, Deployed {
         assertEq(uint8(stakingManagerInstance.validatorCreationStatus(validatorHash)), uint8(IStakingManager.ValidatorCreationStatus.CONFIRMED));
     }
 
-    function test_ValCreation_batchCreateBeaconValidators_accountsForEthCorrectly() public {
+    function test_EntireValidatorCreationFlow_accountsForEthCorrectly() public {
         address spawner = vm.addr(0x5678);
 
         (IStakingManager.DepositData memory depositData, uint256 bidId, address etherFiNode) = _prepareSingleValidator(spawner);
@@ -124,5 +134,59 @@ contract ValCreationIntegrationTest is TestSetup, Deployed {
 
         assertEq(liquidityPoolInstance.totalValueOutOfLp(), initialTotalOut + expectedEthOut);
         assertEq(liquidityPoolInstance.totalValueInLp(), initialTotalIn - expectedEthOut);
+
+        // Advance time until the oracle considers the next report epoch finalized.
+        // Condition inside oracle: (slotEpoch + 2 < currEpoch)  <=>  currEpoch >= slotEpoch + 3
+        while (true) {
+            uint32 slot = etherFiOracleInstance.slotForNextReport();
+            uint32 curr = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+            uint32 min = ((slot / 32) + 3) * 32;
+            if (curr >= min) break;
+            uint256 d = min - curr;
+            vm.roll(block.number + d);
+            vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (curr + uint32(d)));
+        }
+
+        IEtherFiOracle.OracleReport memory report;
+        uint256[] memory emptyVals = new uint256[](0);
+        report = IEtherFiOracle.OracleReport(
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+        );
+
+        (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
+
+        bytes[] memory pubkeys = new bytes[](1);
+        uint256[] memory ids = new uint256[](1);
+        bytes[] memory signatures = new bytes[](1);
+        pubkeys[0] = depositData.publicKey;
+        ids[0] = bidId;
+        signatures[0] = depositData.signature;
+        report.validatorsToApprove = ids;
+        report.lastFinalizedWithdrawalRequestId = withdrawRequestNFTInstance.lastFinalizedRequestId();
+        
+        // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
+        report.refBlockTo = uint32(block.number - 1);
+        if (report.refBlockTo <= etherFiAdminInstance.lastAdminExecutionBlock()) {
+            report.refBlockTo = etherFiAdminInstance.lastAdminExecutionBlock() + 1;
+        }
+
+        vm.prank(AVS_OPERATOR_1);
+        etherFiOracleInstance.submitReport(report);
+
+        vm.prank(AVS_OPERATOR_2);
+        etherFiOracleInstance.submitReport(report);
+
+        // Advance time for postReportWaitTimeInSlots
+        uint256 slotsToWait = uint256(etherFiAdminInstance.postReportWaitTimeInSlots() + 1);
+        uint32 slotAfterReport = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+        vm.roll(block.number + slotsToWait);
+        vm.warp(etherFiOracleInstance.beaconGenesisTimestamp() + 12 * (slotAfterReport + slotsToWait));
+
+        uint256 LiquidityPoolBalanceBefore = address(liquidityPoolInstance).balance;
+        vm.prank(ADMIN_EOA);
+        etherFiAdminInstance.executeTasks(report);
+        (bool completed, bool exists) = _executeValidatorApprovalTask(report, pubkeys, signatures);
+        uint256 LiquidityPoolBalanceAfter = address(liquidityPoolInstance).balance;
+        assertApproxEqAbs(LiquidityPoolBalanceAfter, LiquidityPoolBalanceBefore - liquidityPoolInstance.validatorSizeWei() + stakingManagerInstance.initialDepositAmount(), 1e3);
     }
 }
