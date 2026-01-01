@@ -1,0 +1,10 @@
+{
+  "contractName": "LiquidRefer_Implementation",
+  "network": "scroll",
+  "deploymentParameters": {
+    "factory": "0x9023aFc5b9c2AB8E7Ce0D0C64acF26f9087F5C9C",
+    "salt": "0x639b4d9717c799be1f06750668ea0067e7ecec8f000000000000000000000000",
+    "constructorArgsEncoded": "0x"
+  },
+  "deployedAddress": "0xB5098AF201D565B610c4BCd20f441AD4B3995840"
+}
