@@ -30,6 +30,7 @@ jobs:
         run: forge test -vvv
         env:
           MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
+          SCROLL_RPC_URL: ${{ secrets.SCROLL_RPC_URL }}
           HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL: ${{ secrets.HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL }}
           HISTORICAL_PROOF_RPC_URL: ${{ secrets.HISTORICAL_PROOF_RPC_URL }}
       - name: Generate coverage report
@@ -46,6 +47,7 @@ jobs:
           fi
         env:
           MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
+          SCROLL_RPC_URL: ${{ secrets.SCROLL_RPC_URL }}
           HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL: ${{ secrets.HISTORICAL_PROOF_812_WITHDRAWAL_RPC_URL }}
           HISTORICAL_PROOF_RPC_URL: ${{ secrets.HISTORICAL_PROOF_RPC_URL }}
       
