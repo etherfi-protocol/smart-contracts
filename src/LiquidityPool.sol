@@ -109,6 +109,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     error IncorrectRole();
     error InvalidEtherFiNode();
     error InvalidValidatorSize();
+    error InvalidArrayLengths();
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -320,11 +321,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     ) external whenNotPaused {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, msg.sender)) revert IncorrectRole();
         if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
-
-        // all validators provided should belong to same node
-        IEtherFiNode etherFiNode = IEtherFiNode(nodesManager.etherfiNodeAddress(_validatorIds[0]));
-        address eigenPod = address(etherFiNode.getEigenPod());
-        bytes memory withdrawalCredentials = nodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
+        if (_validatorIds.length == 0 || _validatorIds.length != _pubkeys.length || _validatorIds.length != _signatures.length) revert InvalidArrayLengths();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
         uint256 remainingEthPerValidator = validatorSizeWei - stakingManager.initialDepositAmount();
@@ -332,9 +329,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         // In order to maintain compatibility with current callers in this upgrade
         // need to construct data from old format
         IStakingManager.DepositData[] memory depositData = new IStakingManager.DepositData[](_validatorIds.length);
+
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            // enforce that all validators are part of same node
-            if (address(etherFiNode) != address(nodesManager.etherfiNodeAddress(_validatorIds[i]))) revert InvalidEtherFiNode();
+            IEtherFiNode etherFiNode = IEtherFiNode(nodesManager.etherfiNodeAddress(_validatorIds[i]));
+            address eigenPod = address(etherFiNode.getEigenPod());
+            bytes memory withdrawalCredentials = nodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
 
             bytes32 confirmDepositDataRoot = stakingManager.generateDepositDataRoot(
                 _pubkeys[i],
