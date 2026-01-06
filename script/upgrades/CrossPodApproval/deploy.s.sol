@@ -2,26 +2,23 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
-import {LiquidityPool} from "../../src/LiquidityPool.sol";
-import {EtherFiNodesManager} from "../../src/EtherFiNodesManager.sol";
-import {Deployed} from "../deploys/Deployed.s.sol";
-import {Utils, ICreate2Factory} from "../utils/Utils.sol";
+import {LiquidityPool} from "../../../src/LiquidityPool.sol";
+import {EtherFiNodesManager} from "../../../src/EtherFiNodesManager.sol";
+import {Deployed} from "../../deploys/Deployed.s.sol";
+import {Utils, ICreate2Factory} from "../../utils/Utils.sol";
 
 /**
 command: 
-forge script script/gnosis-txns/crossPodApprovalLiquidityPool.s.sol:CrossPodApprovalLiquidityPoolScript --rpc-url $MAINNET_RPC_URL --broadcast --verify --etherscan-api-key $ETHERSCAN_API_KEY --slow -vvvv
+forge script script/upgrades/CrossPodApproval/deploy.s.sol:CrossPodApprovalDeployScript --fork-url $MAINNET_RPC_URL --verify --etherscan-api-key $ETHERSCAN_API_KEY
  */
 
-contract CrossPodApprovalLiquidityPoolScript is Script, Deployed, Utils {
-    ICreate2Factory factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
+contract CrossPodApprovalDeployScript is Script, Deployed, Utils {
+    ICreate2Factory public constant factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
 
     address liquidityPoolImpl;
     address etherFiNodesManagerImpl;
-    bytes32 commitHashSalt = bytes32(bytes20(hex"6b82e014ed2b134e966b2140337ae7c92ffbf6c2"));
+    bytes32 public constant commitHashSalt = bytes32(bytes20(hex"6b82e014ed2b134e966b2140337ae7c92ffbf6c2"));
 
-    // === MAINNET CONTRACT ADDRESSES ===
-    address constant LIQUIDITY_POOL_PROXY = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
-    
     function run() public {
         console2.log("================================================");
         console2.log("======================== Running Cross Pod Approval Liquidity Pool ========================");
@@ -29,7 +26,7 @@ contract CrossPodApprovalLiquidityPoolScript is Script, Deployed, Utils {
         console2.log("");
 
         vm.startBroadcast();
-        // vm.startPrank(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC);
+        // vm.startPrank(ETHERFI_OPERATING_ADMIN);
 
         // LiquidityPool
         {
@@ -41,6 +38,7 @@ contract CrossPodApprovalLiquidityPoolScript is Script, Deployed, Utils {
             );
             liquidityPoolImpl = deploy(contractName, constructorArgs, bytecode, commitHashSalt, false, factory);
         }
+        console2.log("LiquidityPool deployed at:", liquidityPoolImpl);
 
         // EtherFiNodesManager implementation
         {
@@ -56,5 +54,6 @@ contract CrossPodApprovalLiquidityPoolScript is Script, Deployed, Utils {
             );
             etherFiNodesManagerImpl = deploy(contractName, constructorArgs, bytecode, commitHashSalt, false, factory);
         }
+        console2.log("EtherFiNodesManager deployed at:", etherFiNodesManagerImpl);
     }
 }
