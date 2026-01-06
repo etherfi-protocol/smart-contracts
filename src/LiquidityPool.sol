@@ -107,7 +107,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     error InsufficientLiquidity();
     error SendFail();
     error IncorrectRole();
-    error InvalidEtherFiNode();
     error InvalidValidatorSize();
     error InvalidArrayLengths();
 
