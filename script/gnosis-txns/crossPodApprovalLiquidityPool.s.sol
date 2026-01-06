@@ -17,7 +17,7 @@ contract CrossPodApprovalLiquidityPoolScript is Script, Deployed, Utils {
 
     address liquidityPoolImpl;
     address etherFiNodesManagerImpl;
-    bytes32 commitHashSalt = bytes32(bytes20(hex"674dbc5c457d54a8e68133e20486ad8a99ed2843"));
+    bytes32 commitHashSalt = bytes32(bytes20(hex"6b82e014ed2b134e966b2140337ae7c92ffbf6c2"));
 
     // === MAINNET CONTRACT ADDRESSES ===
     address constant LIQUIDITY_POOL_PROXY = 0x308861A430be4cce5502d0A12724771Fc6DaF216;
