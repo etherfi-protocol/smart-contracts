@@ -3,6 +3,7 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import {LiquidityPool} from "../../src/LiquidityPool.sol";
+import {EtherFiNodesManager} from "../../src/EtherFiNodesManager.sol";
 import {Deployed} from "../deploys/Deployed.s.sol";
 import {Utils, ICreate2Factory} from "../utils/Utils.sol";
 
@@ -15,6 +16,7 @@ contract CrossPodApprovalLiquidityPoolScript is Script, Deployed, Utils {
     ICreate2Factory factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
 
     address liquidityPoolImpl;
+    address etherFiNodesManagerImpl;
     bytes32 commitHashSalt = bytes32(bytes20(hex"674dbc5c457d54a8e68133e20486ad8a99ed2843"));
 
     // === MAINNET CONTRACT ADDRESSES ===
@@ -38,6 +40,21 @@ contract CrossPodApprovalLiquidityPoolScript is Script, Deployed, Utils {
                 constructorArgs
             );
             liquidityPoolImpl = deploy(contractName, constructorArgs, bytecode, commitHashSalt, false, factory);
+        }
+
+        // EtherFiNodesManager implementation
+        {
+            string memory contractName = "EtherFiNodesManager";
+            bytes memory constructorArgs = abi.encode(
+                STAKING_MANAGER,
+                ROLE_REGISTRY,
+                ETHERFI_RATE_LIMITER
+            );
+            bytes memory bytecode = abi.encodePacked(
+                type(EtherFiNodesManager).creationCode,
+                constructorArgs
+            );
+            etherFiNodesManagerImpl = deploy(contractName, constructorArgs, bytecode, commitHashSalt, false, factory);
         }
     }
 }
