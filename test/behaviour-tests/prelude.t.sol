@@ -122,6 +122,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), admin);
         roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), elExiter);
         vm.stopPrank();
 
         vm.startPrank(admin);
@@ -318,7 +319,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
 
         // need to link because this validator is already past this step from the old flow
-        vm.prank(admin);
+        vm.prank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(bidId), toArray_bytes(pubkey));
 
         vm.prank(admin);
@@ -341,7 +342,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // link it to an arbitrary id
         uint256 legacyID = 10885;
         bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-        vm.prank(admin);
+        vm.prank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(pubkey));
 
         // user with no role should not be able to forward calls
@@ -405,7 +406,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Setup: link to legacy ID
         uint256 legacyID = 10886;
         bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
-        vm.prank(admin);
+        vm.prank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(pubkey));
 
         // Setup: create two users with CALL_FORWARDER_ROLE
@@ -613,7 +614,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 legacyID = 10885;
 
         // force link this validator
-        vm.prank(admin);
+        vm.prank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(validatorPubkey));
 
         // Set up rate limiter for the linked EtherFiNode proxy
@@ -909,19 +910,19 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
-        vm.prank(admin);
+        vm.prank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         // should fail if attempt to re-link already linked ids
         vm.expectRevert(IEtherFiNodesManager.AlreadyLinked.selector);
-        vm.prank(admin);
+        vm.prank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         // should fail if attempt to link unknown node
         uint256 badId = 9999999;
         bytes memory badPubkey = vm.randomBytes(48);
         vm.expectRevert(IEtherFiNodesManager.UnknownNode.selector);
-        vm.prank(admin);
+        vm.prank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(badId), toArray_bytes(badPubkey));
 
     }
@@ -1034,7 +1035,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(admin);
+        vm.startPrank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
@@ -1092,7 +1093,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[2] = 51717;
 
         // Link and init
-        vm.startPrank(admin);
+        vm.startPrank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
@@ -1167,7 +1168,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(admin);
+        vm.startPrank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1189,7 +1190,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(admin);
+        vm.startPrank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
         vm.stopPrank();
         _setExitRateLimit(172800, 2);
@@ -1307,7 +1308,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[0] = 51715;
         amounts[0] = 1_000_000_000; // 1 ETH partial exit
 
-        vm.prank(admin);
+        vm.prank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         // Grant role to the triggering EOA
@@ -1486,7 +1487,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.prank(admin);
+        vm.prank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
@@ -1540,7 +1541,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[0] = PK_16171;
         legacyIds[0] = 51715;
 
-        vm.prank(admin);
+        vm.prank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
 
         (, IEigenPod pod0) = _resolvePod(pubkeys[0]);
@@ -1559,7 +1560,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[0] = 51715;
         legacyIds[1] = 51716;
 
-        vm.startPrank(admin);
+        vm.startPrank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1612,7 +1613,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(admin);
+        vm.startPrank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1659,7 +1660,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         pubkeys[0] = PK_16171;
         legacyIds[0] = 51715;
 
-        vm.startPrank(admin);
+        vm.startPrank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1696,7 +1697,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[0] = 51715;
         legacyIds[1] = 51716;
 
-        vm.startPrank(admin);
+        vm.startPrank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 
@@ -1750,7 +1751,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         legacyIds[1] = 51716;
         legacyIds[2] = 51717;
 
-        vm.startPrank(admin);
+        vm.startPrank(elExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys);
         vm.stopPrank();
 

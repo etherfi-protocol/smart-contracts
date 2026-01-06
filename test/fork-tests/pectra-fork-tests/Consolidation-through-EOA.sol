@@ -43,9 +43,10 @@ contract ConsolidationThroughEOATest is Test {
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
 
         //upgrade the etherfi nodes manager contract
-        newEtherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
-        vm.prank(roleRegistry.owner());
+        newEtherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter)); 
+        vm.startPrank(roleRegistry.owner());
         etherFiNodesManager.upgradeTo(address(newEtherFiNodesManagerImpl));
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), realElExiter);
         vm.stopPrank();
         console2.log("=== SETUP COMPLETE ===");
     }
@@ -126,8 +127,8 @@ contract ConsolidationThroughEOATest is Test {
         pubkeysonlyOneValidator[0] = PK_80143;
         legacyIdsonlyOneValidator[0] = 80143;
 
-        // Link legacy validator id (requires admin role, so use timelock)
-        vm.prank(address(etherFiOperatingTimelock));
+        // Link legacy validator id (requires legacy linker role)
+        vm.prank(realElExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIdsonlyOneValidator, pubkeysonlyOneValidator);
         vm.stopPrank();
         console2.log("Linking legacy validator ids complete");
@@ -177,8 +178,9 @@ contract ConsolidationThroughEOATest is Test {
         pubkeysonlyOneValidator[0] = PK_80143;
         legacyIdsonlyOneValidator[0] = 80143;
 
-        // Link legacy validator id (requires admin role, so use timelock)
-        vm.prank(address(etherFiOperatingTimelock));
+        // Link legacy validator id (requires legacy linker role)
+
+        vm.prank(realElExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIdsonlyOneValidator, pubkeysonlyOneValidator);
         vm.stopPrank();
 
