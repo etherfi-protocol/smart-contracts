@@ -15,8 +15,8 @@ import {Utils} from "../../utils/Utils.sol";
 
 // forge script script/upgrades/CrossPodApproval/transactions.s.sol:LegacyLinkerRoleScript --fork-url $MAINNET_RPC_URL -vvvv
 contract LegacyLinkerRoleScript is Script, Deployed, Utils {
-    address constant liquidityPoolImpl = 0xa7251ff793E11a7931D7F734FD3F12ec0a76C4ca;
-    address constant etherFiNodesManagerImpl = 0x3E5a714a5A3A03a56f1Ce1bf49e422D9D1e3e263;
+    address constant liquidityPoolImpl = 0x4ba750e82F91839a4e18f39779B2Fec42c81d821;
+    address constant etherFiNodesManagerImpl = 0x7431f88d669437F9A9A901E1086F8355A53E2e5d;
 
     EtherFiTimelock constant etherFiTimelock = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     RoleRegistry constant roleRegistry = RoleRegistry(ROLE_REGISTRY);

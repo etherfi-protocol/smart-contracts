@@ -17,11 +17,11 @@ contract CrossPodApprovalDeployScript is Script, Deployed, Utils {
 
     address liquidityPoolImpl;
     address etherFiNodesManagerImpl;
-    bytes32 public constant commitHashSalt = bytes32(bytes20(hex"6b82e014ed2b134e966b2140337ae7c92ffbf6c2"));
+    bytes32 public constant commitHashSalt = bytes32(bytes20(hex"044dcec8c0ff9dd64195fa725541d8d623d2e7be"));
 
     function run() public {
         console2.log("================================================");
-        console2.log("======================== Running Cross Pod Approval Liquidity Pool ========================");
+        console2.log("======================== Deploying Liquidity Pool and EtherFiNodesManager ========================");
         console2.log("================================================");
         console2.log("");
 
