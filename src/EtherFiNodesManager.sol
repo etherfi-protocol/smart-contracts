@@ -48,6 +48,7 @@ contract EtherFiNodesManager is
     bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
+    bytes32 public constant ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE = keccak256("ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE");
 
     //-------------------------------------------------------------------------
     //-----------------------------  Rate Limiter Buckets ---------------------
@@ -349,7 +350,7 @@ contract EtherFiNodesManager is
 
     /// @dev this method is for linking our old legacy validator ids that were created before
     ///    we started tracking the pubkeys onchain. We can delete this method once we have linked all of our legacy validators
-    function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyAdmin {
+    function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyLegacyLinker {
         if (validatorIds.length != pubkeys.length) revert LengthMismatch();
         for (uint256 i = 0; i < validatorIds.length; i++) {
 
@@ -458,6 +459,11 @@ contract EtherFiNodesManager is
 
     modifier onlyPodProver() {
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_POD_PROVER_ROLE, msg.sender)) revert IncorrectRole();
+        _;
+    }
+
+    modifier onlyLegacyLinker() {
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 }
