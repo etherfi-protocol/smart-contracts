@@ -225,70 +225,52 @@ contract AutoCompound is Script, Utils {
         (bytes memory scheduleCalldata, bytes memory executeCalldata) = 
             _buildTimelockCalldata(unlinkedIds, unlinkedPubkeys);
         
-        // Create schedule transaction
-        GnosisTxGeneratorLib.GnosisTx[] memory scheduleTxns = new GnosisTxGeneratorLib.GnosisTx[](1);
-        scheduleTxns[0] = GnosisTxGeneratorLib.GnosisTx({
-            to: OPERATING_TIMELOCK,
-            value: 0,
-            data: scheduleCalldata
-        });
+        // Write schedule transaction (nonce N)
+        _writeLinkingTx(config, scheduleCalldata, config.safeNonce, "link-schedule");
         
-        // Create execute transaction
-        GnosisTxGeneratorLib.GnosisTx[] memory executeTxns = new GnosisTxGeneratorLib.GnosisTx[](1);
-        executeTxns[0] = GnosisTxGeneratorLib.GnosisTx({
+        // Write execute transaction (nonce N+1)
+        _writeLinkingTx(config, executeCalldata, config.safeNonce + 1, "link-execute");
+    }
+    
+    function _writeLinkingTx(
+        Config memory config,
+        bytes memory callData,
+        uint256 nonce,
+        string memory txType
+    ) internal {
+        // Create transaction
+        GnosisTxGeneratorLib.GnosisTx[] memory txns = new GnosisTxGeneratorLib.GnosisTx[](1);
+        txns[0] = GnosisTxGeneratorLib.GnosisTx({
             to: OPERATING_TIMELOCK,
             value: 0,
-            data: executeCalldata
+            data: callData
         });
         
         // Generate JSON
-        string memory scheduleJson = GnosisTxGeneratorLib.generateTransactionBatch(
-            scheduleTxns,
+        string memory jsonContent = GnosisTxGeneratorLib.generateTransactionBatch(
+            txns,
             config.chainId,
             config.safeAddress
         );
         
-        string memory executeJson = GnosisTxGeneratorLib.generateTransactionBatch(
-            executeTxns,
-            config.chainId,
-            config.safeAddress
+        // Write file with nonce prefix
+        string memory fileName = string.concat(nonce.uint256ToString(), "-", txType, ".json");
+        string memory filePath = string.concat(
+            config.root, "/script/operations/auto-compound/", fileName
         );
         
-        // Write files
-        string memory baseName = _removeExtension(config.outputFile);
-        string memory schedulePath = string.concat(
-            config.root, "/script/operations/auto-compound/", baseName, "-link-schedule.json"
-        );
-        string memory executePath = string.concat(
-            config.root, "/script/operations/auto-compound/", baseName, "-link-execute.json"
-        );
+        vm.writeFile(filePath, jsonContent);
+        console2.log("Transaction written to:", filePath);
         
-        vm.writeFile(schedulePath, scheduleJson);
-        vm.writeFile(executePath, executeJson);
-        
-        console2.log("Linking schedule transaction written to:", schedulePath);
-        console2.log("Linking execute transaction written to:", executePath);
-        
-        // Output EIP-712 signing data for schedule (nonce N)
+        // Output EIP-712 signing data
         _outputSigningData(
             config.chainId,
             config.safeAddress,
-            scheduleTxns[0].to,
-            scheduleTxns[0].value,
-            scheduleTxns[0].data,
-            config.safeNonce,
-            "link-schedule.json"
-        );
-        
-        // Output EIP-712 signing data for execute (nonce N+1)
-        _outputSigningData(
-            config.chainId,
-            config.safeAddress,
-            executeTxns[0].to,
-            executeTxns[0].value,
-            executeTxns[0].data,
-            config.safeNonce + 1,
-            "link-execute.json"
+            txns[0].to,
+            txns[0].value,
+            txns[0].data,
+            nonce,
+            fileName
         );
     }
     
@@ -388,15 +370,13 @@ contract AutoCompound is Script, Utils {
         Config memory config,
         bool needsLinking
     ) internal {
-        // Determine output filename
-        string memory baseName = _removeExtension(config.outputFile);
-        string memory outputFileName;
+        // Nonce is N+2 if linking was needed (schedule=N, execute=N+1), else N
+        uint256 consolidationNonce = needsLinking ? config.safeNonce + 2 : config.safeNonce;
         
-        if (needsLinking) {
-            outputFileName = string.concat(baseName, "-consolidation.json");
-        } else {
-            outputFileName = config.outputFile;
-        }
+        // Determine output filename with nonce prefix
+        string memory outputFileName = string.concat(
+            consolidationNonce.uint256ToString(), "-consolidation.json"
+        );
         
         string memory outputPath = string.concat(
             config.root, "/script/operations/auto-compound/", outputFileName
@@ -428,9 +408,6 @@ contract AutoCompound is Script, Utils {
         console2.log("Consolidation transactions written to:", outputPath);
         
         // Output EIP-712 signing data for consolidation
-        // Nonce is N+2 if linking was needed (schedule=N, execute=N+1), else N
-        uint256 consolidationNonce = needsLinking ? config.safeNonce + 2 : config.safeNonce;
-        
         if (transactions.length == 1) {
             // Single transaction - can compute exact signing data
             _outputSigningData(
@@ -525,9 +502,21 @@ contract AutoCompound is Script, Utils {
     }
     
     function _resolvePath(string memory root, string memory path) internal pure returns (string memory) {
-        if (bytes(path).length > 0 && bytes(path)[0] == '/') {
+        bytes memory pathBytes = bytes(path);
+        
+        // If absolute path, return as-is
+        if (pathBytes.length > 0 && pathBytes[0] == '/') {
             return path;
         }
+        
+        // If path already starts with "script/", treat as relative to project root
+        if (pathBytes.length >= 7 && 
+            pathBytes[0] == 's' && pathBytes[1] == 'c' && pathBytes[2] == 'r' && 
+            pathBytes[3] == 'i' && pathBytes[4] == 'p' && pathBytes[5] == 't' && pathBytes[6] == '/') {
+            return string.concat(root, "/", path);
+        }
+        
+        // Otherwise, assume it's relative to auto-compound directory
         return string.concat(root, "/script/operations/auto-compound/", path);
     }
     

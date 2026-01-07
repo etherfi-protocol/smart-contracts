@@ -183,6 +183,23 @@ The script automatically:
 
 ### Complete Example: Auto-Compound 50 Validation Cloud Validators
 
+**Option A: One-liner script (recommended)**
+
+```bash
+./script/operations/auto-compound/run-auto-compound.sh \
+  --operator "Validation Cloud" \
+  --count 50 \
+  --nonce 42
+```
+
+This script automatically:
+1. Creates output directory: `validation_cloud_50_YYYYMMDD-HHMMSS/`
+2. Queries validators from database
+3. Generates transactions with Safe nonce
+4. Simulates on Tenderly
+
+**Option B: Manual steps**
+
 ```bash
 # 1. Query validators
 python3 script/operations/auto-compound/query_validators.py \
@@ -191,15 +208,15 @@ python3 script/operations/auto-compound/query_validators.py \
   --output script/operations/auto-compound/validators.json
 
 # 2. Generate transactions
-JSON_FILE=validators.json forge script \
+JSON_FILE=validators.json SAFE_NONCE=42 forge script \
   script/operations/auto-compound/AutoCompound.s.sol:AutoCompound \
   --fork-url $MAINNET_RPC_URL -vvvv
 
 # 3. Simulate on Tenderly (optional but recommended)
 python3 script/operations/utils/simulate.py --tenderly \
-  --schedule script/operations/auto-compound/auto-compound-txns-link-schedule.json \
-  --execute script/operations/auto-compound/auto-compound-txns-link-execute.json \
-  --then script/operations/auto-compound/auto-compound-txns-consolidation.json \
+  --schedule script/operations/auto-compound/txns-link-schedule.json \
+  --execute script/operations/auto-compound/txns-link-execute.json \
+  --then script/operations/auto-compound/txns-consolidation.json \
   --delay 8h \
   --vnet-name "ValidationCloud-AutoCompound"
 
