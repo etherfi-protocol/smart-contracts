@@ -379,6 +379,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
             depositAdapterInstance = DepositAdapter(payable(deployed.DEPOSIT_ADAPTER()));
 
+            membershipManagerV1Instance = MembershipManager(payable(deployed.MEMBERSHIP_MANAGER()));
+
         } else if (forkEnum == TESTNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("TESTNET_RPC_URL")));
             addressProviderInstance = AddressProvider(address(0x7c5EB0bE8af2eDB7461DfFa0Fd2856b3af63123e));
