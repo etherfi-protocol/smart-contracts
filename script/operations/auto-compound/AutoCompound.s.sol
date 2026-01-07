@@ -431,9 +431,8 @@ contract AutoCompound is Script, Utils {
         // Nonce is N+2 if linking was needed (schedule=N, execute=N+1), else N
         uint256 consolidationNonce = needsLinking ? config.safeNonce + 2 : config.safeNonce;
         
-        // For multiple transactions, they would be wrapped in MultiSend
-        // For simplicity, output signing data for each transaction
         if (transactions.length == 1) {
+            // Single transaction - can compute exact signing data
             _outputSigningData(
                 config.chainId,
                 config.safeAddress,
@@ -444,19 +443,15 @@ contract AutoCompound is Script, Utils {
                 outputFileName
             );
         } else {
-            // Multiple batches - output for each (nonce increments)
-            for (uint256 i = 0; i < transactions.length; i++) {
-                string memory txName = string.concat("consolidation-batch-", (i + 1).uint256ToString(), ".json");
-                _outputSigningData(
-                    config.chainId,
-                    config.safeAddress,
-                    transactions[i].to,
-                    transactions[i].value,
-                    transactions[i].data,
-                    consolidationNonce + i,
-                    txName
-                );
-            }
+            // Multiple transactions in one file = Gnosis Safe wraps in MultiSend = ONE Safe tx = ONE nonce
+            // Cannot compute exact MultiSend hash without encoding (Safe UI does this)
+            console2.log("");
+            console2.log("=== EIP-712 SIGNING DATA:", outputFileName, "===");
+            console2.log("Nonce:", consolidationNonce);
+            console2.log("Note: This file contains", transactions.length, "transactions");
+            console2.log("Gnosis Safe will wrap them in MultiSend (single Safe tx)");
+            console2.log("Exact hash depends on MultiSend encoding by Safe UI");
+            console2.log("Domain Separator:", SafeTxHashLib.getDomainSeparator(config.chainId, config.safeAddress).bytes32ToHexString());
         }
     }
     

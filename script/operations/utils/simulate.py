@@ -671,6 +671,14 @@ def run_forge_simulation(args) -> int:
     
     if args.txns:
         env['TXNS'] = args.txns
+    elif args.schedule and args.execute:
+        # Compose TXNS from schedule, execute, and optionally then files
+        txns_list = [args.schedule, args.execute]
+        if args.then:
+            txns_list.append(args.then)
+        env['TXNS'] = ','.join(txns_list)
+    
+    # Also set individual file vars for reference
     if args.schedule:
         env['SCHEDULE_FILE'] = args.schedule
     if args.execute:
