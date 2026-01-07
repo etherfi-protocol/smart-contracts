@@ -36,7 +36,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         withdrawRequestNFTInstance.claimWithdraw(requestId);
 
         uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
-        vm.assume(remainderAmount > 0); // Skip if no remainder was created
+        assertGt(remainderAmount, 0, "Remainder amount should be greater than 0");
 
         // Grant the IMPLICIT_FEE_CLAIMER_ROLE to alice
         vm.startPrank(address(roleRegistryInstance.owner()));
@@ -101,7 +101,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         withdrawRequestNFTInstance.claimWithdraw(requestId);
 
         uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
-        vm.assume(remainderAmount > 1 ether); // Need enough for partial handling
+        assertGt(remainderAmount, 1 ether, "Remainder amount should be greater than 1 ether for partial handling");
 
         vm.startPrank(address(roleRegistryInstance.owner()));
         withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet))));
@@ -130,7 +130,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
         // Remaining remainder should be available for further handling
         uint256 remainingRemainder = withdrawRequestNFTInstance.getEEthRemainderAmount();
-        vm.assume(remainingRemainder > 0);
+        assertGt(remainingRemainder, 0, "Remaining remainder should be greater than 0");
 
         // Handle remaining remainder
         vm.prank(alice);
@@ -177,7 +177,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
             withdrawRequestNFTInstance.claimWithdraw(requestId);
 
             uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
-            vm.assume(remainderAmount > 0);
+            assertGt(remainderAmount, 0, "Remainder amount should be greater than 0");
 
             // Update split ratio
             vm.prank(withdrawRequestNFTInstance.owner());
