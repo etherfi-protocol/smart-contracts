@@ -36,11 +36,7 @@ library ValidatorHelpers {
             uint256 validatorCount
         )
     {
-        // Extract withdrawal credentials to get EigenPod address
-        bytes memory withdrawalCredentials = stdJson.readBytes(jsonData, "$[0].withdrawal_credentials");
-        targetEigenPod = address(uint160(uint256(bytes32(withdrawalCredentials))));
-        
-        // Count validators (with safety limit)
+        // Count validators first (with safety limit)
         validatorCount = 0;
         for (uint256 i = 0; i < maxValidators; i++) {
             string memory basePath = _buildJsonPath(i);
@@ -49,6 +45,18 @@ library ValidatorHelpers {
             }
             validatorCount++;
         }
+        
+        // Return early if no validators found
+        if (validatorCount == 0) {
+            pubkeys = new bytes[](0);
+            ids = new uint256[](0);
+            targetEigenPod = address(0);
+            return (pubkeys, ids, targetEigenPod, validatorCount);
+        }
+        
+        // Extract withdrawal credentials from first validator to get EigenPod address
+        bytes memory withdrawalCredentials = stdJson.readBytes(jsonData, "$[0].withdrawal_credentials");
+        targetEigenPod = address(uint160(uint256(bytes32(withdrawalCredentials))));
         
         pubkeys = new bytes[](validatorCount);
         ids = new uint256[](validatorCount);
@@ -83,17 +91,14 @@ library ValidatorHelpers {
      * @notice Helper to build JSON path for array index
      */
     function _buildJsonPath(uint256 index) private pure returns (string memory) {
-        // Handle common cases for performance
+        // Handle single-digit cases (0-9) for performance
         if (index < 10) {
             bytes memory single = new bytes(1);
             single[0] = bytes1(uint8(48 + index));
             return string.concat("$[", string(single), "]");
         }
         
-        // For larger numbers, convert to string
-        if (index == 0) {
-            return "$[0]";
-        }
+        // For larger numbers (10+), convert to string
         uint256 temp = index;
         uint256 digits;
         while (temp != 0) {
