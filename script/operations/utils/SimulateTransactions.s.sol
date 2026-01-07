@@ -46,6 +46,9 @@ contract SimulateTransactions is Script {
         string memory txnsEnv = vm.envString("TXNS");
         uint256 delay = vm.envOr("DELAY", DEFAULT_DELAY);
         address safeAddress = vm.envOr("SAFE_ADDRESS", DEFAULT_SAFE);
+        // DELAY_AFTER_FILE: only warp time after this file index (default: warp after all except last)
+        // Use max uint256 as sentinel to mean "warp after all files except last"
+        uint256 delayAfterFile = vm.envOr("DELAY_AFTER_FILE", type(uint256).max);
         
         console2.log("Safe address:", safeAddress);
         console2.log("Timelock delay:", delay, "seconds");
@@ -66,8 +69,16 @@ contract SimulateTransactions is Script {
             
             _executeTransactionsFromFile(txnFiles[i], safeAddress);
             
-            // Warp time between files (except after the last one)
-            if (i < txnFiles.length - 1 && delay > 0) {
+            // Warp time only after specific file index (for schedule→execute delay)
+            // If delayAfterFile is max uint256, warp after all files except last (legacy behavior)
+            bool shouldWarp;
+            if (delayAfterFile == type(uint256).max) {
+                shouldWarp = i < txnFiles.length - 1;
+            } else {
+                shouldWarp = i == delayAfterFile;
+            }
+            
+            if (shouldWarp && delay > 0) {
                 console2.log("");
                 console2.log("Warping time by", delay, "seconds...");
                 vm.warp(block.timestamp + delay);

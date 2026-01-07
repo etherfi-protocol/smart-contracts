@@ -159,7 +159,7 @@ def query_validators(
             etherfi_node_contract
         FROM "MainnetValidators"
         WHERE LOWER(node_operator) = %s
-        AND status != 'exited'
+        AND status LIKE '%active%'
     """
     
     params = [operator_address.lower()]
@@ -400,9 +400,6 @@ def convert_to_output_format(validators: List[Dict]) -> List[Dict]:
             'status': validator['status'],
             'index': validator['index']
         })
-
-        # Assert that validator['status'] contains 'active'
-        assert 'active' in validator['status'], f"Validator {validator['id']} status is not active: {validator['status']}"
     
     return result
 

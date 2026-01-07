@@ -671,12 +671,16 @@ def run_forge_simulation(args) -> int:
     
     if args.txns:
         env['TXNS'] = args.txns
+        env['DELAY_AFTER_FILE'] = '0'  # No delay in simple mode
     elif args.schedule and args.execute:
         # Compose TXNS from schedule, execute, and optionally then files
         txns_list = [args.schedule, args.execute]
         if args.then:
             txns_list.append(args.then)
         env['TXNS'] = ','.join(txns_list)
+        # Only apply delay after file index 0 (between schedule and execute)
+        # No delay between execute and then (index 1→2)
+        env['DELAY_AFTER_FILE'] = '0'  # Only delay after first file
     
     # Also set individual file vars for reference
     if args.schedule:
@@ -814,6 +818,9 @@ Examples:
     
     if (args.schedule and not args.execute) or (args.execute and not args.schedule):
         parser.error("--schedule and --execute must be used together")
+    
+    if args.txns and args.then:
+        parser.error("--then cannot be used with --txns. Use --schedule/--execute for multi-phase workflows")
     
     # Run simulation
     try:

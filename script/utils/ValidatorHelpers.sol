@@ -74,6 +74,7 @@ library ValidatorHelpers {
     {
         bytes32 pkHash = nodesManager.calculateValidatorPubkeyHash(pubkey);
         etherFiNode = nodesManager.etherFiNodeFromPubkeyHash(pkHash);
+        require(address(etherFiNode) != address(0), "ValidatorHelpers: validator not linked");
         pod = etherFiNode.getEigenPod();
         require(address(pod) != address(0), "ValidatorHelpers: node has no pod");
     }
