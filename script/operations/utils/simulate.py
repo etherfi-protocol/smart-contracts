@@ -18,7 +18,7 @@ Usage:
     # Schedule + Execute with timelock (8 hour delay)
     python simulate.py --schedule link-schedule.json --execute link-execute.json --delay 8h
 
-    # Full workflow with follow-up transaction
+    # Full auto-compound workflow with multiple consolidation transactions
     python simulate.py \\
         --schedule link-schedule.json \\
         --execute link-execute.json \\
@@ -136,14 +136,36 @@ def resolve_file_path(project_root: Path, file_name: str) -> Path:
 
 
 def load_transactions_from_file(file_path: Path) -> Tuple[List[Dict], str]:
-    """Load transactions from a Gnosis Safe JSON file."""
+    """Load transactions from a Gnosis Safe JSON file.
+
+    Supports both formats:
+    1. Single transaction batch: {"transactions": [...], "safeAddress": "..."}
+    2. Multiple transaction batches: [{"transactions": [...], "safeAddress": "..."}, ...]
+
+    Used for auto-compound consolidation files that may contain multiple transactions
+    grouped by EigenPod (withdrawal credentials).
+    """
     with open(file_path, 'r') as f:
         data = json.load(f)
-    
-    transactions = data.get('transactions', [])
-    safe_address = data.get('safeAddress', DEFAULT_SAFE_ADDRESS)
-    
-    return transactions, safe_address
+
+    # Handle new format: array of transaction batches
+    if isinstance(data, list):
+        if len(data) == 0:
+            return [], DEFAULT_SAFE_ADDRESS
+
+        # Use the first batch's safe address and collect all transactions
+        safe_address = data[0].get('safeAddress', DEFAULT_SAFE_ADDRESS)
+        all_transactions = []
+        for batch in data:
+            batch_transactions = batch.get('transactions', [])
+            all_transactions.extend(batch_transactions)
+        return all_transactions, safe_address
+
+    # Handle old format: single transaction batch
+    else:
+        transactions = data.get('transactions', [])
+        safe_address = data.get('safeAddress', DEFAULT_SAFE_ADDRESS)
+        return transactions, safe_address
 
 
 # ==============================================================================
