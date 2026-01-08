@@ -883,7 +883,13 @@ def main():
     )
     
     args = parser.parse_args()
-    
+
+    # Validate bucket-hours argument
+    if args.bucket_hours <= 0:
+        print(f"Error: --bucket-hours must be a positive integer, got {args.bucket_hours}")
+        print("Bucket hours must be greater than 0 to avoid division by zero errors.")
+        sys.exit(1)
+
     try:
         conn = get_db_connection()
     except ValueError as e:
@@ -988,6 +994,7 @@ def main():
                     # Calculate sweep times for all validators
                     print("  Calculating sweep times...")
                     sweep_results = []
+                    excluded_count = 0
                     for validator in filtered_validators:
                         validator_index = validator.get('index')
                         if validator_index is not None:
@@ -1003,11 +1010,18 @@ def main():
                                 # Include original validator data
                                 **validator
                             })
+                        else:
+                            excluded_count += 1
 
                     # Sort by sweep time
                     sweep_results.sort(key=lambda x: x['secondsUntilSweep'])
 
                     print(f"  ✓ Calculated sweep times for {len(sweep_results)} validators")
+
+                    # Warn about excluded validators
+                    if excluded_count > 0:
+                        print(f"  ⚠ Warning: {excluded_count} validators excluded due to missing beacon index")
+                        print("    This may happen when validators haven't been indexed on the beacon chain yet")
 
                     # Spread validators across queue
                     bucket_result = spread_validators_across_queue(sweep_results, args.bucket_hours)
@@ -1074,7 +1088,7 @@ def main():
 
                     if len(validators) < args.count:
                         print(f"Warning: Only selected {len(validators)} validators (requested {args.count})")
-                        print("This may happen when buckets have limited validators available")
+                        print("This may happen when buckets have limited validators available or some validators were excluded")
 
                 except Exception as e:
                     print(f"Warning: Failed to apply sweep bucketing: {e}")
