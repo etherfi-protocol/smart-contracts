@@ -281,8 +281,7 @@ def create_virtual_testnet(name: str, chain_id: int = 1, verbose: bool = True) -
             }
         },
         "sync_state_config": {
-            "enabled": True,
-            "commitment_level": "latest"
+            "enabled": False
         },
         "explorer_page_config": {
             "enabled": True,
@@ -440,14 +439,26 @@ def submit_tx_via_rpc(
     # Wait for transaction to be mined and check receipt
     if tx_hash:
         receipt = wait_for_tx_receipt(rpc_url, tx_hash, verbose=verbose)
+        # Extract gas usage from receipt
+        gas_used_hex = receipt.get('gasUsed', '0x0')
+        gas_used = int(gas_used_hex, 16)
+
+        # Check for excessive gas usage
+        GAS_LIMIT_MAX = 10_000_000  # 10 million gas limit
+        if gas_used > GAS_LIMIT_MAX:
+            if verbose:
+                print(f"    ❌ Tx failed - Gas used: {gas_used:,} (exceeds limit of {GAS_LIMIT_MAX:,})")
+            return {"status": "failed", "error": f"Gas usage {gas_used:,} exceeds limit of {GAS_LIMIT_MAX:,}", "tx_hash": tx_hash, "receipt": receipt, "gas_used": gas_used}
+
         if receipt.get('status') == '0x1':
             if verbose:
-                print(f"    ✅ Tx successful")
-            return {"status": "success", "tx_hash": tx_hash, "receipt": receipt}
+                print(f"    ✅ Tx successful - Gas used: {gas_used:,}")
+            return {"status": "success", "tx_hash": tx_hash, "receipt": receipt, "gas_used": gas_used}
         else:
+            # Transaction reverted
             if verbose:
-                print(f"    ❌ Tx reverted")
-            return {"status": "failed", "error": "Transaction reverted", "tx_hash": tx_hash, "receipt": receipt}
+                print(f"    ❌ Tx reverted - Gas used: {gas_used:,}")
+            return {"status": "failed", "error": "Transaction reverted", "tx_hash": tx_hash, "receipt": receipt, "gas_used": gas_used}
 
     return {"status": "success", "tx_hash": tx_hash}
 
@@ -477,13 +488,13 @@ def wait_for_tx_receipt(rpc_url: str, tx_hash: str, timeout: int = 30, verbose: 
 def run_tenderly_simulation(args) -> int:
     """Run simulation using Tenderly Virtual Testnet."""
     project_root = get_project_root()
-    
+
     print("=" * 60)
     print("TENDERLY VIRTUAL TESTNET SIMULATION")
     print("=" * 60)
     print(f"Timestamp: {datetime.now().isoformat()}")
     print("")
-    
+
     try:
         access_token, account_slug, project_slug = get_tenderly_credentials()
         print(f"Account: {account_slug}")
@@ -491,11 +502,11 @@ def run_tenderly_simulation(args) -> int:
     except ValueError as e:
         print(f"Error: {e}")
         return 1
-    
+
     # Get or create Virtual Testnet
     vnet_id = args.vnet_id
     vnet_data = None
-    
+
     if vnet_id:
         print(f"\nUsing existing VNet: {vnet_id}")
         vnet_data = get_vnet_by_id(vnet_id)
@@ -511,22 +522,23 @@ def run_tenderly_simulation(args) -> int:
         except Exception as e:
             print(f"Failed to create Virtual Testnet: {e}")
             return 1
-    
+
     # Get Admin RPC URL
     try:
         admin_rpc = get_admin_rpc_url(vnet_data)
     except ValueError as e:
         print(f"Error: {e}")
         return 1
-    
+
     print(f"\nVNet ID: {vnet_id}")
     print(f"Admin RPC: {admin_rpc}")
-    
+
     # Determine safe address
     safe_address = args.safe_address or os.environ.get('SAFE_ADDRESS', DEFAULT_SAFE_ADDRESS)
     print(f"Safe Address: {safe_address}")
-    
+
     all_success = True
+    total_gas_used = 0
     
     # Simple mode (--txns)
     if args.txns:
@@ -545,6 +557,7 @@ def run_tenderly_simulation(args) -> int:
         safe = args.safe_address or file_safe
         print(f"Transactions: {len(transactions)}")
         
+        phase_gas_used = 0
         for i, tx in enumerate(transactions):
             print(f"\n--- Transaction {i+1}/{len(transactions)} ---")
             value = tx.get('value', '0')
@@ -562,6 +575,12 @@ def run_tenderly_simulation(args) -> int:
                 all_success = False
                 if result.get('tx_hash'):
                     print(f"    🔗 Tx Link: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}/tx/{result['tx_hash']}")
+            # Accumulate gas usage
+            if 'gas_used' in result:
+                phase_gas_used += result['gas_used']
+                total_gas_used += result['gas_used']
+
+        print(f"\n📊 Phase Summary: {len(transactions)} transactions, {phase_gas_used:,} gas used")
     
     # Timelock mode (--schedule + --execute)
     elif args.schedule and args.execute:
@@ -581,6 +600,7 @@ def run_tenderly_simulation(args) -> int:
         safe = args.safe_address or file_safe
         print(f"Transactions: {len(transactions)}")
         
+        phase_gas_used = 0
         for i, tx in enumerate(transactions):
             print(f"\n--- Schedule Transaction {i+1}/{len(transactions)} ---")
             value = tx.get('value', '0')
@@ -598,7 +618,13 @@ def run_tenderly_simulation(args) -> int:
                 all_success = False
                 if result.get('tx_hash'):
                     print(f"    🔗 Tx Link: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}/tx/{result['tx_hash']}")
-        
+            # Accumulate gas usage
+            if 'gas_used' in result:
+                phase_gas_used += result['gas_used']
+                total_gas_used += result['gas_used']
+
+        print(f"\n📊 Schedule Phase Summary: {len(transactions)} transactions, {phase_gas_used:,} gas used")
+
         # Time Warp
         delay_seconds = parse_delay(args.delay) if args.delay else 28800
         print(f"\n{'='*40}")
@@ -621,6 +647,7 @@ def run_tenderly_simulation(args) -> int:
         transactions, _ = load_transactions_from_file(execute_path)
         print(f"Transactions: {len(transactions)}")
         
+        phase_gas_used = 0
         for i, tx in enumerate(transactions):
             print(f"\n--- Execute Transaction {i+1}/{len(transactions)} ---")
             value = tx.get('value', '0')
@@ -638,7 +665,13 @@ def run_tenderly_simulation(args) -> int:
                 all_success = False
                 if result.get('tx_hash'):
                     print(f"    🔗 Tx Link: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}/tx/{result['tx_hash']}")
-        
+            # Accumulate gas usage
+            if 'gas_used' in result:
+                phase_gas_used += result['gas_used']
+                total_gas_used += result['gas_used']
+
+        print(f"\n📊 Execute Phase Summary: {len(transactions)} transactions, {phase_gas_used:,} gas used")
+
         # Phase 3: Follow-up (optional --then)
         if args.then:
             print(f"\n{'='*40}")
@@ -655,6 +688,7 @@ def run_tenderly_simulation(args) -> int:
             transactions, _ = load_transactions_from_file(then_path)
             print(f"Transactions: {len(transactions)}")
             
+            phase_gas_used = 0
             for i, tx in enumerate(transactions):
                 print(f"\n--- Follow-up Transaction {i+1}/{len(transactions)} ---")
                 value = tx.get('value', '0')
@@ -672,7 +706,13 @@ def run_tenderly_simulation(args) -> int:
                     all_success = False
                     if result.get('tx_hash'):
                         print(f"    🔗 Tx Link: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}/tx/{result['tx_hash']}")
-    
+                # Accumulate gas usage
+                if 'gas_used' in result:
+                    phase_gas_used += result['gas_used']
+                    total_gas_used += result['gas_used']
+
+            print(f"\n📊 Follow-up Phase Summary: {len(transactions)} transactions, {phase_gas_used:,} gas used")
+
     # Summary
     print(f"\n{'='*60}")
     print("SIMULATION COMPLETE")
@@ -680,7 +720,8 @@ def run_tenderly_simulation(args) -> int:
     print(f"VNet ID: {vnet_id}")
     print(f"View in Tenderly: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}")
     print(f"Result: {'✅ SUCCESS' if all_success else '❌ FAILED'}")
-    
+    print(f"Total Gas Used: {total_gas_used:,}")
+
     return 0 if all_success else 1
 
 
