@@ -148,7 +148,7 @@ def query_validators(
         List of validator dictionaries
     """
     query = """
-        SELECT 
+        SELECT
             pubkey,
             etherfi_id as id,
             beacon_withdrawal_credentials as withdrawal_credentials,
@@ -159,10 +159,10 @@ def query_validators(
             etherfi_node_contract
         FROM "MainnetValidators"
         WHERE LOWER(node_operator) = %s
-        AND status LIKE '%active%'
+        AND status LIKE %s
     """
-    
-    params = [operator_address.lower()]
+
+    params = [operator_address.lower(), '%active%']
     
     if restaked_only:
         query += " AND restaked = true"
