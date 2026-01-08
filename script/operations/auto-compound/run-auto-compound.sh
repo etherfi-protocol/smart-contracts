@@ -164,6 +164,7 @@ else
     echo -e "${YELLOW}[4/4] Simulating on Tenderly...${NC}"
     VNET_NAME="${OPERATOR_SLUG}-${COUNT}-${TIMESTAMP}"
 
+    # Run simulation and check exit code
     if [ -f "$OUTPUT_DIR/$SCHEDULE_FILE" ]; then
         # Linking needed - run schedule + execute + consolidation
         echo "Linking required. Running 3-phase simulation..."
@@ -173,14 +174,23 @@ else
             --then "$OUTPUT_DIR/$CONSOLIDATION_WITH_LINK_FILE" \
             --delay 8h \
             --vnet-name "$VNET_NAME"
+        SIMULATION_EXIT_CODE=$?
     elif [ -f "$OUTPUT_DIR/$CONSOLIDATION_NO_LINK_FILE" ]; then
         # No linking needed - just consolidation
         echo "No linking required. Running simple simulation..."
         python3 script/operations/utils/simulate.py --tenderly \
             --txns "$OUTPUT_DIR/$CONSOLIDATION_NO_LINK_FILE" \
             --vnet-name "$VNET_NAME"
+        SIMULATION_EXIT_CODE=$?
     else
         echo -e "${RED}Error: No transaction files found to simulate${NC}"
+        exit 1
+    fi
+
+    # Check if simulation was successful
+    if [ $SIMULATION_EXIT_CODE -ne 0 ]; then
+        echo -e "${RED}Error: Tenderly simulation failed${NC}"
+        echo -e "${RED}Check the output above for failed transaction links${NC}"
         exit 1
     fi
 fi

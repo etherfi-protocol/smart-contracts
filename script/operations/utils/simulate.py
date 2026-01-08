@@ -402,14 +402,14 @@ def submit_tx_via_rpc(
     """Submit a transaction via Admin RPC using eth_sendTransaction."""
     if not requests:
         raise ImportError("requests library required for Tenderly")
-    
+
     if verbose:
         print(f"  Submitting transaction...")
         print(f"    From: {from_addr}")
         print(f"    To: {to_addr}")
         data_preview = f"{data[:66]}..." if len(data) > 66 else data
         print(f"    Data: {data_preview}")
-    
+
     # Use eth_sendTransaction
     payload = {
         "jsonrpc": "2.0",
@@ -423,21 +423,51 @@ def submit_tx_via_rpc(
         }],
         "id": 1
     }
-    
+
     response = requests.post(rpc_url, json=payload, timeout=60)
     response.raise_for_status()
     result = response.json()
-    
+
     if 'error' in result:
         if verbose:
             print(f"    ❌ Error: {result['error']}")
         return {"status": "failed", "error": result['error']}
-    
+
     tx_hash = result.get('result')
     if verbose:
-        print(f"    ✅ Tx Hash: {tx_hash}")
-    
+        print(f"    ✅ Tx submitted: {tx_hash}")
+
+    # Wait for transaction to be mined and check receipt
+    if tx_hash:
+        receipt = wait_for_tx_receipt(rpc_url, tx_hash, verbose=verbose)
+        if receipt.get('status') == '0x1':
+            if verbose:
+                print(f"    ✅ Tx successful")
+            return {"status": "success", "tx_hash": tx_hash, "receipt": receipt}
+        else:
+            if verbose:
+                print(f"    ❌ Tx reverted")
+            return {"status": "failed", "error": "Transaction reverted", "tx_hash": tx_hash, "receipt": receipt}
+
     return {"status": "success", "tx_hash": tx_hash}
+
+
+def wait_for_tx_receipt(rpc_url: str, tx_hash: str, timeout: int = 30, verbose: bool = True) -> Dict:
+    """Wait for transaction receipt and return it."""
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        try:
+            receipt = rpc_request(rpc_url, "eth_getTransactionReceipt", [tx_hash])
+            if receipt:
+                return receipt
+        except:
+            pass
+        time.sleep(1)
+
+    if verbose:
+        print(f"    ⚠️  Timeout waiting for receipt")
+    return {}
 
 
 # ==============================================================================
@@ -520,7 +550,7 @@ def run_tenderly_simulation(args) -> int:
             value = tx.get('value', '0')
             if not str(value).startswith('0x'):
                 value = hex(int(value))
-            
+
             result = submit_tx_via_rpc(
                 admin_rpc,
                 safe,
@@ -530,6 +560,8 @@ def run_tenderly_simulation(args) -> int:
             )
             if result.get('status') != 'success':
                 all_success = False
+                if result.get('tx_hash'):
+                    print(f"    🔗 Tx Link: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}/tx/{result['tx_hash']}")
     
     # Timelock mode (--schedule + --execute)
     elif args.schedule and args.execute:
@@ -554,7 +586,7 @@ def run_tenderly_simulation(args) -> int:
             value = tx.get('value', '0')
             if not str(value).startswith('0x'):
                 value = hex(int(value))
-            
+
             result = submit_tx_via_rpc(
                 admin_rpc,
                 safe,
@@ -564,6 +596,8 @@ def run_tenderly_simulation(args) -> int:
             )
             if result.get('status') != 'success':
                 all_success = False
+                if result.get('tx_hash'):
+                    print(f"    🔗 Tx Link: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}/tx/{result['tx_hash']}")
         
         # Time Warp
         delay_seconds = parse_delay(args.delay) if args.delay else 28800
@@ -592,7 +626,7 @@ def run_tenderly_simulation(args) -> int:
             value = tx.get('value', '0')
             if not str(value).startswith('0x'):
                 value = hex(int(value))
-            
+
             result = submit_tx_via_rpc(
                 admin_rpc,
                 safe,
@@ -602,6 +636,8 @@ def run_tenderly_simulation(args) -> int:
             )
             if result.get('status') != 'success':
                 all_success = False
+                if result.get('tx_hash'):
+                    print(f"    🔗 Tx Link: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}/tx/{result['tx_hash']}")
         
         # Phase 3: Follow-up (optional --then)
         if args.then:
@@ -624,7 +660,7 @@ def run_tenderly_simulation(args) -> int:
                 value = tx.get('value', '0')
                 if not str(value).startswith('0x'):
                     value = hex(int(value))
-                
+
                 result = submit_tx_via_rpc(
                     admin_rpc,
                     safe,
@@ -634,6 +670,8 @@ def run_tenderly_simulation(args) -> int:
                 )
                 if result.get('status') != 'success':
                     all_success = False
+                    if result.get('tx_hash'):
+                        print(f"    🔗 Tx Link: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}/tx/{result['tx_hash']}")
     
     # Summary
     print(f"\n{'='*60}")
