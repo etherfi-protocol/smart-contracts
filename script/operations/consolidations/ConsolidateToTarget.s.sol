@@ -93,7 +93,7 @@ contract ConsolidateToTarget is Script, Utils {
         }
         
         // Collect all pubkeys that need linking and handle linking
-        _handleLinking(config, pubkeys, ids);
+        _handleLinking(config, pubkeys, ids, config.batchSize);
         
         // Get fee using target pubkey (now linked on fork)
         config.feePerRequest = _getConsolidationFee(config.targetPubkey);
@@ -132,10 +132,10 @@ contract ConsolidateToTarget is Script, Utils {
         console2.log("Found", validatorCount, "validators");
     }
     
-    function _handleLinking(Config memory config, bytes[] memory pubkeys, uint256[] memory ids) internal {
+    function _handleLinking(Config memory config, bytes[] memory pubkeys, uint256[] memory ids, uint256 batchSize) internal {
         // Collect all pubkeys that need linking
         (uint256[] memory unlinkedIds, bytes[] memory unlinkedPubkeys) = _collectUnlinkedValidators(
-            config.targetPubkey, config.targetValidatorId, pubkeys, ids
+            config.targetPubkey, config.targetValidatorId, pubkeys, ids, batchSize
         );
         
         config.needsLinking = unlinkedIds.length > 0;
@@ -172,17 +172,17 @@ contract ConsolidateToTarget is Script, Utils {
         return nodeAddr != address(0);
     }
     
-    /// @notice Collect all validators that need linking (target + first source)
+    /// @notice Collect all validators that need linking (target + first source pubkey of each batch)
     function _collectUnlinkedValidators(
         bytes memory targetPubkey,
         uint256 targetValidatorId,
         bytes[] memory sourcePubkeys,
-        uint256[] memory sourceIds
+        uint256[] memory sourceIds,
+        uint256 batchSize
     ) internal view returns (uint256[] memory unlinkedIds, bytes[] memory unlinkedPubkeys) {
-        // Check target and first source
+        // Check target
         bool targetNeedsLink = !_isPubkeyLinked(targetPubkey);
-        bool firstSourceNeedsLink = !_isPubkeyLinked(sourcePubkeys[0]);
-        
+
         if (targetNeedsLink) {
             console2.log("Target pubkey needs linking:");
             console2.log("  Pubkey:", targetPubkey.bytesToHexString());
@@ -190,33 +190,45 @@ contract ConsolidateToTarget is Script, Utils {
         } else {
             console2.log("Target pubkey is already linked");
         }
-        
-        if (firstSourceNeedsLink) {
-            console2.log("First source pubkey needs linking:");
-            console2.log("  Pubkey:", sourcePubkeys[0].bytesToHexString());
-            console2.log("  Validator ID:", sourceIds[0]);
-        } else {
-            console2.log("First source pubkey is already linked");
+
+        // Check first pubkey of each batch
+        uint256 numBatches = (sourcePubkeys.length + batchSize - 1) / batchSize;
+        bool[] memory batchHeadsNeedLink = new bool[](numBatches);
+
+        uint256 unlinkedCount = targetNeedsLink ? 1 : 0;
+
+        for (uint256 batchIdx = 0; batchIdx < numBatches; batchIdx++) {
+            uint256 firstPubkeyIdx = batchIdx * batchSize;
+            batchHeadsNeedLink[batchIdx] = !_isPubkeyLinked(sourcePubkeys[firstPubkeyIdx]);
+
+            if (batchHeadsNeedLink[batchIdx]) {
+                console2.log("Batch", batchIdx + 1, "first pubkey needs linking:");
+                console2.log("  Pubkey:", sourcePubkeys[firstPubkeyIdx].bytesToHexString());
+                console2.log("  Validator ID:", sourceIds[firstPubkeyIdx]);
+                unlinkedCount++;
+            } else {
+                console2.log("Batch", batchIdx + 1, "first pubkey is already linked");
+            }
         }
-        
-        // Count how many need linking
-        uint256 count = 0;
-        if (targetNeedsLink) count++;
-        if (firstSourceNeedsLink) count++;
-        
+
         // Build arrays
-        unlinkedIds = new uint256[](count);
-        unlinkedPubkeys = new bytes[](count);
-        
+        unlinkedIds = new uint256[](unlinkedCount);
+        unlinkedPubkeys = new bytes[](unlinkedCount);
+
         uint256 idx = 0;
         if (targetNeedsLink) {
             unlinkedIds[idx] = targetValidatorId;
             unlinkedPubkeys[idx] = targetPubkey;
             idx++;
         }
-        if (firstSourceNeedsLink) {
-            unlinkedIds[idx] = sourceIds[0];
-            unlinkedPubkeys[idx] = sourcePubkeys[0];
+
+        for (uint256 batchIdx = 0; batchIdx < numBatches; batchIdx++) {
+            if (batchHeadsNeedLink[batchIdx]) {
+                uint256 firstPubkeyIdx = batchIdx * batchSize;
+                unlinkedIds[idx] = sourceIds[firstPubkeyIdx];
+                unlinkedPubkeys[idx] = sourcePubkeys[firstPubkeyIdx];
+                idx++;
+            }
         }
     }
     

@@ -328,9 +328,9 @@ else
     
     VNET_NAME="${OPERATOR_SLUG}-consolidation-${COUNT}-${TIMESTAMP}"
     
-    # Check if linking is needed by looking for schedule file
-    SCHEDULE_FILE=$(ls "$OUTPUT_DIR"/*-link-schedule.json 2>/dev/null | head -1)
-    EXECUTE_FILE=$(ls "$OUTPUT_DIR"/*-link-execute.json 2>/dev/null | head -1)
+    # Check if linking is needed by looking for schedule files
+    SCHEDULE_FILES=$(ls "$OUTPUT_DIR"/*-link-schedule.json 2>/dev/null | sort -V)
+    EXECUTE_FILES=$(ls "$OUTPUT_DIR"/*-link-execute.json 2>/dev/null | sort -V)
     
     # Find all consolidation files
     CONSOLIDATION_FILES=$(ls "$OUTPUT_DIR"/*-consolidation.json 2>/dev/null | sort -V)
@@ -346,17 +346,60 @@ else
             fi
         done
         
-        if [ -n "$SCHEDULE_FILE" ] && [ -n "$EXECUTE_FILE" ]; then
-            # Linking needed - run schedule + execute + all consolidation files with timelock delay
+        if [ -n "$SCHEDULE_FILES" ] && [ -n "$EXECUTE_FILES" ]; then
+            # Linking needed - combine all schedule/execute files and run with timelock delay
             echo "Linking required. Running 3-phase simulation with timelock delay..."
-            echo "  Schedule: $(basename "$SCHEDULE_FILE")"
-            echo "  Execute: $(basename "$EXECUTE_FILE")"
+
+            # Create combined schedule file from all schedule files
+            COMBINED_SCHEDULE="$OUTPUT_DIR/combined-link-schedule.json"
+            python3 -c "
+import json
+import sys
+from pathlib import Path
+
+combined = {'chainId': '1', 'safeAddress': '', 'meta': {'txBuilderVersion': '1.16.5'}, 'transactions': []}
+
+for schedule_file in sys.argv[1:]:
+    with open(schedule_file) as f:
+        data = json.load(f)
+        if not combined['safeAddress']:
+            combined['chainId'] = data.get('chainId', '1')
+            combined['safeAddress'] = data.get('safeAddress', '')
+        combined['transactions'].extend(data.get('transactions', []))
+
+with open('$COMBINED_SCHEDULE', 'w') as f:
+    json.dump(combined, f, indent=2)
+" $SCHEDULE_FILES
+
+            # Create combined execute file from all execute files
+            COMBINED_EXECUTE="$OUTPUT_DIR/combined-link-execute.json"
+            python3 -c "
+import json
+import sys
+from pathlib import Path
+
+combined = {'chainId': '1', 'safeAddress': '', 'meta': {'txBuilderVersion': '1.16.5'}, 'transactions': []}
+
+for execute_file in sys.argv[1:]:
+    with open(execute_file) as f:
+        data = json.load(f)
+        if not combined['safeAddress']:
+            combined['chainId'] = data.get('chainId', '1')
+            combined['safeAddress'] = data.get('safeAddress', '')
+        combined['transactions'].extend(data.get('transactions', []))
+
+with open('$COMBINED_EXECUTE', 'w') as f:
+    json.dump(combined, f, indent=2)
+" $EXECUTE_FILES
+
+            echo "  Combined Schedule: $(basename "$COMBINED_SCHEDULE")"
+            echo "  Combined Execute: $(basename "$COMBINED_EXECUTE")"
             echo "  Consolidations: $CONSOLIDATION_LIST"
             echo ""
-            
+
             CMD="python3 $PROJECT_ROOT/script/operations/utils/simulate.py --tenderly \
-                --schedule \"$SCHEDULE_FILE\" \
-                --execute \"$EXECUTE_FILE\" \
+                --schedule \"$COMBINED_SCHEDULE\" \
+                --execute \"$COMBINED_EXECUTE\" \
                 --then \"$CONSOLIDATION_LIST\" \
                 --delay 8h --vnet-name \"$VNET_NAME\""
             echo "Running: $CMD"
@@ -418,11 +461,18 @@ echo -e "${BLUE}Next steps:${NC}"
 echo "  1. Review the consolidation plan in consolidation-data.json"
 
 # Check if linking was needed
-SCHEDULE_FILE_CHECK=$(ls "$OUTPUT_DIR"/*-link-schedule.json 2>/dev/null | head -1)
-if [ -n "$SCHEDULE_FILE_CHECK" ]; then
-    echo "  2. Import link-schedule.json to Gnosis Safe → Execute"
+SCHEDULE_FILES_CHECK=$(ls "$OUTPUT_DIR"/*-link-schedule.json 2>/dev/null | sort -V)
+if [ -n "$SCHEDULE_FILES_CHECK" ]; then
+    echo "  2. Import the following link-schedule files to Gnosis Safe in order → Execute:"
+    for file in $SCHEDULE_FILES_CHECK; do
+        echo "     - $(basename "$file")"
+    done
     echo "  3. Wait 8 hours for timelock delay"
-    echo "  4. Import link-execute.json to Gnosis Safe → Execute"
+    echo "  4. Import the following link-execute files to Gnosis Safe in order → Execute:"
+    EXECUTE_FILES_CHECK=$(ls "$OUTPUT_DIR"/*-link-execute.json 2>/dev/null | sort -V)
+    for file in $EXECUTE_FILES_CHECK; do
+        echo "     - $(basename "$file")"
+    done
     echo "  5. Import consolidation files to Gnosis Safe in order → Execute:"
     for file in $(ls "$OUTPUT_DIR"/*-consolidation.json 2>/dev/null | sort -V); do
         echo "     - $(basename "$file")"
