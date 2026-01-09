@@ -567,16 +567,30 @@ def run_tenderly_simulation(args) -> int:
         print(f"\n{'='*40}")
         print("SIMPLE MODE (No Timelock)")
         print(f"{'='*40}")
-        
-        file_path = resolve_file_path(project_root, args.txns)
-        print(f"Loading: {file_path}")
-        
-        if not file_path.exists():
-            print(f"Error: File not found: {file_path}")
-            return 1
-        
-        transactions, file_safe = load_transactions_from_file(file_path)
+
+        # Handle comma-separated list of files
+        txn_files = [f.strip() for f in args.txns.split(',')]
+        all_transactions = []
+        file_safe = None
+
+        for i, txn_file in enumerate(txn_files):
+            file_path = resolve_file_path(project_root, txn_file)
+            print(f"Loading file {i+1}/{len(txn_files)}: {file_path}")
+
+            if not file_path.exists():
+                print(f"Error: File not found: {file_path}")
+                return 1
+
+            transactions, current_safe = load_transactions_from_file(file_path)
+            if file_safe is None:
+                file_safe = current_safe
+            elif file_safe != current_safe and current_safe is not None:
+                print(f"Warning: File {file_path} has different safe address ({current_safe}) than previous files ({file_safe})")
+
+            all_transactions.extend(transactions)
+
         safe = args.safe_address or file_safe
+        transactions = all_transactions
         print(f"Transactions: {len(transactions)}")
         
         phase_gas_used = 0
@@ -699,17 +713,25 @@ def run_tenderly_simulation(args) -> int:
             print(f"\n{'='*40}")
             print("PHASE 3: FOLLOW-UP")
             print(f"{'='*40}")
-            
-            then_path = resolve_file_path(project_root, args.then)
-            print(f"Loading: {then_path}")
-            
-            if not then_path.exists():
-                print(f"Error: File not found: {then_path}")
-                return 1
-            
-            transactions, _ = load_transactions_from_file(then_path)
-            print(f"Transactions: {len(transactions)}")
-            
+
+            # Handle comma-separated list of then files
+            then_files = [f.strip() for f in args.then.split(',')]
+            all_then_transactions = []
+
+            for j, then_file in enumerate(then_files):
+                then_path = resolve_file_path(project_root, then_file)
+                print(f"Loading follow-up file {j+1}/{len(then_files)}: {then_path}")
+
+                if not then_path.exists():
+                    print(f"Error: File not found: {then_path}")
+                    return 1
+
+                then_transactions, _ = load_transactions_from_file(then_path)
+                all_then_transactions.extend(then_transactions)
+
+            transactions = all_then_transactions
+            print(f"Total follow-up transactions: {len(transactions)}")
+
             phase_gas_used = 0
             for i, tx in enumerate(transactions):
                 print(f"\n--- Follow-up Transaction {i+1}/{len(transactions)} ---")
@@ -777,10 +799,12 @@ def run_forge_simulation(args) -> int:
         # Compose TXNS from schedule, execute, and optionally then files
         txns_list = [args.schedule, args.execute]
         if args.then:
-            txns_list.append(args.then)
+            # Handle comma-separated then files
+            then_files = [f.strip() for f in args.then.split(',')]
+            txns_list.extend(then_files)
         env['TXNS'] = ','.join(txns_list)
         # Only apply delay after file index 0 (between schedule and execute)
-        # No delay between execute and then (index 1→2)
+        # No delay between execute and then files (index 1→...)
         env['DELAY_AFTER_FILE'] = '0'  # Only delay after first file
     
     # Also set individual file vars for reference
@@ -866,7 +890,7 @@ Examples:
     # Transaction files
     parser.add_argument(
         '--txns', '-t',
-        help='Simple transaction file (no timelock)'
+        help='Simple transaction file(s) (no timelock). Can be comma-separated for multiple files'
     )
     parser.add_argument(
         '--schedule', '-s',
@@ -878,7 +902,7 @@ Examples:
     )
     parser.add_argument(
         '--then',
-        help='Follow-up transaction file (phase 3, optional)'
+        help='Follow-up transaction file(s) (phase 3, optional). Can be comma-separated for multiple files'
     )
     
     # Options
@@ -913,7 +937,7 @@ Examples:
     # Validate arguments
     if args.txns and (args.schedule or args.execute):
         parser.error("Cannot use --txns with --schedule/--execute")
-    
+
     if not args.txns and not (args.schedule and args.execute):
         parser.error("Must provide either --txns or both --schedule and --execute")
     

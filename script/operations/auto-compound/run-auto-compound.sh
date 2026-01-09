@@ -137,16 +137,15 @@ forge script script/operations/auto-compound/AutoCompound.s.sol:AutoCompound \
     --fork-url "$MAINNET_RPC_URL" -vvvv 2>&1 | tee "$OUTPUT_DIR/forge.log"
 
 # Move generated files to output directory
-# Filenames now have nonce prefix: {nonce}-link-schedule.json, {nonce+1}-link-execute.json, {nonce+2}-consolidation.json
+# Filenames now have nonce prefix: {nonce}-link-schedule.json, {nonce+1}-link-execute.json, {nonce+2+}-consolidation.json
 SCHEDULE_FILE="$NONCE-link-schedule.json"
 EXECUTE_FILE="$((NONCE + 1))-link-execute.json"
-CONSOLIDATION_WITH_LINK_FILE="$((NONCE + 2))-consolidation.json"
-CONSOLIDATION_NO_LINK_FILE="$NONCE-consolidation.json"
 
+# Move all transaction files to output directory
 mv "script/operations/auto-compound/$SCHEDULE_FILE" "$OUTPUT_DIR/" 2>/dev/null || true
 mv "script/operations/auto-compound/$EXECUTE_FILE" "$OUTPUT_DIR/" 2>/dev/null || true
-mv "script/operations/auto-compound/$CONSOLIDATION_WITH_LINK_FILE" "$OUTPUT_DIR/" 2>/dev/null || true
-mv "script/operations/auto-compound/$CONSOLIDATION_NO_LINK_FILE" "$OUTPUT_DIR/" 2>/dev/null || true
+# Move all consolidation files (may be multiple with incrementing nonces)
+mv "script/operations/auto-compound/"*-consolidation.json "$OUTPUT_DIR/" 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}✓ Transactions generated${NC}"
@@ -166,25 +165,60 @@ else
 
     # Run simulation and check exit code
     if [ -f "$OUTPUT_DIR/$SCHEDULE_FILE" ]; then
-        # Linking needed - run schedule + execute + consolidation
-        echo "Linking required. Running 3-phase simulation..."
-        python3 script/operations/utils/simulate.py --tenderly \
-            --schedule "$OUTPUT_DIR/$SCHEDULE_FILE" \
-            --execute "$OUTPUT_DIR/$EXECUTE_FILE" \
-            --then "$OUTPUT_DIR/$CONSOLIDATION_WITH_LINK_FILE" \
-            --delay 8h \
-            --vnet-name "$VNET_NAME"
-        SIMULATION_EXIT_CODE=$?
-    elif [ -f "$OUTPUT_DIR/$CONSOLIDATION_NO_LINK_FILE" ]; then
-        # No linking needed - just consolidation
-        echo "No linking required. Running simple simulation..."
-        python3 script/operations/utils/simulate.py --tenderly \
-            --txns "$OUTPUT_DIR/$CONSOLIDATION_NO_LINK_FILE" \
-            --vnet-name "$VNET_NAME"
+        # Linking needed - run schedule + execute + all consolidation files
+        echo "Linking required. Running 3-phase simulation with consolidation transactions..."
+
+        # Find all consolidation files
+        CONSOLIDATION_FILES=$(ls "$OUTPUT_DIR"/*-consolidation.json 2>/dev/null | sort -V)
+
+        if [ -n "$CONSOLIDATION_FILES" ]; then
+            # Build comma-separated list of consolidation files
+            CONSOLIDATION_LIST=""
+            for consolidation_file in $CONSOLIDATION_FILES; do
+                if [ -z "$CONSOLIDATION_LIST" ]; then
+                    CONSOLIDATION_LIST="$consolidation_file"
+                else
+                    CONSOLIDATION_LIST="$CONSOLIDATION_LIST,$consolidation_file"
+                fi
+            done
+
+            CMD="python3 script/operations/utils/simulate.py --tenderly \
+                --schedule \"$OUTPUT_DIR/$SCHEDULE_FILE\" \
+                --execute \"$OUTPUT_DIR/$EXECUTE_FILE\" \
+                --then \"$CONSOLIDATION_LIST\" \
+                --delay 8h --vnet-name \"$VNET_NAME\""
+            echo "Running: $CMD"
+            eval "$CMD"
+        else
+            echo -e "${RED}Error: Linking required but no consolidation files found${NC}"
+            exit 1
+        fi
         SIMULATION_EXIT_CODE=$?
     else
-        echo -e "${RED}Error: No transaction files found to simulate${NC}"
-        exit 1
+        # No linking needed - run all consolidation files sequentially
+        CONSOLIDATION_FILES=$(ls "$OUTPUT_DIR"/*-consolidation.json 2>/dev/null | sort -V)
+
+        if [ -n "$CONSOLIDATION_FILES" ]; then
+            echo "No linking required. Running consolidation transactions..."
+
+            # Build comma-separated list of consolidation files
+            CONSOLIDATION_LIST=""
+            for consolidation_file in $CONSOLIDATION_FILES; do
+                if [ -z "$CONSOLIDATION_LIST" ]; then
+                    CONSOLIDATION_LIST="$consolidation_file"
+                else
+                    CONSOLIDATION_LIST="$CONSOLIDATION_LIST,$consolidation_file"
+                fi
+            done
+
+            CMD="python3 script/operations/utils/simulate.py --tenderly --txns \"$CONSOLIDATION_LIST\" --vnet-name \"$VNET_NAME\""
+            echo "Running: $CMD"
+            eval "$CMD"
+        else
+            echo -e "${RED}Error: No consolidation files found to simulate${NC}"
+            exit 1
+        fi
+        SIMULATION_EXIT_CODE=$?
     fi
 
     # Check if simulation was successful

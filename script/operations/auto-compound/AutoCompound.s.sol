@@ -333,30 +333,36 @@ contract AutoCompound is Script, Utils {
         // Starting nonce for consolidation transactions
         uint256 startNonce = needsLinking ? config.safeNonce + 2 : config.safeNonce;
 
-        // Determine output filename with starting nonce prefix
-        string memory outputFileName = string.concat(
-            startNonce.uint256ToString(), "-consolidation.json"
-        );
-
-        string memory outputPath = string.concat(
-            config.root, "/script/operations/auto-compound/", outputFileName
-        );
-
-        // Generate JSON - separate Safe transactions for each pod group in one file
-        string memory jsonOutput;
-
-        if (keccak256(bytes(config.outputFormat)) == keccak256(bytes("gnosis"))) {
-            jsonOutput = _generateMultiSafeTransactionJson(transactions, config);
-        } else {
-            jsonOutput = _generateRawJson(transactions);
-        }
-
-        vm.writeFile(outputPath, jsonOutput);
-        console2.log("Consolidation transactions written to:", outputPath);
-
-        // Output EIP-712 signing data for each consolidation transaction
+        // Generate separate JSON files for each consolidation transaction
         for (uint256 i = 0; i < transactions.length; i++) {
             uint256 currentNonce = startNonce + i;
+
+            // Determine output filename for this specific transaction
+            string memory outputFileName = string.concat(
+                currentNonce.uint256ToString(), "-consolidation.json"
+            );
+
+            string memory outputPath = string.concat(
+                config.root, "/script/operations/auto-compound/", outputFileName // update here
+            );
+
+            // Create single transaction array for this consolidation
+            ConsolidationTx[] memory singleTx = new ConsolidationTx[](1);
+            singleTx[0] = transactions[i];
+
+            // Generate JSON for this single transaction
+            string memory jsonOutput;
+
+            if (keccak256(bytes(config.outputFormat)) == keccak256(bytes("gnosis"))) {
+                jsonOutput = _generateSingleSafeTransactionJson(singleTx[0], config);
+            } else {
+                jsonOutput = _generateRawJson(singleTx);
+            }
+
+            vm.writeFile(outputPath, jsonOutput);
+            console2.log("Consolidation transaction", i + 1, "written to:", outputPath);
+
+            // Output EIP-712 signing data for this consolidation transaction
             string memory txName = string.concat(
                 currentNonce.uint256ToString(),
                 "-consolidation-tx",
@@ -379,7 +385,7 @@ contract AutoCompound is Script, Utils {
         console2.log("Generated", transactions.length, "consolidation transactions (one per EigenPod)");
         console2.log("Starting nonce:", startNonce);
         console2.log("Ending nonce:", startNonce + transactions.length - 1);
-        console2.log("All transactions in single JSON array for batch processing");
+        console2.log("Each transaction saved as separate JSON file");
     }
     
     function _outputSigningData(
@@ -687,6 +693,26 @@ contract AutoCompound is Script, Utils {
     /**
      * @notice Generates JSON with multiple separate Safe transactions (one per pod group)
      */
+    function _generateSingleSafeTransactionJson(
+        ConsolidationTx memory transaction,
+        Config memory config
+    ) internal pure returns (string memory) {
+        // Create single transaction array
+        GnosisTxGeneratorLib.GnosisTx[] memory singleTx = new GnosisTxGeneratorLib.GnosisTx[](1);
+        singleTx[0] = GnosisTxGeneratorLib.GnosisTx({
+            to: transaction.to,
+            value: transaction.value,
+            data: transaction.data
+        });
+
+        // Generate Safe transaction JSON (single transaction, not array)
+        return GnosisTxGeneratorLib.generateTransactionBatch(
+            singleTx,
+            config.chainId,
+            config.safeAddress
+        );
+    }
+
     function _generateMultiSafeTransactionJson(
         ConsolidationTx[] memory transactions,
         Config memory config
