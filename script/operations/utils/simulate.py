@@ -18,7 +18,7 @@ Usage:
     # Schedule + Execute with timelock (8 hour delay)
     python simulate.py --schedule link-schedule.json --execute link-execute.json --delay 8h
 
-    # Full workflow with follow-up transaction
+    # Full auto-compound workflow with multiple consolidation transactions
     python simulate.py \\
         --schedule link-schedule.json \\
         --execute link-execute.json \\
@@ -136,14 +136,36 @@ def resolve_file_path(project_root: Path, file_name: str) -> Path:
 
 
 def load_transactions_from_file(file_path: Path) -> Tuple[List[Dict], str]:
-    """Load transactions from a Gnosis Safe JSON file."""
+    """Load transactions from a Gnosis Safe JSON file.
+
+    Supports both formats:
+    1. Single transaction batch: {"transactions": [...], "safeAddress": "..."}
+    2. Multiple transaction batches: [{"transactions": [...], "safeAddress": "..."}, ...]
+
+    Used for auto-compound consolidation files that may contain multiple transactions
+    grouped by EigenPod (withdrawal credentials).
+    """
     with open(file_path, 'r') as f:
         data = json.load(f)
-    
-    transactions = data.get('transactions', [])
-    safe_address = data.get('safeAddress', DEFAULT_SAFE_ADDRESS)
-    
-    return transactions, safe_address
+
+    # Handle new format: array of transaction batches
+    if isinstance(data, list):
+        if len(data) == 0:
+            return [], DEFAULT_SAFE_ADDRESS
+
+        # Use the first batch's safe address and collect all transactions
+        safe_address = data[0].get('safeAddress', DEFAULT_SAFE_ADDRESS)
+        all_transactions = []
+        for batch in data:
+            batch_transactions = batch.get('transactions', [])
+            all_transactions.extend(batch_transactions)
+        return all_transactions, safe_address
+
+    # Handle old format: single transaction batch
+    else:
+        transactions = data.get('transactions', [])
+        safe_address = data.get('safeAddress', DEFAULT_SAFE_ADDRESS)
+        return transactions, safe_address
 
 
 # ==============================================================================
@@ -281,8 +303,7 @@ def create_virtual_testnet(name: str, chain_id: int = 1, verbose: bool = True) -
             }
         },
         "sync_state_config": {
-            "enabled": True,
-            "commitment_level": "latest"
+            "enabled": False
         },
         "explorer_page_config": {
             "enabled": True,
@@ -402,14 +423,14 @@ def submit_tx_via_rpc(
     """Submit a transaction via Admin RPC using eth_sendTransaction."""
     if not requests:
         raise ImportError("requests library required for Tenderly")
-    
+
     if verbose:
         print(f"  Submitting transaction...")
         print(f"    From: {from_addr}")
         print(f"    To: {to_addr}")
         data_preview = f"{data[:66]}..." if len(data) > 66 else data
         print(f"    Data: {data_preview}")
-    
+
     # Use eth_sendTransaction
     payload = {
         "jsonrpc": "2.0",
@@ -423,21 +444,78 @@ def submit_tx_via_rpc(
         }],
         "id": 1
     }
-    
+
     response = requests.post(rpc_url, json=payload, timeout=60)
     response.raise_for_status()
     result = response.json()
-    
+
     if 'error' in result:
         if verbose:
             print(f"    ❌ Error: {result['error']}")
         return {"status": "failed", "error": result['error']}
-    
+
     tx_hash = result.get('result')
     if verbose:
-        print(f"    ✅ Tx Hash: {tx_hash}")
-    
-    return {"status": "success", "tx_hash": tx_hash}
+        print(f"    ✅ Tx submitted: {tx_hash}")
+
+    # Wait for transaction to be mined and check receipt
+    if tx_hash:
+        receipt = wait_for_tx_receipt(rpc_url, tx_hash, verbose=verbose)
+
+        # Check if receipt is empty (timeout)
+        if not receipt:
+            if verbose:
+                print(f"    ❌ Tx failed - Timeout waiting for receipt")
+            return {"status": "failed", "error": "Timeout waiting for transaction receipt", "tx_hash": tx_hash, "receipt": receipt}
+
+        # Extract gas usage from receipt
+        gas_used_hex = receipt.get('gasUsed', '0x0')
+        gas_used = int(gas_used_hex, 16)
+
+        # Check for excessive gas usage
+        GAS_LIMIT_MAX = 10_000_000  # 10 million gas limit
+        if gas_used > GAS_LIMIT_MAX:
+            if verbose:
+                print(f"    ❌ Tx failed - Gas used: {gas_used:,} (exceeds limit of {GAS_LIMIT_MAX:,})")
+            return {"status": "failed", "error": f"Gas usage {gas_used:,} exceeds limit of {GAS_LIMIT_MAX:,}", "tx_hash": tx_hash, "receipt": receipt, "gas_used": gas_used}
+
+        if receipt.get('status') == '0x1':
+            if verbose:
+                print(f"    ✅ Tx successful - Gas used: {gas_used:,}")
+            return {"status": "success", "tx_hash": tx_hash, "receipt": receipt, "gas_used": gas_used}
+        elif receipt.get('status') == '0x0':
+            # Transaction reverted
+            if verbose:
+                print(f"    ❌ Tx reverted - Gas used: {gas_used:,}")
+            return {"status": "failed", "error": "Transaction reverted", "tx_hash": tx_hash, "receipt": receipt, "gas_used": gas_used}
+        else:
+            # Unknown status
+            if verbose:
+                print(f"    ❌ Tx failed - Unknown status: {receipt.get('status')}")
+            return {"status": "failed", "error": f"Unknown transaction status: {receipt.get('status')}", "tx_hash": tx_hash, "receipt": receipt, "gas_used": gas_used}
+
+    # If no transaction hash was returned, submission failed
+    if verbose:
+        print(f"    ❌ Tx submission failed - No transaction hash returned")
+    return {"status": "failed", "error": "Transaction submission failed - no hash returned", "tx_hash": None}
+
+
+def wait_for_tx_receipt(rpc_url: str, tx_hash: str, timeout: int = 30, verbose: bool = True) -> Dict:
+    """Wait for transaction receipt and return it."""
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        try:
+            receipt = rpc_request(rpc_url, "eth_getTransactionReceipt", [tx_hash])
+            if receipt:
+                return receipt
+        except:
+            pass
+        time.sleep(1)
+
+    if verbose:
+        print(f"    ⚠️  Timeout waiting for receipt")
+    return {}
 
 
 # ==============================================================================
@@ -447,13 +525,13 @@ def submit_tx_via_rpc(
 def run_tenderly_simulation(args) -> int:
     """Run simulation using Tenderly Virtual Testnet."""
     project_root = get_project_root()
-    
+
     print("=" * 60)
     print("TENDERLY VIRTUAL TESTNET SIMULATION")
     print("=" * 60)
     print(f"Timestamp: {datetime.now().isoformat()}")
     print("")
-    
+
     try:
         access_token, account_slug, project_slug = get_tenderly_credentials()
         print(f"Account: {account_slug}")
@@ -461,11 +539,11 @@ def run_tenderly_simulation(args) -> int:
     except ValueError as e:
         print(f"Error: {e}")
         return 1
-    
+
     # Get or create Virtual Testnet
     vnet_id = args.vnet_id
     vnet_data = None
-    
+
     if vnet_id:
         print(f"\nUsing existing VNet: {vnet_id}")
         vnet_data = get_vnet_by_id(vnet_id)
@@ -481,46 +559,62 @@ def run_tenderly_simulation(args) -> int:
         except Exception as e:
             print(f"Failed to create Virtual Testnet: {e}")
             return 1
-    
+
     # Get Admin RPC URL
     try:
         admin_rpc = get_admin_rpc_url(vnet_data)
     except ValueError as e:
         print(f"Error: {e}")
         return 1
-    
+
     print(f"\nVNet ID: {vnet_id}")
     print(f"Admin RPC: {admin_rpc}")
-    
+
     # Determine safe address
     safe_address = args.safe_address or os.environ.get('SAFE_ADDRESS', DEFAULT_SAFE_ADDRESS)
     print(f"Safe Address: {safe_address}")
-    
+
     all_success = True
+    total_gas_used = 0
     
     # Simple mode (--txns)
     if args.txns:
         print(f"\n{'='*40}")
         print("SIMPLE MODE (No Timelock)")
         print(f"{'='*40}")
-        
-        file_path = resolve_file_path(project_root, args.txns)
-        print(f"Loading: {file_path}")
-        
-        if not file_path.exists():
-            print(f"Error: File not found: {file_path}")
-            return 1
-        
-        transactions, file_safe = load_transactions_from_file(file_path)
+
+        # Handle comma-separated list of files
+        txn_files = [f.strip() for f in args.txns.split(',')]
+        all_transactions = []
+        file_safe = None
+
+        for i, txn_file in enumerate(txn_files):
+            file_path = resolve_file_path(project_root, txn_file)
+            print(f"Loading file {i+1}/{len(txn_files)}: {file_path}")
+
+            if not file_path.exists():
+                print(f"Error: File not found: {file_path}")
+                return 1
+
+            transactions, current_safe = load_transactions_from_file(file_path)
+            if file_safe is None:
+                file_safe = current_safe
+            elif file_safe != current_safe and current_safe is not None:
+                print(f"Warning: File {file_path} has different safe address ({current_safe}) than previous files ({file_safe})")
+
+            all_transactions.extend(transactions)
+
         safe = args.safe_address or file_safe
+        transactions = all_transactions
         print(f"Transactions: {len(transactions)}")
         
+        phase_gas_used = 0
         for i, tx in enumerate(transactions):
             print(f"\n--- Transaction {i+1}/{len(transactions)} ---")
             value = tx.get('value', '0')
             if not str(value).startswith('0x'):
                 value = hex(int(value))
-            
+
             result = submit_tx_via_rpc(
                 admin_rpc,
                 safe,
@@ -530,6 +624,14 @@ def run_tenderly_simulation(args) -> int:
             )
             if result.get('status') != 'success':
                 all_success = False
+                if result.get('tx_hash'):
+                    print(f"    🔗 Tx Link: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}/tx/{result['tx_hash']}")
+            # Accumulate gas usage
+            if 'gas_used' in result:
+                phase_gas_used += result['gas_used']
+                total_gas_used += result['gas_used']
+
+        print(f"\n📊 Phase Summary: {len(transactions)} transactions, {phase_gas_used:,} gas used")
     
     # Timelock mode (--schedule + --execute)
     elif args.schedule and args.execute:
@@ -549,12 +651,13 @@ def run_tenderly_simulation(args) -> int:
         safe = args.safe_address or file_safe
         print(f"Transactions: {len(transactions)}")
         
+        phase_gas_used = 0
         for i, tx in enumerate(transactions):
             print(f"\n--- Schedule Transaction {i+1}/{len(transactions)} ---")
             value = tx.get('value', '0')
             if not str(value).startswith('0x'):
                 value = hex(int(value))
-            
+
             result = submit_tx_via_rpc(
                 admin_rpc,
                 safe,
@@ -564,7 +667,15 @@ def run_tenderly_simulation(args) -> int:
             )
             if result.get('status') != 'success':
                 all_success = False
-        
+                if result.get('tx_hash'):
+                    print(f"    🔗 Tx Link: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}/tx/{result['tx_hash']}")
+            # Accumulate gas usage
+            if 'gas_used' in result:
+                phase_gas_used += result['gas_used']
+                total_gas_used += result['gas_used']
+
+        print(f"\n📊 Schedule Phase Summary: {len(transactions)} transactions, {phase_gas_used:,} gas used")
+
         # Time Warp
         delay_seconds = parse_delay(args.delay) if args.delay else 28800
         print(f"\n{'='*40}")
@@ -587,12 +698,13 @@ def run_tenderly_simulation(args) -> int:
         transactions, _ = load_transactions_from_file(execute_path)
         print(f"Transactions: {len(transactions)}")
         
+        phase_gas_used = 0
         for i, tx in enumerate(transactions):
             print(f"\n--- Execute Transaction {i+1}/{len(transactions)} ---")
             value = tx.get('value', '0')
             if not str(value).startswith('0x'):
                 value = hex(int(value))
-            
+
             result = submit_tx_via_rpc(
                 admin_rpc,
                 safe,
@@ -602,29 +714,46 @@ def run_tenderly_simulation(args) -> int:
             )
             if result.get('status') != 'success':
                 all_success = False
-        
+                if result.get('tx_hash'):
+                    print(f"    🔗 Tx Link: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}/tx/{result['tx_hash']}")
+            # Accumulate gas usage
+            if 'gas_used' in result:
+                phase_gas_used += result['gas_used']
+                total_gas_used += result['gas_used']
+
+        print(f"\n📊 Execute Phase Summary: {len(transactions)} transactions, {phase_gas_used:,} gas used")
+
         # Phase 3: Follow-up (optional --then)
         if args.then:
             print(f"\n{'='*40}")
             print("PHASE 3: FOLLOW-UP")
             print(f"{'='*40}")
-            
-            then_path = resolve_file_path(project_root, args.then)
-            print(f"Loading: {then_path}")
-            
-            if not then_path.exists():
-                print(f"Error: File not found: {then_path}")
-                return 1
-            
-            transactions, _ = load_transactions_from_file(then_path)
-            print(f"Transactions: {len(transactions)}")
-            
+
+            # Handle comma-separated list of then files
+            then_files = [f.strip() for f in args.then.split(',')]
+            all_then_transactions = []
+
+            for j, then_file in enumerate(then_files):
+                then_path = resolve_file_path(project_root, then_file)
+                print(f"Loading follow-up file {j+1}/{len(then_files)}: {then_path}")
+
+                if not then_path.exists():
+                    print(f"Error: File not found: {then_path}")
+                    return 1
+
+                then_transactions, _ = load_transactions_from_file(then_path)
+                all_then_transactions.extend(then_transactions)
+
+            transactions = all_then_transactions
+            print(f"Total follow-up transactions: {len(transactions)}")
+
+            phase_gas_used = 0
             for i, tx in enumerate(transactions):
                 print(f"\n--- Follow-up Transaction {i+1}/{len(transactions)} ---")
                 value = tx.get('value', '0')
                 if not str(value).startswith('0x'):
                     value = hex(int(value))
-                
+
                 result = submit_tx_via_rpc(
                     admin_rpc,
                     safe,
@@ -634,7 +763,15 @@ def run_tenderly_simulation(args) -> int:
                 )
                 if result.get('status') != 'success':
                     all_success = False
-    
+                    if result.get('tx_hash'):
+                        print(f"    🔗 Tx Link: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}/tx/{result['tx_hash']}")
+                # Accumulate gas usage
+                if 'gas_used' in result:
+                    phase_gas_used += result['gas_used']
+                    total_gas_used += result['gas_used']
+
+            print(f"\n📊 Follow-up Phase Summary: {len(transactions)} transactions, {phase_gas_used:,} gas used")
+
     # Summary
     print(f"\n{'='*60}")
     print("SIMULATION COMPLETE")
@@ -642,7 +779,8 @@ def run_tenderly_simulation(args) -> int:
     print(f"VNet ID: {vnet_id}")
     print(f"View in Tenderly: https://dashboard.tenderly.co/{account_slug}/{project_slug}/testnet/{vnet_id}")
     print(f"Result: {'✅ SUCCESS' if all_success else '❌ FAILED'}")
-    
+    print(f"Total Gas Used: {total_gas_used:,}")
+
     return 0 if all_success else 1
 
 
@@ -676,10 +814,12 @@ def run_forge_simulation(args) -> int:
         # Compose TXNS from schedule, execute, and optionally then files
         txns_list = [args.schedule, args.execute]
         if args.then:
-            txns_list.append(args.then)
+            # Handle comma-separated then files
+            then_files = [f.strip() for f in args.then.split(',')]
+            txns_list.extend(then_files)
         env['TXNS'] = ','.join(txns_list)
         # Only apply delay after file index 0 (between schedule and execute)
-        # No delay between execute and then (index 1→2)
+        # No delay between execute and then files (index 1→...)
         env['DELAY_AFTER_FILE'] = '0'  # Only delay after first file
     
     # Also set individual file vars for reference
@@ -765,7 +905,7 @@ Examples:
     # Transaction files
     parser.add_argument(
         '--txns', '-t',
-        help='Simple transaction file (no timelock)'
+        help='Simple transaction file(s) (no timelock). Can be comma-separated for multiple files'
     )
     parser.add_argument(
         '--schedule', '-s',
@@ -777,7 +917,7 @@ Examples:
     )
     parser.add_argument(
         '--then',
-        help='Follow-up transaction file (phase 3, optional)'
+        help='Follow-up transaction file(s) (phase 3, optional). Can be comma-separated for multiple files'
     )
     
     # Options
@@ -812,7 +952,7 @@ Examples:
     # Validate arguments
     if args.txns and (args.schedule or args.execute):
         parser.error("Cannot use --txns with --schedule/--execute")
-    
+
     if not args.txns and not (args.schedule and args.execute):
         parser.error("Must provide either --txns or both --schedule and --execute")
     

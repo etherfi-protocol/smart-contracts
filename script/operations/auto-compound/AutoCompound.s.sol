@@ -3,6 +3,7 @@ pragma solidity ^0.8.27;
 
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
+import "forge-std/StdJson.sol";
 import "../../utils/utils.sol";
 import "../../utils/GnosisTxGeneratorLib.sol";
 import "../../utils/StringHelpers.sol";
@@ -13,35 +14,39 @@ import "../../../src/interfaces/IEtherFiNode.sol";
 import "../../../src/eigenlayer-interfaces/IEigenPod.sol";
 import "../consolidations/GnosisConsolidationLib.sol";
 import "@openzeppelin/contracts/governance/TimelockController.sol";
-
+import "../../../src/EtherFiTimelock.sol";
 /**
  * @title AutoCompound
- * @notice Generates auto-compounding (0x02) consolidation transactions with automatic linking detection
- * @dev Automatically detects unlinked validators and generates linking transactions via timelock
- * 
+ * @notice Generates auto-compounding (0x02) consolidation transactions grouped by EigenPod
+ * @dev Automatically detects unlinked validators and generates linking transactions via timelock.
+ *      Groups validators by withdrawal credentials (EigenPod) and creates separate consolidation
+ *      transactions for each EigenPod group.
+ *
  * Usage:
  *   JSON_FILE=validators.json SAFE_NONCE=42 forge script \
- *     script/operations/auto-compound/AutoCompound.s.sol:AutoCompound \
+ *     script/operations/auto-compound/txns/AutoCompound.s.sol:AutoCompound \
  *     --fork-url $MAINNET_RPC_URL -vvvv
- * 
+ *
  * Environment Variables:
  *   - JSON_FILE: Path to JSON file with validator data (required)
  *   - OUTPUT_FILE: Output filename (default: auto-compound-txns.json)
- *   - BATCH_SIZE: Number of validators per transaction (default: 50)
+ *   - BATCH_SIZE: Number of validators per EigenPod transaction (default: 50)
  *   - OUTPUT_FORMAT: "gnosis" or "raw" (default: gnosis)
  *   - SAFE_ADDRESS: Gnosis Safe address (default: ETHERFI_OPERATING_ADMIN)
  *   - CHAIN_ID: Chain ID for transaction (default: 1)
  *   - SAFE_NONCE: Starting nonce for Safe tx hash computation (default: 0)
- * 
+ *
  * Output Files (when linking is needed):
  *   - *-link-schedule.json: Timelock schedule transaction (nonce N)
  *   - *-link-execute.json: Timelock execute transaction (nonce N+1)
- *   - *-consolidation.json: Consolidation transaction (nonce N+2)
- * 
- * The script outputs EIP-712 signing data (Domain Separator, SafeTx Hash, Message Hash)
- * for each generated transaction file when SAFE_NONCE is provided.
+ *   - *-consolidation.json: Array of consolidation transactions (nonces N+2, N+3, ...)
+ *
+ * The script groups validators by EigenPod (withdrawal credentials) and generates
+ * separate consolidation transactions for each group. All transactions are output
+ * in a single JSON array that can be processed by simulation tools.
  */
 contract AutoCompound is Script, Utils {
+    using stdJson for string;
     using StringHelpers for uint256;
     using StringHelpers for address;
     using StringHelpers for bytes;
@@ -49,6 +54,7 @@ contract AutoCompound is Script, Utils {
     
     // === MAINNET CONTRACT ADDRESSES ===
     IEtherFiNodesManager constant nodesManager = IEtherFiNodesManager(ETHERFI_NODES_MANAGER);
+    EtherFiTimelock constant etherFiTimelock = EtherFiTimelock(payable(OPERATING_TIMELOCK));
     
     // Note: MIN_DELAY_OPERATING_TIMELOCK is inherited from Utils (via TimelockUtils)
     
@@ -88,11 +94,11 @@ contract AutoCompound is Script, Utils {
         string memory jsonFilePath = _resolvePath(config.root, config.jsonFile);
         string memory jsonData = vm.readFile(jsonFilePath);
         
-        (bytes[] memory pubkeys, uint256[] memory ids, address targetEigenPod, uint256 validatorCount) = 
-            ValidatorHelpers.parseValidatorsFromJson(jsonData, 10000);
+        (bytes[] memory pubkeys, uint256[] memory ids, address[] memory podAddrs, uint256 validatorCount) =
+            _parseValidatorsWithWithdrawalCredentials(jsonData, 10000);
         
         console2.log("Found", validatorCount, "validators");
-        console2.log("EigenPod from withdrawal credentials:", targetEigenPod);
+        console2.log("Grouping by", _countUniquePods(podAddrs), "unique EigenPods (withdrawal credentials)");
         
         if (pubkeys.length == 0) {
             console2.log("No validators to process");
@@ -100,7 +106,7 @@ contract AutoCompound is Script, Utils {
         }
         
         // Process validators
-        _processValidators(pubkeys, ids, targetEigenPod, config);
+        _processValidators(pubkeys, ids, podAddrs, config);
     }
     
     function _loadConfig() internal view returns (Config memory config) {
@@ -114,17 +120,17 @@ contract AutoCompound is Script, Utils {
         config.safeNonce = vm.envOr("SAFE_NONCE", uint256(0));
         
         console2.log("JSON file:", config.jsonFile);
-        console2.log("Output file:", config.outputFile);
-        console2.log("Batch size:", config.batchSize);
-        console2.log("Output format:", config.outputFormat);
-        console2.log("Safe nonce:", config.safeNonce);
+        // console2.log("Output file:", config.outputFile);
+        // console2.log("Batch size:", config.batchSize);
+        // console2.log("Output format:", config.outputFormat);
+        // console2.log("Safe nonce:", config.safeNonce);
         console2.log("");
     }
     
     function _processValidators(
         bytes[] memory pubkeys,
         uint256[] memory ids,
-        address targetEigenPod,
+        address[] memory podAddrs,
         Config memory config
     ) internal {
         // Check linking status
@@ -138,9 +144,7 @@ contract AutoCompound is Script, Utils {
         console2.log("Unlinked validators:", unlinkedIds.length);
         console2.log("");
         
-        // Get consolidation fee (handles case when no validators are linked)
-        uint256 feePerRequest = _getConsolidationFee(pubkeys, targetEigenPod);
-        console2.log("Fee per consolidation request:", feePerRequest);
+        // Note: Fee per request will be determined per pod group during processing
         console2.log("");
         
         // Generate linking transactions if needed
@@ -151,10 +155,11 @@ contract AutoCompound is Script, Utils {
             _generateLinkingTransactions(unlinkedIds, unlinkedPubkeys, config);
         }
         
-        // Generate consolidation transactions
+        // Generate consolidation transactions grouped by EigenPod
         console2.log("");
         console2.log("=== GENERATING CONSOLIDATION TRANSACTIONS ===");
-        _generateAndWriteConsolidation(pubkeys, feePerRequest, config, needsLinking);
+        console2.log("Validators will be grouped by withdrawal credentials (EigenPod)");
+        _generateAndWriteConsolidation(pubkeys, ids, podAddrs, config, needsLinking);
         
         // Print summary
         _printSummary(pubkeys.length, linkedCount, unlinkedIds.length, needsLinking, config);
@@ -200,21 +205,6 @@ contract AutoCompound is Script, Utils {
         return address(node) != address(0);
     }
     
-    function _getConsolidationFee(bytes[] memory pubkeys, address targetEigenPod) internal view returns (uint256) {
-        // Try to find a linked validator to resolve pod
-        for (uint256 i = 0; i < pubkeys.length; i++) {
-            if (_isLinked(pubkeys[i])) {
-                (, IEigenPod pod) = ValidatorHelpers.resolvePod(nodesManager, pubkeys[i]);
-                return pod.getConsolidationRequestFee();
-            }
-        }
-        
-        // If no linked validators, use the targetEigenPod from withdrawal credentials
-        console2.log("No linked validators found. Using EigenPod from withdrawal credentials.");
-        IEigenPod pod = IEigenPod(targetEigenPod);
-        require(address(pod) != address(0), "Cannot resolve EigenPod");
-        return pod.getConsolidationRequestFee();
-    }
     
     function _generateLinkingTransactions(
         uint256[] memory unlinkedIds,
@@ -256,7 +246,7 @@ contract AutoCompound is Script, Utils {
         // Write file with nonce prefix
         string memory fileName = string.concat(nonce.uint256ToString(), "-", txType, ".json");
         string memory filePath = string.concat(
-            config.root, "/script/operations/auto-compound/", fileName
+            config.root, "/script/operations/auto-compound/txns/", fileName
         );
         
         vm.writeFile(filePath, jsonContent);
@@ -280,7 +270,7 @@ contract AutoCompound is Script, Utils {
     function _buildTimelockCalldata(
         uint256[] memory unlinkedIds,
         bytes[] memory unlinkedPubkeys
-    ) internal view returns (bytes memory scheduleCalldata, bytes memory executeCalldata) {
+    ) internal returns (bytes memory scheduleCalldata, bytes memory executeCalldata) {
         // Build linkLegacyValidatorIds calldata
         bytes memory linkCalldata = abi.encodeWithSelector(
             LINK_LEGACY_VALIDATOR_IDS_SELECTOR,
@@ -320,47 +310,24 @@ contract AutoCompound is Script, Utils {
             bytes32(0), // predecessor
             salt
         );
+
+        vm.prank(address(ETHERFI_OPERATING_ADMIN));
+        etherFiTimelock.scheduleBatch(targets, values, payloads, bytes32(0), salt, MIN_DELAY_OPERATING_TIMELOCK);
+        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1);
+        vm.prank(address(ETHERFI_OPERATING_ADMIN));
+        etherFiTimelock.executeBatch(targets, values, payloads, bytes32(0), salt);
     }
     
     function _generateAndWriteConsolidation(
         bytes[] memory pubkeys,
-        uint256 feePerRequest,
+        uint256[] memory ids,
+        address[] memory podAddrs,
         Config memory config,
         bool needsLinking
     ) internal {
-        // Generate consolidation transactions
-        uint256 numBatches = (pubkeys.length + config.batchSize - 1) / config.batchSize;
-        ConsolidationTx[] memory transactions = new ConsolidationTx[](numBatches);
-        
-        for (uint256 batchIdx = 0; batchIdx < numBatches; batchIdx++) {
-            uint256 startIdx = batchIdx * config.batchSize;
-            uint256 endIdx = startIdx + config.batchSize;
-            if (endIdx > pubkeys.length) {
-                endIdx = pubkeys.length;
-            }
-            
-            // Extract batch
-            bytes[] memory batchPubkeys = new bytes[](endIdx - startIdx);
-            for (uint256 i = 0; i < batchPubkeys.length; i++) {
-                batchPubkeys[i] = pubkeys[startIdx + i];
-            }
-            
-            // Generate transaction
-            (address to, uint256 value, bytes memory data) = 
-                GnosisConsolidationLib.generateConsolidationTransaction(
-                    batchPubkeys,
-                    feePerRequest,
-                    address(nodesManager)
-                );
-            
-            transactions[batchIdx] = ConsolidationTx({
-                to: to,
-                value: value,
-                data: data,
-                validatorCount: batchPubkeys.length
-            });
-        }
-        
+        // Group validators by pod address and generate consolidation transactions
+        ConsolidationTx[] memory transactions = _generateConsolidationTransactionsByPod(pubkeys, podAddrs, config);
+
         // Write output
         _writeConsolidationOutput(transactions, config, needsLinking);
     }
@@ -370,66 +337,62 @@ contract AutoCompound is Script, Utils {
         Config memory config,
         bool needsLinking
     ) internal {
-        // Nonce is N+2 if linking was needed (schedule=N, execute=N+1), else N
-        uint256 consolidationNonce = needsLinking ? config.safeNonce + 2 : config.safeNonce;
-        
-        // Determine output filename with nonce prefix
-        string memory outputFileName = string.concat(
-            consolidationNonce.uint256ToString(), "-consolidation.json"
-        );
-        
-        string memory outputPath = string.concat(
-            config.root, "/script/operations/auto-compound/", outputFileName
-        );
-        
-        // Generate JSON
-        string memory jsonOutput;
-        GnosisTxGeneratorLib.GnosisTx[] memory gnosisTxns;
-        
-        if (keccak256(bytes(config.outputFormat)) == keccak256(bytes("gnosis"))) {
-            gnosisTxns = new GnosisTxGeneratorLib.GnosisTx[](transactions.length);
-            for (uint256 i = 0; i < transactions.length; i++) {
-                gnosisTxns[i] = GnosisTxGeneratorLib.GnosisTx({
-                    to: transactions[i].to,
-                    value: transactions[i].value,
-                    data: transactions[i].data
-                });
-            }
-            jsonOutput = GnosisTxGeneratorLib.generateTransactionBatch(
-                gnosisTxns,
-                config.chainId,
-                config.safeAddress
+        // Starting nonce for consolidation transactions
+        uint256 startNonce = needsLinking ? config.safeNonce + 2 : config.safeNonce;
+
+        // Generate separate JSON files for each consolidation transaction
+        for (uint256 i = 0; i < transactions.length; i++) {
+            uint256 currentNonce = startNonce + i;
+
+            // Determine output filename for this specific transaction
+            string memory outputFileName = string.concat(
+                currentNonce.uint256ToString(), "-consolidation.json"
             );
-        } else {
-            jsonOutput = _generateRawJson(transactions);
-        }
-        
-        vm.writeFile(outputPath, jsonOutput);
-        console2.log("Consolidation transactions written to:", outputPath);
-        
-        // Output EIP-712 signing data for consolidation
-        if (transactions.length == 1) {
-            // Single transaction - can compute exact signing data
+
+            string memory outputPath = string.concat(
+                config.root, "/script/operations/auto-compound/txns/", outputFileName
+            );
+
+            // Create single transaction array for this consolidation
+            ConsolidationTx[] memory singleTx = new ConsolidationTx[](1);
+            singleTx[0] = transactions[i];
+
+            // Generate JSON for this single transaction
+            string memory jsonOutput;
+
+            if (keccak256(bytes(config.outputFormat)) == keccak256(bytes("gnosis"))) {
+                jsonOutput = _generateSingleSafeTransactionJson(singleTx[0], config);
+            } else {
+                jsonOutput = _generateRawJson(singleTx);
+            }
+
+            vm.writeFile(outputPath, jsonOutput);
+            console2.log("Consolidation transaction", i + 1, "written to:", outputPath);
+
+            // Output EIP-712 signing data for this consolidation transaction
+            string memory txName = string.concat(
+                currentNonce.uint256ToString(),
+                "-consolidation-tx",
+                (i + 1).uint256ToString()
+            );
+
             _outputSigningData(
                 config.chainId,
                 config.safeAddress,
-                transactions[0].to,
-                transactions[0].value,
-                transactions[0].data,
-                consolidationNonce,
-                outputFileName
+                transactions[i].to,
+                transactions[i].value,
+                transactions[i].data,
+                currentNonce,
+                txName
             );
-        } else {
-            // Multiple transactions in one file = Gnosis Safe wraps in MultiSend = ONE Safe tx = ONE nonce
-            // Cannot compute exact MultiSend hash without encoding (Safe UI does this)
-            console2.log("");
-            console2.log("=== EIP-712 SIGNING DATA:", outputFileName, "===");
-            console2.log("Nonce:", consolidationNonce);
-            console2.log("Note: This file contains", transactions.length, "transactions");
-            console2.log("Gnosis Safe will wrap them in MultiSend (single Safe tx)");
-            console2.log("Exact hash depends on MultiSend encoding by Safe UI");
-            console2.log("Domain Separator:", SafeTxHashLib.getDomainSeparator(config.chainId, config.safeAddress).bytes32ToHexString());
         }
+
+        console2.log("");
+        console2.log("=== CONSOLIDATION SUMMARY ===");
+        console2.log("Generated", transactions.length, "consolidation transactions (one per EigenPod)");
+        console2.log("Starting nonce:", startNonce);
+        console2.log("Ending nonce:", startNonce + transactions.length - 1);
+        console2.log("Each transaction saved as separate JSON file");
     }
     
     function _outputSigningData(
@@ -517,7 +480,7 @@ contract AutoCompound is Script, Utils {
         }
         
         // Otherwise, assume it's relative to auto-compound directory
-        return string.concat(root, "/script/operations/auto-compound/", path);
+        return string.concat(root, "/script/operations/auto-compound/txns/", path);
     }
     
     function _removeExtension(string memory filename) internal pure returns (string memory) {
@@ -533,5 +496,265 @@ contract AutoCompound is Script, Utils {
         }
         return filename;
     }
+
+    /**
+     * @notice Parses validators from JSON data and returns pod addresses for each validator
+     * @param jsonData JSON data string (already read from file)
+     * @param maxValidators Maximum number of validators to parse (prevents infinite loops)
+     * @return pubkeys Array of validator public keys
+     * @return ids Array of validator IDs
+     * @return podAddrs Array of pod addresses derived from withdrawal credentials
+     * @return validatorCount Actual number of validators found
+     */
+    function _parseValidatorsWithWithdrawalCredentials(
+        string memory jsonData,
+        uint256 maxValidators
+    )
+        internal
+        view
+        returns (
+            bytes[] memory pubkeys,
+            uint256[] memory ids,
+            address[] memory podAddrs,
+            uint256 validatorCount
+        )
+    {
+        // Count validators first (with safety limit)
+        validatorCount = 0;
+        for (uint256 i = 0; i < maxValidators; i++) {
+            string memory basePath = string.concat("$[", vm.toString(i), "]");
+            if (!stdJson.keyExists(jsonData, string.concat(basePath, ".pubkey"))) {
+                break;
+            }
+            validatorCount++;
+        }
+
+        // Return early if no validators found
+        if (validatorCount == 0) {
+            pubkeys = new bytes[](0);
+            ids = new uint256[](0);
+            podAddrs = new address[](0);
+            return (pubkeys, ids, podAddrs, validatorCount);
+        }
+
+        pubkeys = new bytes[](validatorCount);
+        ids = new uint256[](validatorCount);
+        podAddrs = new address[](validatorCount);
+
+        for (uint256 i = 0; i < validatorCount; i++) {
+            string memory basePath = string.concat("$[", vm.toString(i), "]");
+            ids[i] = stdJson.readUint(jsonData, string.concat(basePath, ".id"));
+            pubkeys[i] = stdJson.readBytes(jsonData, string.concat(basePath, ".pubkey"));
+
+            bytes memory withdrawalCredentials = stdJson.readBytes(jsonData, string.concat(basePath, ".withdrawal_credentials"));
+            require(withdrawalCredentials.length == 32, "Invalid withdrawal credentials length");
+            podAddrs[i] = address(uint160(uint256(bytes32(withdrawalCredentials))));
+        }
+    }
+
+    /**
+     * @notice Counts unique pod addresses in the array
+     */
+    function _countUniquePods(address[] memory podAddrs) internal pure returns (uint256) {
+        if (podAddrs.length == 0) return 0;
+
+        address[] memory uniquePods = new address[](podAddrs.length);
+        uint256 uniqueCount = 0;
+
+        for (uint256 i = 0; i < podAddrs.length; i++) {
+            bool seen = false;
+            for (uint256 j = 0; j < uniqueCount; j++) {
+                if (uniquePods[j] == podAddrs[i]) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen) {
+                uniquePods[uniqueCount] = podAddrs[i];
+                unchecked { ++uniqueCount; }
+            }
+        }
+        return uniqueCount;
+    }
+
+    /**
+     * @notice Groups validators by pod address and generates consolidation transactions
+     */
+    function _generateConsolidationTransactionsByPod(
+        bytes[] memory pubkeys,
+        address[] memory podAddrs,
+        Config memory config
+    ) internal view returns (ConsolidationTx[] memory) {
+        require(pubkeys.length == podAddrs.length, "pubkeys/pods length mismatch");
+
+        // Find unique pod addresses
+        address[] memory uniquePods = new address[](pubkeys.length);
+        uint256 uniqueCount = 0;
+
+        for (uint256 i = 0; i < podAddrs.length; i++) {
+            bool seen = false;
+            for (uint256 j = 0; j < uniqueCount; j++) {
+                if (uniquePods[j] == podAddrs[i]) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen) {
+                uniquePods[uniqueCount] = podAddrs[i];
+                unchecked { ++uniqueCount; }
+            }
+        }
+
+        // Shrink unique pods array
+        address[] memory podAddresses = new address[](uniqueCount);
+        for (uint256 i = 0; i < uniqueCount; i++) {
+            podAddresses[i] = uniquePods[i];
+        }
+
+        console2.log("Found", uniqueCount, "unique EigenPods");
+
+        // Generate transactions for each pod
+        ConsolidationTx[] memory allTransactions = new ConsolidationTx[](uniqueCount);
+        uint256 txCount = 0;
+
+        for (uint256 p = 0; p < uniqueCount; p++) {
+            address targetPodAddr = podAddresses[p];
+
+            // Collect validators for this pod
+            bytes[] memory podPubkeysTmp = new bytes[](pubkeys.length);
+            uint256 podValidatorCount = 0;
+
+            for (uint256 i = 0; i < pubkeys.length; i++) {
+                if (podAddrs[i] == targetPodAddr) {
+                    podPubkeysTmp[podValidatorCount] = pubkeys[i];
+                    unchecked { ++podValidatorCount; }
+                }
+            }
+
+            if (podValidatorCount == 0) continue;
+
+            // Shrink pubkeys array
+            bytes[] memory podPubkeys = new bytes[](podValidatorCount);
+            for (uint256 i = 0; i < podValidatorCount; i++) {
+                podPubkeys[i] = podPubkeysTmp[i];
+            }
+
+            // Create one consolidation transaction per pod
+            console2.log(string.concat("EigenPod ", targetPodAddr.addressToString(), " - validators: ", podValidatorCount.uint256ToString()));
+
+            // For now, create one transaction per pod (no sub-batching)
+            // Get consolidation fee for this pod
+            uint256 feePerRequest = _getConsolidationFeeForPod(podPubkeys, targetPodAddr);
+
+            // Generate consolidation transaction
+            (address to, uint256 value, bytes memory data) =
+                GnosisConsolidationLib.generateConsolidationTransaction(
+                    podPubkeys,
+                    feePerRequest,
+                    address(nodesManager)
+                );
+
+            allTransactions[txCount] = ConsolidationTx({
+                to: to,
+                value: value,
+                data: data,
+                validatorCount: podValidatorCount
+            });
+
+            unchecked { ++txCount; }
+        }
+
+        // Shrink final array if needed
+        if (txCount < uniqueCount) {
+            ConsolidationTx[] memory finalTransactions = new ConsolidationTx[](txCount);
+            for (uint256 i = 0; i < txCount; i++) {
+                finalTransactions[i] = allTransactions[i];
+            }
+            return finalTransactions;
+        }
+
+        return allTransactions;
+    }
+
+    /**
+     * @notice Gets consolidation fee for a specific pod
+     */
+    function _getConsolidationFeeForPod(bytes[] memory pubkeys, address targetPodAddr) internal view returns (uint256) {
+        // Try to find a linked validator from this pod to resolve fee
+        for (uint256 i = 0; i < pubkeys.length; i++) {
+            if (_isLinked(pubkeys[i])) {
+                (, IEigenPod pod) = ValidatorHelpers.resolvePod(nodesManager, pubkeys[i]);
+                if (address(pod) == targetPodAddr) {
+                    return pod.getConsolidationRequestFee();
+                }
+            }
+        }
+
+        // If no linked validators in this pod, use the target pod directly
+        console2.log(string.concat("No linked validators found for pod ", targetPodAddr.addressToString(), " - using pod directly"));
+        IEigenPod targetPod = IEigenPod(targetPodAddr);
+        require(address(targetPod) != address(0), "Cannot resolve EigenPod");
+        return targetPod.getConsolidationRequestFee();
+    }
+
+    /**
+     * @notice Generates JSON with multiple separate Safe transactions (one per pod group)
+     */
+    function _generateSingleSafeTransactionJson(
+        ConsolidationTx memory transaction,
+        Config memory config
+    ) internal pure returns (string memory) {
+        // Create single transaction array
+        GnosisTxGeneratorLib.GnosisTx[] memory singleTx = new GnosisTxGeneratorLib.GnosisTx[](1);
+        singleTx[0] = GnosisTxGeneratorLib.GnosisTx({
+            to: transaction.to,
+            value: transaction.value,
+            data: transaction.data
+        });
+
+        // Generate Safe transaction JSON (single transaction, not array)
+        return GnosisTxGeneratorLib.generateTransactionBatch(
+            singleTx,
+            config.chainId,
+            config.safeAddress
+        );
+    }
+
+    function _generateMultiSafeTransactionJson(
+        ConsolidationTx[] memory transactions,
+        Config memory config
+    ) internal pure returns (string memory) {
+        string memory json = '[\n';
+
+        for (uint256 i = 0; i < transactions.length; i++) {
+            // Create single transaction array for this pod group
+            GnosisTxGeneratorLib.GnosisTx[] memory singleTx = new GnosisTxGeneratorLib.GnosisTx[](1);
+            singleTx[0] = GnosisTxGeneratorLib.GnosisTx({
+                to: transactions[i].to,
+                value: transactions[i].value,
+                data: transactions[i].data
+            });
+
+            // Generate individual Safe transaction JSON
+            string memory txJson = GnosisTxGeneratorLib.generateTransactionBatch(
+                singleTx,
+                config.chainId,
+                config.safeAddress
+            );
+
+            // Add to array
+            json = string.concat(json, '  ', txJson);
+
+            if (i < transactions.length - 1) {
+                json = string.concat(json, ',\n');
+            } else {
+                json = string.concat(json, '\n');
+            }
+        }
+
+        json = string.concat(json, ']');
+        return json;
+    }
+
 }
 
