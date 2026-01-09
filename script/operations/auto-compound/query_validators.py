@@ -37,7 +37,11 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 from typing import Dict, List
+
+# Add utils directory to path for imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'utils'))
 
 # Import reusable utilities
 from validator_utils import (
