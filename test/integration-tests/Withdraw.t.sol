@@ -10,7 +10,6 @@ import "../../src/interfaces/IWeETHWithdrawAdapter.sol";
 contract WithdrawIntegrationTest is TestSetup, Deployed {
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address public constant LIDO_ADDRESS = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
-    address public constant ADMIN_EOA = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
