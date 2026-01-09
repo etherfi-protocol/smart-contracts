@@ -59,6 +59,9 @@ import "../src/EtherFiRewardsRouter.sol";
 import "../src/CumulativeMerkleRewardsDistributor.sol";
 import "../script/deploys/Deployed.s.sol";
 
+import "../src/DepositAdapter.sol";
+import "../src/interfaces/IWeETHWithdrawAdapter.sol";
+
 contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
@@ -196,6 +199,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     EtherFiAdmin public etherFiAdminImplementation;
     EtherFiAdmin public etherFiAdminInstance;
 
+    DepositAdapter public depositAdapterImplementation;
+    DepositAdapter public depositAdapterInstance;
+
+    IWeETHWithdrawAdapter public weEthWithdrawAdapterInstance;
+    IWeETHWithdrawAdapter public weEthWithdrawAdapterImplementation;
+
     EtherFiRewardsRouter public etherFiRewardsRouterInstance = EtherFiRewardsRouter(payable(0x73f7b1184B5cD361cC0f7654998953E2a251dd58));
 
     EtherFiNode public node;
@@ -236,6 +245,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     address liquidityPool = vm.addr(9);
     address shonee = vm.addr(1200);
     address jess = vm.addr(1201);
+    address tom = vm.addr(1202);
     address committeeMember = address(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
     address timelock = address(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761);
     address buybackWallet = address(0x2f5301a3D59388c509C65f8698f521377D41Fd0F);
@@ -367,6 +377,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             eigenLayerRewardsCoordinator = IRewardsCoordinator(0x7750d328b314EfFa365A0402CcfD489B80B0adda);
 
             eigenLayerTimelock = ITimelock(0xA6Db1A8C5a981d1536266D2a393c5F8dDb210EAF);
+            depositAdapterInstance = DepositAdapter(payable(deployed.DEPOSIT_ADAPTER()));
+
+            membershipManagerV1Instance = MembershipManager(payable(deployed.MEMBERSHIP_MANAGER()));
 
         } else if (forkEnum == TESTNET_FORK) {
             vm.selectFork(vm.createFork(vm.envString("TESTNET_RPC_URL")));
@@ -401,7 +414,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         liquidityPoolInstance = LiquidityPool(payable(addressProviderInstance.getContractAddress("LiquidityPool")));
         eETHInstance = EETH(addressProviderInstance.getContractAddress("EETH"));
         weEthInstance = WeETH(addressProviderInstance.getContractAddress("WeETH"));
-        membershipManagerV1Instance = MembershipManager(payable(addressProviderInstance.getContractAddress("MembershipManager")));
         membershipNftInstance = MembershipNFT(addressProviderInstance.getContractAddress("MembershipNFT"));
         auctionInstance = AuctionManager(addressProviderInstance.getContractAddress("AuctionManager"));
         stakingManagerInstance = StakingManager(addressProviderInstance.getContractAddress("StakingManager"));
@@ -418,7 +430,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(address(0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0)));
         etherFiRestakerInstance = EtherFiRestaker(payable(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf)));
         roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
-        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(deployed.CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR()));
+        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(0x9A8c5046a290664Bf42D065d33512fe403484534));
+        treasuryInstance = 0x0c83EAe1FE72c390A02E426572854931EefF93BA;
+        weEthWithdrawAdapterInstance = IWeETHWithdrawAdapter(deployed.WEETH_WITHDRAW_ADAPTER());
     }
 
     function upgradeEtherFiRedemptionManager() public {
