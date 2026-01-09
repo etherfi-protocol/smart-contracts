@@ -1120,8 +1120,9 @@ def main():
         for v in validators:
             wc = v.get('withdrawal_credentials')
             if wc and wc.strip() and len(wc.strip()) > 0:
-                # Additional check: ensure it's a valid EigenPod address format
-                if wc.startswith('0x') and len(wc) == 42:  # Standard Ethereum address format
+                # Additional check: ensure it's a valid withdrawal credentials format
+                # Accept both EigenPod address (42 chars: 0x + 40 hex) and full withdrawal credentials (66 chars: 0x + 64 hex)
+                if wc.startswith('0x') and (len(wc) == 42 or len(wc) == 66):
                     valid_validators.append(v)
                 else:
                     invalid_validators.append(v)
