@@ -14,7 +14,7 @@ import "../../../src/interfaces/IEtherFiNode.sol";
 import "../../../src/eigenlayer-interfaces/IEigenPod.sol";
 import "../consolidations/GnosisConsolidationLib.sol";
 import "@openzeppelin/contracts/governance/TimelockController.sol";
-
+import "../../../src/EtherFiTimelock.sol";
 /**
  * @title AutoCompound
  * @notice Generates auto-compounding (0x02) consolidation transactions grouped by EigenPod
@@ -54,6 +54,7 @@ contract AutoCompound is Script, Utils {
     
     // === MAINNET CONTRACT ADDRESSES ===
     IEtherFiNodesManager constant nodesManager = IEtherFiNodesManager(ETHERFI_NODES_MANAGER);
+    EtherFiTimelock constant etherFiTimelock = EtherFiTimelock(payable(OPERATING_TIMELOCK));
     
     // Note: MIN_DELAY_OPERATING_TIMELOCK is inherited from Utils (via TimelockUtils)
     
@@ -269,7 +270,7 @@ contract AutoCompound is Script, Utils {
     function _buildTimelockCalldata(
         uint256[] memory unlinkedIds,
         bytes[] memory unlinkedPubkeys
-    ) internal view returns (bytes memory scheduleCalldata, bytes memory executeCalldata) {
+    ) internal returns (bytes memory scheduleCalldata, bytes memory executeCalldata) {
         // Build linkLegacyValidatorIds calldata
         bytes memory linkCalldata = abi.encodeWithSelector(
             LINK_LEGACY_VALIDATOR_IDS_SELECTOR,
@@ -309,6 +310,12 @@ contract AutoCompound is Script, Utils {
             bytes32(0), // predecessor
             salt
         );
+
+        vm.prank(address(ETHERFI_OPERATING_ADMIN));
+        etherFiTimelock.scheduleBatch(targets, values, payloads, bytes32(0), salt, MIN_DELAY_OPERATING_TIMELOCK);
+        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1);
+        vm.prank(address(ETHERFI_OPERATING_ADMIN));
+        etherFiTimelock.executeBatch(targets, values, payloads, bytes32(0), salt);
     }
     
     function _generateAndWriteConsolidation(
