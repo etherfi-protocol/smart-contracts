@@ -237,12 +237,14 @@ TX_FILES=()
 # Process each target consolidation
 for i in $(seq 0 $((NUM_TARGETS - 1))); do
     TARGET_PUBKEY=$(jq -r ".consolidations[$i].target.pubkey" "$CONSOLIDATION_DATA")
+    TARGET_VALIDATOR_ID=$(jq -r ".consolidations[$i].target.id" "$CONSOLIDATION_DATA")
     NUM_SOURCES=$(jq ".consolidations[$i].sources | length" "$CONSOLIDATION_DATA")
     POST_BALANCE=$(jq ".consolidations[$i].post_consolidation_balance_eth" "$CONSOLIDATION_DATA")
     
     echo ""
     echo -e "${BLUE}Target $((i + 1))/$NUM_TARGETS:${NC}"
     echo "  Pubkey: ${TARGET_PUBKEY:0:20}...${TARGET_PUBKEY: -10}"
+    echo "  Validator ID: $TARGET_VALIDATOR_ID"
     echo "  Sources: $NUM_SOURCES validators"
     echo "  Post-consolidation balance: ${POST_BALANCE} ETH"
     
@@ -258,24 +260,35 @@ for i in $(seq 0 $((NUM_TARGETS - 1))); do
     
     JSON_FILE="$TEMP_SOURCES_FILE" \
     TARGET_PUBKEY="$TARGET_PUBKEY" \
-    OUTPUT_FILE="$OUTPUT_FILE" \
+    TARGET_VALIDATOR_ID="$TARGET_VALIDATOR_ID" \
     BATCH_SIZE="$BATCH_SIZE" \
     SAFE_NONCE="$CURRENT_NONCE" \
     forge script "$SCRIPT_DIR/ConsolidateToTarget.s.sol:ConsolidateToTarget" \
         --fork-url "$MAINNET_RPC_URL" -vvvv 2>&1 | tee "$OUTPUT_DIR/forge_target_$((i + 1)).log"
     
-    # Move generated file to output directory
-    if [ -f "$SCRIPT_DIR/$OUTPUT_FILE" ]; then
-        mv "$SCRIPT_DIR/$OUTPUT_FILE" "$OUTPUT_DIR/"
-        TX_FILES+=("$OUTPUT_DIR/$OUTPUT_FILE")
-        echo -e "${GREEN}  ✓ Generated $OUTPUT_FILE${NC}"
-    fi
+    # Move all generated transaction files to output directory
+    # The script generates: *-link-schedule.json, *-link-execute.json, *-consolidation.json
+    GENERATED_COUNT=0
+    for generated_file in "$SCRIPT_DIR"/${CURRENT_NONCE}-*.json "$SCRIPT_DIR"/$((CURRENT_NONCE + 1))-*.json "$SCRIPT_DIR"/$((CURRENT_NONCE + 2))-*.json; do
+        if [ -f "$generated_file" ]; then
+            mv "$generated_file" "$OUTPUT_DIR/"
+            TX_FILES+=("$OUTPUT_DIR/$(basename "$generated_file")")
+            echo -e "${GREEN}  ✓ Generated $(basename "$generated_file")${NC}"
+            GENERATED_COUNT=$((GENERATED_COUNT + 1))
+        fi
+    done
     
     # Clean up temp file
     rm -f "$TEMP_SOURCES_FILE"
     
-    # Increment nonce for next transaction
-    CURRENT_NONCE=$((CURRENT_NONCE + 1))
+    # Increment nonce based on how many files were generated
+    # If linking was needed: link-schedule (N), link-execute (N+1), consolidation (N+2) = +3
+    # If no linking: consolidation (N) = +1
+    if [ $GENERATED_COUNT -gt 1 ]; then
+        CURRENT_NONCE=$((CURRENT_NONCE + GENERATED_COUNT))
+    else
+        CURRENT_NONCE=$((CURRENT_NONCE + 1))
+    fi
 done
 
 echo ""
