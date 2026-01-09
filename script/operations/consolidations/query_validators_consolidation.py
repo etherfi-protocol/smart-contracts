@@ -1,0 +1,828 @@
+#!/usr/bin/env python3
+"""
+query_validators_consolidation.py - Query and select validators for consolidation
+
+This script queries the EtherFi validator database to find validators for consolidation.
+It selects target validators distributed across the withdrawal sweep queue, then assigns
+source validators from matching withdrawal credential groups.
+
+Features:
+- Multi-target selection: Targets are auto-selected across sweep queue buckets
+- Withdrawal credential grouping: Sources must match target's withdrawal credentials
+- Balance overflow prevention: Targets won't exceed max_target_balance post-consolidation
+- Sweep queue distribution: Ensures consolidations are spread across the withdrawal timeline
+
+Usage:
+    python3 query_validators_consolidation.py --list-operators
+    python3 query_validators_consolidation.py --operator "Validation Cloud" --count 50
+    python3 query_validators_consolidation.py --operator "Infstones" --count 100 --bucket-hours 6 --max-target-balance 2016
+
+Examples:
+    # Get 50 source validators distributed across targets in different sweep buckets
+    python3 query_validators_consolidation.py --operator "Validation Cloud" --count 50
+
+    # Use custom max target balance and bucket interval
+    python3 query_validators_consolidation.py --operator "Validation Cloud" --count 50 --max-target-balance 1984 --bucket-hours 12
+
+Environment Variables:
+    VALIDATOR_DB: PostgreSQL connection string for validator database
+    BEACON_CHAIN_URL: Beacon chain API URL (default: https://beaconcha.in/api/v1)
+
+Output:
+    JSON file with consolidation plan suitable for ConsolidateToTarget.s.sol
+"""
+
+import argparse
+import json
+import os
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+# Add utils directory to path for imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'utils'))
+
+# Import reusable utilities
+from validator_utils import (
+    get_db_connection,
+    load_operators_from_db,
+    get_operator_address,
+    list_operators,
+    query_validators,
+    fetch_beacon_state,
+    calculate_sweep_time,
+    format_duration,
+    filter_consolidated_validators,
+    spread_validators_across_queue,
+    check_validators_consolidation_status_batch,
+)
+
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+MAX_EFFECTIVE_BALANCE = 2048  # ETH - Protocol max for compounding validators
+DEFAULT_MAX_TARGET_BALANCE = 2016  # ETH - Leave 32 ETH buffer for rewards
+DEFAULT_SOURCE_BALANCE = 32  # ETH - Standard validator balance
+DEFAULT_BUCKET_HOURS = 6
+
+
+# =============================================================================
+# Withdrawal Credential Utilities
+# =============================================================================
+
+def extract_wc_address(withdrawal_credentials: str) -> Optional[str]:
+    """
+    Extract the 20-byte address from withdrawal credentials.
+    
+    Withdrawal credentials format:
+    - Full format (66 chars): 0x01 + 22 zero chars + 40-char address
+    - Address only (42 chars): 0x + 40-char address
+    
+    Returns:
+        Lowercase address string (40 hex chars without 0x prefix) or None
+    """
+    if not withdrawal_credentials:
+        return None
+    
+    wc = withdrawal_credentials.lower().strip()
+    
+    # Full format: 0x01 + 22 zeros + 40-char address (66 chars total)
+    if len(wc) == 66:
+        return wc[-40:]  # Last 40 hex chars = 20 bytes
+    
+    # Address only format (42 chars)
+    if len(wc) == 42 and wc.startswith('0x'):
+        return wc[2:]  # Remove 0x prefix
+    
+    return None
+
+
+def group_by_withdrawal_credentials(validators: List[Dict]) -> Dict[str, List[Dict]]:
+    """
+    Group validators by their withdrawal credential address (EigenPod).
+    
+    Args:
+        validators: List of validator dictionaries
+    
+    Returns:
+        Dictionary mapping WC address -> list of validators
+    """
+    groups = {}
+    ungrouped = []
+    
+    for v in validators:
+        wc_address = extract_wc_address(v.get('withdrawal_credentials'))
+        if wc_address:
+            if wc_address not in groups:
+                groups[wc_address] = []
+            groups[wc_address].append(v)
+        else:
+            ungrouped.append(v)
+    
+    if ungrouped:
+        print(f"  ⚠ Warning: {len(ungrouped)} validators have no withdrawal credentials (skipped)")
+    
+    return groups
+
+
+def is_consolidated_credentials(withdrawal_credentials: str) -> bool:
+    """Check if withdrawal credentials indicate 0x02 (consolidated) type."""
+    if not withdrawal_credentials:
+        return False
+    return withdrawal_credentials.lower().startswith('0x02')
+
+
+def format_full_withdrawal_credentials(wc_address: str, prefix: str = '01') -> str:
+    """
+    Format address as full 32-byte withdrawal credentials.
+    
+    Args:
+        wc_address: 40-char hex address (without 0x prefix)
+        prefix: Credential type prefix ('01' or '02')
+    
+    Returns:
+        Full 66-char withdrawal credentials string
+    """
+    return f'0x{prefix}' + '0' * 22 + wc_address.lower()
+
+
+# =============================================================================
+# Balance & Capacity Calculations
+# =============================================================================
+
+def get_validator_balance_eth(validator: Dict) -> float:
+    """
+    Get validator balance in ETH.
+    
+    Tries multiple field names to accommodate different data sources.
+    """
+    # Try various balance field names
+    for field in ['balance', 'balance_eth', 'effectivebalance', 'effective_balance']:
+        if field in validator:
+            bal = validator[field]
+            if isinstance(bal, (int, float)):
+                # If balance is in gwei, convert to ETH
+                if bal > 10000:  # Likely gwei
+                    return bal / 1e9
+                return float(bal)
+            try:
+                bal_float = float(bal)
+                if bal_float > 10000:
+                    return bal_float / 1e9
+                return bal_float
+            except (ValueError, TypeError):
+                continue
+    
+    # Default to 32 ETH for standard validators
+    return DEFAULT_SOURCE_BALANCE
+
+
+def calculate_consolidation_capacity(
+    target_balance_eth: float,
+    max_target_balance: float = DEFAULT_MAX_TARGET_BALANCE,
+    source_balance: float = DEFAULT_SOURCE_BALANCE
+) -> int:
+    """
+    Calculate how many source validators can consolidate into a target.
+    
+    Args:
+        target_balance_eth: Current target balance in ETH
+        max_target_balance: Maximum allowed post-consolidation balance
+        source_balance: Expected source validator balance (default 32 ETH)
+    
+    Returns:
+        Number of 32 ETH validators that can consolidate into target
+    """
+    remaining_capacity = max_target_balance - target_balance_eth
+    return max(0, int(remaining_capacity // source_balance))
+
+
+# =============================================================================
+# Target Selection Logic
+# =============================================================================
+
+def select_targets_from_buckets(
+    wc_groups: Dict[str, List[Dict]],
+    buckets: List[Dict],
+    max_target_balance: float,
+    prefer_consolidated: bool = True
+) -> Dict[str, Dict]:
+    """
+    Select target validators distributed across sweep queue buckets.
+    
+    For each withdrawal credential group, selects one target validator
+    preferring those in different sweep queue buckets to maximize distribution.
+    
+    Args:
+        wc_groups: Validators grouped by withdrawal credential address
+        buckets: Sweep time buckets from spread_validators_across_queue
+        max_target_balance: Maximum allowed post-consolidation balance
+        prefer_consolidated: Prefer existing 0x02 validators as targets
+    
+    Returns:
+        Dictionary mapping WC address -> selected target validator info
+    """
+    targets = {}
+    bucket_usage = {b['bucketIndex']: 0 for b in buckets}
+    
+    # Build validator -> bucket mapping
+    validator_to_bucket = {}
+    for bucket in buckets:
+        for v in bucket.get('validators', []):
+            pubkey = v.get('pubkey', '')
+            if pubkey:
+                validator_to_bucket[pubkey.lower()] = bucket['bucketIndex']
+    
+    for wc_address, validators in wc_groups.items():
+        if not validators:
+            continue
+        
+        # Sort validators by preference:
+        # 1. Already consolidated (0x02) - can still receive consolidations
+        # 2. Lower bucket usage (spread across queue)
+        # 3. Lower balance (more capacity)
+        
+        def target_score(v):
+            is_02 = is_consolidated_credentials(v.get('beacon_withdrawal_credentials', v.get('withdrawal_credentials', '')))
+            bucket_idx = validator_to_bucket.get(v.get('pubkey', '').lower(), 999)
+            bucket_count = bucket_usage.get(bucket_idx, 0)
+            balance = get_validator_balance_eth(v)
+            
+            # Score: (prefer 0x02, lower bucket usage, lower balance)
+            return (
+                0 if (is_02 and prefer_consolidated) else 1,
+                bucket_count,
+                balance
+            )
+        
+        sorted_validators = sorted(validators, key=target_score)
+        
+        # Select first validator that has capacity
+        for candidate in sorted_validators:
+            balance = get_validator_balance_eth(candidate)
+            capacity = calculate_consolidation_capacity(balance, max_target_balance)
+            
+            if capacity > 0:
+                bucket_idx = validator_to_bucket.get(candidate.get('pubkey', '').lower(), 0)
+                bucket_usage[bucket_idx] = bucket_usage.get(bucket_idx, 0) + 1
+                
+                targets[wc_address] = {
+                    'validator': candidate,
+                    'balance_eth': balance,
+                    'capacity': capacity,
+                    'bucket_index': bucket_idx
+                }
+                break
+    
+    return targets
+
+
+# =============================================================================
+# Consolidation Planning
+# =============================================================================
+
+def create_consolidation_plan(
+    validators: List[Dict],
+    count: int,
+    max_target_balance: float,
+    bucket_hours: int
+) -> Dict:
+    """
+    Create a consolidation plan with targets and sources.
+    
+    Args:
+        validators: All eligible validators
+        count: Number of source validators to consolidate
+        max_target_balance: Maximum ETH balance for targets
+        bucket_hours: Bucket interval for sweep queue distribution
+    
+    Returns:
+        Consolidation plan dictionary
+    """
+    print(f"\n=== Creating Consolidation Plan ===")
+    print(f"  Target count: {count} source validators")
+    print(f"  Max target balance: {max_target_balance} ETH")
+    print(f"  Bucket interval: {bucket_hours}h")
+    
+    # Step 1: Group validators by withdrawal credentials
+    print(f"\nStep 1: Grouping by withdrawal credentials...")
+    wc_groups = group_by_withdrawal_credentials(validators)
+    print(f"  Found {len(wc_groups)} unique EigenPods")
+    
+    for wc, vals in sorted(wc_groups.items(), key=lambda x: len(x[1]), reverse=True)[:5]:
+        print(f"    {wc[:10]}...{wc[-6:]}: {len(vals)} validators")
+    if len(wc_groups) > 5:
+        print(f"    ... and {len(wc_groups) - 5} more EigenPods")
+    
+    # Step 2: Calculate sweep times and create buckets
+    print(f"\nStep 2: Calculating sweep times...")
+    try:
+        beacon_state = fetch_beacon_state()
+        sweep_index = beacon_state['next_withdrawal_validator_index']
+        total_validators = beacon_state['validator_count']
+        print(f"  Sweep index: {sweep_index:,}")
+        print(f"  Total validators: {total_validators:,}")
+    except Exception as e:
+        print(f"  ⚠ Warning: Failed to fetch beacon state: {e}")
+        print(f"  Using default values...")
+        sweep_index = 0
+        total_validators = 1200000
+    
+    # Add sweep time info to all validators
+    all_with_sweep = []
+    for v in validators:
+        validator_index = v.get('index')
+        if validator_index is not None:
+            sweep_info = calculate_sweep_time(validator_index, sweep_index, total_validators)
+            v_with_sweep = {**v, **sweep_info}
+            all_with_sweep.append(v_with_sweep)
+    
+    all_with_sweep.sort(key=lambda x: x.get('secondsUntilSweep', 0))
+    print(f"  Calculated sweep times for {len(all_with_sweep)} validators")
+    
+    # Create buckets
+    if all_with_sweep:
+        bucket_result = spread_validators_across_queue(all_with_sweep, bucket_hours)
+        buckets = bucket_result.get('buckets', [])
+    else:
+        buckets = []
+    
+    # Step 3: Select targets distributed across buckets
+    print(f"\nStep 3: Selecting target validators...")
+    
+    # Re-group validators with sweep info
+    wc_groups_with_sweep = {}
+    for v in all_with_sweep:
+        wc_address = extract_wc_address(v.get('withdrawal_credentials'))
+        if wc_address:
+            if wc_address not in wc_groups_with_sweep:
+                wc_groups_with_sweep[wc_address] = []
+            wc_groups_with_sweep[wc_address].append(v)
+    
+    targets = select_targets_from_buckets(
+        wc_groups_with_sweep,
+        buckets,
+        max_target_balance
+    )
+    
+    print(f"  Selected {len(targets)} targets across {len(set(t['bucket_index'] for t in targets.values()))} buckets")
+    
+    # Step 4: Assign sources to targets
+    print(f"\nStep 4: Assigning sources to targets...")
+    
+    consolidations = []
+    total_sources = 0
+    skipped_no_capacity = 0
+    skipped_is_target = 0
+    
+    # Track which validators are targets
+    target_pubkeys = set(
+        t['validator'].get('pubkey', '').lower() 
+        for t in targets.values()
+    )
+    
+    for wc_address, target_info in targets.items():
+        target = target_info['validator']
+        capacity = target_info['capacity']
+        target_balance = target_info['balance_eth']
+        
+        # Get sources from same WC group (exclude target)
+        wc_validators = wc_groups_with_sweep.get(wc_address, [])
+        sources = []
+        
+        for v in wc_validators:
+            if total_sources >= count:
+                break
+            
+            v_pubkey = v.get('pubkey', '').lower()
+            
+            # Skip if this is a target
+            if v_pubkey in target_pubkeys:
+                if v_pubkey != target.get('pubkey', '').lower():
+                    skipped_is_target += 1
+                continue
+            
+            # Check capacity
+            if len(sources) >= capacity:
+                skipped_no_capacity += 1
+                continue
+            
+            sources.append(v)
+            total_sources += 1
+        
+        if sources:
+            # Calculate post-consolidation balance
+            source_total = sum(get_validator_balance_eth(s) for s in sources)
+            post_balance = target_balance + source_total
+            
+            consolidations.append({
+                'target': target,
+                'target_balance_eth': target_balance,
+                'sources': sources,
+                'source_total_eth': source_total,
+                'post_consolidation_balance_eth': post_balance,
+                'bucket_index': target_info['bucket_index'],
+                'wc_address': wc_address
+            })
+    
+    print(f"  Assigned {total_sources} sources to {len(consolidations)} targets")
+    if skipped_no_capacity > 0:
+        print(f"  ⚠ Skipped {skipped_no_capacity} validators (target at capacity)")
+    if skipped_is_target > 0:
+        print(f"  ⚠ Skipped {skipped_is_target} validators (already a target)")
+    
+    # Step 5: Validate the plan
+    print(f"\nStep 5: Validating consolidation plan...")
+    validation = validate_consolidation_plan(consolidations, max_target_balance)
+    
+    # Step 6: Generate summary
+    bucket_distribution = {}
+    for c in consolidations:
+        bucket_key = f"bucket_{c['bucket_index']}"
+        bucket_distribution[bucket_key] = bucket_distribution.get(bucket_key, 0) + 1
+    
+    summary = {
+        'total_targets': len(consolidations),
+        'total_sources': sum(len(c['sources']) for c in consolidations),
+        'total_eth_consolidated': sum(c['source_total_eth'] for c in consolidations),
+        'bucket_distribution': bucket_distribution,
+        'withdrawal_credential_groups': len(set(c['wc_address'] for c in consolidations))
+    }
+    
+    return {
+        'consolidations': consolidations,
+        'summary': summary,
+        'validation': validation
+    }
+
+
+def validate_consolidation_plan(consolidations: List[Dict], max_target_balance: float) -> Dict:
+    """
+    Validate the consolidation plan for safety.
+    
+    Checks:
+    1. All source validators share credentials with their target
+    2. No target exceeds max balance post-consolidation
+    3. No validator appears as both source and target
+    4. No duplicate pubkeys
+    """
+    all_credentials_matched = True
+    all_targets_under_capacity = True
+    errors = []
+    
+    all_source_pubkeys = set()
+    all_target_pubkeys = set()
+    
+    for c in consolidations:
+        target_wc = extract_wc_address(c['target'].get('withdrawal_credentials'))
+        target_pubkey = c['target'].get('pubkey', '').lower()
+        all_target_pubkeys.add(target_pubkey)
+        
+        # Check post-consolidation balance
+        if c['post_consolidation_balance_eth'] > max_target_balance:
+            all_targets_under_capacity = False
+            errors.append(f"Target {target_pubkey[:20]}... exceeds max balance: {c['post_consolidation_balance_eth']:.2f} ETH")
+        
+        for source in c['sources']:
+            source_wc = extract_wc_address(source.get('withdrawal_credentials'))
+            source_pubkey = source.get('pubkey', '').lower()
+            
+            # Check credential match
+            if source_wc != target_wc:
+                all_credentials_matched = False
+                errors.append(f"Source {source_pubkey[:20]}... WC mismatch with target")
+            
+            # Check for duplicates
+            if source_pubkey in all_source_pubkeys:
+                errors.append(f"Duplicate source pubkey: {source_pubkey[:20]}...")
+            all_source_pubkeys.add(source_pubkey)
+    
+    # Check for source/target overlap
+    overlap = all_source_pubkeys.intersection(all_target_pubkeys)
+    if overlap:
+        errors.append(f"Validators appear as both source and target: {len(overlap)}")
+    
+    # Calculate sweep distribution score (0-1, higher is better)
+    if consolidations:
+        unique_buckets = len(set(c['bucket_index'] for c in consolidations))
+        sweep_distribution_score = min(1.0, unique_buckets / len(consolidations))
+    else:
+        sweep_distribution_score = 0.0
+    
+    validation = {
+        'all_credentials_matched': all_credentials_matched,
+        'all_targets_under_capacity': all_targets_under_capacity,
+        'sweep_distribution_score': round(sweep_distribution_score, 2),
+        'no_source_target_overlap': len(overlap) == 0,
+        'no_duplicate_pubkeys': len(errors) == 0 or not any('Duplicate' in e for e in errors),
+        'errors': errors if errors else None
+    }
+    
+    # Print validation results
+    print(f"  ✓ Credentials matched: {validation['all_credentials_matched']}")
+    print(f"  ✓ Targets under capacity: {validation['all_targets_under_capacity']}")
+    print(f"  ✓ Sweep distribution score: {validation['sweep_distribution_score']}")
+    print(f"  ✓ No source/target overlap: {validation['no_source_target_overlap']}")
+    
+    if errors:
+        print(f"  ⚠ Validation errors:")
+        for e in errors[:5]:
+            print(f"    - {e}")
+        if len(errors) > 5:
+            print(f"    ... and {len(errors) - 5} more")
+    
+    return validation
+
+
+# =============================================================================
+# Output Generation
+# =============================================================================
+
+def convert_to_output_format(plan: Dict) -> Dict:
+    """
+    Convert consolidation plan to JSON output format for Solidity script.
+    
+    Output format is designed to be compatible with ValidatorHelpers.parseValidatorsFromJson()
+    which expects each validator to have: pubkey, id, withdrawal_credentials
+    """
+    consolidations_output = []
+    
+    for c in plan['consolidations']:
+        target = c['target']
+        wc_address = c['wc_address']
+        full_wc = format_full_withdrawal_credentials(wc_address)
+        
+        target_output = {
+            'pubkey': target.get('pubkey', ''),
+            'validator_index': target.get('index'),
+            'id': target.get('id'),
+            'current_balance_eth': c['target_balance_eth'],
+            'withdrawal_credentials': full_wc,
+            'sweep_bucket': f"bucket_{c['bucket_index']}"
+        }
+        
+        sources_output = []
+        for source in c['sources']:
+            sources_output.append({
+                'pubkey': source.get('pubkey', ''),
+                'validator_index': source.get('index'),
+                'id': source.get('id'),
+                'balance_eth': get_validator_balance_eth(source),
+                # Include withdrawal_credentials for ValidatorHelpers compatibility
+                'withdrawal_credentials': full_wc
+            })
+        
+        consolidations_output.append({
+            'target': target_output,
+            'sources': sources_output,
+            'post_consolidation_balance_eth': c['post_consolidation_balance_eth']
+        })
+    
+    return {
+        'consolidations': consolidations_output,
+        'summary': plan['summary'],
+        'validation': plan['validation'],
+        'generated_at': datetime.now().isoformat()
+    }
+
+
+def write_output(plan: Dict, output_file: str, operator_name: str):
+    """Write consolidation plan to JSON file."""
+    output = convert_to_output_format(plan)
+    
+    with open(output_file, 'w') as f:
+        json.dump(output, f, indent=2, default=str)
+    
+    print(f"\n=== Output Written ===")
+    print(f"File: {output_file}")
+    print(f"Operator: {operator_name}")
+    print(f"Total targets: {plan['summary']['total_targets']}")
+    print(f"Total sources: {plan['summary']['total_sources']}")
+    print(f"Total ETH to consolidate: {plan['summary']['total_eth_consolidated']:.2f}")
+    
+    # Print bucket distribution
+    print(f"\nBucket distribution:")
+    for bucket, count in sorted(plan['summary']['bucket_distribution'].items()):
+        print(f"  {bucket}: {count} targets")
+    
+    # Print next steps
+    print(f"\n=== Next Steps ===")
+    print(f"Run the ConsolidateToTarget script with this data:")
+    print(f"")
+    print(f"  JSON_FILE={os.path.basename(output_file)} \\")
+    print(f"    forge script script/operations/consolidations/ConsolidateToTarget.s.sol:ConsolidateToTarget \\")
+    print(f"    --fork-url $MAINNET_RPC_URL -vvvv")
+
+
+# =============================================================================
+# Main Entry Point
+# =============================================================================
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Query validators from database for consolidation',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # List all operators
+  python3 query_validators_consolidation.py --list-operators
+
+  # Get 50 source validators for consolidation
+  python3 query_validators_consolidation.py --operator "Validation Cloud" --count 50
+
+  # Custom max target balance and bucket interval
+  python3 query_validators_consolidation.py --operator "Infstones" --count 100 \\
+    --max-target-balance 1984 --bucket-hours 12
+
+  # Dry run to preview plan without writing output
+  python3 query_validators_consolidation.py --operator "Validation Cloud" --count 50 --dry-run
+        """
+    )
+    parser.add_argument(
+        '--operator',
+        help='Operator name (e.g., "Validation Cloud")'
+    )
+    parser.add_argument(
+        '--operator-address',
+        help='Operator address (e.g., 0x123...)'
+    )
+    parser.add_argument(
+        '--count',
+        type=int,
+        default=50,
+        help='Number of source validators to consolidate (default: 50)'
+    )
+    parser.add_argument(
+        '--bucket-hours',
+        type=int,
+        default=DEFAULT_BUCKET_HOURS,
+        help=f'Bucket size in hours for sweep time distribution (default: {DEFAULT_BUCKET_HOURS})'
+    )
+    parser.add_argument(
+        '--max-target-balance',
+        type=float,
+        default=DEFAULT_MAX_TARGET_BALANCE,
+        help=f'Maximum ETH balance allowed on target post-consolidation (default: {DEFAULT_MAX_TARGET_BALANCE})'
+    )
+    parser.add_argument(
+        '--output',
+        default='consolidation-data.json',
+        help='Output JSON file (default: consolidation-data.json)'
+    )
+    parser.add_argument(
+        '--list-operators',
+        action='store_true',
+        help='List all operators with validator counts'
+    )
+    parser.add_argument(
+        '--include-non-restaked',
+        action='store_true',
+        help='Include validators that are not restaked (default: only restaked)'
+    )
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Preview consolidation plan without writing output file'
+    )
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Show detailed information'
+    )
+    parser.add_argument(
+        '--beacon-api',
+        default='https://beaconcha.in/api/v1',
+        help='Beacon chain API base URL (default: https://beaconcha.in/api/v1)'
+    )
+    
+    args = parser.parse_args()
+    
+    # Validate arguments
+    if args.bucket_hours <= 0:
+        print(f"Error: --bucket-hours must be a positive integer, got {args.bucket_hours}")
+        sys.exit(1)
+    
+    if args.max_target_balance > MAX_EFFECTIVE_BALANCE:
+        print(f"Error: --max-target-balance cannot exceed {MAX_EFFECTIVE_BALANCE} ETH (protocol max)")
+        sys.exit(1)
+    
+    if args.max_target_balance < DEFAULT_SOURCE_BALANCE * 2:
+        print(f"Error: --max-target-balance must be at least {DEFAULT_SOURCE_BALANCE * 2} ETH")
+        sys.exit(1)
+    
+    # Connect to database
+    try:
+        conn = get_db_connection()
+    except ValueError as e:
+        print(f"Error: {e}")
+        print("Set VALIDATOR_DB environment variable to your PostgreSQL connection string")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        sys.exit(1)
+    
+    try:
+        if args.list_operators:
+            operators = list_operators(conn)
+            print("\n=== Operators ===")
+            print(f"{'Name':<30} {'Address':<44} {'Total':>8} {'Restaked':>10}")
+            print("-" * 95)
+            for op in operators:
+                addr_display = op['address'] if op['address'] else 'N/A'
+                print(f"{op['name']:<30} {addr_display:<44} {op['total']:>8} {op['restaked']:>10}")
+            return
+        
+        # Resolve operator
+        if args.operator_address:
+            operator_address = args.operator_address.lower()
+            address_to_name, _ = load_operators_from_db(conn)
+            operator_name = address_to_name.get(operator_address, 'Unknown')
+        elif args.operator:
+            operator_address = get_operator_address(conn, args.operator)
+            if not operator_address:
+                print(f"Error: Operator '{args.operator}' not found")
+                print("Use --list-operators to see available operators")
+                sys.exit(1)
+            operator_name = args.operator
+        else:
+            print("Error: Must specify --operator or --operator-address")
+            parser.print_help()
+            sys.exit(1)
+        
+        restaked_only = not args.include_non_restaked
+        
+        # Query validators - get more than needed to allow for filtering
+        MAX_VALIDATORS_QUERY = 100000
+        
+        print(f"\n=== Querying Validators ===")
+        print(f"Operator: {operator_name} ({operator_address})")
+        print(f"Target source count: {args.count}")
+        print(f"Max target balance: {args.max_target_balance} ETH")
+        print(f"Restaked only: {restaked_only}")
+        
+        validators = query_validators(
+            conn,
+            operator_address,
+            MAX_VALIDATORS_QUERY,
+            restaked_only=restaked_only
+        )
+        
+        if not validators:
+            print(f"No validators found matching criteria")
+            sys.exit(1)
+        
+        print(f"Found {len(validators)} validators from database")
+        
+        # Filter out already consolidated validators (we want 0x01 -> 0x02)
+        print(f"\nChecking consolidation status on beacon chain...")
+        filtered_validators, consolidated_validators = filter_consolidated_validators(
+            validators,
+            exclude_consolidated=True,
+            beacon_api=args.beacon_api,
+            show_progress=True
+        )
+        
+        print(f"\nFiltered results:")
+        print(f"  Already consolidated (0x02): {len(consolidated_validators)}")
+        print(f"  Need consolidation (0x01): {len(filtered_validators)}")
+        
+        if len(filtered_validators) == 0:
+            print("\nError: No validators need consolidation (all are already 0x02)")
+            sys.exit(1)
+        
+        # Create consolidation plan
+        plan = create_consolidation_plan(
+            filtered_validators,
+            args.count,
+            args.max_target_balance,
+            args.bucket_hours
+        )
+        
+        if plan['summary']['total_sources'] == 0:
+            print("\nError: Could not create any consolidations")
+            print("This may happen if all validators are already targets or at capacity")
+            sys.exit(1)
+        
+        # Check for validation errors
+        if plan['validation'].get('errors'):
+            print("\n⚠ WARNING: Validation errors found!")
+            print("Review the plan carefully before proceeding.")
+        
+        # Write output or just preview
+        if args.dry_run:
+            print("\n=== DRY RUN - Plan Preview ===")
+            output = convert_to_output_format(plan)
+            print(json.dumps(output, indent=2, default=str))
+            print("\n(Use without --dry-run to write to file)")
+        else:
+            write_output(plan, args.output, operator_name)
+        
+    finally:
+        conn.close()
+
+
+if __name__ == '__main__':
+    main()
