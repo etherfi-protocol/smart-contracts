@@ -461,6 +461,13 @@ def submit_tx_via_rpc(
     # Wait for transaction to be mined and check receipt
     if tx_hash:
         receipt = wait_for_tx_receipt(rpc_url, tx_hash, verbose=verbose)
+
+        # Check if receipt is empty (timeout)
+        if not receipt:
+            if verbose:
+                print(f"    ❌ Tx failed - Timeout waiting for receipt")
+            return {"status": "failed", "error": "Timeout waiting for transaction receipt", "tx_hash": tx_hash, "receipt": receipt}
+
         # Extract gas usage from receipt
         gas_used_hex = receipt.get('gasUsed', '0x0')
         gas_used = int(gas_used_hex, 16)
@@ -476,13 +483,21 @@ def submit_tx_via_rpc(
             if verbose:
                 print(f"    ✅ Tx successful - Gas used: {gas_used:,}")
             return {"status": "success", "tx_hash": tx_hash, "receipt": receipt, "gas_used": gas_used}
-        else:
+        elif receipt.get('status') == '0x0':
             # Transaction reverted
             if verbose:
                 print(f"    ❌ Tx reverted - Gas used: {gas_used:,}")
             return {"status": "failed", "error": "Transaction reverted", "tx_hash": tx_hash, "receipt": receipt, "gas_used": gas_used}
+        else:
+            # Unknown status
+            if verbose:
+                print(f"    ❌ Tx failed - Unknown status: {receipt.get('status')}")
+            return {"status": "failed", "error": f"Unknown transaction status: {receipt.get('status')}", "tx_hash": tx_hash, "receipt": receipt, "gas_used": gas_used}
 
-    return {"status": "success", "tx_hash": tx_hash}
+    # If no transaction hash was returned, submission failed
+    if verbose:
+        print(f"    ❌ Tx submission failed - No transaction hash returned")
+    return {"status": "failed", "error": "Transaction submission failed - no hash returned", "tx_hash": None}
 
 
 def wait_for_tx_receipt(rpc_url: str, tx_hash: str, timeout: int = 30, verbose: bool = True) -> Dict:
