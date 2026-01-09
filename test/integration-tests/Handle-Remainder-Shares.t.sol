@@ -7,7 +7,6 @@ import "../../script/deploys/Deployed.s.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
-    address public constant ADMIN_EOA = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);

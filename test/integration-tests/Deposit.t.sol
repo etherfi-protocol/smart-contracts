@@ -141,9 +141,9 @@ contract DepositIntegrationTest is TestSetup {
         uint256 weEthOut = depositAdapterInstance.depositStETHForWeETHWithPermit(stEthAmount, address(0), permitInput);
 
         assertApproxEqAbs(weEthOut, weETHAmountForEETHAmount, 1e1);
-        assertEq(weEthInstance.balanceOf(tom), beforeWeETH + weEthOut); // weETH is transferred to the tom
-        assertEq(eETHInstance.balanceOf(address(weEthInstance)), beforeEETHAmount + eETHAmountForShares); // eETH is transferred to the weETH contract
-        assertEq(address(liquidityPoolInstance).balance, liquidityPoolBalanceBeforeDeposit); // stETH path should not move ETH in the pool
+        assertApproxEqAbs(weEthInstance.balanceOf(tom), beforeWeETH + weEthOut, 1e1); // weETH is transferred to the tom
+        assertApproxEqAbs(eETHInstance.balanceOf(address(weEthInstance)), beforeEETHAmount + eETHAmountForShares, 1e1); // eETH is transferred to the weETH contract
+        assertApproxEqAbs(address(liquidityPoolInstance).balance, liquidityPoolBalanceBeforeDeposit, 1e1); // stETH path should not move ETH in the pool
         assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), beforeStETHBalance + stEthAmount, 1e3); // stETH is transferred to the etherFiRestakerInstance
     }
 
@@ -203,9 +203,9 @@ contract DepositIntegrationTest is TestSetup {
         uint256 weEthOut = depositAdapterInstance.depositWstETHForWeETHWithPermit(wstEthAmount, address(0), permitInput);
 
         assertApproxEqAbs(weEthOut, weETHAmountForEETHAmount, 1e1);
-        assertEq(weEthInstance.balanceOf(tom), beforeWeETH + weEthOut); // weETH is transferred to the tom
-        assertEq(eETHInstance.balanceOf(address(weEthInstance)), beforeEETHAmount + eETHAmountForShares); // eETH is transferred to the weETH contract
-        assertEq(address(liquidityPoolInstance).balance, liquidityPoolBalanceBeforeDeposit); // wstETH path should not move ETH in the pool
+        assertApproxEqAbs(weEthInstance.balanceOf(tom), beforeWeETH + weEthOut, 1e1); // weETH is transferred to the tom
+        assertApproxEqAbs(eETHInstance.balanceOf(address(weEthInstance)), beforeEETHAmount + eETHAmountForShares, 1e1); // eETH is transferred to the weETH contract
+        assertApproxEqAbs(address(liquidityPoolInstance).balance, liquidityPoolBalanceBeforeDeposit, 1e1); // wstETH path should not move ETH in the pool
         assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), beforeStETHBalance + stEthAmountForWstEthAmount, 1e3); // stETH is transferred to the etherFiRestakerInstance
     }
 

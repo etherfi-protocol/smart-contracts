@@ -10,7 +10,6 @@ import "../../src/interfaces/IEtherFiNode.sol";
 import "../../src/libraries/DepositDataRootGenerator.sol";
 
 contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
-    address constant ADMIN_EOA = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
     }

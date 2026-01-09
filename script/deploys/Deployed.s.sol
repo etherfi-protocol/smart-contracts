@@ -60,6 +60,8 @@ contract Deployed {
     address public constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC; // operating admin
     address public constant ETHERFI_UPGRADE_ADMIN = 0xcdd57D11476c22d265722F68390b036f3DA48c21; // upgrade admin
 
+    address public constant ADMIN_EOA = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F; // admin eoa
+
     address public constant AVS_OPERATOR_1 = 0xDd777e5158Cb11DB71B4AF93C75A96eA11A2A615;
     address public constant AVS_OPERATOR_2 = 0x2c7cB7d5dC4aF9caEE654553a144C76F10D4b320;
 
