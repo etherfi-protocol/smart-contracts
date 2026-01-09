@@ -24,7 +24,7 @@ import "@openzeppelin/contracts/governance/TimelockController.sol";
  *
  * Usage:
  *   JSON_FILE=validators.json SAFE_NONCE=42 forge script \
- *     script/operations/auto-compound/AutoCompound.s.sol:AutoCompound \
+ *     script/operations/auto-compound/txns/AutoCompound.s.sol:AutoCompound \
  *     --fork-url $MAINNET_RPC_URL -vvvv
  *
  * Environment Variables:
@@ -245,7 +245,7 @@ contract AutoCompound is Script, Utils {
         // Write file with nonce prefix
         string memory fileName = string.concat(nonce.uint256ToString(), "-", txType, ".json");
         string memory filePath = string.concat(
-            config.root, "/script/operations/auto-compound/", fileName
+            config.root, "/script/operations/auto-compound/txns/", fileName
         );
         
         vm.writeFile(filePath, jsonContent);
@@ -343,7 +343,7 @@ contract AutoCompound is Script, Utils {
             );
 
             string memory outputPath = string.concat(
-                config.root, "/script/operations/auto-compound/", outputFileName // update here
+                config.root, "/script/operations/auto-compound/txns/", outputFileName
             );
 
             // Create single transaction array for this consolidation
@@ -473,7 +473,7 @@ contract AutoCompound is Script, Utils {
         }
         
         // Otherwise, assume it's relative to auto-compound directory
-        return string.concat(root, "/script/operations/auto-compound/", path);
+        return string.concat(root, "/script/operations/auto-compound/txns/", path);
     }
     
     function _removeExtension(string memory filename) internal pure returns (string memory) {

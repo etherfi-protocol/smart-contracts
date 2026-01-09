@@ -102,7 +102,7 @@ fi
 # Create output directory
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 OPERATOR_SLUG=$(echo "$OPERATOR" | tr ' ' '_' | tr '[:upper:]' '[:lower:]')
-OUTPUT_DIR="script/operations/auto-compound/${OPERATOR_SLUG}_${COUNT}_${TIMESTAMP}"
+OUTPUT_DIR="script/operations/auto-compound/txns/${OPERATOR_SLUG}_${COUNT}_${TIMESTAMP}"
 mkdir -p "$OUTPUT_DIR"
 
 echo ""
@@ -142,10 +142,10 @@ SCHEDULE_FILE="$NONCE-link-schedule.json"
 EXECUTE_FILE="$((NONCE + 1))-link-execute.json"
 
 # Move all transaction files to output directory
-mv "script/operations/auto-compound/$SCHEDULE_FILE" "$OUTPUT_DIR/" 2>/dev/null || true
-mv "script/operations/auto-compound/$EXECUTE_FILE" "$OUTPUT_DIR/" 2>/dev/null || true
+mv "script/operations/auto-compound/txns/$SCHEDULE_FILE" "$OUTPUT_DIR/" 2>/dev/null || true
+mv "script/operations/auto-compound/txns/$EXECUTE_FILE" "$OUTPUT_DIR/" 2>/dev/null || true
 # Move all consolidation files (may be multiple with incrementing nonces)
-mv "script/operations/auto-compound/"*-consolidation.json "$OUTPUT_DIR/" 2>/dev/null || true
+mv "script/operations/auto-compound/txns/"*-consolidation.json "$OUTPUT_DIR/" 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}✓ Transactions generated${NC}"
