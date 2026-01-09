@@ -268,8 +268,11 @@ for i in $(seq 0 $((NUM_TARGETS - 1))); do
     
     # Move all generated transaction files to output directory
     # The script generates: *-link-schedule.json, *-link-execute.json, *-consolidation.json
+    echo "  Looking for generated files in: $SCRIPT_DIR"
     GENERATED_COUNT=0
-    for generated_file in "$SCRIPT_DIR"/${CURRENT_NONCE}-*.json "$SCRIPT_DIR"/$((CURRENT_NONCE + 1))-*.json "$SCRIPT_DIR"/$((CURRENT_NONCE + 2))-*.json; do
+    
+    # Look for any JSON files starting with a number (nonce) in the script directory
+    for generated_file in "$SCRIPT_DIR"/[0-9]*-*.json; do
         if [ -f "$generated_file" ]; then
             mv "$generated_file" "$OUTPUT_DIR/"
             TX_FILES+=("$OUTPUT_DIR/$(basename "$generated_file")")
@@ -277,6 +280,13 @@ for i in $(seq 0 $((NUM_TARGETS - 1))); do
             GENERATED_COUNT=$((GENERATED_COUNT + 1))
         fi
     done
+    
+    if [ $GENERATED_COUNT -eq 0 ]; then
+        echo -e "${YELLOW}  Warning: No transaction files found to move${NC}"
+        # Debug: list what's in the script directory
+        echo "  Contents of $SCRIPT_DIR:"
+        ls -la "$SCRIPT_DIR"/*.json 2>/dev/null || echo "  No JSON files found"
+    fi
     
     # Clean up temp file
     rm -f "$TEMP_SOURCES_FILE"
@@ -318,8 +328,12 @@ else
     
     VNET_NAME="${OPERATOR_SLUG}-consolidation-${COUNT}-${TIMESTAMP}"
     
-    # Find all consolidation transaction files
-    CONSOLIDATION_FILES=$(ls "$OUTPUT_DIR"/*-consolidation-*.json 2>/dev/null | sort -V)
+    # Check if linking is needed by looking for schedule file
+    SCHEDULE_FILE=$(ls "$OUTPUT_DIR"/*-link-schedule.json 2>/dev/null | head -1)
+    EXECUTE_FILE=$(ls "$OUTPUT_DIR"/*-link-execute.json 2>/dev/null | head -1)
+    
+    # Find all consolidation files
+    CONSOLIDATION_FILES=$(ls "$OUTPUT_DIR"/*-consolidation.json 2>/dev/null | sort -V)
     
     if [ -n "$CONSOLIDATION_FILES" ]; then
         # Build comma-separated list of consolidation files
@@ -332,11 +346,33 @@ else
             fi
         done
         
-        echo "Simulating consolidation transactions..."
-        CMD="python3 $PROJECT_ROOT/script/operations/utils/simulate.py --tenderly --txns \"$CONSOLIDATION_LIST\" --vnet-name \"$VNET_NAME\""
-        echo "Running: $CMD"
-        eval "$CMD"
-        SIMULATION_EXIT_CODE=$?
+        if [ -n "$SCHEDULE_FILE" ] && [ -n "$EXECUTE_FILE" ]; then
+            # Linking needed - run schedule + execute + all consolidation files with timelock delay
+            echo "Linking required. Running 3-phase simulation with timelock delay..."
+            echo "  Schedule: $(basename "$SCHEDULE_FILE")"
+            echo "  Execute: $(basename "$EXECUTE_FILE")"
+            echo "  Consolidations: $CONSOLIDATION_LIST"
+            echo ""
+            
+            CMD="python3 $PROJECT_ROOT/script/operations/utils/simulate.py --tenderly \
+                --schedule \"$SCHEDULE_FILE\" \
+                --execute \"$EXECUTE_FILE\" \
+                --then \"$CONSOLIDATION_LIST\" \
+                --delay 8h --vnet-name \"$VNET_NAME\""
+            echo "Running: $CMD"
+            eval "$CMD"
+            SIMULATION_EXIT_CODE=$?
+        else
+            # No linking needed - run all consolidation files sequentially
+            echo "No linking required. Running consolidation transactions..."
+            echo "  Consolidations: $CONSOLIDATION_LIST"
+            echo ""
+            
+            CMD="python3 $PROJECT_ROOT/script/operations/utils/simulate.py --tenderly --txns \"$CONSOLIDATION_LIST\" --vnet-name \"$VNET_NAME\""
+            echo "Running: $CMD"
+            eval "$CMD"
+            SIMULATION_EXIT_CODE=$?
+        fi
     else
         echo -e "${RED}Error: No consolidation files found to simulate${NC}"
         SIMULATION_EXIT_CODE=1
@@ -380,10 +416,23 @@ fi
 echo ""
 echo -e "${BLUE}Next steps:${NC}"
 echo "  1. Review the consolidation plan in consolidation-data.json"
-echo "  2. Import the transaction files to Gnosis Safe in order:"
-for file in $(ls "$OUTPUT_DIR"/*-consolidation-*.json 2>/dev/null | sort -V); do
-    echo "     - $(basename "$file")"
-done
+
+# Check if linking was needed
+SCHEDULE_FILE_CHECK=$(ls "$OUTPUT_DIR"/*-link-schedule.json 2>/dev/null | head -1)
+if [ -n "$SCHEDULE_FILE_CHECK" ]; then
+    echo "  2. Import link-schedule.json to Gnosis Safe → Execute"
+    echo "  3. Wait 8 hours for timelock delay"
+    echo "  4. Import link-execute.json to Gnosis Safe → Execute"
+    echo "  5. Import consolidation files to Gnosis Safe in order → Execute:"
+    for file in $(ls "$OUTPUT_DIR"/*-consolidation.json 2>/dev/null | sort -V); do
+        echo "     - $(basename "$file")"
+    done
+else
+    echo "  2. Import the consolidation files to Gnosis Safe in order → Execute:"
+    for file in $(ls "$OUTPUT_DIR"/*-consolidation.json 2>/dev/null | sort -V); do
+        echo "     - $(basename "$file")"
+    done
+fi
 echo "  3. Execute each transaction from Gnosis Safe"
 echo ""
 echo -e "${YELLOW}⚠ Note: Each consolidation request requires a small fee paid to the beacon chain.${NC}"
