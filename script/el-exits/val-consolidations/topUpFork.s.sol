@@ -43,8 +43,6 @@ contract TopUpFork is Script, Deployed, Utils, ArrayTestHelper {
     EtherFiAdmin constant etherFiAdminInstance = EtherFiAdmin(payable(ETHERFI_ADMIN));
     WithdrawRequestNFT constant withdrawRequestNFTInstance = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
     address constant NODE_ADDRESS = 0xfbD914e11dF3DB8f475ae9C36ED46eE0c48f6B79;
-    address constant AVS_OPERATOR_1 = 0xDd777e5158Cb11DB71B4AF93C75A96eA11A2A615;
-    address constant AVS_OPERATOR_2 = 0x2c7cB7d5dC4aF9caEE654553a144C76F10D4b320;
 
     uint256 constant BID_ID = 110766;
     bytes constant PUBKEY = hex"a538a38970260348b6258eec086b932a76d369c96b5c87de5645807657c6128312e0c76bcd9987469ffe16d425bc971e";
