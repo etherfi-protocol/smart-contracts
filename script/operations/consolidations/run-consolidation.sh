@@ -41,14 +41,13 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Default parameters
-OPERATOR=""
-COUNT=50
+OPERATOR="" # operator name from the address-remapping table in Database
+COUNT=50 # number of source validators to consolidate
 BUCKET_HOURS=6
-MAX_TARGET_BALANCE=2016
+MAX_TARGET_BALANCE=1888 # max balance of the target validator after consolidation
 DRY_RUN=false
 SKIP_SIMULATE=false
-NONCE=0
-BATCH_SIZE=50
+NONCE=0 # starting nonce for the Safe transactions
 
 print_usage() {
     echo "Usage: $0 --operator <name> [options]"
@@ -60,24 +59,24 @@ print_usage() {
     echo "  --operator           Operator name (e.g., 'Validation Cloud')"
     echo ""
     echo "Options:"
-    echo "  --count              Number of source validators to consolidate (default: 50)"
+    echo "  --count              Number of source validators to consolidate (default: 58)"
     echo "  --bucket-hours       Time bucket duration for sweep queue distribution (default: 6)"
-    echo "  --max-target-balance Maximum ETH balance allowed on target post-consolidation (default: 2016)"
+    echo "  --max-target-balance Maximum ETH balance allowed on target post-consolidation (default: 1888)"
     echo "  --nonce              Starting Safe nonce for tx hash computation (default: 0)"
-    echo "  --batch-size         Number of consolidations per transaction (default: 50)"
+    echo "  --batch-size         Number of consolidations per transaction (default: 58)"
     echo "  --dry-run            Output consolidation plan JSON without executing forge script"
     echo "  --skip-simulate      Skip Tenderly simulation step"
     echo "  --help, -h           Show this help message"
     echo ""
     echo "Examples:"
-    echo "  # Basic consolidation of 50 validators"
-    echo "  $0 --operator 'Validation Cloud' --count 50"
+    echo "  # Basic consolidation of 58 validators"
+    echo "  $0 --operator 'Validation Cloud' --count 58"
     echo ""
     echo "  # Consolidation with custom settings"
-    echo "  $0 --operator 'Infstones' --count 100 --bucket-hours 12 --max-target-balance 1984"
+    echo "  $0 --operator 'Infstones' --count 58 --bucket-hours 6 --max-target-balance 1888"
     echo ""
     echo "  # Dry run to preview plan"
-    echo "  $0 --operator 'Validation Cloud' --count 50 --dry-run"
+    echo "  $0 --operator 'Validation Cloud' --count 58 --dry-run"
     echo ""
     echo "Environment Variables:"
     echo "  MAINNET_RPC_URL      Ethereum mainnet RPC URL (required)"

@@ -115,9 +115,9 @@ contract ConsolidateToTarget is Script, Utils {
         require(config.targetPubkey.length == 48, "TARGET_PUBKEY must be 48 bytes");
         
         console2.log("JSON file:", jsonFile);
-        console2.log("Target pubkey:", config.targetPubkey.bytesToHexString());
-        console2.log("Target validator ID:", config.targetValidatorId);
-        console2.log("Output file:", config.outputFile);
+        // console2.log("Target pubkey:", config.targetPubkey.bytesToHexString());
+        // console2.log("Target validator ID:", config.targetValidatorId);
+        // console2.log("Output file:", config.outputFile);
         console2.log("Batch size:", config.batchSize);
         console2.log("Safe nonce:", config.safeNonce);
         console2.log("");
@@ -211,24 +211,47 @@ contract ConsolidateToTarget is Script, Utils {
             }
         }
 
-        // Build arrays
-        unlinkedIds = new uint256[](unlinkedCount);
-        unlinkedPubkeys = new bytes[](unlinkedCount);
+        // Build arrays with deduplication
+        uint256[] memory tempIds = new uint256[](unlinkedCount);
+        bytes[] memory tempPubkeys = new bytes[](unlinkedCount);
 
         uint256 idx = 0;
+
         if (targetNeedsLink) {
-            unlinkedIds[idx] = targetValidatorId;
-            unlinkedPubkeys[idx] = targetPubkey;
+            tempIds[idx] = targetValidatorId;
+            tempPubkeys[idx] = targetPubkey;
             idx++;
         }
 
         for (uint256 batchIdx = 0; batchIdx < numBatches; batchIdx++) {
             if (batchHeadsNeedLink[batchIdx]) {
                 uint256 firstPubkeyIdx = batchIdx * batchSize;
-                unlinkedIds[idx] = sourceIds[firstPubkeyIdx];
-                unlinkedPubkeys[idx] = sourcePubkeys[firstPubkeyIdx];
-                idx++;
+                uint256 batchHeadId = sourceIds[firstPubkeyIdx];
+
+                // Check if this ID is already in tempIds
+                bool alreadyAdded = false;
+                for (uint256 j = 0; j < idx; j++) {
+                    if (tempIds[j] == batchHeadId) {
+                        alreadyAdded = true;
+                        break;
+                    }
+                }
+
+                if (!alreadyAdded) {
+                    tempIds[idx] = batchHeadId;
+                    tempPubkeys[idx] = sourcePubkeys[firstPubkeyIdx];
+                    idx++;
+                }
             }
+        }
+
+        // Create final arrays with correct size
+        unlinkedIds = new uint256[](idx);
+        unlinkedPubkeys = new bytes[](idx);
+
+        for (uint256 i = 0; i < idx; i++) {
+            unlinkedIds[i] = tempIds[i];
+            unlinkedPubkeys[i] = tempPubkeys[i];
         }
     }
     

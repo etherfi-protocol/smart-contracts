@@ -40,11 +40,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-# Add utils directory to path for imports
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'utils'))
+# Import from utils module using absolute import
+import sys
+from pathlib import Path
 
-# Import reusable utilities
-from validator_utils import (
+# Add the parent directory to sys.path to enable absolute imports
+parent_dir = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(parent_dir))
+
+from utils.validator_utils import (
     get_db_connection,
     load_operators_from_db,
     get_operator_address,
@@ -52,10 +56,8 @@ from validator_utils import (
     query_validators,
     fetch_beacon_state,
     calculate_sweep_time,
-    format_duration,
     filter_consolidated_validators,
     spread_validators_across_queue,
-    check_validators_consolidation_status_batch,
 )
 
 
@@ -64,9 +66,10 @@ from validator_utils import (
 # =============================================================================
 
 MAX_EFFECTIVE_BALANCE = 2048  # ETH - Protocol max for compounding validators
-DEFAULT_MAX_TARGET_BALANCE = 2016  # ETH - Leave 32 ETH buffer for rewards
+DEFAULT_MAX_TARGET_BALANCE = 1888 # ETH - Leave 32 ETH buffer for rewards
 DEFAULT_SOURCE_BALANCE = 32  # ETH - Standard validator balance
 DEFAULT_BUCKET_HOURS = 6
+BATCH_SIZE=58 # max number of validators that can be consolidated into a target in one transaction
 
 
 # =============================================================================
@@ -350,10 +353,10 @@ def create_consolidation_plan(
     else:
         buckets = []
     
-    # Step 3: Select targets distributed across buckets
-    print(f"\nStep 3: Selecting target validators...")
-    
-    # Re-group validators with sweep info
+    # Step 3: Group validators into consolidation batches
+    print(f"\nStep 3: Creating consolidation batches...")
+
+    # Re-group validators with sweep info by WC
     wc_groups_with_sweep = {}
     for v in all_with_sweep:
         wc_address = extract_wc_address(v.get('withdrawal_credentials'))
@@ -361,78 +364,74 @@ def create_consolidation_plan(
             if wc_address not in wc_groups_with_sweep:
                 wc_groups_with_sweep[wc_address] = []
             wc_groups_with_sweep[wc_address].append(v)
-    
-    targets = select_targets_from_buckets(
-        wc_groups_with_sweep,
-        buckets,
-        max_target_balance
-    )
-    
-    print(f"  Selected {len(targets)} targets across {len(set(t['bucket_index'] for t in targets.values()))} buckets")
-    
-    # Step 4: Assign sources to targets
-    print(f"\nStep 4: Assigning sources to targets...")
-    
+
     consolidations = []
     total_sources = 0
-    skipped_no_capacity = 0
-    skipped_is_target = 0
-    
-    # Track which validators are targets
-    target_pubkeys = set(
-        t['validator'].get('pubkey', '').lower() 
-        for t in targets.values()
-    )
-    
-    for wc_address, target_info in targets.items():
-        target = target_info['validator']
-        capacity = target_info['capacity']
-        target_balance = target_info['balance_eth']
-        
-        # Get sources from same WC group (exclude target)
-        wc_validators = wc_groups_with_sweep.get(wc_address, [])
-        sources = []
-        
-        for v in wc_validators:
-            if total_sources >= count:
-                break
-            
-            v_pubkey = v.get('pubkey', '').lower()
-            
-            # Skip if this is a target
-            if v_pubkey in target_pubkeys:
-                if v_pubkey != target.get('pubkey', '').lower():
-                    skipped_is_target += 1
+
+    # Process each withdrawal credential group
+    for wc_address, validators in wc_groups_with_sweep.items():
+        if not validators:
+            continue
+
+        # Sort validators by balance (lowest first) to optimize consolidation
+        sorted_validators = sorted(validators, key=lambda v: get_validator_balance_eth(v))
+
+        # Create batches where first validator in each batch becomes the target
+        batch_size = BATCH_SIZE  # Max validators per consolidation request (target + sources)
+        for i in range(0, len(sorted_validators), batch_size):
+            batch = sorted_validators[i:i + batch_size]
+            if len(batch) < 2:  # Need at least target + 1 source
                 continue
-            
-            # Check capacity
-            if len(sources) >= capacity:
-                skipped_no_capacity += 1
+
+            # First validator in batch becomes the target
+            target = batch[0]
+            sources = batch  # Target is included as sources[0]
+
+            # Check target's consolidation capacity
+            target_balance = get_validator_balance_eth(target)
+            capacity_needed = len(sources) - 1  # Sources includes target, so subtract 1 for actual sources being consolidated
+            available_capacity = calculate_consolidation_capacity(target_balance, max_target_balance)
+
+            if capacity_needed > available_capacity:
+                # If target doesn't have enough capacity, skip this batch
                 continue
-            
-            sources.append(v)
-            total_sources += 1
-        
-        if sources:
+
             # Calculate post-consolidation balance
             source_total = sum(get_validator_balance_eth(s) for s in sources)
             post_balance = target_balance + source_total
-            
+
+            # Find bucket index for target
+            target_pubkey = target.get('pubkey', '').lower()
+            bucket_idx = 0
+            for bucket in buckets:
+                for v in bucket.get('validators', []):
+                    if v.get('pubkey', '').lower() == target_pubkey:
+                        bucket_idx = bucket['bucketIndex']
+                        break
+                if bucket_idx != 0:
+                    break
+
             consolidations.append({
                 'target': target,
                 'target_balance_eth': target_balance,
                 'sources': sources,
                 'source_total_eth': source_total,
                 'post_consolidation_balance_eth': post_balance,
-                'bucket_index': target_info['bucket_index'],
+                'bucket_index': bucket_idx,
                 'wc_address': wc_address
             })
-    
-    print(f"  Assigned {total_sources} sources to {len(consolidations)} targets")
-    if skipped_no_capacity > 0:
-        print(f"  ⚠ Skipped {skipped_no_capacity} validators (target at capacity)")
-    if skipped_is_target > 0:
-        print(f"  ⚠ Skipped {skipped_is_target} validators (already a target)")
+
+            total_sources += len(sources) - 1  # Sources includes target, so subtract 1 for actual sources
+
+            # Stop if we have enough total sources
+            if total_sources >= count:
+                break
+
+        if total_sources >= count:
+            break
+
+    print(f"  Created {len(consolidations)} consolidation batches")
+    print(f"  Total sources to consolidate: {total_sources}")
     
     # Step 5: Validate the plan
     print(f"\nStep 5: Validating consolidation plan...")
@@ -462,48 +461,52 @@ def create_consolidation_plan(
 def validate_consolidation_plan(consolidations: List[Dict], max_target_balance: float) -> Dict:
     """
     Validate the consolidation plan for safety.
-    
+
     Checks:
     1. All source validators share credentials with their target
     2. No target exceeds max balance post-consolidation
-    3. No validator appears as both source and target
-    4. No duplicate pubkeys
+    3. No duplicate pubkeys across all consolidations
+    4. Target in each batch is the first source (sources[0])
     """
     all_credentials_matched = True
     all_targets_under_capacity = True
+    all_targets_are_first_source = True
     errors = []
-    
-    all_source_pubkeys = set()
-    all_target_pubkeys = set()
-    
+
+    all_pubkeys = set()  # Track all pubkeys to prevent duplicates
+
     for c in consolidations:
         target_wc = extract_wc_address(c['target'].get('withdrawal_credentials'))
         target_pubkey = c['target'].get('pubkey', '').lower()
-        all_target_pubkeys.add(target_pubkey)
-        
+
+        # Check that target is the first source in the batch
+        if c['sources'] and c['sources'][0].get('pubkey', '').lower() != target_pubkey:
+            all_targets_are_first_source = False
+            errors.append(f"Target {target_pubkey[:20]}... is not the first source in its batch")
+
         # Check post-consolidation balance
         if c['post_consolidation_balance_eth'] > max_target_balance:
             all_targets_under_capacity = False
             errors.append(f"Target {target_pubkey[:20]}... exceeds max balance: {c['post_consolidation_balance_eth']:.2f} ETH")
-        
-        for source in c['sources']:
+
+        # Check target pubkey uniqueness
+        if target_pubkey in all_pubkeys:
+            errors.append(f"Duplicate target pubkey: {target_pubkey[:20]}...")
+        all_pubkeys.add(target_pubkey)
+
+        for i, source in enumerate(c['sources']):
             source_wc = extract_wc_address(source.get('withdrawal_credentials'))
             source_pubkey = source.get('pubkey', '').lower()
-            
+
             # Check credential match
             if source_wc != target_wc:
                 all_credentials_matched = False
                 errors.append(f"Source {source_pubkey[:20]}... WC mismatch with target")
-            
-            # Check for duplicates
-            if source_pubkey in all_source_pubkeys:
-                errors.append(f"Duplicate source pubkey: {source_pubkey[:20]}...")
-            all_source_pubkeys.add(source_pubkey)
-    
-    # Check for source/target overlap
-    overlap = all_source_pubkeys.intersection(all_target_pubkeys)
-    if overlap:
-        errors.append(f"Validators appear as both source and target: {len(overlap)}")
+
+            # Check for duplicates across all pubkeys (allow target to be sources[0])
+            if source_pubkey in all_pubkeys and not (i == 0 and source_pubkey == target_pubkey):
+                errors.append(f"Duplicate pubkey: {source_pubkey[:20]}...")
+            all_pubkeys.add(source_pubkey)
     
     # Calculate sweep distribution score (0-1, higher is better)
     if consolidations:
@@ -515,17 +518,17 @@ def validate_consolidation_plan(consolidations: List[Dict], max_target_balance: 
     validation = {
         'all_credentials_matched': all_credentials_matched,
         'all_targets_under_capacity': all_targets_under_capacity,
+        'all_targets_are_first_source': all_targets_are_first_source,
         'sweep_distribution_score': round(sweep_distribution_score, 2),
-        'no_source_target_overlap': len(overlap) == 0,
         'no_duplicate_pubkeys': len(errors) == 0 or not any('Duplicate' in e for e in errors),
         'errors': errors if errors else None
     }
-    
+
     # Print validation results
     print(f"  ✓ Credentials matched: {validation['all_credentials_matched']}")
     print(f"  ✓ Targets under capacity: {validation['all_targets_under_capacity']}")
+    print(f"  ✓ Targets are first source: {validation['all_targets_are_first_source']}")
     print(f"  ✓ Sweep distribution score: {validation['sweep_distribution_score']}")
-    print(f"  ✓ No source/target overlap: {validation['no_source_target_overlap']}")
     
     if errors:
         print(f"  ⚠ Validation errors:")
