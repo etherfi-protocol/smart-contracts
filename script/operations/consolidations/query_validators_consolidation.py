@@ -754,8 +754,8 @@ Examples:
     parser.add_argument(
         '--count',
         type=int,
-        default=50,
-        help='Number of source validators to consolidate (default: 50)'
+        default=0,
+        help='Number of source validators to consolidate (default: 0 = use all available)'
     )
     parser.add_argument(
         '--bucket-hours',
@@ -861,7 +861,7 @@ Examples:
         
         print(f"\n=== Querying Validators ===")
         print(f"Operator: {operator_name} ({operator_address})")
-        print(f"Target source count: {args.count}")
+        print(f"Target source count: {args.count if args.count > 0 else 'all available'}")
         print(f"Max target balance: {args.max_target_balance} ETH")
         print(f"Restaked only: {restaked_only}")
         
@@ -895,10 +895,15 @@ Examples:
             print("\nError: No validators need consolidation (all are already 0x02)")
             sys.exit(1)
         
+        # Use all available validators if count is 0 (default)
+        print(f"len(validators): {len(validators)}")
+        source_count = args.count if args.count > 0 else len(validators)
+        print(f"\nUsing source count: {source_count}")
+        
         # Create consolidation plan
         plan = create_consolidation_plan(
             filtered_validators,
-            args.count,
+            source_count,
             args.max_target_balance,
             args.bucket_hours
         )

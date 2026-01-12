@@ -42,7 +42,7 @@ NC='\033[0m' # No Color
 
 # Default parameters
 OPERATOR="" # operator name from the address-remapping table in Database
-COUNT=50 # number of source validators to consolidate
+COUNT=0 # number of source validators to consolidate (0 = use all available)
 BUCKET_HOURS=6
 MAX_TARGET_BALANCE=1888 # max balance of the target validator after consolidation
 DRY_RUN=false
@@ -59,7 +59,7 @@ print_usage() {
     echo "  --operator           Operator name (e.g., 'Validation Cloud')"
     echo ""
     echo "Options:"
-    echo "  --count              Number of source validators to consolidate (default: 58)"
+    echo "  --count              Number of source validators to consolidate (default: 0 = all available)"
     echo "  --bucket-hours       Time bucket duration for sweep queue distribution (default: 6)"
     echo "  --max-target-balance Maximum ETH balance allowed on target post-consolidation (default: 1888)"
     echo "  --nonce              Starting Safe nonce for tx hash computation (default: 0)"
@@ -69,14 +69,14 @@ print_usage() {
     echo "  --help, -h           Show this help message"
     echo ""
     echo "Examples:"
-    echo "  # Basic consolidation of 58 validators"
-    echo "  $0 --operator 'Validation Cloud' --count 58"
+    echo "  # Consolidate all validators for operator"
+    echo "  $0 --operator 'Validation Cloud'"
     echo ""
-    echo "  # Consolidation with custom settings"
-    echo "  $0 --operator 'Infstones' --count 58 --bucket-hours 6 --max-target-balance 1888"
+    echo "  # Consolidation with custom settings (limit to 100 validators)"
+    echo "  $0 --operator 'Infstones' --count 100 --bucket-hours 6 --max-target-balance 1888"
     echo ""
     echo "  # Dry run to preview plan"
-    echo "  $0 --operator 'Validation Cloud' --count 58 --dry-run"
+    echo "  $0 --operator 'Validation Cloud' --dry-run"
     echo ""
     echo "Environment Variables:"
     echo "  MAINNET_RPC_URL      Ethereum mainnet RPC URL (required)"
@@ -164,7 +164,11 @@ echo -e "${GREEN}╚════════════════════
 echo ""
 echo -e "${BLUE}Configuration:${NC}"
 echo "  Operator:           $OPERATOR"
-echo "  Source count:       $COUNT validators"
+if [ "$COUNT" -eq 0 ]; then
+    echo "  Source count:       all available"
+else
+    echo "  Source count:       $COUNT validators"
+fi
 echo "  Bucket interval:    ${BUCKET_HOURS}h"
 echo "  Max target balance: ${MAX_TARGET_BALANCE} ETH"
 echo "  Batch size:         $BATCH_SIZE"
