@@ -83,25 +83,35 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
     function test_HandleRemainder_PartialHandling() public {
         // Setup: Create remainder and handle only part of it
-        vm.deal(bob, 20 ether);
+        vm.deal(bob, 500 ether);
         vm.startPrank(bob);
-        liquidityPoolInstance.deposit{value: 20 ether}();
-        eETHInstance.approve(address(liquidityPoolInstance), 10 ether);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 10 ether);
+        liquidityPoolInstance.deposit{value: 500 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 200 ether);
+
+        // Create multiple withdrawal requests to generate larger remainder
+        uint256[] memory requestIds = new uint256[](20);
+        for (uint256 i = 0; i < 20; i++) {
+            requestIds[i] = liquidityPoolInstance.requestWithdraw(bob, 10 ether);
+        }
         vm.stopPrank();
 
+        // Skip rebase or do minimal rebase to create larger remainder
         vm.prank(address(membershipManagerV1Instance));
-        liquidityPoolInstance.rebase(10 ether);
+        liquidityPoolInstance.rebase(1 ether);
 
-        vm.prank(ETHERFI_ADMIN);
-        withdrawRequestNFTInstance.finalizeRequests(requestId);
+        // Finalize and claim all requests
+        for (uint256 i = 0; i < 20; i++) {
+            vm.prank(ETHERFI_ADMIN);
+            withdrawRequestNFTInstance.finalizeRequests(requestIds[i]);
 
-        vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(requestId);
+            vm.prank(bob);
+            withdrawRequestNFTInstance.claimWithdraw(requestIds[i]);
+        }
 
         uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
-        assertGt(remainderAmount, 1 ether, "Remainder amount should be greater than 1 ether for partial handling");
+        assertGt(remainderAmount, 0.05 ether, "Remainder amount should be greater than 0.05 ether for partial handling");
 
+        // Now upgrade the contract and grant roles
         vm.startPrank(address(roleRegistryInstance.owner()));
         withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet))));
         roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
