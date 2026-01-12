@@ -15,30 +15,28 @@ import "../../../src/EtherFiTimelock.sol";
 
 /**
  * @title ConsolidateToTarget
- * @notice Generates transactions to consolidate multiple validators to a single target validator
- * @dev Focused script for consolidating validators within the same EigenPod.
+ * @notice Generates transactions to consolidate multiple validators to target validators
+ * @dev Reads consolidation-data.json and processes all targets in a single run.
  *      Automatically detects unlinked validators and generates linking transactions via timelock.
  * 
  * Usage:
- *   JSON_FILE=validators.json TARGET_PUBKEY=0x... TARGET_VALIDATOR_ID=123 SAFE_NONCE=42 forge script \
+ *   CONSOLIDATION_DATA_FILE=consolidation-data.json SAFE_NONCE=42 forge script \
  *     script/operations/consolidations/ConsolidateToTarget.s.sol:ConsolidateToTarget \
  *     --fork-url $MAINNET_RPC_URL -vvvv
  * 
  * Environment Variables:
- *   - JSON_FILE: Path to JSON file with validator data (required)
- *   - TARGET_PUBKEY: 48-byte hex pubkey of target validator (required)
- *   - TARGET_VALIDATOR_ID: Validator ID of the target (required for linking if not linked)
- *   - OUTPUT_FILE: Output filename (default: consolidate-to-target-txns.json)
+ *   - CONSOLIDATION_DATA_FILE: Path to consolidation-data.json (required)
+ *   - OUTPUT_DIR: Output directory for generated files (default: same as CONSOLIDATION_DATA_FILE)
  *   - BATCH_SIZE: Number of validators per transaction (default: 50)
  *   - OUTPUT_FORMAT: "gnosis" or "raw" (default: gnosis)
  *   - SAFE_ADDRESS: Gnosis Safe address (default: ETHERFI_OPERATING_ADMIN)
  *   - CHAIN_ID: Chain ID for transaction (default: 1)
  *   - SAFE_NONCE: Starting nonce for Safe tx hash computation (default: 0)
  *
- * Output Files (when linking is needed):
- *   - *-link-schedule.json: Timelock schedule transaction (nonce N)
- *   - *-link-execute.json: Timelock execute transaction (nonce N+1)
- *   - *-consolidation.json: Consolidation transaction (nonce N+2)
+ * Output Files:
+ *   - consolidation-txns.json: All consolidation transactions combined
+ *   - link-schedule.json: Timelock schedule transaction (if linking needed)
+ *   - link-execute.json: Timelock execute transaction (if linking needed)
  */
 contract ConsolidateToTarget is Script, Utils {
     using StringHelpers for uint256;
@@ -53,232 +51,260 @@ contract ConsolidateToTarget is Script, Utils {
     bytes4 constant LINK_LEGACY_VALIDATOR_IDS_SELECTOR = bytes4(keccak256("linkLegacyValidatorIds(uint256[],bytes[])"));
     
     // Default parameters
-    string constant DEFAULT_OUTPUT_FILE = "consolidate-to-target-txns.json";
     uint256 constant DEFAULT_BATCH_SIZE = 50;
     uint256 constant DEFAULT_CHAIN_ID = 1;
     string constant DEFAULT_OUTPUT_FORMAT = "gnosis";
     
     // Config struct to avoid stack too deep
     struct Config {
-        string outputFile;
+        string outputDir;
         uint256 batchSize;
         string outputFormat;
         uint256 chainId;
         address safeAddress;
         string root;
         uint256 safeNonce;
-        bytes targetPubkey;
-        uint256 targetValidatorId;
-        uint256 feePerRequest;
-        bool needsLinking;
+        uint256 currentNonce;
     }
+
+    // Struct for target validator in consolidation-data.json
+    struct JsonTarget {
+        bytes pubkey;
+        uint256 validator_index;
+        uint256 id;
+        uint256 current_balance_eth;
+        bytes withdrawal_credentials;
+    }
+
+    // Struct for source validator in consolidation-data.json
+    struct JsonSource {
+        bytes pubkey;
+        uint256 validator_index;
+        uint256 id;
+        uint256 balance_eth;
+        bytes withdrawal_credentials;
+    }
+
+    // Storage for unlinked validators across all targets
+    uint256[] internal allUnlinkedIds;
+    bytes[] internal allUnlinkedPubkeys;
     
-    struct ConsolidationTx {
-        address to;
-        uint256 value;
-        bytes data;
-        uint256 validatorCount;
-    }
+    // Storage for all consolidation transactions
+    GnosisTxGeneratorLib.GnosisTx[] internal allConsolidationTxs;
     
     function run() external {
         console2.log("=== CONSOLIDATE TO TARGET TRANSACTION GENERATOR ===");
         console2.log("");
         
-        // Load config and parse validators
-        (Config memory config, bytes[] memory pubkeys, uint256[] memory ids) = _initialize();
+        // Load config
+        Config memory config = _loadConfig();
         
-        if (pubkeys.length == 0) {
-            console2.log("No validators to process");
-            return;
-        }
+        // Read consolidation data file
+        string memory consolidationDataFile = vm.envString("CONSOLIDATION_DATA_FILE");
+        string memory jsonFilePath = _resolvePath(config.root, consolidationDataFile);
+        string memory jsonData = vm.readFile(jsonFilePath);
         
-        // Collect all pubkeys that need linking and handle linking
-        _handleLinking(config, pubkeys, ids, config.batchSize);
-        
-        // Get fee using target pubkey (now linked on fork)
-        config.feePerRequest = _getConsolidationFee(config.targetPubkey);
-        console2.log("");
-        console2.log("Fee per consolidation request:", config.feePerRequest);
-        console2.log("================================================================================================================");
-        
-        // Generate and write consolidation transactions
-        _processAndWrite(pubkeys, config);
-    }
-    
-    function _initialize() internal returns (Config memory config, bytes[] memory pubkeys, uint256[] memory ids) {
-        config = _loadConfig();
-        
-        // Required: JSON file, target pubkey, and target validator ID
-        string memory jsonFile = vm.envString("JSON_FILE");
-        config.targetPubkey = vm.envBytes("TARGET_PUBKEY");
-        config.targetValidatorId = vm.envUint("TARGET_VALIDATOR_ID");
-        require(config.targetPubkey.length == 48, "TARGET_PUBKEY must be 48 bytes");
-        
-        console2.log("JSON file:", jsonFile);
-        // console2.log("Target pubkey:", config.targetPubkey.bytesToHexString());
-        // console2.log("Target validator ID:", config.targetValidatorId);
-        // console2.log("Output file:", config.outputFile);
+        console2.log("Consolidation data file:", consolidationDataFile);
         console2.log("Batch size:", config.batchSize);
         console2.log("Safe nonce:", config.safeNonce);
         console2.log("");
         
-        // Read and parse validators
-        string memory jsonFilePath = _resolvePath(config.root, jsonFile);
-        string memory jsonData = vm.readFile(jsonFilePath);
+        // Set output directory (default: same directory as consolidation data file)
+        string memory outputDir = vm.envOr("OUTPUT_DIR", string(""));
+        if (bytes(outputDir).length == 0) {
+            // Extract directory from consolidation data file path
+            outputDir = _getDirectory(jsonFilePath);
+        }
+        config.outputDir = outputDir;
         
-        uint256 validatorCount;
-        (pubkeys, ids, , validatorCount) = ValidatorHelpers.parseValidatorsFromJson(jsonData, 10000);
+        // Get number of consolidations
+        uint256 numConsolidations = _countConsolidations(jsonData);
+        console2.log("Number of consolidation targets:", numConsolidations);
+        console2.log("");
         
-        console2.log("Found", validatorCount, "validators");
-    }
-    
-    function _handleLinking(Config memory config, bytes[] memory pubkeys, uint256[] memory ids, uint256 batchSize) internal {
-        // Collect all pubkeys that need linking
-        (uint256[] memory unlinkedIds, bytes[] memory unlinkedPubkeys) = _collectUnlinkedValidators(
-            config.targetPubkey, config.targetValidatorId, pubkeys, ids, batchSize
-        );
+        if (numConsolidations == 0) {
+            console2.log("No consolidations to process");
+            return;
+        }
         
-        config.needsLinking = unlinkedIds.length > 0;
+        // Process each consolidation target
+        for (uint256 i = 0; i < numConsolidations; i++) {
+            _processConsolidation(jsonData, i, config);
+        }
         
-        // If linking is needed, generate linking transactions and simulate on fork
-        if (config.needsLinking) {
+        // Handle linking if any validators need it
+        bool needsLinking = allUnlinkedIds.length > 0;
+        if (needsLinking) {
             console2.log("");
             console2.log("=== GENERATING LINKING TRANSACTIONS ===");
-            console2.log("Unlinked validators found:", unlinkedIds.length);
-            _generateLinkingTransactions(unlinkedIds, unlinkedPubkeys, config);
+            console2.log("Total unlinked validators:", allUnlinkedIds.length);
+            _generateLinkingTransactions(config);
+        }
+        
+        // Write all consolidation transactions to a single file
+        _writeConsolidationFile(config, needsLinking);
+        
+        // Summary
+        console2.log("");
+        console2.log("=== CONSOLIDATION COMPLETE ===");
+        console2.log("Total consolidation targets:", numConsolidations);
+        console2.log("Total consolidation transactions:", allConsolidationTxs.length);
+        if (needsLinking) {
+            console2.log("Link transactions included: YES");
+            console2.log("  Schedule nonce:", config.safeNonce);
+            console2.log("  Execute nonce:", config.safeNonce + 1);
+            console2.log("  Consolidation nonce:", config.safeNonce + 2);
+        } else {
+            console2.log("  Consolidation nonce:", config.safeNonce);
         }
     }
     
+    function _processConsolidation(string memory jsonData, uint256 index, Config memory config) internal {
+        console2.log("================================================================================================================");
+        console2.log("Processing consolidation target", index + 1);
+        
+        // Parse target
+        string memory targetPath = string.concat("$.consolidations[", index.uint256ToString(), "].target");
+        bytes memory targetPubkey = stdJson.readBytes(jsonData, string.concat(targetPath, ".pubkey"));
+        uint256 targetValidatorId = stdJson.readUint(jsonData, string.concat(targetPath, ".id"));
+        
+        console2.log("  Target pubkey:", targetPubkey.bytesToHexString());
+        console2.log("  Target validator ID:", targetValidatorId);
+        
+        // Parse sources
+        uint256 numSources = _countSources(jsonData, index);
+        console2.log("  Number of sources:", numSources);
+        
+        bytes[] memory sourcePubkeys = new bytes[](numSources);
+        uint256[] memory sourceIds = new uint256[](numSources);
+        
+        for (uint256 i = 0; i < numSources; i++) {
+            string memory sourcePath = string.concat("$.consolidations[", index.uint256ToString(), "].sources[", i.uint256ToString(), "]");
+            sourcePubkeys[i] = stdJson.readBytes(jsonData, string.concat(sourcePath, ".pubkey"));
+            sourceIds[i] = stdJson.readUint(jsonData, string.concat(sourcePath, ".id"));
+        }
+        
+        // Collect unlinked validators
+        _collectUnlinkedValidators(targetPubkey, targetValidatorId, sourcePubkeys, sourceIds, config.batchSize);
+        
+        // Get fee using target pubkey
+        // Note: We need to get the fee after simulating linking on fork (done in _generateLinkingTransactions)
+        // For now, we'll use a placeholder and update later
+        uint256 feePerRequest = _getConsolidationFeeSafe(targetPubkey);
+        
+        // Generate consolidation transactions for this target
+        _generateConsolidationTxs(sourcePubkeys, targetPubkey, feePerRequest, config.batchSize);
+    }
+    
     function _loadConfig() internal view returns (Config memory config) {
-        config.outputFile = vm.envOr("OUTPUT_FILE", string(DEFAULT_OUTPUT_FILE));
         config.batchSize = vm.envOr("BATCH_SIZE", DEFAULT_BATCH_SIZE);
         config.outputFormat = vm.envOr("OUTPUT_FORMAT", string(DEFAULT_OUTPUT_FORMAT));
         config.chainId = vm.envOr("CHAIN_ID", DEFAULT_CHAIN_ID);
         config.safeAddress = vm.envOr("SAFE_ADDRESS", ETHERFI_OPERATING_ADMIN);
         config.root = vm.projectRoot();
         config.safeNonce = vm.envOr("SAFE_NONCE", uint256(0));
+        config.currentNonce = config.safeNonce;
     }
     
-    function _getConsolidationFee(bytes memory targetPubkey) internal view returns (uint256) {
-        (, IEigenPod targetPod) = ValidatorHelpers.resolvePod(nodesManager, targetPubkey);
-        require(address(targetPod) != address(0), "Target validator has no pod");
-        return targetPod.getConsolidationRequestFee();
+    function _countConsolidations(string memory jsonData) internal view returns (uint256) {
+        uint256 count = 0;
+        for (uint256 i = 0; i < 1000; i++) {
+            string memory path = string.concat("$.consolidations[", i.uint256ToString(), "].target.pubkey");
+            if (!stdJson.keyExists(jsonData, path)) {
+                break;
+            }
+            count++;
+        }
+        return count;
     }
     
-    /// @notice Check if a pubkey is linked to an EtherFiNode
+    function _countSources(string memory jsonData, uint256 consolidationIndex) internal view returns (uint256) {
+        uint256 count = 0;
+        for (uint256 i = 0; i < 10000; i++) {
+            string memory path = string.concat(
+                "$.consolidations[", consolidationIndex.uint256ToString(), "].sources[", i.uint256ToString(), "].pubkey"
+            );
+            if (!stdJson.keyExists(jsonData, path)) {
+                break;
+            }
+            count++;
+        }
+        return count;
+    }
+    
+    function _getConsolidationFeeSafe(bytes memory targetPubkey) internal view returns (uint256) {
+        // Try to get fee, return default if target not linked yet
+        bytes32 pubkeyHash = nodesManager.calculateValidatorPubkeyHash(targetPubkey);
+        address nodeAddr = address(nodesManager.etherFiNodeFromPubkeyHash(pubkeyHash));
+        
+        if (nodeAddr == address(0)) {
+            // Not linked yet, return estimate (will be accurate after linking simulation)
+            return 1; // 1 wei minimum, actual fee will be calculated after linking
+        }
+        
+        IEtherFiNode node = IEtherFiNode(nodeAddr);
+        IEigenPod pod = node.getEigenPod();
+        return pod.getConsolidationRequestFee();
+    }
+    
     function _isPubkeyLinked(bytes memory pubkey) internal view returns (bool) {
         bytes32 pubkeyHash = nodesManager.calculateValidatorPubkeyHash(pubkey);
         address nodeAddr = address(nodesManager.etherFiNodeFromPubkeyHash(pubkeyHash));
         return nodeAddr != address(0);
     }
     
-    /// @notice Collect all validators that need linking (target + first source pubkey of each batch)
     function _collectUnlinkedValidators(
         bytes memory targetPubkey,
         uint256 targetValidatorId,
         bytes[] memory sourcePubkeys,
         uint256[] memory sourceIds,
         uint256 batchSize
-    ) internal view returns (uint256[] memory unlinkedIds, bytes[] memory unlinkedPubkeys) {
+    ) internal {
         // Check target
-        bool targetNeedsLink = !_isPubkeyLinked(targetPubkey);
-
-        if (targetNeedsLink) {
-            console2.log("Target pubkey needs linking:");
-            console2.log("  Pubkey:", targetPubkey.bytesToHexString());
-            console2.log("  Validator ID:", targetValidatorId);
-        } else {
-            console2.log("Target pubkey is already linked");
+        if (!_isPubkeyLinked(targetPubkey)) {
+            _addUnlinkedIfNew(targetValidatorId, targetPubkey);
+            console2.log("  Target needs linking");
         }
-
+        
         // Check first pubkey of each batch
         uint256 numBatches = (sourcePubkeys.length + batchSize - 1) / batchSize;
-        bool[] memory batchHeadsNeedLink = new bool[](numBatches);
-
-        uint256 unlinkedCount = targetNeedsLink ? 1 : 0;
-
+        
         for (uint256 batchIdx = 0; batchIdx < numBatches; batchIdx++) {
             uint256 firstPubkeyIdx = batchIdx * batchSize;
-            batchHeadsNeedLink[batchIdx] = !_isPubkeyLinked(sourcePubkeys[firstPubkeyIdx]);
-
-            if (batchHeadsNeedLink[batchIdx]) {
-                console2.log("Batch", batchIdx + 1, "first pubkey needs linking:");
-                console2.log("  Pubkey:", sourcePubkeys[firstPubkeyIdx].bytesToHexString());
-                console2.log("  Validator ID:", sourceIds[firstPubkeyIdx]);
-                unlinkedCount++;
-            } else {
-                console2.log("Batch", batchIdx + 1, "first pubkey is already linked");
+            if (!_isPubkeyLinked(sourcePubkeys[firstPubkeyIdx])) {
+                _addUnlinkedIfNew(sourceIds[firstPubkeyIdx], sourcePubkeys[firstPubkeyIdx]);
+                console2.log("  Batch", batchIdx + 1, "head needs linking");
             }
-        }
-
-        // Build arrays with deduplication
-        uint256[] memory tempIds = new uint256[](unlinkedCount);
-        bytes[] memory tempPubkeys = new bytes[](unlinkedCount);
-
-        uint256 idx = 0;
-
-        if (targetNeedsLink) {
-            tempIds[idx] = targetValidatorId;
-            tempPubkeys[idx] = targetPubkey;
-            idx++;
-        }
-
-        for (uint256 batchIdx = 0; batchIdx < numBatches; batchIdx++) {
-            if (batchHeadsNeedLink[batchIdx]) {
-                uint256 firstPubkeyIdx = batchIdx * batchSize;
-                uint256 batchHeadId = sourceIds[firstPubkeyIdx];
-
-                // Check if this ID is already in tempIds
-                bool alreadyAdded = false;
-                for (uint256 j = 0; j < idx; j++) {
-                    if (tempIds[j] == batchHeadId) {
-                        alreadyAdded = true;
-                        break;
-                    }
-                }
-
-                if (!alreadyAdded) {
-                    tempIds[idx] = batchHeadId;
-                    tempPubkeys[idx] = sourcePubkeys[firstPubkeyIdx];
-                    idx++;
-                }
-            }
-        }
-
-        // Create final arrays with correct size
-        unlinkedIds = new uint256[](idx);
-        unlinkedPubkeys = new bytes[](idx);
-
-        for (uint256 i = 0; i < idx; i++) {
-            unlinkedIds[i] = tempIds[i];
-            unlinkedPubkeys[i] = tempPubkeys[i];
         }
     }
     
-    /// @notice Generate linking transactions via timelock and simulate on fork
-    function _generateLinkingTransactions(
-        uint256[] memory unlinkedIds,
-        bytes[] memory unlinkedPubkeys,
-        Config memory config
-    ) internal {
+    function _addUnlinkedIfNew(uint256 id, bytes memory pubkey) internal {
+        // Check if already added
+        for (uint256 i = 0; i < allUnlinkedIds.length; i++) {
+            if (allUnlinkedIds[i] == id) {
+                return; // Already added
+            }
+        }
+        allUnlinkedIds.push(id);
+        allUnlinkedPubkeys.push(pubkey);
+    }
+    
+    function _generateLinkingTransactions(Config memory config) internal {
         // Build timelock calldata
-        (bytes memory scheduleCalldata, bytes memory executeCalldata) = 
-            _buildTimelockCalldata(unlinkedIds, unlinkedPubkeys);
+        (bytes memory scheduleCalldata, bytes memory executeCalldata) = _buildTimelockCalldata();
         
-        // Write schedule transaction (nonce N)
-        _writeLinkingTx(config, scheduleCalldata, config.safeNonce, "link-schedule");
+        // Write schedule transaction
+        _writeLinkingTx(config, scheduleCalldata, "link-schedule");
         
-        // Write execute transaction (nonce N+1)
-        _writeLinkingTx(config, executeCalldata, config.safeNonce + 1, "link-execute");
+        // Write execute transaction
+        _writeLinkingTx(config, executeCalldata, "link-execute");
     }
     
     function _writeLinkingTx(
         Config memory config,
         bytes memory callData,
-        uint256 nonce,
         string memory txType
     ) internal {
-        // Create transaction
         GnosisTxGeneratorLib.GnosisTx[] memory txns = new GnosisTxGeneratorLib.GnosisTx[](1);
         txns[0] = GnosisTxGeneratorLib.GnosisTx({
             to: OPERATING_TIMELOCK,
@@ -286,32 +312,25 @@ contract ConsolidateToTarget is Script, Utils {
             data: callData
         });
         
-        // Generate JSON
         string memory jsonContent = GnosisTxGeneratorLib.generateTransactionBatch(
             txns,
             config.chainId,
             config.safeAddress
         );
         
-        // Write file with nonce prefix
-        string memory fileName = string.concat(nonce.uint256ToString(), "-", txType, ".json");
-        string memory filePath = string.concat(
-            config.root, "/script/operations/consolidations/", fileName
-        );
+        string memory fileName = string.concat(txType, ".json");
+        string memory filePath = string.concat(config.outputDir, "/", fileName);
         
         vm.writeFile(filePath, jsonContent);
         console2.log("Transaction written to:", filePath);
     }
     
-    function _buildTimelockCalldata(
-        uint256[] memory unlinkedIds,
-        bytes[] memory unlinkedPubkeys
-    ) internal returns (bytes memory scheduleCalldata, bytes memory executeCalldata) {
+    function _buildTimelockCalldata() internal returns (bytes memory scheduleCalldata, bytes memory executeCalldata) {
         // Build linkLegacyValidatorIds calldata
         bytes memory linkCalldata = abi.encodeWithSelector(
             LINK_LEGACY_VALIDATOR_IDS_SELECTOR,
-            unlinkedIds,
-            unlinkedPubkeys
+            allUnlinkedIds,
+            allUnlinkedPubkeys
         );
         
         // Build batch targets
@@ -324,7 +343,7 @@ contract ConsolidateToTarget is Script, Utils {
         bytes[] memory payloads = new bytes[](1);
         payloads[0] = linkCalldata;
         
-        bytes32 salt = keccak256(abi.encode(unlinkedIds, unlinkedPubkeys, "link-legacy-validators-consolidation"));
+        bytes32 salt = keccak256(abi.encode(allUnlinkedIds, allUnlinkedPubkeys, "link-legacy-validators-consolidation"));
         
         // Build schedule calldata
         scheduleCalldata = abi.encodeWithSelector(
@@ -357,86 +376,25 @@ contract ConsolidateToTarget is Script, Utils {
         console2.log("Linking simulated on fork successfully");
     }
     
-    function _processAndWrite(
-        bytes[] memory pubkeys,
-        Config memory config
-    ) internal {
-        ConsolidationTx[] memory consolidationTxs = _generateTransactions(
-            pubkeys,
-            config.targetPubkey,
-            config.feePerRequest,
-            config.batchSize
-        );
-        
-        // Starting nonce for consolidation transactions
-        // If linking was needed, nonces N and N+1 are used for link-schedule and link-execute
-        uint256 startNonce = config.needsLinking ? config.safeNonce + 2 : config.safeNonce;
-        
-        // Write each consolidation transaction to its own file
-        _writeConsolidationFiles(consolidationTxs, config, startNonce);
-        
-        console2.log("");
-        console2.log("=== CONSOLIDATION COMPLETE ===");
-        console2.log("Total validators:", pubkeys.length);
-        console2.log("Number of consolidation batches:", consolidationTxs.length);
-        if (config.needsLinking) {
-            console2.log("Link transactions included: YES");
-            console2.log("  Schedule nonce:", config.safeNonce);
-            console2.log("  Execute nonce:", config.safeNonce + 1);
-        }
-    }
-    
-    function _writeConsolidationFiles(
-        ConsolidationTx[] memory consolidationTxs,
-        Config memory config,
-        uint256 startNonce
-    ) internal {
-        for (uint256 i = 0; i < consolidationTxs.length; i++) {
-            uint256 currentNonce = startNonce + i;
-            
-            GnosisTxGeneratorLib.GnosisTx[] memory txns = new GnosisTxGeneratorLib.GnosisTx[](1);
-            txns[0] = GnosisTxGeneratorLib.GnosisTx({
-                to: consolidationTxs[i].to,
-                value: consolidationTxs[i].value,
-                data: consolidationTxs[i].data
-            });
-            
-            string memory jsonContent = GnosisTxGeneratorLib.generateTransactionBatch(
-                txns,
-                config.chainId,
-                config.safeAddress
-            );
-            
-            string memory fileName = string.concat(currentNonce.uint256ToString(), "-consolidation.json");
-            string memory filePath = string.concat(
-                config.root, "/script/operations/consolidations/", fileName
-            );
-            
-            vm.writeFile(filePath, jsonContent);
-            console2.log("Consolidation tx written to:", filePath);
-        }
-    }
-    
-    function _generateTransactions(
-        bytes[] memory pubkeys,
+    function _generateConsolidationTxs(
+        bytes[] memory sourcePubkeys,
         bytes memory targetPubkey,
         uint256 feePerRequest,
         uint256 batchSize
-    ) internal pure returns (ConsolidationTx[] memory transactions) {
-        uint256 numBatches = (pubkeys.length + batchSize - 1) / batchSize;
-        transactions = new ConsolidationTx[](numBatches);
+    ) internal {
+        uint256 numBatches = (sourcePubkeys.length + batchSize - 1) / batchSize;
         
         for (uint256 batchIdx = 0; batchIdx < numBatches; batchIdx++) {
             uint256 startIdx = batchIdx * batchSize;
             uint256 endIdx = startIdx + batchSize;
-            if (endIdx > pubkeys.length) {
-                endIdx = pubkeys.length;
+            if (endIdx > sourcePubkeys.length) {
+                endIdx = sourcePubkeys.length;
             }
             
             // Extract batch
             bytes[] memory batchPubkeys = new bytes[](endIdx - startIdx);
             for (uint256 i = 0; i < batchPubkeys.length; i++) {
-                batchPubkeys[i] = pubkeys[startIdx + i];
+                batchPubkeys[i] = sourcePubkeys[startIdx + i];
             }
             
             // Generate transaction
@@ -448,13 +406,34 @@ contract ConsolidateToTarget is Script, Utils {
                     address(nodesManager)
                 );
             
-            transactions[batchIdx] = ConsolidationTx({
+            // Add to storage
+            allConsolidationTxs.push(GnosisTxGeneratorLib.GnosisTx({
                 to: to,
                 value: value,
-                data: data,
-                validatorCount: batchPubkeys.length
-            });
+                data: data
+            }));
         }
+    }
+    
+    function _writeConsolidationFile(Config memory config, bool /* needsLinking */) internal {
+        // Write each consolidation transaction to a separate file
+        for (uint256 i = 0; i < allConsolidationTxs.length; i++) {
+            GnosisTxGeneratorLib.GnosisTx[] memory txns = new GnosisTxGeneratorLib.GnosisTx[](1);
+            txns[0] = allConsolidationTxs[i];
+            
+            string memory jsonContent = GnosisTxGeneratorLib.generateTransactionBatch(
+                txns,
+                config.chainId,
+                config.safeAddress
+            );
+            
+            string memory fileName = string.concat("consolidation-txns-", (i + 1).uint256ToString(), ".json");
+            string memory filePath = string.concat(config.outputDir, "/", fileName);
+            
+            vm.writeFile(filePath, jsonContent);
+            console2.log("Transaction written to:", filePath);
+        }
+        console2.log("  Total transactions:", allConsolidationTxs.length);
     }
     
     function _resolvePath(string memory root, string memory path) internal pure returns (string memory) {
@@ -464,5 +443,27 @@ contract ConsolidateToTarget is Script, Utils {
         }
         // Otherwise, prepend root
         return string.concat(root, "/", path);
+    }
+    
+    function _getDirectory(string memory filePath) internal pure returns (string memory) {
+        bytes memory pathBytes = bytes(filePath);
+        uint256 lastSlash = 0;
+        
+        for (uint256 i = 0; i < pathBytes.length; i++) {
+            if (pathBytes[i] == '/') {
+                lastSlash = i;
+            }
+        }
+        
+        if (lastSlash == 0) {
+            return ".";
+        }
+        
+        bytes memory dirBytes = new bytes(lastSlash);
+        for (uint256 i = 0; i < lastSlash; i++) {
+            dirBytes[i] = pathBytes[i];
+        }
+        
+        return string(dirBytes);
     }
 }
