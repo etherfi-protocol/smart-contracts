@@ -644,15 +644,62 @@ def convert_to_output_format(plan: Dict) -> Dict:
     }
 
 
+def write_targets_json(plan: Dict, output_dir: str) -> str:
+    """
+    Write a separate targets.json file with target validator info for linking.
+    
+    Contains: validatorId, pubkey, estimated sweep time, bucket index
+    Used by ConsolidateToTarget.s.sol for linking validators.
+    """
+    targets_output = []
+    seen_pubkeys = set()  # Deduplicate targets (same target may appear in multiple consolidations)
+    
+    for c in plan['consolidations']:
+        target = c['target']
+        pubkey = target.get('pubkey', '')
+        
+        # Skip duplicates (target may be used across multiple consolidation batches)
+        if pubkey.lower() in seen_pubkeys:
+            continue
+        seen_pubkeys.add(pubkey.lower())
+        
+        targets_output.append({
+            'id': target.get('id'),
+            'pubkey': pubkey,
+            'validator_index': target.get('index'),
+            'estimated_sweep_seconds': target.get('secondsUntilSweep'),
+            'estimated_sweep_time': target.get('estimatedSweepTime'),
+            'bucket_index': c['bucket_index'],
+            'current_balance_eth': c['target_balance_eth'],
+            'withdrawal_credentials': format_full_withdrawal_credentials(c['wc_address'])
+        })
+    
+    # Sort by bucket index for easier review
+    targets_output.sort(key=lambda x: (x['bucket_index'], x.get('estimated_sweep_seconds', 0)))
+    
+    targets_file = os.path.join(output_dir, 'targets.json')
+    with open(targets_file, 'w') as f:
+        json.dump(targets_output, f, indent=2, default=str)
+    
+    return targets_file
+
+
 def write_output(plan: Dict, output_file: str, operator_name: str):
     """Write consolidation plan to JSON file."""
     output = convert_to_output_format(plan)
     
+    # Get output directory for targets.json
+    output_dir = os.path.dirname(output_file) or '.'
+    
     with open(output_file, 'w') as f:
         json.dump(output, f, indent=2, default=str)
     
+    # Write separate targets.json file
+    targets_file = write_targets_json(plan, output_dir)
+    
     print(f"\n=== Output Written ===")
-    print(f"File: {output_file}")
+    print(f"Consolidation data: {output_file}")
+    print(f"Targets file: {targets_file}")
     print(f"Operator: {operator_name}")
     print(f"Total targets: {plan['summary']['total_targets']}")
     print(f"Total sources: {plan['summary']['total_sources']}")
@@ -667,7 +714,7 @@ def write_output(plan: Dict, output_file: str, operator_name: str):
     print(f"\n=== Next Steps ===")
     print(f"Run the ConsolidateToTarget script with this data:")
     print(f"")
-    print(f"  JSON_FILE={os.path.basename(output_file)} \\")
+    print(f"  CONSOLIDATION_DATA={os.path.basename(output_file)} TARGETS_DATA={os.path.basename(targets_file)} \\")
     print(f"    forge script script/operations/consolidations/ConsolidateToTarget.s.sol:ConsolidateToTarget \\")
     print(f"    --fork-url $MAINNET_RPC_URL -vvvv")
 
