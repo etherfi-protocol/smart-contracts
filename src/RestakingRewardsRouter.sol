@@ -74,21 +74,23 @@ contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @dev Manual transfer function to recover ERC20 tokens that may have accumulated in the contract
-    /// @param token The address of the ERC20 token to transfer
-    function transferERC20(address token) external {
+    function transferERC20() external {
         if (
             !roleRegistry.hasRole(
                 ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE,
                 msg.sender
             )
         ) revert IncorrectRole();
-        if (token == address(0)) revert InvalidAddress();
         if (recipientAddress == address(0)) revert NoRecipientSet();
 
-        uint256 balance = IERC20(token).balanceOf(address(this));
+        uint256 balance = IERC20(rewardTokenAddress).balanceOf(address(this));
         if (balance > 0) {
-            IERC20(token).safeTransfer(recipientAddress, balance);
-            emit Erc20Transferred(token, recipientAddress, balance);
+            IERC20(rewardTokenAddress).safeTransfer(recipientAddress, balance);
+            emit Erc20Transferred(
+                rewardTokenAddress,
+                recipientAddress,
+                balance
+            );
         }
     }
 
