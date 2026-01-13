@@ -16,7 +16,7 @@ contract DeployRestakingRewardsRouter is Script {
 
     address routerImpl;
     address routerProxy;
-    bytes32 commitHashSalt = bytes32(bytes20(hex"62a88c287dbc89b37d9254317b744e2af6d8cd12"));
+    bytes32 commitHashSalt = bytes32(bytes20(hex"63623373f3483796a140f0e9d11974b83f2c1f60"));
 
     // === MAINNET CONTRACT ADDRESSES ===
     address constant ROLE_REGISTRY = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
