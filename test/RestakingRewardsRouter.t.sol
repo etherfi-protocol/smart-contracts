@@ -7,28 +7,6 @@ import "../src/RoleRegistry.sol";
 import "../src/UUPSProxy.sol";
 import "./TestERC20.sol";
 
-contract ERC20WithHook is TestERC20 {
-    constructor(string memory _name, string memory _symbol) TestERC20(_name, _symbol) {}
-
-    function transfer(address to, uint256 amount) public override returns (bool) {
-        bool success = super.transfer(to, amount);
-        if (success && to.code.length > 0) {
-            // Call hook and propagate revert if it fails
-            IERC20Receiver(to).onERC20Received(address(this), msg.sender, amount, "");
-        }
-        return success;
-    }
-
-    function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
-        bool success = super.transferFrom(from, to, amount);
-        if (success && to.code.length > 0) {
-            // Call hook and propagate revert if it fails
-            IERC20Receiver(to).onERC20Received(address(this), from, amount, "");
-        }
-        return success;
-    }
-}
-
 contract RestakingRewardsRouterTest is Test {
     RestakingRewardsRouter public router;
     RestakingRewardsRouter public routerImpl;
@@ -37,17 +15,19 @@ contract RestakingRewardsRouterTest is Test {
     RoleRegistry public roleRegistryImpl;
     UUPSProxy public roleRegistryProxy;
     
-    ERC20WithHook public rewardToken;
+    TestERC20 public rewardToken;
     TestERC20 public otherToken;
     
     address public owner = vm.addr(1);
     address public admin = vm.addr(2);
+    address public transferRoleUser = vm.addr(7);
     address public unauthorizedUser = vm.addr(3);
     address public liquidityPool = vm.addr(4);
     address public recipient = vm.addr(5);
     address public user = vm.addr(6);
     
     bytes32 public constant ETHERFI_REWARDS_ROUTER_ADMIN_ROLE = keccak256("ETHERFI_REWARDS_ROUTER_ADMIN_ROLE");
+    bytes32 public constant ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE = keccak256("ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE");
     
     event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
@@ -65,7 +45,7 @@ contract RestakingRewardsRouterTest is Test {
         roleRegistry = RoleRegistry(address(roleRegistryProxy));
         
         // Deploy tokens
-        rewardToken = new ERC20WithHook("Reward Token", "RWD");
+        rewardToken = new TestERC20("Reward Token", "RWD");
         otherToken = new TestERC20("Other Token", "OTH");
         
         // Deploy RestakingRewardsRouter implementation
@@ -77,6 +57,9 @@ contract RestakingRewardsRouterTest is Test {
         
         // Grant admin role
         roleRegistry.grantRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, admin);
+        // Grant transfer role
+        roleRegistry.grantRole(ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE, admin);
+        roleRegistry.grantRole(ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE, transferRoleUser);
         vm.stopPrank();
         
         // Deploy proxy and initialize (outside prank so owner is address(this))
@@ -113,6 +96,15 @@ contract RestakingRewardsRouterTest is Test {
             address(roleRegistry),
             address(rewardToken),
             address(0)
+        );
+    }
+    
+    function test_constructor_revertsWithZeroRoleRegistry() public {
+        vm.expectRevert(RestakingRewardsRouter.InvalidAddress.selector);
+        new RestakingRewardsRouter(
+            address(0),
+            address(rewardToken),
+            liquidityPool
         );
     }
     
@@ -241,82 +233,6 @@ contract RestakingRewardsRouterTest is Test {
         vm.stopPrank();
     }
     
-    // ============ onERC20Received Tests ============
-    
-    function test_onERC20Received_forwardsRewardToken() public {
-        vm.startPrank(admin);
-        router.setRecipientAddress(recipient);
-        vm.stopPrank();
-        
-        uint256 amount = 1000 ether;
-        rewardToken.mint(user, amount);
-        
-        uint256 initialRecipientBalance = rewardToken.balanceOf(recipient);
-        
-        vm.expectEmit(true, true, false, true);
-        emit Erc20Transferred(address(rewardToken), recipient, amount);
-        
-        vm.prank(user);
-        rewardToken.transfer(address(router), amount);
-        
-        assertEq(rewardToken.balanceOf(address(router)), 0);
-        assertEq(rewardToken.balanceOf(recipient), initialRecipientBalance + amount);
-    }
-    
-    function test_onERC20Received_revertsWithInvalidToken() public {
-        vm.startPrank(admin);
-        router.setRecipientAddress(recipient);
-        vm.stopPrank();
-        
-        uint256 amount = 1000 ether;
-        
-        // Call the hook directly with invalid token
-        vm.expectRevert(abi.encodeWithSelector(RestakingRewardsRouter.InvalidToken.selector, address(otherToken)));
-        router.onERC20Received(address(otherToken), user, amount, "");
-    }
-    
-    function test_onERC20Received_revertsWhenNoRecipientSet() public {
-        uint256 amount = 1000 ether;
-        rewardToken.mint(user, amount);
-        
-        vm.prank(user);
-        vm.expectRevert(RestakingRewardsRouter.NoRecipientSet.selector);
-        rewardToken.transfer(address(router), amount);
-    }
-    
-    function test_onERC20Received_handlesMultipleTransfers() public {
-        vm.startPrank(admin);
-        router.setRecipientAddress(recipient);
-        vm.stopPrank();
-        
-        uint256 amount1 = 500 ether;
-        uint256 amount2 = 300 ether;
-        rewardToken.mint(user, amount1 + amount2);
-        
-        vm.startPrank(user);
-        rewardToken.transfer(address(router), amount1);
-        rewardToken.transfer(address(router), amount2);
-        vm.stopPrank();
-        
-        assertEq(rewardToken.balanceOf(address(router)), 0);
-        assertEq(rewardToken.balanceOf(recipient), amount1 + amount2);
-    }
-    
-    function test_onERC20Received_returnsCorrectSelector() public {
-        vm.startPrank(admin);
-        router.setRecipientAddress(recipient);
-        vm.stopPrank();
-        
-        uint256 amount = 100 ether;
-        rewardToken.mint(user, amount);
-        
-        vm.prank(user);
-        rewardToken.transfer(address(router), amount);
-        
-        // If we got here without revert, the selector was correct
-        assertTrue(true);
-    }
-    
     // ============ transferERC20 Tests ============
     
     function test_transferERC20_forwardsBalance() public {
@@ -332,6 +248,7 @@ contract RestakingRewardsRouterTest is Test {
         vm.expectEmit(true, true, false, true);
         emit Erc20Transferred(address(rewardToken), recipient, amount);
         
+        vm.prank(admin);
         router.transferERC20(address(rewardToken));
         
         assertEq(rewardToken.balanceOf(address(router)), 0);
@@ -342,6 +259,7 @@ contract RestakingRewardsRouterTest is Test {
         uint256 amount = 1000 ether;
         rewardToken.mint(address(router), amount);
         
+        vm.prank(admin);
         vm.expectRevert(RestakingRewardsRouter.NoRecipientSet.selector);
         router.transferERC20(address(rewardToken));
     }
@@ -352,12 +270,13 @@ contract RestakingRewardsRouterTest is Test {
         vm.stopPrank();
         
         // Should not revert with zero balance
+        vm.prank(admin);
         router.transferERC20(address(rewardToken));
         
         assertEq(rewardToken.balanceOf(address(router)), 0);
     }
     
-    function test_transferERC20_anyoneCanCall() public {
+    function test_transferERC20_requiresRole() public {
         vm.startPrank(admin);
         router.setRecipientAddress(recipient);
         vm.stopPrank();
@@ -366,6 +285,22 @@ contract RestakingRewardsRouterTest is Test {
         rewardToken.mint(address(router), amount);
         
         vm.prank(unauthorizedUser);
+        vm.expectRevert(RestakingRewardsRouter.IncorrectRole.selector);
+        router.transferERC20(address(rewardToken));
+        
+        // Should still have tokens since transfer failed
+        assertEq(rewardToken.balanceOf(address(router)), amount);
+    }
+    
+    function test_transferERC20_withTransferRole() public {
+        vm.startPrank(admin);
+        router.setRecipientAddress(recipient);
+        vm.stopPrank();
+        
+        uint256 amount = 500 ether;
+        rewardToken.mint(address(router), amount);
+        
+        vm.prank(transferRoleUser);
         router.transferERC20(address(rewardToken));
         
         assertEq(rewardToken.balanceOf(address(router)), 0);
@@ -381,10 +316,12 @@ contract RestakingRewardsRouterTest is Test {
         uint256 amount2 = 300 ether;
         rewardToken.mint(address(router), amount1);
         
+        vm.prank(admin);
         router.transferERC20(address(rewardToken));
         assertEq(rewardToken.balanceOf(recipient), amount1);
         
         rewardToken.mint(address(router), amount2);
+        vm.prank(admin);
         router.transferERC20(address(rewardToken));
         assertEq(rewardToken.balanceOf(recipient), amount1 + amount2);
     }
@@ -402,6 +339,7 @@ contract RestakingRewardsRouterTest is Test {
         vm.expectEmit(true, true, false, true);
         emit Erc20Transferred(address(otherToken), recipient, amount);
         
+        vm.prank(admin);
         router.transferERC20(address(otherToken));
         
         assertEq(otherToken.balanceOf(address(router)), 0);
@@ -413,6 +351,7 @@ contract RestakingRewardsRouterTest is Test {
         router.setRecipientAddress(recipient);
         vm.stopPrank();
         
+        vm.prank(admin);
         vm.expectRevert(RestakingRewardsRouter.InvalidAddress.selector);
         router.transferERC20(address(0));
     }
@@ -505,16 +444,22 @@ contract RestakingRewardsRouterTest is Test {
         assertTrue(success);
         assertEq(liquidityPool.balance, 10 ether);
         
-        // Transfer tokens via hook
+        // Transfer tokens (they will accumulate since there's no hook)
         uint256 tokenAmount = 500 ether;
         rewardToken.mint(user, tokenAmount);
         vm.prank(user);
         rewardToken.transfer(address(router), tokenAmount);
+        assertEq(rewardToken.balanceOf(address(router)), tokenAmount);
+        
+        // Manual transfer to recover accumulated tokens
+        vm.prank(admin);
+        router.transferERC20(address(rewardToken));
         assertEq(rewardToken.balanceOf(recipient), tokenAmount);
         
-        // Manual transfer
+        // Manual transfer for additional tokens
         uint256 manualAmount = 200 ether;
         rewardToken.mint(address(router), manualAmount);
+        vm.prank(admin);
         router.transferERC20(address(rewardToken));
         assertEq(rewardToken.balanceOf(recipient), tokenAmount + manualAmount);
     }
@@ -536,28 +481,13 @@ contract RestakingRewardsRouterTest is Test {
         vm.stopPrank();
         
         assertEq(liquidityPool.balance, 10 ether);
+        // Tokens accumulate since there's no hook
+        assertEq(rewardToken.balanceOf(address(router)), tokenAmount);
+        
+        // Manual transfer to recover tokens
+        vm.prank(admin);
+        router.transferERC20(address(rewardToken));
         assertEq(rewardToken.balanceOf(recipient), tokenAmount);
-    }
-    
-    function test_onERC20Received_withStandardERC20() public {
-        // Standard ERC20 doesn't call the hook, so tokens will accumulate
-        vm.startPrank(admin);
-        router.setRecipientAddress(recipient);
-        vm.stopPrank();
-        
-        uint256 amount = 1000 ether;
-        otherToken.mint(user, amount);
-        
-        // Direct transfer (standard ERC20 doesn't call hook)
-        vm.prank(user);
-        otherToken.transfer(address(router), amount);
-        
-        // Token is in router but hook wasn't called
-        assertEq(otherToken.balanceOf(address(router)), amount);
-        
-        // But if we try to use the hook manually with wrong token, it reverts
-        vm.expectRevert(abi.encodeWithSelector(RestakingRewardsRouter.InvalidToken.selector, address(otherToken)));
-        router.onERC20Received(address(otherToken), user, amount, "");
     }
 }
 
