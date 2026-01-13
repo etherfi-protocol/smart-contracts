@@ -1,19 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/IRoleRegistry.sol";
 
-contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
+contract RestakingRewardsRouter is UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     address public immutable liquidityPool;
     address public immutable rewardTokenAddress;
-    address public recipientAddress;
     IRoleRegistry public immutable roleRegistry;
 
     bytes32 public constant ETHERFI_REWARDS_ROUTER_ADMIN_ROLE =
@@ -21,6 +19,8 @@ contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
 
     bytes32 public constant ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE =
         keccak256("ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE");
+
+    address public recipientAddress;
 
     event EthSent(address indexed from, address indexed to, uint256 value);
     event RecipientAddressSet(address indexed recipient);
@@ -58,7 +58,6 @@ contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function initialize() public initializer {
-        __Ownable_init();
         __UUPSUpgradeable_init();
     }
 

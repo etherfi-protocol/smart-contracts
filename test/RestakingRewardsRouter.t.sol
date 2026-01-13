@@ -68,8 +68,6 @@ contract RestakingRewardsRouterTest is Test {
         );
         router = RestakingRewardsRouter(payable(address(proxy)));
         
-        // Transfer ownership to owner address
-        router.transferOwnership(owner);
     }
     
     // ============ Constructor Tests ============
@@ -113,10 +111,6 @@ contract RestakingRewardsRouterTest is Test {
     }
     
     // ============ Initialization Tests ============
-    
-    function test_initialize_setsOwner() public {
-        assertEq(router.owner(), owner);
-    }
     
     function test_initialize_canOnlyBeCalledOnce() public {
         vm.expectRevert("Initializable: contract is already initialized");
