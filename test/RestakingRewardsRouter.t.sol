@@ -32,6 +32,7 @@ contract RestakingRewardsRouterTest is Test {
     event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
     event RecipientAddressSet(address indexed recipient);
+    event RewardTokenAddressSet(address indexed rewardTokenAddress);
     event Erc20Transferred(address indexed token, address indexed recipient, uint256 amount);
     
     function setUp() public {
@@ -71,11 +72,15 @@ contract RestakingRewardsRouterTest is Test {
         
         // Transfer ownership to owner address
         router.transferOwnership(owner);
+        
+        // Set reward token address (since it's no longer immutable, needs to be set after proxy deployment)
+        vm.prank(admin);
+        router.setRewardTokenAddress(address(rewardToken));
     }
     
     // ============ Constructor Tests ============
     
-    function test_constructor_setsImmutableValues() public {
+    function test_constructor_setsValues() public {
         assertEq(router.rewardTokenAddress(), address(rewardToken));
         assertEq(router.liquidityPool(), liquidityPool);
         assertEq(address(router.roleRegistry()), address(roleRegistry));
@@ -233,11 +238,60 @@ contract RestakingRewardsRouterTest is Test {
         vm.stopPrank();
     }
     
+    // ============ Set Reward Token Address Tests ============
+    
+    function test_setRewardTokenAddress_success() public {
+        TestERC20 newRewardToken = new TestERC20("New Reward Token", "NRWD");
+        
+        vm.prank(admin);
+        router.setRewardTokenAddress(address(newRewardToken));
+        
+        assertEq(router.rewardTokenAddress(), address(newRewardToken));
+    }
+    
+    function test_setRewardTokenAddress_emitsEvent() public {
+        TestERC20 newRewardToken = new TestERC20("New Reward Token", "NRWD");
+        
+        vm.expectEmit(true, false, false, false);
+        emit RewardTokenAddressSet(address(newRewardToken));
+        
+        vm.prank(admin);
+        router.setRewardTokenAddress(address(newRewardToken));
+    }
+    
+    function test_setRewardTokenAddress_revertsWithoutRole() public {
+        TestERC20 newRewardToken = new TestERC20("New Reward Token", "NRWD");
+        
+        vm.prank(unauthorizedUser);
+        vm.expectRevert(RestakingRewardsRouter.IncorrectRole.selector);
+        router.setRewardTokenAddress(address(newRewardToken));
+    }
+    
+    function test_setRewardTokenAddress_revertsWithZeroAddress() public {
+        vm.prank(admin);
+        vm.expectRevert(RestakingRewardsRouter.InvalidAddress.selector);
+        router.setRewardTokenAddress(address(0));
+    }
+    
+    function test_setRewardTokenAddress_canUpdateToken() public {
+        TestERC20 newRewardToken1 = new TestERC20("New Reward Token 1", "NRWD1");
+        TestERC20 newRewardToken2 = new TestERC20("New Reward Token 2", "NRWD2");
+        
+        vm.startPrank(admin);
+        router.setRewardTokenAddress(address(newRewardToken1));
+        assertEq(router.rewardTokenAddress(), address(newRewardToken1));
+        
+        router.setRewardTokenAddress(address(newRewardToken2));
+        assertEq(router.rewardTokenAddress(), address(newRewardToken2));
+        vm.stopPrank();
+    }
+    
     // ============ transferERC20 Tests ============
     
     function test_transferERC20_forwardsBalance() public {
         vm.startPrank(admin);
         router.setRecipientAddress(recipient);
+        router.setRewardTokenAddress(address(rewardToken));
         vm.stopPrank();
         
         uint256 amount = 1000 ether;
@@ -259,6 +313,11 @@ contract RestakingRewardsRouterTest is Test {
         uint256 amount = 1000 ether;
         rewardToken.mint(address(router), amount);
         
+        // Ensure reward token is set (it's set in setUp, but let's be explicit)
+        vm.startPrank(admin);
+        router.setRewardTokenAddress(address(rewardToken));
+        vm.stopPrank();
+        
         vm.prank(admin);
         vm.expectRevert(RestakingRewardsRouter.NoRecipientSet.selector);
         router.transferERC20(address(rewardToken));
@@ -267,6 +326,7 @@ contract RestakingRewardsRouterTest is Test {
     function test_transferERC20_handlesZeroBalance() public {
         vm.startPrank(admin);
         router.setRecipientAddress(recipient);
+        router.setRewardTokenAddress(address(rewardToken));
         vm.stopPrank();
         
         // Should not revert with zero balance
@@ -279,6 +339,7 @@ contract RestakingRewardsRouterTest is Test {
     function test_transferERC20_requiresRole() public {
         vm.startPrank(admin);
         router.setRecipientAddress(recipient);
+        router.setRewardTokenAddress(address(rewardToken));
         vm.stopPrank();
         
         uint256 amount = 500 ether;
@@ -295,6 +356,7 @@ contract RestakingRewardsRouterTest is Test {
     function test_transferERC20_withTransferRole() public {
         vm.startPrank(admin);
         router.setRecipientAddress(recipient);
+        router.setRewardTokenAddress(address(rewardToken));
         vm.stopPrank();
         
         uint256 amount = 500 ether;
@@ -310,6 +372,7 @@ contract RestakingRewardsRouterTest is Test {
     function test_transferERC20_handlesPartialTransfers() public {
         vm.startPrank(admin);
         router.setRecipientAddress(recipient);
+        router.setRewardTokenAddress(address(rewardToken));
         vm.stopPrank();
         
         uint256 amount1 = 500 ether;
@@ -326,7 +389,7 @@ contract RestakingRewardsRouterTest is Test {
         assertEq(rewardToken.balanceOf(recipient), amount1 + amount2);
     }
     
-    function test_transferERC20_withOtherToken() public {
+    function test_transferERC20_revertsWithOtherToken() public {
         vm.startPrank(admin);
         router.setRecipientAddress(recipient);
         vm.stopPrank();
@@ -334,16 +397,35 @@ contract RestakingRewardsRouterTest is Test {
         uint256 amount = 1000 ether;
         otherToken.mint(address(router), amount);
         
-        uint256 initialRecipientBalance = otherToken.balanceOf(recipient);
-        
-        vm.expectEmit(true, true, false, true);
-        emit Erc20Transferred(address(otherToken), recipient, amount);
-        
         vm.prank(admin);
+        vm.expectRevert(RestakingRewardsRouter.InvalidAddress.selector);
         router.transferERC20(address(otherToken));
         
-        assertEq(otherToken.balanceOf(address(router)), 0);
-        assertEq(otherToken.balanceOf(recipient), initialRecipientBalance + amount);
+        // Token should still be in router since transfer failed
+        assertEq(otherToken.balanceOf(address(router)), amount);
+    }
+    
+    function test_transferERC20_worksAfterTokenUpdate() public {
+        TestERC20 newRewardToken = new TestERC20("New Reward Token", "NRWD");
+        
+        vm.startPrank(admin);
+        router.setRecipientAddress(recipient);
+        router.setRewardTokenAddress(address(newRewardToken));
+        vm.stopPrank();
+        
+        uint256 amount = 1000 ether;
+        newRewardToken.mint(address(router), amount);
+        
+        uint256 initialRecipientBalance = newRewardToken.balanceOf(recipient);
+        
+        vm.expectEmit(true, true, false, true);
+        emit Erc20Transferred(address(newRewardToken), recipient, amount);
+        
+        vm.prank(admin);
+        router.transferERC20(address(newRewardToken));
+        
+        assertEq(newRewardToken.balanceOf(address(router)), 0);
+        assertEq(newRewardToken.balanceOf(recipient), initialRecipientBalance + amount);
     }
     
     function test_transferERC20_revertsWithZeroAddress() public {
@@ -380,17 +462,19 @@ contract RestakingRewardsRouterTest is Test {
     
     // ============ Upgrade Tests ============
     
-    function test_upgrade_onlyOwner() public {
+    function test_upgrade_onlyProtocolUpgrader() public {
         RestakingRewardsRouter newImpl = new RestakingRewardsRouter(
             address(roleRegistry),
             address(rewardToken),
             liquidityPool
         );
         
+        // Unauthorized user cannot upgrade
         vm.prank(unauthorizedUser);
         vm.expectRevert();
         router.upgradeTo(address(newImpl));
         
+        // Owner of RoleRegistry (protocol upgrader) can upgrade
         vm.prank(owner);
         router.upgradeTo(address(newImpl));
         
@@ -411,6 +495,7 @@ contract RestakingRewardsRouterTest is Test {
         
         vm.startPrank(admin);
         router.setRecipientAddress(recipient);
+        router.setRewardTokenAddress(address(rewardToken));
         vm.stopPrank();
         
         RestakingRewardsRouter newImpl = new RestakingRewardsRouter(
@@ -419,6 +504,7 @@ contract RestakingRewardsRouterTest is Test {
             liquidityPool
         );
         
+        // Owner of RoleRegistry (protocol upgrader) can upgrade
         vm.prank(owner);
         router.upgradeTo(address(newImpl));
         
@@ -433,9 +519,11 @@ contract RestakingRewardsRouterTest is Test {
     // ============ Edge Cases ============
     
     function test_multipleOperations_sequence() public {
-        // Set recipient
-        vm.prank(admin);
+        // Set recipient and reward token
+        vm.startPrank(admin);
         router.setRecipientAddress(recipient);
+        router.setRewardTokenAddress(address(rewardToken));
+        vm.stopPrank();
         
         // Send ETH
         vm.deal(user, 10 ether);
@@ -467,6 +555,7 @@ contract RestakingRewardsRouterTest is Test {
     function test_receiveAndTransfer_combined() public {
         vm.startPrank(admin);
         router.setRecipientAddress(recipient);
+        router.setRewardTokenAddress(address(rewardToken));
         vm.stopPrank();
         
         // Send ETH and tokens simultaneously
