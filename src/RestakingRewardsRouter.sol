@@ -11,8 +11,8 @@ import "./RoleRegistry.sol";
 contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
-    address public immutable rewardTokenAddress;
     address public immutable liquidityPool;
+    address public rewardTokenAddress;
     address public recipientAddress;
     RoleRegistry public immutable roleRegistry;
 
@@ -25,6 +25,7 @@ contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
     event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
     event RecipientAddressSet(address indexed recipient);
+    event RewardTokenAddressSet(address indexed rewardTokenAddress);
     event Erc20Transferred(
         address indexed token,
         address indexed recipient,
@@ -73,30 +74,38 @@ contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
         emit RecipientAddressSet(_recipient);
     }
 
+    function setRewardTokenAddress(address _rewardTokenAddress) external {
+        if (
+            !roleRegistry.hasRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, msg.sender)
+        ) revert IncorrectRole();
+        if (_rewardTokenAddress == address(0)) revert InvalidAddress();
+        rewardTokenAddress = _rewardTokenAddress;
+        emit RewardTokenAddressSet(_rewardTokenAddress);
+    }
+
     /// @dev Manual transfer function to recover ERC20 tokens that may have accumulated in the contract
-    function transferERC20() external {
+    /// @param token The address of the ERC20 token to transfer
+    function transferERC20(address token) external {
         if (
             !roleRegistry.hasRole(
                 ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE,
                 msg.sender
             )
         ) revert IncorrectRole();
+        if (token == address(0) || token != rewardTokenAddress)
+            revert InvalidAddress();
         if (recipientAddress == address(0)) revert NoRecipientSet();
 
-        uint256 balance = IERC20(rewardTokenAddress).balanceOf(address(this));
+        uint256 balance = IERC20(token).balanceOf(address(this));
         if (balance > 0) {
-            IERC20(rewardTokenAddress).safeTransfer(recipientAddress, balance);
-            emit Erc20Transferred(
-                rewardTokenAddress,
-                recipientAddress,
-                balance
-            );
+            IERC20(token).safeTransfer(recipientAddress, balance);
+            emit Erc20Transferred(token, recipientAddress, balance);
         }
     }
 
-    function _authorizeUpgrade(
-        address newImplementation
-    ) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
