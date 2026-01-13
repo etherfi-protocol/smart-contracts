@@ -47,7 +47,7 @@ contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable, IERC20Re
 
     constructor(address _roleRegistry, address _rewardTokenAddress, address _liquidityPool) {
         _disableInitializers();
-        if (_rewardTokenAddress == address(0) || _liquidityPool == address(0)) revert InvalidAddress();
+        if (_rewardTokenAddress == address(0) || _liquidityPool == address(0) || _roleRegistry == address(0)) revert InvalidAddress();
         roleRegistry = RoleRegistry(_roleRegistry);
         rewardTokenAddress = _rewardTokenAddress;
         liquidityPool = _liquidityPool;
