@@ -29,7 +29,6 @@ contract RestakingRewardsRouterTest is Test {
     bytes32 public constant ETHERFI_REWARDS_ROUTER_ADMIN_ROLE = keccak256("ETHERFI_REWARDS_ROUTER_ADMIN_ROLE");
     bytes32 public constant ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE = keccak256("ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE");
     
-    event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
     event RecipientAddressSet(address indexed recipient);
     event Erc20Transferred(address indexed token, address indexed recipient, uint256 amount);
@@ -126,11 +125,11 @@ contract RestakingRewardsRouterTest is Test {
     
     // ============ Receive ETH Tests ============
     
-    function test_receive_emitsEthReceivedEvent() public {
+    function test_receive_emitsEthSentEvent() public {
         vm.deal(user, 10 ether);
         
-        vm.expectEmit(true, false, false, true);
-        emit EthReceived(user, 10 ether);
+        vm.expectEmit(true, true, false, true);
+        emit EthSent(address(router), liquidityPool, 10 ether);
         
         vm.prank(user);
         (bool success, ) = address(router).call{value: 10 ether}("");
