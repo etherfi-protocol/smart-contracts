@@ -55,6 +55,7 @@ contract EtherFiNodesManager is
     //-------------------------------------------------------------------------
     bytes32 public constant UNRESTAKING_LIMIT_ID = keccak256("UNRESTAKING_LIMIT_ID");
     bytes32 public constant EXIT_REQUEST_LIMIT_ID = keccak256("EXIT_REQUEST_LIMIT_ID");
+    bytes32 public constant CONSOLIDATION_REQUEST_LIMIT_ID = keccak256("CONSOLIDATION_REQUEST_LIMIT_ID");
     // maximum exitable balance in gwei
     uint256 public constant FULL_EXIT_GWEI = 2_048_000_000_000;
 
@@ -250,7 +251,7 @@ contract EtherFiNodesManager is
 
     /**
      * @notice Triggers EIP-7251 consolidation requests for validators in the same EigenPod.
-     * @dev Access: only admin role, pausable, nonReentrant.
+     * @dev Access: only ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE, pausable, nonReentrant.
      * @param requests Array of ConsolidationRequest:
      *        - srcPubkey: 48-byte BLS pubkey of source validator
      *        - targetPubkey: 48-byte BLS pubkey of target validator
@@ -261,6 +262,10 @@ contract EtherFiNodesManager is
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable whenNotPaused nonReentrant {
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE, msg.sender)) revert IncorrectRole();
         if (requests.length == 0) revert EmptyConsolidationRequest();
+
+        // rate limit consolidation requests - each request could affect up to FULL_EXIT_GWEI
+        uint256 totalConsolidationGwei = getTotalConsolidationGwei(requests);
+        rateLimiter.consume(CONSOLIDATION_REQUEST_LIMIT_ID, SafeCast.toUint64(totalConsolidationGwei));
 
         // eigenlayer will revert if all validators don't belong to the same pod
         bytes32 pubKeyHash = calculateValidatorPubkeyHash(requests[0].srcPubkey);
@@ -280,6 +285,22 @@ contract EtherFiNodesManager is
                 emit ValidatorSwitchToCompoundingRequested(address(pod), srcPkHash, requests[i].srcPubkey);
             } else {
                 emit ValidatorConsolidationRequested(address(pod), srcPkHash, requests[i].srcPubkey, targetPkHash, requests[i].targetPubkey);
+            }
+            unchecked { ++i; }
+        }
+    }
+
+    /// @notice Calculates the total Gwei affected by consolidation requests for rate limiting
+    /// @dev For true consolidations (src != target), the source validator's full balance is merged
+    ///      For credential switches (src == target), we count 0 as no ETH movement occurs
+    /// @param requests The consolidation requests to process
+    /// @return totalGwei The total Gwei to rate limit
+    function getTotalConsolidationGwei(IEigenPod.ConsolidationRequest[] calldata requests) internal pure returns (uint256 totalGwei) {
+        for (uint256 i = 0; i < requests.length; ) {
+            // Only count true consolidations where source validator balance is moved
+            // Credential switches (src == target) don't move ETH
+            if (keccak256(requests[i].srcPubkey) != keccak256(requests[i].targetPubkey)) {
+                totalGwei += FULL_EXIT_GWEI;
             }
             unchecked { ++i; }
         }
