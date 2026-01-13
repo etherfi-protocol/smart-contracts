@@ -128,8 +128,10 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.startPrank(admin);
         rateLimiter.createNewLimiter(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
         rateLimiter.createNewLimiter(etherFiNodesManager.EXIT_REQUEST_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
+        rateLimiter.createNewLimiter(etherFiNodesManager.CONSOLIDATION_REQUEST_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000); // (2048*60 one consolidation request) . For 50 such requests, 2048*60*50 = 6_144_000_000_000_000 gwei = 6_144_000_000 ETH
         rateLimiter.updateConsumers(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), address(etherFiNodesManager), true);
         rateLimiter.updateConsumers(etherFiNodesManager.EXIT_REQUEST_LIMIT_ID(), address(etherFiNodesManager), true);
+        rateLimiter.updateConsumers(etherFiNodesManager.CONSOLIDATION_REQUEST_LIMIT_ID(), address(etherFiNodesManager), true);
         vm.stopPrank();
 
         defaultTestValidatorParams = TestValidatorParams({
