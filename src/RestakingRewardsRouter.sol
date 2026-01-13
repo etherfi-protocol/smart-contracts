@@ -6,15 +6,15 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./RoleRegistry.sol";
+import "./interfaces/IRoleRegistry.sol";
 
 contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
 
     address public immutable liquidityPool;
-    address public rewardTokenAddress;
+    address public immutable rewardTokenAddress;
     address public recipientAddress;
-    RoleRegistry public immutable roleRegistry;
+    IRoleRegistry public immutable roleRegistry;
 
     bytes32 public constant ETHERFI_REWARDS_ROUTER_ADMIN_ROLE =
         keccak256("ETHERFI_REWARDS_ROUTER_ADMIN_ROLE");
@@ -25,7 +25,6 @@ contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
     event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
     event RecipientAddressSet(address indexed recipient);
-    event RewardTokenAddressSet(address indexed rewardTokenAddress);
     event Erc20Transferred(
         address indexed token,
         address indexed recipient,
@@ -48,7 +47,7 @@ contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
             _liquidityPool == address(0) ||
             _roleRegistry == address(0)
         ) revert InvalidAddress();
-        roleRegistry = RoleRegistry(_roleRegistry);
+        roleRegistry = IRoleRegistry(_roleRegistry);
         rewardTokenAddress = _rewardTokenAddress;
         liquidityPool = _liquidityPool;
     }
@@ -74,36 +73,30 @@ contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
         emit RecipientAddressSet(_recipient);
     }
 
-    function setRewardTokenAddress(address _rewardTokenAddress) external {
-        if (
-            !roleRegistry.hasRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, msg.sender)
-        ) revert IncorrectRole();
-        if (_rewardTokenAddress == address(0)) revert InvalidAddress();
-        rewardTokenAddress = _rewardTokenAddress;
-        emit RewardTokenAddressSet(_rewardTokenAddress);
-    }
-
-    /// @dev Manual transfer function to recover ERC20 tokens that may have accumulated in the contract
-    /// @param token The address of the ERC20 token to transfer
-    function transferERC20(address token) external {
+    /// @dev Manual transfer function to recover reward tokens that may have accumulated in the contract
+    function transferERC20() external {
         if (
             !roleRegistry.hasRole(
                 ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE,
                 msg.sender
             )
         ) revert IncorrectRole();
-        if (token == address(0) || token != rewardTokenAddress)
-            revert InvalidAddress();
         if (recipientAddress == address(0)) revert NoRecipientSet();
 
-        uint256 balance = IERC20(token).balanceOf(address(this));
+        uint256 balance = IERC20(rewardTokenAddress).balanceOf(address(this));
         if (balance > 0) {
-            IERC20(token).safeTransfer(recipientAddress, balance);
-            emit Erc20Transferred(token, recipientAddress, balance);
+            IERC20(rewardTokenAddress).safeTransfer(recipientAddress, balance);
+            emit Erc20Transferred(
+                rewardTokenAddress,
+                recipientAddress,
+                balance
+            );
         }
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override {
+    function _authorizeUpgrade(
+        address /* newImplementation */
+    ) internal override {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
