@@ -22,7 +22,6 @@ contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
     bytes32 public constant ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE =
         keccak256("ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE");
 
-    event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
     event RecipientAddressSet(address indexed recipient);
     event Erc20Transferred(
@@ -53,7 +52,6 @@ contract RestakingRewardsRouter is OwnableUpgradeable, UUPSUpgradeable {
     }
 
     receive() external payable {
-        emit EthReceived(msg.sender, msg.value);
         (bool success, ) = liquidityPool.call{value: msg.value}("");
         if (!success) revert TransferFailed();
         emit EthSent(address(this), liquidityPool, msg.value);
