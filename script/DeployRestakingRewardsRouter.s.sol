@@ -48,7 +48,7 @@ contract DeployRestakingRewardsRouter is Script {
 
         // Deploy UUPSProxy
         {
-            string memory contractName = "RestakingRewardsRouter_Proxy";
+            string memory contractName = "UUPSProxy";
             
             // Prepare initialization data (initialize takes no parameters)
             bytes memory initializerData = abi.encodeWithSelector(
