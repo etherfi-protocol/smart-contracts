@@ -8,6 +8,7 @@ import {RoleRegistry} from "../../../src/RoleRegistry.sol";
 import {EtherFiTimelock} from "../../../src/EtherFiTimelock.sol";
 import {EtherFiNodesManager} from "../../../src/EtherFiNodesManager.sol";
 import {LiquidityPool} from "../../../src/LiquidityPool.sol";
+import {EtherFiRateLimiter} from "../../../src/EtherFiRateLimiter.sol";
 import {IEtherFiNodesManager} from "../../../src/interfaces/IEtherFiNodesManager.sol";
 import {ContractCodeChecker} from "../../ContractCodeChecker.sol";
 import {Deployed} from "../../deploys/Deployed.s.sol";
@@ -15,8 +16,8 @@ import {Utils} from "../../utils/Utils.sol";
 
 // forge script script/upgrades/CrossPodApproval/transactions.s.sol:LegacyLinkerRoleScript --fork-url $MAINNET_RPC_URL -vvvv
 contract LegacyLinkerRoleScript is Script, Deployed, Utils {
-    address constant liquidityPoolImpl = 0x4ba750e82F91839a4e18f39779B2Fec42c81d821;
-    address constant etherFiNodesManagerImpl = 0x7431f88d669437F9A9A901E1086F8355A53E2e5d;
+    address constant liquidityPoolImpl = 0x6aDA10B4553036170c2C130841894775a5b81276;
+    address constant etherFiNodesManagerImpl = 0x356DC9C3657A683aa73970f8241A51924869d9F1;
 
     EtherFiTimelock constant etherFiTimelock = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     RoleRegistry constant roleRegistry = RoleRegistry(ROLE_REGISTRY);
@@ -24,8 +25,10 @@ contract LegacyLinkerRoleScript is Script, Deployed, Utils {
 
     ContractCodeChecker public contractCodeChecker;
 
-
     bytes32 public ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE;
+    bytes32 public constant CONSOLIDATION_REQUEST_LIMIT_ID = keccak256("CONSOLIDATION_REQUEST_LIMIT_ID");
+    uint64 public constant CAPACITY_RATE_LIMITER = 6_144_000_000_000_000; // (2048 * 60) * 50 * 1e9 = 6_144_000_000_000_000 gwei
+    uint64 public constant REFILL_RATE_LIMITER = 2_000_000_000;
 
     function run() public {
         console2.log("==============================================");
@@ -99,6 +102,40 @@ contract LegacyLinkerRoleScript is Script, Deployed, Utils {
         contractCodeChecker = new ContractCodeChecker();
         verifyBytecode();
         checkUpgrade();
+    }
+
+    function setUpEtherFiRateLimiter() public {
+        console2.log("Setting up EtherFiRateLimiter");
+        console2.log("================================================");
+        // Uncomment to run against fork
+        EtherFiRateLimiter(payable(ETHERFI_RATE_LIMITER)).createNewLimiter(CONSOLIDATION_REQUEST_LIMIT_ID, CAPACITY_RATE_LIMITER, REFILL_RATE_LIMITER);
+        EtherFiRateLimiter(payable(ETHERFI_RATE_LIMITER)).updateConsumers(CONSOLIDATION_REQUEST_LIMIT_ID, ETHERFI_NODES_MANAGER, true);
+
+        bytes[] memory data = new bytes[](2);
+        address[] memory targets = new address[](2);
+
+        data[0] = abi.encodeWithSelector(
+            EtherFiRateLimiter.createNewLimiter.selector,
+            CONSOLIDATION_REQUEST_LIMIT_ID,
+            CAPACITY_RATE_LIMITER,
+            REFILL_RATE_LIMITER
+        );
+        data[1] = abi.encodeWithSelector(
+            EtherFiRateLimiter.updateConsumers.selector,
+            CONSOLIDATION_REQUEST_LIMIT_ID,
+            ETHERFI_NODES_MANAGER,
+            true
+        );
+        for (uint256 i = 0; i < 2; i++) {
+            console2.log("====== Execute Set Up EtherFiRateLimiter Tx", i);
+            targets[i] = address(ETHERFI_RATE_LIMITER);
+            console2.log("target: ", targets[i]);
+            console2.log("data: ");
+            console2.logBytes(data[i]);
+            console2.log("--------------------------------");
+        }
+        console2.log("================================================");
+        console2.log("");
     }
 
     function checkUpgrade() internal {
