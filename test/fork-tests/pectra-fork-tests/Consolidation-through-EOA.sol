@@ -47,6 +47,18 @@ contract ConsolidationThroughEOATest is Test {
         vm.startPrank(roleRegistry.owner());
         etherFiNodesManager.upgradeTo(address(newEtherFiNodesManagerImpl));
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), realElExiter);
+
+        // Setup consolidation rate limiter bucket (required for new rate limiting)
+        bytes32 rateLimiterAdminRole = keccak256("ETHERFI_RATE_LIMITER_ADMIN_ROLE");
+        roleRegistry.grantRole(rateLimiterAdminRole, roleRegistry.owner());
+        
+        vm.stopPrank();
+
+        vm.startPrank(roleRegistry.owner());
+        if (!rateLimiter.limitExists(etherFiNodesManager.CONSOLIDATION_REQUEST_LIMIT_ID())) {
+            rateLimiter.createNewLimiter(etherFiNodesManager.CONSOLIDATION_REQUEST_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
+        }
+        rateLimiter.updateConsumers(etherFiNodesManager.CONSOLIDATION_REQUEST_LIMIT_ID(), address(etherFiNodesManager), true);
         vm.stopPrank();
         console2.log("=== SETUP COMPLETE ===");
     }

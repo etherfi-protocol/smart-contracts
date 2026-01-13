@@ -6,8 +6,11 @@ import "forge-std/console2.sol";
 import "../../../src/EtherFiNodesManager.sol";
 import "../../../src/EtherFiNode.sol";
 import "../../../src/EtherFiTimelock.sol";
+import "../../../src/EtherFiRateLimiter.sol";
 import "../../../src/RoleRegistry.sol";
 import "../../../src/interfaces/IRoleRegistry.sol";
+import "../../../src/interfaces/IEtherFiRateLimiter.sol";
+import "../../../src/interfaces/IStakingManager.sol";
 import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
 import "../../TestSetup.sol";
 import "../../../script/deploys/Deployed.s.sol";
@@ -21,6 +24,8 @@ contract RequestConsolidationTest is TestSetup, Deployed {
     // === MAINNET CONTRACT ADDRESSES ===
     EtherFiNodesManager constant etherFiNodesManager = EtherFiNodesManager(payable(0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F));
     RoleRegistry constant roleRegistry = RoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
+    IStakingManager constant stakingManager = IStakingManager(0x25e821b7197B146F7713C3b89B6A4D83516B912d);
+    IEtherFiRateLimiter constant rateLimiter = IEtherFiRateLimiter(0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8);
 
     EtherFiTimelock constant etherFiOperatingTimelock = EtherFiTimelock(payable(0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a));
     address constant realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
@@ -35,6 +40,29 @@ contract RequestConsolidationTest is TestSetup, Deployed {
 
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
+
+        // Deploy and upgrade to new EtherFiNodesManager implementation with consolidation rate limiting
+        EtherFiNodesManager newEtherFiNodesManagerImpl = new EtherFiNodesManager(
+            address(stakingManager),
+            address(roleRegistry),
+            address(rateLimiter)
+        );
+        vm.prank(roleRegistry.owner());
+        etherFiNodesManager.upgradeTo(address(newEtherFiNodesManagerImpl));
+
+        // Setup consolidation rate limiter bucket
+        vm.startPrank(roleRegistry.owner());
+        bytes32 rateLimiterAdminRole = keccak256("ETHERFI_RATE_LIMITER_ADMIN_ROLE");
+        roleRegistry.grantRole(rateLimiterAdminRole, roleRegistry.owner());
+        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), realElExiter);
+        vm.stopPrank();
+
+        vm.startPrank(roleRegistry.owner());
+        if (!rateLimiter.limitExists(etherFiNodesManager.CONSOLIDATION_REQUEST_LIMIT_ID())) {
+            rateLimiter.createNewLimiter(etherFiNodesManager.CONSOLIDATION_REQUEST_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
+        }
+        rateLimiter.updateConsumers(etherFiNodesManager.CONSOLIDATION_REQUEST_LIMIT_ID(), address(etherFiNodesManager), true);
+        vm.stopPrank();
     }
 
     function _resolvePod(bytes memory pubkey) internal view returns (IEtherFiNode etherFiNode, IEigenPod pod) {
@@ -98,7 +126,7 @@ contract RequestConsolidationTest is TestSetup, Deployed {
         bytes[] memory pubkeysForOneValidator = new bytes[](1);
         pubkeysForOneValidator[0] = PK_80143;
         
-        vm.prank(address(etherFiOperatingTimelock));
+        vm.prank(realElExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIdsForOneValidator, pubkeysForOneValidator); 
         vm.stopPrank();
         console.log("Linking legacy validator ids for one validator complete");  
@@ -132,7 +160,7 @@ contract RequestConsolidationTest is TestSetup, Deployed {
         pubkeys[0] = PK_28689;
         legacyIds[0] = 28689;
 
-        vm.prank(address(etherFiOperatingTimelock));
+        vm.prank(realElExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
         vm.stopPrank();  
 
@@ -175,7 +203,7 @@ contract RequestConsolidationTest is TestSetup, Deployed {
         bytes[] memory linkOnlyOneValidatorPubkeys = new bytes[](1);
         linkOnlyOneValidatorPubkeys[0] = PK_80143;
 
-        vm.prank(address(etherFiOperatingTimelock));
+        vm.prank(realElExiter);
         etherFiNodesManager.linkLegacyValidatorIds(linkOnlyOneValidatorlegacyId, linkOnlyOneValidatorPubkeys); 
         vm.stopPrank();  
 
