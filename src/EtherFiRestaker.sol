@@ -143,7 +143,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @param _requestIds array of request ids to claim
     /// @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
     function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyAdmin {
-        uint256 balance = address(this).balance;
         lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
 
         withdrawEther();
