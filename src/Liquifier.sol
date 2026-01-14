@@ -218,11 +218,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
     }
 
-    function pauseDeposits(address _token) external onlyPauser {
-        tokenInfos[_token].timeBoundCapInEther = 0;
-        tokenInfos[_token].totalCapInEther = 0;
-    }
-
     function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
         admins[_address] = _isAdmin;
     }
