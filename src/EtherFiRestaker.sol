@@ -111,15 +111,26 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @notice Request for a specific amount of stETH holdings
     /// @param _amount the amount of stETH to request
     function stEthRequestWithdrawal(uint256 _amount) public onlyAdmin returns (uint256[] memory) {
-        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) revert IncorrectAmount();
+        uint256 minAmount = lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT();
+        uint256 maxAmount = lidoWithdrawalQueue.MAX_STETH_WITHDRAWAL_AMOUNT();
+
+        if (_amount < minAmount) revert IncorrectAmount();
         if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
 
-        uint256 maxAmount = lidoWithdrawalQueue.MAX_STETH_WITHDRAWAL_AMOUNT();
         uint256 numReqs = (_amount + maxAmount - 1) / maxAmount;
         uint256[] memory reqAmounts = new uint256[](numReqs);
         for (uint256 i = 0; i < numReqs; i++) {
             reqAmounts[i] = (i == numReqs - 1) ? _amount - i * maxAmount : maxAmount;
         }
+
+        // Ensure the last request meets MIN_STETH_WITHDRAWAL_AMOUNT
+        // If too small and we have multiple requests, reduce the penultimate to increase the last
+        if (numReqs > 1 && reqAmounts[numReqs - 1] < minAmount) {
+            uint256 deficit = minAmount - reqAmounts[numReqs - 1];
+            reqAmounts[numReqs - 2] -= deficit;
+            reqAmounts[numReqs - 1] = minAmount;
+        }
+
         lido.approve(address(lidoWithdrawalQueue), _amount);
         uint256[] memory reqIds = lidoWithdrawalQueue.requestWithdrawals(reqAmounts, address(this));
 
