@@ -151,16 +151,22 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {        
         require(isTokenWhitelisted(_token) && (!tokenInfos[_token].isL2Eth || msg.sender == l1SyncPool), "NOT_ALLOWED");
 
+        // Measure actual amount received to handle stETH's 1-2 wei rounding issue
+        uint256 amountReceived;
         if (tokenInfos[_token].isL2Eth) {
-            IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);     
+            uint256 balanceBefore = IERC20(_token).balanceOf(address(this));
+            IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
+            amountReceived = IERC20(_token).balanceOf(address(this)) - balanceBefore;
         } else {
+            uint256 balanceBefore = IERC20(_token).balanceOf(address(etherfiRestaker));
             IERC20(_token).safeTransferFrom(msg.sender, address(etherfiRestaker), _amount);
+            amountReceived = IERC20(_token).balanceOf(address(etherfiRestaker)) - balanceBefore;
         }
 
         // The L1SyncPool's `_anticipatedDeposit` should be the only place to mint the `token` and always send its entirety to the Liquifier contract
         if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
     
-        uint256 dx = quoteByDiscountedValue(_token, _amount);
+        uint256 dx = quoteByDiscountedValue(_token, amountReceived);
         require(!isDepositCapReached(_token, dx), "CAPPED");
 
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, dx, _referral);
