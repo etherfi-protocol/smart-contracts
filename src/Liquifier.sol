@@ -96,7 +96,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     event QueuedStEthWithdrawals(uint256[] _reqIds);
     event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
 
-    error StrategyShareNotEnough();
     error NotSupportedToken();
     error EthTransferFailed();
     error NotEnoughBalance();
@@ -324,11 +323,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         TokenInfo memory info = tokenInfos[_token];
         if (!isTokenWhitelisted(_token)) return (0, 0, 0);
 
-        if (info.strategy != IStrategy(address(0))) {
-            restaked = quoteByFairValue(_token, info.strategy.sharesToUnderlyingView(info.strategyShare)); /// restaked & pending for withdrawals
-        }
         holding = quoteByFairValue(_token, IERC20(_token).balanceOf(address(this))); /// eth value for erc20 holdings
-        pendingForWithdrawals = info.ethAmountPendingForWithdrawals; /// eth pending for withdrawals
     }
 
     function getTotalPooledEther(address _token) public view returns (uint256) {
