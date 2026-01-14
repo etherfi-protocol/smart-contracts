@@ -252,13 +252,15 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      */
     function totalRedeemableAmount(address token) external view returns (uint256) {
         uint256 liquidEthAmount = getInstantLiquidityAmount(token);
+        uint256 lowWatermark = lowWatermarkInETH(token);
 
-        if (liquidEthAmount < lowWatermarkInETH(token)) {
+        if (liquidEthAmount < lowWatermark) {
             return 0;
         }
+        uint256 availableAmount = liquidEthAmount - lowWatermark;
         uint64 consumableBucketUnits = BucketLimiter.consumable(tokenToRedemptionInfo[token].limit);
         uint256 consumableAmount = _convertFromBucketUnit(consumableBucketUnits);
-        return Math.min(consumableAmount, liquidEthAmount);
+        return Math.min(consumableAmount, availableAmount);
     }
 
     /**
