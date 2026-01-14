@@ -58,12 +58,12 @@ contract EtherFiViewer is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    function EigenPod_validatorPubkeyHashToInfo(uint256[] memory _validatorIds, bytes[][] memory _validatorPubkeys) external view returns (IEigenPod.ValidatorInfo[][] memory _validatorInfos) {
+    function EigenPod_validatorPubkeyHashToInfo(uint256[] memory _validatorIds, bytes32[][] memory _validatorPubkeyHashes) external view returns (IEigenPod.ValidatorInfo[][] memory _validatorInfos) {
         _validatorInfos = new IEigenPod.ValidatorInfo[][](_validatorIds.length);
         for (uint256 i = 0; i < _validatorIds.length; i++) {
-            _validatorInfos[i] = new IEigenPod.ValidatorInfo[](_validatorPubkeys[i].length);
-            for (uint256 j = 0; j < _validatorPubkeys[i].length; j++) {
-                _validatorInfos[i][j] = _getEigenPod(_validatorIds[i]).validatorPubkeyToInfo(_validatorPubkeys[i][j]);
+            _validatorInfos[i] = new IEigenPod.ValidatorInfo[](_validatorPubkeyHashes[i].length);
+            for (uint256 j = 0; j < _validatorPubkeyHashes[i].length; j++) {
+                _validatorInfos[i][j] = _getEigenPod(_validatorIds[i]).validatorPubkeyHashToInfo(_validatorPubkeyHashes[i][j]);
             }
         }
     }
