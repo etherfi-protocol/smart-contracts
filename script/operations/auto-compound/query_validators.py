@@ -254,12 +254,12 @@ def main():
         
         # Resolve operator
         if args.operator_address:
-            operator_address = args.operator_address.lower()
+            operator = args.operator_address.lower()
             address_to_name, _ = load_operators_from_db(conn)
-            operator_name = address_to_name.get(operator_address, 'Unknown')
+            operator_name = address_to_name.get(operator, 'Unknown')
         elif args.operator:
-            operator_address = get_operator_address(conn, args.operator)
-            if not operator_address:
+            operator = get_operator_address(conn, args.operator)
+            if not operator:
                 print(f"Error: Operator '{args.operator}' not found")
                 print("Use --list-operators to see available operators")
                 sys.exit(1)
@@ -269,24 +269,20 @@ def main():
             parser.print_help()
             sys.exit(1)
         
-        restaked_only = not args.include_non_restaked
-        
         # Query all validators for the operator, then filter and limit after
         # This ensures we get exactly the right number of non-consolidated validators
         MAX_VALIDATORS_QUERY = 100000
         query_count = MAX_VALIDATORS_QUERY if not args.include_consolidated else args.count
         
-        print(f"Querying validators for {operator_name} ({operator_address})")
+        print(f"Querying validators for {operator_name} ({operator})")
         print(f"  Target count: {args.count}")
-        print(f"  Restaked only: {restaked_only}")
         if args.phase:
             print(f"  Phase filter: {args.phase}")
         
         validators = query_validators(
             conn,
-            operator_address,
+            operator,
             query_count,
-            restaked_only=restaked_only,
             phase_filter=args.phase
         )
         

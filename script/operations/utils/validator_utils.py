@@ -75,12 +75,12 @@ def get_db_connection():
 
 
 def load_operators_from_db(conn) -> Tuple[Dict[str, str], Dict[str, str]]:
-    """Load operators from OperatorMetadata table."""
+    """Load operators from address_remapping table."""
     address_to_name = {}
     name_to_address = {}
     
     with conn.cursor() as cur:
-        cur.execute('SELECT "operatorAdress", "operatorName" FROM "OperatorMetadata"')
+        cur.execute('SELECT payee_address, name FROM address_remapping')
         for addr, name in cur.fetchall():
             addr_lower = addr.lower()
             name_lower = name.lower()
@@ -103,22 +103,22 @@ def get_operator_address(conn, operator: str) -> Optional[str]:
 
 
 def list_operators(conn) -> List[Dict]:
-    """List all operators with validator counts from MainnetValidators table."""
+    """List all operators with validator counts from etherfi_validators table."""
     address_to_name, _ = load_operators_from_db(conn)
     
     operators = []
     with conn.cursor() as cur:
-        # Query using the correct column name: node_operator
+        # Query using the correct column name: operator
         # Count restaked validators (the ones we care about for consolidation)
         cur.execute('''
             SELECT 
-                LOWER(node_operator) as operator_addr,
-                COUNT(*) as total_validators,
-                COUNT(*) FILTER (WHERE restaked = true) as restaked_count
-            FROM "MainnetValidators"
-            WHERE node_operator IS NOT NULL
-            AND status != 'exited'
-            GROUP BY LOWER(node_operator)
+                operator,
+                COUNT(*) AS total_validators
+            FROM "etherfi_validators"
+            WHERE timestamp = (SELECT MAX(timestamp) FROM "etherfi_validators")
+              AND operator IS NOT NULL
+              AND status = 'active_ongoing'
+            GROUP BY operator
             ORDER BY total_validators DESC
         ''')
         
@@ -128,7 +128,6 @@ def list_operators(conn) -> List[Dict]:
                 'address': addr,
                 'name': address_to_name.get(addr, 'Unknown'),
                 'total': row[1],
-                'restaked': row[2]
             })
     
     return operators
@@ -136,19 +135,17 @@ def list_operators(conn) -> List[Dict]:
 
 def query_validators(
     conn,
-    operator_address: str,
+    operator: str,
     count: int,
-    restaked_only: bool = True,
     phase_filter: Optional[str] = None
 ) -> List[Dict]:
     """
-    Query validators from MainnetValidators table by node operator.
+    Query validators from etherfi_validators table by node operator.
     
     Args:
         conn: PostgreSQL connection
-        operator_address: Node operator address (normalized lowercase)
+        operator: Node operator address (normalized lowercase)
         count: Maximum number of validators to return
-        restaked_only: Only return restaked validators (default: True)
         phase_filter: Optional phase filter (e.g., 'LIVE', 'EXITED')
     
     Returns:
@@ -157,28 +154,25 @@ def query_validators(
     query = """
         SELECT
             pubkey,
-            etherfi_id as id,
-            beacon_withdrawal_credentials as withdrawal_credentials,
-            restaked,
+            id,
+            withdrawal_credentials,
             phase,
             status,
-            beacon_index as index,
-            etherfi_node_contract
-        FROM "MainnetValidators"
-        WHERE LOWER(node_operator) = %s
-        AND status LIKE %s
+            index,
+            node_address
+        FROM "etherfi_validators"
+        WHERE timestamp = (SELECT MAX(timestamp) FROM "etherfi_validators")
+          AND operator = %s
+          AND status LIKE %s
     """
 
-    params = [operator_address.lower(), '%active%']
-    
-    if restaked_only:
-        query += " AND restaked = true"
+    params = [operator, '%active%']
     
     if phase_filter:
         query += " AND phase = %s"
         params.append(phase_filter)
     
-    query += ' ORDER BY etherfi_id LIMIT %s'
+    query += ' ORDER BY id LIMIT %s'
     params.append(count)
     
     validators = []
@@ -199,10 +193,9 @@ def query_validators(
                 'id': row['id'],
                 'pubkey': pubkey,
                 'withdrawal_credentials': withdrawal_creds,
-                'etherfi_node': row['etherfi_node_contract'],
+                'etherfi_node': row['node_address'],
                 'phase': row['phase'],
                 'status': row['status'],
-                'restaked': row['restaked'],
                 'index': row['index']
             })
     
