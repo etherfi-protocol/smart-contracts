@@ -9,7 +9,8 @@ script/operations/
 ├── README.md                           # This file
 ├── auto-compound/
 │   ├── AutoCompound.s.sol              # Auto-compound workflow script
-│   └── query_validators.py             # Query validators from DB
+│   ├── query_validators.py             # Query validators from DB
+│   └── txns/                           # Generated transaction files (gitignored)
 ├── consolidations/
 │   ├── ConsolidateToTarget.s.sol       # Consolidate to target script
 │   ├── ConsolidationTransactions.s.sol # General consolidation script
@@ -157,23 +158,28 @@ The script automatically:
 - Generates linking transactions (if needed)
 - Generates consolidation transactions
 
-**Output Files** (when validators need linking):
-- `auto-compound-txns-link-schedule.json` - Timelock schedule transaction
-- `auto-compound-txns-link-execute.json` - Timelock execute transaction
-- `auto-compound-txns-consolidation.json` - Consolidation transaction
+**Output Files** (in `script/operations/auto-compound/txns/` directory):
+
+When validators need linking (with `SAFE_NONCE=N`):
+- `N-link-schedule.json` - Timelock schedule transaction (nonce N)
+- `N+1-link-execute.json` - Timelock execute transaction (nonce N+1)
+- `N+2-consolidation.json`, `N+3-consolidation.json`, ... - One consolidation transaction per EigenPod
+
+When all validators are already linked:
+- `N-consolidation.json`, `N+1-consolidation.json`, ... - One consolidation transaction per EigenPod
 
 ### Step 3: Execute Transactions
 
 **If validators need linking:**
-1. Import `*-link-schedule.json` into Gnosis Safe Transaction Builder
+1. Import `txns/N-link-schedule.json` into Gnosis Safe Transaction Builder
 2. Execute the schedule transaction
 3. Wait 8 hours for timelock delay
-4. Import `*-link-execute.json` and execute
-5. Import `*-consolidation.json` and execute
+4. Import `txns/N+1-link-execute.json` and execute
+5. Import each `txns/N+2-consolidation.json`, `txns/N+3-consolidation.json`, etc. and execute
 
 **If all validators are already linked:**
-1. Import the single output JSON into Gnosis Safe Transaction Builder
-2. Execute the consolidation transaction
+1. Import each consolidation JSON file from `txns/` into Gnosis Safe Transaction Builder
+2. Execute the consolidation transactions (one per EigenPod)
 
 ### Complete Example: Auto-Compound 50 Validation Cloud Validators
 
@@ -207,18 +213,19 @@ JSON_FILE=validators.json SAFE_NONCE=42 forge script \
   --fork-url $MAINNET_RPC_URL -vvvv
 
 # 3. Simulate on Tenderly (optional but recommended)
+#    Note: Replace N with your actual SAFE_NONCE value
 python3 script/operations/utils/simulate.py --tenderly \
-  --schedule script/operations/auto-compound/txns-link-schedule.json \
-  --execute script/operations/auto-compound/txns-link-execute.json \
-  --then script/operations/auto-compound/txns-consolidation.json \
+  --schedule script/operations/auto-compound/txns/N-link-schedule.json \
+  --execute script/operations/auto-compound/txns/N+1-link-execute.json \
+  --then script/operations/auto-compound/txns/N+2-consolidation.json \
   --delay 8h \
   --vnet-name "ValidationCloud-AutoCompound"
 
 # 4. Execute on mainnet via Gnosis Safe
-#    - Import *-link-schedule.json → Execute
+#    - Import txns/N-link-schedule.json → Execute
 #    - Wait 8 hours
-#    - Import *-link-execute.json → Execute
-#    - Import *-consolidation.json → Execute
+#    - Import txns/N+1-link-execute.json → Execute
+#    - Import txns/N+2-consolidation.json (and subsequent) → Execute
 ```
 
 ---
@@ -277,21 +284,21 @@ The simulation tool supports two transaction input modes:
 ### Using Forge (Local Fork)
 
 ```bash
-# Simple: Single transaction file
+# Simple: Single transaction file (replace N with your nonce)
 python3 script/operations/utils/simulate.py \
-  --txns script/operations/auto-compound/auto-compound-txns-consolidation.json
+  --txns script/operations/auto-compound/txns/N-consolidation.json
 
 # Timelock: Schedule + Execute with 8h delay
 python3 script/operations/utils/simulate.py \
-  --schedule script/operations/auto-compound/auto-compound-txns-link-schedule.json \
-  --execute script/operations/auto-compound/auto-compound-txns-link-execute.json \
+  --schedule script/operations/auto-compound/txns/N-link-schedule.json \
+  --execute script/operations/auto-compound/txns/N+1-link-execute.json \
   --delay 8h
 
 # Full workflow: Schedule → Execute → Follow-up consolidation
 python3 script/operations/utils/simulate.py \
-  --schedule script/operations/auto-compound/auto-compound-txns-link-schedule.json \
-  --execute script/operations/auto-compound/auto-compound-txns-link-execute.json \
-  --then script/operations/auto-compound/auto-compound-txns-consolidation.json \
+  --schedule script/operations/auto-compound/txns/N-link-schedule.json \
+  --execute script/operations/auto-compound/txns/N+1-link-execute.json \
+  --then script/operations/auto-compound/txns/N+2-consolidation.json \
   --delay 8h
 ```
 
@@ -303,22 +310,22 @@ Tenderly Virtual Testnets provide persistent simulation environments with sharea
 # List existing Virtual Testnets
 python3 script/operations/utils/simulate.py --tenderly --list-vnets
 
-# Create new VNet and run full auto-compound workflow
+# Create new VNet and run full auto-compound workflow (replace N with your nonce)
 python3 script/operations/utils/simulate.py --tenderly \
-  --schedule script/operations/auto-compound/auto-compound-txns-link-schedule.json \
-  --execute script/operations/auto-compound/auto-compound-txns-link-execute.json \
-  --then script/operations/auto-compound/auto-compound-txns-consolidation.json \
+  --schedule script/operations/auto-compound/txns/N-link-schedule.json \
+  --execute script/operations/auto-compound/txns/N+1-link-execute.json \
+  --then script/operations/auto-compound/txns/N+2-consolidation.json \
   --delay 8h \
   --vnet-name "AutoCompound-Test"
 
 # Use existing VNet (continue from previous simulation)
 python3 script/operations/utils/simulate.py --tenderly \
   --vnet-id 0a7305e5-2654-481c-a2cf-ea2886404ac3 \
-  --txns script/operations/auto-compound/auto-compound-txns-consolidation.json
+  --txns script/operations/auto-compound/txns/N-consolidation.json
 
 # Simple consolidation on new VNet
 python3 script/operations/utils/simulate.py --tenderly \
-  --txns script/operations/auto-compound/auto-compound-txns-consolidation.json \
+  --txns script/operations/auto-compound/txns/N-consolidation.json \
   --vnet-name "Consolidation-Test"
 ```
 

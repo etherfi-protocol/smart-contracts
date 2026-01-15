@@ -448,15 +448,23 @@ contract ConsolidateToTarget is Script, Utils {
     function _getDirectory(string memory filePath) internal pure returns (string memory) {
         bytes memory pathBytes = bytes(filePath);
         uint256 lastSlash = 0;
+        bool foundSlash = false;
         
         for (uint256 i = 0; i < pathBytes.length; i++) {
             if (pathBytes[i] == '/') {
                 lastSlash = i;
+                foundSlash = true;
             }
         }
         
-        if (lastSlash == 0) {
+        // No slash found - return current directory
+        if (!foundSlash) {
             return ".";
+        }
+        
+        // Slash at index 0 (root path like /file.json) - return root
+        if (lastSlash == 0) {
+            return "/";
         }
         
         bytes memory dirBytes = new bytes(lastSlash);

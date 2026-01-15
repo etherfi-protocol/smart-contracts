@@ -161,7 +161,7 @@ def query_validators(
             node_address
         FROM "etherfi_validators"
         WHERE timestamp = (SELECT MAX(timestamp) FROM "etherfi_validators")
-          AND operator = %s
+          AND LOWER(operator) = %s
           AND status LIKE %s
     """
 

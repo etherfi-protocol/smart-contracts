@@ -887,8 +887,8 @@ Examples:
             sys.exit(1)
         
         # Use all available validators if count is 0 (default)
-        print(f"len(validators): {len(validators)}")
-        source_count = args.count if args.count > 0 else len(validators)
+        # Note: Use filtered_validators count (0x01 validators) not raw validators count
+        source_count = args.count if args.count > 0 else len(filtered_validators)
         print(f"\nUsing source count: {source_count}")
         
         # Create consolidation plan
