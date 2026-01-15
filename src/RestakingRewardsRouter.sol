@@ -24,7 +24,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
 
     event EthSent(address indexed from, address indexed to, uint256 value);
     event RecipientAddressSet(address indexed recipient);
-    event Erc20Transferred(
+    event Erc20Recovered(
         address indexed token,
         address indexed recipient,
         uint256 amount
@@ -71,7 +71,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
     }
 
     /// @dev Manual transfer function to recover reward tokens that may have accumulated in the contract
-    function transferERC20() external {
+    function recoverERC20() external {
         if (
             !roleRegistry.hasRole(
                 ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE,
@@ -83,7 +83,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
         uint256 balance = IERC20(rewardTokenAddress).balanceOf(address(this));
         if (balance > 0) {
             IERC20(rewardTokenAddress).safeTransfer(recipientAddress, balance);
-            emit Erc20Transferred(
+            emit Erc20Recovered(
                 rewardTokenAddress,
                 recipientAddress,
                 balance
