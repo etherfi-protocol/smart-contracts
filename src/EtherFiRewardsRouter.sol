@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./RoleRegistry.sol";
+import "./interfaces/ILiquidityPool.sol";
 
 contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     using SafeERC20 for IERC20;
@@ -43,7 +44,9 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
 
     function withdrawToLiquidityPool() external {
 
-        uint256 balance = address(this).balance;
+        uint256 contractBalance = address(this).balance;
+        uint256 totalValueOutOfLp = ILiquidityPool(payable(liquidityPool)).totalValueOutOfLp();
+        uint256 balance = contractBalance < totalValueOutOfLp ? contractBalance : totalValueOutOfLp;
         require(balance > 0, "Contract balance is zero");
         (bool success, ) = liquidityPool.call{value: balance}("");
         require(success, "TRANSFER_FAILED");
