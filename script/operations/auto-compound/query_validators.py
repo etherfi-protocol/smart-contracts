@@ -186,11 +186,6 @@ def main():
         help='List all operators with validator counts'
     )
     parser.add_argument(
-        '--include-non-restaked',
-        action='store_true',
-        help='Include validators that are not restaked (default: only restaked)'
-    )
-    parser.add_argument(
         '--include-consolidated',
         action='store_true',
         help='Include validators that are already consolidated (0x02). Default: exclude them'
@@ -245,11 +240,11 @@ def main():
         if args.list_operators:
             operators = list_operators(conn)
             print("\n=== Operators ===")
-            print(f"{'Name':<30} {'Address':<44} {'Total':>8} {'Restaked':>10}")
-            print("-" * 95)
+            print(f"{'Name':<30} {'Address':<44} {'Total':>8}")
+            print("-" * 85)
             for op in operators:
                 addr_display = op['address'] if op['address'] else 'N/A'
-                print(f"{op['name']:<30} {addr_display:<44} {op['total']:>8} {op['restaked']:>10}")
+                print(f"{op['name']:<30} {addr_display:<44} {op['total']:>8}")
             return
         
         # Resolve operator

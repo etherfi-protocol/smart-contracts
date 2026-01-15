@@ -109,7 +109,6 @@ def list_operators(conn) -> List[Dict]:
     operators = []
     with conn.cursor() as cur:
         # Query using the correct column name: operator
-        # Count restaked validators (the ones we care about for consolidation)
         cur.execute('''
             SELECT 
                 operator,

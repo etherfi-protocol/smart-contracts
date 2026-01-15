@@ -72,11 +72,6 @@ python3 script/operations/auto-compound/query_validators.py \
   --include-consolidated \
   --verbose
 
-# Include non-restaked validators
-python3 script/operations/auto-compound/query_validators.py \
-  --operator "eBunker" \
-  --count 25 \
-  --include-non-restaked
 ```
 
 **Query Options:**
@@ -88,7 +83,6 @@ python3 script/operations/auto-compound/query_validators.py \
 | `--count` | Number of validators to query (default: 50) |
 | `--output` | Output JSON file path |
 | `--include-consolidated` | Include validators already consolidated (0x02) |
-| `--include-non-restaked` | Include non-restaked validators |
 | `--verbose` | Show detailed filtering information |
 
 ### Step 2: Generate Transactions
