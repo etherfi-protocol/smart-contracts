@@ -237,12 +237,21 @@ echo "Files:"
 ls -1 "$OUTPUT_DIR"
 echo ""
 echo "Next steps:"
+# List consolidation files for user instructions
+CONSOLIDATION_FILES_LIST=$(ls "$OUTPUT_DIR"/*-consolidation.json 2>/dev/null | xargs -n1 basename 2>/dev/null | sort -V)
+
 if [ -f "$OUTPUT_DIR/$SCHEDULE_FILE" ]; then
     echo "  1. Import $SCHEDULE_FILE to Gnosis Safe → Execute"
     echo "  2. Wait 8 hours for timelock delay"
     echo "  3. Import $EXECUTE_FILE to Gnosis Safe → Execute"
-    echo "  4. Import $CONSOLIDATION_WITH_LINK_FILE to Gnosis Safe → Execute"
+    echo "  4. Import consolidation file(s) to Gnosis Safe → Execute:"
+    for f in $CONSOLIDATION_FILES_LIST; do
+        echo "     - $f"
+    done
 else
-    echo "  1. Import $CONSOLIDATION_NO_LINK_FILE to Gnosis Safe → Execute"
+    echo "  1. Import consolidation file(s) to Gnosis Safe → Execute:"
+    for f in $CONSOLIDATION_FILES_LIST; do
+        echo "     - $f"
+    done
 fi
 
