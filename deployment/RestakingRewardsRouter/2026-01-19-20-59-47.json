@@ -1,0 +1,12 @@
+{
+  "contractName": "UUPSProxy",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x1a10a60fc25f1c7f7052123edbe683ed2524943d000000000000000000000000",
+    "constructorArgs": {
+      "_implementation": "0xcB6e9a5943946307815eaDF3BEDC49fE30290CA8",
+      "_data": "0x8129fc1c"
+    }
+  },
+  "deployedAddress": "0x89E45081437c959A827d2027135bC201Ab33a2C8"
+}

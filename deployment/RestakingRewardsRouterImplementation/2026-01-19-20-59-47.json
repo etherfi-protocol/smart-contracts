@@ -1,0 +1,13 @@
+{
+  "contractName": "RestakingRewardsRouterImplementation",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x1a10a60fc25f1c7f7052123edbe683ed2524943d000000000000000000000000",
+    "constructorArgs": {
+      "_roleRegistry": "0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9",
+      "_rewardTokenAddress": "0xec53bF9167f50cDEB3Ae105f56099aaaB9061F83",
+      "_liquidityPool": "0x308861A430be4cce5502d0A12724771Fc6DaF216"
+    }
+  },
+  "deployedAddress": "0xcB6e9a5943946307815eaDF3BEDC49fE30290CA8"
+}
