@@ -11,14 +11,14 @@ import "../../utils/utils.sol";
 
 // forge script script/operations/restaking-router/VerifyRestakingRewardsRouterConfig.s.sol --fork-url $MAINNET_RPC_URL -vvvv
 contract VerifyRestakingRewardsRouterConfig is Script, Utils {
-    bytes32 commitHashSalt = bytes32(bytes20(hex"7212da1d56a6d252e00fbce224fa93588631e719"));
+    bytes32 commitHashSalt = bytes32(bytes20(hex"1a10a60fc25f1c7f7052123edbe683ed2524943d"));
     ICreate2Factory constant factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
 
     ContractCodeChecker public contractCodeChecker;
 
     // === DEPLOYED ADDRESSES ===
-    address constant RESTAKING_REWARDS_ROUTER_PROXY = 0xCA0799C65EF9186Fb51635be2dF3748c354d68BA;
-    address constant RESTAKING_REWARDS_ROUTER_IMPL = 0x9f741Fc37856DfC53D6B816A1d29Fc7D7ae313fD;
+    address constant RESTAKING_REWARDS_ROUTER_PROXY = 0x89E45081437c959A827d2027135bC201Ab33a2C8;
+    address constant RESTAKING_REWARDS_ROUTER_IMPL = 0xcB6e9a5943946307815eaDF3BEDC49fE30290CA8;
 
     // === CONSTRUCTOR ARGS ===
     address constant REWARD_TOKEN_ADDRESS = 0xec53bF9167f50cDEB3Ae105f56099aaaB9061F83;
