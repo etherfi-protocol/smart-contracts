@@ -22,7 +22,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
 
     address public recipientAddress;
 
-    event EthSent(address indexed from, address indexed to, uint256 value);
+    event EthSent(address indexed from, address indexed to, address indexed sender, uint256 value);
     event RecipientAddressSet(address indexed recipient);
     event Erc20Recovered(
         address indexed token,
@@ -54,7 +54,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
     receive() external payable {
         (bool success, ) = liquidityPool.call{value: msg.value}("");
         if (!success) revert TransferFailed();
-        emit EthSent(address(this), liquidityPool, msg.value);
+        emit EthSent(address(this), liquidityPool, msg.sender, msg.value);
     }
 
     function initialize() public initializer {
