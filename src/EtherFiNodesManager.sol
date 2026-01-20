@@ -299,7 +299,7 @@ contract EtherFiNodesManager is
         for (uint256 i = 0; i < requests.length; ) {
             // Only count true consolidations where source validator balance is moved
             // Credential switches (src == target) don't move ETH
-            if (keccak256(requests[i].srcPubkey) != keccak256(requests[i].targetPubkey)) {
+            if (calculateValidatorPubkeyHash(requests[i].srcPubkey) != calculateValidatorPubkeyHash(requests[i].targetPubkey)) {
                 totalGwei += FULL_EXIT_GWEI;
             }
             unchecked { ++i; }
