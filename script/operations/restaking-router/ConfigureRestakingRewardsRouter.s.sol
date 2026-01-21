@@ -83,24 +83,24 @@ contract ConfigureRestakingRewardsRouter is Script, Utils {
         console2.log("================================================");
         console2.log("");
 
-        // vm.prank(ETHERFI_OPERATING_ADMIN);
-        // RestakingRewardsRouter(payable(RESTAKING_REWARDS_ROUTER)).setRecipientAddress(SELINI_MARKET_MAKER);
+        vm.prank(ETHERFI_OPERATING_ADMIN);
+        RestakingRewardsRouter(payable(RESTAKING_REWARDS_ROUTER)).setRecipientAddress(SELINI_MARKET_MAKER);
 
-        // //--------------------------------------------------------------------------------------
-        // //-------------- Set Recipient Address (via Operating Admin Multisig) --------------
-        // //--------------------------------------------------------------------------------------
+        //--------------------------------------------------------------------------------------
+        //-------------- Set Recipient Address (via Operating Admin Multisig) --------------
+        //--------------------------------------------------------------------------------------
 
-        // // Calldata for Operating Admin multisig to call setRecipientAddress
-        // bytes memory setRecipientCalldata = abi.encodeWithSelector(
-        //     RestakingRewardsRouter.setRecipientAddress.selector,
-        //     SELINI_MARKET_MAKER
-        // );
+        // Calldata for Operating Admin multisig to call setRecipientAddress
+        bytes memory setRecipientCalldata = abi.encodeWithSelector(
+            RestakingRewardsRouter.setRecipientAddress.selector,
+            SELINI_MARKET_MAKER
+        );
 
-        // console2.log("====== setRecipientAddress Calldata (Operating Admin Multisig):");
-        // console2.log("Target: %s", address(RESTAKING_REWARDS_ROUTER));
-        // console2.logBytes(setRecipientCalldata);
-        // console2.log("================================================");
-        // console2.log("");
+        console2.log("====== setRecipientAddress Calldata (Operating Admin Multisig):");
+        console2.log("Target: %s", address(RESTAKING_REWARDS_ROUTER));
+        console2.logBytes(setRecipientCalldata);
+        console2.log("================================================");
+        console2.log("");
     }
 
     function _encodeRoleGrant(bytes32 role, address account) internal pure returns (bytes memory) {
