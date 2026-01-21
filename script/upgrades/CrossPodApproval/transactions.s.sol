@@ -15,8 +15,8 @@ import {Deployed} from "../../deploys/Deployed.s.sol";
 import {Utils} from "../../utils/Utils.sol";
 import {IEigenPodTypes} from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
 
-// forge script script/upgrades/CrossPodApproval/transactions.s.sol:LegacyLinkerRoleScript --fork-url $MAINNET_RPC_URL -vvvv
-contract LegacyLinkerRoleScript is Script, Deployed, Utils {
+// forge script script/upgrades/CrossPodApproval/transactions.s.sol:CrossPodApprovalScript --fork-url $MAINNET_RPC_URL -vvvv
+contract CrossPodApprovalScript is Script, Deployed, Utils {
     address constant liquidityPoolImpl = 0x8765bb2f362a4b72e614DF81E2841275b9358f8b;
     address constant etherFiNodesManagerImpl = 0x789CbBe0739F1458905C9Ca6d6e74f7997622A9B;
 
@@ -38,13 +38,10 @@ contract LegacyLinkerRoleScript is Script, Deployed, Utils {
     uint256 public constant FULL_EXIT_GWEI = 2_048_000_000_000;
 
     function run() public {
-        console2.log("==============================================");
-        console2.log("Grant legacy linker role to ETHERFI_OPERATING_ADMIN");
-        console2.log("==============================================");
-
         string memory forkUrl = vm.envString("TENDERLY_TEST_RPC");
         vm.selectFork(vm.createFork(forkUrl));
 
+        setUpEtherFiRateLimiter();
         ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE();
         LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = LiquidityPool(payable(liquidityPoolImpl)).LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE();
 
@@ -123,8 +120,8 @@ contract LegacyLinkerRoleScript is Script, Deployed, Utils {
 
         console2.log("Upgrade executed successfully");
         console2.log("================================================");
+        console2.log("");
 
-        setUpEtherFiRateLimiter();
         contractCodeChecker = new ContractCodeChecker();
         verifyBytecode();
         checkUpgrade();
@@ -150,7 +147,7 @@ contract LegacyLinkerRoleScript is Script, Deployed, Utils {
             true
         );
         for (uint256 i = 0; i < 2; i++) {
-            console2.log("====== Execute Set Up EtherFiRateLimiter Tx", i);
+            console2.log("====== EtherFiRateLimiter Tx", i);
             targets[i] = address(ETHERFI_RATE_LIMITER);
             console2.log("target: ", targets[i]);
             console2.log("data: ");
@@ -166,6 +163,7 @@ contract LegacyLinkerRoleScript is Script, Deployed, Utils {
         vm.stopPrank();
         console2.log("EtherFiRateLimiter setup completed");
         console2.log("================================================");
+        console2.log("");
     }
 
     function checkUpgrade() internal {
