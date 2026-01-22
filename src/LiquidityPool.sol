@@ -68,6 +68,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     IRoleRegistry public roleRegistry;
     uint256 public validatorSizeWei;
+
+    address public priorityWithdrawalQueue;
+    uint128 public ethAmountLockedForPriorityWithdrawal;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -203,13 +207,30 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// it returns the amount of shares burned
     function withdraw(address _recipient, uint256 _amount) external whenNotPaused returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);
-        require(msg.sender == address(withdrawRequestNFT) || msg.sender == address(membershipManager) || msg.sender == address(etherFiRedemptionManager), "Incorrect Caller");
-        if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
+        require(
+            msg.sender == address(withdrawRequestNFT) || 
+            msg.sender == address(membershipManager) || 
+            msg.sender == address(etherFiRedemptionManager) ||
+            msg.sender == priorityWithdrawalQueue,
+            "Incorrect Caller"
+        );
+        
+        // Check liquidity based on caller
+        if (msg.sender == address(withdrawRequestNFT)) {
+            if (totalValueInLp < _amount || ethAmountLockedForWithdrawal < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
+        } else if (msg.sender == priorityWithdrawalQueue) {
+            if (totalValueInLp < _amount || ethAmountLockedForPriorityWithdrawal < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
+        } else {
+            if (totalValueInLp < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
+        }
+        
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
 
         totalValueInLp -= uint128(_amount);
         if (msg.sender == address(withdrawRequestNFT)) {
             ethAmountLockedForWithdrawal -= uint128(_amount);
+        } else if (msg.sender == priorityWithdrawalQueue) {
+            ethAmountLockedForPriorityWithdrawal -= uint128(_amount);
         }
 
         eETH.burnShares(msg.sender, share);
@@ -472,6 +493,27 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         if (!(msg.sender == address(etherFiAdminContract))) revert IncorrectCaller();
 
         ethAmountLockedForWithdrawal += _amount;
+    }
+
+    /// @notice Set the priority withdrawal queue address
+    /// @param _priorityWithdrawalQueue Address of the PriorityWithdrawalQueue contract
+    function setPriorityWithdrawalQueue(address _priorityWithdrawalQueue) external {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        priorityWithdrawalQueue = _priorityWithdrawalQueue;
+    }
+
+    /// @notice Add ETH amount locked for priority withdrawal
+    /// @param _amount Amount of ETH to lock
+    function addEthAmountLockedForPriorityWithdrawal(uint128 _amount) external {
+        if (msg.sender != priorityWithdrawalQueue) revert IncorrectCaller();
+        ethAmountLockedForPriorityWithdrawal += _amount;
+    }
+
+    /// @notice Reduce ETH amount locked for priority withdrawal (admin function for emergency)
+    /// @param _amount Amount of ETH to unlock
+    function reduceEthAmountLockedForPriorityWithdrawal(uint128 _amount) external {
+        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        ethAmountLockedForPriorityWithdrawal -= _amount;
     }
 
     function burnEEthShares(uint256 shares) external {
