@@ -32,9 +32,11 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
     bytes32 public STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE = keccak256("STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE");
     bytes32 public ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
     bytes32 public CONSOLIDATION_REQUEST_LIMIT_ID = keccak256("CONSOLIDATION_REQUEST_LIMIT_ID");
-    uint64 public constant CAPACITY_RATE_LIMITER = 250_000 * 1e9; // 250k ETH capacity rate limiter in gwei
-    // 250k ETH per day / 86400 seconds = 2.89 ETH per second
-    uint64 public constant REFILL_RATE = 2_893_518_000; // 2.893518 ETH per second in gwei
+    // How many vals to consolidate for 250k ETH daily ? 250k/32 = 7812.5 vals
+    // For 7813 vals, 2048 * 7813 = 16_001_024 gwei needs to be set on the capacity rate limiter
+    uint64 public constant CAPACITY_RATE_LIMITER = 16_001_024 * 1e9;
+    // 16_001_024 gwei / 86400 seconds = 185.2 ETH per second
+    uint64 public constant REFILL_RATE = 185_200_000_000;
     uint256 public constant FULL_EXIT_GWEI = 2_048_000_000_000;
 
     function run() public {
