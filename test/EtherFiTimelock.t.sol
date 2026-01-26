@@ -356,6 +356,31 @@ contract TimelockTest is TestSetup {
         assertEq(roleRegistryInstance.owner(), testOwner);
         assertEq(roleRegistryInstance.pendingOwner(), address(0));
     }
+
+    function test_grant_ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE() public {
+        initializeRealisticFork(MAINNET_FORK);
+        roleRegistryInstance = RoleRegistry(address(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9));
+        
+        // Define the role and wallet address
+        bytes32 role = keccak256("ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE");
+        address wallet = address(0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F);
+        
+        // Verify the wallet doesn't have the role initially (optional check)
+        bool hasRoleBefore = roleRegistryInstance.hasRole(role, wallet);
+        console2.log("Wallet has role before:", hasRoleBefore);
+        
+        // Grant the role via timelock
+        bytes memory grantRoleData = abi.encodeWithSelector(RoleRegistry.grantRole.selector, role, wallet);
+        _execute_timelock(address(roleRegistryInstance), grantRoleData, true, true, true, true);
+        
+        // Verify the wallet now has the role
+        bool hasRoleAfter = roleRegistryInstance.hasRole(role, wallet);
+        assertTrue(hasRoleAfter, "Wallet should have ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE after timelock execution");
+        
+        // Log the result for verification
+        console2.log("Role granted successfully to:", wallet);
+        console2.logBytes32(role);
+    }
 }
 
 
