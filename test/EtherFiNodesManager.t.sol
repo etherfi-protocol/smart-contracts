@@ -34,7 +34,9 @@ contract EtherFiNodesManagerTest is TestSetup {
         podProver = vm.addr(101);
         callForwarder = vm.addr(102);
         elTriggerExit = vm.addr(103);
-        
+
+        address nodesManagerImplementation = address(new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance)));
+
         vm.startPrank(managerInstance.owner());
         roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
         roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
@@ -46,6 +48,8 @@ contract EtherFiNodesManagerTest is TestSetup {
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin);
         roleRegistryInstance.grantRole(rateLimiterInstance.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
         roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), deployed.STAKING_MANAGER());
+        managerInstance.upgradeTo(nodesManagerImplementation);
+        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), elTriggerExit);
         vm.stopPrank();
         
         // Setup rate limiter - check if limiters already exist before creating
@@ -57,9 +61,14 @@ contract EtherFiNodesManagerTest is TestSetup {
         if (!rateLimiterInstance.limitExists(managerInstance.EXIT_REQUEST_LIMIT_ID())) {
             rateLimiterInstance.createNewLimiter(managerInstance.EXIT_REQUEST_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
         }
+
+        if (!rateLimiterInstance.limitExists(managerInstance.CONSOLIDATION_REQUEST_LIMIT_ID())) {
+            rateLimiterInstance.createNewLimiter(managerInstance.CONSOLIDATION_REQUEST_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
+        }
         
         rateLimiterInstance.updateConsumers(managerInstance.UNRESTAKING_LIMIT_ID(), address(managerInstance), true);
         rateLimiterInstance.updateConsumers(managerInstance.EXIT_REQUEST_LIMIT_ID(), address(managerInstance), true);
+        rateLimiterInstance.updateConsumers(managerInstance.CONSOLIDATION_REQUEST_LIMIT_ID(), address(managerInstance), true);
         vm.stopPrank();
         
         // // Create a proper beacon and upgrade the node implementation
@@ -177,7 +186,11 @@ contract EtherFiNodesManagerTest is TestSetup {
     function test_EXIT_REQUEST_LIMIT_ID() public view {
         assertEq(managerInstance.EXIT_REQUEST_LIMIT_ID(), keccak256("EXIT_REQUEST_LIMIT_ID"));
     }
-    
+
+    function test_CONSOLIDATION_REQUEST_LIMIT_ID() public view {
+        assertEq(managerInstance.CONSOLIDATION_REQUEST_LIMIT_ID(), keccak256("CONSOLIDATION_REQUEST_LIMIT_ID"));
+    }
+
     function test_FULL_EXIT_GWEI() public view {
         assertEq(managerInstance.FULL_EXIT_GWEI(), 2_048_000_000_000);
     }
@@ -520,7 +533,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         legacyIds[0] = 28689;
         amounts[0] = 0;
 
-        vm.prank(deployed.OPERATING_TIMELOCK());
+        vm.prank(elTriggerExit);
         managerInstance.linkLegacyValidatorIds(legacyIds, pubkeys); 
         vm.stopPrank();  
 
@@ -597,7 +610,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         bytes[] memory pubkeysForOneValidator = new bytes[](1);
         pubkeysForOneValidator[0] = PK_80143;
         
-        vm.prank(deployed.OPERATING_TIMELOCK());
+        vm.prank(elTriggerExit);
         managerInstance.linkLegacyValidatorIds(legacyIdsForOneValidator, pubkeysForOneValidator); 
         vm.stopPrank();
 
