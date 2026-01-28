@@ -64,6 +64,11 @@ contract Deployed {
     address public constant AVS_OPERATOR_1 = 0xDd777e5158Cb11DB71B4AF93C75A96eA11A2A615;
     address public constant AVS_OPERATOR_2 = 0x2c7cB7d5dC4aF9caEE654553a144C76F10D4b320;
 
+    // Utilities
+    address constant EIGENLAYER_POD_MANAGER = 0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338;
+    address constant EIGENLAYER_DELEGATION_MANAGER = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
+    address constant EIGENLAYER_REWARDS_COORDINATOR = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
+
     mapping(address => address) public timelockToAdmin;
 
     constructor() {
