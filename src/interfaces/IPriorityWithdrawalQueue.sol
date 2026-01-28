@@ -8,28 +8,22 @@ interface IPriorityWithdrawalQueue {
     /// @param amountOfEEth Original eETH amount requested
     /// @param shareOfEEth eETH shares at time of request
     /// @param creationTime Timestamp when request was created
-    /// @param secondsToMaturity Time until request can be fulfilled
-    /// @param secondsToDeadline Time after maturity until request expires
     struct WithdrawRequest {
         uint96 nonce;
         address user;
         uint128 amountOfEEth;
         uint128 shareOfEEth;
         uint40 creationTime;
-        uint24 secondsToMaturity;
-        uint24 secondsToDeadline;
     }
 
     /// @notice Configuration for withdrawal parameters
-    /// @param allowWithdraws Whether withdrawals are currently allowed
-    /// @param secondsToMaturity Time in seconds until a request can be fulfilled
-    /// @param minimumSecondsToDeadline Minimum validity period after maturity
+    /// @param minDelay Minimum delay in seconds before a request can be fulfilled
+    /// @param creationTime Timestamp when the config was last updated
     /// @param minimumAmount Minimum eETH amount per withdrawal
     /// @param withdrawCapacity Maximum pending withdrawal amount allowed
     struct WithdrawConfig {
-        bool allowWithdraws;
-        uint24 secondsToMaturity;
-        uint24 minimumSecondsToDeadline;
+        uint24 minDelay;
+        uint40 creationTime;
         uint96 minimumAmount;
         uint256 withdrawCapacity;
     }
@@ -43,10 +37,9 @@ interface IPriorityWithdrawalQueue {
     }
 
     // User functions
-    function requestWithdraw(uint128 amountOfEEth, uint24 secondsToDeadline) external returns (bytes32 requestId);
-    function requestWithdrawWithPermit(uint128 amountOfEEth, uint24 secondsToDeadline, PermitInput calldata permit) external returns (bytes32 requestId);
+    function requestWithdraw(uint128 amountOfEEth) external returns (bytes32 requestId);
+    function requestWithdrawWithPermit(uint128 amountOfEEth, PermitInput calldata permit) external returns (bytes32 requestId);
     function cancelWithdraw(WithdrawRequest calldata request) external returns (bytes32 requestId);
-    function replaceWithdraw(WithdrawRequest calldata oldRequest, uint24 newSecondsToDeadline) external returns (bytes32 oldRequestId, bytes32 newRequestId);
     function claimWithdraw(WithdrawRequest calldata request) external;
     function batchClaimWithdraw(WithdrawRequest[] calldata requests) external;
 
@@ -65,13 +58,15 @@ interface IPriorityWithdrawalQueue {
     function addToWhitelist(address user) external;
     function removeFromWhitelist(address user) external;
     function batchUpdateWhitelist(address[] calldata users, bool[] calldata statuses) external;
-    function updateWithdrawConfig(uint24 secondsToMaturity, uint24 minimumSecondsToDeadline, uint96 minimumAmount) external;
+    function updateWithdrawConfig(uint24 minDelay, uint96 minimumAmount) external;
     function setWithdrawCapacity(uint256 capacity) external;
-    function stopWithdraws() external;
-    function invalidateRequest(WithdrawRequest calldata request) external;
-    function validateRequest(bytes32 requestId) external;
-    function finalizeRequests(bytes32 upToRequestId) external;
-    function cancelUserWithdraws(WithdrawRequest[] calldata requests) external returns (bytes32[] memory);
+    function invalidateRequests(WithdrawRequest[] calldata requests) external returns(bytes32[] memory);
+    function updateShareRemainderSplitToTreasury(uint16 _shareRemainderSplitToTreasuryInBps) external;
+    function handleRemainder(uint256 eEthAmount) external;
     function pauseContract() external;
     function unPauseContract() external;
+
+    // Immutables
+    function treasury() external view returns (address);
+    function shareRemainderSplitToTreasuryInBps() external view returns (uint16);
 }
