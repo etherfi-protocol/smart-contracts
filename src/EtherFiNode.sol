@@ -126,7 +126,9 @@ contract EtherFiNode is IEtherFiNode {
         if (!anyWithdrawalsCompleted) revert NoCompleteableWithdrawals(); // bad dev experience if function completes but nothing happened
 
         // if there are available rewards, forward them to the liquidityPool
-        uint256 balance = address(this).balance;
+        uint256 contractBalance = address(this).balance;
+        uint256 totalValueOutOfLp = liquidityPool.totalValueOutOfLp();
+        uint256 balance = contractBalance < totalValueOutOfLp ? contractBalance : totalValueOutOfLp;
         if (balance > 0) {
             (bool sent, ) = payable(address(liquidityPool)).call{value: balance, gas: 20000}("");
             if (!sent) revert TransferFailed();
@@ -155,7 +157,9 @@ contract EtherFiNode is IEtherFiNode {
     // @dev under normal operations it is not expected for eth to accumulate in the nodes,
     //    this is just to handle any exceptional cases such as someone sending directly to the node.
     function sweepFunds() external onlyEtherFiNodesManager returns (uint256 balance) {
-        uint256 balance = address(this).balance;
+        uint256 contractBalance = address(this).balance;
+        uint256 totalValueOutOfLp = liquidityPool.totalValueOutOfLp();
+        balance = contractBalance < totalValueOutOfLp ? contractBalance : totalValueOutOfLp;
         if (balance > 0) {
             (bool sent, ) = payable(address(liquidityPool)).call{value: balance, gas: 20000}("");
             if (!sent) revert TransferFailed();
