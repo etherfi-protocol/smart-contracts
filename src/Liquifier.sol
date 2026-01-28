@@ -309,7 +309,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function getTotalPooledEther() public view returns (uint256 total) {
-        total = address(this).balance + getTotalPooledEther(address(lido)) + getTotalPooledEther(address(cbEth)) + getTotalPooledEther(address(wbEth));
+        total = address(this).balance;
         for (uint256 i = 0; i < dummies.length; i++) {
             total += getTotalPooledEther(address(dummies[i]));
         }
