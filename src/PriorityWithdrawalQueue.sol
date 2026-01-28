@@ -32,11 +32,7 @@ contract PriorityWithdrawalQueue is
     //---------------------------------  CONSTANTS  ----------------------------------------
     //--------------------------------------------------------------------------------------
 
-
-    /// @notice Minimum eETH amount per withdrawal request
     uint96 public constant MIN_AMOUNT = 0.01 ether;
-
-    /// @notice Basis point scale for fee calculations (100% = 10000)
     uint256 private constant _BASIS_POINT_SCALE = 1e4;
 
     //--------------------------------------------------------------------------------------
@@ -47,7 +43,6 @@ contract PriorityWithdrawalQueue is
     IeETH public immutable eETH;
     IRoleRegistry public immutable roleRegistry;
     address public immutable treasury;
-    /// @notice Minimum delay in seconds before a request can be fulfilled
     uint32 public immutable MIN_DELAY;
 
     //--------------------------------------------------------------------------------------
@@ -60,19 +55,11 @@ contract PriorityWithdrawalQueue is
     /// @notice Set of finalized request IDs (fulfilled and ready for claim)
     EnumerableSet.Bytes32Set private _finalizedRequests;
 
-    /// @notice Mapping of whitelisted addresses
     mapping(address => bool) public isWhitelisted;
 
-    /// @notice Request nonce to prevent hash collisions
     uint32 public nonce;
-
-    /// @notice Fee split to treasury in basis points (e.g., 5000 = 50%)
     uint16 public shareRemainderSplitToTreasuryInBps;
-
-    /// @notice Contract pause state
     bool public paused;
-
-    /// @notice Remainder shares from claimed withdrawals (difference between request shares and actual burned)
     uint96 public totalRemainderShares;
 
     //--------------------------------------------------------------------------------------
@@ -177,7 +164,6 @@ contract PriorityWithdrawalQueue is
         _disableInitializers();
     }
 
-    /// @notice Initialize the contract
     function initialize() external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -284,15 +270,12 @@ contract PriorityWithdrawalQueue is
             WithdrawRequest calldata request = requests[i];
             bytes32 requestId = keccak256(abi.encode(request));
 
-            // Check finalized first for better error message (since finalized requests are removed from _withdrawRequests)
             if (_finalizedRequests.contains(requestId)) revert RequestAlreadyFinalized();
             if (!_withdrawRequests.contains(requestId)) revert RequestNotFound();
 
-            // Check MIN_DELAY has passed (request must wait at least MIN_DELAY seconds)
             uint256 earliestFulfillTime = request.creationTime + MIN_DELAY;
             if (block.timestamp < earliestFulfillTime) revert NotMatured();
 
-            // Move from pending to finalized set
             _withdrawRequests.remove(requestId);
             _finalizedRequests.add(requestId);
             totalSharesToFinalize += request.shareOfEEth;
@@ -300,7 +283,6 @@ contract PriorityWithdrawalQueue is
             emit WithdrawRequestFinalized(requestId, request.user, request.amountOfEEth, request.shareOfEEth, request.nonce, uint32(block.timestamp));
         }
 
-        // Lock ETH in LiquidityPool for priority withdrawals
         uint256 totalAmountToLock = liquidityPool.amountForShare(totalSharesToFinalize);
         liquidityPool.addEthAmountLockedForPriorityWithdrawal(uint128(totalAmountToLock));
     }
@@ -382,8 +364,6 @@ contract PriorityWithdrawalQueue is
         emit RemainderHandled(uint96(eEthAmountToTreasury), uint96(liquidityPool.amountForShare(eEthSharesToBurn)));
     }
 
-    /// @notice Update the share remainder split to treasury
-    /// @param _shareRemainderSplitToTreasuryInBps New split percentage in basis points (max 10000)
     function updateShareRemainderSplitToTreasury(uint16 _shareRemainderSplitToTreasuryInBps) external onlyAdmin {
         if (_shareRemainderSplitToTreasuryInBps > _BASIS_POINT_SCALE) revert BadInput();
         shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
@@ -439,9 +419,7 @@ contract PriorityWithdrawalQueue is
         uint256 queueEEthSharesBefore,
         uint256 userEEthSharesBefore
     ) internal view {
-        // LP ETH should be unchanged (no ETH transferred in cancel)
         if (address(liquidityPool).balance != lpEthBefore) revert UnexpectedBalanceChange();
-        // Queue should have less eETH shares and user should have more
         if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
         if (eETH.shares(msg.sender) <= userEEthSharesBefore) revert UnexpectedBalanceChange();
     }
@@ -457,11 +435,8 @@ contract PriorityWithdrawalQueue is
         uint256 userEthBefore,
         address user
     ) internal view {
-        // LP ETH should have decreased (user withdrew ETH)
         if (address(liquidityPool).balance >= lpEthBefore) revert UnexpectedBalanceChange();
-        // Queue eETH shares should have decreased (shares burned)
         if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
-        // User ETH should have increased
         if (user.balance <= userEthBefore) revert UnexpectedBalanceChange();
     }
 
@@ -516,11 +491,9 @@ contract PriorityWithdrawalQueue is
     function _dequeueWithdrawRequest(WithdrawRequest calldata request) internal returns (bytes32 requestId) {
         requestId = keccak256(abi.encode(request));
         
-        // Try to remove from finalized set first (finalized requests are only in _finalizedRequests)
         bool removedFromFinalized = _finalizedRequests.remove(requestId);
         if (removedFromFinalized) return requestId;
         
-        // If not finalized, try to remove from pending set
         bool removedFromPending = _withdrawRequests.remove(requestId);
         if (!removedFromPending) revert RequestNotFound();
     }
@@ -528,34 +501,17 @@ contract PriorityWithdrawalQueue is
     function _cancelWithdrawRequest(WithdrawRequest calldata request) internal returns (bytes32 requestId) {
         requestId = keccak256(abi.encode(request));
         
-        // Check if finalized BEFORE dequeue (dequeue removes from finalized set)
         bool wasFinalized = _finalizedRequests.contains(requestId);
         
         _dequeueWithdrawRequest(request);
         
-        // Calculate current value of shares
-        uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
-        uint256 amountToReturn = request.amountOfEEth < amountForShares 
-            ? request.amountOfEEth 
-            : amountForShares;
-        
-        // Calculate shares being transferred back
-        uint256 sharesToTransfer = liquidityPool.sharesForAmount(amountToReturn);
-        
-        // Track remainder (difference between original shares and transferred shares)
-        // This captures value from positive rebases where user gets original amount using fewer shares
-        uint256 remainder = request.shareOfEEth > sharesToTransfer 
-            ? request.shareOfEEth - sharesToTransfer 
-            : 0;
-        totalRemainderShares += uint96(remainder);
-        
         if (wasFinalized) {
-            liquidityPool.reduceEthAmountLockedForPriorityWithdrawal(uint128(amountToReturn));
+            liquidityPool.reduceEthAmountLockedForPriorityWithdrawal(uint128(request.amountOfEEth));
         }
         
-        IERC20(address(eETH)).safeTransfer(request.user, amountToReturn);
+        IERC20(address(eETH)).safeTransfer(request.user, request.amountOfEEth);
         
-        emit WithdrawRequestCancelled(requestId, request.user, uint96(amountToReturn), uint96(sharesToTransfer), request.nonce, uint32(block.timestamp));
+        emit WithdrawRequestCancelled(requestId, request.user, request.amountOfEEth, request.shareOfEEth, request.nonce, uint32(block.timestamp));
     }
 
     function _claimWithdraw(WithdrawRequest calldata request) internal {
@@ -563,7 +519,6 @@ contract PriorityWithdrawalQueue is
         
         bytes32 requestId = keccak256(abi.encode(request));
         
-        // Only check finalized set (finalized requests are removed from _withdrawRequests)
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
@@ -575,7 +530,6 @@ contract PriorityWithdrawalQueue is
 
         _finalizedRequests.remove(requestId);
 
-        // Track remainder (difference between original shares and burned shares)
         uint256 remainder = request.shareOfEEth > sharesToBurn 
             ? request.shareOfEEth - sharesToBurn 
             : 0;
@@ -595,13 +549,6 @@ contract PriorityWithdrawalQueue is
     //------------------------------------  GETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @notice Generate a request ID from individual parameters
-    /// @param _user The user address
-    /// @param _amountOfEEth The amount of eETH
-    /// @param _shareOfEEth The share of eETH
-    /// @param _nonce The request nonce
-    /// @param _creationTime The creation timestamp
-    /// @return requestId The keccak256 hash of the request
     function generateWithdrawRequestId(
         address _user,
         uint96 _amountOfEEth,
@@ -619,9 +566,6 @@ contract PriorityWithdrawalQueue is
         requestId = keccak256(abi.encode(req));
     }
 
-    /// @notice Get the request ID from a request struct
-    /// @param request The withdrawal request
-    /// @return requestId The keccak256 hash of the request
     function getRequestId(WithdrawRequest calldata request) external pure returns (bytes32) {
         return generateWithdrawRequestId(
             request.user,
@@ -632,35 +576,22 @@ contract PriorityWithdrawalQueue is
         );
     }
 
-    /// @notice Get all active request IDs
-    /// @return Array of request IDs
     function getRequestIds() external view returns (bytes32[] memory) {
         return _withdrawRequests.values();
     }
 
-    /// @notice Get all finalized request IDs
-    /// @return Array of finalized request IDs
     function getFinalizedRequestIds() external view returns (bytes32[] memory) {
         return _finalizedRequests.values();
     }
 
-    /// @notice Check if a request exists (pending or finalized)
-    /// @param requestId The request ID to check
-    /// @return Whether the request exists
     function requestExists(bytes32 requestId) external view returns (bool) {
         return _withdrawRequests.contains(requestId) || _finalizedRequests.contains(requestId);
     }
 
-    /// @notice Check if a request is finalized
-    /// @param requestId The request ID to check
-    /// @return Whether the request is finalized
     function isFinalized(bytes32 requestId) external view returns (bool) {
         return _finalizedRequests.contains(requestId);
     }
 
-    /// @notice Get the claimable amount for a request
-    /// @param request The withdrawal request
-    /// @return The claimable ETH amount
     function getClaimableAmount(WithdrawRequest calldata request) external view returns (uint256) {
         bytes32 requestId = keccak256(abi.encode(request));
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
@@ -669,20 +600,14 @@ contract PriorityWithdrawalQueue is
         return request.amountOfEEth < amountForShares ? request.amountOfEEth : amountForShares;
     }
 
-    /// @notice Get the total number of active requests
-    /// @return The number of active requests
     function totalActiveRequests() external view returns (uint256) {
         return _withdrawRequests.length();
     }
 
-    /// @notice Get the total remainder amount available
-    /// @return The total remainder eETH amount
     function getRemainderAmount() external view returns (uint256) {
         return liquidityPool.amountForShare(totalRemainderShares);
     }
 
-    /// @notice Get the implementation address
-    /// @return The implementation address
     function getImplementation() external view returns (address) {
         return _getImplementation();
     }
