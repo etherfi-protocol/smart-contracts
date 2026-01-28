@@ -489,17 +489,32 @@ contract PriorityWithdrawalQueue is
         
         _dequeueWithdrawRequest(request);
         
-        // Unlock ETH from LiquidityPool if it was finalized
+        // Calculate current value of shares
+        uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
+        uint256 amountToReturn = request.amountOfEEth < amountForShares 
+            ? request.amountOfEEth 
+            : amountForShares;
+        
+        // Calculate shares being transferred back
+        uint256 sharesToTransfer = liquidityPool.sharesForAmount(amountToReturn);
+        
+        // Track remainder (difference between original shares and transferred shares)
+        // This captures value from positive rebases where user gets original amount using fewer shares
+        uint256 remainder = request.shareOfEEth > sharesToTransfer 
+            ? request.shareOfEEth - sharesToTransfer 
+            : 0;
+        totalRemainderShares += uint96(remainder);
+        
         if (wasFinalized) {
-            uint256 amountToUnlock = liquidityPool.amountForShare(request.shareOfEEth);
-            liquidityPool.reduceEthAmountLockedForPriorityWithdrawal(uint128(amountToUnlock));
+            liquidityPool.reduceEthAmountLockedForPriorityWithdrawal(uint128(amountToReturn));
         }
         
         _incrementWithdrawCapacity(request.amountOfEEth);
         
-        IERC20(address(eETH)).safeTransfer(request.user, request.amountOfEEth);
+        // Transfer back the lesser of original amount or current share value (handles negative rebase)
+        IERC20(address(eETH)).safeTransfer(request.user, amountToReturn);
         
-        emit WithdrawRequestCancelled(requestId, request.user, request.amountOfEEth, request.shareOfEEth, request.nonce, uint32(block.timestamp));
+        emit WithdrawRequestCancelled(requestId, request.user, uint96(amountToReturn), uint96(sharesToTransfer), request.nonce, uint32(block.timestamp));
     }
 
     /// @dev Internal claim function

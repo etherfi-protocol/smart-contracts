@@ -518,7 +518,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function burnEEthShares(uint256 shares) external {
-        if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
+        if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT) && msg.sender != priorityWithdrawalQueue) revert IncorrectCaller();
         eETH.burnShares(msg.sender, shares);
     }
 
