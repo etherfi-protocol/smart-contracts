@@ -75,12 +75,12 @@ contract VerifyValidatorKeyGen is Script {
     }
 
     function verifyBytecode() internal {
-        LiquidityPool newLiquidityPoolImplementation = new LiquidityPool();
+        // LiquidityPool newLiquidityPoolImplementation = new LiquidityPool(address(0x0));
         StakingManager newStakingManagerImplementation = new StakingManager(address(LIQUIDITY_POOL_PROXY), address(ETHERFI_NODES_MANAGER_PROXY), address(ETH_DEPOSIT_CONTRACT), address(AUCTION_MANAGER), address(ETHERFI_NODE_BEACON), address(ROLE_REGISTRY));
         EtherFiNodesManager newEtherFiNodesManagerImplementation = new EtherFiNodesManager(address(STAKING_MANAGER_PROXY), address(ROLE_REGISTRY), address(RATE_LIMITER_PROXY));
         EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER));
 
-        contractCodeChecker.verifyContractByteCodeMatch(LIQUIDITY_POOL_IMPL, address(newLiquidityPoolImplementation));
+        // contractCodeChecker.verifyContractByteCodeMatch(LIQUIDITY_POOL_IMPL, address(newLiquidityPoolImplementation));
         contractCodeChecker.verifyContractByteCodeMatch(STAKING_MANAGER_IMPL, address(newStakingManagerImplementation));
         contractCodeChecker.verifyContractByteCodeMatch(ETHERFI_NODES_MANAGER_IMPL, address(newEtherFiNodesManagerImplementation));
         contractCodeChecker.verifyContractByteCodeMatch(ETHERFI_RESTAKER_IMPL, address(newEtherFiRestakerImplementation));

@@ -53,7 +53,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.prank(stakingManager.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
-        LiquidityPool liquidityPoolImpl = new LiquidityPool();
+        LiquidityPool liquidityPoolImpl = new LiquidityPool(address(0x0));
         vm.prank(liquidityPool.owner());
         liquidityPool.upgradeTo(address(liquidityPoolImpl));
 
