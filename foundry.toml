@@ -9,7 +9,13 @@ fs_permissions = [
     { access = "read-write", path = "./deployment" },
     { access = "read-write", path = "./operations" },
     { access = "read", path = "./script/el-exits/val-consolidations" },
-    { access = "read", path = "./script/operator-management" }
+    { access = "read", path = "./script/operator-management" },
+    { access = "read-write", path = "./script/operations/auto-compound" },
+    { access = "read-write", path = "./script/operations/consolidations" },
+    { access = "read-write", path = "./script/operations/exits" },
+    { access = "read-write", path = "./script/operations/utils" },
+    { access = "read", path = "./script/operations/data" },
+    { access = "read", path = "./" }
 ]
 gas_reports = ["*"]
 optimizer_runs = 1500
