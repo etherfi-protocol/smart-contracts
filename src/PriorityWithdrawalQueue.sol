@@ -32,8 +32,6 @@ contract PriorityWithdrawalQueue is
     //---------------------------------  CONSTANTS  ----------------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @notice Minimum delay in seconds before a request can be fulfilled
-    uint32 public constant MIN_DELAY = 1 hours;
 
     /// @notice Minimum eETH amount per withdrawal request
     uint96 public constant MIN_AMOUNT = 0.01 ether;
@@ -49,6 +47,8 @@ contract PriorityWithdrawalQueue is
     IeETH public immutable eETH;
     IRoleRegistry public immutable roleRegistry;
     address public immutable treasury;
+    /// @notice Minimum delay in seconds before a request can be fulfilled
+    uint32 public immutable MIN_DELAY;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -163,7 +163,7 @@ contract PriorityWithdrawalQueue is
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _liquidityPool, address _eETH, address _roleRegistry, address _treasury) {
+    constructor(address _liquidityPool, address _eETH, address _roleRegistry, address _treasury, uint32 _minDelay) {
         if (_liquidityPool == address(0) || _eETH == address(0) || _roleRegistry == address(0) || _treasury == address(0)) {
             revert AddressZero();
         }
@@ -172,6 +172,7 @@ contract PriorityWithdrawalQueue is
         eETH = IeETH(_eETH);
         roleRegistry = IRoleRegistry(_roleRegistry);
         treasury = _treasury;
+        MIN_DELAY = _minDelay;
 
         _disableInitializers();
     }
@@ -283,15 +284,16 @@ contract PriorityWithdrawalQueue is
             WithdrawRequest calldata request = requests[i];
             bytes32 requestId = keccak256(abi.encode(request));
 
-            // Verify request exists in pending set
-            if (!_withdrawRequests.contains(requestId)) revert RequestNotFound();
+            // Check finalized first for better error message (since finalized requests are removed from _withdrawRequests)
             if (_finalizedRequests.contains(requestId)) revert RequestAlreadyFinalized();
+            if (!_withdrawRequests.contains(requestId)) revert RequestNotFound();
 
             // Check MIN_DELAY has passed (request must wait at least MIN_DELAY seconds)
             uint256 earliestFulfillTime = request.creationTime + MIN_DELAY;
             if (block.timestamp < earliestFulfillTime) revert NotMatured();
 
-            // Add to finalized set
+            // Move from pending to finalized set
+            _withdrawRequests.remove(requestId);
             _finalizedRequests.add(requestId);
             totalSharesToFinalize += request.shareOfEEth;
 
@@ -344,7 +346,8 @@ contract PriorityWithdrawalQueue is
         invalidatedRequestIds = new bytes32[](requests.length);
         for (uint256 i = 0; i < requests.length; ++i) {
             bytes32 requestId = keccak256(abi.encode(requests[i]));
-            if (!_withdrawRequests.contains(requestId)) revert RequestNotFound();
+            // Check both sets since pending requests are in _withdrawRequests, finalized in _finalizedRequests
+            if (!_withdrawRequests.contains(requestId) && !_finalizedRequests.contains(requestId)) revert RequestNotFound();
 
             _cancelWithdrawRequest(requests[i]);
             invalidatedRequestIds[i] = requestId;
@@ -512,10 +515,14 @@ contract PriorityWithdrawalQueue is
 
     function _dequeueWithdrawRequest(WithdrawRequest calldata request) internal returns (bytes32 requestId) {
         requestId = keccak256(abi.encode(request));
-        bool removedFromSet = _withdrawRequests.remove(requestId);
-        if (!removedFromSet) revert RequestNotFound();
-
-        _finalizedRequests.remove(requestId);
+        
+        // Try to remove from finalized set first (finalized requests are only in _finalizedRequests)
+        bool removedFromFinalized = _finalizedRequests.remove(requestId);
+        if (removedFromFinalized) return requestId;
+        
+        // If not finalized, try to remove from pending set
+        bool removedFromPending = _withdrawRequests.remove(requestId);
+        if (!removedFromPending) revert RequestNotFound();
     }
 
     function _cancelWithdrawRequest(WithdrawRequest calldata request) internal returns (bytes32 requestId) {
@@ -556,7 +563,7 @@ contract PriorityWithdrawalQueue is
         
         bytes32 requestId = keccak256(abi.encode(request));
         
-        if (!_withdrawRequests.contains(requestId)) revert RequestNotFound();
+        // Only check finalized set (finalized requests are removed from _withdrawRequests)
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
@@ -566,7 +573,6 @@ contract PriorityWithdrawalQueue is
 
         uint256 sharesToBurn = liquidityPool.sharesForWithdrawalAmount(amountToWithdraw);
 
-        _withdrawRequests.remove(requestId);
         _finalizedRequests.remove(requestId);
 
         // Track remainder (difference between original shares and burned shares)
@@ -638,11 +644,11 @@ contract PriorityWithdrawalQueue is
         return _finalizedRequests.values();
     }
 
-    /// @notice Check if a request exists
+    /// @notice Check if a request exists (pending or finalized)
     /// @param requestId The request ID to check
     /// @return Whether the request exists
     function requestExists(bytes32 requestId) external view returns (bool) {
-        return _withdrawRequests.contains(requestId);
+        return _withdrawRequests.contains(requestId) || _finalizedRequests.contains(requestId);
     }
 
     /// @notice Check if a request is finalized
