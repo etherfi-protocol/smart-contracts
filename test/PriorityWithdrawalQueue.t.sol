@@ -17,6 +17,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     address public treasury;
 
     bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE = keccak256("PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE");
+    bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = keccak256("PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE");
     bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE = keccak256("PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE");
     bytes32 public constant IMPLICIT_FEE_CLAIMER_ROLE = keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
 
@@ -52,6 +53,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Grant roles
         roleRegistryInstance.grantRole(PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE, alice);
+        roleRegistryInstance.grantRole(PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE, alice);
         roleRegistryInstance.grantRole(PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE, requestManager);
         roleRegistryInstance.grantRole(IMPLICIT_FEE_CLAIMER_ROLE, alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), alice);
@@ -77,13 +79,13 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     //--------------------------------------------------------------------------------------
 
     /// @dev Helper to create a withdrawal request and return both the requestId and request struct
-    function _createWithdrawRequest(address user, uint128 amount) 
+    function _createWithdrawRequest(address user, uint96 amount) 
         internal 
         returns (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) 
     {
-        uint96 nonceBefore = priorityQueue.nonce();
-        uint128 shareAmount = uint128(liquidityPoolInstance.sharesForAmount(amount));
-        uint40 timestamp = uint40(block.timestamp);
+        uint32 nonceBefore = priorityQueue.nonce();
+        uint96 shareAmount = uint96(liquidityPoolInstance.sharesForAmount(amount));
+        uint32 timestamp = uint32(block.timestamp);
 
         vm.startPrank(user);
         eETHInstance.approve(address(priorityQueue), amount);
@@ -92,10 +94,10 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Reconstruct the request struct
         request = IPriorityWithdrawalQueue.WithdrawRequest({
-            nonce: nonceBefore,
             user: user,
             amountOfEEth: amount,
             shareOfEEth: shareAmount,
+            nonce: uint32(nonceBefore),
             creationTime: timestamp
         });
     }
@@ -129,7 +131,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     //--------------------------------------------------------------------------------------
 
     function test_requestWithdraw() public {
-        uint128 withdrawAmount = 10 ether;
+        uint96 withdrawAmount = 10 ether;
         
         // Record initial state
         uint256 initialEethBalance = eETHInstance.balanceOf(vipUser);
@@ -158,42 +160,13 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertEq(priorityQueue.totalActiveRequests(), 1, "Should have 1 active request");
     }
 
-    // function test_requestWithdrawWithPermit() public {
-    //     uint128 withdrawAmount = 10 ether;
-        
-    //     // For this test, we'll use regular approval since permit requires signatures
-    //     // The permit flow is tested by checking the fallback to allowance
-    //     uint256 initialQueueEethBalance = eETHInstance.balanceOf(address(priorityQueue));
-    //     uint96 initialNonce = priorityQueue.nonce();
-        
-    //     vm.startPrank(vipUser);
-    //     eETHInstance.approve(address(priorityQueue), withdrawAmount);
-        
-    //     // Create permit input (will fail but fallback to allowance)
-    //     IPriorityWithdrawalQueue.PermitInput memory permit = IPriorityWithdrawalQueue.PermitInput({
-    //         value: withdrawAmount,
-    //         deadline: block.timestamp + 1 days,
-    //         v: 0,
-    //         r: bytes32(0),
-    //         s: bytes32(0)
-    //     });
-        
-    //     bytes32 requestId = priorityQueue.requestWithdrawWithPermit(withdrawAmount, permit);
-    //     vm.stopPrank();
-
-    //     // Verify state changes
-    //     assertTrue(priorityQueue.requestExists(requestId), "Request should exist");
-    //     assertEq(priorityQueue.nonce(), initialNonce + 1, "Nonce should increment");
-    //     // Use approximate comparison due to share/amount rounding (1 wei tolerance)
-    //     assertApproxEqAbs(eETHInstance.balanceOf(address(priorityQueue)), initialQueueEethBalance + withdrawAmount, 1, "Queue balance should increase");
-    // }
 
     //--------------------------------------------------------------------------------------
     //------------------------------  FULFILL TESTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
     function test_fulfillRequests() public {
-        uint128 withdrawAmount = 10 ether;
+        uint96 withdrawAmount = 10 ether;
 
         // Setup: VIP user creates a withdrawal request
         (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) = 
@@ -218,7 +191,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     function test_fulfillRequests_revertNotMatured() public {
-        uint128 withdrawAmount = 10 ether;
+        uint96 withdrawAmount = 10 ether;
 
         // Update config to require maturity time
         vm.prank(alice);
@@ -245,7 +218,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     function test_fulfillRequests_revertAlreadyFinalized() public {
-        uint128 withdrawAmount = 10 ether;
+        uint96 withdrawAmount = 10 ether;
 
         (, IPriorityWithdrawalQueue.WithdrawRequest memory request) = 
             _createWithdrawRequest(vipUser, withdrawAmount);
@@ -268,7 +241,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     //--------------------------------------------------------------------------------------
 
     function test_claimWithdraw() public {
-        uint128 withdrawAmount = 10 ether;
+        uint96 withdrawAmount = 10 ether;
 
         // Setup: VIP user creates a withdrawal request
         (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) = 
@@ -304,8 +277,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     function test_batchClaimWithdraw() public {
-        uint128 amount1 = 5 ether;
-        uint128 amount2 = 3 ether;
+        uint96 amount1 = 5 ether;
+        uint96 amount2 = 3 ether;
 
         // Create two requests
         (, IPriorityWithdrawalQueue.WithdrawRequest memory request1) = 
@@ -336,7 +309,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     //--------------------------------------------------------------------------------------
 
     function test_cancelWithdraw() public {
-        uint128 withdrawAmount = 10 ether;
+        uint96 withdrawAmount = 10 ether;
 
         // Create request
         uint256 eethBefore = eETHInstance.balanceOf(vipUser);
@@ -361,7 +334,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     function test_cancelWithdraw_finalized() public {
-        uint128 withdrawAmount = 10 ether;
+        uint96 withdrawAmount = 10 ether;
 
         // Record initial balance
         uint256 eethInitial = eETHInstance.balanceOf(vipUser);
@@ -394,7 +367,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     function test_admininvalidateRequests() public {
-        uint128 withdrawAmount = 10 ether;
+        uint96 withdrawAmount = 10 ether;
 
         // Record initial balance before request
         uint256 eethInitial = eETHInstance.balanceOf(vipUser);
@@ -422,7 +395,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     function test_fullWithdrawalFlow() public {
         // This test verifies the complete flow from deposit to withdrawal
-        uint128 withdrawAmount = 5 ether;
+        uint96 withdrawAmount = 5 ether;
 
         // 1. VIP user already has eETH from setUp
         uint256 initialEethBalance = eETHInstance.balanceOf(vipUser);
@@ -456,8 +429,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     function test_multipleRequests() public {
-        uint128 amount1 = 5 ether;
-        uint128 amount2 = 3 ether;
+        uint96 amount1 = 5 ether;
+        uint96 amount2 = 3 ether;
 
         // Create two requests
         (, IPriorityWithdrawalQueue.WithdrawRequest memory request1) = 
@@ -546,10 +519,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     //--------------------------------------------------------------------------------------
 
     function test_updateWithdrawConfig() public {
-        uint24 newMinDelay = 12 hours;
+        uint32 newMinDelay = 12 hours;
         uint96 newMinAmount = 1 ether;
-
-        IPriorityWithdrawalQueue.WithdrawConfig memory configBefore = priorityQueue.withdrawConfig();
 
         vm.prank(alice);
         priorityQueue.updateWithdrawConfig(newMinDelay, newMinAmount);
@@ -557,12 +528,11 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         IPriorityWithdrawalQueue.WithdrawConfig memory config = priorityQueue.withdrawConfig();
         assertEq(config.minDelay, newMinDelay, "Min delay should be updated");
         assertEq(config.minimumAmount, newMinAmount, "Min amount should be updated");
-        assertGe(config.creationTime, configBefore.creationTime, "Creation time should be updated");
     }
 
     function test_updateWithdrawConfig_revertInvalidDelay() public {
         // Max delay is 30 days
-        uint24 invalidDelay = 31 days;
+        uint32 invalidDelay = 31 days;
 
         vm.prank(alice);
         vm.expectRevert(PriorityWithdrawalQueue.InvalidConfig.selector);
@@ -570,7 +540,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     function test_setWithdrawCapacity() public {
-        uint256 newCapacity = 100 ether;
+        uint96 newCapacity = 100 ether;
 
         vm.prank(alice);
         priorityQueue.setWithdrawCapacity(newCapacity);
@@ -630,7 +600,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     function test_handleRemainder() public {
         // First create and complete a withdrawal to accumulate remainder
-        uint128 withdrawAmount = 10 ether;
+        uint96 withdrawAmount = 10 ether;
         (, IPriorityWithdrawalQueue.WithdrawRequest memory request) = 
             _createWithdrawRequest(vipUser, withdrawAmount);
 
@@ -663,7 +633,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.updateShareRemainderSplitToTreasury(5000);
 
         // Create and complete a withdrawal to accumulate remainder
-        uint128 withdrawAmount = 10 ether;
+        uint96 withdrawAmount = 10 ether;
         (, IPriorityWithdrawalQueue.WithdrawRequest memory request) = 
             _createWithdrawRequest(vipUser, withdrawAmount);
 
@@ -705,7 +675,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.updateShareRemainderSplitToTreasury(10000);
 
         // Create and complete a withdrawal to accumulate remainder
-        uint128 withdrawAmount = 10 ether;
+        uint96 withdrawAmount = 10 ether;
         (, IPriorityWithdrawalQueue.WithdrawRequest memory request) = 
             _createWithdrawRequest(vipUser, withdrawAmount);
 
@@ -738,7 +708,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.updateShareRemainderSplitToTreasury(0);
 
         // Create and complete a withdrawal to accumulate remainder
-        uint128 withdrawAmount = 10 ether;
+        uint96 withdrawAmount = 10 ether;
         (, IPriorityWithdrawalQueue.WithdrawRequest memory request) = 
             _createWithdrawRequest(vipUser, withdrawAmount);
 
@@ -893,11 +863,11 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     function test_revert_requestNotFound() public {
         // Create a fake request that doesn't exist
         IPriorityWithdrawalQueue.WithdrawRequest memory fakeRequest = IPriorityWithdrawalQueue.WithdrawRequest({
-            nonce: 999,
             user: vipUser,
             amountOfEEth: 1 ether,
             shareOfEEth: 1 ether,
-            creationTime: uint40(block.timestamp)
+            nonce: 999,
+            creationTime: uint32(block.timestamp)
         });
 
         IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
@@ -931,7 +901,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     //--------------------------------------------------------------------------------------
 
     function test_getClaimableAmount() public {
-        uint128 withdrawAmount = 10 ether;
+        uint96 withdrawAmount = 10 ether;
 
         (, IPriorityWithdrawalQueue.WithdrawRequest memory request) = 
             _createWithdrawRequest(vipUser, withdrawAmount);
@@ -947,26 +917,26 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     function test_generateWithdrawRequestId() public view {
-        uint96 testNonce = 1;
         address testUser = vipUser;
-        uint128 testAmount = 10 ether;
-        uint128 testShare = uint128(liquidityPoolInstance.sharesForAmount(testAmount));
-        uint40 testTime = uint40(block.timestamp);
+        uint96 testAmount = 10 ether;
+        uint96 testShare = uint96(liquidityPoolInstance.sharesForAmount(testAmount));
+        uint32 testNonce = 1;
+        uint32 testTime = uint32(block.timestamp);
 
         bytes32 generatedId = priorityQueue.generateWithdrawRequestId(
-            testNonce,
             testUser,
             testAmount,
             testShare,
+            testNonce,
             testTime
         );
 
         // Verify it matches keccak256 of the struct
         IPriorityWithdrawalQueue.WithdrawRequest memory req = IPriorityWithdrawalQueue.WithdrawRequest({
-            nonce: testNonce,
             user: testUser,
             amountOfEEth: testAmount,
             shareOfEEth: testShare,
+            nonce: testNonce,
             creationTime: testTime
         });
         bytes32 expectedId = keccak256(abi.encode(req));
@@ -979,8 +949,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     //--------------------------------------------------------------------------------------
 
     function test_withdrawCapacityDecrementsOnRequest() public {
-        uint256 capacity = 20 ether;
-        uint128 withdrawAmount = 5 ether;
+        uint96 capacity = 20 ether;
+        uint96 withdrawAmount = 5 ether;
 
         vm.prank(alice);
         priorityQueue.setWithdrawCapacity(capacity);
@@ -995,8 +965,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     function test_withdrawCapacityIncrementsOnCancel() public {
-        uint256 capacity = 20 ether;
-        uint128 withdrawAmount = 5 ether;
+        uint96 capacity = 20 ether;
+        uint96 withdrawAmount = 5 ether;
 
         vm.prank(alice);
         priorityQueue.setWithdrawCapacity(capacity);
