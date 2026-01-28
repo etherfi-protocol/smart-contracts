@@ -69,8 +69,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     IRoleRegistry public roleRegistry;
     uint256 public validatorSizeWei;
 
-    address public priorityWithdrawalQueue;
     uint128 public ethAmountLockedForPriorityWithdrawal;
+
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  IMMUTABLES  ----------------------------------
+    //--------------------------------------------------------------------------------------
+
+    address public immutable priorityWithdrawalQueue;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
@@ -119,7 +125,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _priorityWithdrawalQueue) {
+        priorityWithdrawalQueue = _priorityWithdrawalQueue;
         _disableInitializers();
     }
 
@@ -495,13 +502,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         ethAmountLockedForWithdrawal += _amount;
     }
 
-    /// @notice Set the priority withdrawal queue address
-    /// @param _priorityWithdrawalQueue Address of the PriorityWithdrawalQueue contract
-    function setPriorityWithdrawalQueue(address _priorityWithdrawalQueue) external {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        priorityWithdrawalQueue = _priorityWithdrawalQueue;
-    }
-
     /// @notice Add ETH amount locked for priority withdrawal
     /// @param _amount Amount of ETH to lock
     function addEthAmountLockedForPriorityWithdrawal(uint128 _amount) external {
@@ -509,10 +509,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         ethAmountLockedForPriorityWithdrawal += _amount;
     }
 
-    /// @notice Reduce ETH amount locked for priority withdrawal (admin function for emergency)
+    /// @notice Reduce ETH amount locked for priority withdrawal
+    /// @dev Can be called by priorityWithdrawalQueue (for canceling requests)
     /// @param _amount Amount of ETH to unlock
     function reduceEthAmountLockedForPriorityWithdrawal(uint128 _amount) external {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (msg.sender != priorityWithdrawalQueue) revert IncorrectCaller();
         ethAmountLockedForPriorityWithdrawal -= _amount;
     }
 
