@@ -26,10 +26,10 @@ import {Utils} from "../../utils/utils.sol";
  * - EtherFiViewer: Changed from validatorPubkeyToInfo to validatorPubkeyHashToInfo
 
 Command:
-forge script ./script/upgrades/reaudit-fixes/deployReaudited.s.sol:DeployReauditedContracts --fork-url $MAINNET_RPC_URL -vvvv
+forge script script/upgrades/reaudit-fixes/deploy-reaudit-fixes.s.sol --fork-url $MAINNET_RPC_URL -vvvv
  */
 
-contract DeployReauditedContracts is Utils {
+contract DeployReauditFixes is Utils {
     // Deployed implementation addresses (populated after deployment)
     address public etherFiNodeImpl;
     address public etherFiRedemptionManagerImpl;
