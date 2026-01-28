@@ -201,6 +201,60 @@ def query_validators(
     return validators
 
 
+def query_validators_by_ids(conn, validator_ids: List[int]) -> List[Dict]:
+    """
+    Query validators from MainnetValidators table by specific validator IDs.
+    
+    Args:
+        conn: PostgreSQL connection
+        validator_ids: List of validator IDs (etherfi_id) to query
+    
+    Returns:
+        List of validator dictionaries
+    """
+    if not validator_ids:
+        return []
+    
+    query = """
+        SELECT
+            pubkey,
+            etherfi_id,
+            eigen_pod_contract,
+            phase,
+            status,
+            beacon_index,
+            etherfi_node_contract
+        FROM "MainnetValidators"
+        WHERE etherfi_id = ANY(%s)
+    """
+    
+    validators = []
+    with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        cur.execute(query, [validator_ids])
+        for row in cur.fetchall():
+            # Normalize pubkey format
+            pubkey = row['pubkey']
+            if pubkey and not pubkey.startswith('0x'):
+                pubkey = '0x' + pubkey
+            
+            # Store eigenpod address as withdrawal credentials
+            eigenpod = row['eigen_pod_contract']
+            if eigenpod and not eigenpod.startswith('0x'):
+                eigenpod = '0x' + eigenpod
+            
+            validators.append({
+                'id': row['etherfi_id'],
+                'pubkey': pubkey,
+                'withdrawal_credentials': eigenpod,
+                'etherfi_node': row['etherfi_node_contract'],
+                'phase': row['phase'],
+                'status': row['status'],
+                'index': row['beacon_index']
+            })
+    
+    return validators
+
+
 # =============================================================================
 # Beacon Chain Utilities
 # =============================================================================
