@@ -273,8 +273,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         uint256 queueEethBefore = eETHInstance.balanceOf(address(priorityQueue));
         uint256 remainderBefore = priorityQueue.totalRemainderShares();
 
-        // VIP user claims their ETH
-        vm.prank(vipUser);
+        // Anyone can send the ETH to the request user
+        vm.prank(regularUser);
         priorityQueue.claimWithdraw(request);
         
         // Verify ETH was received (approximately, due to share price)
@@ -780,23 +780,6 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         
         vm.prank(vipUser);
         vm.expectRevert(PriorityWithdrawalQueue.RequestNotFinalized.selector);
-        priorityQueue.claimWithdraw(request);
-    }
-
-    function test_revert_claimWrongOwner() public {
-        // VIP creates request
-        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) = 
-            _createWithdrawRequest(vipUser, 1 ether);
-
-        // Fulfill
-        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
-        requests[0] = request;
-        vm.prank(requestManager);
-        priorityQueue.fulfillRequests(requests);
-
-        // Another user tries to claim
-        vm.prank(regularUser);
-        vm.expectRevert(PriorityWithdrawalQueue.NotRequestOwner.selector);
         priorityQueue.claimWithdraw(request);
     }
 

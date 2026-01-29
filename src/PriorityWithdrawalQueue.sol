@@ -228,6 +228,7 @@ contract PriorityWithdrawalQueue is
     }
 
     /// @notice Claim ETH for a finalized withdrawal request
+    /// @dev Anyone can call this to claim on behalf of the user. Funds are sent to request.user.
     /// @param request The withdrawal request to claim
     function claimWithdraw(WithdrawRequest calldata request) external whenNotPaused nonReentrant {
         if (request.creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
@@ -241,6 +242,7 @@ contract PriorityWithdrawalQueue is
     }
 
     /// @notice Batch claim multiple withdrawal requests
+    /// @dev Anyone can call this to claim on behalf of users. Funds are sent to each request.user.
     /// @param requests Array of withdrawal requests to claim
     function batchClaimWithdraw(WithdrawRequest[] calldata requests) external whenNotPaused nonReentrant {
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
@@ -506,7 +508,11 @@ contract PriorityWithdrawalQueue is
         _dequeueWithdrawRequest(request);
         
         if (wasFinalized) {
-            liquidityPool.reduceEthAmountLockedForPriorityWithdrawal(uint128(request.amountOfEEth));
+        uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
+        uint256 amountToUnlock = request.amountOfEEth < amountForShares 
+            ? request.amountOfEEth 
+            : amountForShares;
+            liquidityPool.reduceEthAmountLockedForPriorityWithdrawal(uint128(amountToUnlock));
         }
         
         IERC20(address(eETH)).safeTransfer(request.user, request.amountOfEEth);
@@ -514,9 +520,9 @@ contract PriorityWithdrawalQueue is
         emit WithdrawRequestCancelled(requestId, request.user, request.amountOfEEth, request.shareOfEEth, request.nonce, uint32(block.timestamp));
     }
 
+    /// @dev Claims a finalized withdrawal request. Anyone can call to claim on behalf of the user.
+    /// @param request The withdrawal request to claim
     function _claimWithdraw(WithdrawRequest calldata request) internal {
-        if (request.user != msg.sender) revert NotRequestOwner();
-        
         bytes32 requestId = keccak256(abi.encode(request));
         
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
@@ -535,10 +541,10 @@ contract PriorityWithdrawalQueue is
             : 0;
         totalRemainderShares += uint96(remainder);
 
-        uint256 burnedShares = liquidityPool.withdraw(msg.sender, amountToWithdraw);
+        uint256 burnedShares = liquidityPool.withdraw(request.user, amountToWithdraw);
         if (burnedShares != sharesToBurn) revert InvalidBurnedSharesAmount();
 
-        emit WithdrawRequestClaimed(requestId, msg.sender, uint96(amountToWithdraw), uint96(sharesToBurn), request.nonce, uint32(block.timestamp));
+        emit WithdrawRequestClaimed(requestId, request.user, uint96(amountToWithdraw), uint96(sharesToBurn), request.nonce, uint32(block.timestamp));
     }
 
     function _authorizeUpgrade(address) internal override {
