@@ -69,9 +69,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     IRoleRegistry public roleRegistry;
     uint256 public validatorSizeWei;
 
-    uint128 public ethAmountLockedForPriorityWithdrawal;
-
-
     //--------------------------------------------------------------------------------------
     //-------------------------------------  IMMUTABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -225,8 +222,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         // Check liquidity based on caller
         if (msg.sender == address(withdrawRequestNFT)) {
             if (totalValueInLp < _amount || ethAmountLockedForWithdrawal < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
-        } else if (msg.sender == priorityWithdrawalQueue) {
-            if (totalValueInLp < _amount || ethAmountLockedForPriorityWithdrawal < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         } else {
             if (totalValueInLp < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         }
@@ -236,8 +231,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         totalValueInLp -= uint128(_amount);
         if (msg.sender == address(withdrawRequestNFT)) {
             ethAmountLockedForWithdrawal -= uint128(_amount);
-        } else if (msg.sender == priorityWithdrawalQueue) {
-            ethAmountLockedForPriorityWithdrawal -= uint128(_amount);
         }
 
         eETH.burnShares(msg.sender, share);
@@ -500,21 +493,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         if (!(msg.sender == address(etherFiAdminContract))) revert IncorrectCaller();
 
         ethAmountLockedForWithdrawal += _amount;
-    }
-
-    /// @notice Add ETH amount locked for priority withdrawal
-    /// @param _amount Amount of ETH to lock
-    function addEthAmountLockedForPriorityWithdrawal(uint128 _amount) external {
-        if (msg.sender != priorityWithdrawalQueue) revert IncorrectCaller();
-        ethAmountLockedForPriorityWithdrawal += _amount;
-    }
-
-    /// @notice Reduce ETH amount locked for priority withdrawal
-    /// @dev Can be called by priorityWithdrawalQueue (for canceling requests)
-    /// @param _amount Amount of ETH to unlock
-    function reduceEthAmountLockedForPriorityWithdrawal(uint128 _amount) external {
-        if (msg.sender != priorityWithdrawalQueue) revert IncorrectCaller();
-        ethAmountLockedForPriorityWithdrawal -= _amount;
     }
 
     function burnEEthShares(uint256 shares) external {

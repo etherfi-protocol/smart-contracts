@@ -61,6 +61,7 @@ contract PriorityWithdrawalQueue is
     uint16 public shareRemainderSplitToTreasuryInBps;
     bool public paused;
     uint96 public totalRemainderShares;
+    uint128 public ethAmountLockedForWithdrawal;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ----------------------------------------
@@ -292,7 +293,7 @@ contract PriorityWithdrawalQueue is
         }
 
         uint256 totalAmountToLock = liquidityPool.amountForShare(totalSharesToFinalize);
-        liquidityPool.addEthAmountLockedForPriorityWithdrawal(uint128(totalAmountToLock));
+        ethAmountLockedForWithdrawal += uint128(totalAmountToLock);
     }
 
     //--------------------------------------------------------------------------------------
@@ -516,11 +517,11 @@ contract PriorityWithdrawalQueue is
         _dequeueWithdrawRequest(request);
         
         if (wasFinalized) {
-        uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
-        uint256 amountToUnlock = request.amountOfEEth < amountForShares 
-            ? request.amountOfEEth 
-            : amountForShares;
-            liquidityPool.reduceEthAmountLockedForPriorityWithdrawal(uint128(amountToUnlock));
+            uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
+            uint256 amountToUnlock = request.amountOfEEth < amountForShares 
+                ? request.amountOfEEth 
+                : amountForShares;
+            ethAmountLockedForWithdrawal -= uint128(amountToUnlock);
         }
         
         IERC20(address(eETH)).safeTransfer(request.user, request.amountOfEEth);
@@ -528,8 +529,6 @@ contract PriorityWithdrawalQueue is
         emit WithdrawRequestCancelled(requestId, request.user, request.amountOfEEth, request.shareOfEEth, request.nonce, uint32(block.timestamp));
     }
 
-    /// @dev Claims a finalized withdrawal request. Anyone can call to claim on behalf of the user.
-    /// @param request The withdrawal request to claim
     function _claimWithdraw(WithdrawRequest calldata request) internal {
         bytes32 requestId = keccak256(abi.encode(request));
         
@@ -550,6 +549,8 @@ contract PriorityWithdrawalQueue is
             ? request.shareOfEEth - sharesToBurn 
             : 0;
         totalRemainderShares += uint96(remainder);
+
+        ethAmountLockedForWithdrawal -= uint128(amountToWithdraw);
 
         uint256 burnedShares = liquidityPool.withdraw(request.user, amountToWithdraw);
         if (burnedShares != sharesToBurn) revert InvalidBurnedSharesAmount();
