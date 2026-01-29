@@ -220,11 +220,11 @@ contract PriorityWithdrawalQueue is
     ) external whenNotPaused onlyRequestUser(request.user) nonReentrant returns (bytes32 requestId) {
         if (request.creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
-        uint256 userEEthSharesBefore = eETH.shares(msg.sender);
+        uint256 userEEthSharesBefore = eETH.shares(request.user);
 
         requestId = _cancelWithdrawRequest(request);
 
-        _verifyCancelPostConditions(lpEthBefore, queueEEthSharesBefore, userEEthSharesBefore);
+        _verifyCancelPostConditions(lpEthBefore, queueEEthSharesBefore, userEEthSharesBefore, request.user);
     }
 
     /// @notice Claim ETH for a finalized withdrawal request
@@ -331,7 +331,7 @@ contract PriorityWithdrawalQueue is
         for (uint256 i = 0; i < requests.length; ++i) {
             bytes32 requestId = keccak256(abi.encode(requests[i]));
             // Check both sets since pending requests are in _withdrawRequests, finalized in _finalizedRequests
-            if (!_withdrawRequests.contains(requestId) && !_finalizedRequests.contains(requestId)) revert RequestNotFound();
+            if (!(_withdrawRequests.contains(requestId) || _finalizedRequests.contains(requestId))) revert RequestNotFound();
 
             _cancelWithdrawRequest(requests[i]);
             invalidatedRequestIds[i] = requestId;
@@ -416,14 +416,16 @@ contract PriorityWithdrawalQueue is
     /// @param lpEthBefore ETH balance of LiquidityPool before operation
     /// @param queueEEthSharesBefore eETH shares held by queue before operation
     /// @param userEEthSharesBefore eETH shares held by user before operation
+    /// @param user The user who cancelled
     function _verifyCancelPostConditions(
         uint256 lpEthBefore,
         uint256 queueEEthSharesBefore,
-        uint256 userEEthSharesBefore
+        uint256 userEEthSharesBefore,
+        address user
     ) internal view {
         if (address(liquidityPool).balance != lpEthBefore) revert UnexpectedBalanceChange();
         if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
-        if (eETH.shares(msg.sender) <= userEEthSharesBefore) revert UnexpectedBalanceChange();
+        if (eETH.shares(user) <= userEEthSharesBefore) revert UnexpectedBalanceChange();
     }
 
     /// @dev Verify post-conditions after a claim operation
@@ -457,10 +459,7 @@ contract PriorityWithdrawalQueue is
         address user,
         uint96 amountOfEEth
     ) internal returns (bytes32 requestId, WithdrawRequest memory req) {
-        uint32 requestNonce;
-        unchecked {
-            requestNonce = uint32(nonce++);
-        }
+        uint32 requestNonce = nonce++;
 
         uint96 shareOfEEth = uint96(liquidityPool.sharesForAmount(amountOfEEth));
         if (shareOfEEth == 0) revert InvalidAmount();
