@@ -218,14 +218,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
             msg.sender == priorityWithdrawalQueue,
             "Incorrect Caller"
         );
-        
-        // Check liquidity based on caller
-        if (msg.sender == address(withdrawRequestNFT)) {
-            if (totalValueInLp < _amount || ethAmountLockedForWithdrawal < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
-        } else {
-            if (totalValueInLp < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
-        }
-        
+        if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
 
         totalValueInLp -= uint128(_amount);
