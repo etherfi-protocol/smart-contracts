@@ -230,6 +230,31 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
         console2.log("================================================");
     }
 
+    function logSetCapacityAndRefillRateCalldata() public view {
+        console2.log("Set Capacity and Refill Rate Calldata");
+        console2.log("================================================");
+        console2.log("Target: ", ETHERFI_RATE_LIMITER);
+        console2.log("");
+
+        bytes memory setCapacityData = abi.encodeWithSelector(
+            EtherFiRateLimiter.setCapacity.selector,
+            CONSOLIDATION_REQUEST_LIMIT_ID,
+            CAPACITY_RATE_LIMITER
+        );
+        console2.log("setCapacity calldata:");
+        console2.logBytes(setCapacityData);
+        console2.log("");
+
+        bytes memory setRefillRateData = abi.encodeWithSelector(
+            EtherFiRateLimiter.setRefillRate.selector,
+            CONSOLIDATION_REQUEST_LIMIT_ID,
+            REFILL_RATE
+        );
+        console2.log("setRefillRate calldata:");
+        console2.logBytes(setRefillRateData);
+        console2.log("================================================");
+    }
+
     function verifyBytecode() internal {
         LiquidityPool newLiquidityPoolImplementation = new LiquidityPool();
         EtherFiNodesManager newEtherFiNodesManagerImplementation = new EtherFiNodesManager(
