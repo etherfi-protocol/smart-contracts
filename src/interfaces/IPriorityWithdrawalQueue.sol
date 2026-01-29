@@ -40,7 +40,7 @@ interface IPriorityWithdrawalQueue {
     function isWhitelisted(address user) external view returns (bool);
     function nonce() external view returns (uint32);
     function shareRemainderSplitToTreasuryInBps() external view returns (uint16);
-    function ethAmountLockedForWithdrawal() external view returns (uint128);
+    function ethAmountLockedForPriorityWithdrawal() external view returns (uint128);
 
     // Constants
     function MIN_DELAY() external view returns (uint32);

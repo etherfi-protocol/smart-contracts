@@ -61,7 +61,7 @@ contract PriorityWithdrawalQueue is
     uint16 public shareRemainderSplitToTreasuryInBps;
     bool public paused;
     uint96 public totalRemainderShares;
-    uint128 public ethAmountLockedForWithdrawal;
+    uint128 public ethAmountLockedForPriorityWithdrawal;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ----------------------------------------
@@ -293,7 +293,7 @@ contract PriorityWithdrawalQueue is
         }
 
         uint256 totalAmountToLock = liquidityPool.amountForShare(totalSharesToFinalize);
-        ethAmountLockedForWithdrawal += uint128(totalAmountToLock);
+        ethAmountLockedForPriorityWithdrawal += uint128(totalAmountToLock);
     }
 
     //--------------------------------------------------------------------------------------
@@ -521,7 +521,7 @@ contract PriorityWithdrawalQueue is
             uint256 amountToUnlock = request.amountOfEEth < amountForShares 
                 ? request.amountOfEEth 
                 : amountForShares;
-            ethAmountLockedForWithdrawal -= uint128(amountToUnlock);
+            ethAmountLockedForPriorityWithdrawal -= uint128(amountToUnlock);
         }
         
         IERC20(address(eETH)).safeTransfer(request.user, request.amountOfEEth);
@@ -550,7 +550,7 @@ contract PriorityWithdrawalQueue is
             : 0;
         totalRemainderShares += uint96(remainder);
 
-        ethAmountLockedForWithdrawal -= uint128(amountToWithdraw);
+        ethAmountLockedForPriorityWithdrawal -= uint128(amountToWithdraw);
 
         uint256 burnedShares = liquidityPool.withdraw(request.user, amountToWithdraw);
         if (burnedShares != sharesToBurn) revert InvalidBurnedSharesAmount();

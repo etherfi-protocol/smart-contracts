@@ -22,6 +22,7 @@ import "./EtherFiRestaker.sol";
 import "lib/BucketLimiter.sol";
 
 import "./RoleRegistry.sol";
+import "./interfaces/IPriorityWithdrawalQueue.sol";
 
 /*
     The contract allows instant redemption of eETH and weETH tokens to ETH or stETH with an exit fee.
@@ -53,6 +54,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     ILiquidityPool public immutable liquidityPool;
     EtherFiRestaker public immutable etherFiRestaker;
     ILido public immutable lido;
+    IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
 
     mapping(address => RedemptionInfo) public tokenToRedemptionInfo;
 
@@ -66,7 +68,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     receive() external payable {}
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _liquidityPool, address _eEth, address _weEth, address _treasury, address _roleRegistry, address _etherFiRestaker) {
+    constructor(address _liquidityPool, address _eEth, address _weEth, address _treasury, address _roleRegistry, address _etherFiRestaker, address _priorityWithdrawalQueue) {
         roleRegistry = RoleRegistry(_roleRegistry);
         treasury = _treasury;
         liquidityPool = ILiquidityPool(payable(_liquidityPool));
@@ -74,6 +76,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         weEth = IWeETH(_weEth); 
         etherFiRestaker = EtherFiRestaker(payable(_etherFiRestaker));
         lido = etherFiRestaker.lido();
+        priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
 
         _disableInitializers();
     }
@@ -241,7 +244,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
 
     function getInstantLiquidityAmount(address token) public view returns (uint256) {
         if(token == ETH_ADDRESS) {
-            return address(liquidityPool).balance - liquidityPool.ethAmountLockedForWithdrawal();
+            return address(liquidityPool).balance - liquidityPool.ethAmountLockedForWithdrawal() - priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal();
         } else if (token == address(lido)) {
             return lido.balanceOf(address(etherFiRestaker));
         }

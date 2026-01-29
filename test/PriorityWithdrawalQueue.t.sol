@@ -9,7 +9,7 @@ import "../src/interfaces/IPriorityWithdrawalQueue.sol";
 
 contract PriorityWithdrawalQueueTest is TestSetup {
     PriorityWithdrawalQueue public priorityQueue;
-    PriorityWithdrawalQueue public priorityQueueImplementation;
+    PriorityWithdrawalQueue public priorityQueueImpl;
 
     address public requestManager;
     address public vipUser;
@@ -33,7 +33,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Deploy PriorityWithdrawalQueue with constructor args
         vm.startPrank(owner);
-        priorityQueueImplementation = new PriorityWithdrawalQueue(
+        priorityQueueImpl = new PriorityWithdrawalQueue(
             address(liquidityPoolInstance),
             address(eETHInstance),
             address(roleRegistryInstance),
@@ -41,7 +41,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             1 hours
         );
         UUPSProxy proxy = new UUPSProxy(
-            address(priorityQueueImplementation),
+            address(priorityQueueImpl),
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
         );
         priorityQueue = PriorityWithdrawalQueue(address(proxy));
@@ -186,7 +186,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             _createWithdrawRequest(vipUser, withdrawAmount);
 
         // Record state before fulfillment
-        uint128 lpLockedBefore = liquidityPoolInstance.ethAmountLockedForPriorityWithdrawal();
+        uint128 lpLockedBefore = priorityQueue.ethAmountLockedForPriorityWithdrawal();
 
         // Request manager fulfills the request
         IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
@@ -196,7 +196,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.fulfillRequests(requests);
 
         // Verify state changes
-        assertGt(liquidityPoolInstance.ethAmountLockedForPriorityWithdrawal(), lpLockedBefore, "LP locked for priority should increase");
+        assertGt(priorityQueue.ethAmountLockedForPriorityWithdrawal(), lpLockedBefore, "LP locked for priority should increase");
 
         // Verify request is finalized
         assertTrue(priorityQueue.isFinalized(requestId), "Request should be finalized");
@@ -373,7 +373,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.prank(requestManager);
         priorityQueue.fulfillRequests(requests);
 
-        uint128 lpLockedBefore = liquidityPoolInstance.ethAmountLockedForPriorityWithdrawal();
+        uint128 lpLockedBefore = priorityQueue.ethAmountLockedForPriorityWithdrawal();
 
         // Request manager cancels finalized request (invalidateRequests requires request manager role)
         vm.prank(requestManager);
@@ -388,7 +388,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertApproxEqAbs(eETHInstance.balanceOf(vipUser), eethInitial, 1, "eETH should be returned");
         
         // LP locked should decrease
-        assertLt(liquidityPoolInstance.ethAmountLockedForPriorityWithdrawal(), lpLockedBefore, "LP locked should decrease");
+        assertLt(priorityQueue.ethAmountLockedForPriorityWithdrawal(), lpLockedBefore, "LP locked should decrease");
     }
 
     function test_admininvalidateRequests() public {
@@ -442,7 +442,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Verify fulfilled state
         assertTrue(priorityQueue.isFinalized(priorityQueue.getRequestId(request)), "Request should be finalized");
-        assertGt(liquidityPoolInstance.ethAmountLockedForPriorityWithdrawal(), 0, "LP tracks locked amount");
+        assertGt(priorityQueue.ethAmountLockedForPriorityWithdrawal(), 0, "LP tracks locked amount");
 
         // 4. VIP user claims ETH
         vm.prank(vipUser);
