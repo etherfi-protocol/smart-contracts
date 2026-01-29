@@ -173,6 +173,163 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertEq(priorityQueue.totalActiveRequests(), 1, "Should have 1 active request");
     }
 
+    function test_requestWithdrawWithPermit() public {
+        uint256 userPrivKey = 999;
+        address permitUser = vm.addr(userPrivKey);
+        uint96 withdrawAmount = 1 ether;
+
+        // Whitelist and fund the permit user
+        vm.prank(alice);
+        priorityQueue.addToWhitelist(permitUser);
+        vm.deal(permitUser, 10 ether);
+        vm.prank(permitUser);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        // Record initial state
+        uint256 initialEethBalance = eETHInstance.balanceOf(permitUser);
+        uint256 initialQueueEethBalance = eETHInstance.balanceOf(address(priorityQueue));
+        uint96 initialNonce = priorityQueue.nonce();
+
+        // Create valid permit
+        IPriorityWithdrawalQueue.PermitInput memory permit = _createEEthPermitInput(
+            userPrivKey,
+            address(priorityQueue),
+            withdrawAmount,
+            eETHInstance.nonces(permitUser),
+            block.timestamp + 1 hours
+        );
+
+        // Request withdrawal with permit
+        vm.prank(permitUser);
+        bytes32 requestId = priorityQueue.requestWithdrawWithPermit(withdrawAmount, 0, permit);
+
+        // Verify state changes
+        assertEq(priorityQueue.nonce(), initialNonce + 1, "Nonce should increment");
+        assertApproxEqAbs(eETHInstance.balanceOf(permitUser), initialEethBalance - withdrawAmount, 2, "User eETH balance should decrease");
+        assertApproxEqAbs(eETHInstance.balanceOf(address(priorityQueue)), initialQueueEethBalance + withdrawAmount, 2, "Queue eETH balance should increase");
+        assertTrue(priorityQueue.requestExists(requestId), "Request should exist");
+    }
+
+    function test_requestWithdrawWithPermit_invalidPermit_reverts() public {
+        uint256 userPrivKey = 999;
+        address permitUser = vm.addr(userPrivKey);
+        uint96 withdrawAmount = 1 ether;
+
+        // Whitelist and fund the permit user
+        vm.prank(alice);
+        priorityQueue.addToWhitelist(permitUser);
+        vm.deal(permitUser, 10 ether);
+        vm.prank(permitUser);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        // Create invalid permit (wrong signature)
+        IPriorityWithdrawalQueue.PermitInput memory invalidPermit = IPriorityWithdrawalQueue.PermitInput({
+            value: withdrawAmount,
+            deadline: block.timestamp + 1 hours,
+            v: 27,
+            r: bytes32(uint256(1)),
+            s: bytes32(uint256(2))
+        });
+
+        // Request should revert with PermitFailedAndAllowanceTooLow
+        vm.prank(permitUser);
+        vm.expectRevert(PriorityWithdrawalQueue.PermitFailedAndAllowanceTooLow.selector);
+        priorityQueue.requestWithdrawWithPermit(withdrawAmount, 0, invalidPermit);
+    }
+
+    function test_requestWithdrawWithPermit_expiredDeadline_reverts() public {
+        uint256 userPrivKey = 999;
+        address permitUser = vm.addr(userPrivKey);
+        uint96 withdrawAmount = 1 ether;
+
+        // Whitelist and fund the permit user
+        vm.prank(alice);
+        priorityQueue.addToWhitelist(permitUser);
+        vm.deal(permitUser, 10 ether);
+        vm.prank(permitUser);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        // Create permit with expired deadline
+        IPriorityWithdrawalQueue.PermitInput memory expiredPermit = _createEEthPermitInput(
+            userPrivKey,
+            address(priorityQueue),
+            withdrawAmount,
+            eETHInstance.nonces(permitUser),
+            block.timestamp - 1 // expired
+        );
+
+        // Request should revert with PermitFailedAndAllowanceTooLow
+        vm.prank(permitUser);
+        vm.expectRevert(PriorityWithdrawalQueue.PermitFailedAndAllowanceTooLow.selector);
+        priorityQueue.requestWithdrawWithPermit(withdrawAmount, 0, expiredPermit);
+    }
+
+    function test_requestWithdrawWithPermit_replayAttack_reverts() public {
+        uint256 userPrivKey = 999;
+        address permitUser = vm.addr(userPrivKey);
+        uint96 withdrawAmount = 1 ether;
+
+        // Whitelist and fund the permit user
+        vm.prank(alice);
+        priorityQueue.addToWhitelist(permitUser);
+        vm.deal(permitUser, 10 ether);
+        vm.prank(permitUser);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        // Create valid permit
+        IPriorityWithdrawalQueue.PermitInput memory permit = _createEEthPermitInput(
+            userPrivKey,
+            address(priorityQueue),
+            withdrawAmount,
+            eETHInstance.nonces(permitUser),
+            block.timestamp + 1 hours
+        );
+
+        // First request should succeed
+        vm.prank(permitUser);
+        priorityQueue.requestWithdrawWithPermit(withdrawAmount, 0, permit);
+
+        // Second request with same permit should revert (nonce already used)
+        vm.prank(permitUser);
+        vm.expectRevert(PriorityWithdrawalQueue.PermitFailedAndAllowanceTooLow.selector);
+        priorityQueue.requestWithdrawWithPermit(withdrawAmount, 0, permit);
+    }
+
+    /// @dev Helper to create eETH permit input
+    function _createEEthPermitInput(
+        uint256 privKey,
+        address spender,
+        uint256 value,
+        uint256 nonce,
+        uint256 deadline
+    ) internal view returns (IPriorityWithdrawalQueue.PermitInput memory) {
+        address _owner = vm.addr(privKey);
+        bytes32 domainSeparator = eETHInstance.DOMAIN_SEPARATOR();
+        bytes32 digest = _calculatePermitDigest(_owner, spender, value, nonce, deadline, domainSeparator);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privKey, digest);
+        return IPriorityWithdrawalQueue.PermitInput({
+            value: value,
+            deadline: deadline,
+            v: v,
+            r: r,
+            s: s
+        });
+    }
+
+    /// @dev Calculate EIP-2612 permit digest
+    function _calculatePermitDigest(
+        address _owner,
+        address spender,
+        uint256 value,
+        uint256 nonce,
+        uint256 deadline,
+        bytes32 domainSeparator
+    ) internal pure returns (bytes32) {
+        bytes32 PERMIT_TYPEHASH = keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
+        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, _owner, spender, value, nonce, deadline));
+        return keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+    }
+
 
     //--------------------------------------------------------------------------------------
     //------------------------------  FULFILL TESTS  ---------------------------------------

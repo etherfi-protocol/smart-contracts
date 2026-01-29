@@ -210,7 +210,9 @@ contract PriorityWithdrawalQueue is
         if (amountOfEEth < MIN_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
 
-        try eETH.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
+        try eETH.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {
+            revert PermitFailedAndAllowanceTooLow();
+        }
 
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(this), amountOfEEth);
 
