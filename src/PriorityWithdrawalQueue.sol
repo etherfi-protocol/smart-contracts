@@ -82,6 +82,7 @@ contract PriorityWithdrawalQueue is
         address indexed user,
         uint96 amountOfEEth,
         uint96 shareOfEEth,
+        uint96 minAmountOut,
         uint32 nonce,
         uint32 creationTime
     );
@@ -115,6 +116,7 @@ contract PriorityWithdrawalQueue is
     error BadInput();
     error InvalidBurnedSharesAmount();
     error InvalidEEthSharesAfterRemainderHandling();
+    error InsufficientOutputAmount();
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
@@ -179,25 +181,29 @@ contract PriorityWithdrawalQueue is
 
     /// @notice Request a withdrawal of eETH
     /// @param amountOfEEth Amount of eETH to withdraw
+    /// @param minAmountOut Minimum ETH output amount (slippage protection for dynamic fees)
     /// @return requestId The hash-based ID of the created withdrawal request
     function requestWithdraw(
-        uint96 amountOfEEth
+        uint96 amountOfEEth,
+        uint96 minAmountOut
     ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
         if (amountOfEEth < MIN_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
 
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(this), amountOfEEth);
 
-        (requestId,) = _queueWithdrawRequest(msg.sender, amountOfEEth);
+        (requestId,) = _queueWithdrawRequest(msg.sender, amountOfEEth, minAmountOut);
         _verifyRequestPostConditions(lpEthBefore, queueEEthSharesBefore, amountOfEEth);
     }
 
     /// @notice Request a withdrawal with permit for gasless approval
     /// @param amountOfEEth Amount of eETH to withdraw
+    /// @param minAmountOut Minimum ETH output amount (slippage protection for dynamic fees)
     /// @param permit Permit signature data for eETH approval
     /// @return requestId The hash-based ID of the created withdrawal request
     function requestWithdrawWithPermit(
         uint96 amountOfEEth,
+        uint96 minAmountOut,
         PermitInput calldata permit
     ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
         if (amountOfEEth < MIN_AMOUNT) revert InvalidAmount();
@@ -207,7 +213,7 @@ contract PriorityWithdrawalQueue is
 
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(this), amountOfEEth);
 
-        (requestId,) = _queueWithdrawRequest(msg.sender, amountOfEEth);
+        (requestId,) = _queueWithdrawRequest(msg.sender, amountOfEEth, minAmountOut);
 
         _verifyRequestPostConditions(lpEthBefore, queueEEthSharesBefore, amountOfEEth);
     }
@@ -457,7 +463,8 @@ contract PriorityWithdrawalQueue is
 
     function _queueWithdrawRequest(
         address user,
-        uint96 amountOfEEth
+        uint96 amountOfEEth,
+        uint96 minAmountOut
     ) internal returns (bytes32 requestId, WithdrawRequest memory req) {
         uint32 requestNonce = nonce++;
 
@@ -470,6 +477,7 @@ contract PriorityWithdrawalQueue is
             user: user,
             amountOfEEth: amountOfEEth,
             shareOfEEth: shareOfEEth,
+            minAmountOut: minAmountOut,
             nonce: requestNonce,
             creationTime: timeNow
         });
@@ -484,6 +492,7 @@ contract PriorityWithdrawalQueue is
             user,
             amountOfEEth,
             shareOfEEth,
+            minAmountOut,
             requestNonce,
             timeNow
         );
@@ -531,6 +540,8 @@ contract PriorityWithdrawalQueue is
             ? request.amountOfEEth 
             : amountForShares;
 
+        if (amountToWithdraw < request.minAmountOut) revert InsufficientOutputAmount();
+
         uint256 sharesToBurn = liquidityPool.sharesForWithdrawalAmount(amountToWithdraw);
 
         _finalizedRequests.remove(requestId);
@@ -558,6 +569,7 @@ contract PriorityWithdrawalQueue is
         address _user,
         uint96 _amountOfEEth,
         uint96 _shareOfEEth,
+        uint96 _minAmountOut,
         uint32 _nonce,
         uint32 _creationTime
     ) public pure returns (bytes32 requestId) {
@@ -565,6 +577,7 @@ contract PriorityWithdrawalQueue is
             user: _user,
             amountOfEEth: _amountOfEEth,
             shareOfEEth: _shareOfEEth,
+            minAmountOut: _minAmountOut,
             nonce: _nonce,
             creationTime: _creationTime
         });
@@ -576,6 +589,7 @@ contract PriorityWithdrawalQueue is
             request.user,
             request.amountOfEEth,
             request.shareOfEEth,
+            request.minAmountOut,
             request.nonce,
             request.creationTime
         );
