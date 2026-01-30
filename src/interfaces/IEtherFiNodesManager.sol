@@ -45,6 +45,7 @@ interface IEtherFiNodesManager {
     // rate limiting constants
     function UNRESTAKING_LIMIT_ID() external view returns (bytes32);
     function EXIT_REQUEST_LIMIT_ID() external view returns (bytes32);
+    function CONSOLIDATION_REQUEST_LIMIT_ID() external view returns (bytes32);
 
     // call forwarding
     function updateAllowedForwardedExternalCalls(address user, bytes4 selector, address target, bool allowed) external;
