@@ -82,6 +82,41 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         return (pubkey, signature, withdrawalCredentials, depositDataRoot, depositData, etherFiNode);
     }
 
+    function helper_getDataForValidatorKeyGen_2() internal returns (bytes[] memory pubkeys, bytes[] memory signatures, bytes32[] memory depositDataRoots, IStakingManager.DepositData[] memory depositData, bytes memory withdrawalCredentials,  address etherFiNode) {
+        pubkeys = new bytes[](2);
+        signatures = new bytes[](pubkeys.length);
+        depositDataRoots = new bytes32[](pubkeys.length);
+        depositData = new IStakingManager.DepositData[](pubkeys.length);
+        
+        pubkeys[0] = hex"83a0a764e3b70283cdbe0c6017edd0a5f9ada4786d64aa9f0580b77a86839b02c24c0b14c3a7b2c5dc921e5cfcc89412";
+        signatures[0] = hex"b6a4e867465350c9ab8b739f3c5e0c057e82642a6129c296b6ec649fd637e9056d2ecc4a33498920f95274b650004d660e0cb7ce804657eaed36905cee6cffd309ebda5f68d61740b2c2f9ae69ed82cb4fe46907fc6e08662692cc981620d19b";
+        
+        pubkeys[1] = hex"97ecf2290c8035877c75bbad78f8d00eb6997db5e94a8d64c99c5a07d275292ea34177527301b19f2733e0c84b878f07";
+        signatures[1] = hex"84363d21a69ce0d63bce8895f168503989b87d3bc2b73e55581422937bf79ee71b8f0bd7f14643ebefbb022d62a8dec614e159d3e93fde4cc0c4343b9b077d4d52dfc23252e217e90c0bfb44e70b0d5d4b83ad42b52ae54858b5de24a85a6bdf";
+        
+        // pubkeys[2] = hex"af529413ce07701b1589f09e71107ab77b164875cee2e6899f12ba0e6b0e6d0a23c23ac03d0a4f50014c8959eb324aa3";
+        // signatures[2] = hex"9963dd3ec9faadfbe6571360ecf91c361409a20af57c9df4d2e72f05e7390e5997e68ede694237ab4e0d5a626c31a28e12330956807239ba227044d0d4e0afc795206506a9ebb663da433d6e61c5f8d243fa82f2f2441f091bd3992f44553070";
+        
+        // pubkeys[3] = hex"8f385794be657d619751231557cebd29f34ad647219a3215b7da4e5ac038e361c1ab481afc0142945f951c504ad1e207";
+        // signatures[3] = hex"a05317ec9c815648fe9af692790ba126df8e6cf0204e30215d9cd763f8d0018b26ce0f5931227277dde75b26a59a0fb4008804e70ea190991f5583548892210d4c42c96568da2a7c4f27db1a58a550fedfee6cd7577c2a864f07cab832c23ff4";
+        
+        // pubkeys[4] = hex"991a70adf6851ac8697ba42e0de490e7ff4b829efe98041500d93aabb88903a20b6b7d53f2ce17408568ca946798b43d";
+        // signatures[4] = hex"865380d63ff512d815054912515a49b8bf03c139bdf797c458e3f04026557d5363cdee2fca764c6190949ff4d14a3acf19df0bbcbd41bd7c54eb769ca55efd739eeaef3eb66953511558b1cfc14e0b96fe969b83b62a648d2dc0321f5453bcd5";
+        
+        etherFiNode = address(0x00A6c74d55aB9b334d013295579F2B04241555eE);
+        address eigenPod = address(IEtherFiNode(etherFiNode).getEigenPod());
+
+        withdrawalCredentials = etherFiNodesManager.addressToCompoundingWithdrawalCredentials(eigenPod);
+        for (uint256 i = 0; i < pubkeys.length; i++) {
+            depositDataRoots[i] = depositDataRootGenerator.generateDepositDataRoot(pubkeys[i], signatures[i], withdrawalCredentials, 1 ether);
+            depositData[i] = IStakingManager.DepositData({
+                publicKey: pubkeys[i], signature: signatures[i], depositDataRoot: depositDataRoots[i], ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
+            });
+        }
+
+        return (pubkeys, signatures, depositDataRoots, depositData, withdrawalCredentials, etherFiNode);
+    }
+
     function test_liquidityPool_newFlow() public {
         // STEP 1: Whitelist the user
         vm.prank(admin);
@@ -318,6 +353,29 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
             uint8(stakingManager.validatorCreationStatus(validatorHash)),
             uint8(IStakingManager.ValidatorCreationStatus.REGISTERED)
         );
+    }
+
+    function test_batchRegister_2_succeeds() public {
+        address spawner = vm.addr(0x1234);
+        vm.deal(spawner, 100 ether);
+        vm.prank(spawner);
+        nodeOperatorManager.registerNodeOperator("ipfs_hash", 1000);
+        bytes memory data2 = abi.encodeWithSelector(NodeOperatorManager.registerNodeOperator.selector, "jisdvjioqvjdnsjvnefbveiobeiub", 1000);
+
+        vm.prank(operatingTimelock);
+        liquidityPool.registerValidatorSpawner(spawner);
+
+        uint256[] memory createdBids = new uint256[](2);
+        createdBids[0] = 120129;
+        createdBids[1] = 120130;
+
+        (bytes[] memory pubkeys, bytes[] memory signatures, bytes32[] memory depositDataRoots, IStakingManager.DepositData[] memory depositData, bytes memory withdrawalCredentials,  address etherFiNode) = helper_getDataForValidatorKeyGen_2();
+
+        vm.prank(spawner);
+        bytes memory data = abi.encodeWithSelector(LiquidityPool.batchRegister.selector, depositData, createdBids, etherFiNode);
+        console2.logBytes(data);
+        console2.log("================================================");
+        console2.log("");
     }
 
     function test_batchRegister_revertsWhenAlreadyRegistered() public {
