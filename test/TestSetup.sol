@@ -431,12 +431,17 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
-        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(address(0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0)));
-        etherFiRestakerInstance = EtherFiRestaker(payable(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf)));
         roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
-        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(0x9A8c5046a290664Bf42D065d33512fe403484534));
         treasuryInstance = 0x0c83EAe1FE72c390A02E426572854931EefF93BA;
+        etherFiRestakerInstance = EtherFiRestaker(payable(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf)));
+        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(0x9A8c5046a290664Bf42D065d33512fe403484534));
         weEthWithdrawAdapterInstance = IWeETHWithdrawAdapter(deployed.WEETH_WITHDRAW_ADAPTER());
+        etherFiRedemptionManagerInstance = liquidityPoolInstance.etherFiRedemptionManager();
+
+        // Deploy PriorityWithdrawalQueue for fork testing (mainnet LP has immutable address(0) for this)
+        PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
+        UUPSProxy priorityQueueProxy = new UUPSProxy(address(priorityQueueImplementation), "");
+        priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
@@ -666,6 +671,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiRestakerImplementation = new EtherFiRestaker(address(0x0), address(etherFiRedemptionManagerInstance));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
+
+        priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
+        UUPSProxy priorityQueueProxy = new UUPSProxy(address(priorityQueueImplementation), "");
+        priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
 
         etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance))), "");
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
