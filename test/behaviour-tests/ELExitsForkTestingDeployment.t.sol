@@ -212,11 +212,14 @@ contract ELExitsForkTestingDeploymentTest is Test {
         // Initialize buckets exactly like prelude.t.sol
         rateLimiter.createNewLimiter(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
         rateLimiter.createNewLimiter(etherFiNodesManager.EXIT_REQUEST_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
+        rateLimiter.createNewLimiter(etherFiNodesManager.CONSOLIDATION_REQUEST_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
         rateLimiter.updateConsumers(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), address(etherFiNodesManager), true);
         rateLimiter.updateConsumers(etherFiNodesManager.EXIT_REQUEST_LIMIT_ID(), address(etherFiNodesManager), true);
+        rateLimiter.updateConsumers(etherFiNodesManager.CONSOLIDATION_REQUEST_LIMIT_ID(), address(etherFiNodesManager), true);
 
         console2.log("[OK] UNRESTAKING_LIMIT_ID bucket initialized");
         console2.log("[OK] EXIT_REQUEST_LIMIT_ID bucket initialized");
+        console2.log("[OK] CONSOLIDATION_REQUEST_LIMIT_ID bucket initialized");
 
         vm.stopPrank();
         console2.log("");
