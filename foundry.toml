@@ -38,9 +38,7 @@ max_shrink_iters = 100
 mainnet = "${MAINNET_RPC_URL}"
 goerli = "${GOERLI_RPC_URL}"
 
-[lint]
-ignore = ["test/**", "src/archive/**"]
-exclude_lints = ["screaming-snake-case-immutable","screaming-snake-case-const","mixed-case-variable","mixed-case-function","camelcase-constants","pascal-case-struct","unaliased-plain-import","unaliased-import"]
+
 
 [etherscan]
 mainnet = { key = "${ETHERSCAN_API_KEY}" }
@@ -48,105 +46,3 @@ goerli =  { key = "${ETHERSCAN_API_KEY}" }
 
 # Used for verifying contracts on Tenderly Virtual Testnet
 unknown_chain = { key = "${TENDERLY_ACCESS_KEY}", chain =1, url = "${TENDERLY_VIRTUAL_TESTNET_RPC_URL}/verify/etherscan" }
-
-# ==============================================================================
-# FORMATTER CONFIGURATION (forge fmt)
-# ==============================================================================
-# Comprehensive Solidity code formatting settings for consistent style across
-# the entire codebase. These settings control how `forge fmt` formats your code.
-[fmt]
-# Maximum line length before wrapping (set very high to prevent line splitting)
-# Setting to 999 essentially disables line wrapping, keeping code on single lines
-# where possible. This prevents the formatter from splitting long statements.
-line_length = 999
-
-# Number of spaces per indentation level
-# Controls the width of each indentation level. 4 spaces is the Solidity
-# community standard and provides good readability while keeping code compact.
-tab_width = 4
-
-# Whether to add spaces inside array/function call brackets
-# true:  function( arg1, arg2 )  or  array[ index ]
-# false: function(arg1, arg2)    or  array[index]
-# true improves readability, especially with complex expressions
-bracket_spacing = false
-
-# String literal quote style: "double" or "single"
-# "double" uses "string" (standard for most languages)
-# "single" uses 'string' (some prefer this for Solidity)
-# Double quotes are the Solidity convention and default compiler behavior
-quote_style = "double"
-
-# Number formatting: where to place underscores in numeric literals
-# "thousands": 1_000_000 (groups by thousands - most readable for large numbers)
-# "none": 1000000 (no underscores - compact but harder to read)
-# "decimal": 1000.000 (groups only around decimal point)
-# Thousands separator improves readability for large numbers like wei amounts
-number_underscore = "thousands"
-
-# Whether function bodies can be on a single line
-# false: Always use braces and newlines even for single-statement functions
-# true: Allows single-line bodies like "function f() external { doSomething(); }"
-# false is safer and more consistent, enforcing explicit structure
-multiline_func_body = false
-
-# Opening brace placement for code blocks
-# false: Opening brace on same line (K&R style)
-#     if (condition) {
-#         code
-#     }
-# true: Opening brace on new line (Allman style)
-#     if (condition)
-#     {
-#         code
-#     }
-# Same-line braces are more compact and standard in Solidity community
-multiline_block_brace = false
-
-# Whether single-line statement blocks are allowed
-# "preserve": Keeps existing formatting (no change)
-# "single": Allows single-line blocks without braces: if (condition) doSomething();
-# "multi": Always requires braces and multi-line formatting (safer, prevents bugs)
-#     if (condition) {
-#         doSomething();
-#     }
-# "multi" is safer as it prevents bugs from adding code to if statements
-single_line_statement_blocks = "preserve"
-
-# Whether to add blank lines between contract/interface/library definitions
-# false: No extra lines between definitions (compact)
-# true: Adds blank lines between contracts for visual separation
-# false keeps the file more compact, which helps with navigation
-contract_new_lines = false
-
-# Whether to format inline Yul assembly code
-# false: Leave Yul code as-is (assembly formatting is tricky)
-# true: Attempt to format Yul code (may break some assembly)
-# false is recommended as assembly often requires precise formatting
-yul = false
-
-# Whether to sort imports alphabetically, preventing duplicate imports
-sort_imports = true
- 
-# true:     import {Foo} -> import { Foo } (Solidity standard)
-# false:    import { Foo } -> import {Foo} (Solidity standard)
-# false is recommended as it is the Solidity standard
-import_spacing = false
-
-# Integer type preference: "long" (uint256) or "short" (uint)
-# "long" uses explicit types like uint256, int256, bytes32
-# "short" uses aliases like uint, int, bytes32 (bytes32 stays same)
-# Long is preferred for clarity and avoids confusion (uint is uint256, not uint8)
-# int_types = "long"
-int_types = "preserve"
-
-# Multiline function header formatting style
-# "params_first": Parameters start on new line, type comes first
-#     function transfer(
-#         address to,
-#         uint256 amount
-#     ) external
-# "all_one_line": Everything on one line if possible
-# "types_first": Type comes before parameter name
-# Since line_length is high, this mainly affects explicitly multiline functions
-# multiline_func_header = "all_one_line"
