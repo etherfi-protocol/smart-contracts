@@ -8,6 +8,16 @@ import "../src/UUPSProxy.sol";
 import "./TestERC20.sol";
 import "./TestERC721.sol";
 
+contract MockLiquidityPool {
+    uint128 public totalValueOutOfLp;
+
+    function setTotalValueOutOfLp(uint128 _value) external {
+        totalValueOutOfLp = _value;
+    }
+
+    receive() external payable {}
+}
+
 contract EtherFiRewardsRouterTest is Test {
     EtherFiRewardsRouter public rewardsRouter;
     EtherFiRewardsRouter public rewardsRouterImpl;
@@ -15,6 +25,8 @@ contract EtherFiRewardsRouterTest is Test {
     RoleRegistry public roleRegistry;
     RoleRegistry public roleRegistryImpl;
     UUPSProxy public roleRegistryProxy;
+
+    MockLiquidityPool public mockLiquidityPool;
     
     TestERC20 public testToken;
     TestERC721 public testNFT;
@@ -22,7 +34,7 @@ contract EtherFiRewardsRouterTest is Test {
     address public owner = vm.addr(1);
     address public admin = vm.addr(2);
     address public unauthorizedUser = vm.addr(3);
-    address public liquidityPool = vm.addr(4);
+    address public liquidityPool;
     address public treasury = vm.addr(5);
     address public user = vm.addr(6);
     
@@ -42,6 +54,9 @@ contract EtherFiRewardsRouterTest is Test {
             abi.encodeWithSelector(RoleRegistry.initialize.selector, owner)
         );
         roleRegistry = RoleRegistry(address(roleRegistryProxy));
+
+        mockLiquidityPool = new MockLiquidityPool();
+        liquidityPool = address(mockLiquidityPool);
         
         // Deploy EtherFiRewardsRouter implementation
         rewardsRouterImpl = new EtherFiRewardsRouter(
@@ -142,6 +157,9 @@ contract EtherFiRewardsRouterTest is Test {
         uint256 amount = 10 ether;
         vm.deal(address(rewardsRouter), amount);
         
+        // Set totalValueOutOfLp to allow full withdrawal
+        mockLiquidityPool.setTotalValueOutOfLp(uint128(amount));
+        
         uint256 initialLiquidityPoolBalance = liquidityPool.balance;
         
         vm.expectEmit(true, true, false, true);
@@ -152,9 +170,42 @@ contract EtherFiRewardsRouterTest is Test {
         assertEq(address(rewardsRouter).balance, 0);
         assertEq(liquidityPool.balance, initialLiquidityPoolBalance + amount);
     }
+
+    function test_withdrawToLiquidityPool_cappedByTotalValueOutOfLp() public {
+        uint256 contractBalance = 10 ether;
+        uint128 totalValueOutOfLpAmount = 3 ether;
+        vm.deal(address(rewardsRouter), contractBalance);
+        
+        mockLiquidityPool.setTotalValueOutOfLp(totalValueOutOfLpAmount);
+        
+        uint256 initialLiquidityPoolBalance = liquidityPool.balance;
+        
+        vm.expectEmit(true, true, false, true);
+        emit EthSent(address(rewardsRouter), liquidityPool, totalValueOutOfLpAmount);
+        
+        rewardsRouter.withdrawToLiquidityPool();
+        
+        // Only totalValueOutOfLp amount should be withdrawn
+        assertEq(address(rewardsRouter).balance, contractBalance - totalValueOutOfLpAmount);
+        assertEq(liquidityPool.balance, initialLiquidityPoolBalance + totalValueOutOfLpAmount);
+    }
     
     function test_withdrawToLiquidityPool_revertsWhenBalanceIsZero() public {
         assertEq(address(rewardsRouter).balance, 0);
+        
+        // Even with high totalValueOutOfLp, should revert if contract balance is 0
+        mockLiquidityPool.setTotalValueOutOfLp(type(uint128).max);
+        
+        vm.expectRevert("Contract balance is zero");
+        rewardsRouter.withdrawToLiquidityPool();
+    }
+
+    function test_withdrawToLiquidityPool_revertsWhenTotalValueOutOfLpIsZero() public {
+        uint256 amount = 5 ether;
+        vm.deal(address(rewardsRouter), amount);
+        
+        // totalValueOutOfLp is 0, so min(balance, 0) = 0
+        mockLiquidityPool.setTotalValueOutOfLp(0);
         
         vm.expectRevert("Contract balance is zero");
         rewardsRouter.withdrawToLiquidityPool();
@@ -163,6 +214,8 @@ contract EtherFiRewardsRouterTest is Test {
     function test_withdrawToLiquidityPool_anyoneCanCall() public {
         uint256 amount = 5 ether;
         vm.deal(address(rewardsRouter), amount);
+        
+        mockLiquidityPool.setTotalValueOutOfLp(uint128(amount));
         
         vm.prank(unauthorizedUser);
         rewardsRouter.withdrawToLiquidityPool();
@@ -175,6 +228,8 @@ contract EtherFiRewardsRouterTest is Test {
         uint256 amount1 = 5 ether;
         uint256 amount2 = 3 ether;
         vm.deal(address(rewardsRouter), amount1 + amount2);
+        
+        mockLiquidityPool.setTotalValueOutOfLp(uint128(amount1 + amount2));
         
         uint256 balanceBefore = address(rewardsRouter).balance;
         rewardsRouter.withdrawToLiquidityPool();
@@ -421,6 +476,8 @@ contract EtherFiRewardsRouterTest is Test {
         vm.deal(address(rewardsRouter), ethAmount);
         testToken.mint(address(rewardsRouter), tokenAmount);
         
+        mockLiquidityPool.setTotalValueOutOfLp(uint128(ethAmount));
+        
         // Recover ERC20 first
         vm.prank(admin);
         rewardsRouter.recoverERC20(address(testToken), tokenAmount);
@@ -457,6 +514,9 @@ contract EtherFiRewardsRouterTest is Test {
         // Mint tokens
         testToken.mint(address(rewardsRouter), 500 ether);
         uint256 tokenId = testNFT.mint(address(rewardsRouter));
+        
+        // Set totalValueOutOfLp to allow full withdrawal
+        mockLiquidityPool.setTotalValueOutOfLp(uint128(10 ether));
         
         // Withdraw ETH
         rewardsRouter.withdrawToLiquidityPool();
