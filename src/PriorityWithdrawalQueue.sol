@@ -197,11 +197,6 @@ contract PriorityWithdrawalQueue is
         _verifyRequestPostConditions(lpEthBefore, queueEEthSharesBefore, amountOfEEth);
     }
 
-    /// @notice Request a withdrawal with permit for gasless approval
-    /// @param amountOfEEth Amount of eETH to withdraw
-    /// @param minAmountOut Minimum ETH output amount (slippage protection for dynamic fees)
-    /// @param permit Permit signature data for eETH approval
-    /// @return requestId The hash-based ID of the created withdrawal request
     function requestWithdrawWithPermit(
         uint96 amountOfEEth,
         uint96 minAmountOut,
@@ -302,8 +297,6 @@ contract PriorityWithdrawalQueue is
     //-----------------------------------  ADMIN FUNCTIONS  --------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @notice Add an address to the whitelist
-    /// @param user Address to whitelist
     function addToWhitelist(address user) external {
         if (!roleRegistry.hasRole(PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
         if (user == address(0)) revert AddressZero();
@@ -311,17 +304,12 @@ contract PriorityWithdrawalQueue is
         emit WhitelistUpdated(user, true);
     }
 
-    /// @notice Remove an address from the whitelist
-    /// @param user Address to remove from whitelist
     function removeFromWhitelist(address user) external {
         if (!roleRegistry.hasRole(PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
         isWhitelisted[user] = false;
         emit WhitelistUpdated(user, false);
     }
 
-    /// @notice Batch update whitelist status
-    /// @param users Array of user addresses
-    /// @param statuses Array of whitelist statuses
     function batchUpdateWhitelist(address[] calldata users, bool[] calldata statuses) external {
         if (!roleRegistry.hasRole(PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
         if (users.length != statuses.length) revert ArrayLengthMismatch();

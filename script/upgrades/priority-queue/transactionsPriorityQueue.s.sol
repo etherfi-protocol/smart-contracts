@@ -3,6 +3,7 @@ pragma solidity ^0.8.27;
 
 import "../../utils/utils.sol";
 import "../../../src/EtherFiTimelock.sol";
+import "../../../src/EtherFiRedemptionManager.sol";
 import "../../../src/LiquidityPool.sol";
 import "../../../src/PriorityWithdrawalQueue.sol";
 import "../../../src/RoleRegistry.sol";
@@ -20,6 +21,7 @@ contract PriorityQueueTransactions is Script, Utils {
     EtherFiTimelock etherFiTimelock = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     RoleRegistry roleRegistryContract = RoleRegistry(ROLE_REGISTRY);
     LiquidityPool liquidityPool = LiquidityPool(payable(LIQUIDITY_POOL));
+    EtherFiRedemptionManager etherFiRedemptionManager = EtherFiRedemptionManager(payable(ETHERFI_REDEMPTION_MANAGER));
 
     //--------------------------------------------------------------------------------------
     //------------------------------- NEW DEPLOYMENTS --------------------------------------
@@ -29,7 +31,7 @@ contract PriorityQueueTransactions is Script, Utils {
     address constant liquidityPoolImpl = 0x5598b8c76BA17253459e069041349704c28d33DF;
     address constant priorityWithdrawalQueueProxy = 0x79Eb9c078fA5a5Bd1Ee8ba84937acd48AA5F90A8;
     address constant priorityWithdrawalQueueImpl = 0xB149ce3957370066D7C03e5CA81A7997Fe00cAF6;
-
+    address constant etherFiRedemptionManagerImpl = 0x335E9Cf5A2b13621b66D01F8b889174AD75DE045;
     //--------------------------------------------------------------------------------------
     //------------------------------- ROLES ------------------------------------------------
     //--------------------------------------------------------------------------------------
@@ -60,9 +62,9 @@ contract PriorityQueueTransactions is Script, Utils {
         console2.log("Generating Upgrade Transactions");
         console2.log("================================================");
 
-        address[] memory targets = new address[](4);
-        bytes[] memory data = new bytes[](4);
-        uint256[] memory values = new uint256[](4); // Default to 0
+        address[] memory targets = new address[](5);
+        bytes[] memory data = new bytes[](targets.length);
+        uint256[] memory values = new uint256[](targets.length); // Default to 0
 
         //--------------------------------------------------------------------------------------
         //------------------------------- CONTRACT UPGRADES  -----------------------------------
@@ -72,6 +74,10 @@ contract PriorityQueueTransactions is Script, Utils {
         targets[0] = LIQUIDITY_POOL;
         data[0] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, liquidityPoolImpl);
 
+        // Upgrade EtherFiRedemptionManager to new implementation
+        targets[1] = ETHERFI_REDEMPTION_MANAGER;
+        data[1] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiRedemptionManagerImpl);
+
         //--------------------------------------------------------------------------------------
         //---------------------------------- Grant Roles ---------------------------------------
         //--------------------------------------------------------------------------------------
@@ -80,22 +86,22 @@ contract PriorityQueueTransactions is Script, Utils {
         console2.log("PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE:", vm.toString(PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE));
 
         // Grant PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE to ADMIN_EOA
-        targets[1] = ROLE_REGISTRY;
-        data[1] = _encodeRoleGrant(
+        targets[2] = ROLE_REGISTRY;
+        data[2] = _encodeRoleGrant(
             PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE,
             ETHERFI_OPERATING_ADMIN
         );
 
         // Grant PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE to ADMIN_EOA
-        targets[2] = ROLE_REGISTRY;
-        data[2] = _encodeRoleGrant(
+        targets[3] = ROLE_REGISTRY;
+        data[3] = _encodeRoleGrant(
             PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE,
             ETHERFI_OPERATING_ADMIN
         );
 
         // Grant PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE to ADMIN_EOA
-        targets[3] = ROLE_REGISTRY;
-        data[3] = _encodeRoleGrant(
+        targets[4] = ROLE_REGISTRY;
+        data[4] = _encodeRoleGrant(
             PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE,
             ADMIN_EOA
         );
