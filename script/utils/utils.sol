@@ -272,6 +272,12 @@ contract Utils is Script, Deployed {
             return vm.toString(address(uint160(uint256(chunk))));
         } else if (compare(t, "uint256")) {
             return vm.toString(uint256(chunk));
+        } else if (compare(t, "uint32")) {
+            return vm.toString(uint32(uint256(chunk)));
+        } else if (compare(t, "uint64")) {
+            return vm.toString(uint64(uint256(chunk)));
+        } else if (compare(t, "uint128")) {
+            return vm.toString(uint128(uint256(chunk)));
         } else if (compare(t, "bool")) {
             return uint256(chunk) != 0 ? "true" : "false";
         } else if (compare(t, "bytes32")) {
