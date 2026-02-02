@@ -132,7 +132,7 @@ contract DeployPectraUpgradeCreate2 is Script {
         
         // Initialize
         rateLimiterProxy.initialize();
-        console2.log(unicode"✓ Rate limiter deployed and initialized");
+        console2.log("[OK] Rate limiter deployed and initialized");
         console2.log("");
     }
 
@@ -189,7 +189,7 @@ contract DeployPectraUpgradeCreate2 is Script {
             etherFiNodeImpl = deployCreate2(contractName, constructorArgs, bytecode, commitHashSalt, true);
         }
 
-        console2.log(unicode"✓ All implementations deployed using Create2");
+        console2.log("[OK] All implementations deployed using Create2");
         console2.log("");
     }
 
@@ -258,10 +258,10 @@ contract DeployPectraUpgradeCreate2 is Script {
         console2.log("");
         
         console2.log("New Features:");
-        console2.log(unicode"✓ EL-triggered exits");
-        console2.log(unicode"✓ Consolidation requests");
-        console2.log(unicode"✓ Rate limiting system");
-        console2.log(unicode"✓ User-specific call forwarding");
+        console2.log("[OK] EL-triggered exits");
+        console2.log("[OK] Consolidation requests");
+        console2.log("[OK] Rate limiting system");
+        console2.log("[OK] User-specific call forwarding");
         console2.log("");
         
         console2.log("Next Steps:");
@@ -506,13 +506,13 @@ contract DeployPectraUpgradeCreate2 is Script {
         console2.log("=== MANUAL CONTRACT UPGRADES ===");
         
         IUpgradable(STAKING_MANAGER_PROXY).upgradeTo(stakingManagerImpl);
-        console2.log(unicode"✓ StakingManager upgraded");
+        console2.log("[OK] StakingManager upgraded");
         
         IUpgradable(ETHERFI_NODES_MANAGER_PROXY).upgradeTo(etherFiNodesManagerImpl);
-        console2.log(unicode"✓ EtherFiNodesManager upgraded");
+        console2.log("[OK] EtherFiNodesManager upgraded");
         
         StakingManager(STAKING_MANAGER_PROXY).upgradeEtherFiNode(etherFiNodeImpl);
-        console2.log(unicode"✓ EtherFiNode upgraded");
+        console2.log("[OK] EtherFiNode upgraded");
         
         vm.stopBroadcast();
     }

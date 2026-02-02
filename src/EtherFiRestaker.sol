@@ -24,7 +24,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     struct TokenInfo {
         // EigenLayer
         IStrategy elStrategy;
-        uint256 elSharesInPendingForWithdrawals;
     }
 
     IRewardsCoordinator public immutable rewardsCoordinator;
@@ -83,8 +82,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
         (,, IStrategy strategy,,,,,,,,) = liquifier.tokenInfos(address(lido));
         tokenInfos[address(lido)] = TokenInfo({
-            elStrategy: strategy,
-            elSharesInPendingForWithdrawals: 0
+            elStrategy: strategy
         });
     }
 
@@ -113,15 +111,26 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @notice Request for a specific amount of stETH holdings
     /// @param _amount the amount of stETH to request
     function stEthRequestWithdrawal(uint256 _amount) public onlyAdmin returns (uint256[] memory) {
-        if (_amount < lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT()) revert IncorrectAmount();
+        uint256 minAmount = lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT();
+        uint256 maxAmount = lidoWithdrawalQueue.MAX_STETH_WITHDRAWAL_AMOUNT();
+
+        if (_amount < minAmount) revert IncorrectAmount();
         if (_amount > lido.balanceOf(address(this))) revert NotEnoughBalance();
 
-        uint256 maxAmount = lidoWithdrawalQueue.MAX_STETH_WITHDRAWAL_AMOUNT();
         uint256 numReqs = (_amount + maxAmount - 1) / maxAmount;
         uint256[] memory reqAmounts = new uint256[](numReqs);
         for (uint256 i = 0; i < numReqs; i++) {
             reqAmounts[i] = (i == numReqs - 1) ? _amount - i * maxAmount : maxAmount;
         }
+
+        // Ensure the last request meets MIN_STETH_WITHDRAWAL_AMOUNT
+        // If too small and we have multiple requests, reduce the penultimate to increase the last
+        if (numReqs > 1 && reqAmounts[numReqs - 1] < minAmount) {
+            uint256 deficit = minAmount - reqAmounts[numReqs - 1];
+            reqAmounts[numReqs - 2] -= deficit;
+            reqAmounts[numReqs - 1] = minAmount;
+        }
+
         lido.approve(address(lidoWithdrawalQueue), _amount);
         uint256[] memory reqIds = lidoWithdrawalQueue.requestWithdrawals(reqAmounts, address(this));
 
@@ -134,7 +143,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @param _requestIds array of request ids to claim
     /// @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
     function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyAdmin {
-        uint256 balance = address(this).balance;
         lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
 
         withdrawEther();
@@ -144,7 +152,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     // Send the ETH back to the liquidity pool
     function withdrawEther() public onlyAdmin {
-        uint256 amountToLiquidityPool = address(this).balance;
+        uint256 amountToLiquidityPool = _min(address(this).balance, liquidityPool.totalValueOutOfLp());
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
         require(sent, "ETH_SEND_TO_LIQUIDITY_POOL_FAILED");
     }
@@ -174,6 +182,10 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         return withdrawalRoots;
     }
 
+    function isDelegated() external view returns (bool) {
+        return eigenLayerDelegationManager.isDelegated(address(this));
+    }
+
     // deposit the token in holding into the restaking strategy
     function depositIntoStrategy(address token, uint256 amount) external onlyAdmin returns (uint256) {
         IERC20(token).safeApprove(address(eigenLayerStrategyManager), amount);
@@ -190,16 +202,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @param amount the amount of token to withdraw
     function queueWithdrawals(address token, uint256 amount) public onlyAdmin returns (bytes32[] memory) {
         uint256 shares = getEigenLayerRestakingStrategy(token).underlyingToSharesView(amount);
-        return _queueWithdrawalsByShares(token, shares);
-    }
-
-    /// Advanced version
-    function queueWithdrawalsWithParams(IDelegationManagerTypes.QueuedWithdrawalParams[] memory params) public onlyAdmin returns (bytes32[] memory) {
-        bytes32[] memory withdrawalRoots = eigenLayerDelegationManager.queueWithdrawals(params);
+        bytes32[] memory withdrawalRoots = _queueWithdrawalsByShares(token, shares);
 
         for (uint256 i = 0; i < withdrawalRoots.length; i++) {
             withdrawalRootsSet.add(withdrawalRoots[i]);
         }
+
         return withdrawalRoots;
     }
 
@@ -284,8 +292,24 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     function getAmountInEigenLayerPendingForWithdrawals(address _token) public view returns (uint256) {
         TokenInfo memory info = tokenInfos[_token];
         if (info.elStrategy == IStrategy(address(0))) return 0;
-        uint256 amount = info.elStrategy.sharesToUnderlyingView(info.elSharesInPendingForWithdrawals);
-        return amount;
+        
+        // Calculate by summing up shares from all pending withdrawals for this token
+        uint256 totalShares = 0;
+        (IDelegationManager.Withdrawal[] memory queuedWithdrawals, ) = eigenLayerDelegationManager.getQueuedWithdrawals(address(this));
+        for (uint256 i = 0; i < queuedWithdrawals.length; i++) {
+            bytes32 withdrawalRoot = eigenLayerDelegationManager.calculateWithdrawalRoot(queuedWithdrawals[i]);
+            (IDelegationManager.Withdrawal memory withdrawal, uint256[] memory shares) = eigenLayerDelegationManager.getQueuedWithdrawal(withdrawalRoot);
+            
+            // Check if this withdrawal involves the specified token
+            for (uint256 j = 0; j < withdrawal.strategies.length; j++) {
+                address token = address(withdrawal.strategies[j].underlyingToken());
+                if (token == _token && info.elStrategy == withdrawal.strategies[j]) {
+                    totalShares += shares[j];
+                }
+            }
+        }
+
+        return info.elStrategy.sharesToUnderlyingView(totalShares);
     }
 
     // get the amount of token pending for redemption. e.g., pending in Lido's withdrawal queue
@@ -335,7 +359,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
             __deprecated_withdrawer: address(this)
         });
 
-        return queueWithdrawalsWithParams(params);
+        return eigenLayerDelegationManager.queueWithdrawals(params);
     }
 
     function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {

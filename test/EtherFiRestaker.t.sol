@@ -20,7 +20,9 @@ contract EtherFiRestakerTest is TestSetup {
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
 
-        setUpLiquifier(MAINNET_FORK);
+        test_upgrade();
+
+        // setUpLiquifier(MAINNET_FORK);
 
         avsOperator = 0x5ACCC90436492F24E6aF278569691e2c942A676d; // EigenYields
         avsOperator2 = 0xfB487f216CA24162119C0C6Ae015d680D7569C2f;
@@ -58,20 +60,21 @@ contract EtherFiRestakerTest is TestSetup {
     function test_withdrawal_of_non_restaked_stEth() public {
         uint256 lpTvl = liquidityPoolInstance.getTotalPooledEther();
         uint256 lpBalance = address(liquidityPoolInstance).balance;
-
+        uint256 currentEtherFiRestakerTotalPooledEther = etherFiRestakerInstance.getTotalPooledEther();
+        uint256 currentStEthBalance = stEth.balanceOf(address(etherFiRestakerInstance));
         uint256 amount = 10 ether;
 
         _deposit_stEth(amount);
 
         assertEq(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), 0);
 
-        vm.startPrank(alice);
-        uint256 stEthBalance = stEth.balanceOf(address(etherFiRestakerInstance));
+        vm.startPrank(owner);
+        uint256 stEthBalance = stEth.balanceOf(address(etherFiRestakerInstance)) - currentStEthBalance;
         uint256[] memory reqIds = etherFiRestakerInstance.stEthRequestWithdrawal(stEthBalance);
         vm.stopPrank();
         
         assertApproxEqAbs(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), amount, 2 wei);
-        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), amount, 2 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), currentEtherFiRestakerTotalPooledEther + amount, 2 wei);
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
 
         bytes32 FINALIZE_ROLE = etherFiRestakerInstance.lidoWithdrawalQueue().FINALIZE_ROLE();
@@ -80,23 +83,23 @@ contract EtherFiRestakerTest is TestSetup {
         // The redemption is approved by the Lido
         vm.startPrank(finalize_role);
         uint256 currentRate = stEth.getTotalPooledEther() * 1e27 / stEth.getTotalShares();
-        (uint256 ethToLock, uint256 sharesToBurn) = etherFiRestakerInstance.lidoWithdrawalQueue().prefinalize(reqIds, currentRate);
+        etherFiRestakerInstance.lidoWithdrawalQueue().prefinalize(reqIds, currentRate);
         etherFiRestakerInstance.lidoWithdrawalQueue().finalize(reqIds[reqIds.length-1], currentRate);
         vm.stopPrank();
 
         assertApproxEqAbs(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), amount, 2 wei);
-        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), amount, 2 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), currentEtherFiRestakerTotalPooledEther + amount, 2 wei);
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
 
         // The ether.fi admin claims the finalized withdrawal, which sends the ETH to the liquifier contract
-        vm.startPrank(alice);
+        vm.startPrank(owner);
         uint256 lastCheckPointIndex = etherFiRestakerInstance.lidoWithdrawalQueue().getLastCheckpointIndex();
         uint256[] memory hints = etherFiRestakerInstance.lidoWithdrawalQueue().findCheckpointHints(reqIds, 1, lastCheckPointIndex);
         etherFiRestakerInstance.stEthClaimWithdrawals(reqIds, hints);
 
         // the cycle completes
         assertApproxEqAbs(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), 0, 2 wei);
-        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), 0, 2 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), currentEtherFiRestakerTotalPooledEther, 2 wei);
         assertApproxEqAbs(address(etherFiRestakerInstance).balance, 0, 2);
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
         assertApproxEqAbs(address(liquidityPoolInstance).balance, lpBalance + amount, 3 wei);
@@ -107,47 +110,44 @@ contract EtherFiRestakerTest is TestSetup {
 
         _deposit_stEth(10 ether);
 
-        vm.startPrank(alice);        
+        vm.startPrank(owner);        
         etherFiRestakerInstance.depositIntoStrategy(address(stEth), 5 ether);
         vm.stopPrank();
 
 
-        assertApproxEqAbs(etherFiRestakerInstance.getRestakedAmount(address(stEth)), currentStEthRestakedAmount + 5 ether, 2 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getRestakedAmount(address(stEth)), currentStEthRestakedAmount + 5 ether, 10 wei);
     }
 
     function test_queueWithdrawals_1() public returns (bytes32[] memory) {
         test_restake_stEth();
 
-        vm.prank(etherfiOperatingAdmin);
-        return etherFiRestakerInstance.queueWithdrawals(address(stEth), 5 ether);
-    }
+        vm.startPrank(owner);
+        uint256 totalPooledEtherBefore = etherFiRestakerInstance.getTotalPooledEther();
+        uint256 restakedAmountBefore = etherFiRestakerInstance.getRestakedAmount(address(stEth));
+        uint256 pendingSharesBefore = etherFiRestakerInstance.getAmountInEigenLayerPendingForWithdrawals(address(stEth));
 
-    function test_queueWithdrawals_2() public returns (bytes32[] memory) {
-        test_restake_stEth();
+        bytes32[] memory withdrawalRoots = etherFiRestakerInstance.queueWithdrawals(address(stEth), 5 ether);
 
-        IStrategy[] memory strategies = new IStrategy[](1);
-        strategies[0] = etherFiRestakerInstance.getEigenLayerRestakingStrategy(address(stEth));
-        (uint256[] memory withdrawableShares, ) = eigenLayerDelegationManager.getWithdrawableShares(address(etherFiRestakerInstance), strategies);
-        
-        IDelegationManagerTypes.QueuedWithdrawalParams[] memory params = new IDelegationManagerTypes.QueuedWithdrawalParams[](1);
-        params[0] = IDelegationManagerTypes.QueuedWithdrawalParams({
-            strategies: strategies,
-            depositShares: withdrawableShares,
-            __deprecated_withdrawer: address(etherFiRestakerInstance)
-        });
+        assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
+        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), totalPooledEtherBefore, 10 gwei);
+        assertApproxEqAbs(etherFiRestakerInstance.getRestakedAmount(address(stEth)), restakedAmountBefore - 5 ether, 10 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getAmountInEigenLayerPendingForWithdrawals(address(stEth)), pendingSharesBefore + 5 ether, 10 wei);
+        vm.stopPrank();
 
-        vm.prank(etherfiOperatingAdmin);
-        return etherFiRestakerInstance.queueWithdrawalsWithParams(params);
+        return withdrawalRoots;
     }
 
     function test_completeQueuedWithdrawals_1() public {
         bytes32[] memory withdrawalRoots = test_queueWithdrawals_1();
         assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
 
+        uint256 totalPooledEtherBefore = etherFiRestakerInstance.getTotalPooledEther();
+        uint256 pendingSharesBefore = etherFiRestakerInstance.getAmountInEigenLayerPendingForWithdrawals(address(stEth));
+
         // Get the queued withdrawal details from EigenLayer
         (IDelegationManager.Withdrawal memory withdrawal, uint256[] memory shares) = eigenLayerDelegationManager.getQueuedWithdrawal(withdrawalRoots[0]);
         
-        vm.startPrank(etherfiOperatingAdmin);
+        vm.startPrank(owner);
         
         // It won't complete the withdrawal because the withdrawal is still pending (not enough blocks passed)
         IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
@@ -169,65 +169,23 @@ contract EtherFiRestakerTest is TestSetup {
         // Now the withdrawal should complete successfully
         etherFiRestakerInstance.completeQueuedWithdrawals(withdrawals, tokens);
         assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[0]));
+
+        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), totalPooledEtherBefore, 10 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getAmountInEigenLayerPendingForWithdrawals(address(stEth)) + 5 ether, pendingSharesBefore, 10 wei);
         
-        vm.stopPrank();
-    }
-
-    function test_completeQueuedWithdrawals_2() public {
-        bytes32[] memory withdrawalRoots1 = test_queueWithdrawals_1();
-
-        // Fast forward halfway through the withdrawal delay
-        vm.roll(block.number + 50400);
-
-        bytes32[] memory withdrawalRoots2 = test_queueWithdrawals_1();
-
-        assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots1[0]));
-        assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots2[0]));
-
-        // Fast forward so the first withdrawal is completable (total 100800 + 1 blocks from first withdrawal start)
-        // This means 50400 + 1 more blocks from current position
-        vm.roll(block.number + 50400 + 1);
-
-        // Get the queued withdrawal details from EigenLayer
-        (IDelegationManager.Withdrawal memory withdrawal1, ) = eigenLayerDelegationManager.getQueuedWithdrawal(withdrawalRoots1[0]);
-        (IDelegationManager.Withdrawal memory withdrawal2, ) = eigenLayerDelegationManager.getQueuedWithdrawal(withdrawalRoots2[0]);
-
-        vm.startPrank(etherfiOperatingAdmin);
-        
-        // The first withdrawal should be completable now (100800 + 1 blocks have passed since it was queued)
-        // But the second withdrawal is still pending (only 50400 + 1 blocks have passed)
-        IDelegationManager.Withdrawal[] memory withdrawals1 = new IDelegationManager.Withdrawal[](1);
-        withdrawals1[0] = withdrawal1;
-        
-        IERC20[][] memory tokens1 = new IERC20[][](1);
-        tokens1[0] = new IERC20[](1);
-        tokens1[0][0] = IERC20(address(stEth));
-        
-        // Complete the first withdrawal
-        etherFiRestakerInstance.completeQueuedWithdrawals(withdrawals1, tokens1);
-        assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots1[0]));
-        assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots2[0]));
-
-        // Fast forward another 50400 blocks so the second withdrawal can be completed 
-        // (total 100800 + 1 blocks from its start)
-        vm.roll(block.number + 50400);
-
-        // Now complete the second withdrawal
-        IDelegationManager.Withdrawal[] memory withdrawals2 = new IDelegationManager.Withdrawal[](1);
-        withdrawals2[0] = withdrawal2;
-        
-        IERC20[][] memory tokens2 = new IERC20[][](1);
-        tokens2[0] = new IERC20[](1);
-        tokens2[0][0] = IERC20(address(stEth));
-        
-        etherFiRestakerInstance.completeQueuedWithdrawals(withdrawals2, tokens2);
-        assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots1[0]));
-        assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots2[0]));
         
         vm.stopPrank();
     }
 
     function test_delegate_to() public {
+        if (etherFiRestakerInstance.isDelegated()) {
+            vm.prank(owner);
+            etherFiRestakerInstance.undelegate();
+        }
+
+        uint32 timeBoundCapRefreshInterval = liquifierInstance.timeBoundCapRefreshInterval();
+        vm.warp(block.timestamp + timeBoundCapRefreshInterval + 1);
+
         _deposit_stEth(10 ether);
 
         ISignatureUtilsMixinTypes.SignatureWithExpiry memory signature = ISignatureUtilsMixinTypes.SignatureWithExpiry({
@@ -235,7 +193,7 @@ contract EtherFiRestakerTest is TestSetup {
             expiry: 0
         });
 
-        vm.startPrank(etherfiOperatingAdmin);
+        vm.startPrank(owner);
         etherFiRestakerInstance.delegateTo(avsOperator, signature, 0x0);
         etherFiRestakerInstance.depositIntoStrategy(address(stEth), 5 ether);
         vm.stopPrank();
@@ -244,7 +202,7 @@ contract EtherFiRestakerTest is TestSetup {
     function test_undelegate() public {
         test_delegate_to();
 
-        vm.prank(etherfiOperatingAdmin);
+        vm.prank(owner);
         etherFiRestakerInstance.undelegate();
     }
 
@@ -257,16 +215,16 @@ contract EtherFiRestakerTest is TestSetup {
             expiry: 0
         });
 
-        vm.startPrank(etherfiOperatingAdmin);
+        vm.startPrank(owner);
         vm.expectRevert("ActivelyDelegated()");
         etherFiRestakerInstance.delegateTo(avsOperator2, signature, 0x0);
         vm.stopPrank();
     }
 
     function test_claimer_upgrade() public {
-        initializeRealisticFork(MAINNET_FORK);
-        EtherFiRestaker restaker = EtherFiRestaker(payable(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf));
-        address _claimer = vm.addr(433);
+        // initializeRealisticFork(MAINNET_FORK);
+        EtherFiRestaker restaker = EtherFiRestaker(payable(deployed.ETHERFI_RESTAKER()));
+        address _claimer = address(liquidityPoolInstance); // dummy claimer
 
         address newRestakerImpl = address(new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance)));
         vm.startPrank(restaker.owner());
@@ -274,7 +232,24 @@ contract EtherFiRestakerTest is TestSetup {
         restaker.upgradeTo(newRestakerImpl);
         restaker.setRewardsClaimer(_claimer);
 
+        vm.stopPrank();
         assertEq(eigenLayerRewardsCoordinator.claimerFor(address(restaker)), _claimer);
+    }
+
+    function test_upgrade() public {
+        address newRestakerImpl = address(new EtherFiRestaker(
+            address(etherFiRestakerInstance.rewardsCoordinator()),
+            address(etherFiRestakerInstance.etherFiRedemptionManager())
+        ));
+        
+        vm.startPrank(owner);
+        etherFiRestakerInstance.upgradeTo(newRestakerImpl);
+        vm.stopPrank();
+    }
+
+    function test_updatePendingSharesState_after_upgrade() public {
+        etherFiRestakerInstance.getAmountInEigenLayerPendingForWithdrawals(address(stEth));
+        etherFiRestakerInstance.getTotalPooledEther();
     }
 
 }

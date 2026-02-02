@@ -12,8 +12,18 @@ interface IStakingManager {
         string ipfsHashForEncryptedValidatorKey;
     }
 
+    // Possible values for validator creation status
+    enum ValidatorCreationStatus {
+        NOT_REGISTERED,
+        REGISTERED,
+        CONFIRMED,
+        INVALIDATED
+    }
+
     // deposit flow
+    function registerBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external;
     function createBeaconValidators(DepositData[] calldata depositData, uint256[] calldata bidIds, address etherFiNode) external payable;
+    function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external;
     function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable;
     function calculateValidatorPubkeyHash(bytes memory pubkey) external pure returns (bytes32);
     function initialDepositAmount() external returns (uint256);
@@ -78,6 +88,8 @@ interface IStakingManager {
     // legacy event still being emitted in its original form to play nice with existing external tooling
     event ValidatorRegistered(address indexed operator, address indexed bNftOwner, address indexed tNftOwner, uint256 validatorId, bytes validatorPubKey, string ipfsHashForEncryptedValidatorKey);
 
+    event ValidatorCreationStatusUpdated(DepositData depositData, uint256 bidId, address etherFiNode, bytes32 hashedAllData, ValidatorCreationStatus indexed status);
+
     //--------------------------------------------------------------------------
     //-----------------------------  Errors  -----------------------------------
     //--------------------------------------------------------------------------
@@ -92,5 +104,6 @@ interface IStakingManager {
     error InvalidValidatorSize();
     error IncorrectRole();
     error InvalidUpgrade();
+    error InvalidValidatorCreationStatus();
 
 }

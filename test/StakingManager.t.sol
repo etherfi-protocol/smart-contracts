@@ -2,6 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "./TestSetup.sol";
+import "../src/interfaces/IRoleRegistry.sol";
 
 contract StakingManagerTest is TestSetup {
     event StakeDeposit(
@@ -26,10 +27,11 @@ contract StakingManagerTest is TestSetup {
     bytes[] public sig;
 
     function setUp() public {
-        setUpTests();
+        // setUpTests();
+        initializeRealisticFork(MAINNET_FORK);
 
-        vm.prank(alice);
-        liquidityPoolInstance.setStakingTargetWeights(50, 50);
+        // vm.prank(alice);
+        // liquidityPoolInstance.setStakingTargetWeights(50, 50);
     }
 
     // TODO(dave): redo stakingManager tests
@@ -1316,5 +1318,245 @@ contract StakingManagerTest is TestSetup {
         mockDepositContractEth2.deposit{value: 32 ether}(pubkey, withdrawal_credentials, signature, deposit_data_root);
     }
     */
+
+    //---------------------------------------------------------------------------
+    //------------------------- New Function Tests ------------------------------
+    //---------------------------------------------------------------------------
+
+    function test_initialDepositAmount() public view {
+        assertEq(stakingManagerInstance.initialDepositAmount(), 1 ether);
+    }
+
+    function test_calculateValidatorPubkeyHash() public view {
+        bytes memory validPubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
+        bytes32 hash = stakingManagerInstance.calculateValidatorPubkeyHash(validPubkey);
+        assertEq(hash, sha256(abi.encodePacked(validPubkey, bytes16(0))));
+    }
+
+    function test_calculateValidatorPubkeyHashFailsIfInvalidLength() public {
+        bytes memory validPubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
+        // Create 47 byte array by truncating
+        bytes memory invalidPubkey = new bytes(47);
+        for (uint256 i = 0; i < 47; i++) {
+            invalidPubkey[i] = validPubkey[i];
+        }
+        vm.expectRevert(IStakingManager.InvalidPubKeyLength.selector);
+        stakingManagerInstance.calculateValidatorPubkeyHash(invalidPubkey);
+    }
+
+    function test_generateDepositDataRoot() public view {
+        bytes memory pubkey = hex"8f9c0aab19ee7586d3d470f132842396af606947a0589382483308fdffdaf544078c3be24210677a9c471ce70b3b4c2c";
+        bytes memory signature = hex"877bee8d83cac8bf46c89ce50215da0b5e370d282bb6c8599aabdbc780c33833687df5e1f5b5c2de8a6cd20b6572c8b0130b1744310a998e1079e3286ff03e18e4f94de8cdebecf3aaac3277b742adb8b0eea074e619c20d13a1dda6cba6e3df";
+        bytes memory withdrawalCredentials = hex"010000000000000000000000cd5ebc2dd4cb3dc52ac66ceecc72c838b40a5931";
+        uint256 amount = 1 ether;
+        
+        bytes32 root = stakingManagerInstance.generateDepositDataRoot(pubkey, signature, withdrawalCredentials, amount);
+        bytes32 expectedRoot = generateDepositRoot(pubkey, signature, withdrawalCredentials, amount);
+        assertEq(root, expectedRoot);
+    }
+
+    function test_getEtherFiNodeBeacon() public view {
+        // address beacon = stakingManagerInstance.getEtherFiNodeBeacon();
+        try stakingManagerInstance.getEtherFiNodeBeacon() returns (address beacon) {
+            assertTrue(beacon != address(0));
+        } catch {
+            assertTrue(false);
+        }
+    }
+
+    function test_implementation() public {
+        try stakingManagerInstance.implementation() returns (address impl) {
+            assertTrue(impl != address(0));
+        } catch {
+            assertTrue(false);
+        }
+    }
+
+    function test_instantiateEtherFiNode() public {
+        vm.startPrank(owner);
+        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), alice);
+        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManagerInstance));
+        vm.stopPrank();
+        
+        vm.prank(alice);
+        address etherFiNode = stakingManagerInstance.instantiateEtherFiNode(true);
+        assertTrue(etherFiNode != address(0));
+        assertTrue(stakingManagerInstance.deployedEtherFiNodes(etherFiNode));
+    }
+    
+    function test_instantiateEtherFiNodeFailsIfNotAuthorized() public {
+        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        stakingManagerInstance.instantiateEtherFiNode(false);
+    }
+
+    function test_backfillExistingEtherFiNodes() public {
+        vm.startPrank(owner);
+        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_ADMIN_ROLE(), alice);
+        vm.stopPrank();
+        
+        address[] memory nodes = new address[](2);
+        nodes[0] = address(0x1111);
+        nodes[1] = address(0x2222);
+        
+        vm.prank(alice);
+        stakingManagerInstance.backfillExistingEtherFiNodes(nodes);
+        
+        assertTrue(stakingManagerInstance.deployedEtherFiNodes(nodes[0]));
+        assertTrue(stakingManagerInstance.deployedEtherFiNodes(nodes[1]));
+    }
+
+    function test_backfillExistingEtherFiNodesSkipsDuplicates() public {
+        vm.startPrank(owner);
+        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_ADMIN_ROLE(), alice);
+        vm.stopPrank();
+        
+        address[] memory nodes = new address[](2);
+        nodes[0] = address(0x1111);
+        nodes[1] = address(0x1111); // duplicate
+        
+        vm.prank(alice);
+        stakingManagerInstance.backfillExistingEtherFiNodes(nodes);
+        
+        assertTrue(stakingManagerInstance.deployedEtherFiNodes(nodes[0]));
+    }
+
+    function test_backfillExistingEtherFiNodesFailsIfNotAdmin() public {
+        address[] memory nodes = new address[](1);
+        nodes[0] = address(0x1111);
+        
+        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        stakingManagerInstance.backfillExistingEtherFiNodes(nodes);
+    }
+
+    function test_unPauseContract() public {
+        address pauser = roleRegistryInstance.roleHolders(roleRegistryInstance.PROTOCOL_PAUSER())[0];
+        vm.startPrank(pauser);
+        stakingManagerInstance.pauseContract();
+        vm.stopPrank();
+        assertTrue(stakingManagerInstance.paused());
+        
+        address unpauser = roleRegistryInstance.roleHolders(roleRegistryInstance.PROTOCOL_UNPAUSER())[0];
+        vm.prank(unpauser);
+        stakingManagerInstance.unPauseContract();
+        assertFalse(stakingManagerInstance.paused());
+    }
+
+    function test_unPauseContractFailsIfNotAuthorized() public {
+        address pauser = roleRegistryInstance.roleHolders(roleRegistryInstance.PROTOCOL_PAUSER())[0];
+        vm.prank(pauser);
+        stakingManagerInstance.pauseContract();
+        
+        vm.prank(bob);
+        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        stakingManagerInstance.unPauseContract();
+    }
+
+    function test_upgradeEtherFiNode() public {
+        address newImpl = address(new EtherFiNode(address(0), address(0), address(0), address(0), address(roleRegistryInstance)));
+        
+        address roleRegistryOwner = roleRegistryInstance.owner();
+        
+        vm.prank(roleRegistryOwner);
+        stakingManagerInstance.upgradeEtherFiNode(newImpl);
+        assertEq(stakingManagerInstance.implementation(), newImpl);
+    }
+
+    function test_upgradeEtherFiNodeFailsIfNotAuthorized() public {
+        address newImpl = address(new EtherFiNode(address(0), address(0), address(0), address(0), address(roleRegistryInstance)));
+        
+        vm.expectRevert(IRoleRegistry.OnlyProtocolUpgrader.selector);
+        stakingManagerInstance.upgradeEtherFiNode(newImpl);
+    }
+
+    function test_upgradeEtherFiNodeFailsIfZeroAddress() public {
+        vm.prank(stakingManagerInstance.owner());
+        vm.expectRevert(IStakingManager.InvalidUpgrade.selector);
+        stakingManagerInstance.upgradeEtherFiNode(address(0));
+    } 
+
+    function test_createBeaconValidators() public {
+        vm.startPrank(owner);
+        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManagerInstance));
+        vm.stopPrank();
+
+        vm.prank(admin);
+        nodeOperatorManagerInstance.addToWhitelist(alice);
+
+        vm.prank(deployed.OPERATING_TIMELOCK());
+        liquidityPoolInstance.registerValidatorSpawner(alice);
+
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 1000);
+
+        vm.prank(alice);
+        uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
+        
+        vm.startPrank(owner);
+        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), alice);
+        vm.stopPrank();
+        
+        vm.prank(alice);
+        address etherFiNode = stakingManagerInstance.instantiateEtherFiNode(true);
+        assertTrue(etherFiNode != address(0));
+        assertTrue(stakingManagerInstance.deployedEtherFiNodes(etherFiNode));
+    }
+
+    function test_createBeaconValidatorsFailsIfInvalidCaller() public {
+        address etherFiNode = address(node);
+        vm.prank(admin);
+        nodeOperatorManagerInstance.addToWhitelist(alice);
+
+        vm.prank(deployed.OPERATING_TIMELOCK());
+        liquidityPoolInstance.registerValidatorSpawner(alice);
+
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        nodeOperatorManagerInstance.registerNodeOperator(_ipfsHash, 1000);
+
+        vm.prank(alice);
+        uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
+        
+        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
+        
+        // Caller is not liquidityPool, so should revert with InvalidCaller
+        vm.expectRevert(IStakingManager.InvalidCaller.selector);
+        stakingManagerInstance.createBeaconValidators{value: 1 ether}(depositDataArray, bidIds, etherFiNode);
+    }
+
+    function test_createBeaconValidatorsFailsIfInvalidDepositDataLength() public {
+        // Use the implementation's stored liquidityPool address (set in constructor)
+        address liquidityPoolAddr = address(liquidityPoolInstance);
+        vm.deal(liquidityPoolAddr, 10 ether);
+        
+        uint256[] memory bidIds = new uint256[](1);
+        bidIds[0] = 1;
+        
+        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](2); // different length
+        
+        // Caller check passes (liquidityPool), then deposit data length check fails
+        vm.prank(liquidityPoolAddr);
+        vm.expectRevert(IStakingManager.InvalidDepositData.selector);
+        stakingManagerInstance.createBeaconValidators{value: 1 ether}(depositDataArray, bidIds, address(0x1234));
+    }
+
+    function test_confirmAndFundBeaconValidatorsFailsIfInvalidCaller() public {
+        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
+        
+        vm.expectRevert(IStakingManager.InvalidCaller.selector);
+        stakingManagerInstance.confirmAndFundBeaconValidators{value: 31 ether}(depositDataArray, 32 ether);
+    }
+
+    function test_confirmAndFundBeaconValidatorsFailsIfInvalidValidatorSize() public {
+        IStakingManager.DepositData[] memory depositDataArray = new IStakingManager.DepositData[](1);
+        // Use the implementation's stored liquidityPool address (set in constructor)
+        address liquidityPoolAddr = address(liquidityPoolInstance);
+        vm.deal(liquidityPoolAddr, 100 ether);
+        
+        // First check passes (caller is liquidityPool), then validator size check fails
+        vm.prank(liquidityPoolAddr);
+        vm.expectRevert(IStakingManager.InvalidValidatorSize.selector);
+        stakingManagerInstance.confirmAndFundBeaconValidators{value: 30 ether}(depositDataArray, 31 ether); // too small
+    }
 }
 

@@ -2,7 +2,15 @@
 src = 'src'
 out = 'out'
 libs = ['lib']
-fs_permissions = [{ access = "read-write", path = "./out"}, { access = "read-write", path = "./release"}, { access = "read", path = "./test" }, { access = "read-write", path = "./deployment" }, { access = "read-write", path = "./operations" },  { access = "read-write", path = "./deployment" }]
+fs_permissions = [
+    { access = "read-write", path = "./out" },
+    { access = "read-write", path = "./release" },
+    { access = "read", path = "./test" },
+    { access = "read-write", path = "./deployment" },
+    { access = "read-write", path = "./operations" },
+    { access = "read", path = "./script/el-exits/val-consolidations" },
+    { access = "read", path = "./script/operator-management" }
+]
 gas_reports = ["*"]
 optimizer_runs = 1500
 extra_output = ["storageLayout"]
@@ -10,8 +18,20 @@ bytecode_hash = 'none'
 solc-version = '0.8.27'
 dynamic_test_linking = true
 
+ignored_warnings_from = [
+    "src/archive/",
+    "src/libraries/",
+    "src/MembershipNFT.sol",
+    "lib/",
+    "test/"
+]
+
 [fuzz]
 max_shrink_iters = 100
+
+# Coverage configuration
+# To run coverage only on src/ contracts (excluding scripts, mocks, helpers, interfaces, etc.):
+# forge coverage --no-match-coverage '(script/|test/|src/helpers/|src/interfaces/|src/eigenlayer|src/libraries/|src/archive/)' 
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 [rpc_endpoints]

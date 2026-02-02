@@ -96,9 +96,9 @@ contract CleanupOldWhitelist is Script {
 
         console2.log("");
         if (!eigenPod1 && !eigenPod2 && !external1 && !external2) {
-            console2.log(unicode"✓ ALL PREVIOUSLY WHITELISTED ITEMS SUCCESSFULLY CLEARED");
+            console2.log("[OK] ALL PREVIOUSLY WHITELISTED ITEMS SUCCESSFULLY CLEARED");
         } else {
-            console2.log(unicode"✗ SOME ITEMS STILL WHITELISTED:");
+            console2.log("[FAIL] SOME ITEMS STILL WHITELISTED:");
             if (eigenPod1) console2.log("  - EigenPod 0x0dd8dd02 still active");
             if (eigenPod2) console2.log("  - EigenPod 0x88676cad still active");
             if (external1) console2.log("  - External 0x3ccc861d on RewardsCoordinator still active");
