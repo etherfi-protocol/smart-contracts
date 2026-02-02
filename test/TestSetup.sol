@@ -61,6 +61,7 @@ import "../script/deploys/Deployed.s.sol";
 
 import "../src/DepositAdapter.sol";
 import "../src/interfaces/IWeETHWithdrawAdapter.sol";
+import "../src/PriorityWithdrawalQueue.sol";
 
 contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
@@ -204,6 +205,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     IWeETHWithdrawAdapter public weEthWithdrawAdapterInstance;
     IWeETHWithdrawAdapter public weEthWithdrawAdapterImplementation;
+
+    PriorityWithdrawalQueue public priorityQueueImplementation;
+    PriorityWithdrawalQueue public priorityQueueInstance;
 
     EtherFiRewardsRouter public etherFiRewardsRouterInstance = EtherFiRewardsRouter(payable(0x73f7b1184B5cD361cC0f7654998953E2a251dd58));
 
@@ -427,45 +431,17 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
-        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(address(0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0)));
-        etherFiRestakerInstance = EtherFiRestaker(payable(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf)));
         roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
-        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(0x9A8c5046a290664Bf42D065d33512fe403484534));
         treasuryInstance = 0x0c83EAe1FE72c390A02E426572854931EefF93BA;
+        etherFiRestakerInstance = EtherFiRestaker(payable(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf)));
+        cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(0x9A8c5046a290664Bf42D065d33512fe403484534));
         weEthWithdrawAdapterInstance = IWeETHWithdrawAdapter(deployed.WEETH_WITHDRAW_ADAPTER());
-    }
+        etherFiRedemptionManagerInstance = liquidityPoolInstance.etherFiRedemptionManager();
 
-    function upgradeEtherFiRedemptionManager() public {
-        address ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
-        EtherFiRedemptionManager Implementation = new EtherFiRedemptionManager(address(payable(liquidityPoolInstance)), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance));
-        EtherFiRestaker restakerImplementation = new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance));
-        vm.startPrank(owner);
-        etherFiRestakerInstance.upgradeTo(address(restakerImplementation));
-        vm.stopPrank();
-        vm.prank(owner);
-        etherFiRedemptionManagerInstance.upgradeTo(address(Implementation));
-        address[] memory _tokens = new address[](2);
-        _tokens[0] = ETH_ADDRESS;
-        _tokens[1] = address(etherFiRestakerInstance.lido());
-        uint16[] memory _exitFeeSplitToTreasuryInBps = new uint16[](2);
-        _exitFeeSplitToTreasuryInBps[0] = 10_00;
-        _exitFeeSplitToTreasuryInBps[1] = 10_00;
-        uint16[] memory _exitFeeInBps = new uint16[](2);
-        _exitFeeInBps[0] = 1_00;
-        _exitFeeInBps[1] = 1_00;
-        uint16[] memory _lowWatermarkInBpsOfTvl = new uint16[](2);
-        _lowWatermarkInBpsOfTvl[0] = 1_00;
-        _lowWatermarkInBpsOfTvl[1] = 50;
-        uint256[] memory _bucketCapacity = new uint256[](2);
-        _bucketCapacity[0] = 2000 ether;
-        _bucketCapacity[1] = 2000 ether;
-        uint256[] memory _bucketRefillRate = new uint256[](2);
-        _bucketRefillRate[0] = 0.3 ether;
-        _bucketRefillRate[1] = 0.3 ether;
-        vm.startPrank(owner);
-        roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), owner);
-        etherFiRedemptionManagerInstance.initializeTokenParameters(_tokens, _exitFeeSplitToTreasuryInBps, _exitFeeInBps, _lowWatermarkInBpsOfTvl, _bucketCapacity, _bucketRefillRate);
-        vm.stopPrank();
+        // Deploy PriorityWithdrawalQueue for fork testing (mainnet LP has immutable address(0) for this)
+        PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
+        UUPSProxy priorityQueueProxy = new UUPSProxy(address(priorityQueueImplementation), "");
+        priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
@@ -605,7 +581,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         addressProviderInstance = new AddressProvider(address(owner));
 
-        liquidityPoolImplementation = new LiquidityPool();
+        liquidityPoolImplementation = new LiquidityPool(address(0x0));
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImplementation),"");
         liquidityPoolInstance = LiquidityPool(payable(address(liquidityPoolProxy)));
 
@@ -696,7 +672,11 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
-        etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance))), "");
+        priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
+        UUPSProxy priorityQueueProxy = new UUPSProxy(address(priorityQueueImplementation), "");
+        priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
+
+        etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance))), "");
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), owner);
         // etherFiRedemptionManagerInstance.initializeTokenParameters(_tokens, _exitFeeSplitToTreasuryInBps, _exitFeeInBps, _lowWatermarkInBpsOfTvl, _bucketCapacity, _bucketRefillRate);
@@ -913,7 +893,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             // upgrade our existing contracts to utilize `roleRegistry`
             vm.stopPrank();
             vm.startPrank(owner);
-            EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance));
+            PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
+            UUPSProxy priorityQueueProxy = new UUPSProxy(address(priorityQueueImplementation), "");
+            priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
+            EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance));
             etherFiRedemptionManagerProxy = new UUPSProxy(address(etherFiRedemptionManagerImplementation), "");
             etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
             etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark
@@ -1566,7 +1549,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_liquidity_pool_contract() internal {
-        address newImpl = address(new LiquidityPool());
+        address newImpl = address(new LiquidityPool(address(0x0)));
         vm.startPrank(liquidityPoolInstance.owner());
         liquidityPoolInstance.upgradeTo(newImpl);
         vm.stopPrank();

@@ -68,6 +68,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     IRoleRegistry public roleRegistry;
     uint256 public validatorSizeWei;
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  IMMUTABLES  ----------------------------------
+    //--------------------------------------------------------------------------------------
+
+    address public immutable priorityWithdrawalQueue;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -115,7 +122,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _priorityWithdrawalQueue) {
+        priorityWithdrawalQueue = _priorityWithdrawalQueue;
         _disableInitializers();
     }
 
@@ -203,7 +211,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// it returns the amount of shares burned
     function withdraw(address _recipient, uint256 _amount) external whenNotPaused returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);
-        require(msg.sender == address(withdrawRequestNFT) || msg.sender == address(membershipManager) || msg.sender == address(etherFiRedemptionManager), "Incorrect Caller");
+        require(
+            msg.sender == address(withdrawRequestNFT) || 
+            msg.sender == address(membershipManager) || 
+            msg.sender == address(etherFiRedemptionManager) ||
+            msg.sender == priorityWithdrawalQueue,
+            "Incorrect Caller"
+        );
         if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
 
@@ -473,7 +487,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function burnEEthShares(uint256 shares) external {
-        if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
+        if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT) && msg.sender != priorityWithdrawalQueue) revert IncorrectCaller();
         eETH.burnShares(msg.sender, shares);
     }
 

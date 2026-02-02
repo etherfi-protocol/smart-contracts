@@ -79,7 +79,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(stakingManager.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
-        LiquidityPool liquidityPoolImpl = new LiquidityPool();
+        LiquidityPool liquidityPoolImpl = new LiquidityPool(address(0x0));
         vm.prank(LiquidityPool(payable(address(liquidityPool))).owner());
         LiquidityPool(payable(address(liquidityPool))).upgradeTo(address(liquidityPoolImpl));
 
