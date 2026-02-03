@@ -697,4 +697,181 @@ contract Utils is Script, Deployed {
         
         _executeBatch_timelock(timelock, targetsArray, dataArray, predecessor, salt);
     }
+
+    //-------------------------------------------------------------------------
+    // Gnosis Safe Transaction JSON Generation Helpers
+    //-------------------------------------------------------------------------
+
+    /// @notice Struct representing a single Gnosis Safe transaction
+    struct SafeTx {
+        address to;
+        uint256 value;
+        bytes data;
+    }
+
+    /// @notice Generates a Gnosis Safe JSON for a single transaction
+    /// @param safeAddress The Safe multisig address
+    /// @param to Target contract address
+    /// @param value ETH value to send
+    /// @param data Calldata for the transaction
+    /// @param chainId The chain ID (1 for mainnet)
+    /// @return json The formatted JSON string
+    function generateSafeJson(
+        address safeAddress,
+        address to,
+        uint256 value,
+        bytes memory data,
+        uint256 chainId
+    ) internal pure returns (string memory json) {
+        return string.concat(
+            '{\n',
+            '  "chainId": "', vm.toString(chainId), '",\n',
+            '  "safeAddress": "', vm.toString(safeAddress), '",\n',
+            '  "meta": {\n',
+            '    "txBuilderVersion": "1.16.5"\n',
+            '  },\n',
+            '  "transactions": [\n',
+            '    {\n',
+            '      "to": "', vm.toString(to), '",\n',
+            '      "value": "', vm.toString(value), '",\n',
+            '      "data": "', vm.toString(data), '"\n',
+            '    }\n',
+            '  ]\n',
+            '}'
+        );
+    }
+
+    /// @notice Generates a Gnosis Safe JSON for multiple transactions
+    /// @param safeAddress The Safe multisig address
+    /// @param txs Array of SafeTx structs
+    /// @param chainId The chain ID (1 for mainnet)
+    /// @return json The formatted JSON string
+    function generateSafeJson(
+        address safeAddress,
+        SafeTx[] memory txs,
+        uint256 chainId
+    ) internal pure returns (string memory json) {
+        string memory txsJson = "";
+        
+        for (uint256 i = 0; i < txs.length; i++) {
+            txsJson = string.concat(
+                txsJson,
+                '    {\n',
+                '      "to": "', vm.toString(txs[i].to), '",\n',
+                '      "value": "', vm.toString(txs[i].value), '",\n',
+                '      "data": "', vm.toString(txs[i].data), '"\n',
+                '    }',
+                i < txs.length - 1 ? ',\n' : '\n'
+            );
+        }
+
+        return string.concat(
+            '{\n',
+            '  "chainId": "', vm.toString(chainId), '",\n',
+            '  "safeAddress": "', vm.toString(safeAddress), '",\n',
+            '  "meta": {\n',
+            '    "txBuilderVersion": "1.16.5"\n',
+            '  },\n',
+            '  "transactions": [\n',
+            txsJson,
+            '  ]\n',
+            '}'
+        );
+    }
+
+    /// @notice Generates a Gnosis Safe JSON for multiple transactions using arrays
+    /// @param safeAddress The Safe multisig address
+    /// @param targets Array of target addresses
+    /// @param values Array of ETH values
+    /// @param calldatas Array of calldata
+    /// @param chainId The chain ID
+    /// @return json The formatted JSON string
+    function generateSafeJson(
+        address safeAddress,
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        uint256 chainId
+    ) internal pure returns (string memory json) {
+        require(targets.length == values.length && values.length == calldatas.length, "Array length mismatch");
+        
+        SafeTx[] memory txs = new SafeTx[](targets.length);
+        for (uint256 i = 0; i < targets.length; i++) {
+            txs[i] = SafeTx({
+                to: targets[i],
+                value: values[i],
+                data: calldatas[i]
+            });
+        }
+        
+        return generateSafeJson(safeAddress, txs, chainId);
+    }
+
+    /// @notice Writes a Gnosis Safe JSON file for a single transaction
+    /// @param directory The directory path relative to project root (e.g., "script/upgrades/my-upgrade")
+    /// @param filename The filename to write (e.g., "schedule.json")
+    /// @param safeAddress The Safe multisig address
+    /// @param to Target contract address
+    /// @param value ETH value to send
+    /// @param data Calldata for the transaction
+    /// @param chainId The chain ID
+    function writeSafeJson(
+        string memory directory,
+        string memory filename,
+        address safeAddress,
+        address to,
+        uint256 value,
+        bytes memory data,
+        uint256 chainId
+    ) internal {
+        string memory json = generateSafeJson(safeAddress, to, value, data, chainId);
+        string memory root = vm.projectRoot();
+        string memory path = string.concat(root, "/", directory, "/", filename);
+        vm.writeFile(path, json);
+        console2.log("Written Safe JSON to:", path);
+    }
+
+    /// @notice Writes a Gnosis Safe JSON file for multiple transactions
+    /// @param directory The directory path relative to project root (e.g., "script/upgrades/my-upgrade")
+    /// @param filename The filename to write (e.g., "schedule.json")
+    /// @param safeAddress The Safe multisig address
+    /// @param txs Array of SafeTx structs
+    /// @param chainId The chain ID
+    function writeSafeJson(
+        string memory directory,
+        string memory filename,
+        address safeAddress,
+        SafeTx[] memory txs,
+        uint256 chainId
+    ) internal {
+        string memory json = generateSafeJson(safeAddress, txs, chainId);
+        string memory root = vm.projectRoot();
+        string memory path = string.concat(root, "/", directory, "/", filename);
+        vm.writeFile(path, json);
+        console2.log("Written Safe JSON to:", path);
+    }
+
+    /// @notice Writes a Gnosis Safe JSON file for multiple transactions using arrays
+    /// @param directory The directory path relative to project root (e.g., "script/upgrades/my-upgrade")
+    /// @param filename The filename to write (e.g., "schedule.json")
+    /// @param safeAddress The Safe multisig address
+    /// @param targets Array of target addresses
+    /// @param values Array of ETH values
+    /// @param calldatas Array of calldata
+    /// @param chainId The chain ID
+    function writeSafeJson(
+        string memory directory,
+        string memory filename,
+        address safeAddress,
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        uint256 chainId
+    ) internal {
+        string memory json = generateSafeJson(safeAddress, targets, values, calldatas, chainId);
+        string memory root = vm.projectRoot();
+        string memory path = string.concat(root, "/", directory, "/", filename);
+        vm.writeFile(path, json);
+        console2.log("Written Safe JSON to:", path);
+    }
 }

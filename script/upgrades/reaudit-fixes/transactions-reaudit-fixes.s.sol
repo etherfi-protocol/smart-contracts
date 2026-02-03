@@ -148,9 +148,12 @@ contract ReauditFixesTransactions is Utils {
         // targets[6] = ETHERFI_VIEWER;
         // data[6] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, etherFiViewerImpl);
 
-        bytes32 timelockSalt = keccak256(abi.encode(targets, data, "reaudit-fixes-upgrade-v1"));
+        bytes32 timelockSalt = keccak256(abi.encode(targets, data, "reaudit-fixes-upgrade-v1", block.number));
 
-        // Generate and log schedule calldata
+        // Generate Gnosis Safe transaction JSON files
+        console2.log("=== Generating Gnosis Safe Transaction JSONs ===");
+        
+        // Schedule transaction
         bytes memory scheduleCalldata = abi.encodeWithSelector(
             etherFiTimelock.scheduleBatch.selector,
             targets,
@@ -160,13 +163,9 @@ contract ReauditFixesTransactions is Utils {
             timelockSalt,
             TIMELOCK_MIN_DELAY
         );
+        writeSafeJson("script/upgrades/reaudit-fixes", "reaudit-fixes-upgrade_schedule.json", ETHERFI_UPGRADE_ADMIN, UPGRADE_TIMELOCK, 0, scheduleCalldata, 1);
 
-        console2.log("=== Schedule Tx Calldata ===");
-        console2.log("Target: Upgrade Timelock", UPGRADE_TIMELOCK);
-        console2.logBytes(scheduleCalldata);
-        console2.log("");
-
-        // Generate and log execute calldata
+        // Execute transaction
         bytes memory executeCalldata = abi.encodeWithSelector(
             etherFiTimelock.executeBatch.selector,
             targets,
@@ -175,10 +174,8 @@ contract ReauditFixesTransactions is Utils {
             bytes32(0), // predecessor
             timelockSalt
         );
-
-        console2.log("=== Execute Tx Calldata ===");
-        console2.log("Target: Upgrade Timelock", UPGRADE_TIMELOCK);
-        console2.logBytes(executeCalldata);
+        writeSafeJson("script/upgrades/reaudit-fixes", "reaudit-fixes-upgrade_execute.json", ETHERFI_UPGRADE_ADMIN, UPGRADE_TIMELOCK, 0, executeCalldata, 1);
+        
         console2.log("");
 
         // Execute against fork for testing
