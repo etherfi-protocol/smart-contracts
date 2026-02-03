@@ -346,14 +346,19 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     // initialize a fork which inherits the exact contracts, addresses, and state of
     // the associated network. This allows you to realistically test new transactions against
     // testnet or mainnet.
+    //
+    // To use a custom RPC (e.g., Tenderly VNET), set FORK_RPC_URL:
+    //   FORK_RPC_URL=https://your-rpc-url forge test
     function initializeRealisticForkWithBlock(uint8 forkEnum, uint256 blockNo) public {
         deployed = new Deployed();
         if (forkEnum == MAINNET_FORK) {
+            // Use FORK_RPC_URL if set, otherwise fall back to MAINNET_RPC_URL
+            string memory rpcUrl = vm.envOr("FORK_RPC_URL", vm.envString("MAINNET_RPC_URL"));
             if (blockNo == 0) {
-                vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+                vm.selectFork(vm.createFork(rpcUrl));
             }
             else {
-                vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL"), blockNo));
+                vm.selectFork(vm.createFork(rpcUrl, blockNo));
             }
             addressProviderInstance = AddressProvider(address(0x8487c5F8550E3C3e7734Fe7DCF77DB2B72E4A848));
             owner = addressProviderInstance.getContractAddress("EtherFiTimelock");
