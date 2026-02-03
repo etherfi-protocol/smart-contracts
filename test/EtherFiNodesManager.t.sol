@@ -286,12 +286,22 @@ contract EtherFiNodesManagerTest is TestSetup {
         managerInstance.createEigenPod(testNode);
     }
     
+    // Note: These checkpoint tests require EIP-4788 beacon roots which are not available on Tenderly VNET.
+    // Run with a real mainnet fork RPC to test checkpoint functionality.
     function test_startCheckpoint_byAddress() public {
+        // Skip if EIP-4788 not available (e.g., Tenderly VNET)
+        if (!_isEIP4788Available()) {
+            vm.skip(true);
+        }
         vm.prank(podProver);
         managerInstance.startCheckpoint(testNode);
     }
     
     function test_startCheckpoint_byId() public {
+        // Skip if EIP-4788 not available (e.g., Tenderly VNET)
+        if (!_isEIP4788Available()) {
+            vm.skip(true);
+        }
         vm.prank(podProver);
         managerInstance.startCheckpoint(testLegacyId);
     }
@@ -491,7 +501,14 @@ contract EtherFiNodesManagerTest is TestSetup {
         managerInstance.forwardExternalCall(nodes, data, address(0x123));
     }
     
+    // Note: This test requires EIP-4788 beacon roots which are not available on Tenderly VNET.
+    // Run with a real mainnet fork RPC to test this functionality.
     function test_forwardEigenPodCall() public {
+        // Skip if EIP-4788 not available (e.g., Tenderly VNET)
+        if (!_isEIP4788Available()) {
+            vm.skip(true);
+        }
+        
         bytes4 startCheckpointSelector = bytes4(0x88676cad); // startCheckpoint
         address allowedCaller = address(0x7835fB36A8143a014A2c381363cD1A4DeE586d2A);
 
@@ -756,5 +773,27 @@ contract EtherFiNodesManagerTest is TestSetup {
         vm.expectRevert();
         vm.prank(bob);
         managerInstance.upgradeTo(address(newImpl));
+    }
+
+    // ============================================
+    // Helper Functions
+    // ============================================
+
+    /// @notice Check if EIP-4788 beacon roots contract is available and functional
+    /// @dev Tenderly VNETs don't properly simulate EIP-4788, causing checkpoint calls to fail
+    function _isEIP4788Available() internal view returns (bool) {
+        address beaconRoots = 0x000F3df6D732807Ef1319fB7B8bB8522d0Beac02;
+        
+        // Check if the contract exists
+        uint256 codeSize;
+        assembly {
+            codeSize := extcodesize(beaconRoots)
+        }
+        if (codeSize == 0) return false;
+        
+        // Try to query a recent timestamp - the contract stores roots for the last ~27 hours
+        // If it returns non-zero data, EIP-4788 is functional
+        (bool success, bytes memory data) = beaconRoots.staticcall(abi.encode(block.timestamp - 12));
+        return success && data.length >= 32 && uint256(bytes32(data)) != 0;
     }
 }

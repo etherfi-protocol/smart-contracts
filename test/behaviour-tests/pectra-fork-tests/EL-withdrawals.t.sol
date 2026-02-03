@@ -67,7 +67,7 @@ contract ELExitsTest is TestSetup {
         legacyIds[0] = 28689;
         amounts[0] = 0;
 
-        vm.prank(address(etherFiOperatingTimelock));
+        vm.prank(realElExiter);
         etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
         vm.stopPrank();  
 
@@ -110,7 +110,7 @@ contract ELExitsTest is TestSetup {
         bytes[] memory linkOnlyOneValidatorPubkeys = new bytes[](1);
         linkOnlyOneValidatorPubkeys[0] = PK_80194;
         
-        vm.prank(address(etherFiOperatingTimelock));
+        vm.prank(realElExiter);
         etherFiNodesManager.linkLegacyValidatorIds(linkOnlyOneValidatorlegacyId, linkOnlyOneValidatorPubkeys); 
         vm.stopPrank();  
 
