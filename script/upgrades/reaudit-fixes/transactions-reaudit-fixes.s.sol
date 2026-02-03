@@ -44,8 +44,28 @@ contract ReauditFixesTransactions is Utils {
     address constant etherFiRestakerImpl = 0x9D795b303B9dA3488FD3A4ca4702c872576BD0c6;
     address constant etherFiRewardsRouterImpl = 0x408de8D339F40086c5643EE4778E0F872aB5E423;
     address constant liquifierImpl = 0x0E7489D32D34CCdC12d7092067bf53Aa38bf2BF6;
-    address constant withdrawRequestNFTImpl = 0xDdD4278396A22757F2a857ADE3E6Cb35B933f9Cb;
+    address constant withdrawRequestNFTImpl = 0x2f4A5921FcAB46F1F3154e8b42Fc189e08fae3Ed;
     address constant etherFiViewerImpl = 0x69585767FDAEC9a7c18FeB99D59B5CbEDA740483;
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------- IMMUTABLE SNAPSHOTS (PRE-UPGRADE) -----------------------
+    //--------------------------------------------------------------------------------------
+    ImmutableSnapshot internal preRedemptionManagerImmutables;
+    ImmutableSnapshot internal preRestakerImmutables;
+    ImmutableSnapshot internal preRewardsRouterImmutables;
+    ImmutableSnapshot internal preWithdrawRequestNFTImmutables;
+
+    //--------------------------------------------------------------------------------------
+    //---------------------------- ACCESS CONTROL SNAPSHOTS (PRE-UPGRADE) ------------------
+    //--------------------------------------------------------------------------------------
+    address internal preRedemptionManagerOwner;
+    address internal preRestakerOwner;
+    address internal preRewardsRouterOwner;
+    address internal preLiquifierOwner;
+    address internal preWithdrawRequestNFTOwner;
+
+    bool internal preRedemptionManagerPaused;
+    bool internal preLiquifierPaused;
 
     // Salt used for CREATE2 deployment
     bytes32 constant commitHashSalt = bytes32(bytes20(hex"77381e3f2ef7ac8ff04f2a044e59432e2486195d"));
@@ -56,50 +76,30 @@ contract ReauditFixesTransactions is Utils {
         console2.log("================================================");
         console2.log("");
 
-        // string memory forkUrl = vm.envString("MAINNET_RPC_URL");
-        // vm.selectFork(vm.createFork(forkUrl));
-
         contractCodeChecker = new ContractCodeChecker();
 
         // Step 1: Verify deployed bytecode matches expected
         verifyDeployedBytecode();
 
-        // Step 2: Execute upgrade via timelock
+        // Step 2: Take pre-upgrade snapshots (immutables, access control)
+        takePreUpgradeSnapshots();
+
+        // Step 3: Execute upgrade via timelock
         executeUpgrade();
 
-        // Step 3: Verify upgrades were successful
+        // Step 4: Verify upgrades were successful
         verifyUpgrades();
 
-        // Step 4: Run fork tests
+        // Step 5: Verify immutables unchanged
+        verifyImmutablePreservation();
+
+        // Step 6: Verify access control preserved
+        verifyAccessControlPreservation();
+
+        // Step 7: Run fork tests (quick sanity checks)
         forkTests();
-    }
 
-    //--------------------------------------------------------------------------------------
-    //------------------------------- BYTECODE VERIFICATION --------------------------------
-    //--------------------------------------------------------------------------------------
-    function verifyDeployedBytecode() public {
-        console2.log("=== Verifying Deployed Bytecode ===");
-        console2.log("");
-
-        EtherFiNode newEtherFiNodeImplementation = new EtherFiNode(address(LIQUIDITY_POOL), address(ETHERFI_NODES_MANAGER), address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER), address(ROLE_REGISTRY));
-        EtherFiRedemptionManager newEtherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(LIQUIDITY_POOL), address(EETH), address(WEETH), address(TREASURY), address(ROLE_REGISTRY), address(ETHERFI_RESTAKER));
-        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(EIGENLAYER_REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER));
-        EtherFiRewardsRouter newEtherFiRewardsRouterImplementation = new EtherFiRewardsRouter(address(LIQUIDITY_POOL), address(TREASURY), address(ROLE_REGISTRY));
-        Liquifier newLiquifierImplementation = new Liquifier();
-        WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(TREASURY));
-        EtherFiViewer newEtherFiViewerImplementation = new EtherFiViewer(address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
-
-        contractCodeChecker.verifyContractByteCodeMatch(etherFiNodeImpl, address(newEtherFiNodeImplementation));
-        contractCodeChecker.verifyContractByteCodeMatch(etherFiRedemptionManagerImpl, address(newEtherFiRedemptionManagerImplementation));
-        contractCodeChecker.verifyContractByteCodeMatch(etherFiRestakerImpl, address(newEtherFiRestakerImplementation));
-        contractCodeChecker.verifyContractByteCodeMatch(etherFiRewardsRouterImpl, address(newEtherFiRewardsRouterImplementation));
-        contractCodeChecker.verifyContractByteCodeMatch(liquifierImpl, address(newLiquifierImplementation));  
-        contractCodeChecker.verifyContractByteCodeMatch(withdrawRequestNFTImpl, address(newWithdrawRequestNFTImplementation));
-        contractCodeChecker.verifyContractByteCodeMatch(etherFiViewerImpl, address(newEtherFiViewerImplementation));
-
-        console2.log("");
-        console2.log("All bytecode verifications passed!");
-        console2.log("================================================");
+        console2.log("=== Upgrade Verification Complete ===");
         console2.log("");
     }
 
@@ -199,6 +199,233 @@ contract ReauditFixesTransactions is Utils {
     }
 
     //--------------------------------------------------------------------------------------
+    //------------------------------- BYTECODE VERIFICATION --------------------------------
+    //--------------------------------------------------------------------------------------
+    function verifyDeployedBytecode() public {
+        console2.log("=== Verifying Deployed Bytecode ===");
+        console2.log("");
+
+        EtherFiNode newEtherFiNodeImplementation = new EtherFiNode(address(LIQUIDITY_POOL), address(ETHERFI_NODES_MANAGER), address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER), address(ROLE_REGISTRY));
+        EtherFiRedemptionManager newEtherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(LIQUIDITY_POOL), address(EETH), address(WEETH), address(TREASURY), address(ROLE_REGISTRY), address(ETHERFI_RESTAKER));
+        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(EIGENLAYER_REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER));
+        EtherFiRewardsRouter newEtherFiRewardsRouterImplementation = new EtherFiRewardsRouter(address(LIQUIDITY_POOL), address(TREASURY), address(ROLE_REGISTRY));
+        Liquifier newLiquifierImplementation = new Liquifier();
+        WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(TREASURY));
+        EtherFiViewer newEtherFiViewerImplementation = new EtherFiViewer(address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
+
+        contractCodeChecker.verifyContractByteCodeMatch(etherFiNodeImpl, address(newEtherFiNodeImplementation));
+        contractCodeChecker.verifyContractByteCodeMatch(etherFiRedemptionManagerImpl, address(newEtherFiRedemptionManagerImplementation));
+        contractCodeChecker.verifyContractByteCodeMatch(etherFiRestakerImpl, address(newEtherFiRestakerImplementation));
+        contractCodeChecker.verifyContractByteCodeMatch(etherFiRewardsRouterImpl, address(newEtherFiRewardsRouterImplementation));
+        contractCodeChecker.verifyContractByteCodeMatch(liquifierImpl, address(newLiquifierImplementation));  
+        contractCodeChecker.verifyContractByteCodeMatch(withdrawRequestNFTImpl, address(newWithdrawRequestNFTImplementation));
+        contractCodeChecker.verifyContractByteCodeMatch(etherFiViewerImpl, address(newEtherFiViewerImplementation));
+
+        console2.log("");
+        console2.log("All bytecode verifications passed!");
+        console2.log("================================================");
+        console2.log("");
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- IMMUTABLE SELECTOR DEFINITIONS -----------------------
+    //--------------------------------------------------------------------------------------
+
+    function getRedemptionManagerImmutableSelectors() internal pure returns (bytes4[] memory selectors) {
+        selectors = new bytes4[](7);
+        selectors[0] = bytes4(keccak256("roleRegistry()"));
+        selectors[1] = bytes4(keccak256("treasury()"));
+        selectors[2] = bytes4(keccak256("eEth()"));
+        selectors[3] = bytes4(keccak256("weEth()"));
+        selectors[4] = bytes4(keccak256("liquidityPool()"));
+        selectors[5] = bytes4(keccak256("etherFiRestaker()"));
+        selectors[6] = bytes4(keccak256("lido()"));
+    }
+
+    function getRestakerImmutableSelectors() internal pure returns (bytes4[] memory selectors) {
+        selectors = new bytes4[](2);
+        selectors[0] = bytes4(keccak256("rewardsCoordinator()"));
+        selectors[1] = bytes4(keccak256("etherFiRedemptionManager()"));
+    }
+
+    function getRewardsRouterImmutableSelectors() internal pure returns (bytes4[] memory selectors) {
+        selectors = new bytes4[](3);
+        selectors[0] = bytes4(keccak256("treasury()"));
+        selectors[1] = bytes4(keccak256("liquidityPool()"));
+        selectors[2] = bytes4(keccak256("roleRegistry()"));
+    }
+
+    function getWithdrawRequestNFTImmutableSelectors() internal pure returns (bytes4[] memory selectors) {
+        selectors = new bytes4[](1);
+        selectors[0] = bytes4(keccak256("treasury()"));
+    }
+
+    // Note: Liquifier has no immutables
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- PRE-UPGRADE SNAPSHOTS --------------------------------
+    //--------------------------------------------------------------------------------------
+    function takePreUpgradeSnapshots() internal {
+        console2.log("=== Taking Pre-Upgrade Snapshots ===");
+        console2.log("");
+
+        console2.log("--- Immutable Snapshots ---");
+        preRedemptionManagerImmutables = takeImmutableSnapshot(
+            ETHERFI_REDEMPTION_MANAGER,
+            getRedemptionManagerImmutableSelectors()
+        );
+        console2.log("  EtherFiRedemptionManager: captured", preRedemptionManagerImmutables.selectors.length, "immutables");
+
+        preRestakerImmutables = takeImmutableSnapshot(
+            ETHERFI_RESTAKER,
+            getRestakerImmutableSelectors()
+        );
+        console2.log("  EtherFiRestaker: captured", preRestakerImmutables.selectors.length, "immutables");
+
+        preRewardsRouterImmutables = takeImmutableSnapshot(
+            ETHERFI_REWARDS_ROUTER,
+            getRewardsRouterImmutableSelectors()
+        );
+        console2.log("  EtherFiRewardsRouter: captured", preRewardsRouterImmutables.selectors.length, "immutables");
+
+        preWithdrawRequestNFTImmutables = takeImmutableSnapshot(
+            WITHDRAW_REQUEST_NFT,
+            getWithdrawRequestNFTImmutableSelectors()
+        );
+        console2.log("  WithdrawRequestNFT: captured", preWithdrawRequestNFTImmutables.selectors.length, "immutables");
+
+        console2.log("  Liquifier: no immutables to capture");
+
+        // Access Control Snapshots
+        console2.log("");
+        console2.log("--- Access Control Snapshots ---");
+
+        // Capture owners
+        preRedemptionManagerOwner = _getOwner(ETHERFI_REDEMPTION_MANAGER);
+        console2.log("  EtherFiRedemptionManager owner:", preRedemptionManagerOwner);
+
+        preRestakerOwner = _getOwner(ETHERFI_RESTAKER);
+        console2.log("  EtherFiRestaker owner:", preRestakerOwner);
+
+        preRewardsRouterOwner = _getOwner(ETHERFI_REWARDS_ROUTER);
+        console2.log("  EtherFiRewardsRouter owner:", preRewardsRouterOwner);
+
+        preLiquifierOwner = _getOwner(LIQUIFIER);
+        console2.log("  Liquifier owner:", preLiquifierOwner);
+
+        preWithdrawRequestNFTOwner = _getOwner(WITHDRAW_REQUEST_NFT);
+        console2.log("  WithdrawRequestNFT owner:", preWithdrawRequestNFTOwner);
+
+        // Capture paused states
+        preRedemptionManagerPaused = _getPaused(ETHERFI_REDEMPTION_MANAGER);
+        console2.log("  EtherFiRedemptionManager paused:", preRedemptionManagerPaused);
+
+        preLiquifierPaused = _getPaused(LIQUIFIER);
+        console2.log("  Liquifier paused:", preLiquifierPaused);
+
+        console2.log("");
+        console2.log("Pre-upgrade snapshots captured!");
+        console2.log("================================================");
+        console2.log("");
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- IMMUTABLE PRESERVATION VERIFICATION -----------------
+    //--------------------------------------------------------------------------------------
+    function verifyImmutablePreservation() internal view {
+        console2.log("=== Verifying Immutable Preservation ===");
+        console2.log("");
+
+        ImmutableSnapshot memory postRedemptionManagerImmutables = takeImmutableSnapshot(
+            ETHERFI_REDEMPTION_MANAGER,
+            getRedemptionManagerImmutableSelectors()
+        );
+        verifyImmutablesUnchanged(preRedemptionManagerImmutables, postRedemptionManagerImmutables, "EtherFiRedemptionManager");
+
+        ImmutableSnapshot memory postRestakerImmutables = takeImmutableSnapshot(
+            ETHERFI_RESTAKER,
+            getRestakerImmutableSelectors()
+        );
+        verifyImmutablesUnchanged(preRestakerImmutables, postRestakerImmutables, "EtherFiRestaker");
+
+        ImmutableSnapshot memory postRewardsRouterImmutables = takeImmutableSnapshot(
+            ETHERFI_REWARDS_ROUTER,
+            getRewardsRouterImmutableSelectors()
+        );
+        verifyImmutablesUnchanged(preRewardsRouterImmutables, postRewardsRouterImmutables, "EtherFiRewardsRouter");
+
+        ImmutableSnapshot memory postWithdrawRequestNFTImmutables = takeImmutableSnapshot(
+            WITHDRAW_REQUEST_NFT,
+            getWithdrawRequestNFTImmutableSelectors()
+        );
+        verifyImmutablesUnchanged(preWithdrawRequestNFTImmutables, postWithdrawRequestNFTImmutables, "WithdrawRequestNFT");
+
+        console2.log("  Liquifier: no immutables to verify");
+
+        console2.log("");
+        console2.log("All immutable preservation checks passed!");
+        console2.log("================================================");
+        console2.log("");
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- ACCESS CONTROL PRESERVATION --------------------------
+    //--------------------------------------------------------------------------------------
+    function verifyAccessControlPreservation() internal view {
+        console2.log("=== Verifying Access Control Preservation ===");
+        console2.log("");
+
+        console2.log("--- Owner Verification ---");
+
+        address postRedemptionManagerOwner = _getOwner(ETHERFI_REDEMPTION_MANAGER);
+        require(postRedemptionManagerOwner == preRedemptionManagerOwner, "EtherFiRedemptionManager: owner changed");
+        console2.log("[OWNER OK] EtherFiRedemptionManager:", postRedemptionManagerOwner);
+
+        address postRestakerOwner = _getOwner(ETHERFI_RESTAKER);
+        require(postRestakerOwner == preRestakerOwner, "EtherFiRestaker: owner changed");
+        console2.log("[OWNER OK] EtherFiRestaker:", postRestakerOwner);
+
+        address postRewardsRouterOwner = _getOwner(ETHERFI_REWARDS_ROUTER);
+        require(postRewardsRouterOwner == preRewardsRouterOwner, "EtherFiRewardsRouter: owner changed");
+        console2.log("[OWNER OK] EtherFiRewardsRouter:", postRewardsRouterOwner);
+
+        address postLiquifierOwner = _getOwner(LIQUIFIER);
+        require(postLiquifierOwner == preLiquifierOwner, "Liquifier: owner changed");
+        console2.log("[OWNER OK] Liquifier:", postLiquifierOwner);
+
+        address postWithdrawRequestNFTOwner = _getOwner(WITHDRAW_REQUEST_NFT);
+        require(postWithdrawRequestNFTOwner == preWithdrawRequestNFTOwner, "WithdrawRequestNFT: owner changed");
+        console2.log("[OWNER OK] WithdrawRequestNFT:", postWithdrawRequestNFTOwner);
+
+        // --- Paused State Verification ---
+        console2.log("");
+        console2.log("--- Paused State Verification ---");
+
+        bool postRedemptionManagerPaused = _getPaused(ETHERFI_REDEMPTION_MANAGER);
+        require(postRedemptionManagerPaused == preRedemptionManagerPaused, "EtherFiRedemptionManager: paused state changed");
+        console2.log("[PAUSED OK] EtherFiRedemptionManager:", postRedemptionManagerPaused);
+
+        bool postLiquifierPaused = _getPaused(LIQUIFIER);
+        require(postLiquifierPaused == preLiquifierPaused, "Liquifier: paused state changed");
+        console2.log("[PAUSED OK] Liquifier:", postLiquifierPaused);
+
+        // --- Initialization State Verification ---
+        console2.log("");
+        console2.log("--- Initialization State Verification ---");
+
+        verifyNotReinitializable(ETHERFI_REDEMPTION_MANAGER, "EtherFiRedemptionManager");
+        verifyNotReinitializable(ETHERFI_RESTAKER, "EtherFiRestaker");
+        verifyNotReinitializable(ETHERFI_REWARDS_ROUTER, "EtherFiRewardsRouter");
+        verifyNotReinitializable(LIQUIFIER, "Liquifier");
+        verifyNotReinitializable(WITHDRAW_REQUEST_NFT, "WithdrawRequestNFT");
+
+        console2.log("");
+        console2.log("All access control preservation checks passed!");
+        console2.log("================================================");
+        console2.log("");
+    }
+
+    //--------------------------------------------------------------------------------------
     //------------------------------- VERIFY UPGRADES --------------------------------------
     //--------------------------------------------------------------------------------------
     function verifyUpgrades() public view {
@@ -269,6 +496,7 @@ contract ReauditFixesTransactions is Utils {
         console2.log("=== Running Fork Tests ===");
         console2.log("");
 
+        // Quick sanity checks
         testEtherFiRestakerDelegation();
         testLiquifierGetTotalPooledEther();
         testWithdrawRequestNFTBasicFunctionality();
