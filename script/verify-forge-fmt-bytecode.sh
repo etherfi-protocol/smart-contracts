@@ -11,7 +11,8 @@ echo "🔍 Verifying that forge fmt doesn't change bytecode..."
 # Define cache directory
 CACHE_DIR="cache/bytecodeComparison"
 
-# Create cache directory
+# Clean and create cache directory (removes stale data from previous runs)
+rm -rf "$CACHE_DIR"
 mkdir -p "$CACHE_DIR"
 
 # Step 1: Compile and save bytecode before formatting
