@@ -38,13 +38,20 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          if forge coverage --color never --report summary --no-match-coverage '(script/|test/|src/helpers/|src/interfaces/|src/eigenlayer|src/libraries/|src/archive/)' 2>&1 | tee full_output.txt | sed -n '/^|/p; /^Total/p' > coverage.txt; then
+          if forge coverage --report summary --no-match-coverage '(script/|test/|src/helpers/|src/interfaces/|src/eigenlayer|src/libraries/|src/archive/)' --color never 2>&1 | tee full_output.txt | sed -n '/^[|╭╰+]/p' > coverage.txt; then
             echo "" >> coverage.txt
             echo "---" >> coverage.txt
             grep -E "^(Ran|Suite result:|Test result:)" full_output.txt >> coverage.txt || true
           else
             echo "forge coverage failed; see logs above (tests step is the gate)." > coverage.txt
           fi
+          # Debug output
+          echo "=== DEBUG: coverage.txt contents (first 20 lines) ==="
+          head -20 coverage.txt || echo "(empty or missing)"
+          echo "=== DEBUG: coverage.txt size ==="
+          wc -l coverage.txt || echo "(file missing)"
+          echo "=== DEBUG: full_output.txt table lines ==="
+          grep -cE '^[|╭╰+]' full_output.txt || echo "0 lines match table pattern"
         env:
           MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
           SCROLL_RPC_URL: ${{ secrets.SCROLL_RPC_URL }}
