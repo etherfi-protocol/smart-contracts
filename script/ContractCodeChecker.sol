@@ -146,6 +146,9 @@ contract ContractCodeChecker {
     }
 
     function verifyContractByteCodeMatch(address deployedImpl, address localDeployed) public {
+        console2.log("Verifying contract bytecode match... for contract: ", address(deployedImpl));
+        console2.log("Local deployed contract: ", address(localDeployed));
+        console2.log("--------------------------------");
         verifyLengthMatch(deployedImpl, localDeployed);
         verifyPartialMatch(deployedImpl, localDeployed);
         verifyFullMatch(deployedImpl, localDeployed);
