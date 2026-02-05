@@ -22,7 +22,6 @@ Environment Variables:
 """
 
 import argparse
-import hashlib
 import json
 import os
 import sys
@@ -35,128 +34,16 @@ from typing import Dict, List, Optional, Set, Tuple
 
 # Contract Addresses (Mainnet)
 ETHERFI_NODES_MANAGER = "0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F"
-ETHERFI_OPERATING_ADMIN = "0x2aCA71020De61bb532008049e1Bd41E451aE8AdC"
-OPERATING_TIMELOCK = "0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a"
+ADMIN_EOA = "0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F"
 
 # Default parameters
 DEFAULT_BATCH_SIZE = 50
 DEFAULT_CHAIN_ID = 1
 DEFAULT_CONSOLIDATION_FEE = 1  # 1 wei per consolidation request
-MIN_DELAY_OPERATING_TIMELOCK = 28800  # 8 hours in seconds
 
 # Function selectors
 REQUEST_CONSOLIDATION_SELECTOR = "6691954e"  # requestConsolidation((bytes,bytes)[])
 LINK_LEGACY_VALIDATOR_IDS_SELECTOR = "a8f85c84"  # linkLegacyValidatorIds(uint256[],bytes[])
-SCHEDULE_BATCH_SELECTOR = "8f2a0bb0"  # scheduleBatch(address[],uint256[],bytes[],bytes32,bytes32,uint256)
-EXECUTE_BATCH_SELECTOR = "e38335e5"  # executeBatch(address[],uint256[],bytes[],bytes32,bytes32)
-
-
-# =============================================================================
-# Keccak256 Implementation (for salt generation)
-# =============================================================================
-
-def keccak256(data: bytes) -> bytes:
-    """
-    Compute Keccak-256 hash.
-    Uses hashlib if available (Python 3.11+), otherwise falls back to SHA3-256.
-    Note: SHA3-256 != Keccak-256, but for salt generation purposes it's acceptable.
-    For production, consider using pysha3 or pycryptodome.
-    """
-    try:
-        # Python 3.11+ has keccak_256 in hashlib
-        return hashlib.new('keccak_256', data).digest()
-    except ValueError:
-        # Fallback: use a pure Python implementation or SHA3-256
-        # For salt generation, we can use a deterministic hash
-        import struct
-        
-        # Simple keccak-256 implementation for salt generation
-        # This is a simplified version - for critical use, use a proper library
-        def _keccak_f(state):
-            """Keccak-f[1600] permutation."""
-            RC = [
-                0x0000000000000001, 0x0000000000008082, 0x800000000000808a,
-                0x8000000080008000, 0x000000000000808b, 0x0000000080000001,
-                0x8000000080008081, 0x8000000000008009, 0x000000000000008a,
-                0x0000000000000088, 0x0000000080008009, 0x000000008000000a,
-                0x000000008000808b, 0x800000000000008b, 0x8000000000008089,
-                0x8000000000008003, 0x8000000000008002, 0x8000000000000080,
-                0x000000000000800a, 0x800000008000000a, 0x8000000080008081,
-                0x8000000000008080, 0x0000000080000001, 0x8000000080008008
-            ]
-            
-            R = [
-                [0, 36, 3, 41, 18],
-                [1, 44, 10, 45, 2],
-                [62, 6, 43, 15, 61],
-                [28, 55, 25, 21, 56],
-                [27, 20, 39, 8, 14]
-            ]
-            
-            def rot64(x, n):
-                return ((x << n) | (x >> (64 - n))) & 0xFFFFFFFFFFFFFFFF
-            
-            for round_idx in range(24):
-                # θ step
-                C = [state[x][0] ^ state[x][1] ^ state[x][2] ^ state[x][3] ^ state[x][4] for x in range(5)]
-                D = [C[(x - 1) % 5] ^ rot64(C[(x + 1) % 5], 1) for x in range(5)]
-                for x in range(5):
-                    for y in range(5):
-                        state[x][y] ^= D[x]
-                
-                # ρ and π steps
-                B = [[0] * 5 for _ in range(5)]
-                for x in range(5):
-                    for y in range(5):
-                        B[y][(2 * x + 3 * y) % 5] = rot64(state[x][y], R[x][y])
-                
-                # χ step
-                for x in range(5):
-                    for y in range(5):
-                        state[x][y] = B[x][y] ^ ((~B[(x + 1) % 5][y]) & B[(x + 2) % 5][y])
-                
-                # ι step
-                state[0][0] ^= RC[round_idx]
-            
-            return state
-        
-        def _keccak256(message):
-            """Keccak-256 hash function."""
-            rate = 136  # (1600 - 256*2) / 8
-            capacity = 64
-            
-            # Padding
-            padded = bytearray(message)
-            padded.append(0x01)
-            while len(padded) % rate != (rate - 1):
-                padded.append(0x00)
-            padded.append(0x80)
-            
-            # Initialize state
-            state = [[0] * 5 for _ in range(5)]
-            
-            # Absorb
-            for i in range(0, len(padded), rate):
-                block = padded[i:i + rate]
-                for j in range(min(len(block) // 8, 17)):
-                    x = j % 5
-                    y = j // 5
-                    state[x][y] ^= struct.unpack('<Q', block[j*8:(j+1)*8])[0]
-                state = _keccak_f(state)
-            
-            # Squeeze
-            output = b''
-            while len(output) < 32:
-                for y in range(5):
-                    for x in range(5):
-                        if len(output) < 32:
-                            output += struct.pack('<Q', state[x][y])[:min(8, 32 - len(output))]
-                if len(output) < 32:
-                    state = _keccak_f(state)
-            
-            return output[:32]
-        
-        return _keccak256(data)
 
 
 # =============================================================================
@@ -370,104 +257,6 @@ def encode_link_legacy_validators(validator_ids: List[int], pubkeys: List[bytes]
     return selector + params
 
 
-def encode_timelock_schedule_batch(
-    targets: List[str],
-    values: List[int],
-    payloads: List[bytes],
-    predecessor: bytes,
-    salt: bytes,
-    delay: int
-) -> bytes:
-    """
-    Encode TimelockController.scheduleBatch calldata.
-    
-    Function signature:
-        scheduleBatch(address[] targets, uint256[] values, bytes[] payloads, 
-                      bytes32 predecessor, bytes32 salt, uint256 delay)
-    """
-    selector = bytes.fromhex(SCHEDULE_BATCH_SELECTOR)
-    
-    # Encode all arrays
-    targets_encoded = encode_address_array(targets)
-    values_encoded = encode_uint256_array(values)
-    payloads_encoded = encode_bytes_array(payloads)
-    
-    # Calculate offsets for dynamic params (first 3 are dynamic, last 3 are static)
-    # Layout: offset_targets, offset_values, offset_payloads, predecessor, salt, delay, [data...]
-    static_params_size = 6 * 32  # 6 parameters, each 32 bytes
-    
-    offset_targets = static_params_size
-    offset_values = offset_targets + len(targets_encoded)
-    offset_payloads = offset_values + len(values_encoded)
-    
-    params = (
-        encode_uint256(offset_targets) +
-        encode_uint256(offset_values) +
-        encode_uint256(offset_payloads) +
-        encode_bytes32(predecessor) +
-        encode_bytes32(salt) +
-        encode_uint256(delay) +
-        targets_encoded +
-        values_encoded +
-        payloads_encoded
-    )
-    
-    return selector + params
-
-
-def encode_timelock_execute_batch(
-    targets: List[str],
-    values: List[int],
-    payloads: List[bytes],
-    predecessor: bytes,
-    salt: bytes
-) -> bytes:
-    """
-    Encode TimelockController.executeBatch calldata.
-    
-    Function signature:
-        executeBatch(address[] targets, uint256[] values, bytes[] payloads,
-                     bytes32 predecessor, bytes32 salt)
-    """
-    selector = bytes.fromhex(EXECUTE_BATCH_SELECTOR)
-    
-    # Encode all arrays
-    targets_encoded = encode_address_array(targets)
-    values_encoded = encode_uint256_array(values)
-    payloads_encoded = encode_bytes_array(payloads)
-    
-    # Calculate offsets for dynamic params
-    static_params_size = 5 * 32  # 5 parameters
-    
-    offset_targets = static_params_size
-    offset_values = offset_targets + len(targets_encoded)
-    offset_payloads = offset_values + len(values_encoded)
-    
-    params = (
-        encode_uint256(offset_targets) +
-        encode_uint256(offset_values) +
-        encode_uint256(offset_payloads) +
-        encode_bytes32(predecessor) +
-        encode_bytes32(salt) +
-        targets_encoded +
-        values_encoded +
-        payloads_encoded
-    )
-    
-    return selector + params
-
-
-def generate_linking_salt(validator_ids: List[int], pubkeys: List[bytes]) -> bytes:
-    """Generate deterministic salt for linking transaction."""
-    # Replicate Solidity: keccak256(abi.encode(ids, pubkeys, "link-legacy-validators-consolidation"))
-    salt_input = json.dumps({
-        'ids': validator_ids,
-        'pubkeys': [pk.hex() for pk in pubkeys],
-        'tag': 'link-legacy-validators-consolidation'
-    }).encode()
-    return keccak256(salt_input)
-
-
 # =============================================================================
 # Gnosis Safe JSON Generation
 # =============================================================================
@@ -572,79 +361,44 @@ def collect_validators_needing_linking(
     return unlinked_ids, unlinked_pubkeys
 
 
-def generate_linking_transactions(
+def generate_linking_transaction(
     validator_ids: List[int],
     pubkeys: List[bytes],
     chain_id: int,
-    safe_address: str,
+    admin_address: str,
     output_dir: str
-) -> Tuple[Optional[str], Optional[str]]:
+) -> Optional[str]:
     """
-    Generate timelock schedule and execute transactions for linking validators.
-    
+    Generate direct linking transaction (no timelock).
+
     Returns:
-        Tuple of (schedule_file_path, execute_file_path) or (None, None) if no linking needed
+        Path to link-validators.json or None if no linking needed
     """
     if not validator_ids or not pubkeys:
-        return None, None
-    
-    print(f"\n  Generating linking transactions for {len(validator_ids)} validators...")
-    
-    # Build linkLegacyValidatorIds calldata
+        return None
+
+    print(f"\n  Generating linking transaction for {len(validator_ids)} validators...")
+
+    # Build direct linkLegacyValidatorIds calldata
     link_calldata = encode_link_legacy_validators(validator_ids, pubkeys)
-    
-    # Build timelock batch parameters
-    targets = [ETHERFI_NODES_MANAGER]
-    values = [0]
-    payloads = [link_calldata]
-    predecessor = bytes(32)  # bytes32(0)
-    
-    # Generate salt
-    salt = generate_linking_salt(validator_ids, pubkeys)
-    
-    # Generate schedule calldata
-    schedule_calldata = encode_timelock_schedule_batch(
-        targets, values, payloads, predecessor, salt, MIN_DELAY_OPERATING_TIMELOCK
-    )
-    
-    # Generate execute calldata
-    execute_calldata = encode_timelock_execute_batch(
-        targets, values, payloads, predecessor, salt
-    )
-    
-    # Write schedule transaction
-    schedule_tx = {
-        "to": OPERATING_TIMELOCK,
+
+    # Write direct linking transaction (to EtherFiNodesManager)
+    link_tx = {
+        "to": ETHERFI_NODES_MANAGER,
         "value": "0",
-        "data": "0x" + schedule_calldata.hex()
+        "data": "0x" + link_calldata.hex()
     }
-    schedule_json = generate_gnosis_tx_json(
-        [schedule_tx], chain_id, safe_address,
-        meta_name="Link Validators - Schedule",
-        meta_description=f"Schedule linking of {len(validator_ids)} validators via timelock"
+    link_json = generate_gnosis_tx_json(
+        [link_tx], chain_id, admin_address,
+        meta_name="Link Validators",
+        meta_description=f"Link {len(validator_ids)} validators directly via ADMIN_EOA"
     )
-    schedule_file = os.path.join(output_dir, "link-schedule.json")
-    with open(schedule_file, 'w') as f:
-        f.write(schedule_json)
-    print(f"  ✓ Written: link-schedule.json")
-    
-    # Write execute transaction
-    execute_tx = {
-        "to": OPERATING_TIMELOCK,
-        "value": "0",
-        "data": "0x" + execute_calldata.hex()
-    }
-    execute_json = generate_gnosis_tx_json(
-        [execute_tx], chain_id, safe_address,
-        meta_name="Link Validators - Execute",
-        meta_description=f"Execute linking of {len(validator_ids)} validators (after {MIN_DELAY_OPERATING_TIMELOCK // 3600}h delay)"
-    )
-    execute_file = os.path.join(output_dir, "link-execute.json")
-    with open(execute_file, 'w') as f:
-        f.write(execute_json)
-    print(f"  ✓ Written: link-execute.json")
-    
-    return schedule_file, execute_file
+    link_file = os.path.join(output_dir, "link-validators.json")
+    with open(link_file, 'w') as f:
+        f.write(link_json)
+    print(f"  ✓ Written: link-validators.json")
+
+    return link_file
 
 
 def process_consolidation_data(
@@ -769,9 +523,9 @@ Examples:
         help=f'Chain ID (default: {DEFAULT_CHAIN_ID})'
     )
     parser.add_argument(
-        '--safe-address',
-        default=ETHERFI_OPERATING_ADMIN,
-        help=f'Gnosis Safe address (default: {ETHERFI_OPERATING_ADMIN})'
+        '--admin-address',
+        default=ADMIN_EOA,
+        help=f'Admin address for transactions (default: {ADMIN_EOA})'
     )
     parser.add_argument(
         '--skip-linking',
@@ -798,8 +552,8 @@ Examples:
     
     # Override from environment if set
     chain_id = int(os.environ.get('CHAIN_ID', args.chain_id))
-    safe_address = os.environ.get('SAFE_ADDRESS', args.safe_address)
-    
+    admin_address = os.environ.get('ADMIN_ADDRESS', args.admin_address)
+
     print("=" * 60)
     print("GNOSIS TRANSACTION GENERATOR")
     print("=" * 60)
@@ -808,7 +562,7 @@ Examples:
     print(f"Batch size:    {args.batch_size}")
     print(f"Fee/request:   {args.fee} wei")
     print(f"Chain ID:      {chain_id}")
-    print(f"Safe address:  {safe_address}")
+    print(f"Admin address: {admin_address}")
     print(f"Skip linking:  {args.skip_linking}")
     print("")
     
@@ -831,24 +585,24 @@ Examples:
     
     os.makedirs(output_dir, exist_ok=True)
     
-    # Generate linking transactions if needed
+    # Generate linking transaction if needed
     needs_linking = False
     if not args.skip_linking:
         print("Checking for validators that need linking...")
         unlinked_ids, unlinked_pubkeys = collect_validators_needing_linking(
             consolidation_data, args.batch_size
         )
-        
+
         if unlinked_ids:
             print(f"  Found {len(unlinked_ids)} validators that may need linking")
-            schedule_file, execute_file = generate_linking_transactions(
+            link_file = generate_linking_transaction(
                 unlinked_ids,
                 unlinked_pubkeys,
                 chain_id,
-                safe_address,
+                admin_address,
                 output_dir
             )
-            needs_linking = schedule_file is not None
+            needs_linking = link_file is not None
         else:
             print("  No validators need linking")
     else:
@@ -873,7 +627,7 @@ Examples:
         transactions,
         output_dir,
         chain_id,
-        safe_address
+        admin_address
     )
     
     # Summary
@@ -887,21 +641,18 @@ Examples:
     
     print("Files generated:")
     if needs_linking:
-        print(f"  - link-schedule.json (timelock schedule)")
-        print(f"  - link-execute.json (timelock execute)")
+        print(f"  - link-validators.json (direct linking via ADMIN_EOA)")
     for f in written_files:
         print(f"  - {os.path.basename(f)}")
-    
+
     print("")
     print("Execution order:")
     if needs_linking:
-        print("  1. Import and execute link-schedule.json in Gnosis Safe")
-        print(f"  2. Wait {MIN_DELAY_OPERATING_TIMELOCK // 3600} hours for timelock delay")
-        print("  3. Import and execute link-execute.json in Gnosis Safe")
-        print("  4. Import and execute each consolidation-txns-*.json file")
+        print("  1. Execute link-validators.json from ADMIN_EOA")
+        print("  2. Execute each consolidation-txns-*.json file from ADMIN_EOA")
     else:
-        print("  1. Import and execute each consolidation-txns-*.json file in Gnosis Safe")
-    
+        print("  1. Execute each consolidation-txns-*.json file from ADMIN_EOA")
+
     print("")
     print(f"⚠ Each consolidation request requires {args.fee} wei fee.")
     print(f"  Total ETH needed for consolidations: {args.fee * total_sources / 1e18:.18f} ETH")

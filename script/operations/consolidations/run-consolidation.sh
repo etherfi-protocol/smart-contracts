@@ -47,7 +47,7 @@ BUCKET_HOURS=6
 MAX_TARGET_BALANCE=1888 # max balance of the target validator after consolidation
 DRY_RUN=false
 SKIP_SIMULATE=false
-NONCE=0 # starting nonce for the Safe transactions
+MAINNET=false # broadcast transactions on mainnet using ADMIN_EOA
 
 print_usage() {
     echo "Usage: $0 --operator <name> [options]"
@@ -62,14 +62,14 @@ print_usage() {
     echo "  --count              Number of source validators to consolidate (default: 0 = all available)"
     echo "  --bucket-hours       Time bucket duration for sweep queue distribution (default: 6)"
     echo "  --max-target-balance Maximum ETH balance allowed on target post-consolidation (default: 1888)"
-    echo "  --nonce              Starting Safe nonce for tx hash computation (default: 0)"
     echo "  --batch-size         Number of consolidations per transaction (default: 58)"
     echo "  --dry-run            Output consolidation plan JSON without executing forge script"
     echo "  --skip-simulate      Skip Tenderly simulation step"
+    echo "  --mainnet            Broadcast transactions on mainnet using ADMIN_EOA (requires PRIVATE_KEY)"
     echo "  --help, -h           Show this help message"
     echo ""
     echo "Examples:"
-    echo "  # Consolidate all validators for operator"
+    echo "  # Consolidate all validators for operator (simulation only)"
     echo "  $0 --operator 'Validation Cloud'"
     echo ""
     echo "  # Consolidation with custom settings (limit to 100 validators)"
@@ -78,9 +78,13 @@ print_usage() {
     echo "  # Dry run to preview plan"
     echo "  $0 --operator 'Validation Cloud' --dry-run"
     echo ""
+    echo "  # Execute on mainnet"
+    echo "  $0 --operator 'Validation Cloud' --count 50 --mainnet"
+    echo ""
     echo "Environment Variables:"
     echo "  MAINNET_RPC_URL      Ethereum mainnet RPC URL (required)"
     echo "  VALIDATOR_DB         PostgreSQL connection string for validator database"
+    echo "  PRIVATE_KEY          Private key for ADMIN_EOA (required for --mainnet)"
     echo "  BEACON_CHAIN_URL     Beacon chain API URL (optional)"
 }
 
@@ -103,10 +107,6 @@ while [[ $# -gt 0 ]]; do
             MAX_TARGET_BALANCE="$2"
             shift 2
             ;;
-        --nonce)
-            NONCE="$2"
-            shift 2
-            ;;
         --batch-size)
             BATCH_SIZE="$2"
             shift 2
@@ -117,6 +117,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-simulate)
             SKIP_SIMULATE=true
+            shift
+            ;;
+        --mainnet)
+            MAINNET=true
             shift
             ;;
         --help|-h)
@@ -151,6 +155,13 @@ if [ -z "$VALIDATOR_DB" ]; then
     exit 1
 fi
 
+# Check PRIVATE_KEY if --mainnet is used
+if [ "$MAINNET" = true ] && [ -z "$PRIVATE_KEY" ]; then
+    echo -e "${RED}Error: PRIVATE_KEY environment variable not set${NC}"
+    echo "Set it in your .env file or export it for --mainnet mode"
+    exit 1
+fi
+
 # Create output directory
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 OPERATOR_SLUG=$(echo "$OPERATOR" | tr ' ' '_' | tr '[:upper:]' '[:lower:]')
@@ -172,8 +183,8 @@ fi
 echo "  Bucket interval:    ${BUCKET_HOURS}h"
 echo "  Max target balance: ${MAX_TARGET_BALANCE} ETH"
 echo "  Batch size:         $BATCH_SIZE"
-echo "  Safe nonce:         $NONCE"
 echo "  Dry run:            $DRY_RUN"
+echo "  Mainnet mode:       $MAINNET"
 echo "  Output directory:   $OUTPUT_DIR"
 echo ""
 
@@ -214,11 +225,19 @@ echo -e "${GREEN}✓ Consolidation plan written to $OUTPUT_DIR/consolidation-dat
 echo ""
 
 # ============================================================================
-# Step 2: Generate Gnosis Safe transactions
+# Step 2: Generate transactions / Broadcast on mainnet
 # ============================================================================
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}[2/4] Generating Gnosis Safe transactions...${NC}"
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+if [ "$MAINNET" = true ]; then
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}[2/4] Broadcasting transactions on MAINNET...${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${RED}⚠ WARNING: This will execute REAL transactions on mainnet!${NC}"
+    echo ""
+else
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}[2/4] Generating transaction files...${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+fi
 
 # Parse the consolidation data
 CONSOLIDATION_DATA="$OUTPUT_DIR/consolidation-data.json"
@@ -235,13 +254,31 @@ NUM_TARGETS=$(jq '.consolidations | length' "$CONSOLIDATION_DATA")
 TOTAL_SOURCES=$(jq '[.consolidations[].sources | length] | add' "$CONSOLIDATION_DATA")
 echo "Processing $NUM_TARGETS target consolidations with $TOTAL_SOURCES total sources..."
 
-# Generate transactions using forge script (processes all targets in one run)
-CONSOLIDATION_DATA_FILE="$CONSOLIDATION_DATA" \
-OUTPUT_DIR="$OUTPUT_DIR" \
-BATCH_SIZE="$BATCH_SIZE" \
-SAFE_NONCE="$NONCE" \
-forge script "$SCRIPT_DIR/ConsolidateToTarget.s.sol:ConsolidateToTarget" \
-    --fork-url "$MAINNET_RPC_URL" -vvvv 2>&1 | tee "$OUTPUT_DIR/forge_all_targets.log"
+# Build forge command
+FORGE_CMD="CONSOLIDATION_DATA_FILE=\"$CONSOLIDATION_DATA\" OUTPUT_DIR=\"$OUTPUT_DIR\" BATCH_SIZE=\"$BATCH_SIZE\""
+
+if [ "$MAINNET" = true ]; then
+    # Mainnet mode: broadcast transactions using ADMIN_EOA
+    FORGE_CMD="$FORGE_CMD BROADCAST=true forge script \"$SCRIPT_DIR/ConsolidateToTarget.s.sol:ConsolidateToTarget\" \
+        --rpc-url \"$MAINNET_RPC_URL\" \
+        --private-key \"$PRIVATE_KEY\" \
+        --broadcast \
+        -vvvv"
+else
+    # Simulation mode: generate JSON transaction files
+    FORGE_CMD="$FORGE_CMD forge script \"$SCRIPT_DIR/ConsolidateToTarget.s.sol:ConsolidateToTarget\" \
+        --fork-url \"$MAINNET_RPC_URL\" \
+        -vvvv"
+fi
+
+echo "Running forge script..."
+eval "$FORGE_CMD" 2>&1 | tee "$OUTPUT_DIR/forge_all_targets.log"
+FORGE_EXIT_CODE=${PIPESTATUS[0]}
+
+if [ $FORGE_EXIT_CODE -ne 0 ]; then
+    echo -e "${RED}Error: Forge script failed with exit code $FORGE_EXIT_CODE${NC}"
+    exit 1
+fi
 
 # Check for generated files
 echo ""
@@ -268,18 +305,29 @@ echo -e "${GREEN}✓ Generated transaction files for $NUM_TARGETS targets${NC}"
 echo ""
 
 # ============================================================================
-# Step 3: List generated files
+# Step 3: List generated files (skip if mainnet mode)
 # ============================================================================
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}[3/4] Generated files:${NC}"
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-ls -la "$OUTPUT_DIR"/*.json 2>/dev/null || echo "No JSON files found"
-echo ""
+if [ "$MAINNET" = true ]; then
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}[3/4] Transactions broadcast on mainnet${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+else
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}[3/4] Generated files:${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    ls -la "$OUTPUT_DIR"/*.json 2>/dev/null || echo "No JSON files found"
+    echo ""
+fi
 
 # ============================================================================
-# Step 4: Simulate on Tenderly
+# Step 4: Simulate on Tenderly (skip if mainnet mode)
 # ============================================================================
-if [ "$SKIP_SIMULATE" = true ]; then
+if [ "$MAINNET" = true ]; then
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}[4/4] Skipping simulation (transactions already broadcast on mainnet)${NC}"
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+elif [ "$SKIP_SIMULATE" = true ]; then
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${YELLOW}[4/4] Skipping Tenderly simulation (--skip-simulate)${NC}"
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -290,54 +338,38 @@ else
     
     VNET_NAME="${OPERATOR_SLUG}-consolidation-${COUNT}-${TIMESTAMP}"
     
-    # Check if linking is needed by looking for schedule file
-    SCHEDULE_FILE="$OUTPUT_DIR/link-schedule.json"
-    EXECUTE_FILE="$OUTPUT_DIR/link-execute.json"
-    
-    # Find consolidation files (now individual files: consolidation-txns-1.json, consolidation-txns-2.json, etc.)
+    # Check if linking is needed by looking for link-validators file
+    LINK_FILE="$OUTPUT_DIR/link-validators.json"
+
+    # Find consolidation files (individual files: consolidation-txns-1.json, consolidation-txns-2.json, etc.)
     CONSOLIDATION_FILES=($(ls "$OUTPUT_DIR"/consolidation-txns-*.json 2>/dev/null | sort -V))
-    
+
     if [ ${#CONSOLIDATION_FILES[@]} -gt 0 ]; then
         echo "Found ${#CONSOLIDATION_FILES[@]} consolidation transaction file(s)"
-        
-        # Join all consolidation files with commas for the simulate.py script
-        CONSOLIDATION_FILES_CSV=$(IFS=,; echo "${CONSOLIDATION_FILES[*]}")
-        
-        if [ -f "$SCHEDULE_FILE" ] && [ -f "$EXECUTE_FILE" ]; then
-            # Linking needed - run with timelock delay, pass all consolidation files via --then
-            echo "Linking required. Running simulation with timelock delay..."
-            echo "  Schedule: $(basename "$SCHEDULE_FILE")"
-            echo "  Execute: $(basename "$EXECUTE_FILE")"
-            echo "  Consolidation files: ${#CONSOLIDATION_FILES[@]}"
-            for f in "${CONSOLIDATION_FILES[@]}"; do
-                echo "    - $(basename "$f")"
-            done
-            echo ""
 
-            CMD="python3 $PROJECT_ROOT/script/operations/utils/simulate.py --tenderly \
-                --schedule \"$SCHEDULE_FILE\" \
-                --execute \"$EXECUTE_FILE\" \
-                --then \"$CONSOLIDATION_FILES_CSV\" \
-                --delay 8h --vnet-name \"$VNET_NAME\""
-            echo "Running: $CMD"
-            eval "$CMD"
-            SIMULATION_EXIT_CODE=$?
-        else
-            # No linking needed - pass all consolidation files via --txns
-            echo "No linking required. Running all consolidation transactions..."
-            echo "  Consolidation files: ${#CONSOLIDATION_FILES[@]}"
-            for f in "${CONSOLIDATION_FILES[@]}"; do
-                echo "    - $(basename "$f")"
-            done
-            echo ""
-            
-            CMD="python3 $PROJECT_ROOT/script/operations/utils/simulate.py --tenderly \
-                --txns \"$CONSOLIDATION_FILES_CSV\" \
-                --vnet-name \"$VNET_NAME\""
-            echo "Running: $CMD"
-            eval "$CMD"
-            SIMULATION_EXIT_CODE=$?
+        # Build list of all transaction files
+        ALL_TX_FILES=()
+        if [ -f "$LINK_FILE" ]; then
+            echo "Linking required. Adding link-validators.json to transaction list..."
+            ALL_TX_FILES+=("$LINK_FILE")
         fi
+        ALL_TX_FILES+=("${CONSOLIDATION_FILES[@]}")
+
+        # Join all transaction files with commas for the simulate.py script
+        TX_FILES_CSV=$(IFS=,; echo "${ALL_TX_FILES[*]}")
+
+        echo "Transaction files to simulate: ${#ALL_TX_FILES[@]}"
+        for f in "${ALL_TX_FILES[@]}"; do
+            echo "    - $(basename "$f")"
+        done
+        echo ""
+
+        CMD="python3 $PROJECT_ROOT/script/operations/utils/simulate.py --tenderly \
+            --txns \"$TX_FILES_CSV\" \
+            --vnet-name \"$VNET_NAME\""
+        echo "Running: $CMD"
+        eval "$CMD"
+        SIMULATION_EXIT_CODE=$?
     else
         echo -e "${RED}Error: No consolidation files found to simulate${NC}"
         SIMULATION_EXIT_CODE=1
@@ -378,22 +410,30 @@ if [ -f "$CONSOLIDATION_DATA" ]; then
     echo "  Total ETH consolidated: $TOTAL_ETH"
 fi
 
-echo ""
-echo -e "${BLUE}Next steps:${NC}"
-echo "  1. Review the consolidation plan in consolidation-data.json"
-
-# Check if linking was needed
-if [ -f "$OUTPUT_DIR/link-schedule.json" ]; then
-    echo "  2. Import link-schedule.json to Gnosis Safe → Execute"
-    echo "  3. Wait 8 hours for timelock delay"
-    echo "  4. Import link-execute.json to Gnosis Safe → Execute"
-    echo "  5. Import consolidation-txns-*.json files to Gnosis Safe → Execute each one"
+if [ "$MAINNET" = true ]; then
+    echo ""
+    echo -e "${BLUE}Mainnet Execution Complete:${NC}"
+    echo "  All transactions have been broadcast to mainnet."
+    echo "  Check the forge output above for transaction hashes."
+    echo ""
+    echo -e "${YELLOW}⚠ Note: Monitor transactions on Etherscan for confirmation.${NC}"
+    echo ""
 else
-    echo "  2. Import consolidation-txns-*.json files to Gnosis Safe → Execute each one"
+    echo ""
+    echo -e "${BLUE}Next steps:${NC}"
+    echo "  1. Review the consolidation plan in consolidation-data.json"
+
+    # Check if linking was needed
+    if [ -f "$OUTPUT_DIR/link-validators.json" ]; then
+        echo "  2. Execute link-validators.json from ADMIN_EOA"
+        echo "  3. Execute consolidation-txns-*.json files from ADMIN_EOA (each one)"
+    else
+        echo "  2. Execute consolidation-txns-*.json files from ADMIN_EOA (each one)"
+    fi
+    echo ""
+    echo "  Execute each transaction from ADMIN_EOA (one file at a time)"
+    echo ""
+    echo -e "${YELLOW}⚠ Note: Each consolidation request requires a small fee paid to the beacon chain.${NC}"
+    echo -e "${YELLOW}  Ensure ADMIN_EOA has sufficient ETH balance for fees.${NC}"
+    echo ""
 fi
-echo ""
-echo "  Execute each transaction from Gnosis Safe (one file at a time)"
-echo ""
-echo -e "${YELLOW}⚠ Note: Each consolidation request requires a small fee paid to the beacon chain.${NC}"
-echo -e "${YELLOW}  Ensure the Safe has sufficient ETH balance for fees.${NC}"
-echo ""
