@@ -14,6 +14,26 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
         vm.etch(alice, bytes(""));
+
+        // Handle any pending oracle report that hasn't been processed yet
+        _syncOracleReportState();
+    }
+
+    /// @dev Syncs the oracle's lastPublishedReportRefSlot with the admin's lastHandledReportRefSlot
+    ///      This is necessary when forking mainnet where there may be a pending report
+    function _syncOracleReportState() internal {
+        uint32 lastPublished = etherFiOracleInstance.lastPublishedReportRefSlot();
+        uint32 lastHandled = etherFiAdminInstance.lastHandledReportRefSlot();
+
+        if (lastPublished != lastHandled) {
+            // Use the oracle's admin function to sync the state
+            // Get the oracle admin (owner in this case)
+            address oracleOwner = etherFiOracleInstance.owner();
+            uint32 lastPublishedBlock = etherFiOracleInstance.lastPublishedReportRefBlock();
+            
+            vm.prank(oracleOwner);
+            etherFiOracleInstance.updateLastPublishedBlockStamps(lastHandled, lastPublishedBlock);
+        }
     }
 
     function test_Withdraw_EtherFiRedemptionManager_redeemEEth() public {

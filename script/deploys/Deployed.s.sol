@@ -53,6 +53,7 @@ contract Deployed {
     address public constant EARLY_ADOPTER_POOL = 0x7623e9DC0DA6FF821ddb9EbABA794054E078f8c4;
     address public constant CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = 0x9A8c5046a290664Bf42D065d33512fe403484534;
     address public constant TREASURY = 0x0c83EAe1FE72c390A02E426572854931EefF93BA;
+    address public constant WITHDRAW_REQUEST_NFT_BUYBACK_SAFE = 0x2f5301a3D59388c509C65f8698f521377D41Fd0F; // buyback wallet
 
     // role registry & multi-sig
     address public constant ROLE_REGISTRY = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;

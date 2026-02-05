@@ -1,0 +1,10 @@
+{
+  "contractName": "Liquifier",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x77381e3f2ef7ac8ff04f2a044e59432e2486195d000000000000000000000000",
+    "constructorArgs": {
+    }
+  },
+  "deployedAddress": "0x0E7489D32D34CCdC12d7092067bf53Aa38bf2BF6"
+}

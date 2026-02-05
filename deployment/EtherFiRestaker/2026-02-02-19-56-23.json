@@ -1,0 +1,12 @@
+{
+  "contractName": "EtherFiRestaker",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x77381e3f2ef7ac8ff04f2a044e59432e2486195d000000000000000000000000",
+    "constructorArgs": {
+      "_rewardsCoordinator": "0x7750d328b314EfFa365A0402CcfD489B80B0adda",
+      "_etherFiRedemptionManager": "0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0"
+    }
+  },
+  "deployedAddress": "0x9D795b303B9dA3488FD3A4ca4702c872576BD0c6"
+}
