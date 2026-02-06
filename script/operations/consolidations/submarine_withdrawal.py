@@ -414,42 +414,41 @@ def write_consolidation_data(
     return filepath
 
 
-def write_linking_transactions(
+def write_linking_transaction(
     validator_ids: List[int],
     pubkeys: List[bytes],
     chain_id: int,
     from_address: str,
     output_dir: str,
-) -> List[str]:
-    """Generate one linking transaction per validator for direct EOA execution."""
+) -> Optional[str]:
+    """Generate link-validators.json with one tx per validator for direct EOA execution."""
     if not validator_ids or not pubkeys:
-        return []
+        return None
 
-    print(f"\n  Generating {len(validator_ids)} individual linking transaction(s)...")
+    print(f"\n  Generating linking transaction for {len(validator_ids)} src[0] validator(s)...")
 
-    written = []
-    for i, (vid, pk) in enumerate(zip(validator_ids, pubkeys)):
+    transactions = []
+    for vid, pk in zip(validator_ids, pubkeys):
         link_calldata = encode_link_legacy_validators([vid], [pk])
+        transactions.append({
+            "to": ETHERFI_NODES_MANAGER,
+            "value": "0",
+            "data": "0x" + link_calldata.hex(),
+            "description": f"Link validator id={vid}",
+        })
 
-        tx_data = {
-            "chainId": str(chain_id),
-            "from": from_address,
-            "transactions": [{
-                "to": ETHERFI_NODES_MANAGER,
-                "value": "0",
-                "data": "0x" + link_calldata.hex(),
-            }],
-            "description": f"Link validator id={vid} (src[0]) via ADMIN_EOA",
-        }
+    tx_data = {
+        "chainId": str(chain_id),
+        "from": from_address,
+        "transactions": transactions,
+        "description": f"Link {len(validator_ids)} src[0] validator(s) via ADMIN_EOA",
+    }
 
-        filename = f"link-validators-{i + 1}.json"
-        filepath = os.path.join(output_dir, filename)
-        with open(filepath, 'w') as f:
-            json.dump(tx_data, f, indent=2)
-        print(f"  Written: {filename}")
-        written.append(filepath)
-
-    return written
+    filepath = os.path.join(output_dir, "link-validators.json")
+    with open(filepath, 'w') as f:
+        json.dump(tx_data, f, indent=2)
+    print(f"  Written: link-validators.json")
+    return filepath
 
 
 def write_transaction_files(
@@ -487,7 +486,7 @@ def write_submarine_plan(
     total_withdrawal: float,
     operator_name: str,
     output_dir: str,
-    num_link_files: int,
+    needs_linking: bool,
 ) -> str:
     """Write submarine-plan.json with full plan metadata."""
     pods_info = []
@@ -506,7 +505,6 @@ def write_submarine_plan(
         })
 
     num_batches = len(all_batches)
-    link_file_list = [f'link-validators-{i+1}.json' for i in range(num_link_files)] if num_link_files > 0 else []
     plan = {
         'type': 'submarine_withdrawal',
         'operator': operator_name,
@@ -519,7 +517,7 @@ def write_submarine_plan(
             'num_transactions': num_batches,
         },
         'files': {
-            'link_validators': link_file_list if link_file_list else None,
+            'link_validators': 'link-validators.json' if needs_linking else None,
             'consolidation_txns': [f'consolidation-txns-{b["tx_index"]}.json' for b in all_batches],
         },
         'execution_order': [],
@@ -527,8 +525,8 @@ def write_submarine_plan(
     }
 
     step = 1
-    for lf in link_file_list:
-        plan['execution_order'].append(f"{step}. Execute {lf} from ADMIN_EOA")
+    if needs_linking:
+        plan['execution_order'].append(f"{step}. Execute link-validators.json from ADMIN_EOA")
         step += 1
     for b in all_batches:
         plan['execution_order'].append(f"{step}. Execute consolidation-txns-{b['tx_index']}.json from ADMIN_EOA")
@@ -757,7 +755,7 @@ Examples:
         admin_address = os.environ.get('ADMIN_ADDRESS', ADMIN_EOA)
         rpc_url = os.environ.get('MAINNET_RPC_URL', '')
 
-        link_files = []
+        needs_linking = False
         if all_ids:
             print(f"\n  Checking on-chain linking status for {len(all_ids)} src[0] validator(s)...")
             if rpc_url:
@@ -766,13 +764,12 @@ Examples:
                 print("    Warning: MAINNET_RPC_URL not set, skipping on-chain link check")
 
         if all_ids:
-            link_files = write_linking_transactions(
+            link_file = write_linking_transaction(
                 all_ids, all_pubkeys, chain_id, admin_address, output_dir,
             )
+            needs_linking = link_file is not None
         else:
             print("  All src[0] validators already linked, no linking transaction needed.")
-
-        needs_linking = len(link_files) > 0
 
         # 6c: consolidation-txns-N.json (sequentially numbered across all pods)
         all_batches = []
@@ -791,7 +788,7 @@ Examples:
         # 6d: submarine-plan.json
         write_submarine_plan(
             selections, all_batches, args.amount, total_withdrawal,
-            args.operator, output_dir, len(link_files),
+            args.operator, output_dir, needs_linking,
         )
         print(f"  Written: submarine-plan.json")
 
@@ -804,8 +801,8 @@ Examples:
         print(f"Directory: {output_dir}")
         print(f"\nExecution order:")
         step = 1
-        for i in range(len(link_files)):
-            print(f"  {step}. Execute link-validators-{i + 1}.json from ADMIN_EOA")
+        if needs_linking:
+            print(f"  {step}. Execute link-validators.json from ADMIN_EOA")
             step += 1
         for b in all_batches:
             print(f"  {step}. Execute consolidation-txns-{b['tx_index']}.json from ADMIN_EOA")

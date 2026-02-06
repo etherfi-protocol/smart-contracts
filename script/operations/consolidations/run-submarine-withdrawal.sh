@@ -213,25 +213,29 @@ if [ "$MAINNET" = true ]; then
         exit 1
     fi
 
-    # Execute linking transaction first (if exists)
+    # Execute linking transactions first (if file exists)
     LINK_FILE="$OUTPUT_DIR/link-validators.json"
     if [ -f "$LINK_FILE" ]; then
-        echo "Executing link-validators.json..."
-        TX_TO=$(jq -r '.transactions[0].to' "$LINK_FILE")
-        TX_VALUE=$(jq -r '.transactions[0].value' "$LINK_FILE")
-        TX_DATA=$(jq -r '.transactions[0].data' "$LINK_FILE")
+        NUM_LINK_TXS=$(jq '.transactions | length' "$LINK_FILE")
+        echo "Executing link-validators.json ($NUM_LINK_TXS linking tx(s))..."
+        for IDX in $(seq 0 $((NUM_LINK_TXS - 1))); do
+            TX_TO=$(jq -r ".transactions[$IDX].to" "$LINK_FILE")
+            TX_VALUE=$(jq -r ".transactions[$IDX].value" "$LINK_FILE")
+            TX_DATA=$(jq -r ".transactions[$IDX].data" "$LINK_FILE")
 
-        cast send "$TX_TO" "$TX_DATA" \
-            --value "$TX_VALUE" \
-            --rpc-url "$MAINNET_RPC_URL" \
-            --private-key "$PRIVATE_KEY" 2>&1 | tee -a "$OUTPUT_DIR/mainnet_broadcast.log"
-        CAST_EXIT_CODE=${PIPESTATUS[0]}
+            echo "  Sending link tx $((IDX + 1))/$NUM_LINK_TXS..."
+            cast send "$TX_TO" "$TX_DATA" \
+                --value "$TX_VALUE" \
+                --rpc-url "$MAINNET_RPC_URL" \
+                --private-key "$PRIVATE_KEY" 2>&1 | tee -a "$OUTPUT_DIR/mainnet_broadcast.log"
+            CAST_EXIT_CODE=${PIPESTATUS[0]}
 
-        if [ $CAST_EXIT_CODE -ne 0 ]; then
-            echo -e "${RED}Error: Linking transaction failed${NC}"
-            exit 1
-        fi
-        echo -e "${GREEN}Linking transaction sent successfully.${NC}"
+            if [ $CAST_EXIT_CODE -ne 0 ]; then
+                echo -e "${RED}Error: Linking tx $((IDX + 1)) failed${NC}"
+                exit 1
+            fi
+        done
+        echo -e "${GREEN}All linking transactions sent successfully.${NC}"
         echo ""
     fi
 

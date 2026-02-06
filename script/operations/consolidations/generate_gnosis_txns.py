@@ -43,7 +43,7 @@ DEFAULT_CONSOLIDATION_FEE = 1  # 1 wei per consolidation request
 
 # Function selectors
 REQUEST_CONSOLIDATION_SELECTOR = "6691954e"  # requestConsolidation((bytes,bytes)[])
-LINK_LEGACY_VALIDATOR_IDS_SELECTOR = "a8f85c84"  # linkLegacyValidatorIds(uint256[],bytes[])
+LINK_LEGACY_VALIDATOR_IDS_SELECTOR = "83294396"  # linkLegacyValidatorIds(uint256[],bytes[])
 
 
 # =============================================================================
