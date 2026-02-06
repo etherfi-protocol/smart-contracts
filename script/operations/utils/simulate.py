@@ -153,18 +153,18 @@ def load_transactions_from_file(file_path: Path) -> Tuple[List[Dict], str]:
         if len(data) == 0:
             return [], DEFAULT_SAFE_ADDRESS
 
-        # Use the first batch's safe address and collect all transactions
-        safe_address = data[0].get('safeAddress', DEFAULT_SAFE_ADDRESS)
+        # Use the first batch's safe/from address and collect all transactions
+        safe_address = data[0].get('safeAddress', data[0].get('from', DEFAULT_SAFE_ADDRESS))
         all_transactions = []
         for batch in data:
             batch_transactions = batch.get('transactions', [])
             all_transactions.extend(batch_transactions)
         return all_transactions, safe_address
 
-    # Handle old format: single transaction batch
+    # Handle old format: single transaction batch, or raw EOA format with "from"
     else:
         transactions = data.get('transactions', [])
-        safe_address = data.get('safeAddress', DEFAULT_SAFE_ADDRESS)
+        safe_address = data.get('safeAddress', data.get('from', DEFAULT_SAFE_ADDRESS))
         return transactions, safe_address
 
 

@@ -452,6 +452,130 @@ def format_duration(seconds: float) -> str:
 # Validator Consolidation Status Checking
 # =============================================================================
 
+def fetch_validator_details_batch(
+    pubkeys: List[str],
+    beacon_api: str = "https://beaconcha.in/api/v1",
+    batch_size: int = 100,
+    max_retries: int = 3,
+    show_progress: bool = True
+) -> Dict[str, Dict]:
+    """
+    Fetch validator details (balance, consolidation status, validator index) from beacon chain.
+
+    Uses the same beaconcha.in batch API as check_validators_consolidation_status_batch
+    but extracts additional fields: balance and validator index.
+
+    Args:
+        pubkeys: List of validator public keys (with or without 0x prefix)
+        beacon_api: Beacon chain API base URL
+        batch_size: Number of validators per API request (max 100)
+        max_retries: Maximum number of retry attempts per batch
+        show_progress: Show progress messages
+
+    Returns:
+        Dictionary mapping pubkey -> {
+            'balance_eth': float,
+            'is_consolidated': bool or None (True=0x02, False=0x01, None=unknown),
+            'beacon_withdrawal_credentials': str,
+            'validator_index': int or None,
+        }
+    """
+    result = {}
+    if not pubkeys or not requests:
+        return {pk: {'balance_eth': 32.0, 'is_consolidated': None, 'beacon_withdrawal_credentials': '', 'validator_index': None} for pk in pubkeys}
+
+    batch_size = min(batch_size, 100)
+    total_batches = (len(pubkeys) + batch_size - 1) // batch_size
+
+    for batch_idx in range(total_batches):
+        start = batch_idx * batch_size
+        end = min(start + batch_size, len(pubkeys))
+        batch = pubkeys[start:end]
+
+        if show_progress:
+            print(f"  Fetching details batch {batch_idx + 1}/{total_batches} ({end}/{len(pubkeys)})...", end='\r', flush=True)
+
+        batch_result = _fetch_details_single_batch(batch, beacon_api, max_retries)
+        result.update(batch_result)
+
+    if show_progress and total_batches > 0:
+        print(f"  Fetched details for {len(pubkeys)} validators in {total_batches} batches" + " " * 20)
+
+    # Fill in defaults for any pubkeys not found
+    for pk in pubkeys:
+        if pk not in result:
+            result[pk] = {'balance_eth': 32.0, 'is_consolidated': None, 'beacon_withdrawal_credentials': '', 'validator_index': None}
+
+    return result
+
+
+def _fetch_details_single_batch(
+    pubkeys: List[str],
+    beacon_api: str,
+    max_retries: int
+) -> Dict[str, Dict]:
+    """Fetch details for a single batch of pubkeys from beaconcha.in."""
+    pubkeys_clean = [pk[2:] if pk.startswith('0x') else pk for pk in pubkeys]
+    pubkeys_str = ','.join(pubkeys_clean)
+
+    for attempt in range(max_retries):
+        try:
+            url = f"{beacon_api}/validator/{pubkeys_str}"
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+
+            result = {}
+            if data.get('status') == 'OK' and 'data' in data:
+                validator_data_list = data['data']
+                if not isinstance(validator_data_list, list):
+                    validator_data_list = [validator_data_list]
+
+                for vd in validator_data_list:
+                    vpk = vd.get('pubkey', '')
+                    if not vpk:
+                        continue
+
+                    vpk_norm = vpk.lower().replace('0x', '')
+                    matching = None
+                    for pk in pubkeys:
+                        if pk.lower().replace('0x', '') == vpk_norm:
+                            matching = pk
+                            break
+                    if not matching:
+                        continue
+
+                    wc = vd.get('withdrawalcredentials', '')
+                    is_consolidated = None
+                    if wc.startswith('0x02'):
+                        is_consolidated = True
+                    elif wc.startswith('0x01'):
+                        is_consolidated = False
+
+                    balance_gwei = vd.get('balance', 0)
+                    if isinstance(balance_gwei, (int, float)) and balance_gwei > 10000:
+                        balance_eth = balance_gwei / 1e9
+                    else:
+                        balance_eth = float(balance_gwei) if balance_gwei else 32.0
+
+                    result[matching] = {
+                        'balance_eth': balance_eth,
+                        'is_consolidated': is_consolidated,
+                        'beacon_withdrawal_credentials': wc,
+                        'validator_index': vd.get('validatorindex'),
+                    }
+
+            return result
+
+        except Exception:
+            if attempt < max_retries - 1:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            return {}
+
+    return {}
+
+
 def check_validators_consolidation_status_batch(
     pubkeys: List[str],
     beacon_api: str = "https://beaconcha.in/api/v1",
