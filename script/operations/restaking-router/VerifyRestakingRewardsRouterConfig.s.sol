@@ -49,7 +49,7 @@ contract VerifyRestakingRewardsRouterConfig is Script, Utils {
         verifyConfiguration();
     }
 
-    function verifyAddress() public view {
+    function verifyAddress() public {
         console2.log("Verifying Create2 addresses...");
 
         // Implementation
