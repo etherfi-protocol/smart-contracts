@@ -60,6 +60,8 @@ from generate_gnosis_txns import (
     generate_consolidation_calldata,
     encode_link_legacy_validators,
     normalize_pubkey,
+    encode_address,
+    encode_uint256,
     ETHERFI_NODES_MANAGER,
     ADMIN_EOA,
     DEFAULT_CHAIN_ID,
@@ -393,6 +395,7 @@ def write_consolidation_data(
             'target': target_output,
             'sources': sources_output,
             'post_consolidation_balance_eth': sel['post_consolidation_eth'],
+            'withdrawal_amount_gwei': int(round(sel['withdrawal_eth'] * 1e9)),
         })
 
         total_sources += len(sources_output)
@@ -524,6 +527,7 @@ def write_submarine_plan(
         'files': {
             'link_validators': 'link-validators.json' if needs_linking else None,
             'consolidation_txns': [f'consolidation-txns-{b["tx_index"]}.json' for b in all_batches],
+            'queue_withdrawals': 'post-sweep/queue-withdrawals.json',
         },
         'execution_order': [],
         'generated_at': datetime.now().isoformat(),
@@ -536,11 +540,116 @@ def write_submarine_plan(
     for b in all_batches:
         plan['execution_order'].append(f"{step}. Execute consolidation-txns-{b['tx_index']}.json from ADMIN_EOA")
         step += 1
-    plan['execution_order'].append(f"{step}. Wait for beacon chain sweep (excess above 2048 ETH is auto-withdrawn)")
+    plan['execution_order'].append(f"{step}. Wait for beacon chain consolidation + sweep (excess above 2048 ETH is auto-withdrawn)")
+    step += 1
+    plan['execution_order'].append(f"{step}. Execute queue-withdrawals.json from ADMIN_EOA (queueETHWithdrawal for each pod)")
+    step += 1
+    plan['execution_order'].append(f"{step}. Wait for EigenLayer withdrawal delay, then completeQueuedETHWithdrawals")
 
     filepath = os.path.join(output_dir, 'submarine-plan.json')
     with open(filepath, 'w') as f:
         json.dump(plan, f, indent=2, default=str)
+    return filepath
+
+
+# =============================================================================
+# Queue ETH Withdrawal Transaction Generation
+# =============================================================================
+
+QUEUE_ETH_WITHDRAWAL_SELECTOR = "03f49be8"  # queueETHWithdrawal(address,uint256)
+
+
+def get_node_address(pubkey_hex: str, rpc_url: str) -> Optional[str]:
+    """Resolve EtherFi node address from a validator pubkey via on-chain query."""
+    pubkey_hash = compute_pubkey_hash(pubkey_hex)
+    try:
+        result = subprocess.run(
+            ['cast', 'call', ETHERFI_NODES_MANAGER,
+             'etherFiNodeFromPubkeyHash(bytes32)(address)',
+             pubkey_hash,
+             '--rpc-url', rpc_url],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode != 0:
+            print(f"    Warning: Could not resolve node for {pubkey_hex[:20]}...")
+            return None
+        address = result.stdout.strip()
+        if address == '0x0000000000000000000000000000000000000000':
+            return None
+        return address
+    except Exception:
+        return None
+
+
+def encode_queue_eth_withdrawal(node_address: str, amount_wei: int) -> str:
+    """Encode queueETHWithdrawal(address,uint256) calldata."""
+    selector = bytes.fromhex(QUEUE_ETH_WITHDRAWAL_SELECTOR)
+    params = encode_address(node_address) + encode_uint256(amount_wei)
+    return "0x" + (selector + params).hex()
+
+
+def write_queue_withdrawal_transactions(
+    selections: List[Dict],
+    output_dir: str,
+    chain_id: int,
+    from_address: str,
+    rpc_url: str,
+) -> Optional[str]:
+    """
+    Generate queue-withdrawals.json with queueETHWithdrawal calls for each pod.
+
+    Each pod selection has a target pubkey and withdrawal_eth amount.
+    Resolves node addresses on-chain and encodes calldata.
+    All calls are bundled into a single transaction file for gas efficiency.
+    """
+    if not rpc_url:
+        print("  Warning: MAINNET_RPC_URL not set, writing queue-withdrawals metadata only")
+
+    transactions = []
+    for sel in selections:
+        target = sel['target']
+        target_pubkey = target.get('pubkey', '')
+        withdrawal_eth = sel['withdrawal_eth']
+        withdrawal_gwei = int(round(withdrawal_eth * 1e9))
+        withdrawal_wei = withdrawal_gwei * (10 ** 9)
+
+        node_address = None
+        if rpc_url:
+            node_address = get_node_address(target_pubkey, rpc_url)
+
+        tx_entry = {
+            "target_pubkey": target_pubkey,
+            "withdrawal_amount_gwei": withdrawal_gwei,
+            "withdrawal_amount_eth": withdrawal_eth,
+            "node_address": node_address,
+            "to": ETHERFI_NODES_MANAGER,
+            "value": "0",
+        }
+
+        if node_address:
+            tx_entry["data"] = encode_queue_eth_withdrawal(node_address, withdrawal_wei)
+        else:
+            # Node not yet linked — calldata will be generated at execution time
+            # by the shell script after linking. Store empty data placeholder.
+            tx_entry["data"] = "0x"
+            tx_entry["requires_resolution"] = True
+
+        transactions.append(tx_entry)
+
+    tx_data = {
+        "chainId": str(chain_id),
+        "from": from_address,
+        "transactions": transactions,
+        "description": f"Queue ETH withdrawals for {len(transactions)} pod(s) after beacon chain consolidation + sweep",
+    }
+
+    # Write to post-sweep/ subdirectory to avoid simulate.py auto-discovery
+    post_sweep_dir = os.path.join(output_dir, "post-sweep")
+    os.makedirs(post_sweep_dir, exist_ok=True)
+    filepath = os.path.join(post_sweep_dir, "queue-withdrawals.json")
+    with open(filepath, 'w') as f:
+        json.dump(tx_data, f, indent=2)
+    print(f"  Written: post-sweep/queue-withdrawals.json ({len(transactions)} withdrawal(s))")
     return filepath
 
 
@@ -790,7 +899,12 @@ Examples:
         for f in tx_files:
             print(f"  Written: {os.path.basename(f)}")
 
-        # 6d: submarine-plan.json
+        # 6d: queue-withdrawals.json (queueETHWithdrawal per pod)
+        write_queue_withdrawal_transactions(
+            selections, output_dir, chain_id, admin_address, rpc_url,
+        )
+
+        # 6e: submarine-plan.json
         write_submarine_plan(
             selections, all_batches, args.amount, total_withdrawal,
             args.operator, output_dir, needs_linking,
@@ -812,11 +926,17 @@ Examples:
         for b in all_batches:
             print(f"  {step}. Execute consolidation-txns-{b['tx_index']}.json from ADMIN_EOA")
             step += 1
-        print(f"  {step}. Wait for beacon chain sweep (excess above 2048 ETH is auto-withdrawn)")
+        print(f"  {step}. Wait for beacon chain consolidation + sweep")
+        step += 1
+        print(f"  {step}. Execute queue-withdrawals.json from ADMIN_EOA (queueETHWithdrawal)")
+        step += 1
+        print(f"  {step}. Wait for EigenLayer withdrawal delay, then completeQueuedETHWithdrawals")
         print()
         total_requests = sum(b['num_validators'] for b in all_batches)
         print(f"Each consolidation request costs {args.fee} wei.")
         print(f"Total requests: {total_requests} ({total_requests * args.fee / 1e18:.18f} ETH in fees)")
+        total_withdrawal_eth = sum(s['withdrawal_eth'] for s in selections)
+        print(f"Total ETH to queue for withdrawal: {total_withdrawal_eth:,.2f} ETH across {len(selections)} pod(s)")
         print()
 
     finally:

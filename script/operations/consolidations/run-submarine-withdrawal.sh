@@ -276,6 +276,46 @@ if [ "$MAINNET" = true ]; then
         echo ""
     done
 
+    # Execute queueETHWithdrawal transactions (resolve node addresses on-chain)
+    QUEUE_FILE="$OUTPUT_DIR/post-sweep/queue-withdrawals.json"
+    if [ -f "$QUEUE_FILE" ]; then
+        NUM_WITHDRAWALS=$(jq '.transactions | length' "$QUEUE_FILE")
+        echo -e "${YELLOW}Executing queueETHWithdrawal for $NUM_WITHDRAWALS pod(s)...${NC}"
+
+        for IDX in $(seq 0 $((NUM_WITHDRAWALS - 1))); do
+            TARGET_PUBKEY=$(jq -r ".transactions[$IDX].target_pubkey" "$QUEUE_FILE")
+            WITHDRAWAL_GWEI=$(jq -r ".transactions[$IDX].withdrawal_amount_gwei" "$QUEUE_FILE")
+            WITHDRAWAL_WEI=$((WITHDRAWAL_GWEI * 1000000000))
+
+            echo "  Pod $((IDX + 1)): Resolving node for ${TARGET_PUBKEY:0:20}..."
+
+            # Resolve node address from target pubkey
+            PUBKEY_HASH=$(cast call "$NODES_MANAGER" "calculateValidatorPubkeyHash(bytes)(bytes32)" "$TARGET_PUBKEY" --rpc-url "$MAINNET_RPC_URL")
+            NODE_ADDR=$(cast call "$NODES_MANAGER" "etherFiNodeFromPubkeyHash(bytes32)(address)" "$PUBKEY_HASH" --rpc-url "$MAINNET_RPC_URL")
+
+            if [ "$NODE_ADDR" = "0x0000000000000000000000000000000000000000" ]; then
+                echo -e "${RED}Error: Node not found for target ${TARGET_PUBKEY:0:20}...${NC}"
+                exit 1
+            fi
+
+            echo "    Node: $NODE_ADDR"
+            echo "    Amount: $WITHDRAWAL_GWEI gwei ($WITHDRAWAL_WEI wei)"
+
+            cast send "$NODES_MANAGER" "queueETHWithdrawal(address,uint256)" \
+                "$NODE_ADDR" "$WITHDRAWAL_WEI" \
+                --rpc-url "$MAINNET_RPC_URL" \
+                --private-key "$PRIVATE_KEY" 2>&1 | tee -a "$OUTPUT_DIR/mainnet_broadcast.log"
+            CAST_EXIT_CODE=${PIPESTATUS[0]}
+
+            if [ $CAST_EXIT_CODE -ne 0 ]; then
+                echo -e "${RED}Error: queueETHWithdrawal failed for pod $((IDX + 1))${NC}"
+                exit 1
+            fi
+            echo -e "${GREEN}  queueETHWithdrawal for pod $((IDX + 1)) sent successfully.${NC}"
+        done
+        echo ""
+    fi
+
 elif [ "$SKIP_SIMULATE" = true ]; then
     echo -e "${YELLOW}[2/3] Skipping Tenderly simulation (--skip-simulate)${NC}"
     echo -e "${YELLOW}================================================================${NC}"
@@ -309,6 +349,9 @@ else
             echo "  Including: $(basename "$f")"
         done
     fi
+
+    # Note: queue-withdrawals.json is NOT included in simulation.
+    # It's executed separately after beacon chain consolidation + sweep.
 
     if [ ${#ALL_TX_FILES[@]} -eq 0 ]; then
         echo -e "${RED}Error: No transaction files found to simulate${NC}"
@@ -385,7 +428,13 @@ for f in "$OUTPUT_DIR"/consolidation-txns-*.json; do
         STEP=$((STEP + 1))
     fi
 done
-echo "  $STEP. Wait for beacon chain sweep (excess above 2048 ETH auto-withdrawn)"
+echo "  $STEP. Wait for beacon chain consolidation + sweep"
+STEP=$((STEP + 1))
+if [ -f "$OUTPUT_DIR/post-sweep/queue-withdrawals.json" ]; then
+    echo "  $STEP. Execute queue-withdrawals.json from ADMIN_EOA (queueETHWithdrawal)"
+    STEP=$((STEP + 1))
+    echo "  $STEP. Wait for EigenLayer withdrawal delay, then completeQueuedETHWithdrawals"
+fi
 
 echo ""
 echo -e "${YELLOW}Note: Each consolidation request requires a small fee paid to the beacon chain.${NC}"

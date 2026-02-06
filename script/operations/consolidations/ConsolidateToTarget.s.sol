@@ -86,10 +86,14 @@ contract ConsolidateToTarget is Script, Utils {
     uint256[] internal allUnlinkedIds;
     bytes[] internal allUnlinkedPubkeys;
 
+    // Selector for EtherFiNodesManager.queueETHWithdrawal(address,uint256)
+    bytes4 constant QUEUE_ETH_WITHDRAWAL_SELECTOR = bytes4(keccak256("queueETHWithdrawal(address,uint256)"));
+
     // Storage for consolidation data (to process after linking)
     struct ConsolidationData {
         bytes targetPubkey;
         bytes[] sourcePubkeys;
+        uint256 withdrawalAmountGwei;
     }
     ConsolidationData[] internal allConsolidations;
 
@@ -158,6 +162,13 @@ contract ConsolidateToTarget is Script, Utils {
         console2.log("=== PHASE 3: Executing consolidations (fee fetched per tx) ===");
         _executeConsolidationsWithDynamicFee(config);
 
+        // =====================================================================
+        // PHASE 4: Queue ETH withdrawals (one per pod)
+        // =====================================================================
+        console2.log("");
+        console2.log("=== PHASE 4: Queue ETH Withdrawals ===");
+        _executeQueueETHWithdrawals(config);
+
         // Summary
         console2.log("");
         console2.log("=== CONSOLIDATION COMPLETE ===");
@@ -172,6 +183,7 @@ contract ConsolidateToTarget is Script, Utils {
             if (needsLinking) {
                 console2.log("Link transaction: link-validators.json");
             }
+            console2.log("Queue withdrawals: queue-withdrawals.json");
         }
         console2.log("Admin address:", config.adminAddress);
     }
@@ -203,11 +215,22 @@ contract ConsolidateToTarget is Script, Utils {
         // Collect unlinked validators
         _collectUnlinkedValidators(targetPubkey, targetValidatorId, sourcePubkeys, sourceIds, config.batchSize);
 
+        // Read withdrawal amount (0 if not present, e.g. non-submarine consolidations)
+        uint256 withdrawalAmountGwei = 0;
+        string memory withdrawalPath = string.concat("$.consolidations[", index.uint256ToString(), "].withdrawal_amount_gwei");
+        if (stdJson.keyExists(jsonData, withdrawalPath)) {
+            withdrawalAmountGwei = stdJson.readUint(jsonData, withdrawalPath);
+        }
+        if (withdrawalAmountGwei > 0) {
+            console2.log("  Withdrawal amount:", withdrawalAmountGwei, "gwei");
+        }
+
         // Store consolidation data for Phase 3
         allConsolidations.push();
         uint256 idx = allConsolidations.length - 1;
         allConsolidations[idx].targetPubkey = targetPubkey;
         allConsolidations[idx].sourcePubkeys = sourcePubkeys;
+        allConsolidations[idx].withdrawalAmountGwei = withdrawalAmountGwei;
     }
 
     // Counter for transaction numbering
@@ -305,6 +328,89 @@ contract ConsolidateToTarget is Script, Utils {
         require(success, "Consolidation simulation failed");
     }
     
+    /// @notice Phase 4: Generate/broadcast queueETHWithdrawal for each pod with a withdrawal amount
+    /// @dev Bundles all queueETHWithdrawal calls into a single transaction for gas efficiency
+    function _executeQueueETHWithdrawals(Config memory config) internal {
+        // Collect withdrawals
+        uint256 withdrawalCount = 0;
+        for (uint256 i = 0; i < allConsolidations.length; i++) {
+            if (allConsolidations[i].withdrawalAmountGwei > 0) {
+                withdrawalCount++;
+            }
+        }
+
+        if (withdrawalCount == 0) {
+            console2.log("No ETH withdrawals to queue (no withdrawal_amount_gwei in consolidation data)");
+            return;
+        }
+
+        console2.log("Pods with ETH withdrawals:", withdrawalCount);
+
+        // Build an array of (nodeAddress, amountWei) for each pod
+        GnosisTxGeneratorLib.GnosisTx[] memory withdrawalTxns = new GnosisTxGeneratorLib.GnosisTx[](withdrawalCount);
+        uint256 txIdx = 0;
+
+        for (uint256 i = 0; i < allConsolidations.length; i++) {
+            ConsolidationData storage c = allConsolidations[i];
+            if (c.withdrawalAmountGwei == 0) continue;
+
+            // Resolve node address from target pubkey
+            bytes32 pubkeyHash = nodesManager.calculateValidatorPubkeyHash(c.targetPubkey);
+            address nodeAddr = address(nodesManager.etherFiNodeFromPubkeyHash(pubkeyHash));
+            require(nodeAddr != address(0), "Target pubkey not linked - cannot resolve node for withdrawal");
+
+            uint256 amountWei = c.withdrawalAmountGwei * 1 gwei;
+
+            console2.log("  Pod", i + 1);
+            console2.log("    Node:", nodeAddr);
+            console2.log("    Amount (gwei):", c.withdrawalAmountGwei);
+
+            bytes memory callData = abi.encodeWithSelector(
+                QUEUE_ETH_WITHDRAWAL_SELECTOR,
+                nodeAddr,
+                amountWei
+            );
+
+            withdrawalTxns[txIdx] = GnosisTxGeneratorLib.GnosisTx({
+                to: address(nodesManager),
+                value: 0,
+                data: callData
+            });
+            txIdx++;
+        }
+
+        if (config.broadcast) {
+            console2.log("  Broadcasting queueETHWithdrawal transactions...");
+            vm.startBroadcast();
+            for (uint256 i = 0; i < withdrawalTxns.length; i++) {
+                (bool success, ) = withdrawalTxns[i].to.call{value: withdrawalTxns[i].value}(withdrawalTxns[i].data);
+                require(success, "queueETHWithdrawal transaction failed");
+            }
+            vm.stopBroadcast();
+            console2.log("  All queueETHWithdrawal transactions broadcast successfully");
+        } else {
+            // Write all withdrawal calls into a single transaction file
+            string memory jsonContent = GnosisTxGeneratorLib.generateTransactionBatch(
+                withdrawalTxns,
+                config.chainId,
+                config.adminAddress
+            );
+
+            string memory postSweepDir = string.concat(config.outputDir, "/post-sweep");
+            string memory filePath = string.concat(postSweepDir, "/queue-withdrawals.json");
+            vm.writeFile(filePath, jsonContent);
+            console2.log("  Written: queue-withdrawals.json");
+
+            // Simulate on fork
+            for (uint256 i = 0; i < withdrawalTxns.length; i++) {
+                vm.prank(config.adminAddress);
+                (bool success, ) = withdrawalTxns[i].to.call{value: withdrawalTxns[i].value}(withdrawalTxns[i].data);
+                require(success, "queueETHWithdrawal simulation failed");
+            }
+            console2.log("  queueETHWithdrawal simulated on fork successfully");
+        }
+    }
+
     function _loadConfig() internal view returns (Config memory config) {
         config.batchSize = vm.envOr("BATCH_SIZE", DEFAULT_BATCH_SIZE);
         config.chainId = vm.envOr("CHAIN_ID", DEFAULT_CHAIN_ID);
