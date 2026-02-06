@@ -262,6 +262,7 @@ def generate_consolidation_batches(
             'data': calldata,
             'num_validators': len(batch_pubkeys),
             'num_sources': len(batch_sources),
+            'target_pubkey': target_pubkey,
             'tx_index': tx_start_index + len(batches),
         })
 
@@ -469,6 +470,10 @@ def write_transaction_files(
                 "value": batch['value'],
                 "data": batch['data'],
             }],
+            "metadata": {
+                "target_pubkey": batch['target_pubkey'],
+                "num_validators": batch['num_validators'],
+            },
             "description": f"Submarine Consolidation Batch {idx}: {batch['num_sources']} sources into target (vals[0])",
         }
         filename = f"consolidation-txns-{idx}.json"

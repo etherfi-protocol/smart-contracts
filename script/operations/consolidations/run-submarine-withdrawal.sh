@@ -239,16 +239,31 @@ if [ "$MAINNET" = true ]; then
         echo ""
     fi
 
-    # Execute consolidation transactions sequentially
+    # Execute consolidation transactions sequentially with dynamic fee
+    NODES_MANAGER="0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F"
     CONSOLIDATION_FILES=($(ls "$OUTPUT_DIR"/consolidation-txns-*.json 2>/dev/null | sort -V))
     for f in "${CONSOLIDATION_FILES[@]}"; do
         echo "Executing $(basename "$f")..."
         TX_TO=$(jq -r '.transactions[0].to' "$f")
-        TX_VALUE=$(jq -r '.transactions[0].value' "$f")
         TX_DATA=$(jq -r '.transactions[0].data' "$f")
+        TARGET_PUBKEY=$(jq -r '.metadata.target_pubkey' "$f")
+        NUM_VALIDATORS=$(jq -r '.metadata.num_validators' "$f")
+
+        # Fetch dynamic consolidation fee from EigenPod
+        echo "  Fetching consolidation fee for target ${TARGET_PUBKEY:0:20}..."
+        PUBKEY_HASH=$(cast call "$NODES_MANAGER" "calculateValidatorPubkeyHash(bytes)(bytes32)" "$TARGET_PUBKEY" --rpc-url "$MAINNET_RPC_URL")
+        NODE_ADDR=$(cast call "$NODES_MANAGER" "etherFiNodeFromPubkeyHash(bytes32)(address)" "$PUBKEY_HASH" --rpc-url "$MAINNET_RPC_URL")
+        EIGENPOD=$(cast call "$NODE_ADDR" "getEigenPod()(address)" --rpc-url "$MAINNET_RPC_URL")
+        FEE_PER_REQUEST=$(cast call "$EIGENPOD" "getConsolidationRequestFee()(uint256)" --rpc-url "$MAINNET_RPC_URL")
+
+        # Compute total value = fee * num_validators
+        TOTAL_VALUE=$((FEE_PER_REQUEST * NUM_VALIDATORS))
+        echo "  Fee per request: $FEE_PER_REQUEST wei"
+        echo "  Num validators:  $NUM_VALIDATORS"
+        echo "  Total value:     $TOTAL_VALUE wei"
 
         cast send "$TX_TO" "$TX_DATA" \
-            --value "$TX_VALUE" \
+            --value "$TOTAL_VALUE" \
             --rpc-url "$MAINNET_RPC_URL" \
             --private-key "$PRIVATE_KEY" 2>&1 | tee -a "$OUTPUT_DIR/mainnet_broadcast.log"
         CAST_EXIT_CODE=${PIPESTATUS[0]}
