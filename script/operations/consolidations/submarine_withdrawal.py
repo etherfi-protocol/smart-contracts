@@ -425,26 +425,24 @@ def write_linking_transaction(
     from_address: str,
     output_dir: str,
 ) -> Optional[str]:
-    """Generate link-validators.json with one tx per validator for direct EOA execution."""
+    """Generate link-validators.json with a single batched linkLegacyValidatorIds call."""
     if not validator_ids or not pubkeys:
         return None
 
     print(f"\n  Generating linking transaction for {len(validator_ids)} src[0] validator(s)...")
 
-    transactions = []
-    for vid, pk in zip(validator_ids, pubkeys):
-        link_calldata = encode_link_legacy_validators([vid], [pk])
-        transactions.append({
-            "to": ETHERFI_NODES_MANAGER,
-            "value": "0",
-            "data": "0x" + link_calldata.hex(),
-            "description": f"Link validator id={vid}",
-        })
+    # Batch all validators into a single linkLegacyValidatorIds(uint256[],bytes[]) call
+    link_calldata = encode_link_legacy_validators(validator_ids, pubkeys)
 
     tx_data = {
         "chainId": str(chain_id),
         "from": from_address,
-        "transactions": transactions,
+        "transactions": [{
+            "to": ETHERFI_NODES_MANAGER,
+            "value": "0",
+            "data": "0x" + link_calldata.hex(),
+            "description": f"Link {len(validator_ids)} validator(s): ids={validator_ids}",
+        }],
         "description": f"Link {len(validator_ids)} src[0] validator(s) via ADMIN_EOA",
     }
 
@@ -520,6 +518,12 @@ def write_submarine_plan(
         'total_withdrawal_eth': total_withdrawal,
         'num_pods_used': len(selections),
         'pods': pods_info,
+        'transactions': {
+            'linking': 1 if needs_linking else 0,
+            'consolidation': num_batches,
+            'queue_withdrawals': len(selections),
+            'total': (1 if needs_linking else 0) + num_batches + len(selections),
+        },
         'consolidation': {
             'total_sources': sum(s['num_sources'] for s in selections),
             'num_transactions': num_batches,
@@ -559,22 +563,25 @@ def write_submarine_plan(
 QUEUE_ETH_WITHDRAWAL_SELECTOR = "03f49be8"  # queueETHWithdrawal(address,uint256)
 
 
-def get_node_address(pubkey_hex: str, rpc_url: str) -> Optional[str]:
-    """Resolve EtherFi node address from a validator pubkey via on-chain query."""
-    pubkey_hash = compute_pubkey_hash(pubkey_hex)
+def get_node_address(validator_id: int, rpc_url: str) -> Optional[str]:
+    """Resolve EtherFi node address from a legacy validator ID via on-chain query.
+
+    Uses etherfiNodeAddress(uint256) which works for legacy IDs without linking.
+    """
     try:
         result = subprocess.run(
             ['cast', 'call', ETHERFI_NODES_MANAGER,
-             'etherFiNodeFromPubkeyHash(bytes32)(address)',
-             pubkey_hash,
+             'etherfiNodeAddress(uint256)(address)',
+             str(validator_id),
              '--rpc-url', rpc_url],
             capture_output=True, text=True, timeout=30,
         )
         if result.returncode != 0:
-            print(f"    Warning: Could not resolve node for {pubkey_hex[:20]}...")
+            print(f"    Warning: Could not resolve node for validator id={validator_id}")
             return None
         address = result.stdout.strip()
         if address == '0x0000000000000000000000000000000000000000':
+            print(f"    Warning: Node address is zero for validator id={validator_id}")
             return None
         return address
     except Exception:
@@ -609,16 +616,20 @@ def write_queue_withdrawal_transactions(
     for sel in selections:
         target = sel['target']
         target_pubkey = target.get('pubkey', '')
+        target_id = target.get('id')
         withdrawal_eth = sel['withdrawal_eth']
         withdrawal_gwei = int(round(withdrawal_eth * 1e9))
         withdrawal_wei = withdrawal_gwei * (10 ** 9)
 
         node_address = None
-        if rpc_url:
-            node_address = get_node_address(target_pubkey, rpc_url)
+        if rpc_url and target_id is not None:
+            node_address = get_node_address(target_id, rpc_url)
+            if node_address:
+                print(f"    Target id={target_id} -> node {node_address}")
 
         tx_entry = {
             "target_pubkey": target_pubkey,
+            "target_id": target_id,
             "withdrawal_amount_gwei": withdrawal_gwei,
             "withdrawal_amount_eth": withdrawal_eth,
             "node_address": node_address,
@@ -629,8 +640,6 @@ def write_queue_withdrawal_transactions(
         if node_address:
             tx_entry["data"] = encode_queue_eth_withdrawal(node_address, withdrawal_wei)
         else:
-            # Node not yet linked — calldata will be generated at execution time
-            # by the shell script after linking. Store empty data placeholder.
             tx_entry["data"] = "0x"
             tx_entry["requires_resolution"] = True
 

@@ -241,6 +241,8 @@ if [ "$MAINNET" = true ]; then
 
     # Execute consolidation transactions sequentially with dynamic fee
     NODES_MANAGER="0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F"
+    ADMIN_ADDRESS="0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F"
+    GAS_WARNING_THRESHOLD=12000000
     CONSOLIDATION_FILES=($(ls "$OUTPUT_DIR"/consolidation-txns-*.json 2>/dev/null | sort -V))
     for f in "${CONSOLIDATION_FILES[@]}"; do
         echo "Executing $(basename "$f")..."
@@ -262,8 +264,33 @@ if [ "$MAINNET" = true ]; then
         echo "  Num validators:  $NUM_VALIDATORS"
         echo "  Total value:     $TOTAL_VALUE wei"
 
+        # Estimate gas
+        echo "  Estimating gas..."
+        GAS_ESTIMATE=$(cast estimate "$TX_TO" "$TX_DATA" \
+            --value "$TOTAL_VALUE" \
+            --from "$ADMIN_ADDRESS" \
+            --rpc-url "$MAINNET_RPC_URL" 2>&1)
+        ESTIMATE_EXIT_CODE=$?
+
+        if [ $ESTIMATE_EXIT_CODE -ne 0 ]; then
+            echo -e "${RED}  Gas estimation failed: $GAS_ESTIMATE${NC}"
+            echo -e "${RED}  Proceeding without gas limit override${NC}"
+            GAS_LIMIT_FLAG=""
+        else
+            echo "  Estimated gas: $GAS_ESTIMATE"
+            if [ "$GAS_ESTIMATE" -gt 12000000 ]; then
+                echo -e "${RED}  *** WARNING: Gas estimate ($GAS_ESTIMATE) exceeds 12M! ***${NC}"
+                echo -e "${RED}  *** Consider reducing batch size (current: $BATCH_SIZE) ***${NC}"
+            fi
+            # Add 20% buffer to gas estimate
+            GAS_LIMIT=$(( (GAS_ESTIMATE * 120) / 100 ))
+            echo "  Gas limit (with 20% buffer): $GAS_LIMIT"
+            GAS_LIMIT_FLAG="--gas-limit $GAS_LIMIT"
+        fi
+
         cast send "$TX_TO" "$TX_DATA" \
             --value "$TOTAL_VALUE" \
+            $GAS_LIMIT_FLAG \
             --rpc-url "$MAINNET_RPC_URL" \
             --private-key "$PRIVATE_KEY" 2>&1 | tee -a "$OUTPUT_DIR/mainnet_broadcast.log"
         CAST_EXIT_CODE=${PIPESTATUS[0]}
@@ -284,17 +311,23 @@ if [ "$MAINNET" = true ]; then
 
         for IDX in $(seq 0 $((NUM_WITHDRAWALS - 1))); do
             TARGET_PUBKEY=$(jq -r ".transactions[$IDX].target_pubkey" "$QUEUE_FILE")
+            TARGET_ID=$(jq -r ".transactions[$IDX].target_id" "$QUEUE_FILE")
             WITHDRAWAL_GWEI=$(jq -r ".transactions[$IDX].withdrawal_amount_gwei" "$QUEUE_FILE")
             WITHDRAWAL_WEI=$((WITHDRAWAL_GWEI * 1000000000))
 
-            echo "  Pod $((IDX + 1)): Resolving node for ${TARGET_PUBKEY:0:20}..."
+            echo "  Pod $((IDX + 1)): target id=$TARGET_ID"
 
-            # Resolve node address from target pubkey
-            PUBKEY_HASH=$(cast call "$NODES_MANAGER" "calculateValidatorPubkeyHash(bytes)(bytes32)" "$TARGET_PUBKEY" --rpc-url "$MAINNET_RPC_URL")
-            NODE_ADDR=$(cast call "$NODES_MANAGER" "etherFiNodeFromPubkeyHash(bytes32)(address)" "$PUBKEY_HASH" --rpc-url "$MAINNET_RPC_URL")
+            # Use pre-resolved node_address from JSON if available
+            NODE_ADDR=$(jq -r ".transactions[$IDX].node_address // empty" "$QUEUE_FILE")
+
+            if [ -z "$NODE_ADDR" ] || [ "$NODE_ADDR" = "null" ]; then
+                # Resolve via legacy validator ID
+                echo "    Resolving node via etherfiNodeAddress($TARGET_ID)..."
+                NODE_ADDR=$(cast call "$NODES_MANAGER" "etherfiNodeAddress(uint256)(address)" "$TARGET_ID" --rpc-url "$MAINNET_RPC_URL")
+            fi
 
             if [ "$NODE_ADDR" = "0x0000000000000000000000000000000000000000" ]; then
-                echo -e "${RED}Error: Node not found for target ${TARGET_PUBKEY:0:20}...${NC}"
+                echo -e "${RED}Error: Node not found for target id=$TARGET_ID${NC}"
                 exit 1
             fi
 
@@ -350,8 +383,12 @@ else
         done
     fi
 
-    # Note: queue-withdrawals.json is NOT included in simulation.
-    # It's executed separately after beacon chain consolidation + sweep.
+    # Queue withdrawals (from post-sweep/ subdirectory)
+    QUEUE_FILE="$OUTPUT_DIR/post-sweep/queue-withdrawals.json"
+    if [ -f "$QUEUE_FILE" ]; then
+        ALL_TX_FILES+=("$QUEUE_FILE")
+        echo "  Including: post-sweep/queue-withdrawals.json"
+    fi
 
     if [ ${#ALL_TX_FILES[@]} -eq 0 ]; then
         echo -e "${RED}Error: No transaction files found to simulate${NC}"
@@ -391,28 +428,49 @@ echo ""
 SUBMARINE_PLAN="$OUTPUT_DIR/submarine-plan.json"
 if [ -f "$SUBMARINE_PLAN" ] && command -v jq &> /dev/null; then
     REQUESTED=$(jq '.requested_amount_eth' "$SUBMARINE_PLAN")
-    ACTUAL=$(jq '.consolidation.actual_withdrawal_eth' "$SUBMARINE_PLAN")
-    NUM_SOURCES=$(jq '.consolidation.num_sources' "$SUBMARINE_PLAN")
-    NUM_TXS=$(jq '.consolidation.num_transactions' "$SUBMARINE_PLAN")
-    IS_0X02=$(jq -r '.target.is_0x02' "$SUBMARINE_PLAN")
-    TARGET_PK=$(jq -r '.target.pubkey' "$SUBMARINE_PLAN")
+    TOTAL_WITHDRAWAL=$(jq '.total_withdrawal_eth' "$SUBMARINE_PLAN")
+    NUM_PODS=$(jq '.num_pods_used' "$SUBMARINE_PLAN")
+    NUM_SOURCES=$(jq '.consolidation.total_sources' "$SUBMARINE_PLAN")
+    LINK_TXS=$(jq '.transactions.linking // 0' "$SUBMARINE_PLAN")
+    CONSOL_TXS=$(jq '.transactions.consolidation // .consolidation.num_transactions' "$SUBMARINE_PLAN")
+    QUEUE_TXS=$(jq '.transactions.queue_withdrawals // 0' "$SUBMARINE_PLAN")
+    TOTAL_TXS=$(jq '.transactions.total // .consolidation.num_transactions' "$SUBMARINE_PLAN")
 
     echo -e "${BLUE}Summary:${NC}"
     echo "  Requested withdrawal:   $REQUESTED ETH"
-    echo "  Achievable withdrawal:  $ACTUAL ETH"
+    echo "  Total withdrawal:       $TOTAL_WITHDRAWAL ETH"
+    echo "  Pods used:              $NUM_PODS"
     echo "  Sources consolidated:   $NUM_SOURCES"
-    echo "  Transactions:           $NUM_TXS"
-    echo "  Target pubkey:          ${TARGET_PK:0:20}..."
-    echo "  Target is 0x02:         $IS_0X02"
-    if [ "$IS_0X02" = "false" ]; then
-        echo "  Auto-compound:          via vals[0] self-consolidation in each tx"
-    fi
+    echo ""
+    echo "  Transactions:"
+    echo "    Linking:              $LINK_TXS"
+    echo "    Consolidation:        $CONSOL_TXS"
+    echo "    Queue withdrawals:    $QUEUE_TXS"
+    echo "    Total:                $TOTAL_TXS"
+    echo ""
+
+    # Show per-pod details
+    for IDX in $(seq 0 $((NUM_PODS - 1))); do
+        POD_ADDR=$(jq -r ".pods[$IDX].eigenpod" "$SUBMARINE_PLAN")
+        POD_TARGET=$(jq -r ".pods[$IDX].target_pubkey" "$SUBMARINE_PLAN")
+        POD_SOURCES=$(jq ".pods[$IDX].num_sources" "$SUBMARINE_PLAN")
+        POD_WITHDRAWAL=$(jq ".pods[$IDX].withdrawal_eth" "$SUBMARINE_PLAN")
+        POD_0X02=$(jq -r ".pods[$IDX].is_target_0x02" "$SUBMARINE_PLAN")
+        echo "  Pod $((IDX + 1)): $POD_ADDR"
+        echo "    Target:    ${POD_TARGET:0:20}..."
+        echo "    Sources:   $POD_SOURCES"
+        echo "    Withdrawal: $POD_WITHDRAWAL ETH"
+        echo "    Is 0x02:   $POD_0X02"
+    done
     echo ""
 fi
 
 echo -e "${BLUE}Generated files:${NC}"
 ls -1 "$OUTPUT_DIR"/*.json 2>/dev/null | while read -r file; do
     echo "  - $(basename "$file")"
+done
+ls -1 "$OUTPUT_DIR"/post-sweep/*.json 2>/dev/null | while read -r file; do
+    echo "  - post-sweep/$(basename "$file")"
 done
 
 echo ""

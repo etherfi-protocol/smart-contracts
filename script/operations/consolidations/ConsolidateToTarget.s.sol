@@ -53,6 +53,7 @@ contract ConsolidateToTarget is Script, Utils {
     // Default parameters
     uint256 constant DEFAULT_BATCH_SIZE = 50;
     uint256 constant DEFAULT_CHAIN_ID = 1;
+    uint256 constant GAS_WARNING_THRESHOLD = 12_000_000;
     
     // Config struct to avoid stack too deep
     struct Config {
@@ -297,7 +298,19 @@ contract ConsolidateToTarget is Script, Utils {
             );
 
         if (config.broadcast) {
-            console2.log("  Broadcasting tx", txCount);
+            // Estimate gas before broadcasting
+            vm.prank(config.adminAddress);
+            uint256 gasBefore = gasleft();
+            (bool simSuccess, ) = to.call{value: value}(data);
+            uint256 gasEstimate = gasBefore - gasleft();
+            require(simSuccess, "Consolidation gas estimation failed");
+
+            console2.log("  Broadcasting tx", txCount, "- Estimated gas:", gasEstimate);
+            if (gasEstimate > GAS_WARNING_THRESHOLD) {
+                console2.log("  *** WARNING: Gas exceeds 12M threshold! ***");
+                console2.log("  *** Consider reducing batch size ***");
+            }
+
             vm.startBroadcast();
             (bool success, ) = to.call{value: value}(data);
             require(success, "Consolidation transaction failed");
@@ -322,10 +335,18 @@ contract ConsolidateToTarget is Script, Utils {
         vm.writeFile(filePath, jsonContent);
         console2.log("  Written:", fileName);
 
-        // Simulate on fork to update fee state
+        // Simulate on fork to update fee state and estimate gas
         vm.prank(config.adminAddress);
+        uint256 gasBefore = gasleft();
         (bool success, ) = to.call{value: value}(data);
+        uint256 gasUsed = gasBefore - gasleft();
         require(success, "Consolidation simulation failed");
+
+        console2.log("  Estimated gas:", gasUsed);
+        if (gasUsed > GAS_WARNING_THRESHOLD) {
+            console2.log("  *** WARNING: Gas exceeds 12M threshold! ***");
+            console2.log("  *** Consider reducing batch size ***");
+        }
     }
     
     /// @notice Phase 4: Generate/broadcast queueETHWithdrawal for each pod with a withdrawal amount
