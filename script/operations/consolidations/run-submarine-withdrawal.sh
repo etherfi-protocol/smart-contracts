@@ -349,31 +349,43 @@ if [ "$MAINNET" = true ]; then
             TARGET_PUBKEY=$(jq -r ".transactions[$IDX].target_pubkey" "$QUEUE_FILE")
             TARGET_ID=$(jq -r ".transactions[$IDX].target_id" "$QUEUE_FILE")
             WITHDRAWAL_GWEI=$(jq -r ".transactions[$IDX].withdrawal_amount_gwei" "$QUEUE_FILE")
-            WITHDRAWAL_WEI=$((WITHDRAWAL_GWEI * 1000000000))
+            WITHDRAWAL_ETH=$(jq -r ".transactions[$IDX].withdrawal_amount_eth" "$QUEUE_FILE")
+            TX_TO=$(jq -r ".transactions[$IDX].to" "$QUEUE_FILE")
+            TX_DATA=$(jq -r ".transactions[$IDX].data" "$QUEUE_FILE")
+
+            # Compute wei from gwei (integer) via python to avoid bash overflow
+            WITHDRAWAL_WEI=$(python3 -c "print($WITHDRAWAL_GWEI * 10**9)")
 
             echo "  Pod $((IDX + 1)): target id=$TARGET_ID"
+            echo "    Amount: $WITHDRAWAL_ETH ETH ($WITHDRAWAL_GWEI gwei / $WITHDRAWAL_WEI wei)"
 
-            # Use pre-resolved node_address from JSON if available
-            NODE_ADDR=$(jq -r ".transactions[$IDX].node_address // empty" "$QUEUE_FILE")
+            if [ "$TX_DATA" = "0x" ] || [ -z "$TX_DATA" ] || [ "$TX_DATA" = "null" ]; then
+                # Data not pre-encoded; resolve node address and encode on the fly
+                NODE_ADDR=$(jq -r ".transactions[$IDX].node_address // empty" "$QUEUE_FILE")
 
-            if [ -z "$NODE_ADDR" ] || [ "$NODE_ADDR" = "null" ]; then
-                # Resolve via legacy validator ID
-                echo "    Resolving node via etherfiNodeAddress($TARGET_ID)..."
-                NODE_ADDR=$(cast call "$NODES_MANAGER" "etherfiNodeAddress(uint256)(address)" "$TARGET_ID" --rpc-url "$MAINNET_RPC_URL")
+                if [ -z "$NODE_ADDR" ] || [ "$NODE_ADDR" = "null" ]; then
+                    echo "    Resolving node via etherfiNodeAddress($TARGET_ID)..."
+                    NODE_ADDR=$(cast call "$NODES_MANAGER" "etherfiNodeAddress(uint256)(address)" "$TARGET_ID" --rpc-url "$MAINNET_RPC_URL")
+                fi
+
+                if [ "$NODE_ADDR" = "0x0000000000000000000000000000000000000000" ]; then
+                    echo -e "${RED}Error: Node not found for target id=$TARGET_ID${NC}"
+                    exit 1
+                fi
+
+                echo "    Node: $NODE_ADDR"
+
+                cast send "$NODES_MANAGER" "queueETHWithdrawal(address,uint256)" \
+                    "$NODE_ADDR" "$WITHDRAWAL_WEI" \
+                    --rpc-url "$MAINNET_RPC_URL" \
+                    --private-key "$PRIVATE_KEY" 2>&1 | tee -a "$OUTPUT_DIR/mainnet_broadcast.log"
+            else
+                # Use pre-encoded calldata from Python (handles large amounts correctly)
+                echo "    Using pre-encoded calldata"
+                cast send "$TX_TO" "$TX_DATA" \
+                    --rpc-url "$MAINNET_RPC_URL" \
+                    --private-key "$PRIVATE_KEY" 2>&1 | tee -a "$OUTPUT_DIR/mainnet_broadcast.log"
             fi
-
-            if [ "$NODE_ADDR" = "0x0000000000000000000000000000000000000000" ]; then
-                echo -e "${RED}Error: Node not found for target id=$TARGET_ID${NC}"
-                exit 1
-            fi
-
-            echo "    Node: $NODE_ADDR"
-            echo "    Amount: $WITHDRAWAL_GWEI gwei ($WITHDRAWAL_WEI wei)"
-
-            cast send "$NODES_MANAGER" "queueETHWithdrawal(address,uint256)" \
-                "$NODE_ADDR" "$WITHDRAWAL_WEI" \
-                --rpc-url "$MAINNET_RPC_URL" \
-                --private-key "$PRIVATE_KEY" 2>&1 | tee -a "$OUTPUT_DIR/mainnet_broadcast.log"
             CAST_EXIT_CODE=${PIPESTATUS[0]}
 
             if [ $CAST_EXIT_CODE -ne 0 ]; then
