@@ -44,6 +44,7 @@ DRY_RUN=false
 SKIP_SIMULATE=false
 MAINNET=false
 BATCH_SIZE=150
+UNRESTAKE_ONLY=false
 
 print_usage() {
     echo "Usage: $0 --operator <name> --amount <eth> [options]"
@@ -57,11 +58,12 @@ print_usage() {
     echo "  --amount       ETH amount to withdraw (e.g., 10000)"
     echo ""
     echo "Options:"
-    echo "  --batch-size     Validators per tx including target at [0] (default: 150)"
-    echo "  --dry-run        Preview plan without generating transactions"
-    echo "  --skip-simulate  Skip Tenderly simulation"
-    echo "  --mainnet        Broadcast on mainnet using ADMIN_EOA (requires PRIVATE_KEY)"
-    echo "  --help, -h       Show this help"
+    echo "  --batch-size       Validators per tx including target at [0] (default: 150)"
+    echo "  --unrestake-only   Skip consolidation; queue ETH withdrawals directly from pod balances"
+    echo "  --dry-run          Preview plan without generating transactions"
+    echo "  --skip-simulate    Skip Tenderly simulation"
+    echo "  --mainnet          Broadcast on mainnet using ADMIN_EOA (requires PRIVATE_KEY)"
+    echo "  --help, -h         Show this help"
     echo ""
     echo "Examples:"
     echo "  # Preview plan"
@@ -69,6 +71,9 @@ print_usage() {
     echo ""
     echo "  # Generate files and simulate"
     echo "  $0 --operator 'Cosmostation' --amount 10000"
+    echo ""
+    echo "  # Unrestake: withdraw directly from pod balances (no consolidation)"
+    echo "  $0 --operator 'Cosmostation' --amount 1000 --unrestake-only"
     echo ""
     echo "  # Skip simulation"
     echo "  $0 --operator 'Cosmostation' --amount 10000 --skip-simulate"
@@ -99,6 +104,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             DRY_RUN=true
+            shift
+            ;;
+        --unrestake-only)
+            UNRESTAKE_ONLY=true
             shift
             ;;
         --skip-simulate)
@@ -148,18 +157,32 @@ fi
 # Create output directory
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 OPERATOR_SLUG=$(echo "$OPERATOR" | tr ' ' '_' | tr '[:upper:]' '[:lower:]')
-OUTPUT_DIR="$SCRIPT_DIR/txns/${OPERATOR_SLUG}_submarine_${AMOUNT}eth_${TIMESTAMP}"
+if [ "$UNRESTAKE_ONLY" = true ]; then
+    MODE_SLUG="unrestake"
+else
+    MODE_SLUG="submarine"
+fi
+OUTPUT_DIR="$SCRIPT_DIR/txns/${OPERATOR_SLUG}_${MODE_SLUG}_${AMOUNT}eth_${TIMESTAMP}"
 mkdir -p "$OUTPUT_DIR"
 
 echo ""
-echo -e "${GREEN}================================================================${NC}"
-echo -e "${GREEN}           SUBMARINE WITHDRAWAL                                ${NC}"
-echo -e "${GREEN}================================================================${NC}"
+if [ "$UNRESTAKE_ONLY" = true ]; then
+    echo -e "${GREEN}================================================================${NC}"
+    echo -e "${GREEN}           UNRESTAKE WITHDRAWAL                                ${NC}"
+    echo -e "${GREEN}================================================================${NC}"
+else
+    echo -e "${GREEN}================================================================${NC}"
+    echo -e "${GREEN}           SUBMARINE WITHDRAWAL                                ${NC}"
+    echo -e "${GREEN}================================================================${NC}"
+fi
 echo ""
 echo -e "${BLUE}Configuration:${NC}"
 echo "  Operator:      $OPERATOR"
 echo "  Amount:        $AMOUNT ETH"
-echo "  Batch size:    $BATCH_SIZE"
+echo "  Mode:          $([ "$UNRESTAKE_ONLY" = true ] && echo 'UNRESTAKE' || echo 'SUBMARINE')"
+if [ "$UNRESTAKE_ONLY" != true ]; then
+    echo "  Batch size:    $BATCH_SIZE"
+fi
 echo "  Dry run:       $DRY_RUN"
 echo "  Mainnet mode:  $MAINNET"
 echo "  Output:        $OUTPUT_DIR"
@@ -177,6 +200,10 @@ PLAN_ARGS=(
     --output-dir "$OUTPUT_DIR"
     --batch-size "$BATCH_SIZE"
 )
+
+if [ "$UNRESTAKE_ONLY" = true ]; then
+    PLAN_ARGS+=(--unrestake-only)
+fi
 
 if [ "$DRY_RUN" = true ]; then
     PLAN_ARGS+=(--dry-run)
@@ -213,98 +240,107 @@ if [ "$MAINNET" = true ]; then
         exit 1
     fi
 
-    # Execute linking transactions first (if file exists)
-    LINK_FILE="$OUTPUT_DIR/link-validators.json"
-    if [ -f "$LINK_FILE" ]; then
-        NUM_LINK_TXS=$(jq '.transactions | length' "$LINK_FILE")
-        echo "Executing link-validators.json ($NUM_LINK_TXS linking tx(s))..."
-        for IDX in $(seq 0 $((NUM_LINK_TXS - 1))); do
-            TX_TO=$(jq -r ".transactions[$IDX].to" "$LINK_FILE")
-            TX_VALUE=$(jq -r ".transactions[$IDX].value" "$LINK_FILE")
-            TX_DATA=$(jq -r ".transactions[$IDX].data" "$LINK_FILE")
+    NODES_MANAGER="0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F"
+    ADMIN_ADDRESS="0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F"
 
-            echo "  Sending link tx $((IDX + 1))/$NUM_LINK_TXS..."
+    if [ "$UNRESTAKE_ONLY" = true ]; then
+        # Unrestake mode: only execute queueETHWithdrawal (no linking/consolidation)
+        QUEUE_FILE="$OUTPUT_DIR/queue-withdrawals.json"
+    else
+        # Submarine mode: execute linking, consolidation, then queueETHWithdrawal
+
+        # Execute linking transactions first (if file exists)
+        LINK_FILE="$OUTPUT_DIR/link-validators.json"
+        if [ -f "$LINK_FILE" ]; then
+            NUM_LINK_TXS=$(jq '.transactions | length' "$LINK_FILE")
+            echo "Executing link-validators.json ($NUM_LINK_TXS linking tx(s))..."
+            for IDX in $(seq 0 $((NUM_LINK_TXS - 1))); do
+                TX_TO=$(jq -r ".transactions[$IDX].to" "$LINK_FILE")
+                TX_VALUE=$(jq -r ".transactions[$IDX].value" "$LINK_FILE")
+                TX_DATA=$(jq -r ".transactions[$IDX].data" "$LINK_FILE")
+
+                echo "  Sending link tx $((IDX + 1))/$NUM_LINK_TXS..."
+                cast send "$TX_TO" "$TX_DATA" \
+                    --value "$TX_VALUE" \
+                    --rpc-url "$MAINNET_RPC_URL" \
+                    --private-key "$PRIVATE_KEY" 2>&1 | tee -a "$OUTPUT_DIR/mainnet_broadcast.log"
+                CAST_EXIT_CODE=${PIPESTATUS[0]}
+
+                if [ $CAST_EXIT_CODE -ne 0 ]; then
+                    echo -e "${RED}Error: Linking tx $((IDX + 1)) failed${NC}"
+                    exit 1
+                fi
+            done
+            echo -e "${GREEN}All linking transactions sent successfully.${NC}"
+            echo ""
+        fi
+
+        # Execute consolidation transactions sequentially with dynamic fee
+        GAS_WARNING_THRESHOLD=12000000
+        CONSOLIDATION_FILES=($(ls "$OUTPUT_DIR"/consolidation-txns-*.json 2>/dev/null | sort -V))
+        for f in "${CONSOLIDATION_FILES[@]}"; do
+            echo "Executing $(basename "$f")..."
+            TX_TO=$(jq -r '.transactions[0].to' "$f")
+            TX_DATA=$(jq -r '.transactions[0].data' "$f")
+            TARGET_PUBKEY=$(jq -r '.metadata.target_pubkey' "$f")
+            NUM_VALIDATORS=$(jq -r '.metadata.num_validators' "$f")
+
+            # Fetch dynamic consolidation fee from EigenPod
+            echo "  Fetching consolidation fee for target ${TARGET_PUBKEY:0:20}..."
+            PUBKEY_HASH=$(cast call "$NODES_MANAGER" "calculateValidatorPubkeyHash(bytes)(bytes32)" "$TARGET_PUBKEY" --rpc-url "$MAINNET_RPC_URL")
+            NODE_ADDR=$(cast call "$NODES_MANAGER" "etherFiNodeFromPubkeyHash(bytes32)(address)" "$PUBKEY_HASH" --rpc-url "$MAINNET_RPC_URL")
+            EIGENPOD=$(cast call "$NODE_ADDR" "getEigenPod()(address)" --rpc-url "$MAINNET_RPC_URL")
+            FEE_PER_REQUEST=$(cast call "$EIGENPOD" "getConsolidationRequestFee()(uint256)" --rpc-url "$MAINNET_RPC_URL")
+
+            # Compute total value = fee * num_validators
+            TOTAL_VALUE=$((FEE_PER_REQUEST * NUM_VALIDATORS))
+            echo "  Fee per request: $FEE_PER_REQUEST wei"
+            echo "  Num validators:  $NUM_VALIDATORS"
+            echo "  Total value:     $TOTAL_VALUE wei"
+
+            # Estimate gas
+            echo "  Estimating gas..."
+            GAS_ESTIMATE=$(cast estimate "$TX_TO" "$TX_DATA" \
+                --value "$TOTAL_VALUE" \
+                --from "$ADMIN_ADDRESS" \
+                --rpc-url "$MAINNET_RPC_URL" 2>&1)
+            ESTIMATE_EXIT_CODE=$?
+
+            if [ $ESTIMATE_EXIT_CODE -ne 0 ]; then
+                echo -e "${RED}  Gas estimation failed: $GAS_ESTIMATE${NC}"
+                echo -e "${RED}  Proceeding without gas limit override${NC}"
+                GAS_LIMIT_FLAG=""
+            else
+                echo "  Estimated gas: $GAS_ESTIMATE"
+                if [ "$GAS_ESTIMATE" -gt 12000000 ]; then
+                    echo -e "${RED}  *** WARNING: Gas estimate ($GAS_ESTIMATE) exceeds 12M! ***${NC}"
+                    echo -e "${RED}  *** Consider reducing batch size (current: $BATCH_SIZE) ***${NC}"
+                fi
+                # Add 20% buffer to gas estimate
+                GAS_LIMIT=$(( (GAS_ESTIMATE * 120) / 100 ))
+                echo "  Gas limit (with 20% buffer): $GAS_LIMIT"
+                GAS_LIMIT_FLAG="--gas-limit $GAS_LIMIT"
+            fi
+
             cast send "$TX_TO" "$TX_DATA" \
-                --value "$TX_VALUE" \
+                --value "$TOTAL_VALUE" \
+                $GAS_LIMIT_FLAG \
                 --rpc-url "$MAINNET_RPC_URL" \
                 --private-key "$PRIVATE_KEY" 2>&1 | tee -a "$OUTPUT_DIR/mainnet_broadcast.log"
             CAST_EXIT_CODE=${PIPESTATUS[0]}
 
             if [ $CAST_EXIT_CODE -ne 0 ]; then
-                echo -e "${RED}Error: Linking tx $((IDX + 1)) failed${NC}"
+                echo -e "${RED}Error: $(basename "$f") failed${NC}"
                 exit 1
             fi
+            echo -e "${GREEN}$(basename "$f") sent successfully.${NC}"
+            echo ""
         done
-        echo -e "${GREEN}All linking transactions sent successfully.${NC}"
-        echo ""
+
+        QUEUE_FILE="$OUTPUT_DIR/post-sweep/queue-withdrawals.json"
     fi
 
-    # Execute consolidation transactions sequentially with dynamic fee
-    NODES_MANAGER="0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F"
-    ADMIN_ADDRESS="0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F"
-    GAS_WARNING_THRESHOLD=12000000
-    CONSOLIDATION_FILES=($(ls "$OUTPUT_DIR"/consolidation-txns-*.json 2>/dev/null | sort -V))
-    for f in "${CONSOLIDATION_FILES[@]}"; do
-        echo "Executing $(basename "$f")..."
-        TX_TO=$(jq -r '.transactions[0].to' "$f")
-        TX_DATA=$(jq -r '.transactions[0].data' "$f")
-        TARGET_PUBKEY=$(jq -r '.metadata.target_pubkey' "$f")
-        NUM_VALIDATORS=$(jq -r '.metadata.num_validators' "$f")
-
-        # Fetch dynamic consolidation fee from EigenPod
-        echo "  Fetching consolidation fee for target ${TARGET_PUBKEY:0:20}..."
-        PUBKEY_HASH=$(cast call "$NODES_MANAGER" "calculateValidatorPubkeyHash(bytes)(bytes32)" "$TARGET_PUBKEY" --rpc-url "$MAINNET_RPC_URL")
-        NODE_ADDR=$(cast call "$NODES_MANAGER" "etherFiNodeFromPubkeyHash(bytes32)(address)" "$PUBKEY_HASH" --rpc-url "$MAINNET_RPC_URL")
-        EIGENPOD=$(cast call "$NODE_ADDR" "getEigenPod()(address)" --rpc-url "$MAINNET_RPC_URL")
-        FEE_PER_REQUEST=$(cast call "$EIGENPOD" "getConsolidationRequestFee()(uint256)" --rpc-url "$MAINNET_RPC_URL")
-
-        # Compute total value = fee * num_validators
-        TOTAL_VALUE=$((FEE_PER_REQUEST * NUM_VALIDATORS))
-        echo "  Fee per request: $FEE_PER_REQUEST wei"
-        echo "  Num validators:  $NUM_VALIDATORS"
-        echo "  Total value:     $TOTAL_VALUE wei"
-
-        # Estimate gas
-        echo "  Estimating gas..."
-        GAS_ESTIMATE=$(cast estimate "$TX_TO" "$TX_DATA" \
-            --value "$TOTAL_VALUE" \
-            --from "$ADMIN_ADDRESS" \
-            --rpc-url "$MAINNET_RPC_URL" 2>&1)
-        ESTIMATE_EXIT_CODE=$?
-
-        if [ $ESTIMATE_EXIT_CODE -ne 0 ]; then
-            echo -e "${RED}  Gas estimation failed: $GAS_ESTIMATE${NC}"
-            echo -e "${RED}  Proceeding without gas limit override${NC}"
-            GAS_LIMIT_FLAG=""
-        else
-            echo "  Estimated gas: $GAS_ESTIMATE"
-            if [ "$GAS_ESTIMATE" -gt 12000000 ]; then
-                echo -e "${RED}  *** WARNING: Gas estimate ($GAS_ESTIMATE) exceeds 12M! ***${NC}"
-                echo -e "${RED}  *** Consider reducing batch size (current: $BATCH_SIZE) ***${NC}"
-            fi
-            # Add 20% buffer to gas estimate
-            GAS_LIMIT=$(( (GAS_ESTIMATE * 120) / 100 ))
-            echo "  Gas limit (with 20% buffer): $GAS_LIMIT"
-            GAS_LIMIT_FLAG="--gas-limit $GAS_LIMIT"
-        fi
-
-        cast send "$TX_TO" "$TX_DATA" \
-            --value "$TOTAL_VALUE" \
-            $GAS_LIMIT_FLAG \
-            --rpc-url "$MAINNET_RPC_URL" \
-            --private-key "$PRIVATE_KEY" 2>&1 | tee -a "$OUTPUT_DIR/mainnet_broadcast.log"
-        CAST_EXIT_CODE=${PIPESTATUS[0]}
-
-        if [ $CAST_EXIT_CODE -ne 0 ]; then
-            echo -e "${RED}Error: $(basename "$f") failed${NC}"
-            exit 1
-        fi
-        echo -e "${GREEN}$(basename "$f") sent successfully.${NC}"
-        echo ""
-    done
-
-    # Execute queueETHWithdrawal transactions (resolve node addresses on-chain)
-    QUEUE_FILE="$OUTPUT_DIR/post-sweep/queue-withdrawals.json"
+    # Execute queueETHWithdrawal transactions (shared by both modes)
     if [ -f "$QUEUE_FILE" ]; then
         NUM_WITHDRAWALS=$(jq '.transactions | length' "$QUEUE_FILE")
         echo -e "${YELLOW}Executing queueETHWithdrawal for $NUM_WITHDRAWALS pod(s)...${NC}"
@@ -362,32 +398,39 @@ else
         exit 1
     fi
 
-    VNET_NAME="${OPERATOR_SLUG}-submarine-${AMOUNT}eth-${TIMESTAMP}"
+    VNET_NAME="${OPERATOR_SLUG}-${MODE_SLUG}-${AMOUNT}eth-${TIMESTAMP}"
 
     # Collect all transaction files in order
     ALL_TX_FILES=()
 
-    # Link validators first (if exists)
-    LINK_FILE="$OUTPUT_DIR/link-validators.json"
-    if [ -f "$LINK_FILE" ]; then
-        ALL_TX_FILES+=("$LINK_FILE")
-        echo "  Including: link-validators.json"
-    fi
+    if [ "$UNRESTAKE_ONLY" = true ]; then
+        # Unrestake: only queue-withdrawals.json at root
+        QUEUE_FILE="$OUTPUT_DIR/queue-withdrawals.json"
+        if [ -f "$QUEUE_FILE" ]; then
+            ALL_TX_FILES+=("$QUEUE_FILE")
+            echo "  Including: queue-withdrawals.json"
+        fi
+    else
+        # Submarine: link + consolidation + post-sweep/queue-withdrawals
+        LINK_FILE="$OUTPUT_DIR/link-validators.json"
+        if [ -f "$LINK_FILE" ]; then
+            ALL_TX_FILES+=("$LINK_FILE")
+            echo "  Including: link-validators.json"
+        fi
 
-    # Consolidation transactions
-    CONSOLIDATION_FILES=($(ls "$OUTPUT_DIR"/consolidation-txns-*.json 2>/dev/null | sort -V))
-    if [ ${#CONSOLIDATION_FILES[@]} -gt 0 ]; then
-        for f in "${CONSOLIDATION_FILES[@]}"; do
-            ALL_TX_FILES+=("$f")
-            echo "  Including: $(basename "$f")"
-        done
-    fi
+        CONSOLIDATION_FILES=($(ls "$OUTPUT_DIR"/consolidation-txns-*.json 2>/dev/null | sort -V))
+        if [ ${#CONSOLIDATION_FILES[@]} -gt 0 ]; then
+            for f in "${CONSOLIDATION_FILES[@]}"; do
+                ALL_TX_FILES+=("$f")
+                echo "  Including: $(basename "$f")"
+            done
+        fi
 
-    # Queue withdrawals (from post-sweep/ subdirectory)
-    QUEUE_FILE="$OUTPUT_DIR/post-sweep/queue-withdrawals.json"
-    if [ -f "$QUEUE_FILE" ]; then
-        ALL_TX_FILES+=("$QUEUE_FILE")
-        echo "  Including: post-sweep/queue-withdrawals.json"
+        QUEUE_FILE="$OUTPUT_DIR/post-sweep/queue-withdrawals.json"
+        if [ -f "$QUEUE_FILE" ]; then
+            ALL_TX_FILES+=("$QUEUE_FILE")
+            echo "  Including: post-sweep/queue-withdrawals.json"
+        fi
     fi
 
     if [ ${#ALL_TX_FILES[@]} -eq 0 ]; then
@@ -417,9 +460,15 @@ fi
 # Step 3: Summary
 # ============================================================================
 echo ""
-echo -e "${GREEN}================================================================${NC}"
-echo -e "${GREEN}           SUBMARINE WITHDRAWAL COMPLETE                        ${NC}"
-echo -e "${GREEN}================================================================${NC}"
+if [ "$UNRESTAKE_ONLY" = true ]; then
+    echo -e "${GREEN}================================================================${NC}"
+    echo -e "${GREEN}           UNRESTAKE WITHDRAWAL COMPLETE                        ${NC}"
+    echo -e "${GREEN}================================================================${NC}"
+else
+    echo -e "${GREEN}================================================================${NC}"
+    echo -e "${GREEN}           SUBMARINE WITHDRAWAL COMPLETE                        ${NC}"
+    echo -e "${GREEN}================================================================${NC}"
+fi
 echo ""
 echo -e "${BLUE}Output directory:${NC} $OUTPUT_DIR"
 echo ""
@@ -430,37 +479,47 @@ if [ -f "$SUBMARINE_PLAN" ] && command -v jq &> /dev/null; then
     REQUESTED=$(jq '.requested_amount_eth' "$SUBMARINE_PLAN")
     TOTAL_WITHDRAWAL=$(jq '.total_withdrawal_eth' "$SUBMARINE_PLAN")
     NUM_PODS=$(jq '.num_pods_used' "$SUBMARINE_PLAN")
-    NUM_SOURCES=$(jq '.consolidation.total_sources' "$SUBMARINE_PLAN")
-    LINK_TXS=$(jq '.transactions.linking // 0' "$SUBMARINE_PLAN")
-    CONSOL_TXS=$(jq '.transactions.consolidation // .consolidation.num_transactions' "$SUBMARINE_PLAN")
     QUEUE_TXS=$(jq '.transactions.queue_withdrawals // 0' "$SUBMARINE_PLAN")
-    TOTAL_TXS=$(jq '.transactions.total // .consolidation.num_transactions' "$SUBMARINE_PLAN")
+    TOTAL_TXS=$(jq '.transactions.total // 0' "$SUBMARINE_PLAN")
 
     echo -e "${BLUE}Summary:${NC}"
     echo "  Requested withdrawal:   $REQUESTED ETH"
     echo "  Total withdrawal:       $TOTAL_WITHDRAWAL ETH"
     echo "  Pods used:              $NUM_PODS"
-    echo "  Sources consolidated:   $NUM_SOURCES"
-    echo ""
-    echo "  Transactions:"
-    echo "    Linking:              $LINK_TXS"
-    echo "    Consolidation:        $CONSOL_TXS"
-    echo "    Queue withdrawals:    $QUEUE_TXS"
-    echo "    Total:                $TOTAL_TXS"
+
+    if [ "$UNRESTAKE_ONLY" != true ]; then
+        NUM_SOURCES=$(jq '.consolidation.total_sources' "$SUBMARINE_PLAN")
+        LINK_TXS=$(jq '.transactions.linking // 0' "$SUBMARINE_PLAN")
+        CONSOL_TXS=$(jq '.transactions.consolidation // .consolidation.num_transactions' "$SUBMARINE_PLAN")
+        echo "  Sources consolidated:   $NUM_SOURCES"
+        echo ""
+        echo "  Transactions:"
+        echo "    Linking:              $LINK_TXS"
+        echo "    Consolidation:        $CONSOL_TXS"
+        echo "    Queue withdrawals:    $QUEUE_TXS"
+        echo "    Total:                $TOTAL_TXS"
+    else
+        echo ""
+        echo "  Transactions:"
+        echo "    Queue withdrawals:    $QUEUE_TXS"
+        echo "    Total:                $TOTAL_TXS"
+    fi
     echo ""
 
     # Show per-pod details
     for IDX in $(seq 0 $((NUM_PODS - 1))); do
         POD_ADDR=$(jq -r ".pods[$IDX].eigenpod" "$SUBMARINE_PLAN")
         POD_TARGET=$(jq -r ".pods[$IDX].target_pubkey" "$SUBMARINE_PLAN")
-        POD_SOURCES=$(jq ".pods[$IDX].num_sources" "$SUBMARINE_PLAN")
         POD_WITHDRAWAL=$(jq ".pods[$IDX].withdrawal_eth" "$SUBMARINE_PLAN")
-        POD_0X02=$(jq -r ".pods[$IDX].is_target_0x02" "$SUBMARINE_PLAN")
         echo "  Pod $((IDX + 1)): $POD_ADDR"
         echo "    Target:    ${POD_TARGET:0:20}..."
-        echo "    Sources:   $POD_SOURCES"
+        if [ "$UNRESTAKE_ONLY" != true ]; then
+            POD_SOURCES=$(jq ".pods[$IDX].num_sources" "$SUBMARINE_PLAN")
+            POD_0X02=$(jq -r ".pods[$IDX].is_target_0x02" "$SUBMARINE_PLAN")
+            echo "    Sources:   $POD_SOURCES"
+            echo "    Is 0x02:   $POD_0X02"
+        fi
         echo "    Withdrawal: $POD_WITHDRAWAL ETH"
-        echo "    Is 0x02:   $POD_0X02"
     done
     echo ""
 fi
@@ -469,32 +528,38 @@ echo -e "${BLUE}Generated files:${NC}"
 ls -1 "$OUTPUT_DIR"/*.json 2>/dev/null | while read -r file; do
     echo "  - $(basename "$file")"
 done
-ls -1 "$OUTPUT_DIR"/post-sweep/*.json 2>/dev/null | while read -r file; do
-    echo "  - post-sweep/$(basename "$file")"
-done
+if [ "$UNRESTAKE_ONLY" != true ]; then
+    ls -1 "$OUTPUT_DIR"/post-sweep/*.json 2>/dev/null | while read -r file; do
+        echo "  - post-sweep/$(basename "$file")"
+    done
+fi
 
 echo ""
 echo -e "${BLUE}Execution order:${NC}"
-STEP=1
-if [ -f "$OUTPUT_DIR/link-validators.json" ]; then
-    echo "  $STEP. Execute link-validators.json from ADMIN_EOA"
-    STEP=$((STEP + 1))
-fi
-for f in "$OUTPUT_DIR"/consolidation-txns-*.json; do
-    if [ -f "$f" ]; then
-        echo "  $STEP. Execute $(basename "$f") from ADMIN_EOA"
+if [ "$UNRESTAKE_ONLY" = true ]; then
+    echo "  1. Execute queue-withdrawals.json from ADMIN_EOA (queueETHWithdrawal)"
+    echo "  2. Wait for EigenLayer withdrawal delay, then completeQueuedETHWithdrawals"
+else
+    STEP=1
+    if [ -f "$OUTPUT_DIR/link-validators.json" ]; then
+        echo "  $STEP. Execute link-validators.json from ADMIN_EOA"
         STEP=$((STEP + 1))
     fi
-done
-echo "  $STEP. Wait for beacon chain consolidation + sweep"
-STEP=$((STEP + 1))
-if [ -f "$OUTPUT_DIR/post-sweep/queue-withdrawals.json" ]; then
-    echo "  $STEP. Execute queue-withdrawals.json from ADMIN_EOA (queueETHWithdrawal)"
+    for f in "$OUTPUT_DIR"/consolidation-txns-*.json; do
+        if [ -f "$f" ]; then
+            echo "  $STEP. Execute $(basename "$f") from ADMIN_EOA"
+            STEP=$((STEP + 1))
+        fi
+    done
+    echo "  $STEP. Wait for beacon chain consolidation + sweep"
     STEP=$((STEP + 1))
-    echo "  $STEP. Wait for EigenLayer withdrawal delay, then completeQueuedETHWithdrawals"
+    if [ -f "$OUTPUT_DIR/post-sweep/queue-withdrawals.json" ]; then
+        echo "  $STEP. Execute queue-withdrawals.json from ADMIN_EOA (queueETHWithdrawal)"
+        STEP=$((STEP + 1))
+        echo "  $STEP. Wait for EigenLayer withdrawal delay, then completeQueuedETHWithdrawals"
+    fi
+    echo ""
+    echo -e "${YELLOW}Note: Each consolidation request requires a small fee paid to the beacon chain.${NC}"
+    echo -e "${YELLOW}Ensure ADMIN_EOA has sufficient ETH balance for fees.${NC}"
 fi
-
-echo ""
-echo -e "${YELLOW}Note: Each consolidation request requires a small fee paid to the beacon chain.${NC}"
-echo -e "${YELLOW}Ensure ADMIN_EOA has sufficient ETH balance for fees.${NC}"
 echo ""

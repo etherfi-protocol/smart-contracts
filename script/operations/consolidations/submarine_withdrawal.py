@@ -15,9 +15,15 @@ Key design:
   - This auto-compounds 0x01 -> 0x02 if needed, with no separate step or waiting
   - Linking is done once for all validators
 
+Unrestake mode (--unrestake-only):
+  - Skips consolidation entirely; queues ETH withdrawals directly from existing pod balances
+  - Each pod's full balance is withdrawable (no 2048 ETH cap math)
+  - One queueETHWithdrawal call per pod
+
 Usage:
     python3 submarine_withdrawal.py --operator "Cosmostation" --amount 10000
     python3 submarine_withdrawal.py --operator "Cosmostation" --amount 10000 --dry-run
+    python3 submarine_withdrawal.py --operator "Cosmostation" --amount 1000 --unrestake-only
     python3 submarine_withdrawal.py --list-operators
 
 Environment Variables:
@@ -133,6 +139,38 @@ def evaluate_pod(wc_address: str, validators: List[Dict]) -> Dict:
     }
 
 
+def evaluate_pod_unrestake(wc_address: str, validators: List[Dict]) -> Dict:
+    """
+    Evaluate an EigenPod for direct unrestake withdrawal (no consolidation).
+
+    Returns the same dict shape as evaluate_pod so display_eigenpods_table works unchanged.
+    Key difference: max_withdrawal_eth = total_eth - 2048 (must retain MAX_EFFECTIVE_BALANCE).
+    """
+    total_eth = sum(get_balance(v) for v in validators)
+
+    consolidated = [v for v in validators if v.get('is_consolidated') is True]
+    unconsolidated = [v for v in validators if v.get('is_consolidated') is not True]
+
+    # Pick highest-balance validator as representative (for node address resolution)
+    representative = max(validators, key=get_balance) if validators else None
+
+    # Max withdrawal retains 2048 ETH in the pod (same as submarine post-consolidation)
+    max_withdrawal = max(0, total_eth - MAX_EFFECTIVE_BALANCE)
+
+    return {
+        'wc_address': wc_address,
+        'total_validators': len(validators),
+        'total_eth': total_eth,
+        'consolidated_count': len(consolidated),
+        'unconsolidated_count': len([v for v in validators if v.get('is_consolidated') is False]),
+        'target': representative,
+        'target_balance_eth': get_balance(representative) if representative else 0,
+        'is_target_0x02': representative.get('is_consolidated', False) if representative else False,
+        'available_sources': 0,
+        'max_withdrawal_eth': max_withdrawal,
+    }
+
+
 def display_eigenpods_table(evaluations: List[Dict]):
     """Always print a table of all EigenPods for the operator."""
     # Sort by total ETH descending
@@ -207,6 +245,46 @@ def select_pods_for_withdrawal(
             'sources': sources,
             'num_sources': actual_num_sources,
             'post_consolidation_eth': post_consolidation,
+            'withdrawal_eth': withdrawal,
+        })
+
+        remaining -= withdrawal
+
+    total_withdrawal = sum(s['withdrawal_eth'] for s in selections)
+    return selections, total_withdrawal
+
+
+def select_pods_for_unrestake(
+    evaluations: List[Dict],
+    amount_eth: float,
+) -> Tuple[List[Dict], float]:
+    """
+    Select EigenPods for direct unrestake withdrawal (no consolidation).
+
+    Greedy: sort pods by max_withdrawal_eth descending, withdraw up to (total_eth - 2048) per pod.
+
+    Returns:
+        Tuple of (list of pod_selections, total_withdrawal_eth)
+        Each pod_selection has same shape as select_pods_for_withdrawal output.
+    """
+    candidates = [e for e in evaluations if e['max_withdrawal_eth'] > 0 and e['target'] is not None]
+    candidates.sort(key=lambda e: e['max_withdrawal_eth'], reverse=True)
+
+    selections = []
+    remaining = amount_eth
+
+    for pod_eval in candidates:
+        if remaining <= 0:
+            break
+
+        withdrawal = min(pod_eval['max_withdrawal_eth'], remaining)
+
+        selections.append({
+            'pod_eval': pod_eval,
+            'target': pod_eval['target'],
+            'sources': [],
+            'num_sources': 0,
+            'post_consolidation_eth': pod_eval['total_eth'],
             'withdrawal_eth': withdrawal,
         })
 
@@ -556,6 +634,55 @@ def write_submarine_plan(
     return filepath
 
 
+def write_unrestake_plan(
+    selections: List[Dict],
+    amount_eth: float,
+    total_withdrawal: float,
+    operator_name: str,
+    output_dir: str,
+) -> str:
+    """Write submarine-plan.json for unrestake mode (no consolidation/linking)."""
+    pods_info = []
+    for sel in selections:
+        pe = sel['pod_eval']
+        t = sel['target']
+        pods_info.append({
+            'eigenpod': f"0x{pe['wc_address']}",
+            'target_pubkey': t.get('pubkey', ''),
+            'target_id': t.get('id'),
+            'total_eth': pe['total_eth'],
+            'withdrawal_eth': sel['withdrawal_eth'],
+        })
+
+    plan = {
+        'type': 'unrestake_withdrawal',
+        'operator': operator_name,
+        'requested_amount_eth': amount_eth,
+        'total_withdrawal_eth': total_withdrawal,
+        'num_pods_used': len(selections),
+        'pods': pods_info,
+        'transactions': {
+            'linking': 0,
+            'consolidation': 0,
+            'queue_withdrawals': len(selections),
+            'total': len(selections),
+        },
+        'files': {
+            'queue_withdrawals': 'queue-withdrawals.json',
+        },
+        'execution_order': [
+            "1. Execute queue-withdrawals.json from ADMIN_EOA (queueETHWithdrawal for each pod)",
+            "2. Wait for EigenLayer withdrawal delay, then completeQueuedETHWithdrawals",
+        ],
+        'generated_at': datetime.now().isoformat(),
+    }
+
+    filepath = os.path.join(output_dir, 'submarine-plan.json')
+    with open(filepath, 'w') as f:
+        json.dump(plan, f, indent=2, default=str)
+    return filepath
+
+
 # =============================================================================
 # Queue ETH Withdrawal Transaction Generation
 # =============================================================================
@@ -601,6 +728,7 @@ def write_queue_withdrawal_transactions(
     chain_id: int,
     from_address: str,
     rpc_url: str,
+    subdirectory: Optional[str] = "post-sweep",
 ) -> Optional[str]:
     """
     Generate queue-withdrawals.json with queueETHWithdrawal calls for each pod.
@@ -608,6 +736,10 @@ def write_queue_withdrawal_transactions(
     Each pod selection has a target pubkey and withdrawal_eth amount.
     Resolves node addresses on-chain and encodes calldata.
     All calls are bundled into a single transaction file for gas efficiency.
+
+    Args:
+        subdirectory: Subdirectory within output_dir. Default "post-sweep" for submarine mode.
+                      Pass None to write directly to output_dir (unrestake mode).
     """
     if not rpc_url:
         print("  Warning: MAINNET_RPC_URL not set, writing queue-withdrawals metadata only")
@@ -652,13 +784,18 @@ def write_queue_withdrawal_transactions(
         "description": f"Queue ETH withdrawals for {len(transactions)} pod(s) after beacon chain consolidation + sweep",
     }
 
-    # Write to post-sweep/ subdirectory to avoid simulate.py auto-discovery
-    post_sweep_dir = os.path.join(output_dir, "post-sweep")
-    os.makedirs(post_sweep_dir, exist_ok=True)
-    filepath = os.path.join(post_sweep_dir, "queue-withdrawals.json")
+    # Write to subdirectory (or output root if subdirectory is None)
+    if subdirectory:
+        target_dir = os.path.join(output_dir, subdirectory)
+        os.makedirs(target_dir, exist_ok=True)
+        filepath = os.path.join(target_dir, "queue-withdrawals.json")
+        display_path = f"{subdirectory}/queue-withdrawals.json"
+    else:
+        filepath = os.path.join(output_dir, "queue-withdrawals.json")
+        display_path = "queue-withdrawals.json"
     with open(filepath, 'w') as f:
         json.dump(tx_data, f, indent=2)
-    print(f"  Written: post-sweep/queue-withdrawals.json ({len(transactions)} withdrawal(s))")
+    print(f"  Written: {display_path} ({len(transactions)} withdrawal(s))")
     return filepath
 
 
@@ -683,6 +820,9 @@ Examples:
 
   # Custom batch size and output directory
   python3 submarine_withdrawal.py --operator "Cosmostation" --amount 10000 --batch-size 100 --output-dir ./my-txns
+
+  # Unrestake: withdraw directly from pod balances (no consolidation)
+  python3 submarine_withdrawal.py --operator "Cosmostation" --amount 1000 --unrestake-only
         """
     )
     parser.add_argument('--operator', help='Operator name (e.g., "Cosmostation")')
@@ -692,6 +832,8 @@ Examples:
                         help=f'Validators per tx including target at [0] (default: {DEFAULT_BATCH_SIZE})')
     parser.add_argument('--fee', type=int, default=DEFAULT_FEE,
                         help=f'Fee per consolidation request in wei (default: {DEFAULT_FEE})')
+    parser.add_argument('--unrestake-only', action='store_true',
+                        help='Skip consolidation; queue ETH withdrawals directly from existing pod balances')
     parser.add_argument('--dry-run', action='store_true', help='Preview plan without writing files')
     parser.add_argument('--list-operators', action='store_true', help='List available operators')
     parser.add_argument('--beacon-api', default='https://beaconcha.in/api/v1',
@@ -739,13 +881,16 @@ Examples:
             print("Use --list-operators to see available operators")
             sys.exit(1)
 
+        mode = "UNRESTAKE" if args.unrestake_only else "SUBMARINE"
         print(f"\n{'=' * 60}")
-        print(f"SUBMARINE WITHDRAWAL PLANNER")
+        print(f"{mode} WITHDRAWAL PLANNER")
         print(f"{'=' * 60}")
         print(f"Operator:        {args.operator} ({operator_address})")
         print(f"Target amount:   {args.amount:,.0f} ETH")
-        print(f"Batch size:      {args.batch_size}")
-        print(f"Fee/request:     {args.fee} wei")
+        if not args.unrestake_only:
+            print(f"Batch size:      {args.batch_size}")
+            print(f"Fee/request:     {args.fee} wei")
+        print(f"Mode:            {mode}")
         print()
 
         # ================================================================
@@ -791,9 +936,10 @@ Examples:
         print(f"  Found {len(wc_groups)} unique EigenPods")
 
         # Evaluate all pods
+        eval_fn = evaluate_pod_unrestake if args.unrestake_only else evaluate_pod
         evaluations = []
         for wc_address, pod_validators in wc_groups.items():
-            evaluations.append(evaluate_pod(wc_address, pod_validators))
+            evaluations.append(eval_fn(wc_address, pod_validators))
 
         # Always print the full pod table
         display_eigenpods_table(evaluations)
@@ -810,7 +956,10 @@ Examples:
             print(f"  The operator does not have enough validators.")
             sys.exit(1)
 
-        selections, total_withdrawal = select_pods_for_withdrawal(evaluations, wc_groups, args.amount)
+        if args.unrestake_only:
+            selections, total_withdrawal = select_pods_for_unrestake(evaluations, args.amount)
+        else:
+            selections, total_withdrawal = select_pods_for_withdrawal(evaluations, wc_groups, args.amount)
 
         if not selections:
             print("  Error: Could not select any pods for withdrawal")
@@ -819,35 +968,55 @@ Examples:
         # ================================================================
         # Step 5: Print plan summary
         # ================================================================
-        actual_sources_per_batch = args.batch_size - 1
-        total_sources = sum(s['num_sources'] for s in selections)
-        total_batches = sum(math.ceil(s['num_sources'] / actual_sources_per_batch) for s in selections)
+        if args.unrestake_only:
+            print(f"\n{'=' * 60}")
+            print(f"UNRESTAKE WITHDRAWAL PLAN")
+            print(f"{'=' * 60}")
+            print(f"Pods used:                   {len(selections)}")
+            print(f"Requested amount:            {args.amount:,.0f} ETH")
+            print(f"Total withdrawal:            {total_withdrawal:,.2f} ETH")
+            surplus = total_withdrawal - args.amount
+            if surplus > 0:
+                print(f"Surplus over requested:      {surplus:,.2f} ETH")
 
-        print(f"\n{'=' * 60}")
-        print(f"SUBMARINE WITHDRAWAL PLAN")
-        print(f"{'=' * 60}")
-        print(f"Pods used:                   {len(selections)}")
-        print(f"Total sources:               {total_sources}")
-        print(f"Total transactions:          {total_batches}")
-        print(f"Requested amount:            {args.amount:,.0f} ETH")
-        print(f"Total auto-withdrawal:       {total_withdrawal:,.2f} ETH")
-        surplus = total_withdrawal - args.amount
-        if surplus > 0:
-            print(f"Surplus over requested:      {surplus:,.2f} ETH")
+            for i, sel in enumerate(selections, start=1):
+                pe = sel['pod_eval']
+                t = sel['target']
+                print(f"\n  Pod {i}: 0x{pe['wc_address']}")
+                print(f"    Representative pubkey:   {t.get('pubkey', '')[:20]}...")
+                print(f"    Representative ID:       {t.get('id')}")
+                print(f"    Pod total balance:       {pe['total_eth']:,.2f} ETH")
+                print(f"    Withdrawal amount:       {sel['withdrawal_eth']:,.2f} ETH")
+        else:
+            actual_sources_per_batch = args.batch_size - 1
+            total_sources = sum(s['num_sources'] for s in selections)
+            total_batches = sum(math.ceil(s['num_sources'] / actual_sources_per_batch) for s in selections)
 
-        for i, sel in enumerate(selections, start=1):
-            pe = sel['pod_eval']
-            t = sel['target']
-            pod_batches = math.ceil(sel['num_sources'] / actual_sources_per_batch)
-            print(f"\n  Pod {i}: 0x{pe['wc_address']}")
-            print(f"    Target pubkey:           {t.get('pubkey', '')[:20]}...")
-            print(f"    Target ID:               {t.get('id')}")
-            print(f"    Target balance:          {pe['target_balance_eth']:.2f} ETH")
-            print(f"    Target is 0x02:          {'Yes' if pe['is_target_0x02'] else 'No (auto-compound via vals[0])'}")
-            print(f"    Sources:                 {sel['num_sources']}")
-            print(f"    Post-consolidation:      {sel['post_consolidation_eth']:,.2f} ETH")
-            print(f"    Auto-withdrawal:         {sel['withdrawal_eth']:,.2f} ETH")
-            print(f"    Transactions:            {pod_batches}")
+            print(f"\n{'=' * 60}")
+            print(f"SUBMARINE WITHDRAWAL PLAN")
+            print(f"{'=' * 60}")
+            print(f"Pods used:                   {len(selections)}")
+            print(f"Total sources:               {total_sources}")
+            print(f"Total transactions:          {total_batches}")
+            print(f"Requested amount:            {args.amount:,.0f} ETH")
+            print(f"Total auto-withdrawal:       {total_withdrawal:,.2f} ETH")
+            surplus = total_withdrawal - args.amount
+            if surplus > 0:
+                print(f"Surplus over requested:      {surplus:,.2f} ETH")
+
+            for i, sel in enumerate(selections, start=1):
+                pe = sel['pod_eval']
+                t = sel['target']
+                pod_batches = math.ceil(sel['num_sources'] / actual_sources_per_batch)
+                print(f"\n  Pod {i}: 0x{pe['wc_address']}")
+                print(f"    Target pubkey:           {t.get('pubkey', '')[:20]}...")
+                print(f"    Target ID:               {t.get('id')}")
+                print(f"    Target balance:          {pe['target_balance_eth']:.2f} ETH")
+                print(f"    Target is 0x02:          {'Yes' if pe['is_target_0x02'] else 'No (auto-compound via vals[0])'}")
+                print(f"    Sources:                 {sel['num_sources']}")
+                print(f"    Post-consolidation:      {sel['post_consolidation_eth']:,.2f} ETH")
+                print(f"    Auto-withdrawal:         {sel['withdrawal_eth']:,.2f} ETH")
+                print(f"    Transactions:            {pod_batches}")
 
         if args.dry_run:
             print(f"\n(Dry run - no files written)")
@@ -864,89 +1033,117 @@ Examples:
             script_dir = Path(__file__).resolve().parent
             timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
             operator_slug = args.operator.replace(' ', '_').lower()
-            output_dir = str(script_dir / 'txns' / f"{operator_slug}_submarine_{int(args.amount)}eth_{timestamp}")
+            mode_slug = "unrestake" if args.unrestake_only else "submarine"
+            output_dir = str(script_dir / 'txns' / f"{operator_slug}_{mode_slug}_{int(args.amount)}eth_{timestamp}")
 
         os.makedirs(output_dir, exist_ok=True)
 
-        # 6a: consolidation-data.json
-        write_consolidation_data(selections, output_dir)
-        print(f"  Written: consolidation-data.json")
-
-        # 6b: link-validators.json (only link src[0] per batch, i.e. the target pubkey per pod)
-        all_ids, all_pubkeys = collect_src0_ids_and_pubkeys(selections)
         chain_id = int(os.environ.get('CHAIN_ID', DEFAULT_CHAIN_ID))
         admin_address = os.environ.get('ADMIN_ADDRESS', ADMIN_EOA)
         rpc_url = os.environ.get('MAINNET_RPC_URL', '')
 
-        needs_linking = False
-        if all_ids:
-            print(f"\n  Checking on-chain linking status for {len(all_ids)} src[0] validator(s)...")
-            if rpc_url:
-                all_ids, all_pubkeys = filter_unlinked_validators(all_ids, all_pubkeys, rpc_url)
-            else:
-                print("    Warning: MAINNET_RPC_URL not set, skipping on-chain link check")
-
-        if all_ids:
-            link_file = write_linking_transaction(
-                all_ids, all_pubkeys, chain_id, admin_address, output_dir,
+        if args.unrestake_only:
+            # Unrestake mode: only queue-withdrawals.json + submarine-plan.json
+            write_queue_withdrawal_transactions(
+                selections, output_dir, chain_id, admin_address, rpc_url,
+                subdirectory=None,
             )
-            needs_linking = link_file is not None
+
+            write_unrestake_plan(
+                selections, args.amount, total_withdrawal,
+                args.operator, output_dir,
+            )
+            print(f"  Written: submarine-plan.json")
+
+            # Summary
+            print(f"\n{'=' * 60}")
+            print(f"OUTPUT COMPLETE")
+            print(f"{'=' * 60}")
+            print(f"Directory: {output_dir}")
+            print(f"\nExecution order:")
+            print(f"  1. Execute queue-withdrawals.json from ADMIN_EOA (queueETHWithdrawal)")
+            print(f"  2. Wait for EigenLayer withdrawal delay, then completeQueuedETHWithdrawals")
+            print()
+            total_withdrawal_eth = sum(s['withdrawal_eth'] for s in selections)
+            print(f"Total ETH to queue for withdrawal: {total_withdrawal_eth:,.2f} ETH across {len(selections)} pod(s)")
+            print()
+
         else:
-            print("  All src[0] validators already linked, no linking transaction needed.")
+            # Submarine mode: full consolidation flow
+            # 6a: consolidation-data.json
+            write_consolidation_data(selections, output_dir)
+            print(f"  Written: consolidation-data.json")
 
-        # 6c: consolidation-txns-N.json (sequentially numbered across all pods)
-        all_batches = []
-        tx_index = 1
-        for sel in selections:
-            batches = generate_consolidation_batches(
-                sel['target'], sel['sources'], args.batch_size, args.fee, tx_start_index=tx_index,
+            # 6b: link-validators.json (only link src[0] per batch, i.e. the target pubkey per pod)
+            all_ids, all_pubkeys = collect_src0_ids_and_pubkeys(selections)
+
+            needs_linking = False
+            if all_ids:
+                print(f"\n  Checking on-chain linking status for {len(all_ids)} src[0] validator(s)...")
+                if rpc_url:
+                    all_ids, all_pubkeys = filter_unlinked_validators(all_ids, all_pubkeys, rpc_url)
+                else:
+                    print("    Warning: MAINNET_RPC_URL not set, skipping on-chain link check")
+
+            if all_ids:
+                link_file = write_linking_transaction(
+                    all_ids, all_pubkeys, chain_id, admin_address, output_dir,
+                )
+                needs_linking = link_file is not None
+            else:
+                print("  All src[0] validators already linked, no linking transaction needed.")
+
+            # 6c: consolidation-txns-N.json (sequentially numbered across all pods)
+            all_batches = []
+            tx_index = 1
+            for sel in selections:
+                batches = generate_consolidation_batches(
+                    sel['target'], sel['sources'], args.batch_size, args.fee, tx_start_index=tx_index,
+                )
+                all_batches.extend(batches)
+                tx_index += len(batches)
+
+            tx_files = write_transaction_files(all_batches, output_dir, chain_id, admin_address)
+            for f in tx_files:
+                print(f"  Written: {os.path.basename(f)}")
+
+            # 6d: queue-withdrawals.json (queueETHWithdrawal per pod)
+            write_queue_withdrawal_transactions(
+                selections, output_dir, chain_id, admin_address, rpc_url,
             )
-            all_batches.extend(batches)
-            tx_index += len(batches)
 
-        tx_files = write_transaction_files(all_batches, output_dir, chain_id, admin_address)
-        for f in tx_files:
-            print(f"  Written: {os.path.basename(f)}")
+            # 6e: submarine-plan.json
+            write_submarine_plan(
+                selections, all_batches, args.amount, total_withdrawal,
+                args.operator, output_dir, needs_linking,
+            )
+            print(f"  Written: submarine-plan.json")
 
-        # 6d: queue-withdrawals.json (queueETHWithdrawal per pod)
-        write_queue_withdrawal_transactions(
-            selections, output_dir, chain_id, admin_address, rpc_url,
-        )
-
-        # 6e: submarine-plan.json
-        write_submarine_plan(
-            selections, all_batches, args.amount, total_withdrawal,
-            args.operator, output_dir, needs_linking,
-        )
-        print(f"  Written: submarine-plan.json")
-
-        # ================================================================
-        # Summary
-        # ================================================================
-        print(f"\n{'=' * 60}")
-        print(f"OUTPUT COMPLETE")
-        print(f"{'=' * 60}")
-        print(f"Directory: {output_dir}")
-        print(f"\nExecution order:")
-        step = 1
-        if needs_linking:
-            print(f"  {step}. Execute link-validators.json from ADMIN_EOA")
+            # Summary
+            print(f"\n{'=' * 60}")
+            print(f"OUTPUT COMPLETE")
+            print(f"{'=' * 60}")
+            print(f"Directory: {output_dir}")
+            print(f"\nExecution order:")
+            step = 1
+            if needs_linking:
+                print(f"  {step}. Execute link-validators.json from ADMIN_EOA")
+                step += 1
+            for b in all_batches:
+                print(f"  {step}. Execute consolidation-txns-{b['tx_index']}.json from ADMIN_EOA")
+                step += 1
+            print(f"  {step}. Wait for beacon chain consolidation + sweep")
             step += 1
-        for b in all_batches:
-            print(f"  {step}. Execute consolidation-txns-{b['tx_index']}.json from ADMIN_EOA")
+            print(f"  {step}. Execute queue-withdrawals.json from ADMIN_EOA (queueETHWithdrawal)")
             step += 1
-        print(f"  {step}. Wait for beacon chain consolidation + sweep")
-        step += 1
-        print(f"  {step}. Execute queue-withdrawals.json from ADMIN_EOA (queueETHWithdrawal)")
-        step += 1
-        print(f"  {step}. Wait for EigenLayer withdrawal delay, then completeQueuedETHWithdrawals")
-        print()
-        total_requests = sum(b['num_validators'] for b in all_batches)
-        print(f"Each consolidation request costs {args.fee} wei.")
-        print(f"Total requests: {total_requests} ({total_requests * args.fee / 1e18:.18f} ETH in fees)")
-        total_withdrawal_eth = sum(s['withdrawal_eth'] for s in selections)
-        print(f"Total ETH to queue for withdrawal: {total_withdrawal_eth:,.2f} ETH across {len(selections)} pod(s)")
-        print()
+            print(f"  {step}. Wait for EigenLayer withdrawal delay, then completeQueuedETHWithdrawals")
+            print()
+            total_requests = sum(b['num_validators'] for b in all_batches)
+            print(f"Each consolidation request costs {args.fee} wei.")
+            print(f"Total requests: {total_requests} ({total_requests * args.fee / 1e18:.18f} ETH in fees)")
+            total_withdrawal_eth = sum(s['withdrawal_eth'] for s in selections)
+            print(f"Total ETH to queue for withdrawal: {total_withdrawal_eth:,.2f} ETH across {len(selections)} pod(s)")
+            print()
 
     finally:
         conn.close()
