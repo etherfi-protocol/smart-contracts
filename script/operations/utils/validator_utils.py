@@ -558,8 +558,15 @@ def _fetch_details_single_batch(
                     else:
                         balance_eth = float(balance_gwei) if balance_gwei else 32.0
 
+                    effective_balance_gwei = vd.get('effectivebalance', 0)
+                    if isinstance(effective_balance_gwei, (int, float)) and effective_balance_gwei > 10000:
+                        effective_balance_eth = effective_balance_gwei / 1e9
+                    else:
+                        effective_balance_eth = float(effective_balance_gwei) if effective_balance_gwei else 32.0
+
                     result[matching] = {
                         'balance_eth': balance_eth,
+                        'effective_balance_eth': effective_balance_eth,
                         'is_consolidated': is_consolidated,
                         'beacon_withdrawal_credentials': wc,
                         'validator_index': vd.get('validatorindex'),
