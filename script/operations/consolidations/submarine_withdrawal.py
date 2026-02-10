@@ -95,6 +95,11 @@ def get_balance(v: Dict) -> float:
     return v.get('beacon_balance_eth', get_validator_balance_eth(v))
 
 
+def get_effective_balance(v: Dict) -> float:
+    """Get a validator's effective balance, falling back to actual balance."""
+    return v.get('beacon_effective_balance_eth', get_balance(v))
+
+
 def evaluate_pod(wc_address: str, validators: List[Dict]) -> Dict:
     """
     Evaluate an EigenPod's capacity for submarine withdrawal.
@@ -144,15 +149,16 @@ def evaluate_pod_unrestake(wc_address: str, validators: List[Dict]) -> Dict:
     Evaluate an EigenPod for direct unrestake withdrawal (no consolidation).
 
     Returns the same dict shape as evaluate_pod so display_eigenpods_table works unchanged.
-    Key difference: max_withdrawal_eth = total_eth - 2048 (must retain MAX_EFFECTIVE_BALANCE).
+    Uses effective_balance (not actual balance) to compute withdrawable ETH, since
+    effective_balance reflects what the beacon chain will actually sweep to the pod.
     """
-    total_eth = sum(get_balance(v) for v in validators)
+    total_eth = sum(get_effective_balance(v) for v in validators)
 
     consolidated = [v for v in validators if v.get('is_consolidated') is True]
     unconsolidated = [v for v in validators if v.get('is_consolidated') is not True]
 
     # Pick highest-balance validator as representative (for node address resolution)
-    representative = max(validators, key=get_balance) if validators else None
+    representative = max(validators, key=get_effective_balance) if validators else None
 
     # Max withdrawal retains 2048 ETH in the pod (same as submarine post-consolidation)
     max_withdrawal = max(0, total_eth - MAX_EFFECTIVE_BALANCE)
@@ -164,7 +170,7 @@ def evaluate_pod_unrestake(wc_address: str, validators: List[Dict]) -> Dict:
         'consolidated_count': len(consolidated),
         'unconsolidated_count': len([v for v in validators if v.get('is_consolidated') is False]),
         'target': representative,
-        'target_balance_eth': get_balance(representative) if representative else 0,
+        'target_balance_eth': get_effective_balance(representative) if representative else 0,
         'is_target_0x02': representative.get('is_consolidated', False) if representative else False,
         'available_sources': 0,
         'max_withdrawal_eth': max_withdrawal,
@@ -915,6 +921,7 @@ Examples:
             if pk in details:
                 d = details[pk]
                 v['beacon_balance_eth'] = d['balance_eth']
+                v['beacon_effective_balance_eth'] = d.get('effective_balance_eth', d['balance_eth'])
                 v['is_consolidated'] = d['is_consolidated']
                 v['beacon_withdrawal_credentials'] = d['beacon_withdrawal_credentials']
                 if d['validator_index'] is not None:
