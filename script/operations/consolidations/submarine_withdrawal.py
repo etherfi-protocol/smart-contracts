@@ -948,6 +948,15 @@ Examples:
         for wc_address, pod_validators in wc_groups.items():
             evaluations.append(eval_fn(wc_address, pod_validators))
 
+        # HOTFIX: cap max withdrawal for specific pod
+        HOTFIX_POD = "82a5b8abea11b1c969ccd7ea59f0f4c2fb392089"
+        HOTFIX_MAX_WITHDRAWAL = 3099
+        for e in evaluations:
+            if e['wc_address'].lower() == HOTFIX_POD:
+                if e['max_withdrawal_eth'] > HOTFIX_MAX_WITHDRAWAL:
+                    print(f"  HOTFIX: Capping 0x{HOTFIX_POD} max withdrawal from {e['max_withdrawal_eth']:,.0f} to {HOTFIX_MAX_WITHDRAWAL} ETH")
+                    e['max_withdrawal_eth'] = HOTFIX_MAX_WITHDRAWAL
+
         # Always print the full pod table
         display_eigenpods_table(evaluations)
 
