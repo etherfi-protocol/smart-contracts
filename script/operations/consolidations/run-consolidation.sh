@@ -44,7 +44,7 @@ NC='\033[0m' # No Color
 OPERATOR="" # operator name from the address-remapping table in Database
 COUNT=0 # number of source validators to consolidate (0 = use all available)
 BUCKET_HOURS=6
-MAX_TARGET_BALANCE=1888 # max balance of the target validator after consolidation
+MAX_TARGET_BALANCE=1600 # max balance of the target validator after consolidation
 DRY_RUN=false
 SKIP_SIMULATE=false
 MAINNET=false # broadcast transactions on mainnet using ADMIN_EOA
