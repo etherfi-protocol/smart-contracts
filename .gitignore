@@ -25,3 +25,18 @@ artifacts
 
 .DS_Store
 .certora_internal/*
+
+script/data/etherfi-nodes.json
+script/data/operators.json
+
+# Generated operation files
+script/operations/auto-compound/*-link-schedule.json
+script/operations/auto-compound/*-link-execute.json
+script/operations/auto-compound/*-consolidation.json
+script/operations/auto-compound/validators.json
+script/operations/consolidations/*-txns.json
+script/operations/data/*.json
+simulation-*.log
+tenderly-simulation-*.log
+__pycache__/
+*.pyc
