@@ -66,7 +66,7 @@ from utils.validator_utils import (
 # =============================================================================
 
 MAX_EFFECTIVE_BALANCE = 2048  # ETH - Protocol max for compounding validators
-DEFAULT_MAX_TARGET_BALANCE = 1600 # ETH 
+DEFAULT_MAX_TARGET_BALANCE = 1900 # ETH 
 DEFAULT_SOURCE_BALANCE = 32  # ETH - Standard validator balance
 DEFAULT_BUCKET_HOURS = 6
 BATCH_SIZE=58 # max number of validators that can be consolidated into a target in one transaction
