@@ -1,0 +1,11 @@
+{
+  "contractName": "WithdrawRequestNFT",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x77381e3f2ef7ac8ff04f2a044e59432e2486195d000000000000000000000000",
+    "constructorArgs": {
+      "_treasury": "0x0c83EAe1FE72c390A02E426572854931EefF93BA"
+    }
+  },
+  "deployedAddress": "0xDdD4278396A22757F2a857ADE3E6Cb35B933f9Cb"
+}

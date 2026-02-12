@@ -128,7 +128,7 @@ contract DeployReauditFixes is Utils {
         // 6. WithdrawRequestNFT Implementation
         {
             string memory contractName = "WithdrawRequestNFT";
-            bytes memory constructorArgs = abi.encode(TREASURY);
+            bytes memory constructorArgs = abi.encode(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE);
             bytes memory bytecode = abi.encodePacked(
                 type(WithdrawRequestNFT).creationCode,
                 constructorArgs

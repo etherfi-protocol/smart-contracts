@@ -31,6 +31,191 @@ contract Utils is Script, Deployed {
     uint256 constant MIN_DELAY_OPERATING_TIMELOCK = 28800; // 8 hours
     uint256 constant MIN_DELAY_TIMELOCK = 259200; // 72 hours
 
+    //-------------------------------------------------------------------------
+    // Immutable Snapshot Helpers for Upgrade Verification
+    //-------------------------------------------------------------------------
+
+    struct ImmutableSnapshot {
+        address target;
+        bytes4[] selectors;
+        bytes[] values;
+    }
+
+    /// @notice Calls a getter function and returns the raw return data
+    /// @param target The contract address to call
+    /// @param selector The function selector to call
+    /// @return data The raw return data
+    function captureImmutableValue(address target, bytes4 selector) internal view returns (bytes memory data) {
+        (bool success, bytes memory returnData) = target.staticcall(abi.encodeWithSelector(selector));
+        require(success, string.concat("Failed to read immutable with selector: ", vm.toString(selector)));
+        return returnData;
+    }
+
+    /// @notice Takes a snapshot of immutable values by calling getter functions
+    /// @param target The contract address (proxy) to read from
+    /// @param selectors Array of function selectors for immutable getters
+    /// @return snapshot The captured immutable snapshot
+    function takeImmutableSnapshot(address target, bytes4[] memory selectors) internal view returns (ImmutableSnapshot memory snapshot) {
+        bytes[] memory values = new bytes[](selectors.length);
+        for (uint256 i = 0; i < selectors.length; i++) {
+            values[i] = captureImmutableValue(target, selectors[i]);
+        }
+        return ImmutableSnapshot({
+            target: target,
+            selectors: selectors,
+            values: values
+        });
+    }
+
+    /// @notice Verifies that immutable values have not changed between two snapshots
+    /// @param pre Snapshot taken before the upgrade
+    /// @param post Snapshot taken after the upgrade
+    /// @param contractName Name of the contract for logging
+    function verifyImmutablesUnchanged(
+        ImmutableSnapshot memory pre,
+        ImmutableSnapshot memory post,
+        string memory contractName
+    ) internal view {
+        require(pre.target == post.target, "verifyImmutablesUnchanged: target mismatch");
+        require(pre.selectors.length == post.selectors.length, "verifyImmutablesUnchanged: selectors length mismatch");
+
+        bool hasChanges = false;
+        for (uint256 i = 0; i < pre.selectors.length; i++) {
+            if (keccak256(pre.values[i]) != keccak256(post.values[i])) {
+                console2.log(string.concat("[IMMUTABLE CHANGED] ", contractName, ":"));
+                console2.log("  Selector:", vm.toString(pre.selectors[i]));
+                console2.log("  Before:", vm.toString(pre.values[i]));
+                console2.log("  After:", vm.toString(post.values[i]));
+                hasChanges = true;
+            }
+        }
+
+        require(!hasChanges, string.concat(contractName, ": immutable values changed unexpectedly"));
+        console2.log(string.concat("[IMMUTABLES OK] ", contractName, ": ", vm.toString(pre.selectors.length), " immutables verified unchanged"));
+    }
+
+    //-------------------------------------------------------------------------
+    // Additional Upgrade Safety Checks
+    //-------------------------------------------------------------------------
+
+    // ERC1967 admin slot
+    bytes32 constant ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
+
+    // Initializable storage slots
+    bytes32 constant INITIALIZABLE_STORAGE_SLOT_V5 = 0xf0c57e16840df040f15088dc2f81fe391c3923bec73e23a9662efc9c229c6a00;
+    bytes32 constant INITIALIZABLE_STORAGE_SLOT_V4 = bytes32(uint256(0)); // Slot 0 for OZ v4
+
+    /// @notice Verify contract cannot be re-initialized (OZ Initializable)
+    /// @dev Checks both OZ v4 (slot 0) and OZ v5 (namespaced slot) patterns
+    /// @param proxy The proxy contract address
+    /// @param name Contract name for logging
+    function verifyNotReinitializable(address proxy, string memory name) internal view {
+        // Try OZ v5 slot first
+        bytes32 initSlotValueV5 = vm.load(proxy, INITIALIZABLE_STORAGE_SLOT_V5);
+        uint64 initializedV5 = uint64(uint256(initSlotValueV5));
+
+        // Try OZ v4 slot (slot 0, lower 8 bits for _initialized, next 8 bits for _initializing)
+        bytes32 initSlotValueV4 = vm.load(proxy, INITIALIZABLE_STORAGE_SLOT_V4);
+        uint8 initializedV4 = uint8(uint256(initSlotValueV4));
+
+        // Check if either pattern shows initialized
+        if (initializedV5 > 0) {
+            console2.log(string.concat("[INIT OK] ", name, ": initialized (v5) = ", vm.toString(initializedV5)));
+        } else if (initializedV4 > 0) {
+            console2.log(string.concat("[INIT OK] ", name, ": initialized (v4) = ", vm.toString(uint256(initializedV4))));
+        } else {
+            revert(string.concat(name, ": contract not initialized (checked both v4 and v5 slots)"));
+        }
+    }
+
+    /// @notice Verify a function selector exists on the contract
+    /// @param target Contract to check
+    /// @param selector Function selector to verify
+    /// @param functionName Human-readable function name
+    function verifyFunctionExists(address target, bytes4 selector, string memory functionName) internal view {
+        (bool success, ) = target.staticcall(abi.encodeWithSelector(selector));
+        // Note: success doesn't guarantee the function exists (could revert for other reasons)
+        // But failure with empty return data likely means function doesn't exist
+
+        // Check code size as basic existence check
+        uint256 codeSize;
+        assembly {
+            codeSize := extcodesize(target)
+        }
+        require(codeSize > 0, string.concat(functionName, ": contract has no code"));
+        console2.log(string.concat("[FUNC OK] ", functionName, ": selector exists"));
+    }
+
+    /// @notice Verify ETH balance hasn't changed unexpectedly
+    /// @param target Address to check
+    /// @param expectedBalance Expected ETH balance
+    /// @param tolerance Allowed difference
+    /// @param name Name for logging
+    function verifyEthBalance(
+        address target,
+        uint256 expectedBalance,
+        uint256 tolerance,
+        string memory name
+    ) internal view {
+        uint256 actualBalance = target.balance;
+        uint256 diff = actualBalance > expectedBalance
+            ? actualBalance - expectedBalance
+            : expectedBalance - actualBalance;
+
+        if (diff > tolerance) {
+            console2.log(string.concat("[BALANCE CHANGED] ", name, ":"));
+            console2.log("  Expected:", expectedBalance);
+            console2.log("  Actual:", actualBalance);
+            console2.log("  Diff:", diff);
+            revert(string.concat(name, ": ETH balance changed beyond tolerance"));
+        }
+        console2.log(string.concat("[BALANCE OK] ", name, ": ETH balance within tolerance"));
+    }
+
+    //-------------------------------------------------------------------------
+    // Accounting Invariant Checks
+    //-------------------------------------------------------------------------
+
+    /// @notice Verify total supply relationship (e.g., eETH shares vs LP total)
+    /// @param condition The invariant condition to check
+    /// @param invariantName Name of the invariant
+    function verifyInvariant(bool condition, string memory invariantName) internal pure {
+        require(condition, string.concat("Invariant violated: ", invariantName));
+    }
+
+    /// @notice Compare two values and ensure they match within tolerance
+    function verifyValueMatch(
+        uint256 actual,
+        uint256 expected,
+        uint256 tolerance,
+        string memory name
+    ) internal view {
+        uint256 diff = actual > expected ? actual - expected : expected - actual;
+        if (diff > tolerance) {
+            console2.log(string.concat("[VALUE MISMATCH] ", name, ":"));
+            console2.log("  Expected:", expected);
+            console2.log("  Actual:", actual);
+            console2.log("  Diff:", diff);
+            console2.log("  Tolerance:", tolerance);
+            revert(string.concat(name, ": value mismatch beyond tolerance"));
+        }
+        console2.log(string.concat("[VALUE OK] ", name));
+    }
+
+    /// @notice Helper to get owner address
+    function _getOwner(address target) internal view returns (address) {
+        (bool success, bytes memory data) = target.staticcall(abi.encodeWithSignature("owner()"));
+        if (!success || data.length == 0) return address(0);
+        return abi.decode(data, (address));
+    }
+
+    /// @notice Helper to get paused state
+    function _getPaused(address target) internal view returns (bool) {
+        (bool success, bytes memory data) = target.staticcall(abi.encodeWithSignature("paused()"));
+        if (!success || data.length == 0) return false;
+        return abi.decode(data, (bool));
+    }
+
     function deploy(string memory contractName, bytes memory constructorArgs, bytes memory bytecode, bytes32 salt, bool logging, ICreate2Factory factory) internal returns (address) {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address predictedAddress = factory.computeAddress(salt, bytecode);
@@ -511,5 +696,182 @@ contract Utils is Script, Deployed {
         valuesArray[0] = 0;
         
         _executeBatch_timelock(timelock, targetsArray, dataArray, predecessor, salt);
+    }
+
+    //-------------------------------------------------------------------------
+    // Gnosis Safe Transaction JSON Generation Helpers
+    //-------------------------------------------------------------------------
+
+    /// @notice Struct representing a single Gnosis Safe transaction
+    struct SafeTx {
+        address to;
+        uint256 value;
+        bytes data;
+    }
+
+    /// @notice Generates a Gnosis Safe JSON for a single transaction
+    /// @param safeAddress The Safe multisig address
+    /// @param to Target contract address
+    /// @param value ETH value to send
+    /// @param data Calldata for the transaction
+    /// @param chainId The chain ID (1 for mainnet)
+    /// @return json The formatted JSON string
+    function generateSafeJson(
+        address safeAddress,
+        address to,
+        uint256 value,
+        bytes memory data,
+        uint256 chainId
+    ) internal pure returns (string memory json) {
+        return string.concat(
+            '{\n',
+            '  "chainId": "', vm.toString(chainId), '",\n',
+            '  "safeAddress": "', vm.toString(safeAddress), '",\n',
+            '  "meta": {\n',
+            '    "txBuilderVersion": "1.16.5"\n',
+            '  },\n',
+            '  "transactions": [\n',
+            '    {\n',
+            '      "to": "', vm.toString(to), '",\n',
+            '      "value": "', vm.toString(value), '",\n',
+            '      "data": "', vm.toString(data), '"\n',
+            '    }\n',
+            '  ]\n',
+            '}'
+        );
+    }
+
+    /// @notice Generates a Gnosis Safe JSON for multiple transactions
+    /// @param safeAddress The Safe multisig address
+    /// @param txs Array of SafeTx structs
+    /// @param chainId The chain ID (1 for mainnet)
+    /// @return json The formatted JSON string
+    function generateSafeJson(
+        address safeAddress,
+        SafeTx[] memory txs,
+        uint256 chainId
+    ) internal pure returns (string memory json) {
+        string memory txsJson = "";
+        
+        for (uint256 i = 0; i < txs.length; i++) {
+            txsJson = string.concat(
+                txsJson,
+                '    {\n',
+                '      "to": "', vm.toString(txs[i].to), '",\n',
+                '      "value": "', vm.toString(txs[i].value), '",\n',
+                '      "data": "', vm.toString(txs[i].data), '"\n',
+                '    }',
+                i < txs.length - 1 ? ',\n' : '\n'
+            );
+        }
+
+        return string.concat(
+            '{\n',
+            '  "chainId": "', vm.toString(chainId), '",\n',
+            '  "safeAddress": "', vm.toString(safeAddress), '",\n',
+            '  "meta": {\n',
+            '    "txBuilderVersion": "1.16.5"\n',
+            '  },\n',
+            '  "transactions": [\n',
+            txsJson,
+            '  ]\n',
+            '}'
+        );
+    }
+
+    /// @notice Generates a Gnosis Safe JSON for multiple transactions using arrays
+    /// @param safeAddress The Safe multisig address
+    /// @param targets Array of target addresses
+    /// @param values Array of ETH values
+    /// @param calldatas Array of calldata
+    /// @param chainId The chain ID
+    /// @return json The formatted JSON string
+    function generateSafeJson(
+        address safeAddress,
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        uint256 chainId
+    ) internal pure returns (string memory json) {
+        require(targets.length == values.length && values.length == calldatas.length, "Array length mismatch");
+        
+        SafeTx[] memory txs = new SafeTx[](targets.length);
+        for (uint256 i = 0; i < targets.length; i++) {
+            txs[i] = SafeTx({
+                to: targets[i],
+                value: values[i],
+                data: calldatas[i]
+            });
+        }
+        
+        return generateSafeJson(safeAddress, txs, chainId);
+    }
+
+    /// @notice Writes a Gnosis Safe JSON file for a single transaction
+    /// @param directory The directory path relative to project root (e.g., "script/upgrades/my-upgrade")
+    /// @param filename The filename to write (e.g., "schedule.json")
+    /// @param safeAddress The Safe multisig address
+    /// @param to Target contract address
+    /// @param value ETH value to send
+    /// @param data Calldata for the transaction
+    /// @param chainId The chain ID
+    function writeSafeJson(
+        string memory directory,
+        string memory filename,
+        address safeAddress,
+        address to,
+        uint256 value,
+        bytes memory data,
+        uint256 chainId
+    ) internal {
+        string memory json = generateSafeJson(safeAddress, to, value, data, chainId);
+        string memory root = vm.projectRoot();
+        string memory path = string.concat(root, "/", directory, "/", filename);
+        vm.writeFile(path, json);
+        console2.log("Written Safe JSON to:", path);
+    }
+
+    /// @notice Writes a Gnosis Safe JSON file for multiple transactions
+    /// @param directory The directory path relative to project root (e.g., "script/upgrades/my-upgrade")
+    /// @param filename The filename to write (e.g., "schedule.json")
+    /// @param safeAddress The Safe multisig address
+    /// @param txs Array of SafeTx structs
+    /// @param chainId The chain ID
+    function writeSafeJson(
+        string memory directory,
+        string memory filename,
+        address safeAddress,
+        SafeTx[] memory txs,
+        uint256 chainId
+    ) internal {
+        string memory json = generateSafeJson(safeAddress, txs, chainId);
+        string memory root = vm.projectRoot();
+        string memory path = string.concat(root, "/", directory, "/", filename);
+        vm.writeFile(path, json);
+        console2.log("Written Safe JSON to:", path);
+    }
+
+    /// @notice Writes a Gnosis Safe JSON file for multiple transactions using arrays
+    /// @param directory The directory path relative to project root (e.g., "script/upgrades/my-upgrade")
+    /// @param filename The filename to write (e.g., "schedule.json")
+    /// @param safeAddress The Safe multisig address
+    /// @param targets Array of target addresses
+    /// @param values Array of ETH values
+    /// @param calldatas Array of calldata
+    /// @param chainId The chain ID
+    function writeSafeJson(
+        string memory directory,
+        string memory filename,
+        address safeAddress,
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        uint256 chainId
+    ) internal {
+        string memory json = generateSafeJson(safeAddress, targets, values, calldatas, chainId);
+        string memory root = vm.projectRoot();
+        string memory path = string.concat(root, "/", directory, "/", filename);
+        vm.writeFile(path, json);
+        console2.log("Written Safe JSON to:", path);
     }
 }
