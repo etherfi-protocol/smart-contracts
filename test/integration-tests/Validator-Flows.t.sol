@@ -12,6 +12,28 @@ import "../../src/libraries/DepositDataRootGenerator.sol";
 contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
+
+        // Handle any pending oracle report that hasn't been processed yet
+        _syncOracleReportState();
+    }
+
+    /// @dev Advances the admin's lastHandledReportRefSlot to match the oracle's lastPublishedReportRefSlot.
+    function _syncOracleReportState() internal {
+        uint32 lastPublished = etherFiOracleInstance.lastPublishedReportRefSlot();
+        uint32 lastHandled = etherFiAdminInstance.lastHandledReportRefSlot();
+
+        if (lastPublished != lastHandled) {
+            uint32 lastPublishedBlock = etherFiOracleInstance.lastPublishedReportRefBlock();
+
+            // EtherFiAdmin slot 209 packs: lastHandledReportRefSlot (4B @ offset 0) +
+            //   lastHandledReportRefBlock (4B @ offset 4) + other fields in higher bytes
+            bytes32 slot209 = vm.load(address(etherFiAdminInstance), bytes32(uint256(209)));
+            uint256 val = uint256(slot209);
+            val &= ~uint256(0xFFFFFFFFFFFFFFFF); // clear low 64 bits (both uint32 fields)
+            val |= uint256(lastPublished);
+            val |= uint256(lastPublishedBlock) << 32;
+            vm.store(address(etherFiAdminInstance), bytes32(uint256(209)), bytes32(val));
+        }
     }
 
     function _toArray(IStakingManager.DepositData memory d) internal pure returns (IStakingManager.DepositData[] memory arr) {

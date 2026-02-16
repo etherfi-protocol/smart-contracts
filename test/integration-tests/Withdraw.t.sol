@@ -19,20 +19,25 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         _syncOracleReportState();
     }
 
-    /// @dev Syncs the oracle's lastPublishedReportRefSlot with the admin's lastHandledReportRefSlot
-    ///      This is necessary when forking mainnet where there may be a pending report
+    /// @dev Advances the admin's lastHandledReportRefSlot to match the oracle's lastPublishedReportRefSlot.
+    ///      On mainnet fork there may be a published report the admin hasn't processed yet.
+    ///      We advance the admin forward (not rewind the oracle) so that slotForNextReport()
+    ///      returns the correct next slot and committee members can still submit new reports.
     function _syncOracleReportState() internal {
         uint32 lastPublished = etherFiOracleInstance.lastPublishedReportRefSlot();
         uint32 lastHandled = etherFiAdminInstance.lastHandledReportRefSlot();
 
         if (lastPublished != lastHandled) {
-            // Use the oracle's admin function to sync the state
-            // Get the oracle admin (owner in this case)
-            address oracleOwner = etherFiOracleInstance.owner();
             uint32 lastPublishedBlock = etherFiOracleInstance.lastPublishedReportRefBlock();
-            
-            vm.prank(oracleOwner);
-            etherFiOracleInstance.updateLastPublishedBlockStamps(lastHandled, lastPublishedBlock);
+
+            // EtherFiAdmin slot 209 packs: lastHandledReportRefSlot (4B @ offset 0) +
+            //   lastHandledReportRefBlock (4B @ offset 4) + other fields in higher bytes
+            bytes32 slot209 = vm.load(address(etherFiAdminInstance), bytes32(uint256(209)));
+            uint256 val = uint256(slot209);
+            val &= ~uint256(0xFFFFFFFFFFFFFFFF); // clear low 64 bits (both uint32 fields)
+            val |= uint256(lastPublished);
+            val |= uint256(lastPublishedBlock) << 32;
+            vm.store(address(etherFiAdminInstance), bytes32(uint256(209)), bytes32(val));
         }
     }
 
