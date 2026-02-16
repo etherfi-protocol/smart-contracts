@@ -5,7 +5,13 @@ import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import {Deployed} from "../../deploys/Deployed.s.sol";
 import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
-import {ILidoWithdrawalQueue} from "../../../src/interfaces/ILiquifier.sol";
+// import {ILidoWithdrawalQueue} from "../../../src/interfaces/ILiquifier.sol";
+
+interface ILidoWithdrawalQueue {
+    function getLastFinalizedRequestId() external view returns (uint256);
+    function getLastCheckpointIndex() external view returns (uint256);
+    function findCheckpointHints(uint256[] calldata _requestIds, uint256 _firstIndex, uint256 _lastIndex) external view returns (uint256[] memory hintIds);
+}
 
 // forge script script/operations/steth-claim-withdrawals/ClaimStEthWithdrawals.s.sol --fork-url $MAINNET_RPC_URL -vvvv
 
@@ -17,14 +23,14 @@ contract ClaimStEthWithdrawals is Script, Deployed {
         uint256 startId = 113785; // Set this to the first request you want to claim
         uint256 endId = 113863; // Set this to the last request you want to claim
 
-        ILidoWithdrawalQueue lidoWithdrawalQueue = etherFiRestaker.lidoWithdrawalQueue();
+        ILidoWithdrawalQueue lidoWithdrawalQueue = ILidoWithdrawalQueue(address(etherFiRestaker.lidoWithdrawalQueue()));
         console2.log("LidoWithdrawalQueue:", address(lidoWithdrawalQueue));
 
         // Cap endId to the last finalized request
-        uint256 lastFinalizedId = lidoWithdrawalQueue.getLastFinalizedRequestId();
+        uint256 lastFinalizedId = ILidoWithdrawalQueue(address(lidoWithdrawalQueue)).getLastFinalizedRequestId();
         console2.log("Last finalized request ID:", lastFinalizedId);
 
-        if (endId > lastFinalizedId) {
+        if (endId > lastFinalizedId) {  
             console2.log("WARNING: endId", endId, "exceeds last finalized ID, capping to", lastFinalizedId);
             endId = lastFinalizedId;
         }
@@ -40,10 +46,10 @@ contract ClaimStEthWithdrawals is Script, Deployed {
         }
 
         // Get checkpoint hints
-        uint256 lastCheckpointIndex = lidoWithdrawalQueue.getLastCheckpointIndex();
+        uint256 lastCheckpointIndex = ILidoWithdrawalQueue(address(lidoWithdrawalQueue)).getLastCheckpointIndex();
         console2.log("Last checkpoint index:", lastCheckpointIndex);
 
-        uint256[] memory hints = lidoWithdrawalQueue.findCheckpointHints(requestIds, 1, lastCheckpointIndex);
+        uint256[] memory hints = ILidoWithdrawalQueue(address(lidoWithdrawalQueue)).findCheckpointHints(requestIds, 1, lastCheckpointIndex);
 
         console2.log("Hints found for", hints.length, "requests");
         for (uint256 i = 0; i < hints.length; i++) {

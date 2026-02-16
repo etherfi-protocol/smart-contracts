@@ -5,7 +5,18 @@ import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import {Deployed} from "../../deploys/Deployed.s.sol";
 import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
-import {ILido, ILidoWithdrawalQueue} from "../../../src/interfaces/ILiquifier.sol";
+import {ILido} from "../../../src/interfaces/ILiquifier.sol";
+
+
+interface ILidoWithdrawalQueue {
+    function getLastFinalizedRequestId() external view returns (uint256);
+    function getLastCheckpointIndex() external view returns (uint256);
+    function findCheckpointHints(uint256[] calldata _requestIds, uint256 _firstIndex, uint256 _lastIndex) external view returns (uint256[] memory hintIds);
+    function prefinalize(uint256[] calldata _batches, uint256 _maxShareRate) external view returns (uint256 ethToLock, uint256 sharesToBurn);
+    function finalize(uint256 _lastRequestIdToBeFinalized, uint256 _maxShareRate) external payable;
+    function FINALIZE_ROLE() external view returns (bytes32);
+    function getRoleMember(bytes32 _role, uint256 _index) external view returns (address);
+}
 
 // Full withdrawal:
 //   FULL_WITHDRAWAL=true forge script script/operations/steth-claim-withdrawals/AutomateStEthWithdrawals.s.sol --fork-url $MAINNET_RPC_URL -vvvv
@@ -18,7 +29,7 @@ contract AutomateStEthWithdrawals is Script, Deployed {
     EtherFiRestaker constant etherFiRestaker = EtherFiRestaker(payable(ETHERFI_RESTAKER));
 
     function run() external {
-        ILidoWithdrawalQueue lidoWithdrawalQueue = etherFiRestaker.lidoWithdrawalQueue();
+        ILidoWithdrawalQueue lidoWithdrawalQueue = ILidoWithdrawalQueue(address(etherFiRestaker.lidoWithdrawalQueue()));
         ILido lido = etherFiRestaker.lido();
 
         bool fullWithdrawal = vm.envOr("FULL_WITHDRAWAL", false);
@@ -100,8 +111,8 @@ contract AutomateStEthWithdrawals is Script, Deployed {
         }
 
         // Get checkpoint hints
-        uint256 lastCheckpointIndex = lidoWithdrawalQueue.getLastCheckpointIndex();
-        uint256[] memory hints = lidoWithdrawalQueue.findCheckpointHints(claimableIds, 1, lastCheckpointIndex);
+        uint256 lastCheckpointIndex = ILidoWithdrawalQueue(address(lidoWithdrawalQueue)).getLastCheckpointIndex();
+        uint256[] memory hints = ILidoWithdrawalQueue(address(lidoWithdrawalQueue)).findCheckpointHints(claimableIds, 1, lastCheckpointIndex);
 
         // Log claim calldata
         bytes memory claimCalldata = abi.encodeWithSelector(

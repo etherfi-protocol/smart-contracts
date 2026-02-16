@@ -628,12 +628,15 @@ contract PreludeTest is Test, ArrayTestHelper {
             vm.stopPrank();
         }
 
+        // poke withdrawable funds into the restakedExecutionLayerGwei storage slot of the eigenpod
+        // Must be done before queueing to ensure the EigenPod has sufficient state.
+        // Use a large value to also cover any pre-existing queued withdrawals on mainnet.
+        address eigenpod = etherFiNodesManager.getEigenPod(uint256(pubkeyHash));
+        vm.store(eigenpod, bytes32(uint256(52)) /*slot*/, bytes32(uint256(10000 ether / 1 gwei)));
+        vm.deal(eigenpod, 10000 ether);
+
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueETHWithdrawal(uint256(pubkeyHash), 1 ether);
-
-        // poke some withdrawable funds into the restakedExecutionLayerGwei storage slot of the eigenpod
-        address eigenpod = etherFiNodesManager.getEigenPod(uint256(pubkeyHash));
-        vm.store(eigenpod, bytes32(uint256(52)) /*slot*/, bytes32(uint256(50 ether / 1 gwei)));
 
         uint256 startingBalance = address(liquidityPool).balance;
 

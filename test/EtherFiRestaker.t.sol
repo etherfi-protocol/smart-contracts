@@ -62,18 +62,19 @@ contract EtherFiRestakerTest is TestSetup {
         uint256 lpBalance = address(liquidityPoolInstance).balance;
         uint256 currentEtherFiRestakerTotalPooledEther = etherFiRestakerInstance.getTotalPooledEther();
         uint256 currentStEthBalance = stEth.balanceOf(address(etherFiRestakerInstance));
+        uint256 initialPendingRedemption = etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth));
         uint256 amount = 10 ether;
 
         _deposit_stEth(amount);
 
-        assertEq(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), 0);
+        assertEq(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), initialPendingRedemption);
 
         vm.startPrank(owner);
         uint256 stEthBalance = stEth.balanceOf(address(etherFiRestakerInstance)) - currentStEthBalance;
         uint256[] memory reqIds = etherFiRestakerInstance.stEthRequestWithdrawal(stEthBalance);
         vm.stopPrank();
         
-        assertApproxEqAbs(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), amount, 2 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), initialPendingRedemption + amount, 2 wei);
         assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), currentEtherFiRestakerTotalPooledEther + amount, 2 wei);
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
 
@@ -87,7 +88,7 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakerInstance.lidoWithdrawalQueue().finalize(reqIds[reqIds.length-1], currentRate);
         vm.stopPrank();
 
-        assertApproxEqAbs(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), amount, 2 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), initialPendingRedemption + amount, 2 wei);
         assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), currentEtherFiRestakerTotalPooledEther + amount, 2 wei);
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
 
@@ -97,8 +98,8 @@ contract EtherFiRestakerTest is TestSetup {
         uint256[] memory hints = etherFiRestakerInstance.lidoWithdrawalQueue().findCheckpointHints(reqIds, 1, lastCheckPointIndex);
         etherFiRestakerInstance.stEthClaimWithdrawals(reqIds, hints);
 
-        // the cycle completes
-        assertApproxEqAbs(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), 0, 2 wei);
+        // the cycle completes - only the newly requested amount should be redeemed, initial pending remains
+        assertApproxEqAbs(etherFiRestakerInstance.getAmountPendingForRedemption(address(stEth)), initialPendingRedemption, 2 wei);
         assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), currentEtherFiRestakerTotalPooledEther, 2 wei);
         assertApproxEqAbs(address(etherFiRestakerInstance).balance, 0, 2);
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + amount, 2 wei);
