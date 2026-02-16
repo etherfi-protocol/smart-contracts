@@ -47,6 +47,7 @@ BUCKET_HOURS=6
 MAX_TARGET_BALANCE=1900 # max balance of the target validator after consolidation
 DRY_RUN=false
 SKIP_SIMULATE=false
+BATCH_SIZE=58 # max number of consolidations per transaction
 MAINNET=false # broadcast transactions on mainnet using ADMIN_EOA
 
 print_usage() {
@@ -61,7 +62,7 @@ print_usage() {
     echo "Options:"
     echo "  --count              Number of source validators to consolidate (default: 0 = all available)"
     echo "  --bucket-hours       Time bucket duration for sweep queue distribution (default: 6)"
-    echo "  --max-target-balance Maximum ETH balance allowed on target post-consolidation (default: 1888)"
+    echo "  --max-target-balance Maximum ETH balance allowed on target post-consolidation (default: 1900)"
     echo "  --batch-size         Number of consolidations per transaction (default: 58)"
     echo "  --dry-run            Output consolidation plan JSON without executing forge script"
     echo "  --skip-simulate      Skip Tenderly simulation step"
@@ -73,7 +74,7 @@ print_usage() {
     echo "  $0 --operator 'Validation Cloud'"
     echo ""
     echo "  # Consolidation with custom settings (limit to 100 validators)"
-    echo "  $0 --operator 'Infstones' --count 100 --bucket-hours 6 --max-target-balance 1888"
+    echo "  $0 --operator 'Infstones' --count 100 --bucket-hours 6 --max-target-balance 1900"
     echo ""
     echo "  # Dry run to preview plan"
     echo "  $0 --operator 'Validation Cloud' --dry-run"

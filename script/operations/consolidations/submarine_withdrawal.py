@@ -402,7 +402,8 @@ def is_pubkey_linked(pubkey_hex: str, rpc_url: str) -> bool:
             return False
         address = result.stdout.strip()
         return address != '0x0000000000000000000000000000000000000000'
-    except Exception:
+    except Exception as e:
+        print(f"    Warning: Exception checking linking status for {pubkey_hex[:20]}...: {e}")
         return False
 
 
@@ -717,7 +718,8 @@ def get_node_address(validator_id: int, rpc_url: str) -> Optional[str]:
             print(f"    Warning: Node address is zero for validator id={validator_id}")
             return None
         return address
-    except Exception:
+    except Exception as e:
+        print(f"    Warning: Exception resolving node address for validator id={validator_id}: {e}")
         return None
 
 

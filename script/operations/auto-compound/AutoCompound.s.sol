@@ -120,10 +120,6 @@ contract AutoCompound is Script, Utils {
         config.safeNonce = vm.envOr("SAFE_NONCE", uint256(0));
         
         console2.log("JSON file:", config.jsonFile);
-        // console2.log("Output file:", config.outputFile);
-        // console2.log("Batch size:", config.batchSize);
-        // console2.log("Output format:", config.outputFormat);
-        // console2.log("Safe nonce:", config.safeNonce);
         console2.log("");
     }
     
@@ -483,20 +479,6 @@ contract AutoCompound is Script, Utils {
         return string.concat(root, "/script/operations/auto-compound/txns/", path);
     }
     
-    function _removeExtension(string memory filename) internal pure returns (string memory) {
-        bytes memory b = bytes(filename);
-        for (uint256 i = b.length; i > 0; i--) {
-            if (b[i-1] == '.') {
-                bytes memory result = new bytes(i-1);
-                for (uint256 j = 0; j < i-1; j++) {
-                    result[j] = b[j];
-                }
-                return string(result);
-            }
-        }
-        return filename;
-    }
-
     /**
      * @notice Parses validators from JSON data and returns pod addresses for each validator
      * @param jsonData JSON data string (already read from file)
@@ -718,42 +700,6 @@ contract AutoCompound is Script, Utils {
             config.chainId,
             config.safeAddress
         );
-    }
-
-    function _generateMultiSafeTransactionJson(
-        ConsolidationTx[] memory transactions,
-        Config memory config
-    ) internal pure returns (string memory) {
-        string memory json = '[\n';
-
-        for (uint256 i = 0; i < transactions.length; i++) {
-            // Create single transaction array for this pod group
-            GnosisTxGeneratorLib.GnosisTx[] memory singleTx = new GnosisTxGeneratorLib.GnosisTx[](1);
-            singleTx[0] = GnosisTxGeneratorLib.GnosisTx({
-                to: transactions[i].to,
-                value: transactions[i].value,
-                data: transactions[i].data
-            });
-
-            // Generate individual Safe transaction JSON
-            string memory txJson = GnosisTxGeneratorLib.generateTransactionBatch(
-                singleTx,
-                config.chainId,
-                config.safeAddress
-            );
-
-            // Add to array
-            json = string.concat(json, '  ', txJson);
-
-            if (i < transactions.length - 1) {
-                json = string.concat(json, ',\n');
-            } else {
-                json = string.concat(json, '\n');
-            }
-        }
-
-        json = string.concat(json, ']');
-        return json;
     }
 
 }

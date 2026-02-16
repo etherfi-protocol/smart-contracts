@@ -288,9 +288,9 @@ def create_virtual_testnet(name: str, chain_id: int = 1, verbose: bool = True) -
                 "id": 1
             }, timeout=10)
             block_number = int(resp.json()['result'], 16)
-        except:
-            pass
-    
+        except Exception as e:
+            print(f"    Warning: Failed to fetch latest block number: {e}")
+
     payload = {
         "slug": slug,
         "display_name": name,
@@ -509,7 +509,7 @@ def wait_for_tx_receipt(rpc_url: str, tx_hash: str, timeout: int = 30, verbose: 
             receipt = rpc_request(rpc_url, "eth_getTransactionReceipt", [tx_hash])
             if receipt:
                 return receipt
-        except:
+        except Exception:
             pass
         time.sleep(1)
 

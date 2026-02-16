@@ -326,10 +326,13 @@ def fetch_validator_count() -> int:
             data = response.json()
             if data.get('data'):
                 return len(data['data'])
+        else:
+            print(f"Warning: Beacon API returned status {response.status_code} when fetching validator count")
     except Exception as e:
         print(f"Warning: Failed to fetch validator count: {e}")
 
     # Fallback to approximate count
+    print("Warning: Using fallback validator count of 1,200,000")
     return 1200000
 
 
@@ -574,10 +577,11 @@ def _fetch_details_single_batch(
 
             return result
 
-        except Exception:
+        except Exception as e:
             if attempt < max_retries - 1:
                 time.sleep(0.5 * (attempt + 1))
                 continue
+            print(f"Warning: Failed to fetch validator details after {max_retries} retries: {e}")
             return {}
 
     return {}
