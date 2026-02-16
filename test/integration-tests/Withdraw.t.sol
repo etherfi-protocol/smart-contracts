@@ -42,6 +42,8 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         // Ensure bucket limiter has enough capacity and is fully refilled
         etherFiRedemptionManagerInstance.setCapacity(3000 ether, ETH_ADDRESS);
         etherFiRedemptionManagerInstance.setRefillRatePerSecond(3000 ether, ETH_ADDRESS);
+        // On mainnet fork, lowWatermark (% of TVL) can be much larger than available liquidity
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, ETH_ADDRESS);
         vm.stopPrank();
         
         // Warp time forward to ensure bucket is fully refilled
@@ -84,6 +86,8 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         // Ensure bucket limiter has enough capacity and is fully refilled
         etherFiRedemptionManagerInstance.setCapacity(3000 ether, ETH_ADDRESS);
         etherFiRedemptionManagerInstance.setRefillRatePerSecond(3000 ether, ETH_ADDRESS);
+        // On mainnet fork, lowWatermark (% of TVL) can be much larger than available liquidity
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, ETH_ADDRESS);
         vm.stopPrank();
         
         // Warp time forward to ensure bucket is fully refilled
@@ -124,6 +128,10 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
     }
 
     function test_Withdraw_EtherFiRedemptionManager_redeemWeEth() public {
+        // On mainnet fork, lowWatermark (% of TVL) can be much larger than available liquidity
+        vm.prank(OPERATING_TIMELOCK);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, ETH_ADDRESS);
+
         vm.deal(alice, 100 ether);
         vm.startPrank(alice);
         liquidityPoolInstance.deposit{value: 10 ether}(); // to get eETH to generate weETH
@@ -162,6 +170,9 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
     }
 
     function test_Withdraw_EtherFiRedemptionManager_redeemWeEthWithPermit() public {
+        // On mainnet fork, lowWatermark (% of TVL) can be much larger than available liquidity
+        vm.prank(OPERATING_TIMELOCK);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, ETH_ADDRESS);
 
         vm.deal(alice, 100 ether);
         vm.startPrank(alice);
