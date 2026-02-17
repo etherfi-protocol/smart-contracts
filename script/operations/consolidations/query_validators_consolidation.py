@@ -176,10 +176,18 @@ def get_validator_balance_eth(validator: Dict) -> float:
             except (ValueError, TypeError):
                 continue
     
-    # Default to 32 ETH for standard validators
-    print(f"  Warning: Could not determine balance for validator, defaulting to {DEFAULT_SOURCE_BALANCE} ETH")
-    return DEFAULT_SOURCE_BALANCE
+    # For source validators (0x01), missing balance is expected from DB and
+    # DEFAULT_SOURCE_BALANCE is the intended planning assumption.
+    # For existing 0x02 targets, missing balance must fail fast.
+    if validator.get('_is_existing_target'):
+        pubkey = validator.get('pubkey', '')
+        short_pubkey = f"{pubkey[:14]}...{pubkey[-10:]}" if pubkey else "<unknown>"
+        raise ValueError(
+            "Missing beacon balance for existing 0x02 target "
+            f"{short_pubkey}"
+        )
 
+    return DEFAULT_SOURCE_BALANCE
 
 def calculate_consolidation_capacity(
     target_balance_eth: float,
@@ -937,11 +945,18 @@ Examples:
             print(f"\nFetching beacon chain balances for {len(consolidated_validators)} existing 0x02 validators...")
             consolidated_pubkeys = [v.get('pubkey', '') for v in consolidated_validators if v.get('pubkey')]
             beacon_details = fetch_validator_details_batch(consolidated_pubkeys, beacon_api=args.beacon_api)
+            missing_balance_pubkeys = []
 
             for v in consolidated_validators:
                 pubkey = v.get('pubkey', '')
                 details = beacon_details.get(pubkey, {})
-                balance_eth = details.get('balance_eth', 0)
+                is_consolidated = details.get('is_consolidated')
+                balance_eth = details.get('balance_eth')
+
+                # Strict mode: existing 0x02 targets must have resolvable beacon balances.
+                if not details or is_consolidated is None or balance_eth is None:
+                    missing_balance_pubkeys.append(pubkey)
+                    continue
 
                 if balance_eth > 0 and balance_eth < args.max_target_balance:
                     capacity = calculate_consolidation_capacity(balance_eth, args.max_target_balance)
@@ -951,6 +966,16 @@ Examples:
                         if details.get('beacon_withdrawal_credentials'):
                             v['beacon_withdrawal_credentials'] = details['beacon_withdrawal_credentials']
                         existing_targets.append(v)
+
+            if missing_balance_pubkeys:
+                print("\nError: Missing beacon balance for existing 0x02 validator targets.")
+                print("Failed pubkeys:")
+                for pk in missing_balance_pubkeys[:20]:
+                    print(f"  - {pk}")
+                if len(missing_balance_pubkeys) > 20:
+                    print(f"  ... and {len(missing_balance_pubkeys) - 20} more")
+                print("Aborting to avoid using fallback/default balances for existing 0x02 targets.")
+                sys.exit(1)
 
             print(f"  0x02 validators with capacity (balance < {args.max_target_balance} ETH): {len(existing_targets)}")
             if existing_targets:
