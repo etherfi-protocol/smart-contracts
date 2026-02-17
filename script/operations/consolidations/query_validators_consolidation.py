@@ -40,10 +40,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-# Import from utils module using absolute import
-import sys
-from pathlib import Path
-
 # Add the parent directory to sys.path to enable absolute imports
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(parent_dir))
@@ -55,6 +51,7 @@ from utils.validator_utils import (
     list_operators,
     query_validators,
     fetch_beacon_state,
+    fetch_validator_details_batch,
     calculate_sweep_time,
     filter_consolidated_validators,
     spread_validators_across_queue,
@@ -180,6 +177,7 @@ def get_validator_balance_eth(validator: Dict) -> float:
                 continue
     
     # Default to 32 ETH for standard validators
+    print(f"  Warning: Could not determine balance for validator, defaulting to {DEFAULT_SOURCE_BALANCE} ETH")
     return DEFAULT_SOURCE_BALANCE
 
 
@@ -291,32 +289,61 @@ def create_consolidation_plan(
     validators: List[Dict],
     count: int,
     max_target_balance: float,
-    bucket_hours: int
+    bucket_hours: int,
+    existing_targets: List[Dict] = None
 ) -> Dict:
     """
     Create a consolidation plan with targets and sources.
     
     Args:
-        validators: All eligible validators
+        validators: All eligible 0x01 validators (can be targets or sources)
         count: Number of source validators to consolidate
         max_target_balance: Maximum ETH balance for targets
         bucket_hours: Bucket interval for sweep queue distribution
-    
+        existing_targets: Existing 0x02 validators with capacity (target-only, never sources).
+                         Must have 'balance_eth' populated from beacon chain.
+
     Returns:
         Consolidation plan dictionary
     """
+    if existing_targets is None:
+        existing_targets = []
+
     print(f"\n=== Creating Consolidation Plan ===")
     print(f"  Target count: {count} source validators")
     print(f"  Max target balance: {max_target_balance} ETH")
     print(f"  Bucket interval: {bucket_hours}h")
-    
+    if existing_targets:
+        print(f"  Existing 0x02 targets with capacity: {len(existing_targets)}")
+
     # Step 1: Group validators by withdrawal credentials
     print(f"\nStep 1: Grouping by withdrawal credentials...")
     wc_groups = group_by_withdrawal_credentials(validators)
-    print(f"  Found {len(wc_groups)} unique EigenPods")
-    
+    print(f"  Found {len(wc_groups)} unique EigenPods (from 0x01 validators)")
+
+    # Mark existing 0x02 targets so they are never used as sources
+    for v in existing_targets:
+        v['_is_existing_target'] = True
+
+    # Group existing targets by WC and merge into wc_groups
+    existing_target_groups = group_by_withdrawal_credentials(existing_targets)
+    existing_target_wc_count = 0
+    for wc_address, targets in existing_target_groups.items():
+        if wc_address in wc_groups:
+            wc_groups[wc_address].extend(targets)
+        else:
+            # 0x02 targets in pods that have no 0x01 sources - skip these
+            # (nothing to consolidate into them from this operator's 0x01 pool)
+            pass
+        existing_target_wc_count += 1
+    if existing_targets:
+        print(f"  Added {len(existing_targets)} existing 0x02 targets across {existing_target_wc_count} EigenPods")
+
     for wc, vals in sorted(wc_groups.items(), key=lambda x: len(x[1]), reverse=True)[:5]:
-        print(f"    {wc[:10]}...{wc[-6:]}: {len(vals)} validators")
+        source_count_in_group = sum(1 for v in vals if not v.get('_is_existing_target'))
+        target_count_in_group = sum(1 for v in vals if v.get('_is_existing_target'))
+        extra = f" (+{target_count_in_group} existing 0x02)" if target_count_in_group else ""
+        print(f"    {wc[:10]}...{wc[-6:]}: {source_count_in_group} validators{extra}")
     if len(wc_groups) > 5:
         print(f"    ... and {len(wc_groups) - 5} more EigenPods")
     
@@ -333,10 +360,11 @@ def create_consolidation_plan(
         print(f"  Using default values...")
         sweep_index = 0
         total_validators = 1200000
-    
-    # Add sweep time info to all validators
+
+    # Add sweep time info to all validators (0x01 + existing 0x02 targets)
+    all_validators = list(validators) + list(existing_targets)
     all_with_sweep = []
-    for v in validators:
+    for v in all_validators:
         validator_index = v.get('index')
         if validator_index is not None:
             sweep_info = calculate_sweep_time(validator_index, sweep_index, total_validators)
@@ -366,6 +394,7 @@ def create_consolidation_plan(
             wc_groups_with_sweep[wc_address].append(v)
 
     # Use select_targets_from_buckets to pick targets spread across the withdrawal queue
+    # (0x02 validators are preferred via prefer_consolidated=True)
     selected_targets = select_targets_from_buckets(
         wc_groups_with_sweep,
         buckets,
@@ -400,14 +429,24 @@ def create_consolidation_plan(
 
         # Get all validators in this WC group
         wc_validators = wc_groups_with_sweep.get(wc_address, [])
-        if len(wc_validators) < 2:  # Need at least 2 validators (target + source)
+
+        # Need at least 1 source (non-existing-target) + 1 target
+        source_candidates = [v for v in wc_validators if not v.get('_is_existing_target')]
+        if not source_candidates:
             continue
 
-        # Sort by balance (lowest first) - good targets have low balance (more capacity)
-        available_validators = sorted(wc_validators, key=lambda v: get_validator_balance_eth(v))
+        # Sort: prefer existing 0x02 targets first (already consolidated, no linking needed),
+        # then by balance (lowest first = more capacity)
+        available_validators = sorted(wc_validators, key=lambda v: (
+            0 if v.get('_is_existing_target') else 1,
+            get_validator_balance_eth(v)
+        ))
 
-        # Keep consolidating until we run out of validators or hit count
-        while len(available_validators) >= 2 and total_sources < count:
+        # Keep consolidating until we run out of source validators or hit count
+        # Need at least 1 source (non-existing-target) and 1 target candidate
+        while total_sources < count and \
+              any(not v.get('_is_existing_target') for v in available_validators) and \
+              len(available_validators) >= 2:
             # Select a target from available validators (not yet used)
             target = None
             target_idx = None
@@ -431,8 +470,9 @@ def create_consolidation_plan(
             # Mark target as used
             used_target_pubkeys.add(target_pubkey)
 
-            # Get sources (all validators except the target)
-            sources_pool = [v for i, v in enumerate(available_validators) if i != target_idx]
+            # Get sources (all validators except the target, excluding existing 0x02 targets)
+            sources_pool = [v for i, v in enumerate(available_validators)
+                           if i != target_idx and not v.get('_is_existing_target')]
 
             # Select sources that fit within max_target_balance limit
             batch_sources = []
@@ -495,10 +535,14 @@ def create_consolidation_plan(
         bucket_key = f"bucket_{c['bucket_index']}"
         bucket_distribution[bucket_key] = bucket_distribution.get(bucket_key, 0) + 1
     
+    existing_0x02_targets_used = sum(
+        1 for c in consolidations if c['target'].get('_is_existing_target')
+    )
     summary = {
         'total_targets': len(consolidations),
         'total_sources': sum(len(c['sources']) for c in consolidations),
         'total_eth_consolidated': sum(c['source_total_eth'] for c in consolidations),
+        'existing_0x02_targets_used': existing_0x02_targets_used,
         'bucket_distribution': bucket_distribution,
         'withdrawal_credential_groups': len(set(c['wc_address'] for c in consolidations))
     }
@@ -615,6 +659,7 @@ def convert_to_output_format(plan: Dict) -> Dict:
             'validator_index': target.get('index'),
             'id': target.get('id'),
             'current_balance_eth': c['target_balance_eth'],
+            'is_existing_0x02': bool(target.get('_is_existing_target')),
             'withdrawal_credentials': full_wc,
             'sweep_bucket': f"bucket_{c['bucket_index']}"
         }
@@ -881,22 +926,52 @@ Examples:
         print(f"\nFiltered results:")
         print(f"  Already consolidated (0x02): {len(consolidated_validators)}")
         print(f"  Need consolidation (0x01): {len(filtered_validators)}")
-        
+
         if len(filtered_validators) == 0:
             print("\nError: No validators need consolidation (all are already 0x02)")
             sys.exit(1)
-        
+
+        # Fetch beacon chain balances for existing 0x02 validators to use as targets
+        existing_targets = []
+        if consolidated_validators:
+            print(f"\nFetching beacon chain balances for {len(consolidated_validators)} existing 0x02 validators...")
+            consolidated_pubkeys = [v.get('pubkey', '') for v in consolidated_validators if v.get('pubkey')]
+            beacon_details = fetch_validator_details_batch(consolidated_pubkeys, beacon_api=args.beacon_api)
+
+            for v in consolidated_validators:
+                pubkey = v.get('pubkey', '')
+                details = beacon_details.get(pubkey, {})
+                balance_eth = details.get('balance_eth', 0)
+
+                if balance_eth > 0 and balance_eth < args.max_target_balance:
+                    capacity = calculate_consolidation_capacity(balance_eth, args.max_target_balance)
+                    if capacity > 0:
+                        v['balance_eth'] = balance_eth
+                        # Use beacon withdrawal credentials (already 0x02)
+                        if details.get('beacon_withdrawal_credentials'):
+                            v['beacon_withdrawal_credentials'] = details['beacon_withdrawal_credentials']
+                        existing_targets.append(v)
+
+            print(f"  0x02 validators with capacity (balance < {args.max_target_balance} ETH): {len(existing_targets)}")
+            if existing_targets:
+                total_capacity = sum(
+                    calculate_consolidation_capacity(v['balance_eth'], args.max_target_balance)
+                    for v in existing_targets
+                )
+                print(f"  Total additional capacity: ~{total_capacity} source validators")
+
         # Use all available validators if count is 0 (default)
         # Note: Use filtered_validators count (0x01 validators) not raw validators count
         source_count = args.count if args.count > 0 else len(filtered_validators)
         print(f"\nUsing source count: {source_count}")
-        
+
         # Create consolidation plan
         plan = create_consolidation_plan(
             filtered_validators,
             source_count,
             args.max_target_balance,
-            args.bucket_hours
+            args.bucket_hours,
+            existing_targets=existing_targets
         )
         
         if plan['summary']['total_sources'] == 0:
