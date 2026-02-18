@@ -36,6 +36,7 @@ DEFAULT_BUCKET_HOURS = 6
 DEFAULT_MAX_TARGET_BALANCE = 1900.0
 DEFAULT_BATCH_SIZE = 58
 DEFAULT_CHAIN_ID = 1
+CONSOLIDATION_GAS_LIMIT = 15_000_000
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 QUEUE_ETH_WITHDRAWAL_SELECTOR = "0x96d373e5"  # queueETHWithdrawal(address,uint256)
 
@@ -126,6 +127,7 @@ def cast_send_raw(
     private_key: str,
     data: str,
     value_wei: int = 0,
+    gas_limit: Optional[int] = None,
 ) -> str:
     cmd = [
         "cast",
@@ -140,6 +142,8 @@ def cast_send_raw(
         "--value",
         str(value_wei),
     ]
+    if gas_limit is not None:
+        cmd.extend(["--gas-limit", str(gas_limit)])
     proc = run_cmd(cmd)
     out = (proc.stdout or "").strip()
     tx_hash = parse_tx_hash_from_send_output(out)
@@ -387,6 +391,7 @@ def generate_or_broadcast_consolidations(cfg: Config, consolidations: List[Dict]
                     cfg.private_key,
                     calldata,
                     value_wei=value_wei,
+                    gas_limit=CONSOLIDATION_GAS_LIMIT,
                 )
                 receipt = wait_for_receipt(cfg.mainnet_rpc_url, tx_hash)
                 status = parse_int_hex_or_decimal(str(receipt.get("status")))
