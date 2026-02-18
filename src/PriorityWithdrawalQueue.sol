@@ -347,7 +347,11 @@ contract PriorityWithdrawalQueue is
 
         uint256 beforeEEthShares = eETH.shares(address(this));
 
-        uint256 eEthAmountToTreasury = eEthAmount.mulDiv(shareRemainderSplitToTreasuryInBps, _BASIS_POINT_SCALE);
+        uint256 eEthAmountToTreasury = eEthAmount.mulDiv(
+            shareRemainderSplitToTreasuryInBps,
+            _BASIS_POINT_SCALE,
+            Math.Rounding.Up
+        );
         uint256 eEthAmountToBurn = eEthAmount - eEthAmountToTreasury;
         uint256 eEthSharesToBurn = liquidityPool.sharesForAmount(eEthAmountToBurn);
         uint256 eEthSharesMoved = eEthSharesToBurn + liquidityPool.sharesForAmount(eEthAmountToTreasury);
