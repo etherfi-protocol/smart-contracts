@@ -37,6 +37,7 @@ DEFAULT_MAX_TARGET_BALANCE = 1900.0
 DEFAULT_BATCH_SIZE = 58
 DEFAULT_CHAIN_ID = 1
 CONSOLIDATION_GAS_LIMIT = 15_000_000
+TX_DELAY_SECONDS = 5
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 QUEUE_ETH_WITHDRAWAL_SELECTOR = "0x96d373e5"  # queueETHWithdrawal(address,uint256)
 
@@ -347,6 +348,7 @@ def maybe_broadcast_linking(cfg: Config, calldata: str) -> str:
     status = parse_int_hex_or_decimal(str(receipt.get("status")))
     if status != 1:
         raise RuntimeError(f"linking tx failed: {tx_hash}")
+    time.sleep(TX_DELAY_SECONDS)
     return tx_hash
 
 
@@ -400,6 +402,7 @@ def generate_or_broadcast_consolidations(cfg: Config, consolidations: List[Dict]
                 print(
                     f"  Broadcast tx {tx_count} (target {idx}, batch {batch_idx}, fee {fee_per_request}, value {value_wei}) -> {tx_hash}"
                 )
+                time.sleep(TX_DELAY_SECONDS)
             else:
                 tx_json = build_gnosis_single_tx_json(
                     cfg.chain_id,
@@ -457,6 +460,7 @@ def generate_or_broadcast_queue_withdrawals(cfg: Config, consolidations: List[Di
                 raise RuntimeError(f"queueETHWithdrawal failed: {tx_hash}")
             sent += 1
             print(f"  Broadcast queue-withdrawal {sent}/{len(withdrawals)} -> {tx_hash}")
+            time.sleep(TX_DELAY_SECONDS)
         return sent
 
     txs: List[Dict] = []
