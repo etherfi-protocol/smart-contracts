@@ -686,10 +686,12 @@ def convert_to_output_format(plan: Dict) -> Dict:
         consolidations_output.append({
             'target': target_output,
             'sources': sources_output,
+            'source_count': len(sources_output),
             'post_consolidation_balance_eth': c['post_consolidation_balance_eth']
         })
     
     return {
+        'num_consolidations': len(consolidations_output),
         'consolidations': consolidations_output,
         'summary': plan['summary'],
         'validation': plan['validation'],

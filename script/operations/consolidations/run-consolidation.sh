@@ -47,6 +47,8 @@ BUCKET_HOURS=6
 MAX_TARGET_BALANCE=1900 # max balance of the target validator after consolidation
 DRY_RUN=false
 SKIP_SIMULATE=false
+SKIP_FORGE_SIM=false # pass --skip-simulation to forge (skip EVM simulation, just broadcast)
+VERBOSE=false # pass -vvvv to forge for full execution traces
 BATCH_SIZE=58 # max number of consolidations per transaction
 MAINNET=false # broadcast transactions on mainnet using ADMIN_EOA
 
@@ -66,6 +68,8 @@ print_usage() {
     echo "  --batch-size         Number of consolidations per transaction (default: 58)"
     echo "  --dry-run            Output consolidation plan JSON without executing forge script"
     echo "  --skip-simulate      Skip Tenderly simulation step"
+    echo "  --skip-forge-sim     Pass --skip-simulation to forge (skip EVM simulation, just broadcast)"
+    echo "  --verbose, -v        Enable verbose forge output (-vvvv traces). Default: minimal verbosity"
     echo "  --mainnet            Broadcast transactions on mainnet using ADMIN_EOA (requires PRIVATE_KEY)"
     echo "  --help, -h           Show this help message"
     echo ""
@@ -118,6 +122,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-simulate)
             SKIP_SIMULATE=true
+            shift
+            ;;
+        --skip-forge-sim)
+            SKIP_FORGE_SIM=true
+            shift
+            ;;
+        --verbose|-v)
+            VERBOSE=true
             shift
             ;;
         --mainnet)
@@ -185,6 +197,8 @@ echo "  Bucket interval:    ${BUCKET_HOURS}h"
 echo "  Max target balance: ${MAX_TARGET_BALANCE} ETH"
 echo "  Batch size:         $BATCH_SIZE"
 echo "  Dry run:            $DRY_RUN"
+echo "  Skip forge sim:    $SKIP_FORGE_SIM"
+echo "  Verbose forge:     $VERBOSE"
 echo "  Mainnet mode:       $MAINNET"
 echo "  Output directory:   $OUTPUT_DIR"
 echo ""
@@ -258,18 +272,30 @@ echo "Processing $NUM_TARGETS target consolidations with $TOTAL_SOURCES total so
 # Build forge command
 FORGE_CMD="CONSOLIDATION_DATA_FILE=\"$CONSOLIDATION_DATA\" OUTPUT_DIR=\"$OUTPUT_DIR\" BATCH_SIZE=\"$BATCH_SIZE\""
 
+# Pass skip gas estimate to Solidity script when skipping forge simulation
+if [ "$SKIP_FORGE_SIM" = true ]; then
+    FORGE_CMD="$FORGE_CMD SKIP_GAS_ESTIMATE=true"
+fi
+
+# Build optional forge flags
+FORGE_EXTRA_FLAGS=""
+if [ "$SKIP_FORGE_SIM" = true ]; then
+    FORGE_EXTRA_FLAGS="$FORGE_EXTRA_FLAGS --skip-simulation"
+fi
+if [ "$VERBOSE" = true ]; then
+    FORGE_EXTRA_FLAGS="$FORGE_EXTRA_FLAGS -vvvv"
+fi
+
 if [ "$MAINNET" = true ]; then
     # Mainnet mode: broadcast transactions using ADMIN_EOA
     FORGE_CMD="$FORGE_CMD BROADCAST=true forge script \"$SCRIPT_DIR/ConsolidateToTarget.s.sol:ConsolidateToTarget\" \
         --rpc-url \"$MAINNET_RPC_URL\" \
         --private-key \"$PRIVATE_KEY\" \
-        --broadcast \
-        -vvvv"
+        --broadcast${FORGE_EXTRA_FLAGS:+ $FORGE_EXTRA_FLAGS}"
 else
     # Simulation mode: generate JSON transaction files
     FORGE_CMD="$FORGE_CMD forge script \"$SCRIPT_DIR/ConsolidateToTarget.s.sol:ConsolidateToTarget\" \
-        --fork-url \"$MAINNET_RPC_URL\" \
-        -vvvv"
+        --fork-url \"$MAINNET_RPC_URL\"${FORGE_EXTRA_FLAGS:+ $FORGE_EXTRA_FLAGS}"
 fi
 
 echo "Running forge script..."
