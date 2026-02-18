@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
@@ -19,7 +18,6 @@ import "./interfaces/IRoleRegistry.sol";
 /// @dev Implements priority withdrawal queue pattern
 contract PriorityWithdrawalQueue is 
     Initializable, 
-    OwnableUpgradeable, 
     UUPSUpgradeable, 
     ReentrancyGuardUpgradeable,
     IPriorityWithdrawalQueue
@@ -168,7 +166,6 @@ contract PriorityWithdrawalQueue is
     }
 
     function initialize() external initializer {
-        __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
 
