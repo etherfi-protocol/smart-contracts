@@ -316,7 +316,9 @@ contract PriorityWithdrawalQueue is
         }
     }
 
-    /// @notice Invalidate a withdrawal request (prevents finalization)
+    /// @notice Invalidate and cancel withdrawal requests in any state
+    /// @dev Can target both pending and finalized requests.
+    ///      For finalized requests, this also prevents subsequent claims.
     /// @param requests Array of requests to invalidate
     /// @return invalidatedRequestIds Array of request IDs that were invalidated
     function invalidateRequests(WithdrawRequest[] calldata requests) external onlyRequestManager returns (bytes32[] memory invalidatedRequestIds) {
