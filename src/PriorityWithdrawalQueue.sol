@@ -230,6 +230,7 @@ contract PriorityWithdrawalQueue is
 
     /// @notice Claim ETH for a finalized withdrawal request
     /// @dev Anyone can call this to claim on behalf of the user. Funds are sent to request.user.
+    ///      ETH delivery forwards gas to request.user, so third parties should avoid claiming for untrusted recipients.
     /// @param request The withdrawal request to claim
     function claimWithdraw(WithdrawRequest calldata request) external whenNotPaused nonReentrant {
         if (request.creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
@@ -244,6 +245,7 @@ contract PriorityWithdrawalQueue is
 
     /// @notice Batch claim multiple withdrawal requests
     /// @dev Anyone can call this to claim on behalf of users. Funds are sent to each request.user.
+    ///      Each ETH delivery forwards gas to request.user, so batching untrusted recipients can be griefed.
     /// @param requests Array of withdrawal requests to claim
     function batchClaimWithdraw(WithdrawRequest[] calldata requests) external whenNotPaused nonReentrant {
         for (uint256 i = 0; i < requests.length; ++i) {
