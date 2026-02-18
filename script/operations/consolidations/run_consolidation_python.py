@@ -13,8 +13,10 @@ JSON parsing in Solidity. It:
 from __future__ import annotations
 
 import argparse
+from decimal import Decimal, InvalidOperation
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -198,9 +200,43 @@ def normalize_hex_bytes(value: str) -> str:
 
 def parse_int_hex_or_decimal(value: str) -> int:
     v = value.strip()
-    if v.startswith("0x"):
-        return int(v, 16)
-    return int(v, 10)
+    if not v:
+        raise ValueError("cannot parse empty string as integer")
+
+    # `cast call` can return annotations like `39621 [3.962e4]`.
+    # Prefer the primary token before any bracketed annotation.
+    primary = v.split("[", 1)[0].strip() or v
+    token = primary.split()[0].strip().rstrip(",;")
+    token = token.replace(",", "").replace("_", "")
+
+    if token.lower().startswith("0x"):
+        return int(token, 16)
+    if re.fullmatch(r"[+-]?\d+", token):
+        return int(token, 10)
+    if re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+", token):
+        try:
+            return int(Decimal(token))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError(f"cannot parse scientific integer from: {value!r}") from exc
+
+    # Fallback for mixed outputs; try hex, then int, then scientific notation.
+    match = re.search(
+        r"0x[0-9a-fA-F]+|[+-]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+|[+-]?\d+",
+        v,
+    )
+    if not match:
+        raise ValueError(f"cannot parse integer from: {value!r}")
+
+    parsed = match.group(0)
+    if parsed.lower().startswith("0x"):
+        return int(parsed, 16)
+    if re.fullmatch(r"[+-]?\d+", parsed):
+        return int(parsed, 10)
+
+    try:
+        return int(Decimal(parsed))
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"cannot parse integer from: {value!r}") from exc
 
 
 def get_signer_address(private_key: str) -> str:
