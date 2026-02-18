@@ -63,6 +63,7 @@ contract ConsolidateToTarget is Script, Utils {
         address adminAddress;
         string root;
         bool broadcast;
+        bool skipGasEstimate;
     }
 
     // Struct for target validator in consolidation-data.json
@@ -115,6 +116,7 @@ contract ConsolidateToTarget is Script, Utils {
         console2.log("Batch size:", config.batchSize);
         console2.log("Admin address:", config.adminAddress);
         console2.log("Broadcast mode:", config.broadcast);
+        console2.log("Skip gas estimate:", config.skipGasEstimate);
         console2.log("");
 
         // Set output directory (default: same directory as consolidation data file)
@@ -298,17 +300,21 @@ contract ConsolidateToTarget is Script, Utils {
             );
 
         if (config.broadcast) {
-            // Estimate gas before broadcasting
-            vm.prank(config.adminAddress);
-            uint256 gasBefore = gasleft();
-            (bool simSuccess, ) = to.call{value: value}(data);
-            uint256 gasEstimate = gasBefore - gasleft();
-            require(simSuccess, "Consolidation gas estimation failed");
+            if (!config.skipGasEstimate) {
+                // Estimate gas before broadcasting
+                vm.prank(config.adminAddress);
+                uint256 gasBefore = gasleft();
+                (bool simSuccess, ) = to.call{value: value}(data);
+                uint256 gasEstimate = gasBefore - gasleft();
+                require(simSuccess, "Consolidation gas estimation failed");
 
-            console2.log("  Broadcasting tx", txCount, "- Estimated gas:", gasEstimate);
-            if (gasEstimate > GAS_WARNING_THRESHOLD) {
-                console2.log("  *** WARNING: Gas exceeds 12M threshold! ***");
-                console2.log("  *** Consider reducing batch size ***");
+                console2.log("  Broadcasting tx", txCount, "- Estimated gas:", gasEstimate);
+                if (gasEstimate > GAS_WARNING_THRESHOLD) {
+                    console2.log("  *** WARNING: Gas exceeds 12M threshold! ***");
+                    console2.log("  *** Consider reducing batch size ***");
+                }
+            } else {
+                console2.log("  Broadcasting tx", txCount, "(gas estimation skipped)");
             }
 
             vm.startBroadcast();
@@ -438,9 +444,15 @@ contract ConsolidateToTarget is Script, Utils {
         config.adminAddress = vm.envOr("ADMIN_ADDRESS", ADMIN_EOA);
         config.root = vm.projectRoot();
         config.broadcast = vm.envOr("BROADCAST", false);
+        config.skipGasEstimate = vm.envOr("SKIP_GAS_ESTIMATE", false);
     }
     
     function _countConsolidations(string memory jsonData) internal view returns (uint256) {
+        // Fast path: read pre-computed count from JSON (added by query_validators_consolidation.py)
+        if (stdJson.keyExists(jsonData, "$.num_consolidations")) {
+            return stdJson.readUint(jsonData, "$.num_consolidations");
+        }
+        // Fallback: iterate (slow for large files)
         uint256 count = 0;
         for (uint256 i = 0; i < 1000; i++) {
             string memory path = string.concat("$.consolidations[", i.uint256ToString(), "].target.pubkey");
@@ -453,6 +465,12 @@ contract ConsolidateToTarget is Script, Utils {
     }
     
     function _countSources(string memory jsonData, uint256 consolidationIndex) internal view returns (uint256) {
+        // Fast path: read pre-computed count from JSON (added by query_validators_consolidation.py)
+        string memory countPath = string.concat("$.consolidations[", consolidationIndex.uint256ToString(), "].source_count");
+        if (stdJson.keyExists(jsonData, countPath)) {
+            return stdJson.readUint(jsonData, countPath);
+        }
+        // Fallback: iterate (slow for large files)
         uint256 count = 0;
         for (uint256 i = 0; i < 10000; i++) {
             string memory path = string.concat(
