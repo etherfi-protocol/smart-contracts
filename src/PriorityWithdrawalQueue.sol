@@ -359,7 +359,7 @@ contract PriorityWithdrawalQueue is
 
         if (beforeEEthShares - eEthSharesMoved != eETH.shares(address(this))) revert InvalidEEthSharesAfterRemainderHandling();
 
-        emit RemainderHandled(uint96(eEthAmountToTreasury), uint96(liquidityPool.amountForShare(eEthSharesToBurn)));
+        emit RemainderHandled(uint96(eEthAmountToTreasury), uint96(eEthSharesToBurn));
     }
 
     function updateShareRemainderSplitToTreasury(uint16 _shareRemainderSplitToTreasuryInBps) external onlyAdmin {
