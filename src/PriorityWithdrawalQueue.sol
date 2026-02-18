@@ -246,16 +246,12 @@ contract PriorityWithdrawalQueue is
     /// @dev Anyone can call this to claim on behalf of users. Funds are sent to each request.user.
     /// @param requests Array of withdrawal requests to claim
     function batchClaimWithdraw(WithdrawRequest[] calldata requests) external whenNotPaused nonReentrant {
-        (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
-
         for (uint256 i = 0; i < requests.length; ++i) {
             if (requests[i].creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
+            (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
+            uint256 userEthBefore = requests[i].user.balance;
             _claimWithdraw(requests[i]);
-        }
-
-        // Post-hook balance checks (at least one claim should have changed balances)
-        if (requests.length > 0) {
-            _verifyBatchClaimPostConditions(lpEthBefore, queueEEthSharesBefore);
+            _verifyClaimPostConditions(lpEthBefore, queueEEthSharesBefore, userEthBefore, requests[i].user);
         }
     }
 
@@ -441,17 +437,6 @@ contract PriorityWithdrawalQueue is
         if (address(liquidityPool).balance >= lpEthBefore) revert UnexpectedBalanceChange();
         if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
         if (user.balance <= userEthBefore) revert UnexpectedBalanceChange();
-    }
-
-    /// @dev Verify post-conditions after a batch claim operation
-    /// @param lpEthBefore ETH balance of LiquidityPool before operation
-    /// @param queueEEthSharesBefore eETH shares held by queue before operation
-    function _verifyBatchClaimPostConditions(
-        uint256 lpEthBefore,
-        uint256 queueEEthSharesBefore
-    ) internal view {
-        if (address(liquidityPool).balance >= lpEthBefore) revert UnexpectedBalanceChange();
-        if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
     }
 
     function _queueWithdrawRequest(
