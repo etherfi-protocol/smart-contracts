@@ -12,8 +12,10 @@ Features:
 from __future__ import annotations
 
 import argparse
+from decimal import Decimal, InvalidOperation
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -71,9 +73,43 @@ def run_cmd(cmd: List[str], check: bool = True) -> subprocess.CompletedProcess:
 
 def parse_int_hex_or_decimal(value: str) -> int:
     v = value.strip()
-    if v.startswith("0x"):
-        return int(v, 16)
-    return int(v, 10)
+    if not v:
+        raise ValueError("cannot parse empty string as integer")
+
+    # `cast call` can return annotations like `39621 [3.962e4]`.
+    # Prefer the primary token before any bracketed annotation.
+    primary = v.split("[", 1)[0].strip() or v
+    token = primary.split()[0].strip().rstrip(",;")
+    token = token.replace(",", "").replace("_", "")
+
+    if token.lower().startswith("0x"):
+        return int(token, 16)
+    if re.fullmatch(r"[+-]?\d+", token):
+        return int(token, 10)
+    if re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+", token):
+        try:
+            return int(Decimal(token))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError(f"cannot parse scientific integer from: {value!r}") from exc
+
+    # Fallback for mixed outputs; try hex, then int, then scientific notation.
+    match = re.search(
+        r"0x[0-9a-fA-F]+|[+-]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+|[+-]?\d+",
+        v,
+    )
+    if not match:
+        raise ValueError(f"cannot parse integer from: {value!r}")
+
+    parsed = match.group(0)
+    if parsed.lower().startswith("0x"):
+        return int(parsed, 16)
+    if re.fullmatch(r"[+-]?\d+", parsed):
+        return int(parsed, 10)
+
+    try:
+        return int(Decimal(parsed))
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"cannot parse integer from: {value!r}") from exc
 
 
 def parse_tx_hash_from_send_output(out: str) -> Optional[str]:
@@ -207,7 +243,7 @@ def broadcast_linking_file(rpc_url: str, private_key: str, linking_file: Path) -
     for idx, tx in enumerate(txs, start=1):
         to = tx.get("to")
         data = tx.get("data")
-        value = int(tx.get("value", "0"))
+        value = parse_int_hex_or_decimal(str(tx.get("value", "0")))
         if not to or not data:
             raise RuntimeError(f"invalid tx at index {idx} in linking file")
         tx_hash = cast_send_raw(rpc_url, to, private_key, data, value_wei=value)
