@@ -300,6 +300,44 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.requestWithdrawWithPermit(withdrawAmount, 0, permit);
     }
 
+    function test_requestWithdrawWithPermit_frontrunPermit_stillSucceedsWithSufficientAllowance() public {
+        uint256 userPrivKey = 999;
+        address permitUser = vm.addr(userPrivKey);
+        uint96 withdrawAmount = 1 ether;
+        uint256 permitValue = 2 ether;
+
+        vm.prank(alice);
+        priorityQueue.addToWhitelist(permitUser);
+        vm.deal(permitUser, 10 ether);
+        vm.prank(permitUser);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        uint256 initialEethBalance = eETHInstance.balanceOf(permitUser);
+        uint256 initialQueueEethBalance = eETHInstance.balanceOf(address(priorityQueue));
+        uint96 initialNonce = priorityQueue.nonce();
+
+        IPriorityWithdrawalQueue.PermitInput memory permit = _createEEthPermitInput(
+            userPrivKey,
+            address(priorityQueue),
+            permitValue,
+            eETHInstance.nonces(permitUser),
+            block.timestamp + 1 hours
+        );
+
+        // Frontrunner consumes the signed permit first.
+        vm.prank(regularUser);
+        eETHInstance.permit(permitUser, address(priorityQueue), permit.value, permit.deadline, permit.v, permit.r, permit.s);
+
+        // The same bundled tx should still work because allowance is already sufficient.
+        vm.prank(permitUser);
+        bytes32 requestId = priorityQueue.requestWithdrawWithPermit(withdrawAmount, 0, permit);
+
+        assertEq(priorityQueue.nonce(), initialNonce + 1, "Nonce should increment");
+        assertApproxEqAbs(eETHInstance.balanceOf(permitUser), initialEethBalance - withdrawAmount, 2, "User eETH balance should decrease");
+        assertApproxEqAbs(eETHInstance.balanceOf(address(priorityQueue)), initialQueueEethBalance + withdrawAmount, 2, "Queue eETH balance should increase");
+        assertTrue(priorityQueue.requestExists(requestId), "Request should exist");
+    }
+
     /// @dev Helper to create eETH permit input
     function _createEEthPermitInput(
         uint256 privKey,

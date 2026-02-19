@@ -203,7 +203,9 @@ contract PriorityWithdrawalQueue is
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
 
         try eETH.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {
-            revert PermitFailedAndAllowanceTooLow();
+            if (IERC20(address(eETH)).allowance(msg.sender, address(this)) < amountOfEEth) {
+                revert PermitFailedAndAllowanceTooLow();
+            }
         }
 
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(this), amountOfEEth);
