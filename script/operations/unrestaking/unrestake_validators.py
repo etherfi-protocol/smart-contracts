@@ -473,6 +473,11 @@ Examples:
         help='Preview plan without writing files',
     )
     parser.add_argument(
+        '--ignore-pending-withdrawals',
+        action='store_true',
+        help='Skip pending withdrawal check, treat full balance as available',
+    )
+    parser.add_argument(
         '--list-operators',
         action='store_true',
         help='List available operators',
@@ -557,17 +562,23 @@ Examples:
         # Step 2: Check pending withdrawals
         # ==============================================================
         rpc_url = os.environ.get('MAINNET_RPC_URL', '')
-        if rpc_url:
+        if args.ignore_pending_withdrawals:
+            print(
+                "\nStep 2: Skipping pending withdrawal check "
+                "(--ignore-pending-withdrawals)"
+            )
+            pods = evaluate_pods(pods, rpc_url="")
+        elif rpc_url:
             print(
                 "\nStep 2: Checking pending withdrawals on-chain..."
             )
+            pods = evaluate_pods(pods, rpc_url)
         else:
             print(
                 "\nStep 2: Skipping pending withdrawal check "
                 "(MAINNET_RPC_URL not set)"
             )
-
-        pods = evaluate_pods(pods, rpc_url)
+            pods = evaluate_pods(pods, rpc_url="")
 
         # Display table
         display_pods_table(pods)

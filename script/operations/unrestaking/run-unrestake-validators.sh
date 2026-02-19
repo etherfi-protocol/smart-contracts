@@ -37,6 +37,7 @@ AMOUNT=0
 DRY_RUN=false
 SKIP_SIMULATE=false
 MAINNET=false
+IGNORE_PENDING=false
 
 print_usage() {
     echo "Usage: $0 --operator <name> --amount <eth> [options]"
@@ -49,10 +50,11 @@ print_usage() {
     echo "  --amount       ETH amount to unrestake (e.g., 1000). Use 0 to unrestake all available."
     echo ""
     echo "Options:"
-    echo "  --dry-run          Preview plan without generating transactions"
-    echo "  --skip-simulate    Skip Tenderly simulation"
-    echo "  --mainnet          Broadcast on mainnet (requires PRIVATE_KEY)"
-    echo "  --help, -h         Show this help"
+    echo "  --dry-run                    Preview plan without generating transactions"
+    echo "  --skip-simulate              Skip Tenderly simulation"
+    echo "  --ignore-pending-withdrawals Skip pending withdrawal check, use full balance"
+    echo "  --mainnet                    Broadcast on mainnet (requires PRIVATE_KEY)"
+    echo "  --help, -h                   Show this help"
     echo ""
     echo "Examples:"
     echo "  # Preview plan"
@@ -90,6 +92,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-simulate)
             SKIP_SIMULATE=true
+            shift
+            ;;
+        --ignore-pending-withdrawals)
+            IGNORE_PENDING=true
             shift
             ;;
         --mainnet)
@@ -174,6 +180,10 @@ PLAN_ARGS=(
 
 if [ "$DRY_RUN" = true ]; then
     PLAN_ARGS+=(--dry-run)
+fi
+
+if [ "$IGNORE_PENDING" = true ]; then
+    PLAN_ARGS+=(--ignore-pending-withdrawals)
 fi
 
 python3 "$SCRIPT_DIR/unrestake_validators.py" "${PLAN_ARGS[@]}"
