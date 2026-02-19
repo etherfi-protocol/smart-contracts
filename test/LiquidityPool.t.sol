@@ -947,6 +947,30 @@ contract LiquidityPoolTest is TestSetup {
         }
     }
 
+    function test_WithdrawFailsForNonNftCallerWhenLiquidityIsLockedForNftQueue() public {
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(alice, 7 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(reqId);
+
+        // Non-NFT caller needs eETH balance to pass sender-balance checks.
+        uint256 sharesToMint = liquidityPoolInstance.sharesForAmount(100 ether);
+        vm.prank(address(liquidityPoolInstance));
+        eETHInstance.mintShares(address(etherFiRedemptionManagerInstance), sharesToMint);
+
+        uint256 availableLiquidity = liquidityPoolInstance.totalValueInLp() - liquidityPoolInstance.ethAmountLockedForWithdrawal();
+        uint256 amountToWithdraw = availableLiquidity + 1;
+
+        vm.startPrank(address(etherFiRedemptionManagerInstance));
+        vm.expectRevert(LiquidityPool.InsufficientUnlockedLiquidity.selector);
+        liquidityPoolInstance.withdraw(alice, amountToWithdraw);
+        vm.stopPrank();
+    }
+
     function test_WithdrawFailsIfNotAuthorizedCaller() public {
         vm.deal(alice, 10 ether);
         vm.startPrank(alice);

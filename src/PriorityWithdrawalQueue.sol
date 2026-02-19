@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
@@ -19,7 +18,6 @@ import "./interfaces/IRoleRegistry.sol";
 /// @dev Implements priority withdrawal queue pattern
 contract PriorityWithdrawalQueue is 
     Initializable, 
-    OwnableUpgradeable, 
     UUPSUpgradeable, 
     ReentrancyGuardUpgradeable,
     IPriorityWithdrawalQueue
@@ -87,9 +85,9 @@ contract PriorityWithdrawalQueue is
         uint32 nonce,
         uint32 creationTime
     );
-    event WithdrawRequestCancelled(bytes32 indexed requestId, address indexed user, uint96 amountOfEEth, uint96 sharesOfEEth, uint32 nonce, uint32 timestamp);
+    event WithdrawRequestCancelled(bytes32 indexed requestId, address indexed user, uint96 amountOfEEthReturned, uint96 sharesOfEEth, uint32 nonce, uint32 timestamp);
     event WithdrawRequestFinalized(bytes32 indexed requestId, address indexed user, uint96 amountOfEEth, uint96 sharesOfEEth, uint32 nonce, uint32 timestamp);
-    event WithdrawRequestClaimed(bytes32 indexed requestId, address indexed user, uint96 amountOfEEth, uint96 sharesOfEEth, uint32 nonce, uint32 timestamp);
+    event WithdrawRequestClaimed(bytes32 indexed requestId, address indexed user, uint96 amountOfETHtoWithdraw, uint96 sharesBurned, uint32 nonce, uint32 timestamp);
     event WithdrawRequestInvalidated(bytes32 indexed requestId, uint96 amountOfEEth, uint96 sharesOfEEth, uint32 nonce, uint32 timestamp);
     event WhitelistUpdated(address indexed user, bool status);
     event RemainderHandled(uint96 amountToTreasury, uint96 sharesOfEEthToBurn);
@@ -168,7 +166,6 @@ contract PriorityWithdrawalQueue is
     }
 
     function initialize() external initializer {
-        __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
 
@@ -206,7 +203,9 @@ contract PriorityWithdrawalQueue is
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
 
         try eETH.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {
-            revert PermitFailedAndAllowanceTooLow();
+            if (IERC20(address(eETH)).allowance(msg.sender, address(this)) < amountOfEEth) {
+                revert PermitFailedAndAllowanceTooLow();
+            }
         }
 
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(this), amountOfEEth);
@@ -233,6 +232,7 @@ contract PriorityWithdrawalQueue is
 
     /// @notice Claim ETH for a finalized withdrawal request
     /// @dev Anyone can call this to claim on behalf of the user. Funds are sent to request.user.
+    ///      ETH delivery forwards gas to request.user, so third parties should avoid claiming for untrusted recipients.
     /// @param request The withdrawal request to claim
     function claimWithdraw(WithdrawRequest calldata request) external whenNotPaused nonReentrant {
         if (request.creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
@@ -247,18 +247,15 @@ contract PriorityWithdrawalQueue is
 
     /// @notice Batch claim multiple withdrawal requests
     /// @dev Anyone can call this to claim on behalf of users. Funds are sent to each request.user.
+    ///      Each ETH delivery forwards gas to request.user, so batching untrusted recipients can be griefed.
     /// @param requests Array of withdrawal requests to claim
     function batchClaimWithdraw(WithdrawRequest[] calldata requests) external whenNotPaused nonReentrant {
-        (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
-
         for (uint256 i = 0; i < requests.length; ++i) {
             if (requests[i].creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
+            (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
+            uint256 userEthBefore = requests[i].user.balance;
             _claimWithdraw(requests[i]);
-        }
-
-        // Post-hook balance checks (at least one claim should have changed balances)
-        if (requests.length > 0) {
-            _verifyBatchClaimPostConditions(lpEthBefore, queueEEthSharesBefore);
+            _verifyClaimPostConditions(lpEthBefore, queueEEthSharesBefore, userEthBefore, requests[i].user);
         }
     }
 
@@ -270,7 +267,7 @@ contract PriorityWithdrawalQueue is
     /// @dev Checks maturity and deadline, marks requests as finalized
     /// @param requests Array of requests to finalize
     function fulfillRequests(WithdrawRequest[] calldata requests) external onlyRequestManager whenNotPaused {
-        uint256 totalSharesToFinalize = 0;
+        uint256 totalAmountToLock = 0;
 
         for (uint256 i = 0; i < requests.length; ++i) {
             WithdrawRequest calldata request = requests[i];
@@ -284,12 +281,11 @@ contract PriorityWithdrawalQueue is
 
             _withdrawRequests.remove(requestId);
             _finalizedRequests.add(requestId);
-            totalSharesToFinalize += request.shareOfEEth;
+            totalAmountToLock += request.amountOfEEth;
 
             emit WithdrawRequestFinalized(requestId, request.user, request.amountOfEEth, request.shareOfEEth, request.nonce, uint32(block.timestamp));
         }
 
-        uint256 totalAmountToLock = liquidityPool.amountForShare(totalSharesToFinalize);
         ethAmountLockedForPriorityWithdrawal += uint128(totalAmountToLock);
     }
 
@@ -320,7 +316,9 @@ contract PriorityWithdrawalQueue is
         }
     }
 
-    /// @notice Invalidate a withdrawal request (prevents finalization)
+    /// @notice Invalidate and cancel withdrawal requests in any state
+    /// @dev Can target both pending and finalized requests.
+    ///      For finalized requests, this also prevents subsequent claims.
     /// @param requests Array of requests to invalidate
     /// @return invalidatedRequestIds Array of request IDs that were invalidated
     function invalidateRequests(WithdrawRequest[] calldata requests) external onlyRequestManager returns (bytes32[] memory invalidatedRequestIds) {
@@ -348,7 +346,11 @@ contract PriorityWithdrawalQueue is
 
         uint256 beforeEEthShares = eETH.shares(address(this));
 
-        uint256 eEthAmountToTreasury = eEthAmount.mulDiv(shareRemainderSplitToTreasuryInBps, _BASIS_POINT_SCALE);
+        uint256 eEthAmountToTreasury = eEthAmount.mulDiv(
+            shareRemainderSplitToTreasuryInBps,
+            _BASIS_POINT_SCALE,
+            Math.Rounding.Up
+        );
         uint256 eEthAmountToBurn = eEthAmount - eEthAmountToTreasury;
         uint256 eEthSharesToBurn = liquidityPool.sharesForAmount(eEthAmountToBurn);
         uint256 eEthSharesMoved = eEthSharesToBurn + liquidityPool.sharesForAmount(eEthAmountToTreasury);
@@ -360,7 +362,7 @@ contract PriorityWithdrawalQueue is
 
         if (beforeEEthShares - eEthSharesMoved != eETH.shares(address(this))) revert InvalidEEthSharesAfterRemainderHandling();
 
-        emit RemainderHandled(uint96(eEthAmountToTreasury), uint96(liquidityPool.amountForShare(eEthSharesToBurn)));
+        emit RemainderHandled(uint96(eEthAmountToTreasury), uint96(eEthSharesToBurn));
     }
 
     function updateShareRemainderSplitToTreasury(uint16 _shareRemainderSplitToTreasuryInBps) external onlyAdmin {
@@ -441,17 +443,6 @@ contract PriorityWithdrawalQueue is
         if (user.balance <= userEthBefore) revert UnexpectedBalanceChange();
     }
 
-    /// @dev Verify post-conditions after a batch claim operation
-    /// @param lpEthBefore ETH balance of LiquidityPool before operation
-    /// @param queueEEthSharesBefore eETH shares held by queue before operation
-    function _verifyBatchClaimPostConditions(
-        uint256 lpEthBefore,
-        uint256 queueEEthSharesBefore
-    ) internal view {
-        if (address(liquidityPool).balance >= lpEthBefore) revert UnexpectedBalanceChange();
-        if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
-    }
-
     function _queueWithdrawRequest(
         address user,
         uint96 amountOfEEth,
@@ -499,6 +490,8 @@ contract PriorityWithdrawalQueue is
         if (!removedFromPending) revert RequestNotFound();
     }
 
+    /// @dev Transfers amount equivalent to the shares user had transferred to the queue back to the user 
+    /// because don't want user's loss while being in queue. Hence no remainder shares are necessary here.
     function _cancelWithdrawRequest(WithdrawRequest calldata request) internal returns (bytes32 requestId) {
         requestId = keccak256(abi.encode(request));
         
@@ -507,16 +500,13 @@ contract PriorityWithdrawalQueue is
         _dequeueWithdrawRequest(request);
         
         if (wasFinalized) {
-            uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
-            uint256 amountToUnlock = request.amountOfEEth < amountForShares 
-                ? request.amountOfEEth 
-                : amountForShares;
-            ethAmountLockedForPriorityWithdrawal -= uint128(amountToUnlock);
+            ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
         }
+
+        uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
+        IERC20(address(eETH)).safeTransfer(request.user, amountForShares);
         
-        IERC20(address(eETH)).safeTransfer(request.user, request.amountOfEEth);
-        
-        emit WithdrawRequestCancelled(requestId, request.user, request.amountOfEEth, request.shareOfEEth, request.nonce, uint32(block.timestamp));
+        emit WithdrawRequestCancelled(requestId, request.user, uint96(amountForShares), request.shareOfEEth, request.nonce, uint32(block.timestamp));
     }
 
     function _claimWithdraw(WithdrawRequest calldata request) internal {
@@ -540,7 +530,7 @@ contract PriorityWithdrawalQueue is
             : 0;
         totalRemainderShares += uint96(remainder);
 
-        ethAmountLockedForPriorityWithdrawal -= uint128(amountToWithdraw);
+        ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
 
         uint256 burnedShares = liquidityPool.withdraw(request.user, amountToWithdraw);
         if (burnedShares != sharesToBurn) revert InvalidBurnedSharesAmount();

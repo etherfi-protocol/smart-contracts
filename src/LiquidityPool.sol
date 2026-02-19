@@ -112,6 +112,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     error InvalidAmount();
     error DataNotSet();
     error InsufficientLiquidity();
+    error InsufficientUnlockedLiquidity();
     error SendFail();
     error IncorrectRole();
     error InvalidValidatorSize();
@@ -218,7 +219,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
             msg.sender == priorityWithdrawalQueue,
             "Incorrect Caller"
         );
-        if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
+        if (totalValueInLp < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
+        if (msg.sender == address(withdrawRequestNFT)) {
+            if (ethAmountLockedForWithdrawal < _amount) revert InsufficientLiquidity();
+        } else {
+            if (totalValueInLp < uint256(ethAmountLockedForWithdrawal) + _amount) revert InsufficientUnlockedLiquidity();
+        }
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
 
         totalValueInLp -= uint128(_amount);
