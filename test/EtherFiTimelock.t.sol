@@ -381,6 +381,72 @@ contract TimelockTest is TestSetup {
         console2.log("Role granted successfully to:", wallet);
         console2.logBytes32(role);
     }
+
+    function test_completeQueuedWithdrawals_realistic() public {
+        initializeRealisticFork(MAINNET_FORK);
+        (IDelegationManager.Withdrawal memory withdrawal, uint256[] memory shares) = eigenLayerDelegationManager.getQueuedWithdrawal(0xe1ae945fa8792e19a98e5108f478d585aab3ca2b58f5d9847dad3d142f2f8f4d);
+        IERC20[][] memory tokens = new IERC20[][](1);
+        tokens[0] = new IERC20[](1);
+        tokens[0][0] = IERC20(address(stEth));
+        
+        address target = address(etherFiRestakerInstance);
+        IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+        withdrawals[0] = withdrawal;
+        bytes memory data = abi.encodeWithSelector(EtherFiRestaker.completeQueuedWithdrawals.selector, withdrawals, tokens);
+        //bytes memory stEthRequestWithdrawalData = abi.encodeWithSelector(EtherFiRestaker.stEthRequestWithdrawal.selector, 65000 ether);
+        console2.logBytes(data);
+        //console2.logBytes(stEthRequestWithdrawalData);
+        vm.startPrank(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC);
+        etherFiRestakerInstance.completeQueuedWithdrawals(withdrawals, tokens);
+        etherFiRestakerInstance.stEthRequestWithdrawal(65000 ether);
+        vm.stopPrank();
+    }
+
+    function test_set_instant_wd_fee_zero() public {
+        initializeRealisticFork(MAINNET_FORK);
+
+        (IDelegationManager.Withdrawal memory withdrawal, uint256[] memory shares) = eigenLayerDelegationManager.getQueuedWithdrawal(0xe1ae945fa8792e19a98e5108f478d585aab3ca2b58f5d9847dad3d142f2f8f4d);
+        IERC20[][] memory tokens = new IERC20[][](1);
+        tokens[0] = new IERC20[](1);
+        tokens[0][0] = IERC20(address(stEth));
+        address[] memory addresses = new address[](3);
+        addresses[0] = address(etherFiRedemptionManagerInstance);
+        addresses[1] = address(etherFiRedemptionManagerInstance);
+        addresses[2] = address(etherFiRedemptionManagerInstance);
+
+        bytes[] memory data = new bytes[](addresses.length);
+        data[0] = abi.encodeWithSelector(EtherFiRedemptionManager.setExitFeeBasisPoints.selector, 0, address(stEth));
+        data[1] = abi.encodeWithSelector(EtherFiRedemptionManager.setCapacity.selector, 70000 ether, address(stEth));
+        data[2] = abi.encodeWithSelector(EtherFiRedemptionManager.setRefillRatePerSecond.selector, 4861111111111111111 * 4, address(stEth));
+
+        uint256[] memory values = new uint256[](addresses.length);
+        values[0] = 0;
+        values[1] = 0;
+        values[2] = 0;
+
+        _batch_execute_timelock(addresses, data, values, true, false, true, false);
+
+        //verify in 5hrs someone can do instant wd of 60k eeth at 0 exit fee
+        vm.warp(block.timestamp + 1 hours + 100);
+        vm.deal(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, 61000 ether);
+        vm.startPrank(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC);
+        IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+        withdrawals[0] = withdrawal;
+        etherFiRestakerInstance.completeQueuedWithdrawals(withdrawals, tokens);
+
+        //mint eeth to 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC
+        liquidityPoolInstance.deposit{value: 61000 ether}(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC);
+        //approve eeth to redemption manager
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), 60000 ether);
+        //redeem eeth to steth
+        etherFiRedemptionManagerInstance.redeemEEth(60000 ether, 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC, address(stEth));
+        console2.log("steth balance of 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC:", stEth.balanceOf(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC));
+        vm.stopPrank();
+        //verify steth balance of 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC
+        //assertEq(stEth.balanceOf(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC), 60000 ether);
+    }
+
+
 }
 
 
