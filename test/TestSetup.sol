@@ -429,7 +429,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         earlyAdopterPoolInstance = EarlyAdopterPool(payable(addressProviderInstance.getContractAddress("EarlyAdopterPool")));
         withdrawRequestNFTInstance = WithdrawRequestNFT(addressProviderInstance.getContractAddress("WithdrawRequestNFT"));
         liquifierInstance = Liquifier(payable(addressProviderInstance.getContractAddress("Liquifier")));
-        etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
+        etherFiTimelockInstance = EtherFiTimelock(payable(0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(address(0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0)));
@@ -1705,9 +1705,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.stopPrank();
     }
 
-    function _batch_execute_timelock(address[] memory targets, bytes[] memory data, uint256[] memory values, bool _schedule, bool _log_schedule, bool _execute, bool _log_execute) internal {
-        vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
-
+    function _batch_execute_timelock(address[] memory targets, bytes[] memory data, uint256[] memory values, bool _schedule, bool _log_schedule, bool _execute, bool _log_execute) internal { 
+        if(address(0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761) == address(etherFiTimelockInstance)) { // 3 Day Timelock
+            vm.startPrank(0xcdd57D11476c22d265722F68390b036f3DA48c21);
+        } else { // 8hr Timelock
+            vm.startPrank(0x2aCA71020De61bb532008049e1Bd41E451aE8AdC);
+        }
         bytes32 salt = keccak256(abi.encode(targets, data, block.number));
         if (_schedule) etherFiTimelockInstance.scheduleBatch(targets, values, data, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
         if (_log_schedule) _batch_output_schedule_txn(targets, data, values, bytes32(0), salt, etherFiTimelockInstance.getMinDelay());
