@@ -594,8 +594,8 @@ contract PriorityWithdrawalQueue is
 
     function getClaimableAmount(WithdrawRequest calldata request) external view returns (uint256) {
         bytes32 requestId = keccak256(abi.encode(request));
-        if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
-        if (liquidityPool.amountForShare(request.shareOfEEth) < request.amountWithFee) revert InvalidOutputAmount();
+        if (!_finalizedRequests.contains(requestId)) return 0;
+        if (liquidityPool.amountForShare(request.shareOfEEth) < request.amountWithFee) return 0;
 
         return request.amountWithFee;
     }

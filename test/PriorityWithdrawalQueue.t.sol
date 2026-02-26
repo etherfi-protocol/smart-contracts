@@ -1260,6 +1260,14 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertApproxEqRel(claimable, withdrawAmount, 0.001e18, "Claimable should be approximately the withdraw amount");
     }
 
+    function test_getClaimableAmount_returnsZeroIfNotFinalized() public {
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequest(vipUser, 10 ether);
+
+        // Request exists but has not been fulfilled — not in _finalizedRequests yet.
+        assertEq(priorityQueue.getClaimableAmount(request), 0, "Should return 0 for pending request");
+    }
+
     function test_generateWithdrawRequestId() public view {
         address testUser = vipUser;
         uint96 testAmount = 10 ether;
