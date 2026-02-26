@@ -115,7 +115,7 @@ contract PriorityWithdrawalQueue is
     error BadInput();
     error InvalidBurnedSharesAmount();
     error InvalidEEthSharesAfterRemainderHandling();
-    error InsufficientOutputAmount();
+    error InvalidOutputAmount();
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
@@ -450,6 +450,8 @@ contract PriorityWithdrawalQueue is
     ) internal returns (bytes32 requestId, WithdrawRequest memory req) {
         uint32 requestNonce = nonce++;
 
+        if (minAmountOut == 0 || minAmountOut > amountOfEEth) revert InvalidAmount();
+
         uint96 shareOfEEth = uint96(liquidityPool.sharesForAmount(amountOfEEth));
         if (shareOfEEth == 0) revert InvalidAmount();
 
@@ -515,11 +517,9 @@ contract PriorityWithdrawalQueue is
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
-        uint256 amountToWithdraw = request.amountOfEEth < amountForShares 
-            ? request.amountOfEEth 
-            : amountForShares;
+        if (amountForShares < request.minAmountOut) revert InvalidOutputAmount();
 
-        if (amountToWithdraw < request.minAmountOut) revert InsufficientOutputAmount();
+        uint256 amountToWithdraw = request.minAmountOut;
 
         uint256 sharesToBurn = liquidityPool.sharesForWithdrawalAmount(amountToWithdraw);
 
@@ -596,8 +596,7 @@ contract PriorityWithdrawalQueue is
         bytes32 requestId = keccak256(abi.encode(request));
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
-        uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
-        return request.amountOfEEth < amountForShares ? request.amountOfEEth : amountForShares;
+        return request.minAmountOut;
     }
 
     function totalActiveRequests() external view returns (uint256) {
