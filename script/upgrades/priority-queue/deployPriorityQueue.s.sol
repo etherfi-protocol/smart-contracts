@@ -41,7 +41,7 @@ contract DeployPriorityQueue is Script, Utils {
         console2.log("");
 
         console2.log("To compute exact addresses, run with mainnet fork:");
-        console2.log("  forge script script/upgrades/priority-queue/deployPriorityQueue.s.sol:DeployPriorityQueue --sig 'dryRunWithFork()' --fork-url <RPC_URL>");
+        console2.log("  forge script script/upgrades/priority-queue/deployPriorityQueue.s.sol:DeployPriorityQueue --sig 'dryRun()' --fork-url <RPC_URL>");
     }
 
     function run() public {
@@ -125,9 +125,8 @@ contract DeployPriorityQueue is Script, Utils {
         console2.log("EtherFiRedemptionManager Implementation:", etherFiRedemptionManagerImpl);
         console2.log("");
         console2.log("NEXT STEPS:");
-        console2.log("1. Initialize PriorityWithdrawalQueue proxy");
-        console2.log("2. Upgrade LiquidityPool proxy to new implementation");
-        console2.log("3. Upgrade EtherFiRedemptionManager proxy to new implementation");
-        console2.log("4. Grant necessary roles in RoleRegistry");
+        console2.log("1. Upgrade LiquidityPool proxy to new implementation");
+        console2.log("2. Upgrade EtherFiRedemptionManager proxy to new implementation");
+        console2.log("3. Grant necessary roles in RoleRegistry");
     }
 }

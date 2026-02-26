@@ -147,9 +147,10 @@ contract PriorityQueueTransactions is Script, Utils {
         console2.log("Transaction Details:");
         console2.log("--------------------");
         console2.log("1. Upgrade LiquidityPool to:", liquidityPoolImpl);
-        console2.log("2. Grant PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE to:", ETHERFI_OPERATING_ADMIN);
-        console2.log("3. Grant PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE to:", ETHERFI_OPERATING_ADMIN);
-        console2.log("4. Grant PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE to:", ADMIN_EOA);
+        console2.log("2. Upgrade EtherFiRedemptionManager to:", etherFiRedemptionManagerImpl);
+        console2.log("3. Grant PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE to:", ETHERFI_OPERATING_ADMIN);
+        console2.log("4. Grant PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE to:", ETHERFI_OPERATING_ADMIN);
+        console2.log("5. Grant PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE to:", ADMIN_EOA);
         console2.log("================================================");
         console2.log("");
 
