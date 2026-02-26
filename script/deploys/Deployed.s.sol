@@ -53,6 +53,7 @@ contract Deployed {
     address public constant EARLY_ADOPTER_POOL = 0x7623e9DC0DA6FF821ddb9EbABA794054E078f8c4;
     address public constant CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR = 0x9A8c5046a290664Bf42D065d33512fe403484534;
     address public constant TREASURY = 0x0c83EAe1FE72c390A02E426572854931EefF93BA;
+    address public constant WITHDRAW_REQUEST_NFT_BUYBACK_SAFE = 0x2f5301a3D59388c509C65f8698f521377D41Fd0F; // buyback wallet
 
     // role registry & multi-sig
     address public constant ROLE_REGISTRY = 0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9;
@@ -66,9 +67,10 @@ contract Deployed {
     address public constant AVS_OPERATOR_2 = 0x2c7cB7d5dC4aF9caEE654553a144C76F10D4b320;
 
     // Utilities
-    address constant EIGENLAYER_POD_MANAGER = 0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338;
-    address constant EIGENLAYER_DELEGATION_MANAGER = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
-    address constant EIGENLAYER_REWARDS_COORDINATOR = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
+    address public constant EIGENLAYER_POD_MANAGER = 0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338;
+    address public constant EIGENLAYER_DELEGATION_MANAGER = 0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A;
+    address public constant EIGENLAYER_REWARDS_COORDINATOR = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
+    address public constant LIDO_WITHDRAWAL_QUEUE = 0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1;
 
     mapping(address => address) public timelockToAdmin;
 

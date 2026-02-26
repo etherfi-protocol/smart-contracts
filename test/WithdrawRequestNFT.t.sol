@@ -21,7 +21,6 @@ contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
 contract WithdrawRequestNFTTest is TestSetup {
 
     uint32[] public reqIds =[ 20, 388, 478, 714, 726, 729, 735, 815, 861, 916, 941, 1014, 1067, 1154, 1194, 1253];
-    address etherfi_admin_wallet = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
 
     function setUp() public {
         setUpTests();
@@ -528,7 +527,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Assume valid conditions
         vm.assume(depositAmount >= 1 ether && depositAmount <= 1000 ether);
         vm.assume(withdrawAmount > 0 && withdrawAmount <= depositAmount);
-        vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance) && recipient != alice && recipient != admin && recipient != (address(etherFiAdminInstance)));
+        vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance) && recipient != alice && recipient != admin && recipient != (address(etherFiAdminInstance)) && recipient != roleRegistryInstance.owner());
         // Filter out contracts that don't implement IERC721Receiver - only allow EOAs
         vm.assume(recipient.code.length == 0);
         
@@ -553,7 +552,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.invalidateRequest(requestId);
 
         // Admin invalidates request
-        vm.startPrank(address(0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf));
+        vm.startPrank(roleRegistryInstance.owner());
+        console.log("roleRegistryInstance.owner()", roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), admin);
         vm.stopPrank();
         vm.prank(admin);

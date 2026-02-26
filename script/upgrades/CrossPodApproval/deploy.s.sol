@@ -5,7 +5,7 @@ import "forge-std/Script.sol";
 import {LiquidityPool} from "../../../src/LiquidityPool.sol";
 import {EtherFiNodesManager} from "../../../src/EtherFiNodesManager.sol";
 import {Deployed} from "../../deploys/Deployed.s.sol";
-import {Utils, ICreate2Factory} from "../../utils/Utils.sol";
+import {Utils, ICreate2Factory} from "../../utils/utils.sol";
 
 /**
 command: 
