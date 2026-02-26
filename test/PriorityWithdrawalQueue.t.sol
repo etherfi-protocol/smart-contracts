@@ -1380,4 +1380,97 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.prank(vipUser);
         priorityQueue.claimWithdraw(request);
     }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------  CROSS-RESERVE ISOLATION TESTS  -----------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @dev Sets up an NFT withdrawal: deposits ETH, requests withdrawal, finalizes it, and
+    ///      locks the corresponding ETH in LiquidityPool via etherFiAdmin.
+    /// @return nftRequestId  The NFT token ID for the withdrawal request
+    /// @return nftEethAmount The eETH amount locked in the request
+    function _setupNftWithdrawal(address nftUser, uint96 depositAmount)
+        internal
+        returns (uint256 nftRequestId, uint96 nftEethAmount)
+    {
+        bytes32 WITHDRAW_REQUEST_NFT_ADMIN_ROLE = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
+        vm.prank(owner);
+        roleRegistryInstance.grantRole(WITHDRAW_REQUEST_NFT_ADMIN_ROLE, alice);
+
+        vm.deal(nftUser, depositAmount + 1 ether);
+        vm.startPrank(nftUser);
+        liquidityPoolInstance.deposit{value: depositAmount}();
+        nftEethAmount = uint96(eETHInstance.balanceOf(nftUser));
+        eETHInstance.approve(address(liquidityPoolInstance), nftEethAmount);
+        nftRequestId = liquidityPoolInstance.requestWithdraw(nftUser, nftEethAmount);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(nftRequestId);
+    }
+
+    /// @dev Proves that the priority queue can claim its locked ETH even when the NFT queue
+    ///      has a concurrent lock on the LP's balance.
+    function test_crossReserveIsolation_priorityClaimsDespiteNftLock() public {
+        address nftUser = makeAddr("nftUser");
+
+        // Set up NFT withdrawal lock of ~40 ETH
+        _setupNftWithdrawal(nftUser, 40 ether);
+        uint128 nftLocked = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+        assertGt(nftLocked, 0, "NFT queue lock must be non-zero");
+
+        // Create and fulfill a priority withdrawal of 20 ETH (vipUser has 50 ETH from setUp)
+        uint96 priorityAmount = 20 ether;
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory priorityRequest) =
+            _createWithdrawRequest(vipUser, priorityAmount);
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory reqs =
+            new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        reqs[0] = priorityRequest;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(reqs);
+
+        assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), priorityAmount, "Priority lock set");
+
+        // Priority queue claims despite NFT lock — must not revert
+        uint256 vipEthBefore = vipUser.balance;
+        vm.prank(vipUser);
+        priorityQueue.claimWithdraw(priorityRequest);
+
+        assertApproxEqRel(vipUser.balance, vipEthBefore + priorityAmount, 0.001e18, "Priority claim amount correct");
+        assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), 0, "Priority lock cleared");
+        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT lock unchanged by priority claim");
+    }
+
+    /// @dev Proves that the NFT queue can claim its locked ETH even when the priority queue
+    ///      has a concurrent lock on the LP's balance.
+    function test_crossReserveIsolation_nftClaimsDespitePriorityLock() public {
+        address nftUser = makeAddr("nftUser");
+
+        // Set up NFT withdrawal lock of ~40 ETH
+        (uint256 nftRequestId, uint96 nftEethAmount) = _setupNftWithdrawal(nftUser, 40 ether);
+        uint128 nftLocked = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+        assertGt(nftLocked, 0, "NFT queue lock must be non-zero");
+
+        // Create and fulfill a priority withdrawal of 20 ETH (creates priority lock)
+        uint96 priorityAmount = 20 ether;
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory priorityRequest) =
+            _createWithdrawRequest(vipUser, priorityAmount);
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory reqs =
+            new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        reqs[0] = priorityRequest;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(reqs);
+
+        assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), priorityAmount, "Priority lock set");
+
+        // NFT queue claims despite priority lock — must not revert
+        uint256 nftUserEthBefore = nftUser.balance;
+        vm.prank(nftUser);
+        withdrawRequestNFTInstance.claimWithdraw(nftRequestId);
+
+        assertApproxEqRel(nftUser.balance, nftUserEthBefore + nftEethAmount, 0.001e18, "NFT claim amount correct");
+        assertLt(liquidityPoolInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT lock decremented after claim");
+        assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), priorityAmount, "Priority lock unchanged by NFT claim");
+    }
 }

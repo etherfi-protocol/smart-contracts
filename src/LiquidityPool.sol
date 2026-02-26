@@ -16,6 +16,7 @@ import "./interfaces/ILiquifier.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./interfaces/IPriorityWithdrawalQueue.sol";
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
     using SafeERC20 for IERC20;
@@ -218,15 +219,21 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
             msg.sender == priorityWithdrawalQueue,
             "Incorrect Caller"
         );
-        if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
+        if (totalValueInLp < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
 
         if (msg.sender == priorityWithdrawalQueue && (totalValueInLp - ethAmountLockedForWithdrawal < _amount)) revert InsufficientLiquidity();
-
-        totalValueInLp -= uint128(_amount);
+        
         if (msg.sender == address(withdrawRequestNFT)) {
+            if (ethAmountLockedForWithdrawal < _amount) revert InsufficientLiquidity();
+            if (priorityWithdrawalQueue != address(0)) {
+                uint128 priorityLocked = uint128(IPriorityWithdrawalQueue(priorityWithdrawalQueue).ethAmountLockedForPriorityWithdrawal());
+                if (totalValueInLp - priorityLocked < _amount) revert InsufficientLiquidity();
+            }
             ethAmountLockedForWithdrawal -= uint128(_amount);
         }
+
+        totalValueInLp -= uint128(_amount);
 
         eETH.burnShares(msg.sender, share);
 
