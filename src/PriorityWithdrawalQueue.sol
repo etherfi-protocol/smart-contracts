@@ -81,7 +81,7 @@ contract PriorityWithdrawalQueue is
         address indexed user,
         uint96 amountOfEEth,
         uint96 shareOfEEth,
-        uint96 minAmountOut,
+        uint96 amountWithFee,
         uint32 nonce,
         uint32 creationTime
     );
@@ -179,24 +179,24 @@ contract PriorityWithdrawalQueue is
 
     /// @notice Request a withdrawal of eETH
     /// @param amountOfEEth Amount of eETH to withdraw
-    /// @param minAmountOut Minimum ETH output amount (slippage protection for dynamic fees)
+    /// @param amountWithFee ETH amount the user receives after fee deduction (amountOfEEth - fee)
     /// @return requestId The hash-based ID of the created withdrawal request
     function requestWithdraw(
         uint96 amountOfEEth,
-        uint96 minAmountOut
+        uint96 amountWithFee
     ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
         if (amountOfEEth < MIN_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
 
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(this), amountOfEEth);
 
-        (requestId,) = _queueWithdrawRequest(msg.sender, amountOfEEth, minAmountOut);
+        (requestId,) = _queueWithdrawRequest(msg.sender, amountOfEEth, amountWithFee);
         _verifyRequestPostConditions(lpEthBefore, queueEEthSharesBefore, amountOfEEth);
     }
 
     function requestWithdrawWithPermit(
         uint96 amountOfEEth,
-        uint96 minAmountOut,
+        uint96 amountWithFee,
         PermitInput calldata permit
     ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
         if (amountOfEEth < MIN_AMOUNT) revert InvalidAmount();
@@ -210,7 +210,7 @@ contract PriorityWithdrawalQueue is
 
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(this), amountOfEEth);
 
-        (requestId,) = _queueWithdrawRequest(msg.sender, amountOfEEth, minAmountOut);
+        (requestId,) = _queueWithdrawRequest(msg.sender, amountOfEEth, amountWithFee);
 
         _verifyRequestPostConditions(lpEthBefore, queueEEthSharesBefore, amountOfEEth);
     }
@@ -446,11 +446,11 @@ contract PriorityWithdrawalQueue is
     function _queueWithdrawRequest(
         address user,
         uint96 amountOfEEth,
-        uint96 minAmountOut
+        uint96 amountWithFee
     ) internal returns (bytes32 requestId, WithdrawRequest memory req) {
         uint32 requestNonce = nonce++;
 
-        if (minAmountOut == 0 || minAmountOut > amountOfEEth) revert InvalidAmount();
+        if (amountWithFee == 0 || amountWithFee > amountOfEEth) revert InvalidAmount();
 
         uint96 shareOfEEth = uint96(liquidityPool.sharesForAmount(amountOfEEth));
         if (shareOfEEth == 0) revert InvalidAmount();
@@ -461,7 +461,7 @@ contract PriorityWithdrawalQueue is
             user: user,
             amountOfEEth: amountOfEEth,
             shareOfEEth: shareOfEEth,
-            minAmountOut: minAmountOut,
+            amountWithFee: amountWithFee,
             nonce: requestNonce,
             creationTime: timeNow
         });
@@ -476,7 +476,7 @@ contract PriorityWithdrawalQueue is
             user,
             amountOfEEth,
             shareOfEEth,
-            minAmountOut,
+            amountWithFee,
             requestNonce,
             timeNow
         );
@@ -517,9 +517,9 @@ contract PriorityWithdrawalQueue is
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
-        if (amountForShares < request.minAmountOut) revert InvalidOutputAmount();
+        if (amountForShares < request.amountWithFee) revert InvalidOutputAmount();
 
-        uint256 amountToWithdraw = request.minAmountOut;
+        uint256 amountToWithdraw = request.amountWithFee;
 
         uint256 sharesToBurn = liquidityPool.sharesForWithdrawalAmount(amountToWithdraw);
 
@@ -550,7 +550,7 @@ contract PriorityWithdrawalQueue is
         address _user,
         uint96 _amountOfEEth,
         uint96 _shareOfEEth,
-        uint96 _minAmountOut,
+        uint96 _amountWithFee,
         uint32 _nonce,
         uint32 _creationTime
     ) public pure returns (bytes32 requestId) {
@@ -558,7 +558,7 @@ contract PriorityWithdrawalQueue is
             user: _user,
             amountOfEEth: _amountOfEEth,
             shareOfEEth: _shareOfEEth,
-            minAmountOut: _minAmountOut,
+            amountWithFee: _amountWithFee,
             nonce: _nonce,
             creationTime: _creationTime
         });
@@ -570,7 +570,7 @@ contract PriorityWithdrawalQueue is
             request.user,
             request.amountOfEEth,
             request.shareOfEEth,
-            request.minAmountOut,
+            request.amountWithFee,
             request.nonce,
             request.creationTime
         );
@@ -595,8 +595,9 @@ contract PriorityWithdrawalQueue is
     function getClaimableAmount(WithdrawRequest calldata request) external view returns (uint256) {
         bytes32 requestId = keccak256(abi.encode(request));
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
+        if (liquidityPool.amountForShare(request.shareOfEEth) < request.amountWithFee) revert InvalidOutputAmount();
 
-        return request.minAmountOut;
+        return request.amountWithFee;
     }
 
     function totalActiveRequests() external view returns (uint256) {

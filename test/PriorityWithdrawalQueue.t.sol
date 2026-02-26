@@ -87,11 +87,11 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     {
         uint96 shareAmount = uint96(liquidityPoolInstance.sharesForAmount(amount));
         uint96 minOut = uint96(liquidityPoolInstance.amountForShare(shareAmount));
-        return _createWithdrawRequestWithMinOut(user, amount, minOut);
+        return _createWithdrawRequestWithFee(user, amount, minOut);
     }
 
-    /// @dev Helper to create a withdrawal request with custom minAmountOut
-    function _createWithdrawRequestWithMinOut(address user, uint96 amount, uint96 minAmountOut) 
+    /// @dev Helper to create a withdrawal request with custom amountWithFee
+    function _createWithdrawRequestWithFee(address user, uint96 amount, uint96 amountWithFee) 
         internal 
         returns (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) 
     {
@@ -101,7 +101,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         vm.startPrank(user);
         eETHInstance.approve(address(priorityQueue), amount);
-        requestId = priorityQueue.requestWithdraw(amount, minAmountOut);
+        requestId = priorityQueue.requestWithdraw(amount, amountWithFee);
         vm.stopPrank();
 
         // Reconstruct the request struct
@@ -109,7 +109,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             user: user,
             amountOfEEth: amount,
             shareOfEEth: shareAmount,
-            minAmountOut: minAmountOut,
+            amountWithFee: amountWithFee,
             nonce: uint32(nonceBefore),
             creationTime: timestamp
         });
@@ -426,7 +426,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             user: vipUser,
             amountOfEEth: withdrawAmount,
             shareOfEEth: shareAmount,
-            minAmountOut: withdrawAmount,
+            amountWithFee: withdrawAmount,
             nonce: uint32(nonceBefore),
             creationTime: timestamp
         });
@@ -1215,7 +1215,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             user: vipUser,
             amountOfEEth: 1 ether,
             shareOfEEth: 1 ether,
-            minAmountOut: 0,
+            amountWithFee: 0,
             nonce: 999,
             creationTime: uint32(block.timestamp)
         });
@@ -1264,7 +1264,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         address testUser = vipUser;
         uint96 testAmount = 10 ether;
         uint96 testShare = uint96(liquidityPoolInstance.sharesForAmount(testAmount));
-        uint96 testMinOut = 9.5 ether;
+        uint96 testAmountWithFee = 9.5 ether;
         uint32 testNonce = 1;
         uint32 testTime = uint32(block.timestamp);
 
@@ -1272,7 +1272,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             testUser,
             testAmount,
             testShare,
-            testMinOut,
+            testAmountWithFee,
             testNonce,
             testTime
         );
@@ -1282,7 +1282,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             user: testUser,
             amountOfEEth: testAmount,
             shareOfEEth: testShare,
-            minAmountOut: testMinOut,
+            amountWithFee: testAmountWithFee,
             nonce: testNonce,
             creationTime: testTime
         });
@@ -1292,19 +1292,19 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     function test_revert_insufficientOutputAmount() public {
-        // User requests with minAmountOut = amountOfEEth (no fee).
-        // A post-request slash drops share value below minAmountOut, so claim reverts.
+        // User requests with amountWithFee = amountOfEEth (no fee).
+        // A post-request slash drops share value below amountWithFee, so claim reverts.
         uint96 withdrawAmount = 10 ether;
 
         (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
-            _createWithdrawRequestWithMinOut(vipUser, withdrawAmount, withdrawAmount);
+            _createWithdrawRequestWithFee(vipUser, withdrawAmount, withdrawAmount);
 
         // Slash: a large negative rebase drives share value below the requested amount.
         _rebase(20 ether);
         _rebase(-25 ether);
         require(
-            liquidityPoolInstance.amountForShare(request.shareOfEEth) < request.minAmountOut,
-            "Setup: share value must be below minAmountOut after slash"
+            liquidityPoolInstance.amountForShare(request.shareOfEEth) < request.amountWithFee,
+            "Setup: share value must be below amountWithFee after slash"
         );
 
         // Fulfill the request
@@ -1313,13 +1313,13 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.prank(requestManager);
         priorityQueue.fulfillRequests(requests);
 
-        // Claim should revert because current share value < minAmountOut
+        // Claim should revert because current share value < amountWithFee
         vm.prank(vipUser);
         vm.expectRevert(PriorityWithdrawalQueue.InvalidOutputAmount.selector);
         priorityQueue.claimWithdraw(request);
     }
 
-    function test_revert_minAmountOutExceedsDepositAmount() public {
+    function test_revert_amountWithFeeExceedsDepositAmount() public {
         uint96 withdrawAmount = 10 ether;
 
         vm.startPrank(vipUser);
@@ -1332,7 +1332,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.stopPrank();
     }
 
-    function test_revert_minAmountOutZero() public {
+    function test_revert_amountWithFeeZero() public {
         uint96 withdrawAmount = 10 ether;
 
         vm.startPrank(vipUser);
@@ -1344,20 +1344,20 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.stopPrank();
     }
 
-    function test_minAmountOutEqualsDepositAmount() public {
+    function test_amountWithFeeEqualsDepositAmount() public {
         uint96 withdrawAmount = 10 ether;
-        uint96 minAmountOut = withdrawAmount - 1; // 1 wei less for rounding
+        uint96 amountWithFee = withdrawAmount - 1; // 1 wei less for rounding
 
         vm.prank(vipUser);
         eETHInstance.approve(address(priorityQueue), withdrawAmount);
         vm.prank(vipUser);
-        priorityQueue.requestWithdraw(withdrawAmount, minAmountOut);
+        priorityQueue.requestWithdraw(withdrawAmount, amountWithFee);
 
         IPriorityWithdrawalQueue.WithdrawRequest memory request = IPriorityWithdrawalQueue.WithdrawRequest({
             user: vipUser,
             amountOfEEth: withdrawAmount,
             shareOfEEth: uint96(liquidityPoolInstance.sharesForAmount(withdrawAmount)),
-            minAmountOut: minAmountOut,
+            amountWithFee: amountWithFee,
             nonce: 1,
             creationTime: uint32(block.timestamp)
         });

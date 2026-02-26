@@ -6,14 +6,14 @@ interface IPriorityWithdrawalQueue {
     /// @param user The user who created the request
     /// @param amountOfEEth Original eETH amount requested
     /// @param shareOfEEth eETH shares at time of request
-    /// @param minAmountOut Minimum ETH output amount (slippage protection for dynamic fees)
+    /// @param amountWithFee ETH amount the user receives after fee deduction (amountOfEEth - fee)
     /// @param nonce Unique nonce to prevent hash collisions
     /// @param creationTime Timestamp when request was created
     struct WithdrawRequest {
         address user;           // 20 bytes
         uint96 amountOfEEth;    // 12 bytes | Slot 1 = 32 bytes
         uint96 shareOfEEth;     // 12 bytes
-        uint96 minAmountOut;    // 12 bytes
+        uint96 amountWithFee;    // 12 bytes
         uint32 nonce;           // 4 bytes
         uint32 creationTime;    // 4 bytes  | Slot 2 = 32 bytes
     }
@@ -27,8 +27,8 @@ interface IPriorityWithdrawalQueue {
     }
 
     // User functions
-    function requestWithdraw(uint96 amountOfEEth, uint96 minAmountOut) external returns (bytes32 requestId);
-    function requestWithdrawWithPermit(uint96 amountOfEEth, uint96 minAmountOut, PermitInput calldata permit) external returns (bytes32 requestId);
+    function requestWithdraw(uint96 amountOfEEth, uint96 amountWithFee) external returns (bytes32 requestId);
+    function requestWithdrawWithPermit(uint96 amountOfEEth, uint96 amountWithFee, PermitInput calldata permit) external returns (bytes32 requestId);
     function cancelWithdraw(WithdrawRequest calldata request) external returns (bytes32 requestId);
     function claimWithdraw(WithdrawRequest calldata request) external;
     function batchClaimWithdraw(WithdrawRequest[] calldata requests) external;
