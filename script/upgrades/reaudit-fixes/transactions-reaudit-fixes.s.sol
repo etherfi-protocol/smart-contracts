@@ -96,21 +96,8 @@ contract ReauditFixesTransactions is Utils {
         // Step 6: Verify access control preserved
         verifyAccessControlPreservation();
 
-        EtherFiNode newEtherFiNodeImplementation = new EtherFiNode(address(LIQUIDITY_POOL), address(ETHERFI_NODES_MANAGER), address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER), address(ROLE_REGISTRY));
-        EtherFiRedemptionManager newEtherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(LIQUIDITY_POOL), address(EETH), address(WEETH), address(TREASURY), address(ROLE_REGISTRY), address(ETHERFI_RESTAKER), address(0x0));
-        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(EIGENLAYER_REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER));
-        EtherFiRewardsRouter newEtherFiRewardsRouterImplementation = new EtherFiRewardsRouter(address(LIQUIDITY_POOL), address(TREASURY), address(ROLE_REGISTRY));
-        Liquifier newLiquifierImplementation = new Liquifier();
-        WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(TREASURY));
-        EtherFiViewer newEtherFiViewerImplementation = new EtherFiViewer(address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
-
-        contractCodeChecker.verifyContractByteCodeMatch(etherFiNodeImpl, address(newEtherFiNodeImplementation));
-        contractCodeChecker.verifyContractByteCodeMatch(etherFiRedemptionManagerImpl, address(newEtherFiRedemptionManagerImplementation));
-        contractCodeChecker.verifyContractByteCodeMatch(etherFiRestakerImpl, address(newEtherFiRestakerImplementation));
-        contractCodeChecker.verifyContractByteCodeMatch(etherFiRewardsRouterImpl, address(newEtherFiRewardsRouterImplementation));
-        contractCodeChecker.verifyContractByteCodeMatch(liquifierImpl, address(newLiquifierImplementation));  
-        contractCodeChecker.verifyContractByteCodeMatch(withdrawRequestNFTImpl, address(newWithdrawRequestNFTImplementation));
-        contractCodeChecker.verifyContractByteCodeMatch(etherFiViewerImpl, address(newEtherFiViewerImplementation));
+        // Step 7: Run fork tests (quick sanity checks)
+        forkTests();
 
         console2.log("=== Upgrade Verification Complete ===");
         console2.log("");

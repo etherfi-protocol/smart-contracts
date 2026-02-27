@@ -220,15 +220,15 @@ contract PriorityQueueTransactions is Script, Utils {
         // Verify roles granted
         require(
             roleRegistryContract.hasRole(PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE, ETHERFI_OPERATING_ADMIN),
-            "ADMIN_EOA does not have PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE"
+            "ETHERFI_OPERATING_ADMIN does not have PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE"
         );
-        console2.log("PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE granted to ADMIN_EOA");
+        console2.log("PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE granted to ETHERFI_OPERATING_ADMIN");
 
         require(
             roleRegistryContract.hasRole(PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE, ETHERFI_OPERATING_ADMIN),
-            "ADMIN_EOA does not have PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE"
+            "ETHERFI_OPERATING_ADMIN does not have PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE"
         );
-        console2.log("PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE granted to ADMIN_EOA");
+        console2.log("PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE granted to ETHERFI_OPERATING_ADMIN");
 
         require(
             roleRegistryContract.hasRole(PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE, ADMIN_EOA),
