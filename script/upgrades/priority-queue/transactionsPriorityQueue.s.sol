@@ -10,9 +10,10 @@ import "../../../src/RoleRegistry.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
+import {ContractCodeChecker} from "../../../script/ContractCodeChecker.sol";
 
 /// @title PriorityQueueTransactions
-/// @notice Generates timelock transactions for upgrading LiquidityPool and granting roles for PriorityWithdrawalQueue
+/// @notice Generates timelock transactions for upgrading LiquidityPool, EtherFiRedemptionManager, and granting roles for PriorityWithdrawalQueue
 /// @dev Run with: forge script script/upgrades/priority-queue/transactionsPriorityQueue.s.sol --fork-url $MAINNET_RPC_URL
 contract PriorityQueueTransactions is Script, Utils {
     //--------------------------------------------------------------------------------------
@@ -27,34 +28,69 @@ contract PriorityQueueTransactions is Script, Utils {
     //------------------------------- NEW DEPLOYMENTS --------------------------------------
     //--------------------------------------------------------------------------------------
     
-    // TODO: Update these addresses with actual deployed addresses
-    address constant liquidityPoolImpl = 0x5598b8c76BA17253459e069041349704c28d33DF;
-    address constant priorityWithdrawalQueueProxy = 0x79Eb9c078fA5a5Bd1Ee8ba84937acd48AA5F90A8;
-    address constant priorityWithdrawalQueueImpl = 0xB149ce3957370066D7C03e5CA81A7997Fe00cAF6;
-    address constant etherFiRedemptionManagerImpl = 0x335E9Cf5A2b13621b66D01F8b889174AD75DE045;
+    address constant liquidityPoolImpl = 0xD97b8a3A1119a2C30ADaf9605da0b552F359adfe;
+    address constant priorityWithdrawalQueueProxy = 0x06fce94d05CC4bC7ff75A210CC3d7FC254362FeE;
+    address constant priorityWithdrawalQueueImpl = 0x94190737Ff3540a8990864F41c149159224878A0;
+    address constant etherFiRedemptionManagerImpl = 0x61a4df8965926Bd4b2Ddb2c6f67c7B05D5ED2018;
+    ContractCodeChecker contractCodeChecker;
+
+    // MIN_DELAY used when deploying PriorityWithdrawalQueue implementation (must match deploy script)
+    uint32 constant PWQ_MIN_DELAY = 1 hours;
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- IMMUTABLE SNAPSHOTS (PRE-UPGRADE) -------------------
+    //--------------------------------------------------------------------------------------
+    ImmutableSnapshot internal preRedemptionManagerImmutables;
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- ACCESS CONTROL SNAPSHOTS (PRE-UPGRADE) --------------
+    //--------------------------------------------------------------------------------------
+    address internal preLiquidityPoolOwner;
+    address internal preRedemptionManagerOwner;
+
+    bool internal preLiquidityPoolPaused;
+    bool internal preRedemptionManagerPaused;
+
     //--------------------------------------------------------------------------------------
     //------------------------------- ROLES ------------------------------------------------
     //--------------------------------------------------------------------------------------
-    
+
     bytes32 public PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE;
     bytes32 public PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE;
     bytes32 public PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE;
 
     function run() public {
         console2.log("================================================");
-        console2.log("Running Priority Queue Transactions");
+        console2.log("=== Priority Queue Upgrade Transactions ========");
         console2.log("================================================");
         console2.log("");
 
-        // string memory forkUrl = vm.envString("MAINNET_RPC_URL");
-        // vm.selectFork(vm.createFork(forkUrl));
+        contractCodeChecker = new ContractCodeChecker();
 
         // Get role hashes from the implementation
         PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE = PriorityWithdrawalQueue(payable(priorityWithdrawalQueueImpl)).PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE();
         PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = PriorityWithdrawalQueue(payable(priorityWithdrawalQueueImpl)).PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE();
         PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE = PriorityWithdrawalQueue(payable(priorityWithdrawalQueueImpl)).PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE();
 
+        // Step 1: Verify deployed bytecode matches expected
+        verifyDeployedBytecode();
+
+        // Step 2: Take pre-upgrade snapshots (immutables, access control)
+        takePreUpgradeSnapshots();
+
+        // Step 3: Execute upgrade via timelock
         executeUpgrade();
+
+        // Step 4: Verify upgrades were successful
+        verifyUpgrades();
+
+        // Step 5: Verify immutables unchanged (and new ones set correctly)
+        verifyImmutablePreservation();
+
+        // Step 6: Verify access control preserved
+        verifyAccessControlPreservation();
+
+        // Step 7: Fork-level functional tests
         forkTest();
     }
 
@@ -208,6 +244,220 @@ contract PriorityQueueTransactions is Script, Utils {
         console2.log("");
         console2.log("All fork tests passed!");
         console2.log("================================================");
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- BYTECODE VERIFICATION --------------------------------
+    //--------------------------------------------------------------------------------------
+    function verifyDeployedBytecode() public {
+        console2.log("=== Verifying Deployed Bytecode ===");
+        console2.log("");
+
+        LiquidityPool newLiquidityPoolImpl = new LiquidityPool(priorityWithdrawalQueueProxy);
+        PriorityWithdrawalQueue newPWQImpl = new PriorityWithdrawalQueue(
+            LIQUIDITY_POOL, EETH, ROLE_REGISTRY, TREASURY, PWQ_MIN_DELAY
+        );
+        EtherFiRedemptionManager newRedemptionManagerImpl = new EtherFiRedemptionManager(
+            LIQUIDITY_POOL, EETH, WEETH, TREASURY, ROLE_REGISTRY, ETHERFI_RESTAKER, priorityWithdrawalQueueProxy
+        );
+
+        contractCodeChecker.verifyContractByteCodeMatch(liquidityPoolImpl, address(newLiquidityPoolImpl));
+        contractCodeChecker.verifyContractByteCodeMatch(priorityWithdrawalQueueImpl, address(newPWQImpl));
+        contractCodeChecker.verifyContractByteCodeMatch(etherFiRedemptionManagerImpl, address(newRedemptionManagerImpl));
+
+        console2.log("");
+        console2.log("All bytecode verifications passed!");
+        console2.log("================================================");
+        console2.log("");
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- IMMUTABLE SELECTOR DEFINITIONS -----------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @dev Only selectors present in BOTH old and new EtherFiRedemptionManager implementations.
+    ///      Intentionally excludes lido() (removed in new impl) and priorityWithdrawalQueue()
+    ///      (new in new impl).
+    function getRedemptionManagerImmutableSelectors() internal pure returns (bytes4[] memory selectors) {
+        selectors = new bytes4[](6);
+        selectors[0] = bytes4(keccak256("roleRegistry()"));
+        selectors[1] = bytes4(keccak256("treasury()"));
+        selectors[2] = bytes4(keccak256("eEth()"));
+        selectors[3] = bytes4(keccak256("weEth()"));
+        selectors[4] = bytes4(keccak256("liquidityPool()"));
+        selectors[5] = bytes4(keccak256("etherFiRestaker()"));
+    }
+
+    function getPWQImmutableSelectors() internal pure returns (bytes4[] memory selectors) {
+        selectors = new bytes4[](5);
+        selectors[0] = bytes4(keccak256("liquidityPool()"));
+        selectors[1] = bytes4(keccak256("eETH()"));
+        selectors[2] = bytes4(keccak256("roleRegistry()"));
+        selectors[3] = bytes4(keccak256("treasury()"));
+        selectors[4] = bytes4(keccak256("MIN_DELAY()"));
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- PRE-UPGRADE SNAPSHOTS --------------------------------
+    //--------------------------------------------------------------------------------------
+    function takePreUpgradeSnapshots() internal {
+        console2.log("=== Taking Pre-Upgrade Snapshots ===");
+        console2.log("");
+
+        console2.log("--- Immutable Snapshots ---");
+        preRedemptionManagerImmutables = takeImmutableSnapshot(
+            ETHERFI_REDEMPTION_MANAGER,
+            getRedemptionManagerImmutableSelectors()
+        );
+        console2.log(
+            "  EtherFiRedemptionManager: captured",
+            preRedemptionManagerImmutables.selectors.length,
+            "immutables"
+        );
+
+        // LiquidityPool has no immutables in the current (pre-upgrade) implementation.
+        console2.log("  LiquidityPool: no immutables in pre-upgrade implementation");
+
+        console2.log("");
+        console2.log("--- Access Control Snapshots ---");
+
+        preLiquidityPoolOwner = _getOwner(LIQUIDITY_POOL);
+        console2.log("  LiquidityPool owner:", preLiquidityPoolOwner);
+
+        preRedemptionManagerOwner = _getOwner(ETHERFI_REDEMPTION_MANAGER);
+        console2.log("  EtherFiRedemptionManager owner:", preRedemptionManagerOwner);
+
+        preLiquidityPoolPaused = _getPaused(LIQUIDITY_POOL);
+        console2.log("  LiquidityPool paused:", preLiquidityPoolPaused);
+
+        preRedemptionManagerPaused = _getPaused(ETHERFI_REDEMPTION_MANAGER);
+        console2.log("  EtherFiRedemptionManager paused:", preRedemptionManagerPaused);
+
+        console2.log("");
+        console2.log("Pre-upgrade snapshots captured!");
+        console2.log("================================================");
+        console2.log("");
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- VERIFY UPGRADES --------------------------------------
+    //--------------------------------------------------------------------------------------
+    function verifyUpgrades() public view {
+        console2.log("=== Verifying Upgrades ===");
+        console2.log("");
+
+        // 1. LiquidityPool (UUPS)
+        {
+            address currentImpl = getImplementation(LIQUIDITY_POOL);
+            require(currentImpl == liquidityPoolImpl, "LiquidityPool upgrade failed");
+            console2.log("LiquidityPool implementation:", currentImpl);
+        }
+
+        // 2. EtherFiRedemptionManager (UUPS)
+        {
+            address currentImpl = getImplementation(ETHERFI_REDEMPTION_MANAGER);
+            require(currentImpl == etherFiRedemptionManagerImpl, "EtherFiRedemptionManager upgrade failed");
+            console2.log("EtherFiRedemptionManager implementation:", currentImpl);
+        }
+
+        // 3. PriorityWithdrawalQueue proxy — verify it points to the expected implementation
+        {
+            address currentImpl = getImplementation(priorityWithdrawalQueueProxy);
+            require(currentImpl == priorityWithdrawalQueueImpl, "PriorityWithdrawalQueue proxy impl mismatch");
+            console2.log("PriorityWithdrawalQueue implementation:", currentImpl);
+        }
+
+        console2.log("");
+        console2.log("All upgrades verified successfully!");
+        console2.log("================================================");
+        console2.log("");
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- IMMUTABLE PRESERVATION VERIFICATION -----------------
+    //--------------------------------------------------------------------------------------
+    function verifyImmutablePreservation() internal view {
+        console2.log("=== Verifying Immutable Preservation ===");
+        console2.log("");
+
+        // 1. EtherFiRedemptionManager: check shared immutables are unchanged
+        ImmutableSnapshot memory postRedemptionManagerImmutables = takeImmutableSnapshot(
+            ETHERFI_REDEMPTION_MANAGER,
+            getRedemptionManagerImmutableSelectors()
+        );
+        verifyImmutablesUnchanged(
+            preRedemptionManagerImmutables,
+            postRedemptionManagerImmutables,
+            "EtherFiRedemptionManager"
+        );
+
+        // 2. EtherFiRedemptionManager: new priorityWithdrawalQueue immutable set correctly
+        {
+            bytes4 sel = bytes4(keccak256("priorityWithdrawalQueue()"));
+            (bool ok, bytes memory data) = ETHERFI_REDEMPTION_MANAGER.staticcall(abi.encodeWithSelector(sel));
+            require(ok, "EtherFiRedemptionManager: priorityWithdrawalQueue() call failed");
+            address pwq = abi.decode(data, (address));
+            require(pwq == priorityWithdrawalQueueProxy, "EtherFiRedemptionManager: wrong priorityWithdrawalQueue");
+            console2.log("[IMMUTABLES OK] EtherFiRedemptionManager.priorityWithdrawalQueue:", pwq);
+        }
+
+        // 3. LiquidityPool: new priorityWithdrawalQueue immutable set correctly
+        {
+            address pwq = LiquidityPool(payable(LIQUIDITY_POOL)).priorityWithdrawalQueue();
+            require(pwq == priorityWithdrawalQueueProxy, "LiquidityPool: wrong priorityWithdrawalQueue immutable");
+            console2.log("[IMMUTABLES OK] LiquidityPool.priorityWithdrawalQueue:", pwq);
+        }
+
+        // 4. PriorityWithdrawalQueue proxy: did not have anything pre upgrade
+
+        console2.log("");
+        console2.log("All immutable preservation checks passed!");
+        console2.log("================================================");
+        console2.log("");
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- ACCESS CONTROL PRESERVATION --------------------------
+    //--------------------------------------------------------------------------------------
+    function verifyAccessControlPreservation() internal view {
+        console2.log("=== Verifying Access Control Preservation ===");
+        console2.log("");
+
+        console2.log("--- Owner Verification ---");
+
+        address postLiquidityPoolOwner = _getOwner(LIQUIDITY_POOL);
+        require(postLiquidityPoolOwner == preLiquidityPoolOwner, "LiquidityPool: owner changed");
+        console2.log("[OWNER OK] LiquidityPool:", postLiquidityPoolOwner);
+
+        address postRedemptionManagerOwner = _getOwner(ETHERFI_REDEMPTION_MANAGER);
+        require(postRedemptionManagerOwner == preRedemptionManagerOwner, "EtherFiRedemptionManager: owner changed");
+        console2.log("[OWNER OK] EtherFiRedemptionManager:", postRedemptionManagerOwner);
+
+        console2.log("");
+        console2.log("--- Paused State Verification ---");
+
+        bool postLiquidityPoolPaused = _getPaused(LIQUIDITY_POOL);
+        require(postLiquidityPoolPaused == preLiquidityPoolPaused, "LiquidityPool: paused state changed");
+        console2.log("[PAUSED OK] LiquidityPool:", postLiquidityPoolPaused);
+
+        bool postRedemptionManagerPaused = _getPaused(ETHERFI_REDEMPTION_MANAGER);
+        require(
+            postRedemptionManagerPaused == preRedemptionManagerPaused,
+            "EtherFiRedemptionManager: paused state changed"
+        );
+        console2.log("[PAUSED OK] EtherFiRedemptionManager:", postRedemptionManagerPaused);
+
+        console2.log("");
+        console2.log("--- Initialization State Verification ---");
+
+        verifyNotReinitializable(LIQUIDITY_POOL, "LiquidityPool");
+        verifyNotReinitializable(ETHERFI_REDEMPTION_MANAGER, "EtherFiRedemptionManager");
+        verifyNotReinitializable(priorityWithdrawalQueueProxy, "PriorityWithdrawalQueue");
+
+        console2.log("");
+        console2.log("All access control preservation checks passed!");
+        console2.log("================================================");
+        console2.log("");
     }
 
     //--------------------------------------------------------------------------------------

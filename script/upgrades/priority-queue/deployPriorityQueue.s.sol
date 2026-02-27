@@ -15,7 +15,7 @@ contract DeployPriorityQueue is Script, Utils {
     address priorityWithdrawalQueueProxy;
     address liquidityPoolImpl;
     address etherFiRedemptionManagerImpl;
-    bytes32 commitHashSalt = hex"45312df178d6eb8143604e47b7aa9e618779c0de"; // TODO: Update with actual commit hash
+    bytes32 commitHashSalt = hex"3b6b81bae101b8bfe24eca53b038a986f5959e74";
     
     uint32 constant MIN_DELAY = 1 hours; // TODO: Set appropriate min delay (e.g., 1 hours = 3600)
 
