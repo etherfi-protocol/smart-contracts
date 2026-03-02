@@ -7,6 +7,7 @@ import "../../../src/EtherFiRedemptionManager.sol";
 import "../../../src/LiquidityPool.sol";
 import "../../../src/PriorityWithdrawalQueue.sol";
 import "../../../src/RoleRegistry.sol";
+import "../../../src/UUPSProxy.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
@@ -264,6 +265,7 @@ contract PriorityQueueTransactions is Script, Utils {
         contractCodeChecker.verifyContractByteCodeMatch(liquidityPoolImpl, address(newLiquidityPoolImpl));
         contractCodeChecker.verifyContractByteCodeMatch(priorityWithdrawalQueueImpl, address(newPWQImpl));
         contractCodeChecker.verifyContractByteCodeMatch(etherFiRedemptionManagerImpl, address(newRedemptionManagerImpl));
+        contractCodeChecker.verifyContractByteCodeMatch(priorityWithdrawalQueueProxy, address(new UUPSProxy(priorityWithdrawalQueueImpl, abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector))));
 
         console2.log("");
         console2.log("All bytecode verifications passed!");
