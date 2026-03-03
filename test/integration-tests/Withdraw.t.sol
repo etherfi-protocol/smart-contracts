@@ -19,25 +19,47 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         _syncOracleReportState();
     }
 
-    /// @dev Advances the admin's lastHandledReportRefSlot to match the oracle's lastPublishedReportRefSlot.
-    ///      On mainnet fork there may be a published report the admin hasn't processed yet.
-    ///      We advance the admin forward (not rewind the oracle) so that slotForNextReport()
-    ///      returns the correct next slot and committee members can still submit new reports.
+    /// @dev Syncs oracle/admin state so AVS_OPERATOR_1 and AVS_OPERATOR_2 can submit reports.
+    ///
+    /// Two conditions can block report submission on a mainnet fork:
+    ///
+    /// (A) Admin hasn't processed the latest published report yet:
+    ///     shouldSubmitReport() requires lastPublishedReportRefSlot == lastHandledReportRefSlot.
+    ///     Fix: advance admin's lastHandledReportRefSlot to match the oracle.
+    ///
+    /// (B) Operators already submitted for slotForNextReport() (quorum not reached on mainnet):
+    ///     shouldSubmitReport() returns false when lastReportRefSlot >= slotForNextReport().
+    ///     Fix: remove and re-add each operator via the oracle owner. addCommitteeMember()
+    ///     resets CommitteeMemberState to (registered=true, enabled=true, lastReportRefSlot=0),
+    ///     clearing the stale submission without adding new committee members.
     function _syncOracleReportState() internal {
+        // Step A: sync admin to oracle
         uint32 lastPublished = etherFiOracleInstance.lastPublishedReportRefSlot();
-        uint32 lastHandled = etherFiAdminInstance.lastHandledReportRefSlot();
-
+        uint32 lastHandled   = etherFiAdminInstance.lastHandledReportRefSlot();
         if (lastPublished != lastHandled) {
             uint32 lastPublishedBlock = etherFiOracleInstance.lastPublishedReportRefBlock();
-
-            // EtherFiAdmin slot 209 packs: lastHandledReportRefSlot (4B @ offset 0) +
-            //   lastHandledReportRefBlock (4B @ offset 4) + other fields in higher bytes
             bytes32 slot209 = vm.load(address(etherFiAdminInstance), bytes32(uint256(209)));
             uint256 val = uint256(slot209);
-            val &= ~uint256(0xFFFFFFFFFFFFFFFF); // clear low 64 bits (both uint32 fields)
+            val &= ~uint256(0xFFFFFFFFFFFFFFFF); // clear bits 0-63
             val |= uint256(lastPublished);
             val |= uint256(lastPublishedBlock) << 32;
             vm.store(address(etherFiAdminInstance), bytes32(uint256(209)), bytes32(val));
+        }
+
+        // Step B: if AVS_OPERATOR_1 has already submitted for slotForNextReport(), their
+        // lastReportRefSlot == slotForNextReport(), so shouldSubmitReport() returns false.
+        // Fix: remove then re-add each operator via the oracle owner. addCommitteeMember()
+        // resets CommitteeMemberState to (registered=true, enabled=true, lastReportRefSlot=0,
+        // numReports=0), clearing the stale submission without touching raw storage or adding
+        // new committee members.
+        if (!etherFiOracleInstance.shouldSubmitReport(AVS_OPERATOR_1)) {
+            address oracleOwner = etherFiOracleInstance.owner();
+            vm.startPrank(oracleOwner);
+            etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_1);
+            etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_1);
+            etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_2);
+            etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_2);
+            vm.stopPrank();
         }
     }
 
