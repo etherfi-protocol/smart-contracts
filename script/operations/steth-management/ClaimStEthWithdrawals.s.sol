@@ -55,6 +55,8 @@ contract ClaimStEthWithdrawals is Script, Deployed {
             }
         }
 
+        _sortAscending(requestIds);
+
         console2.log("Claiming request IDs:");
         for (uint256 i = 0; i < requestIds.length; i++) {
             console2.log(" ", requestIds[i]);
@@ -94,5 +96,18 @@ contract ClaimStEthWithdrawals is Script, Deployed {
         console2.log("LiquidityPool balance after:", lpBalanceAfter / 1e18);
         console2.log("ETH claimed:", (lpBalanceAfter - lpBalanceBefore) / 1e18);
         console2.log("Simulation successful");
+    }
+
+    function _sortAscending(uint256[] memory arr) internal pure {
+        uint256 length = arr.length;
+        for (uint256 i = 1; i < length; i++) {
+            uint256 key = arr[i];
+            uint256 j = i;
+            while (j > 0 && arr[j - 1] > key) {
+                arr[j] = arr[j - 1];
+                j--;
+            }
+            arr[j] = key;
+        }
     }
 }
