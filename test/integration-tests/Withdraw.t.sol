@@ -46,21 +46,17 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
             vm.store(address(etherFiAdminInstance), bytes32(uint256(209)), bytes32(val));
         }
 
-        // Step B: if AVS_OPERATOR_1 has already submitted for slotForNextReport(), their
-        // lastReportRefSlot == slotForNextReport(), so shouldSubmitReport() returns false.
-        // Fix: remove then re-add each operator via the oracle owner. addCommitteeMember()
-        // resets CommitteeMemberState to (registered=true, enabled=true, lastReportRefSlot=0,
-        // numReports=0), clearing the stale submission without touching raw storage or adding
-        // new committee members.
-        if (!etherFiOracleInstance.shouldSubmitReport(AVS_OPERATOR_1)) {
-            address oracleOwner = etherFiOracleInstance.owner();
-            vm.startPrank(oracleOwner);
-            etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_1);
-            etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_1);
-            etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_2);
-            etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_2);
-            vm.stopPrank();
-        }
+        // Step B: unconditionally reset operator submissions by removing and re-adding each one.
+        // addCommitteeMember() resets CommitteeMemberState to
+        // (registered=true, enabled=true, lastReportRefSlot=0, numReports=0), clearing any stale
+        // submission from mainnet without adding new committee members.
+        address oracleOwner = etherFiOracleInstance.owner();
+        vm.startPrank(oracleOwner);
+        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_1);
+        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_1);
+        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_2);
+        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_2);
+        vm.stopPrank();
     }
 
     function test_Withdraw_EtherFiRedemptionManager_redeemEEth() public {

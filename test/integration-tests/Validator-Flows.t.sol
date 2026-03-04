@@ -19,6 +19,8 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
 
     /// @dev Advances the admin's lastHandledReportRefSlot to match the oracle's lastPublishedReportRefSlot.
     function _syncOracleReportState() internal {
+        // Step A: sync admin to oracle so submitReport doesn't fail with
+        // "Last published report is not handled yet".
         uint32 lastPublished = etherFiOracleInstance.lastPublishedReportRefSlot();
         uint32 lastHandled = etherFiAdminInstance.lastHandledReportRefSlot();
 
@@ -34,6 +36,18 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
             val |= uint256(lastPublishedBlock) << 32;
             vm.store(address(etherFiAdminInstance), bytes32(uint256(209)), bytes32(val));
         }
+
+        // Step B: unconditionally reset operator submissions by removing and re-adding each one.
+        // addCommitteeMember() resets CommitteeMemberState to
+        // (registered=true, enabled=true, lastReportRefSlot=0, numReports=0), clearing any stale
+        // submission from mainnet without adding new committee members.
+        address oracleOwner = etherFiOracleInstance.owner();
+        vm.startPrank(oracleOwner);
+        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_1);
+        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_1);
+        etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_2);
+        etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_2);
+        vm.stopPrank();
     }
 
     function _toArray(IStakingManager.DepositData memory d) internal pure returns (IStakingManager.DepositData[] memory arr) {
