@@ -256,7 +256,7 @@ contract PriorityQueueTransactions is Script, Utils {
 
         LiquidityPool newLiquidityPoolImpl = new LiquidityPool(priorityWithdrawalQueueProxy);
         PriorityWithdrawalQueue newPWQImpl = new PriorityWithdrawalQueue(
-            LIQUIDITY_POOL, EETH, ROLE_REGISTRY, TREASURY, PWQ_MIN_DELAY
+            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_MIN_DELAY
         );
         EtherFiRedemptionManager newRedemptionManagerImpl = new EtherFiRedemptionManager(
             LIQUIDITY_POOL, EETH, WEETH, TREASURY, ROLE_REGISTRY, ETHERFI_RESTAKER, priorityWithdrawalQueueProxy
