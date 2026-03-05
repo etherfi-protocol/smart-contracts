@@ -29,10 +29,10 @@ contract PriorityQueueTransactions is Script, Utils {
     //------------------------------- NEW DEPLOYMENTS --------------------------------------
     //--------------------------------------------------------------------------------------
     
-    address constant liquidityPoolImpl = 0xD97b8a3A1119a2C30ADaf9605da0b552F359adfe;
-    address constant priorityWithdrawalQueueProxy = 0x06fce94d05CC4bC7ff75A210CC3d7FC254362FeE;
-    address constant priorityWithdrawalQueueImpl = 0x94190737Ff3540a8990864F41c149159224878A0;
-    address constant etherFiRedemptionManagerImpl = 0x61a4df8965926Bd4b2Ddb2c6f67c7B05D5ED2018;
+    address constant liquidityPoolImpl = 0x83bc649fCdb2c8DA146b2154a559ddEDf937eF12;
+    address constant priorityWithdrawalQueueProxy = 0x35e7D6feF6f72aDd3c3e39dEc6d9CCc29e3345FA;
+    address constant priorityWithdrawalQueueImpl = 0x554B2a0c78840bBD4fDB24e198cdD93f99E29456;
+    address constant etherFiRedemptionManagerImpl = 0x6BD191582F40012b2f2cdf66bD3D32bDe41191F7;
     ContractCodeChecker contractCodeChecker;
 
     // MIN_DELAY used when deploying PriorityWithdrawalQueue implementation (must match deploy script)
@@ -259,7 +259,7 @@ contract PriorityQueueTransactions is Script, Utils {
             LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_MIN_DELAY
         );
         EtherFiRedemptionManager newRedemptionManagerImpl = new EtherFiRedemptionManager(
-            LIQUIDITY_POOL, EETH, WEETH, TREASURY, ROLE_REGISTRY, ETHERFI_RESTAKER, priorityWithdrawalQueueProxy
+            LIQUIDITY_POOL, EETH, WEETH, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, ROLE_REGISTRY, ETHERFI_RESTAKER, priorityWithdrawalQueueProxy
         );
 
         contractCodeChecker.verifyContractByteCodeMatch(liquidityPoolImpl, address(newLiquidityPoolImpl));
@@ -281,13 +281,12 @@ contract PriorityQueueTransactions is Script, Utils {
     ///      Intentionally excludes lido() (removed in new impl) and priorityWithdrawalQueue()
     ///      (new in new impl).
     function getRedemptionManagerImmutableSelectors() internal pure returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](6);
+        selectors = new bytes4[](5);
         selectors[0] = bytes4(keccak256("roleRegistry()"));
-        selectors[1] = bytes4(keccak256("treasury()"));
-        selectors[2] = bytes4(keccak256("eEth()"));
-        selectors[3] = bytes4(keccak256("weEth()"));
-        selectors[4] = bytes4(keccak256("liquidityPool()"));
-        selectors[5] = bytes4(keccak256("etherFiRestaker()"));
+        selectors[1] = bytes4(keccak256("eEth()"));
+        selectors[2] = bytes4(keccak256("weEth()"));
+        selectors[3] = bytes4(keccak256("liquidityPool()"));
+        selectors[4] = bytes4(keccak256("etherFiRestaker()"));
     }
 
     function getPWQImmutableSelectors() internal pure returns (bytes4[] memory selectors) {
@@ -403,14 +402,24 @@ contract PriorityQueueTransactions is Script, Utils {
             console2.log("[IMMUTABLES OK] EtherFiRedemptionManager.priorityWithdrawalQueue:", pwq);
         }
 
-        // 3. LiquidityPool: new priorityWithdrawalQueue immutable set correctly
+        // 3. EtherFiRedemptionManager: treasury intentionally changed to new address
+        {
+            bytes4 sel = bytes4(keccak256("treasury()"));
+            (bool ok, bytes memory data) = ETHERFI_REDEMPTION_MANAGER.staticcall(abi.encodeWithSelector(sel));
+            require(ok, "EtherFiRedemptionManager: treasury() call failed");
+            address treasury = abi.decode(data, (address));
+            require(treasury == WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, "EtherFiRedemptionManager: wrong treasury");
+            console2.log("[IMMUTABLES OK] EtherFiRedemptionManager.treasury:", treasury);
+        }
+
+        // 4. LiquidityPool: new priorityWithdrawalQueue immutable set correctly
         {
             address pwq = LiquidityPool(payable(LIQUIDITY_POOL)).priorityWithdrawalQueue();
             require(pwq == priorityWithdrawalQueueProxy, "LiquidityPool: wrong priorityWithdrawalQueue immutable");
             console2.log("[IMMUTABLES OK] LiquidityPool.priorityWithdrawalQueue:", pwq);
         }
 
-        // 4. PriorityWithdrawalQueue proxy: did not have anything pre upgrade
+        // 5. PriorityWithdrawalQueue proxy: did not have anything pre upgrade
 
         console2.log("");
         console2.log("All immutable preservation checks passed!");

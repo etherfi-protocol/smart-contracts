@@ -15,7 +15,7 @@ contract DeployPriorityQueue is Script, Utils {
     address priorityWithdrawalQueueProxy;
     address liquidityPoolImpl;
     address etherFiRedemptionManagerImpl;
-    bytes32 commitHashSalt = hex"3b6b81bae101b8bfe24eca53b038a986f5959e74";
+    bytes32 commitHashSalt = hex"7fc5100aa09ac0c9236907fe0330a15cb0fda6f8";
     
     uint32 constant MIN_DELAY = 1 hours; // TODO: Set appropriate min delay (e.g., 1 hours = 3600)
 
@@ -29,7 +29,7 @@ contract DeployPriorityQueue is Script, Utils {
         console2.log("  _liquidityPool:", LIQUIDITY_POOL);
         console2.log("  _eETH:", EETH);
         console2.log("  _roleRegistry:", ROLE_REGISTRY);
-        console2.log("  _treasury:", TREASURY);
+        console2.log("  _treasury:", WITHDRAW_REQUEST_NFT_BUYBACK_SAFE);
         console2.log("  _minDelay:", MIN_DELAY);
         console2.log("");
 
@@ -90,7 +90,7 @@ contract DeployPriorityQueue is Script, Utils {
                 LIQUIDITY_POOL,
                 EETH,
                 WEETH,
-                TREASURY,
+                WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
                 ROLE_REGISTRY,
                 ETHERFI_RESTAKER,
                 priorityWithdrawalQueueProxy
