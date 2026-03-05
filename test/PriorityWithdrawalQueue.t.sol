@@ -36,6 +36,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueueImpl = new PriorityWithdrawalQueue(
             address(liquidityPoolInstance),
             address(eETHInstance),
+            address(weEthInstance),
             address(roleRegistryInstance),
             treasury,
             1 hours
@@ -124,6 +125,56 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         liquidityPoolInstance.rebase(accruedRewards);
     }
 
+    /// @dev Helper to create a withdrawal request via weETH and return both the requestId and request struct
+    function _createWithdrawRequestWithWeETH(address user, uint96 weEthAmount)
+        internal
+        returns (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request)
+    {
+        uint96 eEthAmount = uint96(weEthInstance.getEETHByWeETH(weEthAmount));
+        uint96 shareAmount = uint96(liquidityPoolInstance.sharesForAmount(eEthAmount));
+        uint96 minOut = uint96(liquidityPoolInstance.amountForShare(shareAmount));
+
+        uint32 nonceBefore = priorityQueue.nonce();
+        uint32 timestamp = uint32(block.timestamp);
+
+        vm.startPrank(user);
+        IERC20(address(weEthInstance)).approve(address(priorityQueue), weEthAmount);
+        requestId = priorityQueue.requestWithdrawWithWeETH(weEthAmount, minOut);
+        vm.stopPrank();
+
+        request = IPriorityWithdrawalQueue.WithdrawRequest({
+            user: user,
+            amountOfEEth: eEthAmount,
+            shareOfEEth: shareAmount,
+            amountWithFee: minOut,
+            nonce: uint32(nonceBefore),
+            creationTime: timestamp
+        });
+
+        vm.warp(block.timestamp + 1 hours + 1);
+        vm.roll(block.number + 1);
+    }
+
+    /// @dev Helper to create weETH permit input
+    function _createWeEthPermitInput(
+        uint256 privKey,
+        address spender,
+        uint256 value,
+        uint256 nonce,
+        uint256 deadline
+    ) internal returns (IPriorityWithdrawalQueue.PermitInput memory) {
+        IWeETH.PermitInput memory weEthPermit = weEth_createPermitInput(
+            privKey, spender, value, nonce, deadline, weEthInstance.DOMAIN_SEPARATOR()
+        );
+        return IPriorityWithdrawalQueue.PermitInput({
+            value: weEthPermit.value,
+            deadline: weEthPermit.deadline,
+            v: weEthPermit.v,
+            r: weEthPermit.r,
+            s: weEthPermit.s
+        });
+    }
+
     //--------------------------------------------------------------------------------------
     //------------------------------  INITIALIZATION TESTS  --------------------------------
     //--------------------------------------------------------------------------------------
@@ -132,6 +183,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // Verify immutables
         assertEq(address(priorityQueue.liquidityPool()), address(liquidityPoolInstance));
         assertEq(address(priorityQueue.eETH()), address(eETHInstance));
+        assertEq(address(priorityQueue.weETH()), address(weEthInstance));
         assertEq(address(priorityQueue.roleRegistry()), address(roleRegistryInstance));
         assertEq(priorityQueue.treasury(), treasury);
 
@@ -375,6 +427,179 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         return keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
     }
 
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------  WEETH REQUEST TESTS  ---------------------------------
+    //--------------------------------------------------------------------------------------
+
+    function test_requestWithdrawWithWeETH() public {
+        uint96 depositAmount = 10 ether;
+
+        // Give vipUser some weETH: deposit ETH -> get eETH -> wrap to weETH
+        vm.startPrank(vipUser);
+        eETHInstance.approve(address(weEthInstance), depositAmount);
+        uint256 weEthMinted = weEthInstance.wrap(depositAmount);
+        vm.stopPrank();
+
+        uint96 weEthAmount = uint96(weEthMinted);
+        uint96 expectedEEthAmount = uint96(weEthInstance.getEETHByWeETH(weEthAmount));
+
+        uint256 initialWeEthBalance = weEthInstance.balanceOf(vipUser);
+        uint256 initialQueueEethBalance = eETHInstance.balanceOf(address(priorityQueue));
+        uint96 initialNonce = priorityQueue.nonce();
+
+        (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequestWithWeETH(vipUser, weEthAmount);
+
+        // Verify state changes
+        assertEq(priorityQueue.nonce(), initialNonce + 1, "Nonce should increment");
+        assertEq(weEthInstance.balanceOf(vipUser), initialWeEthBalance - weEthAmount, "weETH balance should decrease");
+        assertApproxEqAbs(
+            eETHInstance.balanceOf(address(priorityQueue)),
+            initialQueueEethBalance + expectedEEthAmount,
+            1,
+            "Queue eETH balance should increase by unwrapped amount"
+        );
+        assertTrue(priorityQueue.requestExists(requestId), "Request should exist");
+        assertFalse(priorityQueue.isFinalized(requestId), "Request should not be finalized yet");
+    }
+
+    function test_requestWithdrawWithWeETHAndPermit() public {
+        uint256 userPrivKey = 888;
+        address permitUser = vm.addr(userPrivKey);
+
+        // Whitelist and fund the permit user
+        vm.prank(alice);
+        priorityQueue.addToWhitelist(permitUser);
+        vm.deal(permitUser, 10 ether);
+        vm.startPrank(permitUser);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+        eETHInstance.approve(address(weEthInstance), 5 ether);
+        uint256 weEthMinted = weEthInstance.wrap(5 ether);
+        vm.stopPrank();
+
+        uint96 weEthAmount = uint96(weEthMinted);
+        uint96 expectedEEthAmount = uint96(weEthInstance.getEETHByWeETH(weEthAmount));
+        uint96 shareAmount = uint96(liquidityPoolInstance.sharesForAmount(expectedEEthAmount));
+        uint96 minOut = uint96(liquidityPoolInstance.amountForShare(shareAmount));
+
+        uint256 initialWeEthBalance = weEthInstance.balanceOf(permitUser);
+        uint256 initialQueueEethBalance = eETHInstance.balanceOf(address(priorityQueue));
+        uint96 initialNonce = priorityQueue.nonce();
+
+        // Create valid weETH permit
+        IPriorityWithdrawalQueue.PermitInput memory permit = _createWeEthPermitInput(
+            userPrivKey,
+            address(priorityQueue),
+            weEthAmount,
+            weEthInstance.nonces(permitUser),
+            block.timestamp + 1 hours
+        );
+
+        vm.prank(permitUser);
+        bytes32 requestId = priorityQueue.requestWithdrawWithWeETHAndPermit(weEthAmount, minOut, permit);
+
+        // Verify state changes
+        assertEq(priorityQueue.nonce(), initialNonce + 1, "Nonce should increment");
+        assertEq(weEthInstance.balanceOf(permitUser), initialWeEthBalance - weEthAmount, "weETH balance should decrease");
+        assertApproxEqAbs(
+            eETHInstance.balanceOf(address(priorityQueue)),
+            initialQueueEethBalance + expectedEEthAmount,
+            1,
+            "Queue eETH balance should increase"
+        );
+        assertTrue(priorityQueue.requestExists(requestId), "Request should exist");
+    }
+
+    function test_requestWithdrawWithWeETHAndPermit_invalidPermit_reverts() public {
+        uint256 userPrivKey = 888;
+        address permitUser = vm.addr(userPrivKey);
+
+        vm.prank(alice);
+        priorityQueue.addToWhitelist(permitUser);
+        vm.deal(permitUser, 10 ether);
+        vm.startPrank(permitUser);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+        eETHInstance.approve(address(weEthInstance), 5 ether);
+        uint256 weEthMinted = weEthInstance.wrap(5 ether);
+        vm.stopPrank();
+
+        uint96 weEthAmount = uint96(weEthMinted);
+
+        // Create invalid permit (wrong signature)
+        IPriorityWithdrawalQueue.PermitInput memory invalidPermit = IPriorityWithdrawalQueue.PermitInput({
+            value: weEthAmount,
+            deadline: block.timestamp + 1 hours,
+            v: 27,
+            r: bytes32(uint256(1)),
+            s: bytes32(uint256(2))
+        });
+
+        vm.prank(permitUser);
+        vm.expectRevert(PriorityWithdrawalQueue.PermitFailedAndAllowanceTooLow.selector);
+        priorityQueue.requestWithdrawWithWeETHAndPermit(weEthAmount, 0, invalidPermit);
+    }
+
+    function test_requestWithdrawWithWeETH_notWhitelisted_reverts() public {
+        // Give regularUser some weETH
+        vm.deal(regularUser, 10 ether);
+        vm.startPrank(regularUser);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+        eETHInstance.approve(address(weEthInstance), 5 ether);
+        uint256 weEthMinted = weEthInstance.wrap(5 ether);
+        IERC20(address(weEthInstance)).approve(address(priorityQueue), weEthMinted);
+
+        vm.expectRevert(PriorityWithdrawalQueue.NotWhitelisted.selector);
+        priorityQueue.requestWithdrawWithWeETH(uint96(weEthMinted), 0);
+        vm.stopPrank();
+    }
+
+    function test_requestWithdrawWithWeETH_tooSmall_reverts() public {
+        // Give vipUser a tiny amount of weETH
+        vm.deal(vipUser, 1 ether);
+        vm.startPrank(vipUser);
+        eETHInstance.approve(address(weEthInstance), 0.001 ether);
+        uint256 weEthMinted = weEthInstance.wrap(0.001 ether);
+        IERC20(address(weEthInstance)).approve(address(priorityQueue), weEthMinted);
+
+        // The eETH amount after unwrap should be < MIN_AMOUNT (0.01 ether)
+        vm.expectRevert(PriorityWithdrawalQueue.InvalidAmount.selector);
+        priorityQueue.requestWithdrawWithWeETH(uint96(weEthMinted), 0);
+        vm.stopPrank();
+    }
+
+    function test_fullWithdrawalFlowWithWeETH() public {
+        uint96 depositAmount = 10 ether;
+
+        // Give vipUser some weETH
+        vm.startPrank(vipUser);
+        eETHInstance.approve(address(weEthInstance), depositAmount);
+        uint256 weEthMinted = weEthInstance.wrap(depositAmount);
+        vm.stopPrank();
+
+        uint96 weEthAmount = uint96(weEthMinted);
+        uint256 initialEthBalance = vipUser.balance;
+
+        // 1. Request withdrawal with weETH
+        (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequestWithWeETH(vipUser, weEthAmount);
+
+        assertTrue(priorityQueue.requestExists(requestId), "Request should exist");
+
+        // 2. Fulfill
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        requests[0] = request;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(requests);
+        assertTrue(priorityQueue.isFinalized(requestId), "Request should be finalized");
+
+        // 3. Claim ETH
+        vm.prank(vipUser);
+        priorityQueue.claimWithdraw(request);
+
+        assertFalse(priorityQueue.requestExists(requestId), "Request should be removed");
+        assertApproxEqRel(vipUser.balance, initialEthBalance + depositAmount, 0.001e18, "ETH received");
+    }
 
     //--------------------------------------------------------------------------------------
     //------------------------------  FULFILL TESTS  ---------------------------------------

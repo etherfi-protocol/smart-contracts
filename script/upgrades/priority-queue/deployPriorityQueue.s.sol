@@ -58,8 +58,9 @@ contract DeployPriorityQueue is Script, Utils {
             bytes memory constructorArgs = abi.encode(
                 LIQUIDITY_POOL,
                 EETH,
+                WEETH,
                 ROLE_REGISTRY,
-                TREASURY,
+                WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
                 MIN_DELAY
             );
             bytes memory bytecode = abi.encodePacked(

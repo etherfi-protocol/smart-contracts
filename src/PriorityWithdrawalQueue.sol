@@ -11,6 +11,7 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IeETH.sol";
+import "./interfaces/IWeETH.sol";
 import "./interfaces/IRoleRegistry.sol";
 
 /// @title PriorityWithdrawalQueue
@@ -39,6 +40,7 @@ contract PriorityWithdrawalQueue is
 
     ILiquidityPool public immutable liquidityPool;
     IeETH public immutable eETH;
+    IWeETH public immutable weETH;
     IRoleRegistry public immutable roleRegistry;
     address public immutable treasury;
     uint32 public immutable MIN_DELAY;
@@ -151,13 +153,14 @@ contract PriorityWithdrawalQueue is
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _liquidityPool, address _eETH, address _roleRegistry, address _treasury, uint32 _minDelay) {
-        if (_liquidityPool == address(0) || _eETH == address(0) || _roleRegistry == address(0) || _treasury == address(0)) {
+    constructor(address _liquidityPool, address _eETH, address _weETH, address _roleRegistry, address _treasury, uint32 _minDelay) {
+        if (_liquidityPool == address(0) || _eETH == address(0) || _weETH == address(0) || _roleRegistry == address(0) || _treasury == address(0)) {
             revert AddressZero();
         }
         
         liquidityPool = ILiquidityPool(_liquidityPool);
         eETH = IeETH(_eETH);
+        weETH = IWeETH(_weETH);
         roleRegistry = IRoleRegistry(_roleRegistry);
         treasury = _treasury;
         MIN_DELAY = _minDelay;
@@ -213,6 +216,52 @@ contract PriorityWithdrawalQueue is
         (requestId,) = _queueWithdrawRequest(msg.sender, amountOfEEth, amountWithFee);
 
         _verifyRequestPostConditions(lpEthBefore, queueEEthSharesBefore, amountOfEEth);
+    }
+
+    /// @notice Request a withdrawal using weETH (unwraps to eETH internally)
+    /// @param weEthAmount Amount of weETH to withdraw
+    /// @param amountWithFee ETH amount the user receives after fee deduction
+    /// @return requestId The hash-based ID of the created withdrawal request
+    function requestWithdrawWithWeETH(
+        uint96 weEthAmount,
+        uint96 amountWithFee
+    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+        (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
+
+        IERC20(address(weETH)).safeTransferFrom(msg.sender, address(this), weEthAmount);
+        uint96 eEthAmount = uint96(weETH.unwrap(weEthAmount));
+
+        if (eEthAmount < MIN_AMOUNT) revert InvalidAmount();
+
+        (requestId,) = _queueWithdrawRequest(msg.sender, eEthAmount, amountWithFee);
+        _verifyRequestPostConditions(lpEthBefore, queueEEthSharesBefore, eEthAmount);
+    }
+
+    /// @notice Request a withdrawal using weETH with EIP-2612 permit
+    /// @param weEthAmount Amount of weETH to withdraw
+    /// @param amountWithFee ETH amount the user receives after fee deduction
+    /// @param permit The permit params for weETH approval
+    /// @return requestId The hash-based ID of the created withdrawal request
+    function requestWithdrawWithWeETHAndPermit(
+        uint96 weEthAmount,
+        uint96 amountWithFee,
+        PermitInput calldata permit
+    ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
+        (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
+
+        try weETH.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {
+            if (IERC20(address(weETH)).allowance(msg.sender, address(this)) < weEthAmount) {
+                revert PermitFailedAndAllowanceTooLow();
+            }
+        }
+
+        IERC20(address(weETH)).safeTransferFrom(msg.sender, address(this), weEthAmount);
+        uint96 eEthAmount = uint96(weETH.unwrap(weEthAmount));
+
+        if (eEthAmount < MIN_AMOUNT) revert InvalidAmount();
+
+        (requestId,) = _queueWithdrawRequest(msg.sender, eEthAmount, amountWithFee);
+        _verifyRequestPostConditions(lpEthBefore, queueEEthSharesBefore, eEthAmount);
     }
 
     /// @notice Cancel a pending withdrawal request
