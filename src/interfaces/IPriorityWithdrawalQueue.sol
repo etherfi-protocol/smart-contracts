@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
+import "./IWeETH.sol";
+
 interface IPriorityWithdrawalQueue {
     /// @notice Withdrawal request struct stored as hash in EnumerableSet
     /// @param user The user who created the request
@@ -29,6 +31,9 @@ interface IPriorityWithdrawalQueue {
     // User functions
     function requestWithdraw(uint96 amountOfEEth, uint96 amountWithFee) external returns (bytes32 requestId);
     function requestWithdrawWithPermit(uint96 amountOfEEth, uint96 amountWithFee, PermitInput calldata permit) external returns (bytes32 requestId);
+    function requestWithdrawWithWeETH(uint96 weEthAmount, uint96 amountWithFee) external returns (bytes32 requestId);
+    function requestWithdrawWithWeETHAndPermit(uint96 weEthAmount, uint96 amountWithFee, PermitInput calldata permit) external returns (bytes32 requestId);
+    function weETH() external view returns (IWeETH);
     function cancelWithdraw(WithdrawRequest calldata request) external returns (bytes32 requestId);
     function claimWithdraw(WithdrawRequest calldata request) external;
     function batchClaimWithdraw(WithdrawRequest[] calldata requests) external;
