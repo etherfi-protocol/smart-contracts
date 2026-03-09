@@ -9,10 +9,10 @@ import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
 import {IDelegationManager} from "../../../src/eigenlayer-interfaces/IDelegationManager.sol";
 
 // Full un-restake (all stETH restaked in EigenLayer):
-//   FULL_WITHDRAWAL=true forge script script/operations/steth-claim-withdrawals/UnrestakeStEth.s.sol --fork-url $MAINNET_RPC_URL -vvvv
+//   FULL_WITHDRAWAL=true forge script script/operations/steth-management/UnrestakeStEth.s.sol --fork-url $MAINNET_RPC_URL -vvvv
 //
 // Partial un-restake (amount in ether):
-//   AMOUNT=100 forge script script/operations/steth-claim-withdrawals/UnrestakeStEth.s.sol --fork-url $MAINNET_RPC_URL -vvvv
+//   AMOUNT=100 forge script script/operations/steth-management/UnrestakeStEth.s.sol --fork-url $MAINNET_RPC_URL -vvvv
 
 contract UnrestakeStEth is Script, Deployed {
 
