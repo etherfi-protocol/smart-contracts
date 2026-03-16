@@ -15,7 +15,7 @@ fs_permissions = [
     { access = "read-write", path = "./script/operations/exits" },
     { access = "read-write", path = "./script/operations/utils" },
     { access = "read", path = "./script/operations/data" },
-    { access = "read", path = "./" }
+    { access = "read", path = "./" },
     { access = "read-write", path = "./script/upgrades" },
 ]
 gas_reports = ["*"]
