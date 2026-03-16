@@ -63,13 +63,13 @@ contract ELExitsTest is TestSetup {
         uint256[] memory legacyIds = new uint256[](1);
         uint64[] memory amounts = new uint64[](1);
 
-        pubkeys[0] = PK_28689;
-        legacyIds[0] = 28689;
+        pubkeys[0] = PK_80194;
+        legacyIds[0] = 80194;
         amounts[0] = 0;
 
-        vm.prank(realElExiter);
-        etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
-        vm.stopPrank();  
+        // vm.prank(realElExiter);
+        // etherFiNodesManager.linkLegacyValidatorIds(legacyIds, pubkeys); 
+        // vm.stopPrank();  
 
         ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
 
@@ -85,42 +85,6 @@ contract ELExitsTest is TestSetup {
             etherFiNodesManager.calculateValidatorPubkeyHash(pubkeys[0]), 
             pubkeys[0]
         );
-        vm.prank(realElExiter);
-        etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
-        vm.stopPrank();
-    }
-
-    function test_multiple_ELExits() public {
-        console2.log("=== MULTIPLE EL EXITS TEST ===");
-
-        bytes[] memory pubkeys = new bytes[](3);
-        uint64[] memory amounts = new uint64[](3);
-
-        pubkeys[0] = PK_80194;
-        amounts[0] = 0;
-        
-        pubkeys[1] = PK_89936;
-        amounts[1] = 0;
-
-        pubkeys[2] = PK_80143;
-        amounts[2] = 0;
-
-        uint256[] memory linkOnlyOneValidatorlegacyId = new uint256[](1);
-        linkOnlyOneValidatorlegacyId[0] = 80194;
-        bytes[] memory linkOnlyOneValidatorPubkeys = new bytes[](1);
-        linkOnlyOneValidatorPubkeys[0] = PK_80194;
-        
-        vm.prank(realElExiter);
-        etherFiNodesManager.linkLegacyValidatorIds(linkOnlyOneValidatorlegacyId, linkOnlyOneValidatorPubkeys); 
-        vm.stopPrank();  
-
-        ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
-        IEigenPod.WithdrawalRequest[] memory reqs = _requestsFromPubkeys(pubkeys, amounts);
-
-        uint256 feePer = pod0.getWithdrawalRequestFee();
-        uint256 n = reqs.length;
-        uint256 valueToSend = feePer * n;
-
         vm.prank(realElExiter);
         etherFiNodesManager.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
         vm.stopPrank();

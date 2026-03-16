@@ -56,7 +56,7 @@ contract RestakingRewardsRouterTest is Test {
         otherToken = new TestERC20("Other Token", "OTH");
 
         // Deploy LiquidityPool
-        liquidityPoolImpl = new LiquidityPool();
+        liquidityPoolImpl = new LiquidityPool(address(0x0));
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImpl), "");
         liquidityPool = LiquidityPool(payable(address(liquidityPoolProxy)));
         

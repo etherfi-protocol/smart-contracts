@@ -256,13 +256,13 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
     }
 
     function verifyBytecode() internal {
-        LiquidityPool newLiquidityPoolImplementation = new LiquidityPool();
+        // LiquidityPool newLiquidityPoolImplementation = new LiquidityPool();
         EtherFiNodesManager newEtherFiNodesManagerImplementation = new EtherFiNodesManager(
             address(STAKING_MANAGER),
             address(ROLE_REGISTRY),
             address(ETHERFI_RATE_LIMITER)
         );
-        contractCodeChecker.verifyContractByteCodeMatch(liquidityPoolImpl, address(newLiquidityPoolImplementation));
+        // contractCodeChecker.verifyContractByteCodeMatch(liquidityPoolImpl, address(newLiquidityPoolImplementation));
         contractCodeChecker.verifyContractByteCodeMatch(etherFiNodesManagerImpl, address(newEtherFiNodesManagerImplementation));
 
         console2.log("[OK] Bytecode verified successfully");

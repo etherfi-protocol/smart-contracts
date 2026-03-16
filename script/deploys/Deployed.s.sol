@@ -28,6 +28,7 @@ contract Deployed {
     address public constant ETHERFI_NODES_MANAGER = 0x8B71140AD2e5d1E7018d2a7f8a288BD3CD38916F;
     address public constant ETHERFI_REDEMPTION_MANAGER = 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0;
     address public constant WEETH_WITHDRAW_ADAPTER = 0xFbfe6b9cEe0E555Bad7e2E7309EFFC75200cBE38;
+    address public constant PRIORITY_WITHDRAWAL_QUEUE = 0x35e7D6feF6f72aDd3c3e39dEc6d9CCc29e3345FA;
     
     // Oracle
     address public constant ETHERFI_ORACLE = 0x57AaF0004C716388B21795431CD7D5f9D3Bb6a41;

@@ -1,0 +1,11 @@
+{
+  "contractName": "LiquidityPool",
+  "deploymentParameters": {
+    "factory": "0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99",
+    "salt": "0x7fc5100aa09ac0c9236907fe0330a15cb0fda6f8000000000000000000000000",
+    "constructorArgs": {
+      "_priorityWithdrawalQueue": "0x35e7D6feF6f72aDd3c3e39dEc6d9CCc29e3345FA"
+    }
+  },
+  "deployedAddress": "0x83bc649fCdb2c8DA146b2154a559ddEDf937eF12"
+}
