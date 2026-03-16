@@ -198,16 +198,18 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
             roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
             vm.stopPrank();
 
-            uint256 treasuryBalanceBefore = eETHInstance.balanceOf(buybackWallet);
+            uint256 nominalToTreasury = Math.mulDiv(remainderAmount, splitRatios[i], 10000);
+            uint256 expectedSharesToTreasury = liquidityPoolInstance.sharesForAmount(nominalToTreasury);
+
+            uint256 treasurySharesBefore = eETHInstance.shares(buybackWallet);
 
             vm.prank(alice);
             withdrawRequestNFTInstance.handleRemainder(remainderAmount);
 
-            uint256 treasuryBalanceAfter = eETHInstance.balanceOf(buybackWallet);
-            uint256 expectedToTreasury = Math.mulDiv(remainderAmount, splitRatios[i], 10000);
+            uint256 treasurySharesAfter = eETHInstance.shares(buybackWallet);
 
-            assertApproxEqAbs(treasuryBalanceAfter - treasuryBalanceBefore, expectedToTreasury, 1e14,
-                string(abi.encodePacked("Treasury should receive correct portion for ratio ", vm.toString(splitRatios[i]))));
+            assertApproxEqAbs(treasurySharesAfter - treasurySharesBefore, expectedSharesToTreasury, 10,
+                string(abi.encodePacked("Treasury should receive correct shares for ratio ", vm.toString(splitRatios[i]))));
         }
     }
 }

@@ -19,10 +19,10 @@ interface ILidoWithdrawalQueue {
 }
 
 // Full withdrawal:
-//   FULL_WITHDRAWAL=true forge script script/operations/steth-claim-withdrawals/AutomateStEthWithdrawals.s.sol --fork-url $MAINNET_RPC_URL -vvvv
+//   FULL_WITHDRAWAL=true forge script script/operations/steth-management/AutomateStEthWithdrawals.s.sol --fork-url $MAINNET_RPC_URL -vvvv
 //
 // Partial withdrawal (amount in ether):
-//   AMOUNT=100 forge script script/operations/steth-claim-withdrawals/AutomateStEthWithdrawals.s.sol --fork-url $MAINNET_RPC_URL -vvvv
+//   AMOUNT=100 forge script script/operations/steth-management/AutomateStEthWithdrawals.s.sol --fork-url $MAINNET_RPC_URL -vvvv
 
 contract AutomateStEthWithdrawals is Script, Deployed {
 
