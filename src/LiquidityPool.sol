@@ -16,6 +16,7 @@ import "./interfaces/ILiquifier.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./interfaces/IPriorityWithdrawalQueue.sol";
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
     using SafeERC20 for IERC20;
@@ -68,6 +69,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     IRoleRegistry public roleRegistry;
     uint256 public validatorSizeWei;
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------------------  IMMUTABLES  ----------------------------------
+    //--------------------------------------------------------------------------------------
+
+    address public immutable priorityWithdrawalQueue;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -115,7 +123,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _priorityWithdrawalQueue) {
+        priorityWithdrawalQueue = _priorityWithdrawalQueue;
         _disableInitializers();
     }
 
@@ -203,14 +212,28 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     /// it returns the amount of shares burned
     function withdraw(address _recipient, uint256 _amount) external whenNotPaused returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);
-        require(msg.sender == address(withdrawRequestNFT) || msg.sender == address(membershipManager) || msg.sender == address(etherFiRedemptionManager), "Incorrect Caller");
-        if (totalValueInLp < _amount || (msg.sender == address(withdrawRequestNFT) && ethAmountLockedForWithdrawal < _amount) || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
+        require(
+            msg.sender == address(withdrawRequestNFT) || 
+            msg.sender == address(membershipManager) || 
+            msg.sender == address(etherFiRedemptionManager) ||
+            msg.sender == priorityWithdrawalQueue,
+            "Incorrect Caller"
+        );
+        if (totalValueInLp < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
 
-        totalValueInLp -= uint128(_amount);
+        if (msg.sender == priorityWithdrawalQueue && (totalValueInLp - ethAmountLockedForWithdrawal < _amount)) revert InsufficientLiquidity();
+        
         if (msg.sender == address(withdrawRequestNFT)) {
+            if (ethAmountLockedForWithdrawal < _amount) revert InsufficientLiquidity();
+            if (priorityWithdrawalQueue != address(0)) {
+                uint128 priorityLocked = uint128(IPriorityWithdrawalQueue(priorityWithdrawalQueue).ethAmountLockedForPriorityWithdrawal());
+                if (totalValueInLp - priorityLocked < _amount) revert InsufficientLiquidity();
+            }
             ethAmountLockedForWithdrawal -= uint128(_amount);
         }
+
+        totalValueInLp -= uint128(_amount);
 
         eETH.burnShares(msg.sender, share);
 
@@ -473,7 +496,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
     }
 
     function burnEEthShares(uint256 shares) external {
-        if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
+        if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT) && msg.sender != priorityWithdrawalQueue) revert IncorrectCaller();
         eETH.burnShares(msg.sender, shares);
     }
 

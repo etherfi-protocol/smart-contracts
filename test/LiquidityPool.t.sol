@@ -213,7 +213,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_StakingManagerFailsNotInitializedToken() public {
-        LiquidityPool liquidityPoolNoToken = new LiquidityPool();
+        LiquidityPool liquidityPoolNoToken = new LiquidityPool(address(0x0));
 
         vm.startPrank(alice);
         vm.deal(alice, 3 ether);
@@ -763,7 +763,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_Upgrade2_49_onlyRoleRegistryOwnerCanUpgrade() public {
-        liquidityPool = address(new LiquidityPool());
+        liquidityPool = address(new LiquidityPool(address(0x0)));
         vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
         vm.prank(address(100));
         liquidityPoolInstance.upgradeTo(liquidityPool);

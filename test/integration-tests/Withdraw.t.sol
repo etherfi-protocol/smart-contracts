@@ -14,6 +14,31 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
         vm.etch(alice, bytes(""));
+
+        // Handle any pending oracle report that hasn't been processed yet
+        _syncOracleReportState();
+    }
+
+    /// @dev Advances the admin's lastHandledReportRefSlot to match the oracle's lastPublishedReportRefSlot.
+    ///      On mainnet fork there may be a published report the admin hasn't processed yet.
+    ///      We advance the admin forward (not rewind the oracle) so that slotForNextReport()
+    ///      returns the correct next slot and committee members can still submit new reports.
+    function _syncOracleReportState() internal {
+        uint32 lastPublished = etherFiOracleInstance.lastPublishedReportRefSlot();
+        uint32 lastHandled = etherFiAdminInstance.lastHandledReportRefSlot();
+
+        if (lastPublished != lastHandled) {
+            uint32 lastPublishedBlock = etherFiOracleInstance.lastPublishedReportRefBlock();
+
+            // EtherFiAdmin slot 209 packs: lastHandledReportRefSlot (4B @ offset 0) +
+            //   lastHandledReportRefBlock (4B @ offset 4) + other fields in higher bytes
+            bytes32 slot209 = vm.load(address(etherFiAdminInstance), bytes32(uint256(209)));
+            uint256 val = uint256(slot209);
+            val &= ~uint256(0xFFFFFFFFFFFFFFFF); // clear low 64 bits (both uint32 fields)
+            val |= uint256(lastPublished);
+            val |= uint256(lastPublishedBlock) << 32;
+            vm.store(address(etherFiAdminInstance), bytes32(uint256(209)), bytes32(val));
+        }
     }
 
     function test_Withdraw_EtherFiRedemptionManager_redeemEEth() public {
@@ -22,6 +47,8 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         // Ensure bucket limiter has enough capacity and is fully refilled
         etherFiRedemptionManagerInstance.setCapacity(3000 ether, ETH_ADDRESS);
         etherFiRedemptionManagerInstance.setRefillRatePerSecond(3000 ether, ETH_ADDRESS);
+        // On mainnet fork, lowWatermark (% of TVL) can be much larger than available liquidity
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, ETH_ADDRESS);
         vm.stopPrank();
         
         // Warp time forward to ensure bucket is fully refilled
@@ -64,6 +91,8 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         // Ensure bucket limiter has enough capacity and is fully refilled
         etherFiRedemptionManagerInstance.setCapacity(3000 ether, ETH_ADDRESS);
         etherFiRedemptionManagerInstance.setRefillRatePerSecond(3000 ether, ETH_ADDRESS);
+        // On mainnet fork, lowWatermark (% of TVL) can be much larger than available liquidity
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, ETH_ADDRESS);
         vm.stopPrank();
         
         // Warp time forward to ensure bucket is fully refilled
@@ -104,6 +133,10 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
     }
 
     function test_Withdraw_EtherFiRedemptionManager_redeemWeEth() public {
+        // On mainnet fork, lowWatermark (% of TVL) can be much larger than available liquidity
+        vm.prank(OPERATING_TIMELOCK);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, ETH_ADDRESS);
+
         vm.deal(alice, 100 ether);
         vm.startPrank(alice);
         liquidityPoolInstance.deposit{value: 10 ether}(); // to get eETH to generate weETH
@@ -142,6 +175,9 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
     }
 
     function test_Withdraw_EtherFiRedemptionManager_redeemWeEthWithPermit() public {
+        // On mainnet fork, lowWatermark (% of TVL) can be much larger than available liquidity
+        vm.prank(OPERATING_TIMELOCK);
+        etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, ETH_ADDRESS);
 
         vm.deal(alice, 100 ether);
         vm.startPrank(alice);
