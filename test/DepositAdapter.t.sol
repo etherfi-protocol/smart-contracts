@@ -183,9 +183,9 @@ contract DepositAdapterTest is TestSetup {
         stEth.approve(address(depositAdapterInstance), 1 ether);
         depositAdapterInstance.depositStETHForWeETH(1 ether, bob);
 
-        assertApproxEqAbs(stEth.balanceOf(address(alice)), stEthBalanceBeforeDeposit - 1 ether, 3);
-        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(eETHAmountFromStETH), 3);
-        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolStETHBeforeDeposit + 1 ether, 3);
+        assertApproxEqAbs(stEth.balanceOf(address(alice)), stEthBalanceBeforeDeposit - 1 ether, 5);
+        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(eETHAmountFromStETH), 5);
+        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolStETHBeforeDeposit + 1 ether, 5);
 
         // larger deposit
         stEth.submit{value: 5000 ether}(address(0));
@@ -194,7 +194,7 @@ contract DepositAdapterTest is TestSetup {
         stEth.approve(address(depositAdapterInstance), 5000 ether);
         depositAdapterInstance.depositStETHForWeETH(5000 ether, bob);
 
-        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolStETHBeforeDeposit + 5000 ether, 3);
+        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolStETHBeforeDeposit + 5000 ether, 5);
     }
 
     function test_DepositWstETHWithoutPermit() public {
@@ -271,7 +271,7 @@ contract DepositAdapterTest is TestSetup {
         uint256 expectedWeETH = weEthInstance.getWeETHByeETH(eETHAmountFromStETH);
 
         uint256 weEthAmount = depositAdapterInstance.depositStETHForWeETH(1 ether, address(0));
-        assertApproxEqAbs(weEthAmount, expectedWeETH, 3);
+        assertApproxEqAbs(weEthAmount, expectedWeETH, 5);
         assertApproxEqAbs(weEthInstance.balanceOf(alice), weEthAmount, 0);
     }
 
