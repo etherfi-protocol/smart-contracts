@@ -22,6 +22,11 @@ contract EtherFiRestakerTest is TestSetup {
 
         test_upgrade();
 
+        vm.startPrank(owner);
+        _grantRestakerRoles(owner);
+        _grantRestakerRoles(alice);
+        vm.stopPrank();
+
         // setUpLiquifier(MAINNET_FORK);
 
         avsOperator = 0x5ACCC90436492F24E6aF278569691e2c942A676d; // EigenYields
@@ -30,6 +35,14 @@ contract EtherFiRestakerTest is TestSetup {
 
         vm.prank(owner);
         liquifierInstance.updateQuoteStEthWithCurve(false);
+    }
+
+    function _grantRestakerRoles(address _account) internal {
+        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_STETH_REQUEST_WITHDRAWAL_ROLE(), _account);
+        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_STETH_CLAIM_WITHDRAWALS_ROLE(), _account);
+        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_QUEUE_WITHDRAWALS_ROLE(), _account);
+        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_COMPLETE_QUEUED_WITHDRAWALS_ROLE(), _account);
+        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE(), _account);
     }
 
     function _deposit_stEth(uint256 _amount) internal {
@@ -227,7 +240,7 @@ contract EtherFiRestakerTest is TestSetup {
         EtherFiRestaker restaker = EtherFiRestaker(payable(deployed.ETHERFI_RESTAKER()));
         address _claimer = address(liquidityPoolInstance); // dummy claimer
 
-        address newRestakerImpl = address(new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance)));
+        address newRestakerImpl = address(new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance), address(roleRegistryInstance)));
         vm.startPrank(restaker.owner());
 
         restaker.upgradeTo(newRestakerImpl);
@@ -240,7 +253,8 @@ contract EtherFiRestakerTest is TestSetup {
     function test_upgrade() public {
         address newRestakerImpl = address(new EtherFiRestaker(
             address(etherFiRestakerInstance.rewardsCoordinator()),
-            address(etherFiRestakerInstance.etherFiRedemptionManager())
+            address(etherFiRestakerInstance.etherFiRedemptionManager()),
+            address(etherFiRestakerInstance.roleRegistry())
         ));
         
         vm.startPrank(owner);
