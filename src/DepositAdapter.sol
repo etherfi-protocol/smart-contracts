@@ -151,7 +151,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     /// @param _referral Address to credit referral
     /// @return weEthAmount weETH received by the depositer
     function depositWstETHForWeETH(uint256 _amount, address _referral) external returns (uint256) {
-        IERC20Upgradeable(address(wstETH)).transferFrom(msg.sender, address(this), _amount);
+        wstETH.transferFrom(msg.sender, address(this), _amount);
 
         // Accounting for the 1-2 wei corner case
         uint256 initialBalance = stETH.balanceOf(address(this));
