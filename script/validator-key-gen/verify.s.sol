@@ -78,7 +78,7 @@ contract VerifyValidatorKeyGen is Script {
         // LiquidityPool newLiquidityPoolImplementation = new LiquidityPool(address(0x0));
         StakingManager newStakingManagerImplementation = new StakingManager(address(LIQUIDITY_POOL_PROXY), address(ETHERFI_NODES_MANAGER_PROXY), address(ETH_DEPOSIT_CONTRACT), address(AUCTION_MANAGER), address(ETHERFI_NODE_BEACON), address(ROLE_REGISTRY));
         EtherFiNodesManager newEtherFiNodesManagerImplementation = new EtherFiNodesManager(address(STAKING_MANAGER_PROXY), address(ROLE_REGISTRY), address(RATE_LIMITER_PROXY));
-        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER));
+        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER), address(ROLE_REGISTRY));
 
         // contractCodeChecker.verifyContractByteCodeMatch(LIQUIDITY_POOL_IMPL, address(newLiquidityPoolImplementation));
         contractCodeChecker.verifyContractByteCodeMatch(STAKING_MANAGER_IMPL, address(newStakingManagerImplementation));
