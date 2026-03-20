@@ -127,44 +127,6 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         return _wrapAndReturn(eETHShares);
     }
 
-    /// @notice Deposit stETH to liquifier for weETH
-    /// @dev Requires an explicit approval to this contract before use
-    /// @param _amount Amount of stETH to deposit
-    /// @param _referral Address to credit referral
-    /// @return weEthAmount weETH received by the depositer
-    function depositStETHForWeETH(uint256 _amount, address _referral) external returns (uint256) {
-        // Accounting for the 1-2 wei corner case
-        uint256 initialBalance = stETH.balanceOf(address(this));
-        stETH.transferFrom(msg.sender, address(this), _amount);
-        uint256 actualTransferredAmount = stETH.balanceOf(address(this)) - initialBalance;
-
-        stETH.approve(address(liquifier), actualTransferredAmount);
-        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), actualTransferredAmount, _referral);
-
-        emit AdapterDeposit(msg.sender, actualTransferredAmount, SourceOfFunds.STETH, _referral);
-        return _wrapAndReturn(eETHShares);
-    }
-
-    /// @notice Deposit wstETH for weETH
-    /// @dev Requires an explicit approval to this contract before use. Funds are unwrapped to stETH and deposited to liquifier
-    /// @param _amount Amount of wstETH to deposit
-    /// @param _referral Address to credit referral
-    /// @return weEthAmount weETH received by the depositer
-    function depositWstETHForWeETH(uint256 _amount, address _referral) external returns (uint256) {
-        wstETH.transferFrom(msg.sender, address(this), _amount);
-
-        // Accounting for the 1-2 wei corner case
-        uint256 initialBalance = stETH.balanceOf(address(this));
-        wstETH.unwrap(_amount);
-        uint256 actualTransferredAmount = stETH.balanceOf(address(this)) - initialBalance;
-
-        stETH.approve(address(liquifier), actualTransferredAmount);
-        uint256 eETHShares = liquifier.depositWithERC20(address(stETH), actualTransferredAmount, _referral);
-
-        emit AdapterDeposit(msg.sender, actualTransferredAmount, SourceOfFunds.WSTETH, _referral);
-        return _wrapAndReturn(eETHShares);
-    }
-
     receive() external payable {
         if (msg.sender != address(wETH)) {
             revert("ETH_TRANSFERS_NOT_ACCEPTED");

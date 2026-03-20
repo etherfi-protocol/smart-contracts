@@ -4,12 +4,13 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import "forge-std/console2.sol";
 import {Deployed} from "../../deploys/Deployed.s.sol";
+import {Utils} from "../../utils/utils.sol";
 import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
 import {ILidoWithdrawalQueue} from "../../../src/interfaces/ILiquifier.sol";
 
 // forge script script/operations/steth-management/ClaimStEthWithdrawals.s.sol --fork-url $MAINNET_RPC_URL -vvvv
 
-contract ClaimStEthWithdrawals is Script, Deployed {
+contract ClaimStEthWithdrawals is Script, Deployed, Utils {
 
     EtherFiRestaker constant etherFiRestaker = EtherFiRestaker(payable(ETHERFI_RESTAKER));
 
@@ -80,12 +81,27 @@ contract ClaimStEthWithdrawals is Script, Deployed {
             hints
         );
 
+        // 6. Write Safe transaction JSON automatically for claimable requests
+        address safeAddress = vm.envOr("SAFE_ADDRESS", ETHERFI_OPERATING_ADMIN);
+        string memory outputFile = vm.envOr("OUTPUT_FILE", string("claim-steth-withdrawals.json"));
+        writeSafeJson(
+            "script/operations/steth-management",
+            outputFile,
+            safeAddress,
+            address(etherFiRestaker),
+            0,
+            callData,
+            block.chainid
+        );
+
         console2.log("");
         console2.log("=== stEthClaimWithdrawals calldata ===");
         console2.log("Target:", address(etherFiRestaker));
         console2.logBytes(callData);
+        console2.log("Safe JSON file:", outputFile);
+        console2.log("Safe address:", safeAddress);
 
-        // 6. Simulate on fork as operating admin
+        // 7. Simulate on fork as operating admin
         console2.log("");
         console2.log("=== Simulating on fork ===");
         uint256 lpBalanceBefore = LIQUIDITY_POOL.balance;
