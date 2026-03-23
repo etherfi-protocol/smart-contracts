@@ -7,6 +7,7 @@ import {Utils} from "../../utils/utils.sol";
 import {EtherFiTimelock} from "../../../src/EtherFiTimelock.sol";
 import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
 import {IRoleRegistry} from "../../../src/interfaces/IRoleRegistry.sol";
+import {IEtherFiRateLimiter} from "../../../src/interfaces/IEtherFiRateLimiter.sol";
 import {ContractCodeChecker} from "../../../script/ContractCodeChecker.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
@@ -29,9 +30,15 @@ contract RestakerRolesTransactions is Utils {
     ContractCodeChecker contractCodeChecker;
 
     // TODO: fill in after running deploy.s.sol
-    address constant etherFiRestakerImpl = address(0);
+    address constant etherFiRestakerImpl = 0x2d09A6561588506aF434CEe87Eac16Aba09d5641;
 
     bytes32 constant commitHashSalt = keccak256("restaker-roles-v1"); // TODO: fill in after audit
+
+    // Rate limiter values (in gwei)
+    // capacity:   100_000_000_000_000 gwei = 100,000 ETH
+    // refillRate: 2_000_000_000 gwei/sec   = 2 ETH/sec (~172,800 ETH/day)
+    uint64 constant RATE_LIMIT_CAPACITY = 100_000_000_000_000;
+    uint64 constant RATE_LIMIT_REFILL_RATE = 2_000_000_000;
 
     address internal preRestakerOwner;
 
@@ -48,6 +55,7 @@ contract RestakerRolesTransactions is Utils {
         verifyDeployedBytecode();
         takePreUpgradeSnapshots();
         executeUpgrade();
+        setUpRateLimiters();
         verifyUpgrade();
         verifyAccessControlPreservation();
 
@@ -63,7 +71,8 @@ contract RestakerRolesTransactions is Utils {
         EtherFiRestaker expected = new EtherFiRestaker(
             address(EIGENLAYER_REWARDS_COORDINATOR),
             address(ETHERFI_REDEMPTION_MANAGER),
-            address(ROLE_REGISTRY)
+            address(ROLE_REGISTRY),
+            address(ETHERFI_RATE_LIMITER)
         );
         contractCodeChecker.verifyContractByteCodeMatch(etherFiRestakerImpl, address(expected));
 
@@ -89,12 +98,11 @@ contract RestakerRolesTransactions is Utils {
     function executeUpgrade() public {
         console2.log("=== Executing Upgrade ===");
 
-        EtherFiRestaker restaker = EtherFiRestaker(payable(ETHERFI_RESTAKER));
-        bytes32 claimRole = restaker.ETHERFI_RESTAKER_STETH_CLAIM_WITHDRAWALS_ROLE();
-        bytes32 requestRole = restaker.ETHERFI_RESTAKER_STETH_REQUEST_WITHDRAWAL_ROLE();
-        bytes32 queueRole = restaker.ETHERFI_RESTAKER_QUEUE_WITHDRAWALS_ROLE();
-        bytes32 completeRole = restaker.ETHERFI_RESTAKER_COMPLETE_QUEUED_WITHDRAWALS_ROLE();
-        bytes32 depositRole = restaker.ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE();
+        bytes32 claimRole = keccak256("ETHERFI_RESTAKER_STETH_CLAIM_WITHDRAWALS_ROLE");
+        bytes32 requestRole = keccak256("ETHERFI_RESTAKER_STETH_REQUEST_WITHDRAWAL_ROLE");
+        bytes32 queueRole = keccak256("ETHERFI_RESTAKER_QUEUE_WITHDRAWALS_ROLE");
+        bytes32 completeRole = keccak256("ETHERFI_RESTAKER_COMPLETE_QUEUED_WITHDRAWALS_ROLE");
+        bytes32 depositRole = keccak256("ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE");
 
         address[] memory targets = new address[](6);
         bytes[] memory data = new bytes[](targets.length);
@@ -170,6 +178,64 @@ contract RestakerRolesTransactions is Utils {
     }
 
     //--------------------------------------------------------------------------------------
+    //------------------------------- RATE LIMITER SETUP -----------------------------------
+    //--------------------------------------------------------------------------------------
+    function setUpRateLimiters() public {
+        console2.log("=== Setting Up Rate Limiters ===");
+
+        bytes32 stethLimitId = keccak256("STETH_REQUEST_WITHDRAWAL_LIMIT_ID");
+        bytes32 queueLimitId = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
+
+        address[] memory targets = new address[](4);
+        bytes[] memory data = new bytes[](4);
+
+        data[0] = abi.encodeWithSelector(
+            IEtherFiRateLimiter.createNewLimiter.selector,
+            stethLimitId,
+            RATE_LIMIT_CAPACITY,
+            RATE_LIMIT_REFILL_RATE
+        );
+        data[1] = abi.encodeWithSelector(
+            IEtherFiRateLimiter.createNewLimiter.selector,
+            queueLimitId,
+            RATE_LIMIT_CAPACITY,
+            RATE_LIMIT_REFILL_RATE
+        );
+        data[2] = abi.encodeWithSelector(
+            IEtherFiRateLimiter.updateConsumers.selector,
+            stethLimitId,
+            ETHERFI_RESTAKER,
+            true
+        );
+        data[3] = abi.encodeWithSelector(
+            IEtherFiRateLimiter.updateConsumers.selector,
+            queueLimitId,
+            ETHERFI_RESTAKER,
+            true
+        );
+
+        for (uint256 i = 0; i < 4; i++) {
+            targets[i] = ETHERFI_RATE_LIMITER;
+            console2.log("====== Rate Limiter Tx:", i);
+            console2.log("target: ", targets[i]);
+            console2.log("data: ");
+            console2.logBytes(data[i]);
+            console2.log("--------------------------------");
+        }
+
+        // Execute on fork for testing
+        vm.startPrank(ETHERFI_OPERATING_ADMIN);
+        IEtherFiRateLimiter(ETHERFI_RATE_LIMITER).createNewLimiter(stethLimitId, RATE_LIMIT_CAPACITY, RATE_LIMIT_REFILL_RATE);
+        IEtherFiRateLimiter(ETHERFI_RATE_LIMITER).createNewLimiter(queueLimitId, RATE_LIMIT_CAPACITY, RATE_LIMIT_REFILL_RATE);
+        IEtherFiRateLimiter(ETHERFI_RATE_LIMITER).updateConsumers(stethLimitId, ETHERFI_RESTAKER, true);
+        IEtherFiRateLimiter(ETHERFI_RATE_LIMITER).updateConsumers(queueLimitId, ETHERFI_RESTAKER, true);
+        vm.stopPrank();
+
+        console2.log("Rate limiter setup completed!");
+        console2.log("================================================");
+    }
+
+    //--------------------------------------------------------------------------------------
     //------------------------------- VERIFY UPGRADE ---------------------------------------
     //--------------------------------------------------------------------------------------
     function verifyUpgrade() public view {
@@ -206,6 +272,21 @@ contract RestakerRolesTransactions is Utils {
 
         console2.log("All role constants verified!");
         console2.log("All role grants verified for ETHERFI_OPERATING_ADMIN!");
+
+        // Verify rate limiter immutable
+        require(address(restaker.rateLimiter()) == ETHERFI_RATE_LIMITER, "rateLimiter mismatch");
+
+        // Verify rate limiters were created and restaker is registered as consumer
+        IEtherFiRateLimiter rl = IEtherFiRateLimiter(ETHERFI_RATE_LIMITER);
+        bytes32 stethLimitId = restaker.STETH_REQUEST_WITHDRAWAL_LIMIT_ID();
+        bytes32 queueLimitId = restaker.QUEUE_WITHDRAWALS_LIMIT_ID();
+
+        require(rl.limitExists(stethLimitId), "STETH_REQUEST_WITHDRAWAL rate limiter not created");
+        require(rl.limitExists(queueLimitId), "QUEUE_WITHDRAWALS rate limiter not created");
+        require(rl.isConsumerAllowed(stethLimitId, ETHERFI_RESTAKER), "Restaker not registered as consumer for STETH_REQUEST_WITHDRAWAL");
+        require(rl.isConsumerAllowed(queueLimitId, ETHERFI_RESTAKER), "Restaker not registered as consumer for QUEUE_WITHDRAWALS");
+
+        console2.log("Rate limiters verified!");
         console2.log("================================================");
     }
 

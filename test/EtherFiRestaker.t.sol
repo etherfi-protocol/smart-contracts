@@ -9,6 +9,7 @@ import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20Burnable
 import "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import "../src/eigenlayer-interfaces/IStrategyManager.sol";
 import "../src/eigenlayer-interfaces/ISignatureUtils.sol";
+import "../src/interfaces/IEtherFiRateLimiter.sol";
 
 
 contract EtherFiRestakerTest is TestSetup {
@@ -284,4 +285,314 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakerInstance.getTotalPooledEther();
     }
 
+    // -------------------------------------------------------------------------
+    // Rate Limiter Tests
+    // -------------------------------------------------------------------------
+
+    // Use a small capacity (100 ETH) to stay within Lido's staking limit.
+    // Refill rate: 1 ETH/sec (1_000_000_000 gwei/sec)
+    uint64 constant TEST_CAPACITY = 100_000_000_000; // 100 ETH in gwei
+    uint64 constant TEST_REFILL_RATE = 1_000_000_000; // 1 ETH/sec in gwei
+
+    function _setUpSmallRateLimiters() internal {
+        vm.startPrank(owner);
+        rateLimiterInstance.setCapacity(etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID(), TEST_CAPACITY);
+        rateLimiterInstance.setRemaining(etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID(), TEST_CAPACITY);
+        rateLimiterInstance.setRefillRate(etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID(), TEST_REFILL_RATE);
+
+        rateLimiterInstance.setCapacity(etherFiRestakerInstance.QUEUE_WITHDRAWALS_LIMIT_ID(), TEST_CAPACITY);
+        rateLimiterInstance.setRemaining(etherFiRestakerInstance.QUEUE_WITHDRAWALS_LIMIT_ID(), TEST_CAPACITY);
+        rateLimiterInstance.setRefillRate(etherFiRestakerInstance.QUEUE_WITHDRAWALS_LIMIT_ID(), TEST_REFILL_RATE);
+        vm.stopPrank();
+    }
+
+    function _stethConsumable() internal view returns (uint64) {
+        return rateLimiterInstance.consumable(etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID());
+    }
+
+    function _queueConsumable() internal view returns (uint64) {
+        return rateLimiterInstance.consumable(etherFiRestakerInstance.QUEUE_WITHDRAWALS_LIMIT_ID());
+    }
+
+    function _toGwei(uint256 ethAmount) internal pure returns (uint64) {
+        return uint64(ethAmount / 1 gwei);
+    }
+
+    function test_rateLimiter_stEthRequestWithdrawal_exactCapacity() public {
+        _setUpSmallRateLimiters();
+        _deposit_stEth(150 ether);
+
+        // Verify initial remaining = full capacity
+        assertEq(_stethConsumable(), TEST_CAPACITY);
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.stEthRequestWithdrawal(100 ether);
+        vm.stopPrank();
+
+        // After consuming exactly capacity, remaining should be 0
+        assertEq(_stethConsumable(), 0);
+    }
+
+    function test_rateLimiter_stEthRequestWithdrawal_exceedsCapacity() public {
+        _setUpSmallRateLimiters();
+        _deposit_stEth(150 ether);
+
+        assertEq(_stethConsumable(), TEST_CAPACITY);
+
+        vm.startPrank(owner);
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        etherFiRestakerInstance.stEthRequestWithdrawal(101 ether);
+        vm.stopPrank();
+
+        // Remaining unchanged after failed call
+        assertEq(_stethConsumable(), TEST_CAPACITY);
+    }
+
+    function test_rateLimiter_stEthRequestWithdrawal_twoCallsExceedCapacity() public {
+        _setUpSmallRateLimiters();
+        _deposit_stEth(150 ether);
+
+        assertEq(_stethConsumable(), TEST_CAPACITY);
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.stEthRequestWithdrawal(60 ether);
+        assertEq(_stethConsumable(), _toGwei(40 ether));
+
+        etherFiRestakerInstance.stEthRequestWithdrawal(40 ether);
+        assertEq(_stethConsumable(), 0);
+
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        etherFiRestakerInstance.stEthRequestWithdrawal(1 ether);
+
+        // Still 0 after failed call
+        assertEq(_stethConsumable(), 0);
+        vm.stopPrank();
+    }
+
+    function test_rateLimiter_stEthRequestWithdrawal_refillAfterDrain() public {
+        _setUpSmallRateLimiters();
+        _deposit_stEth(150 ether);
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.stEthRequestWithdrawal(100 ether);
+        assertEq(_stethConsumable(), 0);
+
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        etherFiRestakerInstance.stEthRequestWithdrawal(1 ether);
+        vm.stopPrank();
+
+        // Wait 5 seconds: refills 5 * 1 ETH/sec = 5 ETH
+        vm.warp(block.timestamp + 5);
+        assertEq(_stethConsumable(), _toGwei(5 ether));
+
+        _deposit_stEth(10 ether);
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.stEthRequestWithdrawal(5 ether);
+        assertEq(_stethConsumable(), 0);
+
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        etherFiRestakerInstance.stEthRequestWithdrawal(1 ether);
+        vm.stopPrank();
+    }
+
+    function test_rateLimiter_stEthRequestWithdrawal_refillCapsAtCapacity() public {
+        _setUpSmallRateLimiters();
+        _deposit_stEth(150 ether);
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.stEthRequestWithdrawal(10 ether);
+        assertEq(_stethConsumable(), _toGwei(90 ether));
+        vm.stopPrank();
+
+        // Wait a very long time -- refill should cap at capacity, not exceed it
+        vm.warp(block.timestamp + 1 days);
+        assertEq(_stethConsumable(), TEST_CAPACITY);
+
+        _deposit_stEth(150 ether);
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.stEthRequestWithdrawal(100 ether);
+        assertEq(_stethConsumable(), 0);
+
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        etherFiRestakerInstance.stEthRequestWithdrawal(1 ether);
+        vm.stopPrank();
+    }
+
+    function test_rateLimiter_queueWithdrawals_exactCapacity() public {
+        _setUpSmallRateLimiters();
+        _deposit_stEth(150 ether);
+
+        assertEq(_queueConsumable(), TEST_CAPACITY);
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.depositIntoStrategy(address(stEth), 100 ether);
+        etherFiRestakerInstance.queueWithdrawals(address(stEth), 100 ether);
+        vm.stopPrank();
+
+        assertEq(_queueConsumable(), 0);
+    }
+
+    function test_rateLimiter_queueWithdrawals_exceedsCapacity() public {
+        _setUpSmallRateLimiters();
+        _deposit_stEth(150 ether);
+
+        assertEq(_queueConsumable(), TEST_CAPACITY);
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.depositIntoStrategy(address(stEth), 110 ether);
+
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        etherFiRestakerInstance.queueWithdrawals(address(stEth), 101 ether);
+        vm.stopPrank();
+
+        // Unchanged after failed call
+        assertEq(_queueConsumable(), TEST_CAPACITY);
+    }
+
+    function test_rateLimiter_queueWithdrawals_refillAfterDrain() public {
+        _setUpSmallRateLimiters();
+        _deposit_stEth(150 ether);
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.depositIntoStrategy(address(stEth), 130 ether);
+
+        etherFiRestakerInstance.queueWithdrawals(address(stEth), 100 ether);
+        assertEq(_queueConsumable(), 0);
+
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        etherFiRestakerInstance.queueWithdrawals(address(stEth), 1 ether);
+        vm.stopPrank();
+
+        // Wait 10 seconds: refills 10 * 1 = 10 ETH
+        vm.warp(block.timestamp + 10);
+        assertEq(_queueConsumable(), _toGwei(10 ether));
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.queueWithdrawals(address(stEth), 10 ether);
+        assertEq(_queueConsumable(), 0);
+
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        etherFiRestakerInstance.queueWithdrawals(address(stEth), 1 ether);
+        vm.stopPrank();
+    }
+
+    function test_rateLimiter_stEthAndQueueWithdrawals_independent() public {
+        _setUpSmallRateLimiters();
+
+        _deposit_stEth(150 ether);
+        vm.startPrank(owner);
+        etherFiRestakerInstance.depositIntoStrategy(address(stEth), 100 ether);
+        vm.stopPrank();
+
+        _deposit_stEth(150 ether);
+
+        // Both start at full capacity
+        assertEq(_stethConsumable(), TEST_CAPACITY);
+        assertEq(_queueConsumable(), TEST_CAPACITY);
+
+        vm.startPrank(owner);
+
+        // Drain stETH limiter -- queue limiter unaffected
+        etherFiRestakerInstance.stEthRequestWithdrawal(100 ether);
+        assertEq(_stethConsumable(), 0);
+        assertEq(_queueConsumable(), TEST_CAPACITY);
+
+        // Drain queue limiter -- stETH limiter still 0
+        etherFiRestakerInstance.queueWithdrawals(address(stEth), 100 ether);
+        assertEq(_stethConsumable(), 0);
+        assertEq(_queueConsumable(), 0);
+
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        etherFiRestakerInstance.stEthRequestWithdrawal(1 ether);
+
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        etherFiRestakerInstance.queueWithdrawals(address(stEth), 1 ether);
+        vm.stopPrank();
+    }
+
+    function test_rateLimiter_partialRefill_boundary() public {
+        _setUpSmallRateLimiters();
+        _deposit_stEth(110 ether);
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.stEthRequestWithdrawal(100 ether);
+        assertEq(_stethConsumable(), 0);
+        vm.stopPrank();
+
+        // Wait exactly 2 seconds: refills 2 ETH
+        vm.warp(block.timestamp + 2);
+        assertEq(_stethConsumable(), _toGwei(2 ether));
+
+        _deposit_stEth(5 ether);
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.stEthRequestWithdrawal(2 ether);
+        assertEq(_stethConsumable(), 0);
+
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        etherFiRestakerInstance.stEthRequestWithdrawal(1 ether);
+        vm.stopPrank();
+    }
+
+    function test_rateLimiter_adminCanAdjustCapacity() public {
+        _setUpSmallRateLimiters();
+        _deposit_stEth(20 ether);
+
+        assertEq(_stethConsumable(), TEST_CAPACITY);
+
+        vm.startPrank(owner);
+        rateLimiterInstance.setCapacity(
+            etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID(),
+            10_000_000_000 // 10 ETH in gwei
+        );
+        rateLimiterInstance.setRemaining(
+            etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID(),
+            10_000_000_000 // 10 ETH in gwei
+        );
+        vm.stopPrank();
+
+        assertEq(_stethConsumable(), _toGwei(10 ether));
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.stEthRequestWithdrawal(10 ether);
+        assertEq(_stethConsumable(), 0);
+
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        etherFiRestakerInstance.stEthRequestWithdrawal(1 ether);
+        vm.stopPrank();
+    }
+
+    function test_rateLimiter_adminCanAdjustRefillRate() public {
+        _setUpSmallRateLimiters();
+        _deposit_stEth(150 ether);
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.stEthRequestWithdrawal(100 ether);
+        assertEq(_stethConsumable(), 0);
+        vm.stopPrank();
+
+        // Increase refill rate to 10 ETH/sec
+        vm.startPrank(owner);
+        rateLimiterInstance.setRefillRate(
+            etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID(),
+            10_000_000_000 // 10 ETH/sec in gwei
+        );
+        vm.stopPrank();
+
+        // Wait 1 second: should refill 10 ETH (not 1 ETH)
+        vm.warp(block.timestamp + 1);
+        assertEq(_stethConsumable(), _toGwei(10 ether));
+
+        _deposit_stEth(15 ether);
+
+        vm.startPrank(owner);
+        etherFiRestakerInstance.stEthRequestWithdrawal(10 ether);
+        assertEq(_stethConsumable(), 0);
+
+        vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
+        etherFiRestakerInstance.stEthRequestWithdrawal(1 ether);
+        vm.stopPrank();
+    }
 }
