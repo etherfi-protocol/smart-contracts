@@ -9,11 +9,13 @@ import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import "./Liquifier.sol";
 import "./LiquidityPool.sol";
 
 import "./interfaces/IRoleRegistry.sol";
+import "./interfaces/IEtherFiRateLimiter.sol";
 import "./eigenlayer-interfaces/IStrategyManager.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
 import "./eigenlayer-interfaces/IRewardsCoordinator.sol";
@@ -30,12 +32,16 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     IRewardsCoordinator public immutable rewardsCoordinator;
     address public immutable etherFiRedemptionManager;
     IRoleRegistry public immutable roleRegistry;
+    IEtherFiRateLimiter public immutable rateLimiter;
 
     bytes32 public constant ETHERFI_RESTAKER_STETH_CLAIM_WITHDRAWALS_ROLE = keccak256("ETHERFI_RESTAKER_STETH_CLAIM_WITHDRAWALS_ROLE");
     bytes32 public constant ETHERFI_RESTAKER_STETH_REQUEST_WITHDRAWAL_ROLE = keccak256("ETHERFI_RESTAKER_STETH_REQUEST_WITHDRAWAL_ROLE");
     bytes32 public constant ETHERFI_RESTAKER_QUEUE_WITHDRAWALS_ROLE = keccak256("ETHERFI_RESTAKER_QUEUE_WITHDRAWALS_ROLE");
     bytes32 public constant ETHERFI_RESTAKER_COMPLETE_QUEUED_WITHDRAWALS_ROLE = keccak256("ETHERFI_RESTAKER_COMPLETE_QUEUED_WITHDRAWALS_ROLE");
     bytes32 public constant ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE = keccak256("ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE");
+
+    bytes32 public constant STETH_REQUEST_WITHDRAWAL_LIMIT_ID = keccak256("STETH_REQUEST_WITHDRAWAL_LIMIT_ID");
+    bytes32 public constant QUEUE_WITHDRAWALS_LIMIT_ID = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
 
     LiquidityPool public liquidityPool;
     Liquifier public liquifier;
@@ -68,10 +74,11 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     error IncorrectRole();
 
      /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _rewardsCoordinator, address _etherFiRedemptionManager, address _roleRegistry) {
+    constructor(address _rewardsCoordinator, address _etherFiRedemptionManager, address _roleRegistry, address _rateLimiter) {
         rewardsCoordinator = IRewardsCoordinator(_rewardsCoordinator);
         etherFiRedemptionManager = _etherFiRedemptionManager;
         roleRegistry = IRoleRegistry(_roleRegistry);
+        rateLimiter = IEtherFiRateLimiter(_rateLimiter);
         _disableInitializers();
     }
 
@@ -123,6 +130,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @param _amount the amount of stETH to request
     function stEthRequestWithdrawal(uint256 _amount) public returns (uint256[] memory) {
         if (!roleRegistry.hasRole(ETHERFI_RESTAKER_STETH_REQUEST_WITHDRAWAL_ROLE, msg.sender)) revert IncorrectRole();
+        rateLimiter.consume(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, SafeCast.toUint64(_amount / 1 gwei));
         uint256 minAmount = lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT();
         uint256 maxAmount = lidoWithdrawalQueue.MAX_STETH_WITHDRAWAL_AMOUNT();
 
@@ -216,6 +224,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @param amount the amount of token to withdraw
     function queueWithdrawals(address token, uint256 amount) public returns (bytes32[] memory) {
         if (!roleRegistry.hasRole(ETHERFI_RESTAKER_QUEUE_WITHDRAWALS_ROLE, msg.sender)) revert IncorrectRole();
+        rateLimiter.consume(QUEUE_WITHDRAWALS_LIMIT_ID, SafeCast.toUint64(amount / 1 gwei));
         uint256 shares = getEigenLayerRestakingStrategy(token).underlyingToSharesView(amount);
         bytes32[] memory withdrawalRoots = _queueWithdrawalsByShares(token, shares);
 
