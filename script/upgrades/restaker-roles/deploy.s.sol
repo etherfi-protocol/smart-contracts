@@ -9,7 +9,7 @@ import {Utils} from "../../utils/utils.sol";
  * @title DeployEtherFiRestakerWithRoles
  * @notice Deploys the new EtherFiRestaker implementation with per-function RoleRegistry roles
  *
- * Constructor now takes a third arg: _roleRegistry
+ * Constructor now takes a fourth arg: _rateLimiter
  *
  * Command:
  * forge script script/upgrades/restaker-roles/deploy.s.sol --fork-url $MAINNET_RPC_URL -vvvv
@@ -32,7 +32,8 @@ contract DeployEtherFiRestakerWithRoles is Utils {
             bytes memory constructorArgs = abi.encode(
                 EIGENLAYER_REWARDS_COORDINATOR,
                 ETHERFI_REDEMPTION_MANAGER,
-                ROLE_REGISTRY
+                ROLE_REGISTRY,
+                ETHERFI_RATE_LIMITER
             );
             bytes memory bytecode = abi.encodePacked(
                 type(EtherFiRestaker).creationCode,
