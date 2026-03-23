@@ -22,9 +22,25 @@ contract EtherFiRestakerTest is TestSetup {
 
         test_upgrade();
 
+        rateLimiterInstance = EtherFiRateLimiter(deployed.ETHERFI_RATE_LIMITER());
+
         vm.startPrank(owner);
         _grantRestakerRoles(owner);
         _grantRestakerRoles(alice);
+
+        roleRegistryInstance.grantRole(rateLimiterInstance.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), owner);
+        vm.stopPrank();
+
+        // Setup rate limiters for the restaker
+        vm.startPrank(owner);
+        if (!rateLimiterInstance.limitExists(etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID())) {
+            rateLimiterInstance.createNewLimiter(etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
+        }
+        if (!rateLimiterInstance.limitExists(etherFiRestakerInstance.QUEUE_WITHDRAWALS_LIMIT_ID())) {
+            rateLimiterInstance.createNewLimiter(etherFiRestakerInstance.QUEUE_WITHDRAWALS_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
+        }
+        rateLimiterInstance.updateConsumers(etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID(), address(etherFiRestakerInstance), true);
+        rateLimiterInstance.updateConsumers(etherFiRestakerInstance.QUEUE_WITHDRAWALS_LIMIT_ID(), address(etherFiRestakerInstance), true);
         vm.stopPrank();
 
         // setUpLiquifier(MAINNET_FORK);
@@ -240,7 +256,7 @@ contract EtherFiRestakerTest is TestSetup {
         EtherFiRestaker restaker = EtherFiRestaker(payable(deployed.ETHERFI_RESTAKER()));
         address _claimer = address(liquidityPoolInstance); // dummy claimer
 
-        address newRestakerImpl = address(new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance), address(roleRegistryInstance)));
+        address newRestakerImpl = address(new EtherFiRestaker(deployed.EIGENLAYER_REWARDS_COORDINATOR(), deployed.ETHERFI_REDEMPTION_MANAGER(), deployed.ROLE_REGISTRY(), deployed.ETHERFI_RATE_LIMITER()));
         vm.startPrank(restaker.owner());
 
         restaker.upgradeTo(newRestakerImpl);
@@ -252,11 +268,12 @@ contract EtherFiRestakerTest is TestSetup {
 
     function test_upgrade() public {
         address newRestakerImpl = address(new EtherFiRestaker(
-            address(etherFiRestakerInstance.rewardsCoordinator()),
-            address(etherFiRestakerInstance.etherFiRedemptionManager()),
-            address(etherFiRestakerInstance.roleRegistry())
+            deployed.EIGENLAYER_REWARDS_COORDINATOR(),
+            deployed.ETHERFI_REDEMPTION_MANAGER(),
+            deployed.ROLE_REGISTRY(),
+            deployed.ETHERFI_RATE_LIMITER()
         ));
-        
+
         vm.startPrank(owner);
         etherFiRestakerInstance.upgradeTo(newRestakerImpl);
         vm.stopPrank();
