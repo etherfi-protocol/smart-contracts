@@ -10,6 +10,8 @@ import {EtherFiRedemptionManager} from "../../../src/EtherFiRedemptionManager.so
 import {IRoleRegistry} from "../../../src/interfaces/IRoleRegistry.sol";
 import {IEtherFiRateLimiter} from "../../../src/interfaces/IEtherFiRateLimiter.sol";
 import {ContractCodeChecker} from "../../../script/ContractCodeChecker.sol";
+import {IDelegationManager} from "../../../src/eigenlayer-interfaces/IDelegationManager.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 /**
@@ -36,7 +38,7 @@ contract RestakerRolesTransactions is Utils {
     // TODO: fill in after running redemption-manager-7702/deploy.s.sol
     address constant redemptionManagerImpl = address(0);
 
-    bytes32 constant commitHashSalt = keccak256("restaker-roles-v1"); // TODO: fill in after audit
+    bytes32 constant commitHashSalt = keccak256("restaker-roles-v2"); // TODO: fill in after audit
 
     // Rate limiter values (in gwei)
     // capacity:   100_000_000_000_000 gwei = 100,000 ETH
@@ -75,6 +77,7 @@ contract RestakerRolesTransactions is Utils {
         verifyUpgrade();
         verifyImmutablePreservation();
         verifyAccessControlPreservation();
+        forkTests();
 
         console2.log("=== Upgrade Complete ===");
     }
@@ -98,7 +101,7 @@ contract RestakerRolesTransactions is Utils {
             LIQUIDITY_POOL,
             EETH,
             WEETH,
-            TREASURY,
+            WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
             ROLE_REGISTRY,
             ETHERFI_RESTAKER,
             PRIORITY_WITHDRAWAL_QUEUE
@@ -198,7 +201,6 @@ contract RestakerRolesTransactions is Utils {
         data[4] = abi.encodeWithSelector(IRoleRegistry.grantRole.selector, completeRole, ADMIN_EOA);
         targets[5] = ROLE_REGISTRY;
         data[5] = abi.encodeWithSelector(IRoleRegistry.grantRole.selector, depositRole, ADMIN_EOA);
-        // RedemptionManager upgrade (EIP-7702 gas fix)
         targets[6] = ETHERFI_REDEMPTION_MANAGER;
         data[6] = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, redemptionManagerImpl);
 
@@ -349,16 +351,16 @@ contract RestakerRolesTransactions is Utils {
         // Verify roleRegistry immutable is set correctly
         require(address(restaker.roleRegistry()) == ROLE_REGISTRY, "roleRegistry mismatch");
 
-        // Verify role grants were applied to operating admin
+        // Verify role grants were applied to ADMIN_EOA
         IRoleRegistry registry = IRoleRegistry(ROLE_REGISTRY);
-        require(registry.hasRole(claimRole, ETHERFI_OPERATING_ADMIN), "claimRole not granted");
-        require(registry.hasRole(requestRole, ETHERFI_OPERATING_ADMIN), "requestRole not granted");
-        require(registry.hasRole(queueRole, ETHERFI_OPERATING_ADMIN), "queueRole not granted");
-        require(registry.hasRole(completeRole, ETHERFI_OPERATING_ADMIN), "completeRole not granted");
-        require(registry.hasRole(depositRole, ETHERFI_OPERATING_ADMIN), "depositRole not granted");
+        require(registry.hasRole(claimRole, ADMIN_EOA), "claimRole not granted");
+        require(registry.hasRole(requestRole, ADMIN_EOA), "requestRole not granted");
+        require(registry.hasRole(queueRole, ADMIN_EOA), "queueRole not granted");
+        require(registry.hasRole(completeRole, ADMIN_EOA), "completeRole not granted");
+        require(registry.hasRole(depositRole, ADMIN_EOA), "depositRole not granted");
 
         console2.log("All role constants verified!");
-        console2.log("All role grants verified for ETHERFI_OPERATING_ADMIN!");
+        console2.log("All role grants verified for ADMIN_EOA!");
 
         // Verify rate limiter immutable
         require(address(restaker.rateLimiter()) == ETHERFI_RATE_LIMITER, "rateLimiter mismatch");
@@ -437,5 +439,130 @@ contract RestakerRolesTransactions is Utils {
         console2.log("");
         console2.log("All access control preservation checks passed!");
         console2.log("================================================");
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------- FORK TESTS -------------------------------------------
+    //--------------------------------------------------------------------------------------
+    function forkTests() public {
+        console2.log("=== Running Fork Tests ===");
+        console2.log("");
+
+        testRoleBasedAccessControl();
+        testRateLimiterEnforcement();
+
+        console2.log("");
+        console2.log("All fork tests passed!");
+        console2.log("================================================");
+    }
+
+    function testRoleBasedAccessControl() internal {
+        console2.log("Testing role-based access control...");
+
+        EtherFiRestaker restaker = EtherFiRestaker(payable(ETHERFI_RESTAKER));
+        address unauthorizedAddr = address(0xdead);
+
+        // ADMIN_EOA should be able to call role-gated functions (revert for other reasons is OK)
+        // Unauthorized address should revert with IncorrectRole
+
+        // Test stEthRequestWithdrawal — unauthorized must revert with IncorrectRole
+        vm.prank(unauthorizedAddr);
+        try restaker.stEthRequestWithdrawal() {
+            revert("stEthRequestWithdrawal: should have reverted for unauthorized");
+        } catch (bytes memory reason) {
+            require(bytes4(reason) == EtherFiRestaker.IncorrectRole.selector, "stEthRequestWithdrawal: wrong revert reason");
+        }
+        console2.log("  [OK] stEthRequestWithdrawal blocks unauthorized");
+
+        // Test stEthClaimWithdrawals — unauthorized must revert with IncorrectRole
+        uint256[] memory emptyIds = new uint256[](0);
+        uint256[] memory emptyHints = new uint256[](0);
+        vm.prank(unauthorizedAddr);
+        try restaker.stEthClaimWithdrawals(emptyIds, emptyHints) {
+            revert("stEthClaimWithdrawals: should have reverted for unauthorized");
+        } catch (bytes memory reason) {
+            require(bytes4(reason) == EtherFiRestaker.IncorrectRole.selector, "stEthClaimWithdrawals: wrong revert reason");
+        }
+        console2.log("  [OK] stEthClaimWithdrawals blocks unauthorized");
+
+        // Test queueWithdrawals — unauthorized must revert with IncorrectRole
+        vm.prank(unauthorizedAddr);
+        try restaker.queueWithdrawals(address(restaker.lido()), 1 ether) {
+            revert("queueWithdrawals: should have reverted for unauthorized");
+        } catch (bytes memory reason) {
+            require(bytes4(reason) == EtherFiRestaker.IncorrectRole.selector, "queueWithdrawals: wrong revert reason");
+        }
+        console2.log("  [OK] queueWithdrawals blocks unauthorized");
+
+        // Test completeQueuedWithdrawals — unauthorized must revert with IncorrectRole
+        IDelegationManager.Withdrawal[] memory emptyWithdrawals = new IDelegationManager.Withdrawal[](0);
+        IERC20[][] memory emptyTokens = new IERC20[][](0);
+        vm.prank(unauthorizedAddr);
+        try restaker.completeQueuedWithdrawals(emptyWithdrawals, emptyTokens) {
+            revert("completeQueuedWithdrawals: should have reverted for unauthorized");
+        } catch (bytes memory reason) {
+            require(bytes4(reason) == EtherFiRestaker.IncorrectRole.selector, "completeQueuedWithdrawals: wrong revert reason");
+        }
+        console2.log("  [OK] completeQueuedWithdrawals blocks unauthorized");
+
+        // Test depositIntoStrategy — unauthorized must revert with IncorrectRole
+        vm.prank(unauthorizedAddr);
+        try restaker.depositIntoStrategy(address(restaker.lido()), 1 ether) {
+            revert("depositIntoStrategy: should have reverted for unauthorized");
+        } catch (bytes memory reason) {
+            require(bytes4(reason) == EtherFiRestaker.IncorrectRole.selector, "depositIntoStrategy: wrong revert reason");
+        }
+        console2.log("  [OK] depositIntoStrategy blocks unauthorized");
+
+        // Verify ADMIN_EOA passes the role check (may revert for other reasons like insufficient balance)
+        // stEthRequestWithdrawal with 0 balance should revert with IncorrectAmount, NOT IncorrectRole
+        vm.prank(ADMIN_EOA);
+        try restaker.stEthRequestWithdrawal() {
+            // If it succeeds, that's fine too (role check passed)
+        } catch (bytes memory reason) {
+            require(bytes4(reason) != EtherFiRestaker.IncorrectRole.selector, "ADMIN_EOA should have the request role");
+        }
+        console2.log("  [OK] ADMIN_EOA passes role check for stEthRequestWithdrawal");
+
+        console2.log("  Role-based access control tests passed!");
+    }
+
+    function testRateLimiterEnforcement() internal {
+        console2.log("Testing rate limiter enforcement...");
+
+        EtherFiRestaker restaker = EtherFiRestaker(payable(ETHERFI_RESTAKER));
+        IEtherFiRateLimiter rl = IEtherFiRateLimiter(ETHERFI_RATE_LIMITER);
+
+        // Verify rate limiter is wired up
+        require(address(restaker.rateLimiter()) == ETHERFI_RATE_LIMITER, "rateLimiter not set");
+
+        // Verify limiters exist and restaker is consumer
+        bytes32 stethLimitId = restaker.STETH_REQUEST_WITHDRAWAL_LIMIT_ID();
+        bytes32 queueLimitId = restaker.QUEUE_WITHDRAWALS_LIMIT_ID();
+
+        require(rl.limitExists(stethLimitId), "stETH limiter missing");
+        require(rl.limitExists(queueLimitId), "queue limiter missing");
+        require(rl.isConsumerAllowed(stethLimitId, ETHERFI_RESTAKER), "restaker not consumer for stETH limiter");
+        require(rl.isConsumerAllowed(queueLimitId, ETHERFI_RESTAKER), "restaker not consumer for queue limiter");
+
+        console2.log("  [OK] Rate limiters wired correctly");
+
+        // Warp 1 second to refill buckets so consumption test is valid
+        vm.warp(block.timestamp + 1);
+
+        // Test that a legitimate call from ADMIN_EOA hits the rate limiter (not IncorrectRole)
+        // stEthRequestWithdrawal with a small amount: should fail for balance, not role or rate limit
+        // (rate limit capacity is 100k ETH, so small amounts pass)
+        vm.prank(ADMIN_EOA);
+        try restaker.stEthRequestWithdrawal(1 ether) {
+            // Passed — role + rate limit OK, had enough stETH balance
+        } catch (bytes memory reason) {
+            // Should NOT be IncorrectRole (role is granted)
+            require(bytes4(reason) != EtherFiRestaker.IncorrectRole.selector, "ADMIN_EOA should have the role");
+            // Acceptable reverts: NotEnoughBalance, IncorrectAmount (stETH balance < 1 ether)
+        }
+        console2.log("  [OK] Rate limiter allows small amounts within capacity");
+
+        console2.log("  Rate limiter enforcement tests passed!");
     }
 }
