@@ -40,8 +40,12 @@ contract EtherFiRestakerTest is TestSetup {
         if (!rateLimiterInstance.limitExists(etherFiRestakerInstance.QUEUE_WITHDRAWALS_LIMIT_ID())) {
             rateLimiterInstance.createNewLimiter(etherFiRestakerInstance.QUEUE_WITHDRAWALS_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
         }
+        if (!rateLimiterInstance.limitExists(etherFiRestakerInstance.DEPOSIT_INTO_STRATEGY_LIMIT_ID())) {
+            rateLimiterInstance.createNewLimiter(etherFiRestakerInstance.DEPOSIT_INTO_STRATEGY_LIMIT_ID(), 100_000_000_000_000, 1_157_407_407);
+        }
         rateLimiterInstance.updateConsumers(etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID(), address(etherFiRestakerInstance), true);
         rateLimiterInstance.updateConsumers(etherFiRestakerInstance.QUEUE_WITHDRAWALS_LIMIT_ID(), address(etherFiRestakerInstance), true);
+        rateLimiterInstance.updateConsumers(etherFiRestakerInstance.DEPOSIT_INTO_STRATEGY_LIMIT_ID(), address(etherFiRestakerInstance), true);
         vm.stopPrank();
 
         // setUpLiquifier(MAINNET_FORK);
