@@ -42,6 +42,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     bytes32 public constant STETH_REQUEST_WITHDRAWAL_LIMIT_ID = keccak256("STETH_REQUEST_WITHDRAWAL_LIMIT_ID");
     bytes32 public constant QUEUE_WITHDRAWALS_LIMIT_ID = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
+    bytes32 public constant DEPOSIT_INTO_STRATEGY_LIMIT_ID = keccak256("DEPOSIT_INTO_STRATEGY_LIMIT_ID");
 
     LiquidityPool public liquidityPool;
     Liquifier public liquifier;
@@ -213,6 +214,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     // deposit the token in holding into the restaking strategy
     function depositIntoStrategy(address token, uint256 amount) external returns (uint256) {
         if (!roleRegistry.hasRole(ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE, msg.sender)) revert IncorrectRole();
+        rateLimiter.consume(DEPOSIT_INTO_STRATEGY_LIMIT_ID, SafeCast.toUint64(amount / 1 gwei));
         IERC20(token).safeApprove(address(eigenLayerStrategyManager), amount);
 
         IStrategy strategy = tokenInfos[token].elStrategy;
