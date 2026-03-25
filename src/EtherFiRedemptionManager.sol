@@ -234,6 +234,12 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         }
 
         emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver, outputToken);
+
+        // Sweep any residual eETH dust left to treasury from share<->amount rounding
+        uint256 dust = eEth.balanceOf(address(this));
+        if (dust > 0) {
+            IERC20(address(eEth)).safeTransfer(treasury, dust);
+        }
     }
 
     /**
