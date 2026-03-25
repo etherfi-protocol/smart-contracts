@@ -35,9 +35,9 @@ contract RestakerRolesTransactions is Utils {
     ContractCodeChecker contractCodeChecker;
 
     // TODO: fill in after running deploy.s.sol
-    address constant etherFiRestakerImpl = 0x2d09A6561588506aF434CEe87Eac16Aba09d5641;
+    address constant etherFiRestakerImpl = 0xc57ECe62cEE0cC4408423564b79590526C49A157;
     // TODO: fill in after running redemption-manager-7702/deploy.s.sol
-    address constant redemptionManagerImpl = address(0);
+    address constant redemptionManagerImpl = 0x502BDc5D7b23DD42a401b9d995eDcb9637eC883a;
 
     bytes32 constant commitHashSalt = keccak256("restaker-roles-v2"); // TODO: fill in after audit
 
@@ -129,7 +129,7 @@ contract RestakerRolesTransactions is Utils {
     }
 
     function getRedemptionManagerImmutableSelectors() internal pure returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](7);
+        selectors = new bytes4[](8);
         selectors[0] = bytes4(keccak256("roleRegistry()"));
         selectors[1] = bytes4(keccak256("treasury()"));
         selectors[2] = bytes4(keccak256("eEth()"));
@@ -137,6 +137,7 @@ contract RestakerRolesTransactions is Utils {
         selectors[4] = bytes4(keccak256("liquidityPool()"));
         selectors[5] = bytes4(keccak256("etherFiRestaker()"));
         selectors[6] = bytes4(keccak256("lido()"));
+        selectors[7] = bytes4(keccak256("priorityWithdrawalQueue()"));
     }
 
     //--------------------------------------------------------------------------------------
@@ -619,13 +620,8 @@ contract RestakerRolesTransactions is Utils {
         require(cap == DEPOSIT_RATE_LIMIT_CAPACITY, "Deposit limiter capacity wrong");
         console2.log("  [OK] Deposit limiter capacity:", cap, "gwei (100k ETH)");
 
-        // Fund restaker with stETH for testing
-        address depositor = address(0xBEEF);
-        vm.deal(depositor, 150_000 ether);
-        vm.startPrank(depositor);
-        ILido(stETH).submit{value: 150_000 ether}(address(0));
-        IERC20(stETH).transfer(ETHERFI_RESTAKER, ILido(stETH).balanceOf(depositor));
-        vm.stopPrank();
+        // Fund restaker with stETH via direct storage poke (avoids Lido STAKE_LIMIT)
+        _dealStETH(ETHERFI_RESTAKER, 150_000 ether);
 
         uint256 restakerStEthBefore = IERC20(stETH).balanceOf(ETHERFI_RESTAKER);
         console2.log("  Restaker stETH balance:", restakerStEthBefore / 1e18, "stETH");
@@ -663,12 +659,9 @@ contract RestakerRolesTransactions is Utils {
         require(consumableAfter12h <= 51_000_000_000_000, "Should not exceed ~50k gwei after 12h");
         console2.log("  [OK] ~50k ETH refilled after 12 hours");
 
-        // Fund restaker with more stETH for the next deposit
-        vm.deal(depositor, 60_000 ether);
-        vm.startPrank(depositor);
-        ILido(stETH).submit{value: 60_000 ether}(address(0));
-        IERC20(stETH).transfer(ETHERFI_RESTAKER, ILido(stETH).balanceOf(depositor));
-        vm.stopPrank();
+        // Fund restaker with more stETH via direct storage poke
+        uint256 currentBal = IERC20(stETH).balanceOf(ETHERFI_RESTAKER);
+        _dealStETH(ETHERFI_RESTAKER, currentBal + 60_000 ether);
 
         // Deposit 40k should succeed after 12h refill
         vm.prank(ADMIN_EOA);
@@ -684,5 +677,37 @@ contract RestakerRolesTransactions is Utils {
         console2.log("  [OK] Full capacity restored:", consumableAfterFullRefill, "gwei");
 
         console2.log("  depositIntoStrategy rate limiter tests passed!");
+    }
+
+    /// @dev Sets `to`'s stETH balance to `stEthAmount` by poking Lido's AragonOS
+    ///      unstructured storage directly, bypassing the STAKE_LIMIT rate limiter.
+    function _dealStETH(address to, uint256 stEthAmount) internal {
+        ILido lido = EtherFiRestaker(payable(ETHERFI_RESTAKER)).lido();
+        address stETH = address(lido);
+
+        uint256 totalPooled = lido.getTotalPooledEther();
+        uint256 totalShares = lido.getTotalShares();
+        uint256 sharesNeeded = stEthAmount * totalShares / totalPooled;
+
+        // AragonOS unstructured storage positions
+        bytes32 sharesMapPos = keccak256("lido.StETH.shares");
+        bytes32 totalSharesPos = keccak256("lido.StETH.totalShares");
+        bytes32 bufferedEtherPos = keccak256("lido.Lido.bufferedEther");
+
+        // AragonOS mapping lookup: keccak256(encodePacked(key, position))
+        bytes32 accountSlot = keccak256(abi.encodePacked(to, sharesMapPos));
+        uint256 currentShares = uint256(vm.load(stETH, accountSlot));
+
+        if (sharesNeeded > currentShares) {
+            uint256 sharesDelta = sharesNeeded - currentShares;
+            uint256 etherDelta = sharesDelta * totalPooled / totalShares;
+
+            vm.store(stETH, accountSlot, bytes32(sharesNeeded));
+            vm.store(stETH, totalSharesPos, bytes32(totalShares + sharesDelta));
+
+            uint256 currentBuffered = uint256(vm.load(stETH, bufferedEtherPos));
+            vm.store(stETH, bufferedEtherPos, bytes32(currentBuffered + etherDelta));
+            vm.deal(stETH, stETH.balance + etherDelta);
+        }
     }
 }
