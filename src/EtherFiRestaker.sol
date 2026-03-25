@@ -121,7 +121,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// Initiate the redemption of stETH for ETH
     /// @notice Request for all stETH holdings
     function stEthRequestWithdrawal() external returns (uint256[] memory) {
-        if (!roleRegistry.hasRole(ETHERFI_RESTAKER_STETH_REQUEST_WITHDRAWAL_ROLE, msg.sender)) revert IncorrectRole();
         uint256 amount = lido.balanceOf(address(this));
         return stEthRequestWithdrawal(amount);
     }
