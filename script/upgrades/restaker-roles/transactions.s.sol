@@ -7,6 +7,7 @@ import {Utils} from "../../utils/utils.sol";
 import {EtherFiTimelock} from "../../../src/EtherFiTimelock.sol";
 import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
 import {EtherFiRedemptionManager} from "../../../src/EtherFiRedemptionManager.sol";
+import {LiquidRefer} from "../../../src/helpers/LiquidRefer.sol";
 import {IRoleRegistry} from "../../../src/interfaces/IRoleRegistry.sol";
 import {IEtherFiRateLimiter} from "../../../src/interfaces/IEtherFiRateLimiter.sol";
 import {ContractCodeChecker} from "../../../script/ContractCodeChecker.sol";
@@ -34,10 +35,11 @@ contract RestakerRolesTransactions is Utils {
     EtherFiTimelock etherFiTimelock = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     ContractCodeChecker contractCodeChecker;
 
-    // TODO: fill in after running deploy.s.sol
     address constant etherFiRestakerImpl = 0xc57ECe62cEE0cC4408423564b79590526C49A157;
-    // TODO: fill in after running redemption-manager-7702/deploy.s.sol
     address constant redemptionManagerImpl = 0x502BDc5D7b23DD42a401b9d995eDcb9637eC883a;
+    address constant liquidReferImpl = 0x58dcc08043f8DdEeDE1a18CaB6432E23274F2D78;
+
+    address constant LIQUID_REFER_PROXY = 0x1d536713E681B3679f6201f0aD0f83d79eff3ede;
 
     bytes32 constant commitHashSalt = keccak256("restaker-roles-v2"); // TODO: fill in after audit
 
@@ -59,6 +61,8 @@ contract RestakerRolesTransactions is Utils {
     address internal preRestakerOwner;
     address internal preRedemptionManagerOwner;
     bool internal preRedemptionManagerPaused;
+    address internal preLiquidReferOwner;
+    bool internal preLiquidReferPaused;
 
     function run() public {
         console2.log("================================================");
@@ -68,6 +72,7 @@ contract RestakerRolesTransactions is Utils {
 
         require(etherFiRestakerImpl != address(0), "Set etherFiRestakerImpl before running");
         require(redemptionManagerImpl != address(0), "Set redemptionManagerImpl before running");
+        require(liquidReferImpl != address(0), "Set liquidReferImpl before running");
 
         contractCodeChecker = new ContractCodeChecker();
 
@@ -109,6 +114,10 @@ contract RestakerRolesTransactions is Utils {
         );
         contractCodeChecker.verifyContractByteCodeMatch(redemptionManagerImpl, address(expectedRedemption));
         console2.log("EtherFiRedemptionManager bytecode verified!");
+
+        LiquidRefer expectedLiquidRefer = new LiquidRefer();
+        contractCodeChecker.verifyContractByteCodeMatch(liquidReferImpl, address(expectedLiquidRefer));
+        console2.log("LiquidRefer bytecode verified!");
 
         console2.log("================================================");
     }
@@ -167,6 +176,12 @@ contract RestakerRolesTransactions is Utils {
 
         preRedemptionManagerPaused = _getPaused(ETHERFI_REDEMPTION_MANAGER);
         console2.log("  EtherFiRedemptionManager paused:", preRedemptionManagerPaused);
+
+        preLiquidReferOwner = _getOwner(LIQUID_REFER_PROXY);
+        console2.log("  LiquidRefer owner:", preLiquidReferOwner);
+
+        preLiquidReferPaused = _getPaused(LIQUID_REFER_PROXY);
+        console2.log("  LiquidRefer paused:", preLiquidReferPaused);
 
         console2.log("");
         console2.log("Pre-upgrade snapshots captured!");
@@ -259,6 +274,25 @@ contract RestakerRolesTransactions is Utils {
         etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
 
         console2.log("Upgrade executed on fork!");
+        console2.log("================================================");
+
+        // LiquidRefer upgrade (owner-gated, not timelocked)
+        console2.log("=== LiquidRefer Upgrade ===");
+        bytes memory liquidReferUpgradeData = abi.encodeWithSelector(UUPSUpgradeable.upgradeTo.selector, liquidReferImpl);
+        writeSafeJson(
+            "script/upgrades/restaker-roles",
+            "liquid-refer-upgrade.json",
+            ETHERFI_OPERATING_ADMIN,
+            LIQUID_REFER_PROXY,
+            0,
+            liquidReferUpgradeData,
+            1
+        );
+
+        // Execute on fork for testing
+        vm.prank(ETHERFI_OPERATING_ADMIN);
+        LiquidRefer(LIQUID_REFER_PROXY).upgradeTo(liquidReferImpl);
+        console2.log("LiquidRefer upgrade executed on fork!");
         console2.log("================================================");
     }
 
@@ -357,6 +391,11 @@ contract RestakerRolesTransactions is Utils {
         require(currentRedemptionImpl == redemptionManagerImpl, "EtherFiRedemptionManager upgrade failed");
         console2.log("EtherFiRedemptionManager implementation:", currentRedemptionImpl);
 
+        // Verify LiquidRefer upgrade
+        address currentLiquidReferImpl = getImplementation(LIQUID_REFER_PROXY);
+        require(currentLiquidReferImpl == liquidReferImpl, "LiquidRefer upgrade failed");
+        console2.log("LiquidRefer implementation:", currentLiquidReferImpl);
+
         // Verify new role constants are accessible
         EtherFiRestaker restaker = EtherFiRestaker(payable(ETHERFI_RESTAKER));
         bytes32 claimRole = restaker.ETHERFI_RESTAKER_STETH_CLAIM_WITHDRAWALS_ROLE();
@@ -452,6 +491,10 @@ contract RestakerRolesTransactions is Utils {
         require(postRedemptionOwner == preRedemptionManagerOwner, "EtherFiRedemptionManager: owner changed");
         console2.log("[OWNER OK] EtherFiRedemptionManager:", postRedemptionOwner);
 
+        address postLiquidReferOwner = _getOwner(LIQUID_REFER_PROXY);
+        require(postLiquidReferOwner == preLiquidReferOwner, "LiquidRefer: owner changed");
+        console2.log("[OWNER OK] LiquidRefer:", postLiquidReferOwner);
+
         // Paused state verification
         console2.log("");
         console2.log("--- Paused State Verification ---");
@@ -460,12 +503,17 @@ contract RestakerRolesTransactions is Utils {
         require(postRedemptionManagerPaused == preRedemptionManagerPaused, "EtherFiRedemptionManager: paused state changed");
         console2.log("[PAUSED OK] EtherFiRedemptionManager:", postRedemptionManagerPaused);
 
+        bool postLiquidReferPaused = _getPaused(LIQUID_REFER_PROXY);
+        require(postLiquidReferPaused == preLiquidReferPaused, "LiquidRefer: paused state changed");
+        console2.log("[PAUSED OK] LiquidRefer:", postLiquidReferPaused);
+
         // Initialization state verification
         console2.log("");
         console2.log("--- Initialization State Verification ---");
 
         verifyNotReinitializable(ETHERFI_RESTAKER, "EtherFiRestaker");
         verifyNotReinitializable(ETHERFI_REDEMPTION_MANAGER, "EtherFiRedemptionManager");
+        verifyNotReinitializable(LIQUID_REFER_PROXY, "LiquidRefer");
 
         console2.log("");
         console2.log("All access control preservation checks passed!");

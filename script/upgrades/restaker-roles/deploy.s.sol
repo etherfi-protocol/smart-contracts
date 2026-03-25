@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import "forge-std/Script.sol";
 import {EtherFiRestaker} from "../../../src/EtherFiRestaker.sol";
 import {EtherFiRedemptionManager} from "../../../src/EtherFiRedemptionManager.sol";
+import {LiquidRefer} from "../../../src/helpers/LiquidRefer.sol";
 import {Utils} from "../../utils/utils.sol";
 
 /**
@@ -18,6 +19,7 @@ import {Utils} from "../../utils/utils.sol";
 contract DeployEtherFiRestakerAndRedemptionManagerWithRoles is Utils {
     address public etherFiRestakerImpl;
     address public redemptionManagerImpl;
+    address public liquidReferImpl;
 
     // Salt derived from a short description of this change. to update this post final audit
     bytes32 commitHashSalt = keccak256("restaker-roles-v2");
@@ -60,6 +62,14 @@ contract DeployEtherFiRestakerAndRedemptionManagerWithRoles is Utils {
             );
             redemptionManagerImpl = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true, mainnetCreate2Factory);
         }
+        {
+            string memory contractName = "LiquidRefer";
+            bytes memory constructorArgs = "";
+            bytes memory bytecode = abi.encodePacked(
+                type(LiquidRefer).creationCode
+            );
+            liquidReferImpl = deploy(contractName, constructorArgs, bytecode, commitHashSalt, true, mainnetCreate2Factory);
+        }
 
         vm.stopBroadcast();
 
@@ -67,5 +77,6 @@ contract DeployEtherFiRestakerAndRedemptionManagerWithRoles is Utils {
         console2.log("=== Deployment Summary ===");
         console2.log("EtherFiRedemptionManager Implementation:", redemptionManagerImpl);
         console2.log("EtherFiRestaker Implementation:", etherFiRestakerImpl);
+        console2.log("LiquidRefer Implementation:", liquidReferImpl);
     }
 }
