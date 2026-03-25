@@ -59,7 +59,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     mapping(address => RedemptionInfo) public tokenToRedemptionInfo;
 
 
-    event Redeemed(address indexed receiver, uint256 redemptionAmount, uint256 feeAmountToTreasury, uint256 feeAmountToStakers, address token);
+    event Redeemed(address indexed receiver, uint256 redemptionAmount, uint256 feeAmountToTreasury, uint256 eEthAmountToReceiver, address token);
 
     error InvalidAmount();
     error InvalidOutputToken();
@@ -233,13 +233,13 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
             revert InvalidOutputToken();
         }
 
-        emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver, outputToken);
-
         // Sweep any residual eETH dust left to treasury from share<->amount rounding
         uint256 dust = eEth.balanceOf(address(this));
         if (dust > 0) {
             IERC20(address(eEth)).safeTransfer(treasury, dust);
         }
+
+        emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury + dust, eEthAmountToReceiver, outputToken);
     }
 
     /**
