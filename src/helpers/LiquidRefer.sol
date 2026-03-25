@@ -44,15 +44,17 @@ contract LiquidRefer is Initializable, UUPSUpgradeable, OwnableUpgradeable, Paus
     )whenNotPaused onlyWhitelistedTeller(address(teller)) external returns (uint256 shares) {
         address vault = teller.vault();
 
+        uint256 balanceBefore = IERC20(depositAsset).balanceOf(address(this));
         IERC20(depositAsset).safeTransferFrom(msg.sender, address(this), depositAmount);
+        uint256 actualAmount = IERC20(depositAsset).balanceOf(address(this)) - balanceBefore;
 
-        IERC20(depositAsset).safeIncreaseAllowance(vault, depositAmount);
+        IERC20(depositAsset).safeIncreaseAllowance(vault, actualAmount);
 
-        shares = teller.deposit(depositAsset, depositAmount, minimumMint);
+        shares = teller.deposit(depositAsset, actualAmount, minimumMint);
 
         IERC20(vault).safeTransfer(msg.sender, shares);
 
-        emit Referral(vault, referrer, depositAmount);
+        emit Referral(vault, referrer, actualAmount);
     }
 
     function depositWithPermit(
@@ -68,17 +70,19 @@ contract LiquidRefer is Initializable, UUPSUpgradeable, OwnableUpgradeable, Paus
     ) whenNotPaused onlyWhitelistedTeller(address(teller)) external returns (uint256 shares) {
         address vault = teller.vault();
 
-        IERC20Permit(depositAsset).permit(msg.sender, address(this), depositAmount, deadline, v, r, s);
+        try IERC20Permit(depositAsset).permit(msg.sender, address(this), depositAmount, deadline, v, r, s) {} catch {}
 
+        uint256 balanceBefore = IERC20(depositAsset).balanceOf(address(this));
         IERC20(depositAsset).safeTransferFrom(msg.sender, address(this), depositAmount);
+        uint256 actualAmount = IERC20(depositAsset).balanceOf(address(this)) - balanceBefore;
 
-        IERC20(depositAsset).safeIncreaseAllowance(vault, depositAmount);
+        IERC20(depositAsset).safeIncreaseAllowance(vault, actualAmount);
 
-        shares = teller.deposit(depositAsset, depositAmount, minimumMint);
+        shares = teller.deposit(depositAsset, actualAmount, minimumMint);
 
         IERC20(vault).safeTransfer(msg.sender, shares);
 
-        emit Referral(vault, referrer, depositAmount);
+        emit Referral(vault, referrer, actualAmount);
     }
 
     function toggleWhiteList(address teller, bool status) external onlyOwner {
