@@ -41,17 +41,11 @@ contract RestakerRolesTransactions is Utils {
 
     bytes32 constant commitHashSalt = keccak256("restaker-roles-v2"); // TODO: fill in after audit
 
-    // Rate limiter values (in gwei)
-    // capacity:   100_000_000_000_000 gwei = 100,000 ETH
-    // refillRate: 1_157_407_407 gwei/sec   = 100,000 ETH/day
-    uint64 constant RATE_LIMIT_CAPACITY = 100_000_000_000_000;
-    uint64 constant RATE_LIMIT_REFILL_RATE = 1_157_407_407;
-
-    // depositIntoStrategy rate limiter: 100k ETH/day
+    // Rate limiter values (in gwei) — shared across all restaker limiters
     // capacity:   100_000_000_000_000 gwei = 100,000 ETH
     // refillRate: 1_157_407_407 gwei/sec   ≈ 100,000 ETH/day
-    uint64 constant DEPOSIT_RATE_LIMIT_CAPACITY = 100_000_000_000_000;
-    uint64 constant DEPOSIT_RATE_LIMIT_REFILL_RATE = 1_157_407_407;
+    uint64 constant RATE_LIMIT_CAPACITY = 100_000_000_000_000;
+    uint64 constant RATE_LIMIT_REFILL_RATE = 1_157_407_407;
 
     //--------------------------------------------------------------------------------------
     //---------------------------- IMMUTABLE SNAPSHOTS (PRE-UPGRADE) -----------------------
@@ -296,8 +290,8 @@ contract RestakerRolesTransactions is Utils {
         data[2] = abi.encodeWithSelector(
             IEtherFiRateLimiter.createNewLimiter.selector,
             depositLimitId,
-            DEPOSIT_RATE_LIMIT_CAPACITY,
-            DEPOSIT_RATE_LIMIT_REFILL_RATE
+            RATE_LIMIT_CAPACITY,
+            RATE_LIMIT_REFILL_RATE
         );
         data[3] = abi.encodeWithSelector(
             IEtherFiRateLimiter.updateConsumers.selector,
@@ -337,7 +331,7 @@ contract RestakerRolesTransactions is Utils {
         vm.startPrank(ETHERFI_OPERATING_ADMIN);
         IEtherFiRateLimiter(ETHERFI_RATE_LIMITER).createNewLimiter(stethLimitId, RATE_LIMIT_CAPACITY, RATE_LIMIT_REFILL_RATE);
         IEtherFiRateLimiter(ETHERFI_RATE_LIMITER).createNewLimiter(queueLimitId, RATE_LIMIT_CAPACITY, RATE_LIMIT_REFILL_RATE);
-        IEtherFiRateLimiter(ETHERFI_RATE_LIMITER).createNewLimiter(depositLimitId, DEPOSIT_RATE_LIMIT_CAPACITY, DEPOSIT_RATE_LIMIT_REFILL_RATE);
+        IEtherFiRateLimiter(ETHERFI_RATE_LIMITER).createNewLimiter(depositLimitId, RATE_LIMIT_CAPACITY, RATE_LIMIT_REFILL_RATE);
         IEtherFiRateLimiter(ETHERFI_RATE_LIMITER).updateConsumers(stethLimitId, ETHERFI_RESTAKER, true);
         IEtherFiRateLimiter(ETHERFI_RATE_LIMITER).updateConsumers(queueLimitId, ETHERFI_RESTAKER, true);
         IEtherFiRateLimiter(ETHERFI_RATE_LIMITER).updateConsumers(depositLimitId, ETHERFI_RESTAKER, true);
@@ -409,8 +403,8 @@ contract RestakerRolesTransactions is Utils {
 
         // Verify deposit rate limiter config
         (uint64 depositCap, , uint64 depositRefill, ) = rl.getLimit(depositLimitId);
-        require(depositCap == DEPOSIT_RATE_LIMIT_CAPACITY, "Deposit limiter capacity mismatch");
-        require(depositRefill == DEPOSIT_RATE_LIMIT_REFILL_RATE, "Deposit limiter refill rate mismatch");
+        require(depositCap == RATE_LIMIT_CAPACITY, "Deposit limiter capacity mismatch");
+        require(depositRefill == RATE_LIMIT_REFILL_RATE, "Deposit limiter refill rate mismatch");
 
         console2.log("Rate limiters verified (including DEPOSIT_INTO_STRATEGY)!");
         console2.log("================================================");
@@ -617,7 +611,7 @@ contract RestakerRolesTransactions is Utils {
 
         // Pre-check: limiter exists, capacity is 100k ETH
         (uint64 cap, , , ) = rl.getLimit(depositLimitId);
-        require(cap == DEPOSIT_RATE_LIMIT_CAPACITY, "Deposit limiter capacity wrong");
+        require(cap == RATE_LIMIT_CAPACITY, "Deposit limiter capacity wrong");
         console2.log("  [OK] Deposit limiter capacity:", cap, "gwei (100k ETH)");
 
         // Fund restaker with stETH via direct storage poke (avoids Lido STAKE_LIMIT)
@@ -673,7 +667,7 @@ contract RestakerRolesTransactions is Utils {
         vm.warp(block.timestamp + 1 days);
 
         uint64 consumableAfterFullRefill = rl.consumable(depositLimitId);
-        require(consumableAfterFullRefill == DEPOSIT_RATE_LIMIT_CAPACITY, "Should be at full capacity after 1 day");
+        require(consumableAfterFullRefill == RATE_LIMIT_CAPACITY, "Should be at full capacity after 1 day");
         console2.log("  [OK] Full capacity restored:", consumableAfterFullRefill, "gwei");
 
         console2.log("  depositIntoStrategy rate limiter tests passed!");
