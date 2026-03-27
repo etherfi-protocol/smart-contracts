@@ -18,6 +18,9 @@ bytecode_hash = 'none'
 solc-version = '0.8.27'
 dynamic_test_linking = true
 
+[fuzz]
+max_shrink_iters = 100
+
 ignored_warnings_from = [
     "src/archive/",
     "src/libraries/",
