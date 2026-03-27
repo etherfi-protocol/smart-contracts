@@ -26,8 +26,6 @@ ignored_warnings_from = [
     "test/"
 ]
 
-[fuzz]
-max_shrink_iters = 100
 
 # Coverage configuration
 # To run coverage only on src/ contracts (excluding scripts, mocks, helpers, interfaces, etc.):
@@ -40,7 +38,7 @@ goerli = "${GOERLI_RPC_URL}"
 
 [lint]
 ignore = ["test/**", "src/archive/**"]
-exclude_lints = ["screaming-snake-case-immutable","screaming-snake-case-const","mixed-case-variable","mixed-case-function","camelcase-constants","pascal-case-struct","unaliased-plain-import","unaliased-import"]
+exclude_lints = ["screaming-snake-case-immutable","screaming-snake-case-const","mixed-case-variable","mixed-case-function","pascal-case-struct","unaliased-plain-import"]
 
 [etherscan]
 mainnet = { key = "${ETHERSCAN_API_KEY}" }
@@ -84,25 +82,6 @@ quote_style = "double"
 # Thousands separator improves readability for large numbers like wei amounts
 number_underscore = "thousands"
 
-# Whether function bodies can be on a single line
-# false: Always use braces and newlines even for single-statement functions
-# true: Allows single-line bodies like "function f() external { doSomething(); }"
-# false is safer and more consistent, enforcing explicit structure
-multiline_func_body = false
-
-# Opening brace placement for code blocks
-# false: Opening brace on same line (K&R style)
-#     if (condition) {
-#         code
-#     }
-# true: Opening brace on new line (Allman style)
-#     if (condition)
-#     {
-#         code
-#     }
-# Same-line braces are more compact and standard in Solidity community
-multiline_block_brace = false
-
 # Whether single-line statement blocks are allowed
 # "preserve": Keeps existing formatting (no change)
 # "single": Allows single-line blocks without braces: if (condition) doSomething();
@@ -119,19 +98,8 @@ single_line_statement_blocks = "preserve"
 # false keeps the file more compact, which helps with navigation
 contract_new_lines = false
 
-# Whether to format inline Yul assembly code
-# false: Leave Yul code as-is (assembly formatting is tricky)
-# true: Attempt to format Yul code (may break some assembly)
-# false is recommended as assembly often requires precise formatting
-yul = false
-
 # Whether to sort imports alphabetically, preventing duplicate imports
 sort_imports = true
- 
-# true:     import {Foo} -> import { Foo } (Solidity standard)
-# false:    import { Foo } -> import {Foo} (Solidity standard)
-# false is recommended as it is the Solidity standard
-import_spacing = false
 
 # Integer type preference: "long" (uint256) or "short" (uint)
 # "long" uses explicit types like uint256, int256, bytes32

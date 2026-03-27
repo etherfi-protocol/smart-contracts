@@ -6,6 +6,23 @@
 
 set -e
 
+# Require a clean working tree so we can safely revert forge fmt changes
+if ! git diff --quiet; then
+    echo "❌ ERROR: Working tree has uncommitted changes. Please commit or stash them before running this script."
+    exit 1
+fi
+
+# Initialize temp vars and register cleanup trap for all exit paths
+TEMP_BEFORE=""
+TEMP_CHANGED=""
+TEMP_STATS=""
+cleanup() {
+    rm -rf "$TEMP_BEFORE" "$TEMP_CHANGED" "$TEMP_STATS"
+    # Revert any formatting changes made by forge fmt
+    git checkout -- . 2>/dev/null || true
+}
+trap cleanup EXIT
+
 echo "🔍 Verifying that forge fmt doesn't change bytecode..."
 
 # Define cache directory
@@ -110,9 +127,6 @@ done
 
 echo "✅ Post-format bytecode extracted and comparison saved"
 
-# Cleanup temp directory
-rm -rf "$TEMP_BEFORE"
-
 # Step 4: Compare bytecode for each contract
 echo ""
 echo "🔍 Analyzing bytecode changes..."
@@ -196,8 +210,6 @@ if [ $CHANGED_COUNT -gt 0 ]; then
     echo "💡 To see which contracts changed:"
     echo "   find $CACHE_DIR -name '*.json' -exec jq -r 'select(.bytecodeChanged == true) | .artifactPath' {} \\;"
     
-    # Cleanup
-    rm -f "$TEMP_CHANGED" "$TEMP_STATS"
     exit 1
 else
     echo "✅ SUCCESS: All contracts have identical bytecode!"
@@ -205,7 +217,5 @@ else
     echo ""
     echo "📁 Comparison data saved in: $CACHE_DIR/"
     
-    # Cleanup
-    rm -f "$TEMP_CHANGED" "$TEMP_STATS"
     exit 0
 fi
