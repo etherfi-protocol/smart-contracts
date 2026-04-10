@@ -207,6 +207,25 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         return withdrawalRoots;
     }
 
+    /// @notice Redelegate to a new operator. Atomically undelegates from the current operator and delegates to the new one.
+    ///         Shares are queued for withdrawal and must be completed via completeQueuedWithdrawals before being re-deposited.
+    /// @param newOperator The new operator to delegate to
+    /// @param approverSignatureAndExpiry Signature from the new operator's delegationApprover (if any)
+    /// @param approverSalt A unique single use value tied to the approver's signature
+    function redelegate(
+        address newOperator,
+        IDelegationManager.SignatureWithExpiry memory approverSignatureAndExpiry,
+        bytes32 approverSalt
+    ) external onlyAdmin returns (bytes32[] memory) {
+        bytes32[] memory withdrawalRoots = eigenLayerDelegationManager.redelegate(newOperator, approverSignatureAndExpiry, approverSalt);
+
+        for (uint256 i = 0; i < withdrawalRoots.length; i++) {
+            withdrawalRootsSet.add(withdrawalRoots[i]);
+        }
+
+        return withdrawalRoots;
+    }
+
     function isDelegated() external view returns (bool) {
         return eigenLayerDelegationManager.isDelegated(address(this));
     }

@@ -256,6 +256,123 @@ contract EtherFiRestakerTest is TestSetup {
         vm.stopPrank();
     }
 
+    // -------------------------------------------------------------------------
+    // Redelegate Tests
+    // -------------------------------------------------------------------------
+
+    function test_redelegate() public {
+        test_delegate_to();
+
+        assertTrue(etherFiRestakerInstance.isDelegated());
+
+        uint256 restakedBefore = etherFiRestakerInstance.getRestakedAmount(address(stEth));
+
+        ISignatureUtilsMixinTypes.SignatureWithExpiry memory signature = ISignatureUtilsMixinTypes.SignatureWithExpiry({
+            signature: hex"",
+            expiry: 0
+        });
+
+        vm.startPrank(owner);
+        bytes32[] memory withdrawalRoots = etherFiRestakerInstance.redelegate(avsOperator2, signature, 0x0);
+        vm.stopPrank();
+
+        // After redelegate: delegated to new operator
+        assertTrue(etherFiRestakerInstance.isDelegated());
+
+        // Withdrawal roots are tracked if there were restaked shares
+        if (restakedBefore > 0) {
+            assertTrue(withdrawalRoots.length > 0);
+            for (uint256 i = 0; i < withdrawalRoots.length; i++) {
+                assertTrue(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[i]));
+            }
+        }
+    }
+
+    function test_redelegate_completeWithdrawals_and_redeposit() public {
+        test_delegate_to();
+
+        uint256 totalPooledEtherBefore = etherFiRestakerInstance.getTotalPooledEther();
+
+        ISignatureUtilsMixinTypes.SignatureWithExpiry memory signature = ISignatureUtilsMixinTypes.SignatureWithExpiry({
+            signature: hex"",
+            expiry: 0
+        });
+
+        // Redelegate to operator2
+        vm.startPrank(owner);
+        bytes32[] memory withdrawalRoots = etherFiRestakerInstance.redelegate(avsOperator2, signature, 0x0);
+        vm.stopPrank();
+
+        assertTrue(etherFiRestakerInstance.isDelegated());
+
+        if (withdrawalRoots.length > 0) {
+            // Build the withdrawal structs for completion
+            IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](withdrawalRoots.length);
+            IERC20[][] memory tokens = new IERC20[][](withdrawalRoots.length);
+
+            for (uint256 i = 0; i < withdrawalRoots.length; i++) {
+                (IDelegationManager.Withdrawal memory withdrawal, ) = eigenLayerDelegationManager.getQueuedWithdrawal(withdrawalRoots[i]);
+                withdrawals[i] = withdrawal;
+                tokens[i] = new IERC20[](1);
+                tokens[i][0] = IERC20(address(stEth));
+            }
+
+            // Should revert before delay passes
+            vm.prank(owner);
+            vm.expectRevert();
+            etherFiRestakerInstance.completeQueuedWithdrawals(withdrawals, tokens);
+
+            // Fast forward past the withdrawal delay
+            vm.roll(block.number + 100800 + 1);
+
+            // Complete withdrawals
+            vm.prank(owner);
+            etherFiRestakerInstance.completeQueuedWithdrawals(withdrawals, tokens);
+
+            for (uint256 i = 0; i < withdrawalRoots.length; i++) {
+                assertFalse(etherFiRestakerInstance.isPendingWithdrawal(withdrawalRoots[i]));
+            }
+
+            // Re-deposit the test amount into strategy under the new operator
+            vm.prank(owner);
+            etherFiRestakerInstance.depositIntoStrategy(address(stEth), 5 ether);
+        }
+
+        // TVL should be approximately preserved through the whole flow
+        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), totalPooledEtherBefore, 10 wei);
+    }
+
+    function test_redelegate_onlyAdmin() public {
+        test_delegate_to();
+
+        ISignatureUtilsMixinTypes.SignatureWithExpiry memory signature = ISignatureUtilsMixinTypes.SignatureWithExpiry({
+            signature: hex"",
+            expiry: 0
+        });
+
+        // Non-admin (bob) should revert
+        vm.prank(bob);
+        vm.expectRevert(EtherFiRestaker.IncorrectCaller.selector);
+        etherFiRestakerInstance.redelegate(avsOperator2, signature, 0x0);
+    }
+
+    function test_redelegate_notDelegated_reverts() public {
+        // Ensure not delegated
+        if (etherFiRestakerInstance.isDelegated()) {
+            vm.prank(owner);
+            etherFiRestakerInstance.undelegate();
+        }
+
+        ISignatureUtilsMixinTypes.SignatureWithExpiry memory signature = ISignatureUtilsMixinTypes.SignatureWithExpiry({
+            signature: hex"",
+            expiry: 0
+        });
+
+        vm.prank(owner);
+        vm.expectRevert();
+        etherFiRestakerInstance.redelegate(avsOperator, signature, 0x0);
+    }
+
     function test_claimer_upgrade() public {
         // initializeRealisticFork(MAINNET_FORK);
         EtherFiRestaker restaker = EtherFiRestaker(payable(deployed.ETHERFI_RESTAKER()));
