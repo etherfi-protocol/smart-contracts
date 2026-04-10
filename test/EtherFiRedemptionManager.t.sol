@@ -899,8 +899,9 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 instantLiquidity = etherFiRedemptionManagerInstance.getInstantLiquidityAmount(ETH_ADDRESS);
         uint256 lpBalance = address(liquidityPoolInstance).balance;
         uint256 lockedForWithdrawal = liquidityPoolInstance.ethAmountLockedForWithdrawal();
-        
-        assertEq(instantLiquidity, lpBalance - lockedForWithdrawal);
+        uint256 lockedForPriorityWithdrawal = etherFiRedemptionManagerInstance.priorityWithdrawalQueue().ethAmountLockedForPriorityWithdrawal();
+
+        assertEq(instantLiquidity, lpBalance - lockedForWithdrawal - lockedForPriorityWithdrawal);
         assertGt(instantLiquidity, 0);
     }
 
@@ -1494,9 +1495,10 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 instantLiquidity = etherFiRedemptionManagerInstance.getInstantLiquidityAmount(ETH_ADDRESS);
         uint256 lpBalance = address(liquidityPoolInstance).balance;
         uint256 lockedForWithdrawal = liquidityPoolInstance.ethAmountLockedForWithdrawal();
-        
+        uint256 lockedForPriorityWithdrawal = etherFiRedemptionManagerInstance.priorityWithdrawalQueue().ethAmountLockedForPriorityWithdrawal();
+
         // Verify getInstantLiquidityAmount accounts for locked withdrawals
-        assertEq(instantLiquidity, lpBalance - lockedForWithdrawal);
+        assertEq(instantLiquidity, lpBalance - lockedForWithdrawal - lockedForPriorityWithdrawal);
         
         vm.startPrank(op_admin);
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(0, ETH_ADDRESS);

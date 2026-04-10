@@ -59,7 +59,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
     mapping(address => RedemptionInfo) public tokenToRedemptionInfo;
 
 
-    event Redeemed(address indexed receiver, uint256 redemptionAmount, uint256 feeAmountToTreasury, uint256 feeAmountToStakers, address token);
+    event Redeemed(address indexed receiver, uint256 redemptionAmount, uint256 feeAmountToTreasury, uint256 eEthAmountToReceiver, address token);
 
     error InvalidAmount();
     error InvalidOutputToken();
@@ -167,8 +167,8 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         liquidityPool.burnEEthShares(feeShareToStakers);
         require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
 
-        // To Receiver by transferring ETH, using gas 10k for additional safety
-        (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
+        // To Receiver by transferring ETH, using 100k gas while still capping gas to prevent griefing (Solady SafeTransferLib GAS_STIPEND_NO_GRIEF)
+        (bool success, ) = receiver.call{value: ethReceived, gas: 100_000}("");
         require(success, "EtherFiRedemptionManager: Transfer failed");
 
         // Make sure the liquidity pool balance is correct && total shares are correct
@@ -233,7 +233,13 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
             revert InvalidOutputToken();
         }
 
-        emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury, eEthAmountToReceiver, outputToken);
+        // Sweep any residual eETH dust left to treasury from share<->amount rounding
+        uint256 dust = eEth.balanceOf(address(this));
+        if (dust > 0) {
+            IERC20(address(eEth)).safeTransfer(treasury, dust);
+        }
+
+        emit Redeemed(receiver, ethAmount, eEthFeeAmountToTreasury + dust, eEthAmountToReceiver, outputToken);
     }
 
     /**

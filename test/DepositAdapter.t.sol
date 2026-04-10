@@ -38,6 +38,22 @@ contract DepositAdapterTest is TestSetup {
         // depositAdapterInstance = DepositAdapter(payable(depositAdapterProxy));
         // depositAdapterInstance.initialize();
 
+        vm.startPrank(depositAdapterInstance.owner());
+        // Upgrade deposit adapter to latest implementation with new functions
+        address newImpl = address(
+            new DepositAdapter(
+                address(liquidityPoolInstance),
+                address(liquifierInstance),
+                address(weEthInstance),
+                address(eETHInstance),
+                address(wETH),
+                address(stETHmainnet),
+                address(wstETHmainnet)
+            )
+        );
+        depositAdapterInstance.upgradeTo(newImpl);
+        vm.stopPrank();
+
         vm.startPrank(owner);
 
         // Caps are hit on mainnet
@@ -145,6 +161,35 @@ contract DepositAdapterTest is TestSetup {
         liquifierPermitInput = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         vm.expectRevert("ERC20: transfer amount exceeds balance");
         depositAdapterInstance.depositWstETHForWeETHWithPermit(1 ether, bob, liquifierPermitInput);
+    }
+
+    // NOTE: Tests for depositStETHForWeETH and depositWstETHForWeETH (non-permit variants)
+    function test_DepositStETHWithPermitAfterApprove() public {
+        stEth.submit{value: 2 ether}(address(0));
+
+        // Approve stETH to the deposit adapter (no permit needed)
+        stEth.approve(address(depositAdapterInstance), 1 ether);
+
+        // Pass dummy permit values with a valid (non-expired) deadline
+        ILiquifier.PermitInput memory dummyPermit = ILiquifier.PermitInput({
+            value: 0,
+            deadline: type(uint256).max,
+            v: 0,
+            r: bytes32(0),
+            s: bytes32(0)
+        });
+
+        uint256 protocolStETHBefore = stEth.balanceOf(address(etherFiRestakerInstance));
+        uint256 stEthBefore = stEth.balanceOf(address(alice));
+        uint256 eETHAmountFromStETH = liquifierInstance.quoteByDiscountedValue(address(stEth), 1 ether);
+
+        // depositStETHForWeETHWithPermit should work using the prior approve
+        uint256 weEthAmount = depositAdapterInstance.depositStETHForWeETHWithPermit(1 ether, bob, dummyPermit);
+
+        assertGt(weEthAmount, 0);
+        assertApproxEqAbs(stEth.balanceOf(address(alice)), stEthBefore - 1 ether, 5);
+        assertApproxEqAbs(weEthInstance.balanceOf(address(alice)), weEthInstance.getWeETHByeETH(eETHAmountFromStETH), 5);
+        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), protocolStETHBefore + 1 ether, 5);
     }
 
     function test_DepositPermitExpired() public {
