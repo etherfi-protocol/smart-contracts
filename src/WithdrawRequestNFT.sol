@@ -12,10 +12,11 @@ import "./interfaces/IMembershipManager.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./RoleRegistry.sol";
+import "./ReentrancyGuardNamespaced.sol";
 
 
 
-contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IWithdrawRequestNFT {
+contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardNamespaced, IWithdrawRequestNFT {
     using Math for uint256;
     using SafeERC20 for IERC20;
 
@@ -135,7 +136,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @notice called by the NFT owner to claim their ETH
     /// @dev burns the NFT and transfers ETH from the liquidity pool to the owner minus any fee, withdraw request must be valid and finalized
     /// @param tokenId the id of the withdraw request and associated NFT
-    function claimWithdraw(uint256 tokenId) external whenNotPaused {
+    function claimWithdraw(uint256 tokenId) external whenNotPaused nonReentrant {
         return _claimWithdraw(tokenId, ownerOf(tokenId));
     }
     
@@ -160,7 +161,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw, amountBurnedShare, recipient, 0);
     }
 
-    function batchClaimWithdraw(uint256[] calldata tokenIds) external whenNotPaused {
+    function batchClaimWithdraw(uint256[] calldata tokenIds) external whenNotPaused nonReentrant {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             _claimWithdraw(tokenIds[i], ownerOf(tokenIds[i]));
         }
