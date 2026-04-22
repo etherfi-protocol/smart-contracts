@@ -251,6 +251,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (_report.accruedRewards == 0) {
             return;
         }
+        require(_report.accruedRewards > 0, "EtherFiAdmin: accrued rewards are negative");
 
         // compute the elapsed time since the last rebase
         int256 elapsedSlots = int32(_report.refSlotTo - lastHandledReportRefSlot);
@@ -266,7 +267,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (currentTVL > 0) {
             apr = 10000 * (_report.accruedRewards * 365 days) / (currentTVL * elapsedTime);
         }
-        require(apr >= 0, "EtherFiAdmin: accrued rewards are negative");
         require(apr <= acceptableRebaseAprInBps, "EtherFiAdmin: TVL changed too much");
 
         membershipManager.rebase(_report.accruedRewards);
