@@ -1154,16 +1154,6 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 10 ether);
     }
 
-    function test_AddEthAmountLockedForWithdrawalRevertsWhenExceedsLp() public {
-        vm.deal(alice, 5 ether);
-        vm.prank(alice);
-        liquidityPoolInstance.deposit{value: 5 ether}();
-
-        vm.prank(address(etherFiAdminInstance));
-        vm.expectRevert(LiquidityPool.InsufficientLiquidity.selector);
-        liquidityPoolInstance.addEthAmountLockedForWithdrawal(6 ether);
-    }
-
     function test_AddEthAmountLockedForWithdrawalFailsIfNotEtherFiAdmin() public {
         vm.startPrank(alice);
         vm.expectRevert(LiquidityPool.IncorrectCaller.selector);

@@ -14,6 +14,7 @@ import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
+import "./interfaces/IPriorityWithdrawalQueue.sol";
 
 interface IEtherFiPausable {
     function paused() external view returns (bool);
@@ -56,6 +57,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     bytes32 public constant ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE");
     bytes32 public constant ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE");
 
+    IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
+
     uint256 public maxFinalizedWithdrawalAmountPerDay;
     uint256 public maxNumValidatorsToApprovePerDay;
 
@@ -72,8 +75,9 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _priorityWithdrawalQueue) {
         _disableInitializers();
+        priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
     }
 
     function initialize(
@@ -312,6 +316,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             withdrawRequestNft.invalidateRequest(_report.withdrawalRequestsToInvalidate[i]);
         }
         withdrawRequestNft.finalizeRequests(_report.lastFinalizedWithdrawalRequestId);
+        require(_report.finalizedWithdrawalAmount + liquidityPool.ethAmountLockedForWithdrawal() + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal() <= liquidityPool.totalValueInLp(), "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
         liquidityPool.addEthAmountLockedForWithdrawal(_report.finalizedWithdrawalAmount);
     }
 

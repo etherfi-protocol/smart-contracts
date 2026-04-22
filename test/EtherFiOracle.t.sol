@@ -1480,4 +1480,49 @@ contract EtherFiOracleTest is TestSetup {
 
         assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), lockedBefore + 10 ether);
     }
+
+    // New LP-liquidity sanity check in _handleWithdrawals: finalized amount +
+    // existing LP lock + priority-queue lock must not exceed totalValueInLp.
+    function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsLpLiquidity() public {
+        // Set the per-day cap high so it doesn't trip first.
+        vm.prank(alice);
+        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(1000 ether);
+
+        // Deposit a small amount so totalValueInLp is modest.
+        vm.deal(alice, 5 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 6 ether; // 6 > totalValueInLp (5)
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+    }
+
+    // The liquidity check also counts the priority-queue outstanding lock, so a
+    // report that fits in the LP alone can still revert once the priority lock
+    // is considered.
+    function test_executeTasks_revertsWhenFinalizedPlusPriorityLockExceedsLp() public {
+        vm.prank(alice);
+        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(1000 ether);
+
+        vm.deal(alice, 10 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+
+        // Force the priority queue to report an outstanding lock, so the
+        // EtherFiAdmin-side check must add it to the LP's current commitments.
+        vm.mockCall(
+            address(priorityQueueInstance),
+            abi.encodeWithSelector(priorityQueueInstance.ethAmountLockedForPriorityWithdrawal.selector),
+            abi.encode(uint128(8 ether))
+        );
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 5 ether; // 5 + 0 + 8 > 10
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+    }
 }
