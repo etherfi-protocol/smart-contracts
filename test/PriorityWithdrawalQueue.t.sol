@@ -1698,4 +1698,41 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertLt(liquidityPoolInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT lock decremented after claim");
         assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), priorityAmount, "Priority lock unchanged by NFT claim");
     }
+
+    /// @dev `addEthAmountLockedForWithdrawal` must count the priority queue's outstanding lock
+    ///      against `totalValueInLp` so the two reserves can never collectively over-commit the LP.
+    function test_addEthAmountLockedForWithdrawal_accountsForPriorityLock() public {
+        // Fulfill a priority withdrawal so the queue holds a non-zero lock.
+        uint96 priorityAmount = 20 ether;
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory priorityRequest) =
+            _createWithdrawRequest(vipUser, priorityAmount);
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory reqs =
+            new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        reqs[0] = priorityRequest;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(reqs);
+
+        assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), priorityAmount, "Priority lock set");
+
+        uint128 totalInLp = liquidityPoolInstance.totalValueInLp();
+        uint128 nftLocked = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+        uint128 headroom = totalInLp - nftLocked - uint128(priorityAmount);
+
+        address etherFiAdminContract = address(liquidityPoolInstance.etherFiAdminContract());
+
+        // Locking exactly up to the headroom (priority-aware) succeeds.
+        vm.prank(etherFiAdminContract);
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(headroom);
+        assertEq(
+            liquidityPoolInstance.ethAmountLockedForWithdrawal(),
+            nftLocked + headroom,
+            "NFT lock advanced to priority-aware ceiling"
+        );
+
+        // One wei beyond that ceiling reverts because the priority lock is now counted in.
+        vm.prank(etherFiAdminContract);
+        vm.expectRevert(LiquidityPool.InsufficientLiquidity.selector);
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(1);
+    }
 }
