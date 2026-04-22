@@ -18,6 +18,8 @@ contract LiquidReferEthTest is LiquidReferBaseTest {
     }
 }
 
+// Obsolete: Scroll integration no longer exists.
+/*
 contract LiquidReferETHScrollTest is LiquidReferBaseTest {
     function _assetConfig() internal pure override returns (AssetConfig memory) {
         return AssetConfig({
@@ -34,3 +36,4 @@ contract LiquidReferETHScrollTest is LiquidReferBaseTest {
         return "SCROLL_RPC_URL";
     }
 }
+*/

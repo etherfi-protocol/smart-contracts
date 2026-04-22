@@ -199,10 +199,11 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(blockForNextReportToProcess() == _report.refBlockFrom, "EtherFiAdmin: report has wrong `refBlockFrom`");
         require(current_slot >= postReportWaitTimeInSlots + etherFiOracle.getConsensusSlot(reportHash), "EtherFiAdmin: report is too fresh");
 
-        _handleAccruedRewards(_report);
+        uint256 elapsedTime = (_report.refSlotTo - _report.refSlotFrom) * 12 seconds;
+        _handleAccruedRewards(_report, elapsedTime);
         _handleProtocolFees(_report);
-        _handleValidators(reportHash, _report);
-        _handleWithdrawals(_report);
+        _handleValidators(reportHash, elapsedTime, _report);
+        _handleWithdrawals(_report, elapsedTime);
 
         lastHandledReportRefSlot = _report.refSlotTo;
         lastHandledReportRefBlock = _report.refBlockTo;
@@ -247,15 +248,11 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         liquidityPool.payProtocolFees(uint128(_report.protocolFees));
     }
 
-    function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report) internal {
+    function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal {
         if (_report.accruedRewards == 0) {
             return;
         }
         require(_report.accruedRewards > 0, "EtherFiAdmin: accrued rewards are negative");
-
-        // compute the elapsed time since the last rebase
-        int256 elapsedSlots = int32(_report.refSlotTo - lastHandledReportRefSlot);
-        int256 elapsedTime = 12 seconds * elapsedSlots;
 
         // This guard will be removed in future versions
         // Ensure that the new TVL didnt' change too much
@@ -265,22 +262,22 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         int256 currentTVL = int128(uint128(liquidityPool.getTotalPooledEther()));
         int256 apr;
         if (currentTVL > 0) {
-            apr = 10000 * (_report.accruedRewards * 365 days) / (currentTVL * elapsedTime);
+            apr = 10000 * (_report.accruedRewards * 365 days) / (currentTVL * int256(elapsedTime));
         }
         require(apr <= acceptableRebaseAprInBps, "EtherFiAdmin: TVL changed too much");
 
         membershipManager.rebase(_report.accruedRewards);
     }
 
-    function _enqueueValidatorApprovalTask(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report) internal {
-        uint256 numBatches = (_report.validatorsToApprove.length + validatorTaskBatchSize - 1) / validatorTaskBatchSize;
-        uint256 elapsedTime = (_report.refSlotTo - _report.refSlotFrom) * 12 seconds;
-        uint256 numValidatorsToapprovePerDay = (_report.validatorsToApprove.length * 1 days) / elapsedTime;
-        require(numValidatorsToapprovePerDay <= maxNumValidatorsToapprovePerDay, "EtherFiAdmin: number of validators to approve exceeds max");
-
+    function _enqueueValidatorApprovalTask(bytes32 _reportHash, uint256 elapsedTime, IEtherFiOracle.OracleReport calldata _report) internal {
         if(_report.validatorsToApprove.length == 0) {
             return;
         }
+        uint256 numValidatorsToapprovePerDay = (_report.validatorsToApprove.length * 1 days) / elapsedTime;
+        require(numValidatorsToapprovePerDay <= maxNumValidatorsToapprovePerDay, "EtherFiAdmin: number of validators to approve exceeds max");
+
+        uint256 numBatches = (_report.validatorsToApprove.length + validatorTaskBatchSize - 1) / validatorTaskBatchSize;
+
         for (uint256 i = 0; i < numBatches; i++) {
             uint256 start = i * validatorTaskBatchSize;
             uint256 end = (i + 1) * validatorTaskBatchSize > _report.validatorsToApprove.length ? _report.validatorsToApprove.length : (i + 1) * validatorTaskBatchSize;
@@ -296,12 +293,11 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    function _handleValidators(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report) internal {
-        _enqueueValidatorApprovalTask(_reportHash, _report);
+    function _handleValidators(bytes32 _reportHash, uint256 elapsedTime, IEtherFiOracle.OracleReport calldata _report) internal {
+        _enqueueValidatorApprovalTask(_reportHash, elapsedTime, _report);
     }
 
-    function _handleWithdrawals(IEtherFiOracle.OracleReport calldata _report) internal {
-        uint256 elapsedTime = (_report.refSlotTo - _report.refSlotFrom) * 12 seconds;
+    function _handleWithdrawals(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal {
         uint256 finalizedWithdrawalAmountPerDay = (_report.finalizedWithdrawalAmount * 1 days) / elapsedTime;
         require(finalizedWithdrawalAmountPerDay <= maxFinalizedwithdrawalAmountPerDay, "EtherFiAdmin: finalized withdrawal amount exceeds max");
 

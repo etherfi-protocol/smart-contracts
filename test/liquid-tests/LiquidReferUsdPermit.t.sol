@@ -22,6 +22,8 @@ contract LiquidReferUsdPermitTest is LiquidReferPermitFuzzBaseTest {
         return 10_000e6; // cap fuzzed USDC deposits to 10k
     }
 }
+// Obsolete: Scroll integration no longer exists in CI.
+/*
 contract LiquidReferUsdPermitScrollTest is LiquidReferPermitFuzzBaseTest {
     function _assetConfig() internal pure override returns (AssetConfig memory) {
         return AssetConfig({
@@ -42,3 +44,4 @@ contract LiquidReferUsdPermitScrollTest is LiquidReferPermitFuzzBaseTest {
         return "SCROLL_RPC_URL";
     }
 }
+*/

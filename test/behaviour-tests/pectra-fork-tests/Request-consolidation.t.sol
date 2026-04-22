@@ -111,6 +111,8 @@ contract RequestConsolidationTest is TestSetup, Deployed {
         }
     }
 
+    // TODO: update pubkeys
+    /*
     function test_RequestConsolidation() public {
         console2.log("=== REQUEST CONSOLIDATION TEST ===");
         bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), ETHERFI_OPERATING_ADMIN);
@@ -221,4 +223,5 @@ contract RequestConsolidationTest is TestSetup, Deployed {
         etherFiNodesManager.requestConsolidation{value: valueToSend}(reqs);
 
     }
+    */
 }
