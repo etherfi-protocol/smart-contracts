@@ -1406,30 +1406,30 @@ contract EtherFiOracleTest is TestSetup {
 
     // ========== Sanity-check setter tests ==========
 
-    function test_setMaxFinalizedwithdrawalAmountPerDay() public {
+    function test_setMaxFinalizedWithdrawalAmountPerDay() public {
         vm.prank(alice);
-        etherFiAdminInstance.setMaxFinalizedwithdrawalAmountPerDay(123 ether);
-        assertEq(etherFiAdminInstance.maxFinalizedwithdrawalAmountPerDay(), 123 ether);
+        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(123 ether);
+        assertEq(etherFiAdminInstance.maxFinalizedWithdrawalAmountPerDay(), 123 ether);
 
         vm.prank(chad);
         vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
-        etherFiAdminInstance.setMaxFinalizedwithdrawalAmountPerDay(456 ether);
+        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(456 ether);
     }
 
-    function test_setMaxNumValidatorsToapprovePerDay() public {
+    function test_setMaxNumValidatorsToApprovePerDay() public {
         vm.prank(alice);
-        etherFiAdminInstance.setMaxNumValidatorsToapprovePerDay(50);
-        assertEq(etherFiAdminInstance.maxNumValidatorsToapprovePerDay(), 50);
+        etherFiAdminInstance.setMaxNumValidatorsToApprovePerDay(50);
+        assertEq(etherFiAdminInstance.maxNumValidatorsToApprovePerDay(), 50);
 
         vm.prank(chad);
         vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
-        etherFiAdminInstance.setMaxNumValidatorsToapprovePerDay(100);
+        etherFiAdminInstance.setMaxNumValidatorsToApprovePerDay(100);
     }
 
     function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsCap() public {
         // Cap finalized withdrawals to a tiny amount so the report trips the guard.
         vm.prank(alice);
-        etherFiAdminInstance.setMaxFinalizedwithdrawalAmountPerDay(1);
+        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(1);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         // 10 ETH finalized over a 1024-slot window (~3.4 hours) extrapolates to ~70 ETH/day.
@@ -1449,7 +1449,7 @@ contract EtherFiOracleTest is TestSetup {
         // Each batch holds up to validatorTaskBatchSize (100) validators. Setting the cap
         // to zero means even a single batch trips the guard.
         vm.prank(alice);
-        etherFiAdminInstance.setMaxNumValidatorsToapprovePerDay(0);
+        etherFiAdminInstance.setMaxNumValidatorsToApprovePerDay(0);
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         report.validatorsToApprove = new uint256[](1);
@@ -1457,5 +1457,27 @@ contract EtherFiOracleTest is TestSetup {
 
         _moveClock(1 days / 12);
         _executeAdminTasks(report, "EtherFiAdmin: number of validators to approve exceeds max");
+    }
+
+    // Happy path: a report with a non-zero finalized-withdrawal amount that stays
+    // within the per-day cap processes cleanly and advances the LP's locked
+    // accounting.
+    function test_executeTasks_finalizedWithdrawalWithinCap_succeeds() public {
+        vm.prank(alice);
+        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(100 ether);
+
+        vm.deal(alice, 200 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 200 ether}();
+
+        uint256 lockedBefore = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 10 ether;
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report);
+
+        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), lockedBefore + 10 ether);
     }
 }

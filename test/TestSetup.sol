@@ -805,8 +805,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
-        etherFiAdminInstance.setMaxFinalizedwithdrawalAmountPerDay(1e30);
-        etherFiAdminInstance.setMaxNumValidatorsToapprovePerDay(1e30);
+        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(1e30);
+        etherFiAdminInstance.setMaxNumValidatorsToApprovePerDay(1e30);
         liquidityPoolInstance.setValidatorSizeWei(32 ether);
         vm.stopPrank();
 
@@ -937,8 +937,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), alice);
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
-        etherFiAdminInstance.setMaxFinalizedwithdrawalAmountPerDay(1e30);
-        etherFiAdminInstance.setMaxNumValidatorsToapprovePerDay(1e30);
+        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(1e30);
+        etherFiAdminInstance.setMaxNumValidatorsToApprovePerDay(1e30);
         vm.stopPrank();
     }
 
