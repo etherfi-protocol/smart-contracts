@@ -1698,5 +1698,4 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertLt(liquidityPoolInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT lock decremented after claim");
         assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), priorityAmount, "Priority lock unchanged by NFT claim");
     }
-
 }

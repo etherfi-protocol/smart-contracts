@@ -1143,14 +1143,10 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_AddEthAmountLockedForWithdrawal() public {
         assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0);
-
-        vm.deal(alice, 10 ether);
-        vm.prank(alice);
-        liquidityPoolInstance.deposit{value: 10 ether}();
-
+        
         vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(10 ether);
-
+        
         assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 10 ether);
     }
 
