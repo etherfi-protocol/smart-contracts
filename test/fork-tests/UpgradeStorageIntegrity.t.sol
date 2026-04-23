@@ -236,6 +236,131 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         }
     }
 
+    /// @notice After the upgrade, a pre-existing finalized-but-unclaimed
+    ///         request from live mainnet state must still be claimable by its
+    ///         NFT owner. Proves: (a) storage for `_requests[id]` and the NFT
+    ///         ownership mapping is intact, (b) the removal of `whenNotPaused`
+    ///         does not regress happy-path claims, (c) LP.withdraw still wired
+    ///         correctly for the historical accounting path.
+    function test_postUpgrade_preExistingFinalizedRequest_isClaimable() public {
+        _doUpgrade();
+
+        WithdrawRequestNFT wrn = WithdrawRequestNFT(WITHDRAW_REQUEST_NFT);
+        uint32 lastFin = wrn.lastFinalizedRequestId();
+        require(lastFin > 0, "no finalized requests on fork");
+
+        // Scan downward from lastFinalizedRequestId looking for an
+        // unclaimed (ownerOf doesn't revert) + valid request with non-zero
+        // claim amount. Skip the very top few in case the LP doesn't have
+        // the liquidity buffered yet.
+        uint256 found = 0;
+        address nftOwner;
+        uint256 maxScan = 1000;
+        for (uint256 i = 0; i < maxScan; i++) {
+            if (i >= lastFin) break;
+            uint256 candidate = lastFin - i;
+
+            (bool ok, bytes memory data) = address(wrn).staticcall(
+                abi.encodeWithSignature("ownerOf(uint256)", candidate)
+            );
+            if (!ok) continue;
+            address o = abi.decode(data, (address));
+            if (o == address(0)) continue;
+
+            // isValid reverts if !_exists; ownerOf already asserted existence,
+            // so this is safe.
+            if (!wrn.isValid(candidate)) continue;
+
+            // Skip zero-amount edge cases (partial claims or weird shares).
+            if (wrn.getClaimableAmount(candidate) == 0) continue;
+
+            found = candidate;
+            nftOwner = o;
+            break;
+        }
+
+        require(found != 0, "no finalized+valid+unclaimed request found in scan range");
+
+        uint256 claimable = wrn.getClaimableAmount(found);
+        uint256 balBefore = nftOwner.balance;
+
+        vm.prank(nftOwner);
+        wrn.claimWithdraw(found);
+
+        assertGt(nftOwner.balance, balBefore, "pre-existing finalized request produced no payout");
+        assertApproxEqAbs(
+            nftOwner.balance - balBefore,
+            claimable,
+            1,
+            "payout deviates from getClaimableAmount"
+        );
+    }
+
+    /// @notice Also exercises the permissionless-claim property on real state:
+    ///         pause WRN (via PROTOCOL_PAUSER), then claim a pre-existing
+    ///         finalized request. Must succeed post-upgrade.
+    function test_postUpgrade_claimWorksWhilePaused_onMainnetData() public {
+        _doUpgrade();
+
+        WithdrawRequestNFT wrn = WithdrawRequestNFT(WITHDRAW_REQUEST_NFT);
+        uint32 lastFin = wrn.lastFinalizedRequestId();
+        require(lastFin > 0, "no finalized requests on fork");
+
+        uint256 found = 0;
+        address nftOwner;
+        for (uint256 i = 0; i < 1000; i++) {
+            if (i >= lastFin) break;
+            uint256 candidate = lastFin - i;
+            (bool ok, bytes memory data) = address(wrn).staticcall(
+                abi.encodeWithSignature("ownerOf(uint256)", candidate)
+            );
+            if (!ok) continue;
+            address o = abi.decode(data, (address));
+            if (o == address(0)) continue;
+            if (!wrn.isValid(candidate)) continue;
+            if (wrn.getClaimableAmount(candidate) == 0) continue;
+            found = candidate;
+            nftOwner = o;
+            break;
+        }
+        require(found != 0, "no candidate");
+
+        // Pause WRN directly via the namespaced pauser. Instead of hunting
+        // down the live pauser address, grant the role to this test via
+        // RoleRegistry's owner/DEFAULT_ADMIN.
+        bytes32 pauserRole = wrn.roleRegistry().PROTOCOL_PAUSER();
+        address roleRegOwner = IOwnableRead(address(wrn.roleRegistry())).owner();
+        vm.prank(roleRegOwner);
+        (bool granted,) = address(wrn.roleRegistry()).call(
+            abi.encodeWithSignature("grantRole(bytes32,address)", pauserRole, address(this))
+        );
+        require(granted, "role grant failed");
+
+        wrn.pauseContract();
+        assertTrue(wrn.paused(), "precondition: WRN paused");
+
+        uint256 balBefore = nftOwner.balance;
+        vm.prank(nftOwner);
+        wrn.claimWithdraw(found);
+
+        assertGt(nftOwner.balance, balBefore, "paused WRN must not block finalized claim");
+    }
+
+    /// @dev Internal helper used by the integrity test above - upgrades both
+    ///      proxies to new implementations with the guard + permissionless
+    ///      claim changes.
+    function _doUpgrade() internal {
+        address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE));
+
+        vm.prank(UPGRADE_TIMELOCK);
+        IUUPSProxy(LIQUIDITY_POOL).upgradeTo(newLP);
+
+        address wrnOwner = IOwnableRead(WITHDRAW_REQUEST_NFT).owner();
+        vm.prank(wrnOwner);
+        IUUPSProxy(WITHDRAW_REQUEST_NFT).upgradeTo(newWRN);
+    }
+
     /// @dev Separately verify that, post-upgrade, the guard actually blocks
     ///      re-entry. This is defence-in-depth in case some ABI mismatch made
     ///      the modifier no-op.
