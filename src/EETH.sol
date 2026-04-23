@@ -39,7 +39,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
 
     bytes32 public constant EETH_OPERATING_ADMIN_ROLE = keccak256("EETH_OPERATING_ADMIN_ROLE");
     bytes32 public constant EETH_PAUSER_ROLE = keccak256("EETH_PAUSER_ROLE");
-    bytes32 public constant EETH_EXTEND_PAUSER_ROLE = keccak256("EETH_EXTEND_PAUSER_ROLE");
+    bytes32 public constant EETH_PAUSER_UNTIL_ROLE = keccak256("EETH_PAUSER_UNTIL_ROLE");
 
     mapping(address => bool) public paused;
     mapping(address => uint64) public pausedUntil;
@@ -78,6 +78,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     }
 
     function mintShares(address _user, uint256 _share) external onlyPoolContract {
+        require(!paused[_user] && pausedUntil[_user] < block.timestamp, "MINT PAUSED");
         shares[_user] += _share;
         totalShares += _share;
 
@@ -87,6 +88,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
 
     function burnShares(address _user, uint256 _share) external {
         require(msg.sender == address(liquidityPool), "Incorrect Caller");
+        require(!paused[_user] && pausedUntil[_user] < block.timestamp, "BURN PAUSED");
         require(shares[_user] >= _share, "BURN_AMOUNT_EXCEEDS_BALANCE");
         shares[_user] -= _share;
         totalShares -= _share;
@@ -138,14 +140,14 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
 
     function pause(address _user) external {
         require(_user != address(0), "No zero addresses");
-        require(roleRegistry.hasRole(EETH_EXTEND_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
         paused[_user] = true;
         emit Paused(_user);
     }
 
     function pauseUntil(address _user) external {
         require(_user != address(0), "No zero addresses");
-        require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        require(roleRegistry.hasRole(EETH_PAUSER_UNTIL_ROLE, msg.sender), "IncorrectRole");
         if (!paused[_user] && pausedUntil[_user] < block.timestamp) {
             pausedUntil[_user] = uint64(block.timestamp) + 1 days;
             emit PausedUntil(_user, pausedUntil[_user]);
@@ -154,7 +156,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
 
     function unpause(address _user) external {
         require(_user != address(0), "No zero addresses");
-        require(roleRegistry.hasRole(EETH_EXTEND_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
         if (pausedUntil[_user] >= block.timestamp) {
             delete pausedUntil[_user];
         }

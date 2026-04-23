@@ -38,7 +38,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
 
     bytes32 public constant WEETH_OPERATING_ADMIN_ROLE = keccak256("WEETH_OPERATING_ADMIN_ROLE");
     bytes32 public constant WEETH_PAUSER_ROLE = keccak256("WEETH_PAUSER_ROLE");
-    bytes32 public constant WEETH_EXTEND_PAUSER_ROLE = keccak256("WEETH_EXTEND_PAUSER_ROLE");
+    bytes32 public constant WEETH_PAUSER_UNTIL_ROLE = keccak256("WEETH_PAUSER_UNTIL_ROLE");
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -102,14 +102,14 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     }
 
     function pause(address _user) external {
-        require(roleRegistry.hasRole(WEETH_EXTEND_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
         require(_user != address(0), "No zero addresses");
         paused[_user] = true;
         emit Paused(_user);
     }
 
     function pauseUntil(address _user) external {
-        require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        require(roleRegistry.hasRole(WEETH_PAUSER_UNTIL_ROLE, msg.sender), "IncorrectRole");
         require(_user != address(0), "No zero addresses");
         if (!paused[_user] && pausedUntil[_user] < block.timestamp) {
             pausedUntil[_user] = uint64(block.timestamp) + 1 days;
@@ -118,7 +118,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     }
 
     function unpause(address _user) external {
-        require(roleRegistry.hasRole(WEETH_EXTEND_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
         require(_user != address(0), "No zero addresses");
         if (pausedUntil[_user] >= block.timestamp) {
             delete pausedUntil[_user];
