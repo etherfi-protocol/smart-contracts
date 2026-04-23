@@ -295,6 +295,9 @@ contract WithdrawRequestNFTTest is TestSetup {
 
     // It depicts the scenario where bob's WithdrawalRequest NFT is stolen by alice.
     // The owner invalidates the request 
+    /// @dev Updated: admin MUST NOT be able to invalidate a request once it has been finalized.
+    ///      Previously this test demonstrated the legacy (unsafe) capability; it now proves the
+    ///      post-finalization invalidation path reverts and the request remains valid.
     function test_InvalidatedRequestNft_after_finalization() public returns (uint256 requestId) {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
@@ -318,7 +321,10 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertTrue(withdrawRequestNFTInstance.isValid(requestId), "Request should be valid");
 
         vm.prank(admin);
+        vm.expectRevert("Cannot invalidate finalized request");
         withdrawRequestNFTInstance.invalidateRequest(requestId);
+
+        assertTrue(withdrawRequestNFTInstance.isValid(requestId), "Request must remain valid after rejected invalidation");
     }
 
     function test_InvalidatedRequestNft_before_finalization() public returns (uint256 requestId) {
@@ -1036,6 +1042,9 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice, "NFT should be transferred");
     }
 
+    /// @dev Updated: invalidation now only possible pre-finalization, so the test invalidates
+    ///      first, THEN finalizes, then asserts claim reverts on `!isValid`. End-state assertion
+    ///      (invalid request cannot be claimed) is unchanged.
     function test_claimWithdraw_InvalidRequest() public {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
@@ -1047,13 +1056,14 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
-        _finalizeWithdrawalRequest(requestId);
-
-        // Invalidate request
+        // Invalidate BEFORE finalization (the only time admin can do it now).
         vm.prank(admin);
         withdrawRequestNFTInstance.invalidateRequest(requestId);
 
-        // Cannot claim invalid request
+        // An invalid request can still be finalized (finalization cursor is monotonic and doesn't check validity).
+        _finalizeWithdrawalRequest(requestId);
+
+        // Claim still blocked by the `isValid` check inside `_claimWithdraw`.
         vm.prank(bob);
         vm.expectRevert("Request is not valid");
         withdrawRequestNFTInstance.claimWithdraw(requestId);
@@ -1069,5 +1079,125 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_isValid_NonExistent() public {
         vm.expectRevert("Request does not exist");
         withdrawRequestNFTInstance.isValid(99999);
+    }
+
+    // -----------------------------------------------------------------
+    //  Permissionless claim + no-post-finalization-invalidation tests
+    // -----------------------------------------------------------------
+
+    /// @dev Helper: make a withdraw request owned by `owner` for `amount`.
+    function _requestFor(address owner, uint96 amount) internal returns (uint256 requestId) {
+        startHoax(owner);
+        liquidityPoolInstance.deposit{value: amount}();
+        eETHInstance.approve(address(liquidityPoolInstance), amount);
+        requestId = liquidityPoolInstance.requestWithdraw(owner, amount);
+        vm.stopPrank();
+    }
+
+    function test_claimWithdraw_succeedsWhilePaused_ifFinalized() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        _finalizeWithdrawalRequest(requestId);
+
+        // Pause BEFORE the claim — finalized claim must proceed anyway.
+        vm.prank(admin);
+        withdrawRequestNFTInstance.pauseContract();
+        assertTrue(withdrawRequestNFTInstance.paused(), "precondition: must be paused");
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+
+        assertEq(bob.balance - bobBalBefore, 1 ether, "finalized claim must pay out while paused");
+    }
+
+    function test_batchClaimWithdraw_succeedsWhilePaused_ifFinalized() public {
+        uint256 r1 = _requestFor(bob, 1 ether);
+        uint256 r2 = _requestFor(bob, 2 ether);
+        _finalizeWithdrawalRequest(r1);
+        _finalizeWithdrawalRequest(r2);
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.pauseContract();
+
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = r1;
+        ids[1] = r2;
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.batchClaimWithdraw(ids);
+
+        assertEq(bob.balance - bobBalBefore, 3 ether, "batch claim must pay out while paused");
+    }
+
+    function test_claimWithdraw_revertsWhenUnfinalized_paused() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        // NOT finalized.
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.pauseContract();
+
+        vm.prank(bob);
+        vm.expectRevert("Request is not finalized");
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+    }
+
+    function test_claimWithdraw_revertsWhenUnfinalized_unpaused() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        // NOT finalized, NOT paused (matches post-setUp state).
+
+        vm.prank(bob);
+        vm.expectRevert("Request is not finalized");
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+    }
+
+    function test_invalidateRequest_revertsForFinalizedRequest() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        _finalizeWithdrawalRequest(requestId);
+        assertTrue(withdrawRequestNFTInstance.isFinalized(requestId));
+
+        vm.prank(admin);
+        vm.expectRevert("Cannot invalidate finalized request");
+        withdrawRequestNFTInstance.invalidateRequest(requestId);
+
+        // Still valid & claimable after the rejected invalidate attempt.
+        assertTrue(withdrawRequestNFTInstance.isValid(requestId), "should still be valid");
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertEq(bob.balance - bobBalBefore, 1 ether);
+    }
+
+    function test_invalidateRequest_succeedsForUnfinalizedRequest() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        assertFalse(withdrawRequestNFTInstance.isFinalized(requestId));
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.invalidateRequest(requestId);
+
+        assertFalse(withdrawRequestNFTInstance.isValid(requestId), "should be invalid after admin action");
+    }
+
+    /// @dev Off-by-one: the token at EXACTLY lastFinalizedRequestId is finalized
+    ///      and therefore must NOT be invalidatable. The next token (id + 1) is
+    ///      not finalized and must still be invalidatable.
+    function test_invalidateRequest_boundary_atLastFinalizedRequestId() public {
+        uint256 r1 = _requestFor(bob, 1 ether);
+        uint256 r2 = _requestFor(bob, 1 ether);
+
+        // Finalize only r1.
+        _finalizeWithdrawalRequest(r1);
+        assertEq(uint256(withdrawRequestNFTInstance.lastFinalizedRequestId()), r1, "r1 is the boundary");
+
+        // r1 == lastFinalizedRequestId → cannot invalidate.
+        vm.prank(admin);
+        vm.expectRevert("Cannot invalidate finalized request");
+        withdrawRequestNFTInstance.invalidateRequest(r1);
+
+        // r2 == lastFinalizedRequestId + 1 → can invalidate.
+        vm.prank(admin);
+        withdrawRequestNFTInstance.invalidateRequest(r2);
+        assertFalse(withdrawRequestNFTInstance.isValid(r2), "r2 should be invalid");
     }
 }
