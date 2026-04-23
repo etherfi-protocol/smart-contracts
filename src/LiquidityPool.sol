@@ -8,6 +8,7 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import "./EtherFiRedemptionManager.sol";
+import "./utils/PausableUntil.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IStakingManager.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
@@ -18,7 +19,7 @@ import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
 
-contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ILiquidityPool {
+contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, PausableUntil, ILiquidityPool {
     using SafeERC20 for IERC20;
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -485,6 +486,18 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
         emit Unpaused(msg.sender);
     }
 
+    // Pauses contract until MAX_PAUSE_DURATION
+    function pauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _pauseUntil();
+    }
+
+    // Unpauses contract from pauseUntil
+    function unPauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _unpauseUntil();
+    }
+
     // Deprecated, just existing not to touch EtherFiAdmin contract
     function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external {
     }
@@ -610,6 +623,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, IL
 
     modifier whenNotPaused() {
         _requireNotPaused();
+        _requireNotPausedUntil();
         _;
     }
 }

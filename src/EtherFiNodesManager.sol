@@ -183,7 +183,7 @@ contract EtherFiNodesManager is
     function queueWithdrawals(address node, IDelegationManager.QueuedWithdrawalParams[] calldata params) public onlyEigenlayerAdmin whenNotPaused whenNotPausedUntil {
         _validateNode(node);
         // need to rate limit any beacon eth being withdrawn
-        rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(_sumRestakingETHWithdrawals(params) / 1 gwei));
+        rateLimiter.consume(UNRESTAKING_LIMIT_ID, SafeCast.toUint64(sumRestakingETHWithdrawals(params) / 1 gwei));
         IEtherFiNode(node).queueWithdrawals(params);
     }
     

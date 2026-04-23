@@ -19,6 +19,8 @@ contract MockRoleRegistry is IRoleRegistry {
     bytes32 public constant ETHERFI_RATE_LIMITER_ADMIN_ROLE = keccak256("ETHERFI_RATE_LIMITER_ADMIN_ROLE");
     bytes32 public constant PROTOCOL_PAUSER_ROLE = keccak256("PROTOCOL_PAUSER");
     bytes32 public constant PROTOCOL_UNPAUSER_ROLE = keccak256("PROTOCOL_UNPAUSER");
+    bytes32 public constant PAUSE_UNTIL_ROLE = keccak256("PAUSE_UNTIL_ROLE");
+    bytes32 public constant UNPAUSE_UNTIL_ROLE = keccak256("UNPAUSE_UNTIL_ROLE");
 
     constructor() {
         owner = msg.sender;
