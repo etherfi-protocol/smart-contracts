@@ -17,6 +17,7 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IWeETH.sol";
 import "./interfaces/ILiquifier.sol";
+import "./utils/PausableUntil.sol";
 import "./EtherFiRestaker.sol";
 
 import "lib/BucketLimiter.sol";
@@ -37,7 +38,7 @@ struct RedemptionInfo {
     uint16 lowWatermarkInBpsOfTvl;
 }
 
-contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
@@ -111,7 +112,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      * @param receiver The address to receive the redeemed outputToken.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
+    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused whenNotPausedUntil nonReentrant {
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
 
@@ -121,7 +122,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      * @param receiver The address to receive the redeemed outputToken.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
+    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused whenNotPausedUntil nonReentrant {
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
 
@@ -132,7 +133,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      * @param permit The permit params.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
+    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused whenNotPausedUntil nonReentrant {
         try eEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
@@ -144,7 +145,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      * @param permit The permit params.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
+    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused whenNotPausedUntil nonReentrant {
         try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
@@ -335,6 +336,14 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
 
     function unPauseContract() external hasRole(roleRegistry.PROTOCOL_UNPAUSER()) {
         _unpause();
+    }
+
+    function pauseContractUntil() external hasRole(roleRegistry.PAUSE_UNTIL_ROLE()) {
+        _pauseUntil();
+    }
+
+    function unPauseContractUntil() external hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE()) {
+        _unpauseUntil();
     }
 
     function _redeemEEth(uint256 eEthAmount, address receiver, address outputToken) internal {
