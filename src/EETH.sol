@@ -153,7 +153,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     function unpause() external {
         require(roleRegistry.hasRole(EETH_EXTEND_PAUSER_ROLE, msg.sender), "IncorrectRole");
         if (pausedUntil >= block.timestamp) {
-            pausedUntil = uint64(block.timestamp) - 1;
+            pausedUntil = 0;
         }
         paused = false;
         emit Unpaused();
@@ -211,10 +211,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     }
 
     function _transferShares(address _sender, address _recipient, uint256 _sharesAmount) internal {
+        require(!paused && pausedUntil < block.timestamp, "PAUSED");
         require(_sender != address(0), "TRANSFER_FROM_THE_ZERO_ADDRESS");
         require(_recipient != address(0), "TRANSFER_TO_THE_ZERO_ADDRESS");
         require(_sharesAmount <= shares[_sender], "TRANSFER_AMOUNT_EXCEEDS_BALANCE");
-        require(!paused && pausedUntil < block.timestamp, "PAUSED");
 
         shares[_sender] -= _sharesAmount;
         shares[_recipient] += _sharesAmount;
