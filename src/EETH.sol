@@ -41,13 +41,14 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     bytes32 public constant EETH_PAUSER_ROLE = keccak256("EETH_PAUSER_ROLE");
     bytes32 public constant EETH_PAUSER_UNTIL_ROLE = keccak256("EETH_PAUSER_UNTIL_ROLE");
 
-    mapping(address => bool) public paused;
+    bool public paused;
     mapping(address => uint64) public pausedUntil;
 
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
-    event Paused(address indexed user);
+    event Paused();
     event PausedUntil(address indexed user, uint64 pausedUntil);
-    event Unpaused(address indexed user);
+    event CancelledPauseUntil(address indexed user);
+    event Unpaused();
 
     error IncorrectRole();
 
@@ -78,7 +79,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     }
 
     function mintShares(address _user, uint256 _share) external onlyPoolContract {
-        require(!paused[_user] && pausedUntil[_user] < block.timestamp, "MINT PAUSED");
+        require(!paused && pausedUntil[_user] < block.timestamp, "MINT PAUSED");
         shares[_user] += _share;
         totalShares += _share;
 
@@ -88,7 +89,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
 
     function burnShares(address _user, uint256 _share) external {
         require(msg.sender == address(liquidityPool), "Incorrect Caller");
-        require(!paused[_user] && pausedUntil[_user] < block.timestamp, "BURN PAUSED");
+        require(!paused && pausedUntil[_user] < block.timestamp, "BURN PAUSED");
         require(shares[_user] >= _share, "BURN_AMOUNT_EXCEEDS_BALANCE");
         shares[_user] -= _share;
         totalShares -= _share;
@@ -138,30 +139,41 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         return true;
     }
 
-    function pause(address _user) external {
-        require(_user != address(0), "No zero addresses");
+    function pause() external {
         require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
-        paused[_user] = true;
-        emit Paused(_user);
+        paused = true;
+        emit Paused();
     }
 
     function pauseUntil(address _user) external {
         require(_user != address(0), "No zero addresses");
         require(roleRegistry.hasRole(EETH_PAUSER_UNTIL_ROLE, msg.sender), "IncorrectRole");
-        if (!paused[_user] && pausedUntil[_user] < block.timestamp) {
+        if (pausedUntil[_user] < block.timestamp) {
             pausedUntil[_user] = uint64(block.timestamp) + 1 days;
             emit PausedUntil(_user, pausedUntil[_user]);
         }
     }
 
-    function unpause(address _user) external {
-        require(_user != address(0), "No zero addresses");
+    function extendPauseUntil(address _user, uint64 _duration) external {
         require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        require(_user != address(0), "No zero addresses");
         if (pausedUntil[_user] >= block.timestamp) {
-            delete pausedUntil[_user];
+            pausedUntil[_user] = uint64(block.timestamp) + _duration;
+            emit PausedUntil(_user, pausedUntil[_user]);
         }
-        delete paused[_user];
-        emit Unpaused(_user);
+    }
+
+    function cancelPauseUntil(address _user) external {
+        require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        require(_user != address(0), "No zero addresses");
+        delete pausedUntil[_user];
+        emit CancelledPauseUntil(_user);
+    }
+
+    function unpause() external {
+        require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        paused = false;
+        emit Unpaused();
     }
 
     function permit(
@@ -216,8 +228,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     }
 
     function _transferShares(address _sender, address _recipient, uint256 _sharesAmount) internal {
-        require(!paused[_sender] && pausedUntil[_sender] < block.timestamp, "SENDER PAUSED");
-        require(!paused[_recipient] && pausedUntil[_recipient] < block.timestamp, "RECIPIENT PAUSED");
+        require(!paused, "PAUSED");
+        require(pausedUntil[_sender] < block.timestamp, "SENDER PAUSED");
+        require(pausedUntil[_recipient] < block.timestamp, "RECIPIENT PAUSED");
         require(_sender != address(0), "TRANSFER_FROM_THE_ZERO_ADDRESS");
         require(_recipient != address(0), "TRANSFER_TO_THE_ZERO_ADDRESS");
         require(_sharesAmount <= shares[_sender], "TRANSFER_AMOUNT_EXCEEDS_BALANCE");

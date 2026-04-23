@@ -3,25 +3,23 @@ pragma solidity ^0.8.13;
 
 import "./TestSetup.sol";
 
-/// Unit + fuzz tests for the per-user FREEZE feature on EETH.
-/// Role model (post-rename):
-///   EETH_PAUSER_ROLE        -> security council : pause(user) / unpause(user) (strong)
-///   EETH_PAUSER_UNTIL_ROLE  -> monitoring EOA   : pauseUntil(user) arms 1-day freeze
-///
-/// Semantics:
-/// - `paused` / `pausedUntil` are per-address mappings.
-/// - `_transferShares` blocks if EITHER sender OR recipient is frozen.
-/// - `mintShares` / `burnShares` ALSO gate on the `_user` mapping entry
-///   (closes the prior C-1 bypass via LP deposit/withdraw).
+/// Unit + fuzz tests for the hybrid pause feature on EETH.
+/// Design:
+///   - global `paused` (bool)           : pause() / unpause()                      -> PAUSER_ROLE (strong)
+///   - per-user `pausedUntil[user]`     : pauseUntil(user)                         -> PAUSER_UNTIL_ROLE (weak)
+///                                      : extendPauseUntil(user, duration)         -> PAUSER_ROLE (strong)
+///                                      : cancelPauseUntil(user)                   -> PAUSER_ROLE (strong)
+/// All transfer / mint / burn paths require global !paused AND timer expired for the affected user(s).
 contract EETHPauseTest is TestSetup {
-    event Paused(address indexed user);
+    event Paused();
     event PausedUntil(address indexed user, uint64 pausedUntil);
-    event Unpaused(address indexed user);
+    event CancelledPauseUntil(address indexed user);
+    event Unpaused();
     event Transfer(address indexed from, address indexed to, uint256 value);
 
-    address pauser;       // holds EETH_PAUSER_ROLE (strong: pause + unpause)
-    address pauserUntil;  // holds EETH_PAUSER_UNTIL_ROLE (weak: 1-day timer)
-    address unauthorized; // no pause roles
+    address pauser;       // PAUSER_ROLE (strong)
+    address pauserUntil;  // PAUSER_UNTIL_ROLE (weak)
+    address unauthorized;
 
     uint64 constant ONE_DAY = 1 days;
 
@@ -52,22 +50,22 @@ contract EETHPauseTest is TestSetup {
     //                          ZERO-ADDRESS GUARDS
     // -------------------------------------------------------------------
 
-    function test_pause_rejectsZeroAddress() public {
-        vm.prank(pauser);
-        vm.expectRevert("No zero addresses");
-        eETHInstance.pause(address(0));
-    }
-
     function test_pauseUntil_rejectsZeroAddress() public {
         vm.prank(pauserUntil);
         vm.expectRevert("No zero addresses");
         eETHInstance.pauseUntil(address(0));
     }
 
-    function test_unpause_rejectsZeroAddress() public {
+    function test_extendPauseUntil_rejectsZeroAddress() public {
         vm.prank(pauser);
         vm.expectRevert("No zero addresses");
-        eETHInstance.unpause(address(0));
+        eETHInstance.extendPauseUntil(address(0), ONE_DAY);
+    }
+
+    function test_cancelPauseUntil_rejectsZeroAddress() public {
+        vm.prank(pauser);
+        vm.expectRevert("No zero addresses");
+        eETHInstance.cancelPauseUntil(address(0));
     }
 
     // -------------------------------------------------------------------
@@ -77,15 +75,15 @@ contract EETHPauseTest is TestSetup {
     function test_pause_onlyPauserRole() public {
         vm.prank(unauthorized);
         vm.expectRevert("IncorrectRole");
-        eETHInstance.pause(alice);
+        eETHInstance.pause();
 
         vm.prank(pauserUntil);
         vm.expectRevert("IncorrectRole");
-        eETHInstance.pause(alice);
+        eETHInstance.pause();
 
         vm.prank(pauser);
-        eETHInstance.pause(alice);
-        assertTrue(eETHInstance.paused(alice));
+        eETHInstance.pause();
+        assertTrue(eETHInstance.paused());
     }
 
     function test_pauseUntil_onlyPauserUntilRole() public {
@@ -102,293 +100,137 @@ contract EETHPauseTest is TestSetup {
         assertEq(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + ONE_DAY);
     }
 
-    function test_unpause_onlyPauserRole() public {
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
+    function test_extendPauseUntil_onlyPauserRole() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice); // arm the timer so extend has something to do
 
         vm.prank(unauthorized);
         vm.expectRevert("IncorrectRole");
-        eETHInstance.unpause(alice);
+        eETHInstance.extendPauseUntil(alice, 2 days);
 
         vm.prank(pauserUntil);
         vm.expectRevert("IncorrectRole");
-        eETHInstance.unpause(alice);
+        eETHInstance.extendPauseUntil(alice, 2 days);
 
         vm.prank(pauser);
-        eETHInstance.unpause(alice);
-        assertFalse(eETHInstance.paused(alice));
+        eETHInstance.extendPauseUntil(alice, 2 days);
+        assertEq(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + 2 days);
+    }
+
+    function test_cancelPauseUntil_onlyPauserRole() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        vm.prank(unauthorized);
+        vm.expectRevert("IncorrectRole");
+        eETHInstance.cancelPauseUntil(alice);
+
+        vm.prank(pauserUntil);
+        vm.expectRevert("IncorrectRole");
+        eETHInstance.cancelPauseUntil(alice);
+
+        vm.prank(pauser);
+        eETHInstance.cancelPauseUntil(alice);
+        assertEq(eETHInstance.pausedUntil(alice), 0);
+    }
+
+    function test_unpause_onlyPauserRole() public {
+        vm.prank(pauser);
+        eETHInstance.pause();
+
+        vm.prank(unauthorized);
+        vm.expectRevert("IncorrectRole");
+        eETHInstance.unpause();
+
+        vm.prank(pauserUntil);
+        vm.expectRevert("IncorrectRole");
+        eETHInstance.unpause();
+
+        vm.prank(pauser);
+        eETHInstance.unpause();
+        assertFalse(eETHInstance.paused());
     }
 
     // -------------------------------------------------------------------
-    //                      PER-USER FREEZE SELECTIVITY
+    //                     GLOBAL PAUSE — TRANSFER / MINT / BURN
     // -------------------------------------------------------------------
 
-    function test_freeze_isPerUser_othersUnaffected() public {
+    function test_globalPause_blocksAllTransfers() public {
         vm.prank(pauser);
-        eETHInstance.pause(alice);
-
-        vm.prank(bob);
-        eETHInstance.transfer(chad, 1 ether);
-        vm.prank(chad);
-        eETHInstance.transfer(bob, 1 ether);
-    }
-
-    function test_freeze_blocksSender() public {
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
+        eETHInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert("SENDER PAUSED");
+        vm.expectRevert("PAUSED");
         eETHInstance.transfer(bob, 1 ether);
-    }
 
-    function test_freeze_blocksRecipient() public {
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-
-        vm.prank(bob);
-        vm.expectRevert("RECIPIENT PAUSED");
-        eETHInstance.transfer(alice, 1 ether);
-    }
-
-    function test_freeze_blocksSelfTransfer() public {
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-
-        vm.prank(alice);
-        vm.expectRevert("SENDER PAUSED");
-        eETHInstance.transfer(alice, 1 ether);
-    }
-
-    function test_freeze_blocksTransferFrom_viaSender() public {
+        // transferFrom also blocked
         vm.prank(alice);
         eETHInstance.approve(bob, 1 ether);
-
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-
         vm.prank(bob);
-        vm.expectRevert("SENDER PAUSED");
+        vm.expectRevert("PAUSED");
         eETHInstance.transferFrom(alice, chad, 1 ether);
     }
 
-    function test_freeze_blocksTransferFrom_viaRecipient() public {
-        vm.prank(alice);
-        eETHInstance.approve(bob, 1 ether);
-
+    function test_globalPause_blocksMintShares() public {
         vm.prank(pauser);
-        eETHInstance.pause(chad);
+        eETHInstance.pause();
 
-        vm.prank(bob);
-        vm.expectRevert("RECIPIENT PAUSED");
-        eETHInstance.transferFrom(alice, chad, 1 ether);
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert("MINT PAUSED");
+        eETHInstance.mintShares(alice, 1 ether);
     }
 
-    function test_freeze_spenderNotChecked() public {
-        vm.prank(alice);
-        eETHInstance.approve(bob, 1 ether);
-
+    function test_globalPause_blocksBurnShares() public {
         vm.prank(pauser);
-        eETHInstance.pause(bob); // spender frozen — does NOT matter
+        eETHInstance.pause();
 
-        vm.prank(bob);
-        eETHInstance.transferFrom(alice, chad, 1 ether); // must succeed
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert("BURN PAUSED");
+        eETHInstance.burnShares(alice, 1 ether);
     }
 
-    function test_bothPartiesFrozen_sendErrorFiresFirst() public {
+    function test_globalPause_blocksLPDeposit() public {
         vm.prank(pauser);
-        eETHInstance.pause(alice);
-        vm.prank(pauser);
-        eETHInstance.pause(bob);
+        eETHInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert("SENDER PAUSED");
+        vm.expectRevert("MINT PAUSED");
+        liquidityPoolInstance.deposit{value: 1 ether}();
+    }
+
+    function test_globalUnpause_restoresTransfers() public {
+        vm.prank(pauser);
+        eETHInstance.pause();
+
+        vm.prank(pauser);
+        eETHInstance.unpause();
+
+        vm.prank(alice);
         eETHInstance.transfer(bob, 1 ether);
     }
 
-    function test_unfreeze_isPerUser() public {
+    /// @dev Documents M-2: unpause has no is-paused guard.
+    function test_unpause_noop_whenNotPaused() public {
+        assertFalse(eETHInstance.paused());
         vm.prank(pauser);
-        eETHInstance.pause(alice);
-        vm.prank(pauser);
-        eETHInstance.pause(bob);
+        eETHInstance.unpause();
+        assertFalse(eETHInstance.paused());
+    }
 
-        vm.prank(pauser);
-        eETHInstance.unpause(alice);
-
+    function test_globalPause_blocksEvenApprovedTransferFrom() public {
         vm.prank(alice);
-        eETHInstance.transfer(chad, 1 ether);
+        eETHInstance.approve(bob, 10 ether);
+
+        vm.prank(pauser);
+        eETHInstance.pause();
 
         vm.prank(bob);
-        vm.expectRevert("SENDER PAUSED");
-        eETHInstance.transfer(chad, 1 ether);
+        vm.expectRevert("PAUSED");
+        eETHInstance.transferFrom(alice, chad, 1 ether);
     }
 
     // -------------------------------------------------------------------
-    //                     MINT / BURN SHARES FREEZE GATE
-    //         (user's new fix — previously bypassed, now blocked)
-    // -------------------------------------------------------------------
-
-    function test_mintShares_blockedWhenUserPaused() public {
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-
-        vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert("MINT PAUSED");
-        eETHInstance.mintShares(alice, 1 ether);
-    }
-
-    function test_mintShares_blockedWhenUserPauseUntilActive() public {
-        vm.prank(pauserUntil);
-        eETHInstance.pauseUntil(alice);
-
-        vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert("MINT PAUSED");
-        eETHInstance.mintShares(alice, 1 ether);
-    }
-
-    function test_mintShares_blockedAtPauseUntilBoundary() public {
-        vm.prank(pauserUntil);
-        eETHInstance.pauseUntil(alice);
-        uint64 expiry = eETHInstance.pausedUntil(alice);
-        vm.warp(expiry); // exactly at boundary — still frozen
-
-        vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert("MINT PAUSED");
-        eETHInstance.mintShares(alice, 1 ether);
-    }
-
-    function test_mintShares_worksAfterPauseUntilExpiry() public {
-        vm.prank(pauserUntil);
-        eETHInstance.pauseUntil(alice);
-        uint64 expiry = eETHInstance.pausedUntil(alice);
-
-        vm.warp(uint256(expiry) + 1);
-
-        uint256 sharesBefore = eETHInstance.shares(alice);
-        vm.prank(address(liquidityPoolInstance));
-        eETHInstance.mintShares(alice, 1 ether);
-        assertEq(eETHInstance.shares(alice), sharesBefore + 1 ether);
-    }
-
-    function test_mintShares_worksForNonFrozenUser() public {
-        vm.prank(pauser);
-        eETHInstance.pause(alice); // freeze alice, not bob
-
-        uint256 sharesBefore = eETHInstance.shares(bob);
-        vm.prank(address(liquidityPoolInstance));
-        eETHInstance.mintShares(bob, 1 ether);
-        assertEq(eETHInstance.shares(bob), sharesBefore + 1 ether);
-    }
-
-    function test_burnShares_blockedWhenUserPaused() public {
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-
-        vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert("BURN PAUSED");
-        eETHInstance.burnShares(alice, 1 ether);
-    }
-
-    function test_burnShares_blockedWhenUserPauseUntilActive() public {
-        vm.prank(pauserUntil);
-        eETHInstance.pauseUntil(alice);
-
-        vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert("BURN PAUSED");
-        eETHInstance.burnShares(alice, 1 ether);
-    }
-
-    function test_burnShares_blockedAtPauseUntilBoundary() public {
-        vm.prank(pauserUntil);
-        eETHInstance.pauseUntil(alice);
-        uint64 expiry = eETHInstance.pausedUntil(alice);
-        vm.warp(expiry);
-
-        vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert("BURN PAUSED");
-        eETHInstance.burnShares(alice, 1 ether);
-    }
-
-    function test_burnShares_worksAfterPauseUntilExpiry() public {
-        vm.prank(pauserUntil);
-        eETHInstance.pauseUntil(alice);
-        uint64 expiry = eETHInstance.pausedUntil(alice);
-
-        vm.warp(uint256(expiry) + 1);
-
-        uint256 sharesBefore = eETHInstance.shares(alice);
-        vm.prank(address(liquidityPoolInstance));
-        eETHInstance.burnShares(alice, 1 ether);
-        assertEq(eETHInstance.shares(alice), sharesBefore - 1 ether);
-    }
-
-    function test_burnShares_worksForNonFrozenUser() public {
-        vm.prank(pauser);
-        eETHInstance.pause(bob);
-
-        uint256 sharesBefore = eETHInstance.shares(alice);
-        vm.prank(address(liquidityPoolInstance));
-        eETHInstance.burnShares(alice, 1 ether);
-        assertEq(eETHInstance.shares(alice), sharesBefore - 1 ether);
-    }
-
-    /// @dev mintShares check is first thing after onlyPoolContract — a non-LP caller
-    /// still sees the auth error, not the pause error.
-    function test_mintShares_revertsForNonLPCaller_evenWhenFrozen() public {
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-
-        vm.prank(bob);
-        vm.expectRevert("Only pool contract function");
-        eETHInstance.mintShares(alice, 1 ether);
-    }
-
-    function test_burnShares_revertsForNonLPCaller_evenWhenFrozen() public {
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-
-        vm.prank(bob);
-        vm.expectRevert("Incorrect Caller");
-        eETHInstance.burnShares(alice, 1 ether);
-    }
-
-    // -------------------------------------------------------------------
-    //          INTEGRATION: LP deposit/withdraw respect the freeze
-    // -------------------------------------------------------------------
-
-    function test_LPDeposit_blockedForFrozenDepositor() public {
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-
-        vm.prank(alice);
-        vm.expectRevert("MINT PAUSED");
-        liquidityPoolInstance.deposit{value: 1 ether}();
-    }
-
-    function test_LPDeposit_blockedUnderPauseUntil() public {
-        vm.prank(pauserUntil);
-        eETHInstance.pauseUntil(alice);
-
-        vm.prank(alice);
-        vm.expectRevert("MINT PAUSED");
-        liquidityPoolInstance.deposit{value: 1 ether}();
-    }
-
-    function test_LPDeposit_worksAfterPauseUntilExpiry() public {
-        vm.prank(pauserUntil);
-        eETHInstance.pauseUntil(alice);
-        uint64 expiry = eETHInstance.pausedUntil(alice);
-
-        vm.warp(uint256(expiry) + 1);
-
-        uint256 sharesBefore = eETHInstance.shares(alice);
-        vm.prank(alice);
-        liquidityPoolInstance.deposit{value: 1 ether}();
-        assertGt(eETHInstance.shares(alice), sharesBefore);
-    }
-
-    // -------------------------------------------------------------------
-    //                     pauseUntil TIMER SEMANTICS
+    //                     PER-USER TIMER — TRANSFER BLOCKING
     // -------------------------------------------------------------------
 
     function test_pauseUntil_blocksSender() public {
@@ -409,15 +251,54 @@ contract EETHPauseTest is TestSetup {
         eETHInstance.transfer(alice, 1 ether);
     }
 
-    function test_pauseUntil_expiresAfterOneDay() public {
+    function test_pauseUntil_blocksSelfTransfer() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
-        uint64 expiry = eETHInstance.pausedUntil(alice);
-
-        vm.warp(uint256(expiry) + 1);
 
         vm.prank(alice);
+        vm.expectRevert("SENDER PAUSED");
+        eETHInstance.transfer(alice, 1 ether);
+    }
+
+    function test_pauseUntil_blocksMintShares() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert("MINT PAUSED");
+        eETHInstance.mintShares(alice, 1 ether);
+    }
+
+    function test_pauseUntil_blocksBurnShares() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert("BURN PAUSED");
+        eETHInstance.burnShares(alice, 1 ether);
+    }
+
+    function test_pauseUntil_blocksLPDepositForUser() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        vm.prank(alice);
+        vm.expectRevert("MINT PAUSED");
+        liquidityPoolInstance.deposit{value: 1 ether}();
+    }
+
+    function test_pauseUntil_isPerUser_othersUnaffected() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        vm.prank(bob);
+        eETHInstance.transfer(chad, 1 ether);
+        vm.prank(chad);
         eETHInstance.transfer(bob, 1 ether);
+
+        // bob can deposit
+        vm.prank(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
     }
 
     function test_pauseUntil_blockedAtBoundary() public {
@@ -431,25 +312,34 @@ contract EETHPauseTest is TestSetup {
         eETHInstance.transfer(bob, 1 ether);
     }
 
-    function test_pauseUntil_timerIsPerUser() public {
+    function test_pauseUntil_expiresAfterOneDay() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
-        assertEq(eETHInstance.pausedUntil(bob), 0);
+        uint64 expiry = eETHInstance.pausedUntil(alice);
+
+        vm.warp(uint256(expiry) + 1);
+
+        vm.prank(alice);
+        eETHInstance.transfer(bob, 1 ether);
     }
 
-    /// @dev Documents M-1.
-    function test_pauseUntil_silentNoOp_whilePaused() public {
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-        uint64 before = eETHInstance.pausedUntil(alice);
+    function test_pauseUntil_spenderCanRelayBetweenUnfrozenParties() public {
+        // Spender (bob) frozen on per-user timer, but alice → chad transferFrom must still work.
+        vm.prank(alice);
+        eETHInstance.approve(bob, 1 ether);
 
         vm.prank(pauserUntil);
-        eETHInstance.pauseUntil(alice);
+        eETHInstance.pauseUntil(bob);
 
-        assertEq(eETHInstance.pausedUntil(alice), before);
-        assertTrue(eETHInstance.paused(alice));
+        vm.prank(bob);
+        eETHInstance.transferFrom(alice, chad, 1 ether);
     }
 
+    // -------------------------------------------------------------------
+    //                   pauseUntil — no-op while timer active
+    // -------------------------------------------------------------------
+
+    /// @dev Documents carry-over M-1: pauseUntil cannot be refreshed by the weak role.
     function test_pauseUntil_cannotExtend_whileTimerActive() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
@@ -460,7 +350,7 @@ contract EETHPauseTest is TestSetup {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
 
-        assertEq(eETHInstance.pausedUntil(alice), firstExpiry);
+        assertEq(eETHInstance.pausedUntil(alice), firstExpiry, "weak role cannot refresh (M-1)");
     }
 
     function test_pauseUntil_canRenew_afterExpiry() public {
@@ -474,34 +364,62 @@ contract EETHPauseTest is TestSetup {
         eETHInstance.pauseUntil(alice);
 
         assertEq(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + ONE_DAY);
-        assertGt(eETHInstance.pausedUntil(alice), firstExpiry);
     }
 
     // -------------------------------------------------------------------
-    //                          UNPAUSE SEMANTICS
+    //                         extendPauseUntil SEMANTICS
     // -------------------------------------------------------------------
 
-    function test_unpause_clearsBothFlags_whenFullyFrozen() public {
+    function test_extendPauseUntil_extendsLiveTimer() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-
-        assertTrue(eETHInstance.paused(alice));
-        assertGt(eETHInstance.pausedUntil(alice), block.timestamp);
 
         vm.prank(pauser);
-        eETHInstance.unpause(alice);
+        eETHInstance.extendPauseUntil(alice, 7 days);
 
-        assertFalse(eETHInstance.paused(alice));
-        assertEq(eETHInstance.pausedUntil(alice), 0);
+        assertEq(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + 7 days);
 
+        vm.warp(block.timestamp + 1 days + 1); // past original 1-day expiry
+        vm.prank(alice);
+        vm.expectRevert("SENDER PAUSED");
+        eETHInstance.transfer(bob, 1 ether);
+    }
+
+    /// @dev H-1 (HIGH): extendPauseUntil can SHORTEN a timer despite its name.
+    function test_SECURITY_extendPauseUntil_canShortenTimer() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice); // arms 1-day timer
+
+        // Admin calls extend with 1-hour duration → new expiry is EARLIER than original.
+        vm.prank(pauser);
+        eETHInstance.extendPauseUntil(alice, 1 hours);
+
+        assertEq(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + 1 hours);
+        assertLt(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + ONE_DAY,
+                 "extend should not allow shortening (H-1)");
+    }
+
+    /// @dev H-1 corollary: duration=0 effectively releases the user next block.
+    function test_SECURITY_extendPauseUntil_withZeroDuration_effectivelyCancels() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        vm.prank(pauser);
+        eETHInstance.extendPauseUntil(alice, 0);
+
+        // Current block — timer is at block.timestamp, require uses strict <, still paused.
+        vm.prank(alice);
+        vm.expectRevert("SENDER PAUSED");
+        eETHInstance.transfer(bob, 1 ether);
+
+        // But any forward progress unfreezes.
+        vm.warp(block.timestamp + 1);
         vm.prank(alice);
         eETHInstance.transfer(bob, 1 ether);
     }
 
-    /// @dev Documents M-2: unpause after expiry does not clear pausedUntil.
-    function test_unpause_afterExpiry_leavesStaleTimer() public {
+    /// @dev M-1-new: extendPauseUntil silent no-op when timer already expired.
+    function test_extendPauseUntil_silentNoOp_whenTimerExpired() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
         uint64 expiry = eETHInstance.pausedUntil(alice);
@@ -509,32 +427,163 @@ contract EETHPauseTest is TestSetup {
         vm.warp(uint256(expiry) + 1);
 
         vm.prank(pauser);
-        eETHInstance.unpause(alice);
+        eETHInstance.extendPauseUntil(alice, 3 days);
 
-        assertEq(eETHInstance.pausedUntil(alice), expiry);
-        assertFalse(eETHInstance.paused(alice));
-
-        vm.prank(alice);
-        eETHInstance.transfer(bob, 1 ether);
+        assertEq(eETHInstance.pausedUntil(alice), expiry, "no-op when timer expired (M-1-new)");
     }
 
-    /// @dev Documents M-2.
-    function test_unpause_noop_whenNeverPaused() public {
+    function test_extendPauseUntil_silentNoOp_whenNeverArmed() public {
         vm.prank(pauser);
-        eETHInstance.unpause(alice);
-        assertFalse(eETHInstance.paused(alice));
+        eETHInstance.extendPauseUntil(alice, 3 days);
         assertEq(eETHInstance.pausedUntil(alice), 0);
     }
 
+    function test_extendPauseUntil_emitsPausedUntil_whenActive() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        uint64 expected = uint64(block.timestamp) + 3 days;
+        vm.expectEmit(true, false, false, true);
+        emit PausedUntil(alice, expected);
+        vm.prank(pauser);
+        eETHInstance.extendPauseUntil(alice, 3 days);
+    }
+
+    function test_extendPauseUntil_doesNotEmit_whenExpired() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+        vm.warp(block.timestamp + 2 days);
+
+        vm.recordLogs();
+        vm.prank(pauser);
+        eETHInstance.extendPauseUntil(alice, 3 days);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 0, "no event on no-op");
+    }
+
+    function test_extendPauseUntil_onOtherUser_doesNotLeak() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        vm.prank(pauser);
+        eETHInstance.extendPauseUntil(bob, 7 days); // bob was never paused → no-op
+
+        assertEq(eETHInstance.pausedUntil(bob), 0);
+    }
+
     // -------------------------------------------------------------------
-    //                           EVENT EMISSION
+    //                         cancelPauseUntil SEMANTICS
     // -------------------------------------------------------------------
 
-    function test_pause_emitsIndexedUser() public {
-        vm.expectEmit(true, false, false, true);
-        emit Paused(alice);
+    function test_cancelPauseUntil_clearsActiveTimer() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
         vm.prank(pauser);
-        eETHInstance.pause(alice);
+        eETHInstance.cancelPauseUntil(alice);
+
+        assertEq(eETHInstance.pausedUntil(alice), 0);
+
+        vm.prank(alice);
+        eETHInstance.transfer(bob, 1 ether); // must succeed immediately
+    }
+
+    /// @dev M-2-new: cancelPauseUntil emits event even when there's nothing to cancel.
+    function test_cancelPauseUntil_emitsEvenWhenNeverArmed() public {
+        vm.expectEmit(true, false, false, true);
+        emit CancelledPauseUntil(alice);
+        vm.prank(pauser);
+        eETHInstance.cancelPauseUntil(alice);
+    }
+
+    function test_cancelPauseUntil_emitsEvenWhenAlreadyExpired() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+        vm.warp(block.timestamp + 2 days);
+
+        vm.expectEmit(true, false, false, true);
+        emit CancelledPauseUntil(alice);
+        vm.prank(pauser);
+        eETHInstance.cancelPauseUntil(alice);
+
+        assertEq(eETHInstance.pausedUntil(alice), 0, "stale timer also cleared");
+    }
+
+    function test_cancelPauseUntil_isPerUser_doesNotTouchOthers() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(bob);
+
+        vm.prank(pauser);
+        eETHInstance.cancelPauseUntil(alice);
+
+        assertEq(eETHInstance.pausedUntil(alice), 0);
+        assertGt(eETHInstance.pausedUntil(bob), block.timestamp);
+    }
+
+    // -------------------------------------------------------------------
+    //                 GLOBAL ⨯ PER-USER INTERACTION
+    // -------------------------------------------------------------------
+
+    function test_globalPause_dominatesTimerCheck_inTransfer() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        vm.prank(pauser);
+        eETHInstance.pause();
+
+        // Even bob (not timer-frozen) can't transfer — global wins, returns "PAUSED".
+        vm.prank(bob);
+        vm.expectRevert("PAUSED");
+        eETHInstance.transfer(chad, 1 ether);
+    }
+
+    function test_globalUnpause_leavesPerUserTimerInEffect() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        vm.prank(pauser);
+        eETHInstance.pause();
+        vm.prank(pauser);
+        eETHInstance.unpause();
+
+        // Bob can move again, alice is still locked by per-user timer.
+        vm.prank(bob);
+        eETHInstance.transfer(chad, 1 ether);
+
+        vm.prank(alice);
+        vm.expectRevert("SENDER PAUSED");
+        eETHInstance.transfer(bob, 1 ether);
+    }
+
+    function test_pauseUntilWorksDuringGlobalPause_butTransfersStillBlocked() public {
+        vm.prank(pauser);
+        eETHInstance.pause();
+
+        // Weak role can still arm a per-user timer during global pause.
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        assertGt(eETHInstance.pausedUntil(alice), block.timestamp);
+    }
+
+    // -------------------------------------------------------------------
+    //                                EVENTS
+    // -------------------------------------------------------------------
+
+    function test_pause_emitsPaused() public {
+        vm.expectEmit(false, false, false, true);
+        emit Paused();
+        vm.prank(pauser);
+        eETHInstance.pause();
+    }
+
+    function test_unpause_emitsUnpaused() public {
+        vm.expectEmit(false, false, false, true);
+        emit Unpaused();
+        vm.prank(pauser);
+        eETHInstance.unpause();
     }
 
     function test_pauseUntil_emitsIndexedUserAndExpiry() public {
@@ -544,64 +593,73 @@ contract EETHPauseTest is TestSetup {
         eETHInstance.pauseUntil(alice);
     }
 
-    function test_unpause_emitsIndexedUser() public {
-        vm.expectEmit(true, false, false, true);
-        emit Unpaused(alice);
-        vm.prank(pauser);
-        eETHInstance.unpause(alice);
-    }
-
     // -------------------------------------------------------------------
-    //                  NON-TRANSFER PATHS DURING FREEZE
+    //                   NON-TRANSFER PATHS DURING FREEZE
     // -------------------------------------------------------------------
 
-    function test_approve_notBlockedByFreeze() public {
+    function test_approve_worksDuringGlobalPause() public {
         vm.prank(pauser);
-        eETHInstance.pause(alice);
+        eETHInstance.pause();
 
         vm.prank(alice);
         eETHInstance.approve(bob, 1 ether);
         assertEq(eETHInstance.allowance(alice, bob), 1 ether);
     }
 
-    function test_permit_notBlockedByFreeze() public {
+    function test_approve_worksWhileUserPaused() public {
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        vm.prank(alice);
+        eETHInstance.approve(bob, 1 ether);
+        assertEq(eETHInstance.allowance(alice, bob), 1 ether);
+    }
+
+    function test_permit_worksDuringGlobalPause() public {
         ILiquidityPool.PermitInput memory p = createPermitInput(
             2, bob, 1 ether, eETHInstance.nonces(alice),
             type(uint256).max, eETHInstance.DOMAIN_SEPARATOR()
         );
 
         vm.prank(pauser);
-        eETHInstance.pause(alice);
+        eETHInstance.pause();
 
         eETHInstance.permit(alice, bob, 1 ether, type(uint256).max, p.v, p.r, p.s);
         assertEq(eETHInstance.allowance(alice, bob), 1 ether);
     }
 
     // -------------------------------------------------------------------
-    //                    INTERLEAVED / LIFECYCLE FLOWS
+    //                          LIFECYCLE SEQUENCES
     // -------------------------------------------------------------------
 
-    function test_sequence_pauseUntil_then_pause_locks() public {
+    function test_sequence_weakArms_then_strongExtends_then_strongCancels() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
 
         vm.prank(pauser);
-        eETHInstance.pause(alice);
+        eETHInstance.extendPauseUntil(alice, 3 days);
+        assertEq(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + 3 days);
 
-        vm.warp(block.timestamp + 2 days);
+        vm.prank(pauser);
+        eETHInstance.cancelPauseUntil(alice);
+        assertEq(eETHInstance.pausedUntil(alice), 0);
+
+        vm.prank(alice);
+        eETHInstance.transfer(bob, 1 ether);
+    }
+
+    function test_sequence_globalPause_thenPerUserArm_thenUnpause_userStillFrozen() public {
+        vm.prank(pauser);
+        eETHInstance.pause();
+
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        vm.prank(pauser);
+        eETHInstance.unpause();
 
         vm.prank(alice);
         vm.expectRevert("SENDER PAUSED");
-        eETHInstance.transfer(bob, 1 ether);
-
-        vm.prank(pauserUntil);
-        vm.expectRevert("IncorrectRole");
-        eETHInstance.unpause(alice);
-
-        vm.prank(pauser);
-        eETHInstance.unpause(alice);
-
-        vm.prank(alice);
         eETHInstance.transfer(bob, 1 ether);
     }
 
@@ -623,7 +681,14 @@ contract EETHPauseTest is TestSetup {
         vm.assume(caller != pauser);
         vm.prank(caller);
         vm.expectRevert("IncorrectRole");
-        eETHInstance.pause(alice);
+        eETHInstance.pause();
+    }
+
+    function testFuzz_unpause_revertsForNonPauser(address caller) public {
+        vm.assume(caller != pauser);
+        vm.prank(caller);
+        vm.expectRevert("IncorrectRole");
+        eETHInstance.unpause();
     }
 
     function testFuzz_pauseUntil_revertsForNonPauserUntil(address caller) public {
@@ -633,11 +698,18 @@ contract EETHPauseTest is TestSetup {
         eETHInstance.pauseUntil(alice);
     }
 
-    function testFuzz_unpause_revertsForNonPauser(address caller) public {
+    function testFuzz_extendPauseUntil_revertsForNonPauser(address caller) public {
         vm.assume(caller != pauser);
         vm.prank(caller);
         vm.expectRevert("IncorrectRole");
-        eETHInstance.unpause(alice);
+        eETHInstance.extendPauseUntil(alice, ONE_DAY);
+    }
+
+    function testFuzz_cancelPauseUntil_revertsForNonPauser(address caller) public {
+        vm.assume(caller != pauser);
+        vm.prank(caller);
+        vm.expectRevert("IncorrectRole");
+        eETHInstance.cancelPauseUntil(alice);
     }
 
     function testFuzz_pauseUntil_setsOneDayFromWarpedTimestamp(uint64 warpTo) public {
@@ -650,11 +722,34 @@ contract EETHPauseTest is TestSetup {
         assertEq(eETHInstance.pausedUntil(alice), warpTo + ONE_DAY);
     }
 
-    function testFuzz_senderFrozen_blocksAnyAmount(uint256 amount) public {
+    function testFuzz_extendPauseUntil_setsArbitraryDuration(uint64 duration) public {
+        duration = uint64(bound(uint256(duration), 1, 365 days));
+
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        vm.prank(pauser);
+        eETHInstance.extendPauseUntil(alice, duration);
+
+        assertEq(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + duration);
+    }
+
+    function testFuzz_globalPause_blocksTransferAnyAmount(uint256 amount) public {
         amount = bound(amount, 1, eETHInstance.shares(alice));
 
         vm.prank(pauser);
-        eETHInstance.pause(alice);
+        eETHInstance.pause();
+
+        vm.prank(alice);
+        vm.expectRevert("PAUSED");
+        eETHInstance.transfer(bob, amount);
+    }
+
+    function testFuzz_senderFrozen_blocksAnyAmount(uint256 amount) public {
+        amount = bound(amount, 1, eETHInstance.shares(alice));
+
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
 
         vm.prank(alice);
         vm.expectRevert("SENDER PAUSED");
@@ -664,42 +759,56 @@ contract EETHPauseTest is TestSetup {
     function testFuzz_recipientFrozen_blocksAnyAmount(uint256 amount) public {
         amount = bound(amount, 1, eETHInstance.shares(bob));
 
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
 
         vm.prank(bob);
         vm.expectRevert("RECIPIENT PAUSED");
         eETHInstance.transfer(alice, amount);
     }
 
-    function testFuzz_unfrozenUsers_unaffected(uint256 amount) public {
-        amount = bound(amount, 1, eETHInstance.shares(bob));
+    function testFuzz_globalPause_blocksMintShares(uint256 amount) public {
+        amount = bound(amount, 1, 1_000_000 ether);
 
         vm.prank(pauser);
-        eETHInstance.pause(alice);
+        eETHInstance.pause();
 
-        uint256 bobBefore = eETHInstance.shares(bob);
-        uint256 chadBefore = eETHInstance.shares(chad);
-
-        vm.prank(bob);
-        eETHInstance.transfer(chad, amount);
-
-        assertLe(eETHInstance.shares(bob), bobBefore);
-        assertGe(eETHInstance.shares(chad), chadBefore);
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert("MINT PAUSED");
+        eETHInstance.mintShares(alice, amount);
     }
 
-    function testFuzz_transferAtOrBeforeExpiry_blocksSender(uint64 delta) public {
-        delta = uint64(bound(uint256(delta), 0, ONE_DAY));
+    function testFuzz_globalPause_blocksBurnShares(uint256 amount) public {
+        amount = bound(amount, 1, eETHInstance.shares(alice));
+
+        vm.prank(pauser);
+        eETHInstance.pause();
+
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert("BURN PAUSED");
+        eETHInstance.burnShares(alice, amount);
+    }
+
+    function testFuzz_pauseUntil_blocksMintShares(uint256 amount) public {
+        amount = bound(amount, 1, 1_000_000 ether);
 
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
-        uint64 expiry = eETHInstance.pausedUntil(alice);
 
-        vm.warp(uint256(expiry) - delta);
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert("MINT PAUSED");
+        eETHInstance.mintShares(alice, amount);
+    }
 
-        vm.prank(alice);
-        vm.expectRevert("SENDER PAUSED");
-        eETHInstance.transfer(bob, 1);
+    function testFuzz_pauseUntil_blocksBurnShares(uint256 amount) public {
+        amount = bound(amount, 1, eETHInstance.shares(alice));
+
+        vm.prank(pauserUntil);
+        eETHInstance.pauseUntil(alice);
+
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert("BURN PAUSED");
+        eETHInstance.burnShares(alice, amount);
     }
 
     function testFuzz_transferWorksAfterExpiry(uint256 amount, uint64 extra) public {
@@ -721,69 +830,7 @@ contract EETHPauseTest is TestSetup {
         assertEq(eETHInstance.shares(bob), bobBefore + sharesMoved);
     }
 
-    function testFuzz_mintShares_blockedWhenPaused(uint256 amount) public {
-        amount = bound(amount, 1, 1_000_000 ether);
-
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-
-        vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert("MINT PAUSED");
-        eETHInstance.mintShares(alice, amount);
-    }
-
-    function testFuzz_mintShares_blockedUnderPauseUntil(uint256 amount, uint64 delta) public {
-        amount = bound(amount, 1, 1_000_000 ether);
-        delta = uint64(bound(uint256(delta), 0, ONE_DAY));
-
-        vm.prank(pauserUntil);
-        eETHInstance.pauseUntil(alice);
-        uint64 expiry = eETHInstance.pausedUntil(alice);
-        vm.warp(uint256(expiry) - delta);
-
-        vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert("MINT PAUSED");
-        eETHInstance.mintShares(alice, amount);
-    }
-
-    function testFuzz_burnShares_blockedWhenPaused(uint256 amount) public {
-        amount = bound(amount, 1, eETHInstance.shares(alice));
-
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-
-        vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert("BURN PAUSED");
-        eETHInstance.burnShares(alice, amount);
-    }
-
-    function testFuzz_burnShares_blockedUnderPauseUntil(uint256 amount, uint64 delta) public {
-        amount = bound(amount, 1, eETHInstance.shares(alice));
-        delta = uint64(bound(uint256(delta), 0, ONE_DAY));
-
-        vm.prank(pauserUntil);
-        eETHInstance.pauseUntil(alice);
-        uint64 expiry = eETHInstance.pausedUntil(alice);
-        vm.warp(uint256(expiry) - delta);
-
-        vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert("BURN PAUSED");
-        eETHInstance.burnShares(alice, amount);
-    }
-
-    function testFuzz_independentUsers_freezingOneDoesNotTouchOther(address userA, address userB) public {
-        vm.assume(userA != address(0) && userB != address(0));
-        vm.assume(userA != userB);
-
-        vm.prank(pauser);
-        eETHInstance.pause(userA);
-
-        assertTrue(eETHInstance.paused(userA));
-        assertFalse(eETHInstance.paused(userB));
-        assertEq(eETHInstance.pausedUntil(userB), 0);
-    }
-
-    function testFuzz_pauseUntil_doesNotTouchOtherUser(address userA, address userB) public {
+    function testFuzz_independentUsers_timerIsolated(address userA, address userB) public {
         vm.assume(userA != address(0) && userB != address(0));
         vm.assume(userA != userB);
 
@@ -792,6 +839,5 @@ contract EETHPauseTest is TestSetup {
 
         assertGt(eETHInstance.pausedUntil(userA), block.timestamp);
         assertEq(eETHInstance.pausedUntil(userB), 0);
-        assertFalse(eETHInstance.paused(userB));
     }
 }

@@ -19,9 +19,10 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     error IncorrectRole();
     error CannotRecoverEETH();
 
-    event Paused(address indexed user);
+    event Paused();
     event PausedUntil(address indexed user, uint64 pausedUntil);
-    event Unpaused(address indexed user);
+    event CancelledPauseUntil(address indexed user);
+    event Unpaused();
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STORAGE  ----------------------------------
@@ -29,7 +30,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
 
     IeETH public eETH;
     ILiquidityPool public liquidityPool;
-    mapping(address => bool) public paused;
+    bool public paused;
     mapping(address => uint64) public pausedUntil;
 
     //--------------------------------------------------------------------------------------
@@ -101,30 +102,41 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         return eETHAmount;
     }
 
-    function pause(address _user) external {
+    function pause() external {
         require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
-        require(_user != address(0), "No zero addresses");
-        paused[_user] = true;
-        emit Paused(_user);
+        paused = true;
+        emit Paused();
     }
 
     function pauseUntil(address _user) external {
         require(roleRegistry.hasRole(WEETH_PAUSER_UNTIL_ROLE, msg.sender), "IncorrectRole");
         require(_user != address(0), "No zero addresses");
-        if (!paused[_user] && pausedUntil[_user] < block.timestamp) {
+        if (pausedUntil[_user] < block.timestamp) {
             pausedUntil[_user] = uint64(block.timestamp) + 1 days;
             emit PausedUntil(_user, pausedUntil[_user]);
         }
     }
 
-    function unpause(address _user) external {
+    function extendPauseUntil(address _user, uint64 _duration) external {
         require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
         require(_user != address(0), "No zero addresses");
         if (pausedUntil[_user] >= block.timestamp) {
-            delete pausedUntil[_user];
+            pausedUntil[_user] = uint64(block.timestamp) + _duration;
+            emit PausedUntil(_user, pausedUntil[_user]);
         }
-        delete paused[_user];
-        emit Unpaused(_user);
+    }
+
+    function cancelPauseUntil(address _user) external {
+        require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        require(_user != address(0), "No zero addresses");
+        delete pausedUntil[_user];
+        emit CancelledPauseUntil(_user);
+    }
+
+    function unpause() external {
+        require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        paused = false;
+        emit Unpaused();
     }
 
     function recoverETH(address payable to, uint256 amount) external {
@@ -158,8 +170,9 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         address to,
         uint256 /* amount */
     ) internal virtual override {
-        require(!paused[from] && pausedUntil[from] < block.timestamp, "SENDER PAUSED");
-        require(!paused[to] && pausedUntil[to] < block.timestamp, "RECIPIENT PAUSED");
+        require(!paused, "PAUSED");
+        require(pausedUntil[from] < block.timestamp, "SENDER PAUSED");
+        require(pausedUntil[to] < block.timestamp, "RECIPIENT PAUSED");
     }
 
     //--------------------------------------------------------------------------------------

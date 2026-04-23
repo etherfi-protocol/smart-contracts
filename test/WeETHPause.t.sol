@@ -3,20 +3,19 @@ pragma solidity ^0.8.13;
 
 import "./TestSetup.sol";
 
-/// Unit + fuzz tests for the per-user FREEZE feature on WeETH.
-/// Role model (post-rename):
-///   WEETH_PAUSER_ROLE        -> security council : pause(user) / unpause(user) (strong)
-///   WEETH_PAUSER_UNTIL_ROLE  -> monitoring EOA   : pauseUntil(user) arms 1-day freeze
-///
-/// WeETH uses `_beforeTokenTransfer`, which fires on `_mint`/`_burn` too — so a freeze
-/// on either party blocks transfer, wrap (mint), and unwrap (burn).
+/// Unit + fuzz tests for the hybrid pause feature on WeETH.
+/// - global `paused` (bool)       : pause() / unpause()                       -> PAUSER_ROLE (strong)
+/// - per-user `pausedUntil[u]`    : pauseUntil(user)                          -> PAUSER_UNTIL_ROLE (weak)
+///                                : extendPauseUntil(user, duration)          -> PAUSER_ROLE (strong)
+///                                : cancelPauseUntil(user)                    -> PAUSER_ROLE (strong)
 contract WeETHPauseTest is TestSetup {
-    event Paused(address indexed user);
+    event Paused();
     event PausedUntil(address indexed user, uint64 pausedUntil);
-    event Unpaused(address indexed user);
+    event CancelledPauseUntil(address indexed user);
+    event Unpaused();
 
-    address pauser;        // WEETH_PAUSER_ROLE (strong)
-    address pauserUntil;   // WEETH_PAUSER_UNTIL_ROLE (weak)
+    address pauser;
+    address pauserUntil;
     address unauthorized;
 
     uint64 constant ONE_DAY = 1 days;
@@ -60,8 +59,6 @@ contract WeETHPauseTest is TestSetup {
         weEthInstance.wrap(10 ether);
     }
 
-    /// @dev Shared helper — grants eETH pause role to a council address so tests can
-    /// exercise cross-token freeze interactions without repeating the dance.
     function _grantEETHPauserRole(address to) internal {
         vm.startPrank(owner);
         roleRegistryInstance.grantRole(eETHInstance.EETH_PAUSER_ROLE(), to);
@@ -78,22 +75,22 @@ contract WeETHPauseTest is TestSetup {
     //                          ZERO-ADDRESS GUARDS
     // -------------------------------------------------------------------
 
-    function test_pause_rejectsZeroAddress() public {
-        vm.prank(pauser);
-        vm.expectRevert("No zero addresses");
-        weEthInstance.pause(address(0));
-    }
-
     function test_pauseUntil_rejectsZeroAddress() public {
         vm.prank(pauserUntil);
         vm.expectRevert("No zero addresses");
         weEthInstance.pauseUntil(address(0));
     }
 
-    function test_unpause_rejectsZeroAddress() public {
+    function test_extendPauseUntil_rejectsZeroAddress() public {
         vm.prank(pauser);
         vm.expectRevert("No zero addresses");
-        weEthInstance.unpause(address(0));
+        weEthInstance.extendPauseUntil(address(0), ONE_DAY);
+    }
+
+    function test_cancelPauseUntil_rejectsZeroAddress() public {
+        vm.prank(pauser);
+        vm.expectRevert("No zero addresses");
+        weEthInstance.cancelPauseUntil(address(0));
     }
 
     // -------------------------------------------------------------------
@@ -103,15 +100,15 @@ contract WeETHPauseTest is TestSetup {
     function test_pause_onlyPauserRole() public {
         vm.prank(unauthorized);
         vm.expectRevert("IncorrectRole");
-        weEthInstance.pause(alice);
+        weEthInstance.pause();
 
         vm.prank(pauserUntil);
         vm.expectRevert("IncorrectRole");
-        weEthInstance.pause(alice);
+        weEthInstance.pause();
 
         vm.prank(pauser);
-        weEthInstance.pause(alice);
-        assertTrue(weEthInstance.paused(alice));
+        weEthInstance.pause();
+        assertTrue(weEthInstance.paused());
     }
 
     function test_pauseUntil_onlyPauserUntilRole() public {
@@ -128,113 +125,137 @@ contract WeETHPauseTest is TestSetup {
         assertEq(weEthInstance.pausedUntil(alice), uint64(block.timestamp) + ONE_DAY);
     }
 
-    function test_unpause_onlyPauserRole() public {
-        vm.prank(pauser);
-        weEthInstance.pause(alice);
+    function test_extendPauseUntil_onlyPauserRole() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
 
         vm.prank(unauthorized);
         vm.expectRevert("IncorrectRole");
-        weEthInstance.unpause(alice);
+        weEthInstance.extendPauseUntil(alice, 2 days);
 
         vm.prank(pauserUntil);
         vm.expectRevert("IncorrectRole");
-        weEthInstance.unpause(alice);
+        weEthInstance.extendPauseUntil(alice, 2 days);
 
         vm.prank(pauser);
-        weEthInstance.unpause(alice);
-        assertFalse(weEthInstance.paused(alice));
+        weEthInstance.extendPauseUntil(alice, 2 days);
+        assertEq(weEthInstance.pausedUntil(alice), uint64(block.timestamp) + 2 days);
+    }
+
+    function test_cancelPauseUntil_onlyPauserRole() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+
+        vm.prank(unauthorized);
+        vm.expectRevert("IncorrectRole");
+        weEthInstance.cancelPauseUntil(alice);
+
+        vm.prank(pauserUntil);
+        vm.expectRevert("IncorrectRole");
+        weEthInstance.cancelPauseUntil(alice);
+
+        vm.prank(pauser);
+        weEthInstance.cancelPauseUntil(alice);
+        assertEq(weEthInstance.pausedUntil(alice), 0);
+    }
+
+    function test_unpause_onlyPauserRole() public {
+        vm.prank(pauser);
+        weEthInstance.pause();
+
+        vm.prank(unauthorized);
+        vm.expectRevert("IncorrectRole");
+        weEthInstance.unpause();
+
+        vm.prank(pauserUntil);
+        vm.expectRevert("IncorrectRole");
+        weEthInstance.unpause();
+
+        vm.prank(pauser);
+        weEthInstance.unpause();
+        assertFalse(weEthInstance.paused());
     }
 
     // -------------------------------------------------------------------
-    //                     PER-USER FREEZE SELECTIVITY
+    //                     GLOBAL PAUSE SEMANTICS
     // -------------------------------------------------------------------
 
-    function test_freeze_isPerUser_othersUnaffected() public {
+    function test_globalPause_blocksTransfer() public {
         vm.prank(pauser);
-        weEthInstance.pause(alice);
+        weEthInstance.pause();
 
-        vm.prank(bob);
-        weEthInstance.transfer(chad, 1 ether);
-        vm.prank(chad);
+        vm.prank(alice);
+        vm.expectRevert("PAUSED");
         weEthInstance.transfer(bob, 1 ether);
     }
 
-    function test_freeze_blocksSender() public {
+    function test_globalPause_blocksWrap() public {
         vm.prank(pauser);
-        weEthInstance.pause(alice);
+        weEthInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert("SENDER PAUSED");
-        weEthInstance.transfer(bob, 1 ether);
-    }
-
-    function test_freeze_blocksRecipient() public {
-        vm.prank(pauser);
-        weEthInstance.pause(alice);
-
-        vm.prank(bob);
-        vm.expectRevert("RECIPIENT PAUSED");
-        weEthInstance.transfer(alice, 1 ether);
-    }
-
-    function test_freeze_blocksSelfTransfer() public {
-        vm.prank(pauser);
-        weEthInstance.pause(alice);
-
-        vm.prank(alice);
-        vm.expectRevert("SENDER PAUSED");
-        weEthInstance.transfer(alice, 1 ether);
-    }
-
-    function test_freeze_blocksTransferFrom_viaSender() public {
-        vm.prank(alice);
-        weEthInstance.approve(bob, 1 ether);
-
-        vm.prank(pauser);
-        weEthInstance.pause(alice);
-
-        vm.prank(bob);
-        vm.expectRevert("SENDER PAUSED");
-        weEthInstance.transferFrom(alice, chad, 1 ether);
-    }
-
-    function test_freeze_blocksTransferFrom_viaRecipient() public {
-        vm.prank(alice);
-        weEthInstance.approve(bob, 1 ether);
-
-        vm.prank(pauser);
-        weEthInstance.pause(chad);
-
-        vm.prank(bob);
-        vm.expectRevert("RECIPIENT PAUSED");
-        weEthInstance.transferFrom(alice, chad, 1 ether);
-    }
-
-    // -------------------------------------------------------------------
-    //           WRAP UNDER FREEZE — weETH side (_beforeTokenTransfer)
-    // -------------------------------------------------------------------
-
-    /// @dev pause() on WeETH -> wrap reverts at _mint's _beforeTokenTransfer.
-    function test_wrap_blocked_whenCallerFrozenOnWeETH() public {
-        vm.prank(pauser);
-        weEthInstance.pause(alice);
-
-        vm.prank(alice);
-        vm.expectRevert("RECIPIENT PAUSED");
+        vm.expectRevert("PAUSED");
         weEthInstance.wrap(1 ether);
     }
 
-    /// @dev pauseUntil() on WeETH -> wrap reverts while timer active.
-    function test_wrap_blocked_underPauseUntil_onWeETH() public {
+    function test_globalPause_blocksUnwrap() public {
+        vm.prank(pauser);
+        weEthInstance.pause();
+
+        vm.prank(alice);
+        vm.expectRevert("PAUSED");
+        weEthInstance.unwrap(1 ether);
+    }
+
+    function test_globalPause_blocksWrapWithPermit() public {
+        ILiquidityPool.PermitInput memory p = createPermitInput(
+            2, address(weEthInstance), 1 ether, eETHInstance.nonces(alice),
+            type(uint256).max, eETHInstance.DOMAIN_SEPARATOR()
+        );
+
+        vm.prank(pauser);
+        weEthInstance.pause();
+
+        vm.prank(alice);
+        vm.expectRevert("PAUSED");
+        weEthInstance.wrapWithPermit(1 ether, p);
+    }
+
+    function test_globalUnpause_restoresFlow() public {
+        vm.prank(pauser);
+        weEthInstance.pause();
+
+        vm.prank(pauser);
+        weEthInstance.unpause();
+
+        vm.prank(alice);
+        weEthInstance.transfer(bob, 1 ether);
+    }
+
+    /// @dev M-2 carry-over: unpause has no is-paused guard.
+    function test_unpause_noop_whenNotPaused() public {
+        assertFalse(weEthInstance.paused());
+        vm.prank(pauser);
+        weEthInstance.unpause();
+        assertFalse(weEthInstance.paused());
+    }
+
+    // -------------------------------------------------------------------
+    //                   WRAP / UNWRAP UNDER PER-USER TIMER
+    //              (WeETH side uses _beforeTokenTransfer on _mint/_burn)
+    // -------------------------------------------------------------------
+
+    function test_wrap_blockedWhenCallerOnWeETHTimer() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
 
         vm.prank(alice);
+        // _mint(alice, ...) triggers _beforeTokenTransfer(0, alice, ...); recipient check fires.
         vm.expectRevert("RECIPIENT PAUSED");
         weEthInstance.wrap(1 ether);
     }
 
-    function test_wrap_blockedAtPauseUntilBoundary_onWeETH() public {
+    function test_wrap_blockedAtTimerBoundary_onWeETH() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
         uint64 expiry = weEthInstance.pausedUntil(alice);
@@ -245,7 +266,7 @@ contract WeETHPauseTest is TestSetup {
         weEthInstance.wrap(1 ether);
     }
 
-    function test_wrap_worksAfterPauseUntilExpiry_onWeETH() public {
+    function test_wrap_worksAfterTimerExpiry_onWeETH() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
         uint64 expiry = weEthInstance.pausedUntil(alice);
@@ -255,57 +276,17 @@ contract WeETHPauseTest is TestSetup {
         weEthInstance.wrap(1 ether);
     }
 
-    function test_wrapWithPermit_blocked_whenCallerFrozenOnWeETH() public {
-        ILiquidityPool.PermitInput memory p = createPermitInput(
-            2, address(weEthInstance), 1 ether, eETHInstance.nonces(alice),
-            type(uint256).max, eETHInstance.DOMAIN_SEPARATOR()
-        );
-
-        vm.prank(pauser);
-        weEthInstance.pause(alice);
-
-        vm.prank(alice);
-        vm.expectRevert("RECIPIENT PAUSED");
-        weEthInstance.wrapWithPermit(1 ether, p);
-    }
-
-    function test_wrapWithPermit_blocked_underPauseUntil_onWeETH() public {
-        ILiquidityPool.PermitInput memory p = createPermitInput(
-            2, address(weEthInstance), 1 ether, eETHInstance.nonces(alice),
-            type(uint256).max, eETHInstance.DOMAIN_SEPARATOR()
-        );
-
+    function test_unwrap_blockedWhenCallerOnWeETHTimer() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
 
         vm.prank(alice);
-        vm.expectRevert("RECIPIENT PAUSED");
-        weEthInstance.wrapWithPermit(1 ether, p);
-    }
-
-    // -------------------------------------------------------------------
-    //                        UNWRAP UNDER FREEZE — weETH side
-    // -------------------------------------------------------------------
-
-    function test_unwrap_blocked_whenCallerFrozenOnWeETH() public {
-        vm.prank(pauser);
-        weEthInstance.pause(alice);
-
-        vm.prank(alice);
+        // _burn(alice, ...) triggers _beforeTokenTransfer(alice, 0, ...); sender check fires.
         vm.expectRevert("SENDER PAUSED");
         weEthInstance.unwrap(1 ether);
     }
 
-    function test_unwrap_blocked_underPauseUntil_onWeETH() public {
-        vm.prank(pauserUntil);
-        weEthInstance.pauseUntil(alice);
-
-        vm.prank(alice);
-        vm.expectRevert("SENDER PAUSED");
-        weEthInstance.unwrap(1 ether);
-    }
-
-    function test_unwrap_blockedAtPauseUntilBoundary_onWeETH() public {
+    function test_unwrap_blockedAtTimerBoundary_onWeETH() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
         uint64 expiry = weEthInstance.pausedUntil(alice);
@@ -316,7 +297,7 @@ contract WeETHPauseTest is TestSetup {
         weEthInstance.unwrap(1 ether);
     }
 
-    function test_unwrap_worksAfterPauseUntilExpiry_onWeETH() public {
+    function test_unwrap_worksAfterTimerExpiry_onWeETH() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
         uint64 expiry = weEthInstance.pausedUntil(alice);
@@ -327,22 +308,10 @@ contract WeETHPauseTest is TestSetup {
     }
 
     // -------------------------------------------------------------------
-    //     CROSS-TOKEN FREEZE — freeze on eETH propagates to WeETH flows
+    //                 WRAP / UNWRAP UNDER CROSS-TOKEN TIMER (eETH side)
     // -------------------------------------------------------------------
 
-    function test_wrap_blocked_whenCallerFrozenOnEETH() public {
-        _grantEETHPauserRole(pauser);
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-
-        vm.prank(alice);
-        // wrap's eETH.transferFrom fails before weETH._mint runs, because mintShares
-        // routes through _transferShares (sender=alice is frozen on eETH).
-        vm.expectRevert("SENDER PAUSED");
-        weEthInstance.wrap(1 ether);
-    }
-
-    function test_wrap_blocked_underPauseUntil_onEETH() public {
+    function test_wrap_blockedWhenCallerOnEETHTimer() public {
         _grantEETHPauserUntilRole(pauserUntil);
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
@@ -352,19 +321,7 @@ contract WeETHPauseTest is TestSetup {
         weEthInstance.wrap(1 ether);
     }
 
-    function test_unwrap_blocked_whenCallerFrozenOnEETH() public {
-        _grantEETHPauserRole(pauser);
-        vm.prank(pauser);
-        eETHInstance.pause(alice);
-
-        vm.prank(alice);
-        // weETH._burn succeeds (msg.sender frozen on eETH, not weETH), but the
-        // subsequent eETH.transfer(alice, ...) fails with recipient=alice frozen.
-        vm.expectRevert("RECIPIENT PAUSED");
-        weEthInstance.unwrap(1 ether);
-    }
-
-    function test_unwrap_blocked_underPauseUntil_onEETH() public {
+    function test_unwrap_blockedWhenCallerOnEETHTimer() public {
         _grantEETHPauserUntilRole(pauserUntil);
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
@@ -374,48 +331,72 @@ contract WeETHPauseTest is TestSetup {
         weEthInstance.unwrap(1 ether);
     }
 
-    /// @dev C-2: freezing the WeETH contract's own eETH account bricks wrap for all.
-    function test_SECURITY_freezingWeETHOnEETH_bricksWrapForAll() public {
-        _grantEETHPauserRole(pauser);
-        vm.prank(pauser);
-        eETHInstance.pause(address(weEthInstance));
+    function test_wrap_blockedWhenGlobalPausedOnEETH() public {
+        _grantEETHPauserRole(pauserUntil); // reuse the EOA; grant separate strong role on eETH
+        vm.prank(pauserUntil);
+        eETHInstance.pause();
 
-        vm.prank(bob); // bob is NOT frozen on either token
-        vm.expectRevert("RECIPIENT PAUSED");
+        vm.prank(alice);
+        // wrap path goes through eETH._transferShares which now reverts "PAUSED" (global).
+        vm.expectRevert("PAUSED");
         weEthInstance.wrap(1 ether);
     }
 
-    function test_SECURITY_freezingWeETHOnEETH_bricksUnwrapForAll() public {
-        _grantEETHPauserRole(pauser);
-        vm.prank(pauser);
-        eETHInstance.pause(address(weEthInstance));
+    function test_unwrap_blockedWhenGlobalPausedOnEETH() public {
+        _grantEETHPauserRole(pauserUntil);
+        vm.prank(pauserUntil);
+        eETHInstance.pause();
 
-        vm.prank(bob);
-        vm.expectRevert("SENDER PAUSED");
+        vm.prank(alice);
+        vm.expectRevert("PAUSED");
         weEthInstance.unwrap(1 ether);
     }
 
-    function test_weETHFreeze_doesNotTouchEETH() public {
+    function test_weETHFreeze_doesNotTouchEETHTransfers() public {
         vm.prank(pauser);
-        weEthInstance.pause(alice);
+        weEthInstance.pause();
 
         vm.prank(alice);
         eETHInstance.transfer(bob, 1 ether); // must succeed
     }
 
     // -------------------------------------------------------------------
-    //                       TIMER SEMANTICS (WeETH)
+    //                     PER-USER TIMER BASIC TRANSFERS
     // -------------------------------------------------------------------
 
-    function test_pauseUntil_expiresAfterOneDay() public {
+    function test_pauseUntil_blocksSender() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
-        uint64 expiry = weEthInstance.pausedUntil(alice);
-
-        vm.warp(uint256(expiry) + 1);
 
         vm.prank(alice);
+        vm.expectRevert("SENDER PAUSED");
         weEthInstance.transfer(bob, 1 ether);
+    }
+
+    function test_pauseUntil_blocksRecipient() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+
+        vm.prank(bob);
+        vm.expectRevert("RECIPIENT PAUSED");
+        weEthInstance.transfer(alice, 1 ether);
+    }
+
+    function test_pauseUntil_blocksSelfTransfer() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+
+        vm.prank(alice);
+        vm.expectRevert("SENDER PAUSED");
+        weEthInstance.transfer(alice, 1 ether);
+    }
+
+    function test_pauseUntil_isPerUser_othersUnaffected() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+
+        vm.prank(bob);
+        weEthInstance.transfer(chad, 1 ether);
     }
 
     function test_pauseUntil_blockedAtBoundary() public {
@@ -429,16 +410,15 @@ contract WeETHPauseTest is TestSetup {
         weEthInstance.transfer(bob, 1 ether);
     }
 
-    function test_pauseUntil_silentNoOp_whilePaused() public {
-        vm.prank(pauser);
-        weEthInstance.pause(alice);
-        uint64 before = weEthInstance.pausedUntil(alice);
-
+    function test_pauseUntil_expiresAfterOneDay() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
+        uint64 expiry = weEthInstance.pausedUntil(alice);
 
-        assertEq(weEthInstance.pausedUntil(alice), before);
-        assertTrue(weEthInstance.paused(alice));
+        vm.warp(uint256(expiry) + 1);
+
+        vm.prank(alice);
+        weEthInstance.transfer(bob, 1 ether);
     }
 
     function test_pauseUntil_cannotExtend_whileTimerActive() public {
@@ -467,29 +447,32 @@ contract WeETHPauseTest is TestSetup {
     }
 
     // -------------------------------------------------------------------
-    //                            UNPAUSE SEMANTICS
+    //                        extendPauseUntil SEMANTICS
     // -------------------------------------------------------------------
 
-    function test_unpause_clearsBothFlags_whenFullyFrozen() public {
+    function test_extendPauseUntil_extendsLiveTimer() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
-        vm.prank(pauser);
-        weEthInstance.pause(alice);
-
-        assertTrue(weEthInstance.paused(alice));
-        assertGt(weEthInstance.pausedUntil(alice), block.timestamp);
 
         vm.prank(pauser);
-        weEthInstance.unpause(alice);
+        weEthInstance.extendPauseUntil(alice, 7 days);
 
-        assertFalse(weEthInstance.paused(alice));
-        assertEq(weEthInstance.pausedUntil(alice), 0);
-
-        vm.prank(alice);
-        weEthInstance.transfer(bob, 1 ether);
+        assertEq(weEthInstance.pausedUntil(alice), uint64(block.timestamp) + 7 days);
     }
 
-    function test_unpause_afterExpiry_leavesStaleTimer() public {
+    /// @dev H-1 (HIGH): extendPauseUntil can shorten the timer.
+    function test_SECURITY_extendPauseUntil_canShortenTimer() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+
+        vm.prank(pauser);
+        weEthInstance.extendPauseUntil(alice, 1 hours);
+
+        assertLt(weEthInstance.pausedUntil(alice), uint64(block.timestamp) + ONE_DAY,
+                 "extend allowed to shorten (H-1)");
+    }
+
+    function test_extendPauseUntil_silentNoOp_whenTimerExpired() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
         uint64 expiry = weEthInstance.pausedUntil(alice);
@@ -497,28 +480,100 @@ contract WeETHPauseTest is TestSetup {
         vm.warp(uint256(expiry) + 1);
 
         vm.prank(pauser);
-        weEthInstance.unpause(alice);
+        weEthInstance.extendPauseUntil(alice, 3 days);
 
-        assertEq(weEthInstance.pausedUntil(alice), expiry, "stale expiry remains (M-2)");
-        assertFalse(weEthInstance.paused(alice));
+        assertEq(weEthInstance.pausedUntil(alice), expiry, "no-op on expired (M-1-new)");
     }
 
-    function test_unpause_noop_whenNeverPaused() public {
+    function test_extendPauseUntil_silentNoOp_whenNeverArmed() public {
         vm.prank(pauser);
-        weEthInstance.unpause(alice);
-        assertFalse(weEthInstance.paused(alice));
+        weEthInstance.extendPauseUntil(alice, 3 days);
         assertEq(weEthInstance.pausedUntil(alice), 0);
+    }
+
+    // -------------------------------------------------------------------
+    //                        cancelPauseUntil SEMANTICS
+    // -------------------------------------------------------------------
+
+    function test_cancelPauseUntil_clearsActiveTimer() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+
+        vm.prank(pauser);
+        weEthInstance.cancelPauseUntil(alice);
+
+        assertEq(weEthInstance.pausedUntil(alice), 0);
+
+        vm.prank(alice);
+        weEthInstance.transfer(bob, 1 ether);
+    }
+
+    function test_cancelPauseUntil_emitsEvenWhenNeverArmed() public {
+        vm.expectEmit(true, false, false, true);
+        emit CancelledPauseUntil(alice);
+        vm.prank(pauser);
+        weEthInstance.cancelPauseUntil(alice);
+    }
+
+    function test_cancelPauseUntil_isPerUser() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(bob);
+
+        vm.prank(pauser);
+        weEthInstance.cancelPauseUntil(alice);
+
+        assertEq(weEthInstance.pausedUntil(alice), 0);
+        assertGt(weEthInstance.pausedUntil(bob), block.timestamp);
+    }
+
+    // -------------------------------------------------------------------
+    //                       GLOBAL ⨯ PER-USER INTERACTION
+    // -------------------------------------------------------------------
+
+    function test_globalPause_dominatesTimer() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+
+        vm.prank(pauser);
+        weEthInstance.pause();
+
+        vm.prank(bob);
+        vm.expectRevert("PAUSED");
+        weEthInstance.transfer(chad, 1 ether);
+    }
+
+    function test_globalUnpause_leavesTimerInEffect() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+
+        vm.prank(pauser);
+        weEthInstance.pause();
+        vm.prank(pauser);
+        weEthInstance.unpause();
+
+        vm.prank(alice);
+        vm.expectRevert("SENDER PAUSED");
+        weEthInstance.transfer(bob, 1 ether);
     }
 
     // -------------------------------------------------------------------
     //                              EVENTS
     // -------------------------------------------------------------------
 
-    function test_pause_emitsIndexedUser() public {
-        vm.expectEmit(true, false, false, true);
-        emit Paused(alice);
+    function test_pause_emitsPaused() public {
+        vm.expectEmit(false, false, false, true);
+        emit Paused();
         vm.prank(pauser);
-        weEthInstance.pause(alice);
+        weEthInstance.pause();
+    }
+
+    function test_unpause_emitsUnpaused() public {
+        vm.expectEmit(false, false, false, true);
+        emit Unpaused();
+        vm.prank(pauser);
+        weEthInstance.unpause();
     }
 
     function test_pauseUntil_emitsIndexedUserAndExpiry() public {
@@ -528,20 +583,34 @@ contract WeETHPauseTest is TestSetup {
         weEthInstance.pauseUntil(alice);
     }
 
-    function test_unpause_emitsIndexedUser() public {
+    function test_extendPauseUntil_emitsPausedUntil_whenActive() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+
+        uint64 expected = uint64(block.timestamp) + 3 days;
         vm.expectEmit(true, false, false, true);
-        emit Unpaused(alice);
+        emit PausedUntil(alice, expected);
         vm.prank(pauser);
-        weEthInstance.unpause(alice);
+        weEthInstance.extendPauseUntil(alice, 3 days);
+    }
+
+    function test_cancelPauseUntil_emitsCancelledPauseUntil() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+
+        vm.expectEmit(true, false, false, true);
+        emit CancelledPauseUntil(alice);
+        vm.prank(pauser);
+        weEthInstance.cancelPauseUntil(alice);
     }
 
     // -------------------------------------------------------------------
     //                     NON-TRANSFER PATHS DURING FREEZE
     // -------------------------------------------------------------------
 
-    function test_approve_notBlockedByFreeze() public {
+    function test_approve_worksDuringGlobalPause() public {
         vm.prank(pauser);
-        weEthInstance.pause(alice);
+        weEthInstance.pause();
 
         vm.prank(alice);
         weEthInstance.approve(bob, 1 ether);
@@ -550,7 +619,7 @@ contract WeETHPauseTest is TestSetup {
 
     function test_getters_workWhileFrozen() public {
         vm.prank(pauser);
-        weEthInstance.pause(alice);
+        weEthInstance.pause();
 
         weEthInstance.getRate();
         weEthInstance.getEETHByWeETH(1 ether);
@@ -559,14 +628,21 @@ contract WeETHPauseTest is TestSetup {
     }
 
     // -------------------------------------------------------------------
-    //                               FUZZING
+    //                                FUZZING
     // -------------------------------------------------------------------
 
     function testFuzz_pause_revertsForNonPauser(address caller) public {
         vm.assume(caller != pauser);
         vm.prank(caller);
         vm.expectRevert("IncorrectRole");
-        weEthInstance.pause(alice);
+        weEthInstance.pause();
+    }
+
+    function testFuzz_unpause_revertsForNonPauser(address caller) public {
+        vm.assume(caller != pauser);
+        vm.prank(caller);
+        vm.expectRevert("IncorrectRole");
+        weEthInstance.unpause();
     }
 
     function testFuzz_pauseUntil_revertsForNonPauserUntil(address caller) public {
@@ -576,11 +652,18 @@ contract WeETHPauseTest is TestSetup {
         weEthInstance.pauseUntil(alice);
     }
 
-    function testFuzz_unpause_revertsForNonPauser(address caller) public {
+    function testFuzz_extendPauseUntil_revertsForNonPauser(address caller) public {
         vm.assume(caller != pauser);
         vm.prank(caller);
         vm.expectRevert("IncorrectRole");
-        weEthInstance.unpause(alice);
+        weEthInstance.extendPauseUntil(alice, ONE_DAY);
+    }
+
+    function testFuzz_cancelPauseUntil_revertsForNonPauser(address caller) public {
+        vm.assume(caller != pauser);
+        vm.prank(caller);
+        vm.expectRevert("IncorrectRole");
+        weEthInstance.cancelPauseUntil(alice);
     }
 
     function testFuzz_pauseUntil_setsOneDayFromWarpedTimestamp(uint64 warpTo) public {
@@ -593,37 +676,71 @@ contract WeETHPauseTest is TestSetup {
         assertEq(weEthInstance.pausedUntil(alice), warpTo + ONE_DAY);
     }
 
-    function testFuzz_senderFrozen_blocksAnyAmount(uint256 amount) public {
+    function testFuzz_extendPauseUntil_setsArbitraryDuration(uint64 duration) public {
+        duration = uint64(bound(uint256(duration), 1, 365 days));
+
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+
+        vm.prank(pauser);
+        weEthInstance.extendPauseUntil(alice, duration);
+
+        assertEq(weEthInstance.pausedUntil(alice), uint64(block.timestamp) + duration);
+    }
+
+    function testFuzz_globalPause_blocksTransferAnyAmount(uint256 amount) public {
         amount = bound(amount, 1, weEthInstance.balanceOf(alice));
 
         vm.prank(pauser);
-        weEthInstance.pause(alice);
+        weEthInstance.pause();
+
+        vm.prank(alice);
+        vm.expectRevert("PAUSED");
+        weEthInstance.transfer(bob, amount);
+    }
+
+    function testFuzz_globalPause_blocksWrap(uint256 amount) public {
+        amount = bound(amount, 1, eETHInstance.balanceOf(alice));
+
+        vm.prank(pauser);
+        weEthInstance.pause();
+
+        vm.prank(alice);
+        vm.expectRevert("PAUSED");
+        weEthInstance.wrap(amount);
+    }
+
+    function testFuzz_globalPause_blocksUnwrap(uint256 amount) public {
+        amount = bound(amount, 1, weEthInstance.balanceOf(alice));
+
+        vm.prank(pauser);
+        weEthInstance.pause();
+
+        vm.prank(alice);
+        vm.expectRevert("PAUSED");
+        weEthInstance.unwrap(amount);
+    }
+
+    function testFuzz_senderTimer_blocksAnyAmount(uint256 amount) public {
+        amount = bound(amount, 1, weEthInstance.balanceOf(alice));
+
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
 
         vm.prank(alice);
         vm.expectRevert("SENDER PAUSED");
         weEthInstance.transfer(bob, amount);
     }
 
-    function testFuzz_recipientFrozen_blocksAnyAmount(uint256 amount) public {
+    function testFuzz_recipientTimer_blocksAnyAmount(uint256 amount) public {
         amount = bound(amount, 1, weEthInstance.balanceOf(bob));
 
-        vm.prank(pauser);
-        weEthInstance.pause(alice);
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
 
         vm.prank(bob);
         vm.expectRevert("RECIPIENT PAUSED");
         weEthInstance.transfer(alice, amount);
-    }
-
-    function testFuzz_wrapBlockedWhenFrozenOnWeETH(uint256 amount) public {
-        amount = bound(amount, 1, eETHInstance.balanceOf(alice));
-
-        vm.prank(pauser);
-        weEthInstance.pause(alice);
-
-        vm.prank(alice);
-        vm.expectRevert("RECIPIENT PAUSED");
-        weEthInstance.wrap(amount);
     }
 
     function testFuzz_wrapBlockedUnderPauseUntil_onWeETH(uint256 amount, uint64 delta) public {
@@ -640,17 +757,6 @@ contract WeETHPauseTest is TestSetup {
         weEthInstance.wrap(amount);
     }
 
-    function testFuzz_unwrapBlockedWhenFrozenOnWeETH(uint256 amount) public {
-        amount = bound(amount, 1, weEthInstance.balanceOf(alice));
-
-        vm.prank(pauser);
-        weEthInstance.pause(alice);
-
-        vm.prank(alice);
-        vm.expectRevert("SENDER PAUSED");
-        weEthInstance.unwrap(amount);
-    }
-
     function testFuzz_unwrapBlockedUnderPauseUntil_onWeETH(uint256 amount, uint64 delta) public {
         amount = bound(amount, 1, weEthInstance.balanceOf(alice));
         delta = uint64(bound(uint256(delta), 0, ONE_DAY));
@@ -665,30 +771,14 @@ contract WeETHPauseTest is TestSetup {
         weEthInstance.unwrap(amount);
     }
 
-    function testFuzz_unfrozenUsers_unaffected(uint256 amount) public {
-        amount = bound(amount, 1, weEthInstance.balanceOf(bob));
-
-        vm.prank(pauser);
-        weEthInstance.pause(alice);
-
-        uint256 bobBefore = weEthInstance.balanceOf(bob);
-        uint256 chadBefore = weEthInstance.balanceOf(chad);
-
-        vm.prank(bob);
-        weEthInstance.transfer(chad, amount);
-
-        assertEq(weEthInstance.balanceOf(bob), bobBefore - amount);
-        assertEq(weEthInstance.balanceOf(chad), chadBefore + amount);
-    }
-
-    function testFuzz_independentUsers_freezeIsolated(address userA, address userB) public {
+    function testFuzz_independentUsers_timerIsolated(address userA, address userB) public {
         vm.assume(userA != address(0) && userB != address(0));
         vm.assume(userA != userB);
 
-        vm.prank(pauser);
-        weEthInstance.pause(userA);
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(userA);
 
-        assertTrue(weEthInstance.paused(userA));
-        assertFalse(weEthInstance.paused(userB));
+        assertGt(weEthInstance.pausedUntil(userA), block.timestamp);
+        assertEq(weEthInstance.pausedUntil(userB), 0);
     }
 }
