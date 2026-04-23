@@ -19,18 +19,26 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     error IncorrectRole();
     error CannotRecoverEETH();
 
+    event Paused();
+    event PausedUntil(uint64 pausedUntil);
+    event Unpaused();
+
     //--------------------------------------------------------------------------------------
     //---------------------------------  STORAGE  ----------------------------------
     //--------------------------------------------------------------------------------------
 
     IeETH public eETH;
     ILiquidityPool public liquidityPool;
+    bool public paused;
+    uint64 public pausedUntil;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
     bytes32 public constant WEETH_OPERATING_ADMIN_ROLE = keccak256("WEETH_OPERATING_ADMIN_ROLE");
+    bytes32 public constant WEETH_PAUSER_ROLE = keccak256("WEETH_PAUSER_ROLE");
+    bytes32 public constant WEETH_EXTEND_PAUSER_ROLE = keccak256("WEETH_EXTEND_PAUSER_ROLE");
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -93,6 +101,29 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         return eETHAmount;
     }
 
+    function pause() external {
+        require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        paused = true;
+        emit Paused();
+    }
+
+    function pauseUntil() external {
+        require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        if (!paused && pausedUntil < block.timestamp) {
+            pausedUntil = uint64(block.timestamp) + 1 days;
+            emit PausedUntil(pausedUntil);
+        }
+    }
+
+    function unpause() external {
+        require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        if (pausedUntil >= block.timestamp) {
+            pausedUntil = uint64(block.timestamp) - 1;
+        }
+        paused = false;
+        emit Unpaused();
+    }
+
     function recoverETH(address payable to, uint256 amount) external {
         if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _recoverETH(to, amount);
@@ -119,6 +150,13 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
+    function _beforeTokenTransfer(
+        address /* from */,
+        address /* to */,
+        uint256 /* amount */
+    ) internal virtual override {
+        require(!paused && pausedUntil < block.timestamp, "PAUSED");
+    }
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------

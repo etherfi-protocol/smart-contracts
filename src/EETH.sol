@@ -38,8 +38,16 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     IRoleRegistry public immutable roleRegistry;
 
     bytes32 public constant EETH_OPERATING_ADMIN_ROLE = keccak256("EETH_OPERATING_ADMIN_ROLE");
+    bytes32 public constant EETH_PAUSER_ROLE = keccak256("EETH_PAUSER_ROLE");
+    bytes32 public constant EETH_EXTEND_PAUSER_ROLE = keccak256("EETH_EXTEND_PAUSER_ROLE");
+
+    bool public paused;
+    uint64 public pausedUntil;
 
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
+    event Paused();
+    event PausedUntil(uint64 pausedUntil);
+    event Unpaused();
 
     error IncorrectRole();
 
@@ -128,6 +136,29 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         return true;
     }
 
+    function pause() external {
+        require(roleRegistry.hasRole(EETH_EXTEND_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        paused = true;
+        emit Paused();
+    }
+
+    function pauseUntil() external {
+        require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        if (!paused && pausedUntil < block.timestamp) {
+            pausedUntil = uint64(block.timestamp) + 1 days;
+            emit PausedUntil(pausedUntil);
+        }
+    }
+
+    function unpause() external {
+        require(roleRegistry.hasRole(EETH_EXTEND_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        if (pausedUntil >= block.timestamp) {
+            pausedUntil = uint64(block.timestamp) - 1;
+        }
+        paused = false;
+        emit Unpaused();
+    }
+
     function permit(
         address owner,
         address spender,
@@ -183,6 +214,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         require(_sender != address(0), "TRANSFER_FROM_THE_ZERO_ADDRESS");
         require(_recipient != address(0), "TRANSFER_TO_THE_ZERO_ADDRESS");
         require(_sharesAmount <= shares[_sender], "TRANSFER_AMOUNT_EXCEEDS_BALANCE");
+        require(!paused && pausedUntil < block.timestamp, "PAUSED");
 
         shares[_sender] -= _sharesAmount;
         shares[_recipient] += _sharesAmount;
