@@ -1678,7 +1678,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.unpauseContractUntil();
     }
 
-    // --- each gated function (whenNotPausedUntil explicit on 4 entrypoints) ---
+    // --- each gated function (whenNotPaused now also enforces pause-until via override) ---
 
     function test_redeemEEth_blockedByPauseContractUntil() public {
         _setupRedeemScenario();

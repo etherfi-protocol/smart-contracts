@@ -42,6 +42,13 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
+    /// @dev Route OZ's whenNotPaused through the pause-until check as well, so any function
+    ///      gated by whenNotPaused is automatically blocked during a timed pause too.
+    function _requireNotPaused() internal view override {
+        _requireNotPausedUntil();
+        super._requireNotPaused();
+    }
+
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
     //-------------------------------------------------------------------------
@@ -129,7 +136,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param id The rate limit identifier
     /// @param amount The amount to consume in gwei
     /// @dev Reverts if the consumer is not whitelisted or if insufficient capacity is available
-    function consume(bytes32 id, uint64 amount) external whenNotPaused whenNotPausedUntil {
+    function consume(bytes32 id, uint64 amount) external whenNotPaused {
         if (!limitExists(id)) revert UnknownLimit();
         if (!consumers[id][msg.sender]) revert InvalidConsumer(); // must be whitelisted consumer
 

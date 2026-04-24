@@ -451,18 +451,37 @@ contract PausableUntilIntegrationTest is Test {
         limiter.consume(LIMIT_ID, 1_000);
     }
 
-    function test_pauseContractUntil_and_pauseContract_areIndependent() public {
+    function test_pauseContract_blockedWhilePausedUntilActive() public {
+        // The _requireNotPaused() override routes OZ's internal checks through _requireNotPausedUntil()
+        // too. Since OZ's _pause() itself is gated by whenNotPaused, escalating from pause-until to
+        // full pause requires calling unpauseContractUntil first (multisig holds both roles).
         vm.prank(pauseUntilPauser);
         limiter.pauseContractUntil();
+        uint256 until = block.timestamp + limiter.MAX_PAUSE_DURATION();
 
-        // full pause still works while paused-until is active
+        vm.prank(pauser);
+        vm.expectRevert(abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, until));
+        limiter.pauseContract();
+
+        // clear pause-until, then full pause succeeds
+        vm.prank(unpauseUntilUnpauser);
+        limiter.unpauseContractUntil();
+
         vm.prank(pauser);
         limiter.pauseContract();
         assertTrue(limiter.paused());
+    }
 
-        // and unpausing the full pause does not clear paused-until
+    function test_unPauseContract_doesNotClearPausedUntil() public {
+        vm.prank(pauser);
+        limiter.pauseContract();
+        vm.prank(pauseUntilPauser);
+        limiter.pauseContractUntil();
+
         vm.prank(unpauser);
         limiter.unPauseContract();
+
+        // paused-until still blocks consume()
         vm.prank(consumer);
         vm.expectRevert();
         limiter.consume(LIMIT_ID, 1_000);

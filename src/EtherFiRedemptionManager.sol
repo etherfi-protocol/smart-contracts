@@ -112,7 +112,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param receiver The address to receive the redeemed outputToken.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused whenNotPausedUntil nonReentrant {
+    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
 
@@ -122,7 +122,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param receiver The address to receive the redeemed outputToken.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused whenNotPausedUntil nonReentrant {
+    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
 
@@ -133,7 +133,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param permit The permit params.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused whenNotPausedUntil nonReentrant {
+    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
         try eEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
@@ -145,7 +145,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param permit The permit params.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused whenNotPausedUntil nonReentrant {
+    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
         try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
@@ -426,4 +426,10 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         _;
     }
 
+    /// @dev Route OZ's whenNotPaused through the pause-until check as well, so any function
+    ///      gated by whenNotPaused is automatically blocked during a timed pause too.
+    function _requireNotPaused() internal view override {
+        _requireNotPausedUntil();
+        super._requireNotPaused();
+    }
 }

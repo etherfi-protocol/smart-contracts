@@ -862,9 +862,9 @@ contract EtherFiNodesManagerTest is TestSetup {
         managerInstance.unpauseContractUntil();
     }
 
-    // --- each whenNotPausedUntil-gated function ---
-    // All role-gated functions run their onlyX modifier BEFORE whenNotPaused/whenNotPausedUntil,
-    // so we use the authorized caller on each.
+    // --- each whenNotPaused-gated function (now also blocked via _requireNotPaused override) ---
+    // All role-gated functions run their onlyX modifier BEFORE whenNotPaused, so we use the
+    // authorized caller on each.
 
     function test_sweepFunds_blockedByPauseContractUntil() public {
         _grantNmPauseUntilRoles();
