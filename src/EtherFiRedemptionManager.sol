@@ -342,7 +342,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         _pauseUntil();
     }
 
-    function unPauseContractUntil() external hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE()) {
+    function unpauseContractUntil() external hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE()) {
         _unpauseUntil();
     }
 

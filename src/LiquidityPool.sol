@@ -493,7 +493,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Pa
     }
 
     // Unpauses contract from pauseUntil
-    function unPauseContractUntil() external {
+    function unpauseContractUntil() external {
         if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
         _unpauseUntil();
     }

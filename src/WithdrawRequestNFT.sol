@@ -261,7 +261,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         _pauseUntil();
     }
 
-    function unPauseContractUntil() external {
+    function unpauseContractUntil() external {
         require(isScanOfShareRemainderCompleted(), "scan is not completed");
         if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
         _unpauseUntil();

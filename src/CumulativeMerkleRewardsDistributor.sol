@@ -154,7 +154,7 @@ using SafeERC20 for IERC20;
         _pauseUntil();
     }
 
-    function unPauseContractUntil() external {
+    function unpauseContractUntil() external {
         if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
         _unpauseUntil();
     }

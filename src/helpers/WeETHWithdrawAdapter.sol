@@ -200,7 +200,7 @@ contract WeETHWithdrawAdapter is
     /**
      * @notice Unpause the contract from pauseUntil
      */
-    function unPauseContractUntil() external {
+    function unpauseContractUntil() external {
         if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
         _unpauseUntil();
     }

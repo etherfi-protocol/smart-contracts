@@ -387,18 +387,18 @@ contract PausableUntilIntegrationTest is Test {
         limiter.pauseContractUntil();
     }
 
-    function test_unPauseContractUntil_requiresRole() public {
+    function test_unpauseContractUntil_requiresRole() public {
         vm.prank(pauseUntilPauser);
         limiter.pauseContractUntil();
 
         vm.prank(outsider);
         vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
-        limiter.unPauseContractUntil();
+        limiter.unpauseContractUntil();
 
-        // PROTOCOL_UNPAUSER alone must not be able to invoke unPauseContractUntil
+        // PROTOCOL_UNPAUSER alone must not be able to invoke unpauseContractUntil
         vm.prank(unpauser);
         vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
-        limiter.unPauseContractUntil();
+        limiter.unpauseContractUntil();
     }
 
     // --- functional: consume() gated by both pause paths ---
@@ -426,7 +426,7 @@ contract PausableUntilIntegrationTest is Test {
         limiter.pauseContractUntil();
 
         vm.prank(unpauseUntilUnpauser);
-        limiter.unPauseContractUntil();
+        limiter.unpauseContractUntil();
 
         vm.prank(consumer);
         limiter.consume(LIMIT_ID, 1_000);
