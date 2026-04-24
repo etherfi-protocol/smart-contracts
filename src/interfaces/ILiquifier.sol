@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import "../eigenlayer-interfaces/IStrategyManager.sol";
 import "../eigenlayer-interfaces/IStrategy.sol";
 import "../eigenlayer-interfaces/IPauserRegistry.sol";
+import "./IRoleRegistry.sol";
 
 // cbETH-ETH mainnet: 0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A
 // wBETH-ETH mainnet: 0xBfAb6FA95E0091ed66058ad493189D2cB29385E6
@@ -126,4 +127,11 @@ interface ILiquifier {
 
     function depositWithERC20(address _token, uint256 _amount, address _referral) external returns (uint256);
     function quoteByFairValue(address _token, uint256 _amount) external view returns (uint256);
+
+    function pauseContractUntil() external;
+    function unpauseContractUntil() external;
+
+    function setRolesRegistry(address _roleRegistry) external;
+    function roleRegistry() external view returns (IRoleRegistry);
+    function LIQUIFIER_ADMIN_ROLE() external view returns (bytes32);
 }

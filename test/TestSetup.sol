@@ -465,9 +465,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.stopPrank();
 
         // Wire Liquifier to the role registry and grant admin/pauser/unpauser roles used by tests.
-        // setRolesLibrary is onlyOwner; on fork, liquifier's owner is the live timelock/multisig.
+        // setRolesRegistry is onlyOwner; on fork, liquifier's owner is the live timelock/multisig.
         vm.prank(liquifierInstance.owner());
-        liquifierInstance.setRolesLibrary(address(roleRegistryInstance));
+        liquifierInstance.setRolesRegistry(address(roleRegistryInstance));
 
         // On fork, the live RoleRegistry impl may predate this PR and not expose PAUSE_UNTIL_ROLE().
         // Upgrade in place so new role getters are reachable, then grant roles used by tests.

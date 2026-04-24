@@ -262,7 +262,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     /// @notice Sets the role registry contract
-    function setRolesLibrary(address _roleRegistry) external onlyOwner {
+    function setRolesRegistry(address _roleRegistry) external onlyOwner {
         roleRegistry = IRoleRegistry(_roleRegistry);
     }
 

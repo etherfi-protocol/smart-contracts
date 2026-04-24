@@ -28,6 +28,8 @@ interface ICumulativeMerkleRewardsDistributor {
     function finalizeMerkleRoot(address _token, uint256 _finalizedBlock) external;
     function pause() external;
     function unpause() external;
+    function pauseContractUntil() external;
+    function unpauseContractUntil() external;
     // Claim the given amount of the token to the given address. Reverts if the inputs are invalid.
     function claim(
         address token, 
