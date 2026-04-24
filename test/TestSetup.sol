@@ -458,11 +458,30 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     function setUpLiquifier(uint8 forkEnum) internal {
         vm.startPrank(owner);
-            
-        if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {            
+
+        if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
             liquifierInstance.upgradeTo(address(new Liquifier()));
-            liquifierInstance.updateAdmin(alice, true);
         }
+        vm.stopPrank();
+
+        // Wire Liquifier to the role registry and grant admin/pauser/unpauser roles used by tests.
+        // setRolesLibrary is onlyOwner; on fork, liquifier's owner is the live timelock/multisig.
+        vm.prank(liquifierInstance.owner());
+        liquifierInstance.setRolesLibrary(address(roleRegistryInstance));
+
+        // On fork, the live RoleRegistry impl may predate this PR and not expose PAUSE_UNTIL_ROLE().
+        // Upgrade in place so new role getters are reachable, then grant roles used by tests.
+        vm.startPrank(roleRegistryInstance.owner());
+        if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
+            roleRegistryInstance.upgradeTo(address(new RoleRegistry()));
+        }
+        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), owner);
+        vm.stopPrank();
+
+        vm.startPrank(owner);
 
         address impl = address(new BucketRateLimiter());
         bucketRateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
