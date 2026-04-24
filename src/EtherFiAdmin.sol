@@ -316,7 +316,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             withdrawRequestNft.invalidateRequest(_report.withdrawalRequestsToInvalidate[i]);
         }
         withdrawRequestNft.finalizeRequests(_report.lastFinalizedWithdrawalRequestId);
-        require(_report.finalizedWithdrawalAmount + liquidityPool.ethAmountLockedForWithdrawal() + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal() <= liquidityPool.totalValueInLp(), "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+        require(_report.finalizedWithdrawalAmount + liquidityPool.ethAmountLockedForWithdrawal() + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal() <= address(liquidityPool).balance, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
         liquidityPool.addEthAmountLockedForWithdrawal(_report.finalizedWithdrawalAmount);
     }
 
