@@ -13,6 +13,7 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IWeETH.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./utils/PausableUntil.sol";
 
 /// @title PriorityWithdrawalQueue
 /// @notice Manages priority withdrawals for whitelisted users
@@ -21,6 +22,7 @@ contract PriorityWithdrawalQueue is
     Initializable, 
     UUPSUpgradeable, 
     ReentrancyGuardUpgradeable,
+    PausableUntil,
     IPriorityWithdrawalQueue
 {
     using SafeERC20 for IERC20;
@@ -125,6 +127,7 @@ contract PriorityWithdrawalQueue is
 
     modifier whenNotPaused() {
         if (paused) revert ContractPaused();
+        _requireNotPausedUntil();
         _;
     }
 
@@ -432,6 +435,16 @@ contract PriorityWithdrawalQueue is
         if (!paused) revert ContractNotPaused();
         paused = false;
         emit Unpaused(msg.sender);
+    }
+
+    function pauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _pauseUntil();
+    }
+
+    function unPauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _unpauseUntil();
     }
 
     //--------------------------------------------------------------------------------------

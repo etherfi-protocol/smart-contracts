@@ -13,6 +13,7 @@ import {IeETH} from "../interfaces/IeETH.sol";
 import {ILiquidityPool} from "../interfaces/ILiquidityPool.sol";
 import {IWithdrawRequestNFT} from "../interfaces/IWithdrawRequestNFT.sol";
 import {IRoleRegistry} from "../interfaces/IRoleRegistry.sol";
+import {PausableUntil} from "../utils/PausableUntil.sol";
 
 /**
  * @title WeETHWithdrawAdapter
@@ -23,6 +24,7 @@ contract WeETHWithdrawAdapter is
     Initializable, 
     UUPSUpgradeable, 
     OwnableUpgradeable, 
+    PausableUntil,
     IWeETHWithdrawAdapter 
 {
     using SafeERC20 for IERC20;
@@ -187,6 +189,22 @@ contract WeETHWithdrawAdapter is
         emit Unpaused(msg.sender);
     }
 
+    /**
+     * @notice Pause the contract until MAX_PAUSE_DURATION
+     */
+    function pauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _pauseUntil();
+    }
+
+    /**
+     * @notice Unpause the contract from pauseUntil
+     */
+    function unPauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _unpauseUntil();
+    }
+
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -232,6 +250,7 @@ contract WeETHWithdrawAdapter is
 
     modifier whenNotPaused() {
         _requireNotPaused();
+        _requireNotPausedUntil();
         _;
     }
 }

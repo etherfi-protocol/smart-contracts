@@ -5,9 +5,10 @@ import { SafeERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/utils/Saf
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {RoleRegistry} from "./RoleRegistry.sol";
+import {PausableUntil} from "./utils/PausableUntil.sol";
 import {ICumulativeMerkleRewardsDistributor}  from "./interfaces/ICumulativeMerkleRewardsDistributor.sol";
 
-contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, OwnableUpgradeable, UUPSUpgradeable {
+contract CumulativeMerkleRewardsDistributor is ICumulativeMerkleRewardsDistributor, OwnableUpgradeable, UUPSUpgradeable, PausableUntil {
 using SafeERC20 for IERC20;
 
 
@@ -148,6 +149,16 @@ using SafeERC20 for IERC20;
         emit UnPaused(msg.sender);
     }
 
+    function pauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _pauseUntil();
+    }
+
+    function unPauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _unpauseUntil();
+    }
+
 
     function getImplementation() external view returns (address) {return _getImplementation();}
 
@@ -195,6 +206,7 @@ using SafeERC20 for IERC20;
 
     modifier whenNotPaused() {
         _requireNotPaused();
+        _requireNotPausedUntil();
         _;
     }
 

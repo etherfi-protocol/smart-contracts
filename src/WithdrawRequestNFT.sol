@@ -12,10 +12,11 @@ import "./interfaces/IMembershipManager.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./RoleRegistry.sol";
+import "./utils/PausableUntil.sol";
 
 
 
-contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IWithdrawRequestNFT {
+contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IWithdrawRequestNFT {
     using Math for uint256;
     using SafeERC20 for IERC20;
 
@@ -255,6 +256,17 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit Unpaused(msg.sender);
     }
 
+    function pauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _pauseUntil();
+    }
+
+    function unPauseContractUntil() external {
+        require(isScanOfShareRemainderCompleted(), "scan is not completed");
+        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _unpauseUntil();
+    }
+
     /// @dev Handles the remainder of the eEth shares after the claim of the withdraw request
     /// the remainder eETH share for a request = request.shareOfEEth - request.amountOfEEth / (eETH amount to eETH shares rate)
     /// - Splits the remainder into two parts:
@@ -324,6 +336,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     modifier whenNotPaused() {
         _requireNotPaused();
+        _requireNotPausedUntil();
         _;
     }
 }

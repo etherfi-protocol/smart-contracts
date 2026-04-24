@@ -8,8 +8,9 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "./interfaces/IEtherFiRateLimiter.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "lib/BucketLimiter.sol";
+import "./utils/PausableUntil.sol";
 
-contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, PausableUpgradeable {
+contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, PausableUpgradeable, PausableUntil {
 
     IRoleRegistry public immutable roleRegistry;
 
@@ -108,6 +109,18 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
         _unpause();
     }
 
+    /// @notice Pauses the contract until MAX_PAUSE_DURATION
+    function pauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _pauseUntil();
+    }
+
+    /// @notice Unpauses the contract from pauseUntil
+    function unPauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _unpauseUntil();
+    }
+
     //--------------------------------------------------------------------------------------
     //-----------------------------------  Core  -------------------------------------------
     //--------------------------------------------------------------------------------------
@@ -116,7 +129,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param id The rate limit identifier
     /// @param amount The amount to consume in gwei
     /// @dev Reverts if the consumer is not whitelisted or if insufficient capacity is available
-    function consume(bytes32 id, uint64 amount) external whenNotPaused {
+    function consume(bytes32 id, uint64 amount) external whenNotPaused whenNotPausedUntil {
         if (!limitExists(id)) revert UnknownLimit();
         if (!consumers[id][msg.sender]) revert InvalidConsumer(); // must be whitelisted consumer
 
