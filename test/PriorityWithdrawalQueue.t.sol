@@ -6,6 +6,7 @@ import "forge-std/console2.sol";
 
 import "../src/PriorityWithdrawalQueue.sol";
 import "../src/interfaces/IPriorityWithdrawalQueue.sol";
+import "../src/utils/PausableUntil.sol";
 
 contract PriorityWithdrawalQueueTest is TestSetup {
     PriorityWithdrawalQueue public priorityQueue;
@@ -1162,6 +1163,226 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.prank(alice);
         vm.expectRevert(PriorityWithdrawalQueue.ContractNotPaused.selector);
         priorityQueue.unPauseContract();
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------  pauseContractUntil / unpauseContractUntil  -----------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 constant PAUSABLE_UNTIL_SLOT =
+        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+    address pauseUntilPauser = makeAddr("pauseUntilPauser");
+    address unpauseUntilUnpauser = makeAddr("unpauseUntilUnpauser");
+
+    function _grantPauseUntilRoles() internal {
+        // On the mainnet fork, the live RoleRegistry predates this PR and doesn't expose
+        // PAUSE_UNTIL_ROLE() / UNPAUSE_UNTIL_ROLE(). Upgrade the impl in place so the new
+        // role constants are reachable through both the registry and any contract that
+        // resolves roles via roleRegistry.PAUSE_UNTIL_ROLE().
+        vm.startPrank(roleRegistryInstance.owner());
+        RoleRegistry newImpl = new RoleRegistry();
+        roleRegistryInstance.upgradeTo(address(newImpl));
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
+        vm.stopPrank();
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+    }
+
+    function _pausedUntil() internal view returns (uint256) {
+        return uint256(vm.load(address(priorityQueue), PAUSABLE_UNTIL_SLOT));
+    }
+
+    function test_pauseContractUntil_requiresRole() public {
+        _grantPauseUntilRoles();
+        vm.prank(regularUser);
+        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        priorityQueue.pauseContractUntil();
+
+        // PROTOCOL_PAUSER (alice) alone must not bypass
+        vm.prank(alice);
+        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        priorityQueue.pauseContractUntil();
+    }
+
+    function test_pauseContractUntil_setsState() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        priorityQueue.pauseContractUntil();
+        assertEq(_pausedUntil(), block.timestamp + priorityQueue.MAX_PAUSE_DURATION());
+    }
+
+    function test_unpauseContractUntil_requiresRole() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        priorityQueue.pauseContractUntil();
+
+        vm.prank(regularUser);
+        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        priorityQueue.unpauseContractUntil();
+
+        // PROTOCOL_UNPAUSER (alice) alone must not bypass
+        vm.prank(alice);
+        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        priorityQueue.unpauseContractUntil();
+    }
+
+    function test_unpauseContractUntil_clearsState() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        priorityQueue.pauseContractUntil();
+
+        vm.prank(unpauseUntilUnpauser);
+        priorityQueue.unpauseContractUntil();
+        assertEq(_pausedUntil(), 0);
+    }
+
+    function test_unpauseContractUntil_revertsIfNotPaused() public {
+        _grantPauseUntilRoles();
+        vm.prank(unpauseUntilUnpauser);
+        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
+        priorityQueue.unpauseContractUntil();
+    }
+
+    // --- each gated function (whenNotPaused → blocked by pause-until too) ---
+
+    function test_requestWithdraw_blockedByPauseContractUntil() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        priorityQueue.pauseContractUntil();
+
+        vm.startPrank(vipUser);
+        eETHInstance.approve(address(priorityQueue), 1 ether);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
+        );
+        priorityQueue.requestWithdraw(1 ether, 0);
+        vm.stopPrank();
+    }
+
+    function test_requestWithdrawWithPermit_blockedByPauseContractUntil() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        priorityQueue.pauseContractUntil();
+
+        IPriorityWithdrawalQueue.PermitInput memory emptyPermit;
+        vm.prank(vipUser);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
+        );
+        priorityQueue.requestWithdrawWithPermit(1 ether, 0, emptyPermit);
+    }
+
+    function test_requestWithdrawWithWeETH_blockedByPauseContractUntil() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        priorityQueue.pauseContractUntil();
+
+        vm.prank(vipUser);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
+        );
+        priorityQueue.requestWithdrawWithWeETH(1 ether, 0);
+    }
+
+    function test_requestWithdrawWithWeETHAndPermit_blockedByPauseContractUntil() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        priorityQueue.pauseContractUntil();
+
+        IPriorityWithdrawalQueue.PermitInput memory emptyPermit;
+        vm.prank(vipUser);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
+        );
+        priorityQueue.requestWithdrawWithWeETHAndPermit(1 ether, 0, emptyPermit);
+    }
+
+    function test_cancelWithdraw_blockedByPauseContractUntil() public {
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequest(vipUser, 1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        priorityQueue.pauseContractUntil();
+
+        vm.prank(vipUser);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
+        );
+        priorityQueue.cancelWithdraw(request);
+    }
+
+    function test_claimWithdraw_blockedByPauseContractUntil() public {
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequest(vipUser, 1 ether);
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory rs = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        rs[0] = request;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(rs);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        priorityQueue.pauseContractUntil();
+
+        vm.prank(vipUser);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
+        );
+        priorityQueue.claimWithdraw(request);
+    }
+
+    function test_batchClaimWithdraw_blockedByPauseContractUntil() public {
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequest(vipUser, 1 ether);
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory rs = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        rs[0] = request;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(rs);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        priorityQueue.pauseContractUntil();
+
+        vm.prank(vipUser);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
+        );
+        priorityQueue.batchClaimWithdraw(rs);
+    }
+
+    function test_fulfillRequests_blockedByPauseContractUntil() public {
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequest(vipUser, 1 ether);
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory rs = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        rs[0] = request;
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        priorityQueue.pauseContractUntil();
+
+        vm.prank(requestManager);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
+        );
+        priorityQueue.fulfillRequests(rs);
+    }
+
+    function test_requestWithdraw_unblockedAfterPauseExpires() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        priorityQueue.pauseContractUntil();
+
+        vm.warp(block.timestamp + priorityQueue.MAX_PAUSE_DURATION() + 1);
+
+        uint96 amount = 1 ether;
+        uint96 shareAmount = uint96(liquidityPoolInstance.sharesForAmount(amount));
+        uint96 minOut = uint96(liquidityPoolInstance.amountForShare(shareAmount));
+
+        vm.startPrank(vipUser);
+        eETHInstance.approve(address(priorityQueue), amount);
+        priorityQueue.requestWithdraw(amount, minOut);
+        vm.stopPrank();
     }
 
     //--------------------------------------------------------------------------------------

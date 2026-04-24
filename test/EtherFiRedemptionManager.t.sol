@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/console2.sol";
 import "./TestSetup.sol";
 import "lib/BucketLimiter.sol";
+import "../src/utils/PausableUntil.sol";
 
 contract EtherFiRedemptionManagerTest is TestSetup {
 
@@ -1582,5 +1583,185 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         
         assertApproxEqAbs(treasuryBalanceAfter - treasuryBalanceBefore, expectedTreasuryFee, 5e11);
         vm.stopPrank();
+    }
+
+    //--------------------------------------------------------------------------------------
+    //--------------------------  pauseContractUntil / unpauseContractUntil  ---------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 constant PAUSABLE_UNTIL_SLOT =
+        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+    address rmPauseUntilPauser = makeAddr("rmPauseUntilPauser");
+    address rmUnpauseUntilUnpauser = makeAddr("rmUnpauseUntilUnpauser");
+
+    function _grantRmPauseUntilRoles() internal {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), rmPauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), rmUnpauseUntilUnpauser);
+        vm.stopPrank();
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+    }
+
+    function _rmPausedUntil() internal view returns (uint256) {
+        return uint256(vm.load(address(etherFiRedemptionManagerInstance), PAUSABLE_UNTIL_SLOT));
+    }
+
+    function _setupRedeemScenario() internal {
+        // deposit LP liquidity + user eETH balance + configure rate limiter
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        vm.startPrank(admin);
+        etherFiRedemptionManagerInstance.setCapacity(5 ether, ETH_ADDRESS);
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(5 ether, ETH_ADDRESS);
+        vm.stopPrank();
+        vm.warp(block.timestamp + 1);
+
+        vm.prank(user);
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), type(uint256).max);
+    }
+
+    function test_pauseContractUntil_requiresRole() public {
+        _grantRmPauseUntilRoles();
+        vm.prank(bob);
+        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        // PROTOCOL_PAUSER (admin) alone is insufficient
+        vm.prank(admin);
+        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+    }
+
+    function test_pauseContractUntil_setsState() public {
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+        assertEq(_rmPausedUntil(), block.timestamp + etherFiRedemptionManagerInstance.MAX_PAUSE_DURATION());
+    }
+
+    function test_unpauseContractUntil_requiresRole() public {
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        etherFiRedemptionManagerInstance.unpauseContractUntil();
+
+        // PROTOCOL_UNPAUSER (admin) alone is insufficient
+        vm.prank(admin);
+        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        etherFiRedemptionManagerInstance.unpauseContractUntil();
+    }
+
+    function test_unpauseContractUntil_clearsState() public {
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        vm.prank(rmUnpauseUntilUnpauser);
+        etherFiRedemptionManagerInstance.unpauseContractUntil();
+        assertEq(_rmPausedUntil(), 0);
+    }
+
+    function test_unpauseContractUntil_revertsIfNotPaused() public {
+        _grantRmPauseUntilRoles();
+        vm.prank(rmUnpauseUntilUnpauser);
+        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
+        etherFiRedemptionManagerInstance.unpauseContractUntil();
+    }
+
+    // --- each gated function (whenNotPausedUntil explicit on 4 entrypoints) ---
+
+    function test_redeemEEth_blockedByPauseContractUntil() public {
+        _setupRedeemScenario();
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        vm.prank(user);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _rmPausedUntil())
+        );
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, ETH_ADDRESS);
+    }
+
+    function test_redeemWeEth_blockedByPauseContractUntil() public {
+        _setupRedeemScenario();
+        // wrap a small amount of eETH to weETH so we can attempt redeemWeEth
+        vm.startPrank(user);
+        eETHInstance.approve(address(weEthInstance), 1 ether);
+        weEthInstance.wrap(1 ether);
+        IERC20(address(weEthInstance)).approve(address(etherFiRedemptionManagerInstance), type(uint256).max);
+        vm.stopPrank();
+
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        vm.prank(user);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _rmPausedUntil())
+        );
+        etherFiRedemptionManagerInstance.redeemWeEth(0.5 ether, user, ETH_ADDRESS);
+    }
+
+    function test_redeemEEthWithPermit_blockedByPauseContractUntil() public {
+        _setupRedeemScenario();
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        IeETH.PermitInput memory emptyPermit;
+        vm.prank(user);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _rmPausedUntil())
+        );
+        etherFiRedemptionManagerInstance.redeemEEthWithPermit(1 ether, user, emptyPermit, ETH_ADDRESS);
+    }
+
+    function test_redeemWeEthWithPermit_blockedByPauseContractUntil() public {
+        _setupRedeemScenario();
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        IWeETH.PermitInput memory emptyPermit;
+        vm.prank(user);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _rmPausedUntil())
+        );
+        etherFiRedemptionManagerInstance.redeemWeEthWithPermit(1 ether, user, emptyPermit, ETH_ADDRESS);
+    }
+
+    function test_redeemEEth_unblockedAfterPauseExpires() public {
+        _setupRedeemScenario();
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        vm.warp(block.timestamp + etherFiRedemptionManagerInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, ETH_ADDRESS);
+    }
+
+    function test_redeemEEth_unblockedAfterExplicitUnpause() public {
+        _setupRedeemScenario();
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+        vm.prank(rmUnpauseUntilUnpauser);
+        etherFiRedemptionManagerInstance.unpauseContractUntil();
+
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, ETH_ADDRESS);
     }
 }
