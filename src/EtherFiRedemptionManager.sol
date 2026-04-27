@@ -43,6 +43,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
 
     uint256 private constant BUCKET_UNIT_SCALE = 1e12;
     uint256 private constant BASIS_POINT_SCALE = 1e4;
+    uint256 private constant MAX_EXIT_FEE_BASIS_POINTS = 100; // 1%
 
     bytes32 public constant ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE");
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
@@ -315,7 +316,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
      * @param token The token to set the exit fee for
      */
     function setExitFeeBasisPoints(uint16 _exitFeeInBps, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
-        require(_exitFeeInBps <= BASIS_POINT_SCALE, "INVALID");
+        require(_exitFeeInBps <= MAX_EXIT_FEE_BASIS_POINTS, "Exceeds max exit fee");
         tokenToRedemptionInfo[token].exitFeeInBps = _exitFeeInBps;
     }
 

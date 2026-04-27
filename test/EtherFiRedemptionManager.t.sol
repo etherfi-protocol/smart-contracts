@@ -86,6 +86,12 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100_01, ETH_ADDRESS); // 100.01%
     }
 
+    function test_exit_fee_guardrail() public {
+        vm.prank(admin);
+        vm.expectRevert("Exceeds max exit fee");
+        etherFiRedemptionManagerInstance.setExitFeeBasisPoints(101, ETH_ADDRESS);
+    }
+
     function _admin_permission_by_token(address token) public {
         address dummy = makeAddr("dummy");
         vm.startPrank(dummy);
@@ -114,7 +120,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         depositAmount = bound(depositAmount, 1 ether, 1000 ether);
         redeemAmount = bound(redeemAmount, 0.1 ether, depositAmount);
         exitFeeSplitBps = bound(exitFeeSplitBps, 0, 10000);
-        exitFeeBps = uint16(bound(uint256(exitFeeBps), 0, 10000));
+        exitFeeBps = uint16(bound(uint256(exitFeeBps), 0, 100));
         lowWatermarkBps = uint16(bound(uint256(lowWatermarkBps), 0, 10000));
 
 
@@ -169,7 +175,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         depositAmount = bound(depositAmount, 1 ether, 1000 ether);
         redeemAmount = bound(redeemAmount, 0.1 ether, depositAmount);
         exitFeeSplitBps = uint16(bound(exitFeeSplitBps, 0, 10000));
-        exitFeeBps = uint16(bound(exitFeeBps, 0, 10000));
+        exitFeeBps = uint16(bound(exitFeeBps, 0, 100));
         lowWatermarkBps = uint16(bound(lowWatermarkBps, 0, 10000));
         rebase = bound(rebase, 0, int128(uint128(depositAmount) / 10));
 
