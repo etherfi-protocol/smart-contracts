@@ -10,7 +10,7 @@ import "./TestSetup.sol";
 ///                                : cancelPauseUntil(user)                    -> PAUSER_ROLE (strong)
 contract WeETHPauseTest is TestSetup {
     event Paused();
-    event PausedUntil(address indexed user, uint64 pausedUntil);
+    event PausedUntil(address indexed user, uint256 pausedUntil);
     event CancelledPauseUntil(address indexed user);
     event Unpaused();
 
@@ -258,7 +258,7 @@ contract WeETHPauseTest is TestSetup {
     function test_wrap_blockedAtTimerBoundary_onWeETH() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
-        uint64 expiry = weEthInstance.pausedUntil(alice);
+        uint256 expiry = weEthInstance.pausedUntil(alice);
         vm.warp(expiry);
 
         vm.prank(alice);
@@ -269,7 +269,7 @@ contract WeETHPauseTest is TestSetup {
     function test_wrap_worksAfterTimerExpiry_onWeETH() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
-        uint64 expiry = weEthInstance.pausedUntil(alice);
+        uint256 expiry = weEthInstance.pausedUntil(alice);
         vm.warp(uint256(expiry) + 1);
 
         vm.prank(alice);
@@ -289,7 +289,7 @@ contract WeETHPauseTest is TestSetup {
     function test_unwrap_blockedAtTimerBoundary_onWeETH() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
-        uint64 expiry = weEthInstance.pausedUntil(alice);
+        uint256 expiry = weEthInstance.pausedUntil(alice);
         vm.warp(expiry);
 
         vm.prank(alice);
@@ -300,7 +300,7 @@ contract WeETHPauseTest is TestSetup {
     function test_unwrap_worksAfterTimerExpiry_onWeETH() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
-        uint64 expiry = weEthInstance.pausedUntil(alice);
+        uint256 expiry = weEthInstance.pausedUntil(alice);
         vm.warp(uint256(expiry) + 1);
 
         vm.prank(alice);
@@ -402,7 +402,7 @@ contract WeETHPauseTest is TestSetup {
     function test_pauseUntil_blockedAtBoundary() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
-        uint64 expiry = weEthInstance.pausedUntil(alice);
+        uint256 expiry = weEthInstance.pausedUntil(alice);
         vm.warp(expiry);
 
         vm.prank(alice);
@@ -413,7 +413,7 @@ contract WeETHPauseTest is TestSetup {
     function test_pauseUntil_expiresAfterOneDay() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
-        uint64 expiry = weEthInstance.pausedUntil(alice);
+        uint256 expiry = weEthInstance.pausedUntil(alice);
 
         vm.warp(uint256(expiry) + 1);
 
@@ -424,7 +424,7 @@ contract WeETHPauseTest is TestSetup {
     function test_pauseUntil_cannotExtend_whileTimerActive() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
-        uint64 firstExpiry = weEthInstance.pausedUntil(alice);
+        uint256 firstExpiry = weEthInstance.pausedUntil(alice);
 
         vm.warp(block.timestamp + 6 hours);
 
@@ -437,7 +437,7 @@ contract WeETHPauseTest is TestSetup {
     function test_pauseUntil_canRenew_afterExpiry() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
-        uint64 firstExpiry = weEthInstance.pausedUntil(alice);
+        uint256 firstExpiry = weEthInstance.pausedUntil(alice);
 
         vm.warp(uint256(firstExpiry) + 1);
         vm.prank(pauserUntil);
@@ -475,7 +475,7 @@ contract WeETHPauseTest is TestSetup {
     function test_extendPauseUntil_silentNoOp_whenTimerExpired() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
-        uint64 expiry = weEthInstance.pausedUntil(alice);
+        uint256 expiry = weEthInstance.pausedUntil(alice);
 
         vm.warp(uint256(expiry) + 1);
 
@@ -749,7 +749,7 @@ contract WeETHPauseTest is TestSetup {
 
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
-        uint64 expiry = weEthInstance.pausedUntil(alice);
+        uint256 expiry = weEthInstance.pausedUntil(alice);
         vm.warp(uint256(expiry) - delta);
 
         vm.prank(alice);
@@ -763,7 +763,7 @@ contract WeETHPauseTest is TestSetup {
 
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
-        uint64 expiry = weEthInstance.pausedUntil(alice);
+        uint256 expiry = weEthInstance.pausedUntil(alice);
         vm.warp(uint256(expiry) - delta);
 
         vm.prank(alice);

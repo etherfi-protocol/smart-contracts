@@ -20,7 +20,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     error CannotRecoverEETH();
 
     event Paused();
-    event PausedUntil(address indexed user, uint64 pausedUntil);
+    event PausedUntil(address indexed user, uint256 pausedUntil);
     event CancelledPauseUntil(address indexed user);
     event Unpaused();
 
@@ -31,7 +31,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     IeETH public eETH;
     ILiquidityPool public liquidityPool;
     bool public paused;
-    mapping(address => uint64) public pausedUntil;
+    mapping(address => uint256) public pausedUntil;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
@@ -112,7 +112,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         require(roleRegistry.hasRole(WEETH_PAUSER_UNTIL_ROLE, msg.sender), "IncorrectRole");
         require(_user != address(0), "No zero addresses");
         if (pausedUntil[_user] < block.timestamp) {
-            pausedUntil[_user] = uint64(block.timestamp) + 1 days;
+            pausedUntil[_user] = block.timestamp + 1 days;
             emit PausedUntil(_user, pausedUntil[_user]);
         }
     }
@@ -121,7 +121,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
         require(_user != address(0), "No zero addresses");
         if (pausedUntil[_user] >= block.timestamp) {
-            pausedUntil[_user] = uint64(block.timestamp) + _duration;
+            pausedUntil[_user] = block.timestamp + _duration;
             emit PausedUntil(_user, pausedUntil[_user]);
         }
     }

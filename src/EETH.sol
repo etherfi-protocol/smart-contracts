@@ -42,11 +42,11 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     bytes32 public constant EETH_PAUSER_UNTIL_ROLE = keccak256("EETH_PAUSER_UNTIL_ROLE");
 
     bool public paused;
-    mapping(address => uint64) public pausedUntil;
+    mapping(address => uint256) public pausedUntil;
 
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
     event Paused();
-    event PausedUntil(address indexed user, uint64 pausedUntil);
+    event PausedUntil(address indexed user, uint256 pausedUntil);
     event CancelledPauseUntil(address indexed user);
     event Unpaused();
 
@@ -149,7 +149,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         require(_user != address(0), "No zero addresses");
         require(roleRegistry.hasRole(EETH_PAUSER_UNTIL_ROLE, msg.sender), "IncorrectRole");
         if (pausedUntil[_user] < block.timestamp) {
-            pausedUntil[_user] = uint64(block.timestamp) + 1 days;
+            pausedUntil[_user] = block.timestamp + 1 days;
             emit PausedUntil(_user, pausedUntil[_user]);
         }
     }
@@ -158,7 +158,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
         require(_user != address(0), "No zero addresses");
         if (pausedUntil[_user] >= block.timestamp) {
-            pausedUntil[_user] = uint64(block.timestamp) + _duration;
+            pausedUntil[_user] = block.timestamp + _duration;
             emit PausedUntil(_user, pausedUntil[_user]);
         }
     }

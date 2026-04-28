@@ -12,7 +12,7 @@ import "./TestSetup.sol";
 /// All transfer / mint / burn paths require global !paused AND timer expired for the affected user(s).
 contract EETHPauseTest is TestSetup {
     event Paused();
-    event PausedUntil(address indexed user, uint64 pausedUntil);
+    event PausedUntil(address indexed user, uint256 pausedUntil);
     event CancelledPauseUntil(address indexed user);
     event Unpaused();
     event Transfer(address indexed from, address indexed to, uint256 value);
@@ -304,7 +304,7 @@ contract EETHPauseTest is TestSetup {
     function test_pauseUntil_blockedAtBoundary() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
-        uint64 expiry = eETHInstance.pausedUntil(alice);
+        uint256 expiry = eETHInstance.pausedUntil(alice);
         vm.warp(expiry);
 
         vm.prank(alice);
@@ -315,7 +315,7 @@ contract EETHPauseTest is TestSetup {
     function test_pauseUntil_expiresAfterOneDay() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
-        uint64 expiry = eETHInstance.pausedUntil(alice);
+        uint256 expiry = eETHInstance.pausedUntil(alice);
 
         vm.warp(uint256(expiry) + 1);
 
@@ -343,7 +343,7 @@ contract EETHPauseTest is TestSetup {
     function test_pauseUntil_cannotExtend_whileTimerActive() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
-        uint64 firstExpiry = eETHInstance.pausedUntil(alice);
+        uint256 firstExpiry = eETHInstance.pausedUntil(alice);
 
         vm.warp(block.timestamp + 12 hours);
 
@@ -356,7 +356,7 @@ contract EETHPauseTest is TestSetup {
     function test_pauseUntil_canRenew_afterExpiry() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
-        uint64 firstExpiry = eETHInstance.pausedUntil(alice);
+        uint256 firstExpiry = eETHInstance.pausedUntil(alice);
 
         vm.warp(uint256(firstExpiry) + 1);
 
@@ -422,7 +422,7 @@ contract EETHPauseTest is TestSetup {
     function test_extendPauseUntil_silentNoOp_whenTimerExpired() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
-        uint64 expiry = eETHInstance.pausedUntil(alice);
+        uint256 expiry = eETHInstance.pausedUntil(alice);
 
         vm.warp(uint256(expiry) + 1);
 
