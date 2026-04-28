@@ -589,7 +589,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         addressProviderInstance = new AddressProvider(address(owner));
 
-        liquidityPoolImplementation = new LiquidityPool(address(0x0));
+        liquidityPoolImplementation = new LiquidityPool(address(0x0), 0);
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImplementation),"");
         liquidityPoolInstance = LiquidityPool(payable(address(liquidityPoolProxy)));
 
@@ -1563,7 +1563,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_liquidity_pool_contract() internal {
-        address newImpl = address(new LiquidityPool(address(0x0)));
+        address newImpl = address(new LiquidityPool(address(0x0), 0));
         vm.startPrank(liquidityPoolInstance.owner());
         liquidityPoolInstance.upgradeTo(newImpl);
         vm.stopPrank();

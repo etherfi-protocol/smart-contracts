@@ -213,7 +213,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_StakingManagerFailsNotInitializedToken() public {
-        LiquidityPool liquidityPoolNoToken = new LiquidityPool(address(0x0));
+        LiquidityPool liquidityPoolNoToken = new LiquidityPool(address(0x0), 0);
 
         vm.startPrank(alice);
         vm.deal(alice, 3 ether);
@@ -763,7 +763,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_Upgrade2_49_onlyRoleRegistryOwnerCanUpgrade() public {
-        liquidityPool = address(new LiquidityPool(address(0x0)));
+        liquidityPool = address(new LiquidityPool(address(0x0), 0));
         vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
         vm.prank(address(100));
         liquidityPoolInstance.upgradeTo(liquidityPool);
@@ -1446,10 +1446,272 @@ contract LiquidityPoolTest is TestSetup {
         vm.startPrank(alice);
         liquidityPoolInstance.deposit{value: 100 ether}();
         vm.stopPrank();
-        
+
         vm.prank(address(membershipManagerInstance));
         liquidityPoolInstance.rebase(10 ether);
-        
+
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 110 ether);
+    }
+
+    // ============================================================================
+    // MIN_AMOUNT_FOR_SHARE Tests
+    // ============================================================================
+    //
+    // The LiquidityPool now enforces a configurable floor on the eETH share-price.
+    // After share-supply or pooled-ether changes, `_checkMinAmountForShare()` reverts
+    // with `InvalidAmountForShare` whenever `amountForShare(1 ether) < MIN_AMOUNT_FOR_SHARE`.
+    // The check fires from: receive(), withdraw(), rebase(), burnEEthShares(),
+    // burnEEthSharesForNonETHWithdrawal(), _deposit() (every external deposit*),
+    // and _accountForEthSentOut() (validator-deposit flows).
+
+    /// @dev Deploy a fresh LiquidityPool implementation with the desired MIN and upgrade the proxy.
+    /// Preserves the existing `priorityWithdrawalQueue` immutable.
+    function _upgradeLpWithMinAmount(uint256 minAmount) internal {
+        address pq = liquidityPoolInstance.priorityWithdrawalQueue();
+        LiquidityPool newImpl = new LiquidityPool(pq, minAmount);
+        vm.prank(owner);
+        liquidityPoolInstance.upgradeTo(address(newImpl));
+    }
+
+    /// @dev Set the packed (totalValueOutOfLp, totalValueInLp) storage at slot 207.
+    /// Used to seed `totalValueOutOfLp` so a negative `rebase()` doesn't underflow before
+    /// reaching `_checkMinAmountForShare`.
+    function _setLpAccounting(uint128 valueOutOfLp, uint128 valueInLp) internal {
+        bytes32 packed = bytes32(uint256(valueOutOfLp) | (uint256(valueInLp) << 128));
+        vm.store(address(liquidityPoolInstance), bytes32(uint256(207)), packed);
+    }
+
+    // --- immutable getter ---
+
+    function test_minAmountForShare_default_is_zero_in_test_setup() public {
+        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0);
+    }
+
+    function test_minAmountForShare_immutable_is_set_via_constructor() public {
+        LiquidityPool fresh = new LiquidityPool(address(0), 0.5 ether);
+        assertEq(fresh.MIN_AMOUNT_FOR_SHARE(), 0.5 ether);
+
+        LiquidityPool fresh2 = new LiquidityPool(address(0), type(uint256).max);
+        assertEq(fresh2.MIN_AMOUNT_FOR_SHARE(), type(uint256).max);
+    }
+
+    function test_minAmountForShare_immutable_persists_through_upgrade() public {
+        _upgradeLpWithMinAmount(0.75 ether);
+        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0.75 ether);
+    }
+
+    // --- with MIN = 0 (check effectively disabled) ---
+
+    function test_minAmountForShare_zero_allows_empty_pool_operations() public {
+        // amountForShare(1 ether) returns 0 when totalShares == 0; with MIN=0 the strict `<` is false.
+        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0);
+        assertEq(eETHInstance.totalShares(), 0);
+
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+        assertEq(eETHInstance.balanceOf(alice), 1 ether);
+    }
+
+    // --- deposit / mint flow ---
+
+    function test_minAmountForShare_first_deposit_passes_at_exact_boundary() public {
+        // First deposit yields ratio = exactly 1 ether per 1 ether of shares; strict `<` allows MIN = 1 ether.
+        _upgradeLpWithMinAmount(1 ether);
+
+        vm.deal(alice, 5 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1 ether);
+    }
+
+    function test_minAmountForShare_first_deposit_reverts_when_min_above_initial_ratio() public {
+        // Initial deposit ratio is 1 ether; MIN = 1 ether + 1 wei should reject the mint.
+        _upgradeLpWithMinAmount(1 ether + 1);
+
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        vm.expectRevert(LiquidityPool.InvalidAmountForShare.selector);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+    }
+
+    function test_minAmountForShare_subsequent_deposit_succeeds_above_min() public {
+        // Establish ratio = 1.1 ether per share (positive rebase), then upgrade with MIN below it.
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(10 ether);
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1.1 ether);
+
+        _upgradeLpWithMinAmount(1.05 ether);
+
+        vm.deal(bob, 5 ether);
+        vm.prank(bob);
+        uint256 shares = liquidityPoolInstance.deposit{value: 5 ether}();
+        assertGt(shares, 0);
+        // Proportional minting preserves ratio.
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1.1 ether);
+    }
+
+    // --- rebase flow ---
+
+    function test_minAmountForShare_positive_rebase_succeeds() public {
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
+        _upgradeLpWithMinAmount(1 ether);
+
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(20 ether);
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1.2 ether);
+    }
+
+    function test_minAmountForShare_negative_rebase_above_min_succeeds() public {
+        // Deposit 100 ether (totalShares=100, ratio=1.0), then move 50 ether to outOfLp so
+        // a negative rebase has room to subtract without underflowing.
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        _setLpAccounting(50 ether, 50 ether); // totalPooled stays at 100, ratio still 1.0
+
+        _upgradeLpWithMinAmount(0.9 ether);
+
+        // Drop totalPooled from 100 to 95 → ratio 0.95 (above MIN).
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(-5 ether);
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 0.95 ether);
+    }
+
+    function test_minAmountForShare_negative_rebase_at_exact_boundary_succeeds() public {
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        _setLpAccounting(50 ether, 50 ether);
+
+        _upgradeLpWithMinAmount(0.9 ether);
+
+        // Drop totalPooled to exactly 90 → ratio 0.9 (== MIN; strict `<` lets equality through).
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(-10 ether);
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 0.9 ether);
+    }
+
+    function test_minAmountForShare_negative_rebase_below_min_reverts() public {
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        _setLpAccounting(50 ether, 50 ether);
+
+        _upgradeLpWithMinAmount(0.9 ether);
+
+        // Drop totalPooled to 89 → ratio 0.89 < MIN, reverts on the MIN check.
+        vm.prank(address(membershipManagerInstance));
+        vm.expectRevert(LiquidityPool.InvalidAmountForShare.selector);
+        liquidityPoolInstance.rebase(-11 ether);
+    }
+
+    // --- burnEEthShares (called by RedemptionManager / withdrawRequestNFT / priorityWithdrawalQueue) ---
+
+    function test_minAmountForShare_burnEEthShares_increases_ratio() public {
+        // Burning eETH shares without removing pooled ETH only raises the ratio,
+        // so the check cannot revert on this path even with MIN equal to the prior ratio.
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
+        // Move 10 eETH worth of shares to the redemption manager.
+        vm.prank(alice);
+        eETHInstance.transfer(address(etherFiRedemptionManagerInstance), 10 ether);
+        uint256 sharesToBurn = eETHInstance.shares(address(etherFiRedemptionManagerInstance));
+
+        _upgradeLpWithMinAmount(1 ether);
+
+        vm.prank(address(etherFiRedemptionManagerInstance));
+        liquidityPoolInstance.burnEEthShares(sharesToBurn);
+
+        // ratio = 100 ether / 90 shares > 1 ether
+        assertGt(liquidityPoolInstance.amountForShare(1 ether), 1 ether);
+    }
+
+    function test_minAmountForShare_burnEEthShares_reverts_at_zero_total_shares() public {
+        // Burning the last share leaves totalShares == 0, where amountForShare returns 0.
+        // With MIN > 0 this trips the guard.
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+
+        // Cache the transfer amount BEFORE pranking — view calls otherwise consume vm.prank.
+        uint256 aliceBalance = eETHInstance.balanceOf(alice);
+        vm.prank(alice);
+        eETHInstance.transfer(address(etherFiRedemptionManagerInstance), aliceBalance);
+        uint256 sharesToBurn = eETHInstance.shares(address(etherFiRedemptionManagerInstance));
+
+        _upgradeLpWithMinAmount(1 ether);
+
+        vm.prank(address(etherFiRedemptionManagerInstance));
+        vm.expectRevert(LiquidityPool.InvalidAmountForShare.selector);
+        liquidityPoolInstance.burnEEthShares(sharesToBurn);
+    }
+
+    // --- receive() ---
+
+    function test_minAmountForShare_receive_reverts_when_pool_empty_and_min_positive() public {
+        _upgradeLpWithMinAmount(1 ether);
+
+        // No deposits yet → totalShares == 0 → amountForShare(1 ether) == 0 → 0 < 1 ether → revert.
+        // Note: receive() also subtracts msg.value from totalValueOutOfLp, which is 0 here, so we
+        // also expect the underflow path. We rely on `vm.expectRevert` matching either.
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        vm.expectRevert();
+        (bool sent, ) = address(liquidityPoolInstance).call{value: 1 ether}("");
+        sent; // silence unused-var
+    }
+
+    // --- access control on the new constructor / immutable ---
+
+    function test_minAmountForShare_immutable_independent_of_priority_queue() public {
+        // The two constructor params are independent and neither cross-contaminates the other.
+        LiquidityPool a = new LiquidityPool(address(0xBEEF), 1 ether);
+        assertEq(a.priorityWithdrawalQueue(), address(0xBEEF));
+        assertEq(a.MIN_AMOUNT_FOR_SHARE(), 1 ether);
+
+        LiquidityPool b = new LiquidityPool(address(0), 0);
+        assertEq(b.priorityWithdrawalQueue(), address(0));
+        assertEq(b.MIN_AMOUNT_FOR_SHARE(), 0);
+    }
+
+    // --- fuzz: rebase boundary ---
+
+    function testFuzz_minAmountForShare_rebase_boundary(int128 rebaseAmount) public {
+        // Anchor share-price at 1.0 ether with a 100 ether deposit.
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        // Move pooled ETH out of LP so negative rebase has room before underflow.
+        _setLpAccounting(50 ether, 50 ether);
+
+        // Bound rebase to keep totalValueOutOfLp in [0, type(uint128).max] after the update.
+        // Pre-rebase totalValueOutOfLp == 50e18.
+        rebaseAmount = int128(bound(int256(rebaseAmount), -50 ether, 50 ether));
+
+        uint256 minAmount = 0.5 ether;
+        _upgradeLpWithMinAmount(minAmount);
+
+        // Compute resulting ratio: amountForShare(1 ether) = (1e18 * (100e18 + rebaseAmount)) / 100e18
+        int256 newPooled = 100 ether + int256(rebaseAmount);
+        uint256 expectedRatio = uint256(newPooled * 1 ether / 100 ether);
+
+        if (expectedRatio < minAmount) {
+            vm.prank(address(membershipManagerInstance));
+            vm.expectRevert(LiquidityPool.InvalidAmountForShare.selector);
+            liquidityPoolInstance.rebase(rebaseAmount);
+        } else {
+            vm.prank(address(membershipManagerInstance));
+            liquidityPoolInstance.rebase(rebaseAmount);
+            assertEq(liquidityPoolInstance.amountForShare(1 ether), expectedRatio);
+        }
     }
 }

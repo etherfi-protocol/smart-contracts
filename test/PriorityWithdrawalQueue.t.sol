@@ -50,7 +50,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Upgrade LiquidityPool to latest version (needed for setPriorityWithdrawalQueue)
         vm.startPrank(owner);
-        LiquidityPool newLpImpl = new LiquidityPool(address(priorityQueue));
+        LiquidityPool newLpImpl = new LiquidityPool(address(priorityQueue), 0);
         liquidityPoolInstance.upgradeTo(address(newLpImpl));
 
         // Grant roles
