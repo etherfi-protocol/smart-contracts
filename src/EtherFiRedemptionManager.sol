@@ -73,6 +73,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _liquidityPool, address _eEth, address _weEth, address _treasury, address _roleRegistry, address _etherFiRestaker, address _priorityWithdrawalQueue, uint256 _maxExitFeeSplitToTreasuryInBps, uint256 _maxExitFeeInBps, uint256 _maxLowWatermarkInBpsOfTvl) {
+        if (_maxExitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _maxExitFeeInBps > BASIS_POINT_SCALE || _maxLowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidAmount();
         MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS = _maxExitFeeSplitToTreasuryInBps;
         MAX_EXIT_FEE_IN_BPS = _maxExitFeeInBps;
         MAX_LOW_WATERMARK_IN_BPS_OF_TVL = _maxLowWatermarkInBpsOfTvl;
