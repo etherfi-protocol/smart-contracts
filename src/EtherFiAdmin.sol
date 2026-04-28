@@ -56,6 +56,9 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     bytes32 public constant ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE");
     bytes32 public constant ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE");
 
+    int256 public immutable MAX_ACCEPTABLE_REBASE_APR_IN_BPS;
+    uint256 public immutable MAX_VALIDATOR_TASK_BATCH_SIZE;
+
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
 
@@ -64,9 +67,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event ValidatorApprovalTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
 
     error IncorrectRole();
+    error InvalidAcceptableRebaseApr();
+    error InvalidValidatorTaskBatchSize();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(int256 _maxAcceptableRebaseAprInBps, uint256 _maxValidatorTaskBatchSize) {
+        MAX_ACCEPTABLE_REBASE_APR_IN_BPS = _maxAcceptableRebaseAprInBps;
+        MAX_VALIDATOR_TASK_BATCH_SIZE = _maxValidatorTaskBatchSize;
         _disableInitializers();
     }
 
@@ -162,6 +169,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function setValidatorTaskBatchSize(uint16 _batchSize) external {
         if(!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (_batchSize > MAX_VALIDATOR_TASK_BATCH_SIZE) revert InvalidValidatorTaskBatchSize();
         validatorTaskBatchSize = _batchSize;
     }
 
@@ -302,6 +310,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external {
         if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (_acceptableRebaseAprInBps < 0 || _acceptableRebaseAprInBps > MAX_ACCEPTABLE_REBASE_APR_IN_BPS) revert InvalidAcceptableRebaseApr();
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
     }
 

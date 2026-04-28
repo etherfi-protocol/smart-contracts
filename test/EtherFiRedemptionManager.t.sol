@@ -82,14 +82,42 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100_00, ETH_ADDRESS); // 100%
         assertEq(etherFiRedemptionManagerInstance.lowWatermarkInETH(ETH_ADDRESS), 100 ether);
 
-        vm.expectRevert("INVALID");
+        vm.expectRevert("Exceeds max low watermark of tvl");
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100_01, ETH_ADDRESS); // 100.01%
     }
 
     function test_exit_fee_guardrail() public {
-        vm.prank(admin);
+        vm.startPrank(admin);
+
+        uint256 maxExitFee = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_IN_BPS();
+        assertEq(maxExitFee, 100); // configured in TestSetup
+
+        // boundary value is accepted
+        etherFiRedemptionManagerInstance.setExitFeeBasisPoints(uint16(maxExitFee), ETH_ADDRESS);
+        (, , uint16 exitFeeBps, ) = etherFiRedemptionManagerInstance.tokenToRedemptionInfo(ETH_ADDRESS);
+        assertEq(exitFeeBps, uint16(maxExitFee));
+
+        // one above the cap reverts
         vm.expectRevert("Exceeds max exit fee");
-        etherFiRedemptionManagerInstance.setExitFeeBasisPoints(101, ETH_ADDRESS);
+        etherFiRedemptionManagerInstance.setExitFeeBasisPoints(uint16(maxExitFee + 1), ETH_ADDRESS);
+        vm.stopPrank();
+    }
+
+    function test_exit_fee_split_to_treasury_guardrail() public {
+        vm.startPrank(admin);
+
+        uint256 maxSplit = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS();
+        assertEq(maxSplit, 10_000); // configured in TestSetup
+
+        // boundary value is accepted
+        etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(uint16(maxSplit), ETH_ADDRESS);
+        (, uint16 exitSplit, , ) = etherFiRedemptionManagerInstance.tokenToRedemptionInfo(ETH_ADDRESS);
+        assertEq(exitSplit, uint16(maxSplit));
+
+        // one above the cap reverts
+        vm.expectRevert("Exceeds max exit fee split to treasury");
+        etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(uint16(maxSplit + 1), ETH_ADDRESS);
+        vm.stopPrank();
     }
 
     function _admin_permission_by_token(address token) public {

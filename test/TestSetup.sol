@@ -656,7 +656,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         membershipManagerProxy = new UUPSProxy(address(membershipManagerImplementation), "");
         membershipManagerInstance = MembershipManagerV0(payable(membershipManagerProxy));
 
-        etherFiAdminImplementation = new EtherFiAdmin();
+        etherFiAdminImplementation = new EtherFiAdmin(10_000, 1_000);
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
 
@@ -687,7 +687,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         );
         priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
 
-        etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance))), "");
+        etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance), 10_000, 100, 10_000)), "");
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), owner);
         // etherFiRedemptionManagerInstance.initializeTokenParameters(_tokens, _exitFeeSplitToTreasuryInBps, _exitFeeInBps, _lowWatermarkInBpsOfTvl, _bucketCapacity, _bucketRefillRate);
@@ -881,7 +881,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_etherfiAdmin() internal {
-        address newAdminImpl = address(new EtherFiAdmin());
+        address newAdminImpl = address(new EtherFiAdmin(10_000, 1_000));
         vm.prank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
@@ -910,7 +910,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
             );
             priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
-            EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance));
+            EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance), 10_000, 100, 10_000);
             etherFiRedemptionManagerProxy = new UUPSProxy(address(etherFiRedemptionManagerImplementation), "");
             etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
             etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark

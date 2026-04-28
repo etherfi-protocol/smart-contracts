@@ -1013,6 +1013,40 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.setValidatorTaskBatchSize(75);
     }
 
+    function test_setValidatorTaskBatchSize_guardrail() public {
+        uint256 maxBatchSize = etherFiAdminInstance.MAX_VALIDATOR_TASK_BATCH_SIZE();
+        assertEq(maxBatchSize, 1_000); // configured in TestSetup
+
+        // boundary value is accepted
+        vm.prank(alice);
+        etherFiAdminInstance.setValidatorTaskBatchSize(uint16(maxBatchSize));
+
+        // one above the cap reverts
+        vm.prank(alice);
+        vm.expectRevert(EtherFiAdmin.InvalidValidatorTaskBatchSize.selector);
+        etherFiAdminInstance.setValidatorTaskBatchSize(uint16(maxBatchSize + 1));
+    }
+
+    function test_updateAcceptableRebaseApr_guardrail() public {
+        int256 maxApr = etherFiAdminInstance.MAX_ACCEPTABLE_REBASE_APR_IN_BPS();
+        assertEq(maxApr, 10_000); // configured in TestSetup
+
+        // boundary value is accepted
+        vm.prank(alice);
+        etherFiAdminInstance.updateAcceptableRebaseApr(int32(maxApr));
+        assertEq(etherFiAdminInstance.acceptableRebaseAprInBps(), int32(maxApr));
+
+        // negative limit is not allowed in acceptable rebase apr
+        vm.prank(alice);
+        vm.expectRevert(EtherFiAdmin.InvalidAcceptableRebaseApr.selector);
+        etherFiAdminInstance.updateAcceptableRebaseApr(-1);
+
+        // one above the cap reverts
+        vm.prank(alice);
+        vm.expectRevert(EtherFiAdmin.InvalidAcceptableRebaseApr.selector);
+        etherFiAdminInstance.updateAcceptableRebaseApr(int32(maxApr + 1));
+    }
+
     function test_executeValidatorApprovalTask() public {
         // RoleRegistry is already initialized and alice already has the role in setUpTests
 
