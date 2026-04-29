@@ -61,7 +61,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     mapping(address => TokenInfo) public tokenInfos;
     mapping(bytes32 => bool) public isRegisteredQueuedWithdrawals;
-    mapping(address => bool) public admins; // deprecated
+    mapping(address => bool) public DEPRECATED_admins;
 
     address public treasury;
     ILiquidityPool public liquidityPool;
@@ -90,9 +90,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     address public etherfiRestaker;
 
-    IRoleRegistry public roleRegistry;
-
     bytes32 public constant LIQUIFIER_ADMIN_ROLE = keccak256("LIQUIFIER_ADMIN_ROLE");
+    bytes32 public constant LIQUIFIER_SENDER_ROLE = keccak256("LIQUIFIER_SENDER_ROLE");
+    IRoleRegistry public immutable roleRegistry;
 
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     // This event is deprecated. will be removed in the next release.
@@ -113,7 +113,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _roleRegistry) {
+        roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
 
@@ -197,7 +198,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function sendToEtherFiRestaker(address _token, uint256 _amount) external {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(LIQUIFIER_SENDER_ROLE, msg.sender)) revert IncorrectRole();
         IERC20(_token).safeTransfer(etherfiRestaker, _amount);
     }
 
@@ -259,11 +260,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function unpauseContractUntil() external {
         if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
         _unpauseUntil();
-    }
-
-    /// @notice Sets the role registry contract
-    function setRolesRegistry(address _roleRegistry) external onlyOwner {
-        roleRegistry = IRoleRegistry(_roleRegistry);
     }
 
     // ETH comes in, L2ETH is burnt

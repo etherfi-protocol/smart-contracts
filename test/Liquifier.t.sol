@@ -362,6 +362,65 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.unPauseContract();
     }
 
+    function test_sendToEtherFiRestaker_requiresSenderRole() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+
+        // Fund the liquifier with stETH so a transfer would otherwise succeed
+        vm.deal(alice, 5 ether);
+        vm.startPrank(alice);
+        stEth.submit{value: 5 ether}(address(0));
+        stEth.transfer(address(liquifierInstance), 1 ether);
+        vm.stopPrank();
+
+        // bob has no roles
+        vm.prank(bob);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        liquifierInstance.sendToEtherFiRestaker(address(stEth), 1);
+
+        // chad has only LIQUIFIER_ADMIN_ROLE — that role is no longer accepted here
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), chad);
+        vm.stopPrank();
+        vm.prank(chad);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        liquifierInstance.sendToEtherFiRestaker(address(stEth), 1);
+    }
+
+    function test_sendToEtherFiRestaker_succeedsWithSenderRole() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+
+        vm.deal(alice, 5 ether);
+        vm.startPrank(alice);
+        stEth.submit{value: 5 ether}(address(0));
+        stEth.transfer(address(liquifierInstance), 2 ether);
+        vm.stopPrank();
+
+        address sender = makeAddr("liqSender");
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_SENDER_ROLE(), sender);
+        vm.stopPrank();
+
+        uint256 restakerBalBefore = stEth.balanceOf(address(etherFiRestakerInstance));
+        uint256 liquifierBalBefore = stEth.balanceOf(address(liquifierInstance));
+
+        vm.prank(sender);
+        liquifierInstance.sendToEtherFiRestaker(address(stEth), 1 ether);
+
+        // stETH transfer can be off by 1-2 wei due to share rounding
+        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), restakerBalBefore + 1 ether, 2);
+        assertApproxEqAbs(stEth.balanceOf(address(liquifierInstance)), liquifierBalBefore - 1 ether, 2);
+    }
+
+    function test_LIQUIFIER_SENDER_ROLE_constant() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+
+        assertEq(liquifierInstance.LIQUIFIER_SENDER_ROLE(), keccak256("LIQUIFIER_SENDER_ROLE"));
+        assertTrue(liquifierInstance.LIQUIFIER_ADMIN_ROLE() != liquifierInstance.LIQUIFIER_SENDER_ROLE());
+    }
+
     function test_getTotalPooledEther() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);

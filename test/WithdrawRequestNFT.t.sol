@@ -821,6 +821,40 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.unpauseContractUntil();
     }
 
+    // The scan-of-share-remainder gate was removed from unPauseContract / unpauseContractUntil.
+    // Unpausing must succeed even when isScanOfShareRemainderCompleted() returns false.
+    function test_unPauseContract_worksWhenScanIncomplete() public {
+        // Force scan-incomplete state: scanFrom < scanUntil + 1
+        vm.startPrank(withdrawRequestNFTInstance.owner());
+        updateParam(1, 5);
+        vm.stopPrank();
+        assertFalse(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "scan should be incomplete");
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.pauseContract();
+        assertTrue(withdrawRequestNFTInstance.paused());
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.unPauseContract();
+        assertFalse(withdrawRequestNFTInstance.paused(), "Contract should unpause regardless of scan state");
+    }
+
+    function test_unpauseContractUntil_worksWhenScanIncomplete() public {
+        vm.startPrank(withdrawRequestNFTInstance.owner());
+        updateParam(1, 5);
+        vm.stopPrank();
+        assertFalse(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "scan should be incomplete");
+
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+        assertEq(_wrPausedUntil(), block.timestamp + withdrawRequestNFTInstance.MAX_PAUSE_DURATION());
+
+        vm.prank(wrUnpauseUntilUnpauser);
+        withdrawRequestNFTInstance.unpauseContractUntil();
+        assertEq(_wrPausedUntil(), 0, "pause-until should clear regardless of scan state");
+    }
+
     // --- each gated function (whenNotPaused → blocked by pause-until too) ---
 
     function test_requestWithdraw_blockedByPauseContractUntil() public {
