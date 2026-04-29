@@ -14,6 +14,8 @@ import "./interfaces/IRoleRegistry.sol";
 
 contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
 
+    IeETH public immutable eETH;
+    ILiquidityPool public immutable liquidityPool;
     IRoleRegistry public immutable roleRegistry;
 
     error IncorrectRole();
@@ -28,8 +30,8 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     //---------------------------------  STORAGE  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    IeETH public eETH;
-    ILiquidityPool public liquidityPool;
+    IeETH public DEPRECATED_eETH;
+    ILiquidityPool public DEPRECATED_liquidityPool;
     bool public paused;
     mapping(address => uint256) public pausedUntil;
 
@@ -46,22 +48,21 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry) {
-        require(_roleRegistry != address(0), "must set role registry");
+    constructor(address _eETH, address _liquidityPool, address _roleRegistry) {
+        require(_eETH != address(0), "No zero addresses");
+        require(_liquidityPool != address(0), "No zero addresses");
+        require(_roleRegistry != address(0), "No zero addresses");
+        eETH = IeETH(_eETH);
+        liquidityPool = ILiquidityPool(_liquidityPool);
         roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
 
-    function initialize(address _liquidityPool, address _eETH) external initializer {
-        require(_liquidityPool != address(0), "No zero addresses");
-        require(_eETH != address(0), "No zero addresses");
-
+    function initialize() external initializer {
         __ERC20_init("Wrapped eETH", "weETH");
         __ERC20Permit_init("Wrapped eETH");
         __UUPSUpgradeable_init();
         __Ownable_init();
-        eETH = IeETH(_eETH);
-        liquidityPool = ILiquidityPool(_liquidityPool);
     }
 
     /// @dev name changed from the version initially deployed

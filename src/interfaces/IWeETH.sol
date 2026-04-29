@@ -22,7 +22,7 @@ interface IWeETH is IERC20Upgradeable {
     function blacklistedRecipient(address recipient) external view returns (bool);
 
     // STATE-CHANGING FUNCTIONS
-    function initialize(address _liquidityPool, address _eETH) external;
+    function initialize() external;
     function wrap(uint256 _eETHAmount) external returns (uint256);
     function wrapWithPermit(uint256 _eETHAmount, ILiquidityPool.PermitInput calldata _permit) external returns (uint256);
     function unwrap(uint256 _weETHAmount) external returns (uint256);

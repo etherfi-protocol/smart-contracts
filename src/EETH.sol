@@ -16,7 +16,7 @@ import "./interfaces/IRoleRegistry.sol";
 
 contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20PermitUpgradeable, IeETH, AssetRecovery {
     using CountersUpgradeable for CountersUpgradeable.Counter;
-    ILiquidityPool public liquidityPool;
+    ILiquidityPool public DEPRECATED_liquidityPool;
 
     uint256 public totalShares;
     mapping (address => uint256) public shares;
@@ -36,6 +36,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     bytes32 private immutable _TYPE_HASH;
 
     IRoleRegistry public immutable roleRegistry;
+    ILiquidityPool public immutable liquidityPool;
 
     bytes32 public constant EETH_OPERATING_ADMIN_ROLE = keccak256("EETH_OPERATING_ADMIN_ROLE");
     bytes32 public constant EETH_PAUSER_ROLE = keccak256("EETH_PAUSER_ROLE");
@@ -53,7 +54,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     error IncorrectRole();
 
     // TODO: Figure our what `name` and `version` are for
-    constructor(address _roleRegistry) {
+    constructor(address _roleRegistry, address _liquidityPool) {
         bytes32 hashedName = keccak256("EETH");
         bytes32 hashedVersion = keccak256("1");
         bytes32 typeHash = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -64,18 +65,17 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         _CACHED_THIS = address(this);
         _TYPE_HASH = typeHash;
 
-        require(_roleRegistry != address(0), "must set role registry");
+        require(_liquidityPool != address(0), "No zero addresses");
+        require(_roleRegistry != address(0), "No zero addresses");
         roleRegistry = IRoleRegistry(_roleRegistry);
+        liquidityPool = ILiquidityPool(_liquidityPool);
 
         _disableInitializers(); 
     }
 
-    function initialize(address _liquidityPool) external initializer {
-        require(_liquidityPool != address(0), "No zero addresses");
-        
+    function initialize() external initializer {    
         __UUPSUpgradeable_init();
         __Ownable_init();
-        liquidityPool = ILiquidityPool(_liquidityPool);
     }
 
     function mintShares(address _user, uint256 _share) external onlyPoolContract {
