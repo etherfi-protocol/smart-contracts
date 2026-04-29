@@ -58,9 +58,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     bytes32 public constant ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE");
 
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
-
-    uint256 public maxFinalizedWithdrawalAmountPerDay;
-    uint256 public maxNumValidatorsToApprovePerDay;
+    uint256 public immutable MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY;
+    uint256 public immutable MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY;
 
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
@@ -69,15 +68,14 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event ValidatorApprovalTaskCompleted(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
     event ValidatorApprovalTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
 
-    event MaxFinalizedWithdrawalAmountPerDayUpdated(uint256 newValue);
-    event MaxNumValidatorsToApprovePerDayUpdated(uint256 newValue);
-
     error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _priorityWithdrawalQueue) {
+    constructor(address _priorityWithdrawalQueue, uint256 _maxFinalizedWithdrawalAmountPerDay, uint256 _maxNumValidatorsToApprovePerDay) {
         _disableInitializers();
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
+        MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = _maxFinalizedWithdrawalAmountPerDay;
+        MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY = _maxNumValidatorsToApprovePerDay;
     }
 
     function initialize(
@@ -175,18 +173,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         validatorTaskBatchSize = _batchSize;
     }
 
-    function setMaxFinalizedWithdrawalAmountPerDay(uint256 _maxFinalizedWithdrawalAmountPerDay) external {
-        if(!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        maxFinalizedWithdrawalAmountPerDay = _maxFinalizedWithdrawalAmountPerDay;
-        emit MaxFinalizedWithdrawalAmountPerDayUpdated(_maxFinalizedWithdrawalAmountPerDay);
-    }
-
-    function setMaxNumValidatorsToApprovePerDay(uint256 _maxNumValidatorsToApprovePerDay) external {
-        if(!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        maxNumValidatorsToApprovePerDay = _maxNumValidatorsToApprovePerDay;
-        emit MaxNumValidatorsToApprovePerDayUpdated(_maxNumValidatorsToApprovePerDay);
-    }
-
     function canExecuteTasks(IEtherFiOracle.OracleReport calldata _report) external view returns (bool) {
         bytes32 reportHash = etherFiOracle.generateReportHash(_report);
         uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
@@ -208,7 +194,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(blockForNextReportToProcess() == _report.refBlockFrom, "EtherFiAdmin: report has wrong `refBlockFrom`");
         require(current_slot >= postReportWaitTimeInSlots + etherFiOracle.getConsensusSlot(reportHash), "EtherFiAdmin: report is too fresh");
 
-        uint256 elapsedTime = (_report.refSlotTo - _report.refSlotFrom) * 12 seconds;
+        uint256 elapsedTime = (_report.refSlotTo - lastHandledReportRefSlot) * 12 seconds;
         require(elapsedTime > 0, "EtherFiAdmin: report spans zero slots");
 
         _handleAccruedRewards(_report, elapsedTime);
@@ -285,7 +271,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             return;
         }
         uint256 numValidatorsToApprovePerDay = (_report.validatorsToApprove.length * 1 days) / elapsedTime;
-        require(numValidatorsToApprovePerDay <= maxNumValidatorsToApprovePerDay, "EtherFiAdmin: number of validators to approve exceeds max");
+        require(numValidatorsToApprovePerDay <= MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY, "EtherFiAdmin: number of validators to approve exceeds max");
 
         uint256 numBatches = (_report.validatorsToApprove.length + validatorTaskBatchSize - 1) / validatorTaskBatchSize;
 
@@ -310,7 +296,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function _handleWithdrawals(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal {
         uint256 finalizedWithdrawalAmountPerDay = (_report.finalizedWithdrawalAmount * 1 days) / elapsedTime;
-        require(finalizedWithdrawalAmountPerDay <= maxFinalizedWithdrawalAmountPerDay, "EtherFiAdmin: finalized withdrawal amount exceeds max");
+        require(finalizedWithdrawalAmountPerDay <= MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY, "EtherFiAdmin: finalized withdrawal amount exceeds max");
 
         for (uint256 i = 0; i < _report.withdrawalRequestsToInvalidate.length; i++) {
             withdrawRequestNft.invalidateRequest(_report.withdrawalRequestsToInvalidate[i]);
