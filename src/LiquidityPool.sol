@@ -211,7 +211,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @param _recipient the recipient who will receives the ETH
     /// @param _amount the amount to withdraw from contract
     /// it returns the amount of shares burned
-    function withdraw(address _recipient, uint256 _amount) external whenNotPaused nonReentrant returns (uint256) {
+    function withdraw(address _recipient, uint256 _amount) external nonReentrant returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);
         require(
             msg.sender == address(withdrawRequestNFT) || 
