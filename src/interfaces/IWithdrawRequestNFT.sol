@@ -18,4 +18,7 @@ interface IWithdrawRequestNFT {
 
     function invalidateRequest(uint256 requestId) external;
     function finalizeRequests(uint256 upperBound) external;
+
+    function pauseContractUntil() external;
+    function unpauseContractUntil() external;
 }

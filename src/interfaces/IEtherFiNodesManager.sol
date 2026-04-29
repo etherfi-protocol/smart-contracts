@@ -58,6 +58,8 @@ interface IEtherFiNodesManager {
     // protocol
     function pauseContract() external;
     function unPauseContract() external;
+    function pauseContractUntil() external;
+    function unpauseContractUntil() external;
 
     struct LegacyNodesManagerState {
         uint256[4] legacyPadding1;

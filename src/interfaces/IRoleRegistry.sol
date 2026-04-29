@@ -86,6 +86,18 @@ interface IRoleRegistry {
     function PROTOCOL_UNPAUSER() external view returns (bytes32);
 
     /**
+     * @notice Returns the PAUSE_UNTIL_ROLE role identifier
+     * @return The bytes32 identifier for the PAUSE_UNTIL_ROLE role
+     */
+    function PAUSE_UNTIL_ROLE() external view returns (bytes32);
+
+    /**
+     * @notice Returns the UNPAUSE_UNTIL_ROLE role identifier
+     * @return The bytes32 identifier for the UNPAUSE_UNTIL_ROLE role
+     */
+    function UNPAUSE_UNTIL_ROLE() external view returns (bytes32);
+
+    /**
      * @notice Returns the current owner of the contract
      * @return The address of the current owner
      */

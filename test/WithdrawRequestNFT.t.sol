@@ -5,6 +5,7 @@ pragma solidity ^0.8.13;
 
 import "forge-std/console2.sol";
 import "./TestSetup.sol";
+import "../src/utils/PausableUntil.sol";
 
 
 contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
@@ -751,6 +752,194 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(admin);
         vm.expectRevert("Pausable: not paused");
         withdrawRequestNFTInstance.unPauseContract();
+    }
+
+    //--------------------------------------------------------------------------------------
+    //--------------------------  pauseContractUntil / unpauseContractUntil  ---------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 constant PAUSABLE_UNTIL_SLOT =
+        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+    address wrPauseUntilPauser = makeAddr("wrPauseUntilPauser");
+    address wrUnpauseUntilUnpauser = makeAddr("wrUnpauseUntilUnpauser");
+
+    function _grantWrPauseUntilRoles() internal {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), wrPauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), wrUnpauseUntilUnpauser);
+        vm.stopPrank();
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+    }
+
+    function _wrPausedUntil() internal view returns (uint256) {
+        return uint256(vm.load(address(withdrawRequestNFTInstance), PAUSABLE_UNTIL_SLOT));
+    }
+
+    function test_pauseContractUntil_requiresRole() public {
+        _grantWrPauseUntilRoles();
+        vm.prank(bob);
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        withdrawRequestNFTInstance.pauseContractUntil();
+
+        // PROTOCOL_PAUSER (admin) alone is insufficient
+        vm.prank(admin);
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        withdrawRequestNFTInstance.pauseContractUntil();
+    }
+
+    function test_pauseContractUntil_setsState() public {
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+        assertEq(_wrPausedUntil(), block.timestamp + withdrawRequestNFTInstance.MAX_PAUSE_DURATION());
+    }
+
+    function test_unpauseContractUntil_requiresRole() public {
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        withdrawRequestNFTInstance.unpauseContractUntil();
+
+        // PROTOCOL_UNPAUSER (admin) alone is insufficient
+        vm.prank(admin);
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        withdrawRequestNFTInstance.unpauseContractUntil();
+    }
+
+    function test_unpauseContractUntil_clearsState() public {
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+
+        vm.prank(wrUnpauseUntilUnpauser);
+        withdrawRequestNFTInstance.unpauseContractUntil();
+        assertEq(_wrPausedUntil(), 0);
+    }
+
+    function test_unpauseContractUntil_revertsIfNotPaused() public {
+        _grantWrPauseUntilRoles();
+        vm.prank(wrUnpauseUntilUnpauser);
+        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
+        withdrawRequestNFTInstance.unpauseContractUntil();
+    }
+
+    // The scan-of-share-remainder gate was removed from unPauseContract / unpauseContractUntil.
+    // Unpausing must succeed even when isScanOfShareRemainderCompleted() returns false.
+    function test_unPauseContract_worksWhenScanIncomplete() public {
+        // Force scan-incomplete state: scanFrom < scanUntil + 1
+        vm.startPrank(withdrawRequestNFTInstance.owner());
+        updateParam(1, 5);
+        vm.stopPrank();
+        assertFalse(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "scan should be incomplete");
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.pauseContract();
+        assertTrue(withdrawRequestNFTInstance.paused());
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.unPauseContract();
+        assertFalse(withdrawRequestNFTInstance.paused(), "Contract should unpause regardless of scan state");
+    }
+
+    function test_unpauseContractUntil_worksWhenScanIncomplete() public {
+        vm.startPrank(withdrawRequestNFTInstance.owner());
+        updateParam(1, 5);
+        vm.stopPrank();
+        assertFalse(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "scan should be incomplete");
+
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+        assertEq(_wrPausedUntil(), block.timestamp + withdrawRequestNFTInstance.MAX_PAUSE_DURATION());
+
+        vm.prank(wrUnpauseUntilUnpauser);
+        withdrawRequestNFTInstance.unpauseContractUntil();
+        assertEq(_wrPausedUntil(), 0, "pause-until should clear regardless of scan state");
+    }
+
+    // --- each gated function (whenNotPaused → blocked by pause-until too) ---
+
+    function test_requestWithdraw_blockedByPauseContractUntil() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        vm.stopPrank();
+
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _wrPausedUntil())
+        );
+        liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+    }
+
+    function test_claimWithdraw_blockedByPauseContractUntil() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(requestId);
+
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _wrPausedUntil())
+        );
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+    }
+
+    function test_batchClaimWithdraw_blockedByPauseContractUntil() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(requestId);
+
+        uint256[] memory ids = new uint256[](1);
+        ids[0] = requestId;
+
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _wrPausedUntil())
+        );
+        withdrawRequestNFTInstance.batchClaimWithdraw(ids);
+    }
+
+    function test_claimWithdraw_unblockedAfterPauseExpires() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(requestId);
+
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+
+        vm.warp(block.timestamp + withdrawRequestNFTInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
     }
 
     function test_getEEthRemainderAmount() public {
