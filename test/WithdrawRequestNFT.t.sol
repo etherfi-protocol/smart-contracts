@@ -1204,6 +1204,29 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(bob.balance - bobBalBefore, 1 ether, "finalized claim must pay out while both are paused");
     }
 
+    function test_liquidityPool_withdraw_revertsForOtherCallersWhenLpPaused() public {
+        // Pause the LP, then assert that the two non-permissionless callers (membershipManager and
+        // etherFiRedemptionManager) still revert at the pause gate. The pause check sits between the
+        // caller-allowlist require and the eETH-balance check, so no LP funding is needed.
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+
+        address membershipMgr = address(liquidityPoolInstance.membershipManager());
+        address redemptionMgr = address(liquidityPoolInstance.etherFiRedemptionManager());
+
+        if (membershipMgr != address(0)) {
+            vm.prank(membershipMgr);
+            vm.expectRevert("Pausable: paused");
+            liquidityPoolInstance.withdraw(bob, 1 ether);
+        }
+
+        if (redemptionMgr != address(0)) {
+            vm.prank(redemptionMgr);
+            vm.expectRevert("Pausable: paused");
+            liquidityPoolInstance.withdraw(bob, 1 ether);
+        }
+    }
+
     function test_liquidityPool_requestWithdraw_revertsWhenLpPaused() public {
         // Sanity: deposit / requestWithdraw remain gated by the LP pause — only the
         // claim path is permissionless.
