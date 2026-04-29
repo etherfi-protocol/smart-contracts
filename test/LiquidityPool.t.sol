@@ -957,13 +957,41 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_WithdrawFailsWhenPaused() public {
+        // Permissionless claim paths (withdrawRequestNFT, priorityWithdrawalQueue) bypass the LP pause.
+        // Only the gated callers (membershipManager, etherFiRedemptionManager) must still revert at the pause gate.
         vm.prank(admin);
         liquidityPoolInstance.pauseContract();
-        
-        vm.startPrank(address(withdrawRequestNFTInstance));
+
+        vm.startPrank(address(membershipManagerInstance));
         vm.expectRevert("Pausable: paused");
         liquidityPoolInstance.withdraw(alice, 1 ether);
         vm.stopPrank();
+
+        vm.startPrank(address(etherFiRedemptionManagerInstance));
+        vm.expectRevert("Pausable: paused");
+        liquidityPoolInstance.withdraw(alice, 1 ether);
+        vm.stopPrank();
+    }
+
+    function test_WithdrawByWithdrawRequestNFT_succeedsWhenLpPaused() public {
+        // Permissionless claim path: LP.withdraw must succeed for withdrawRequestNFT even when the LP is paused.
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(alice, 5 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(reqId);
+
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+        assertTrue(liquidityPoolInstance.paused(), "precondition: LP must be paused");
+
+        uint256 aliceBalBefore = alice.balance;
+        vm.prank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        assertGe(alice.balance, aliceBalBefore + 5 ether - 1 wei);
     }
 
     // ============ Request Membership NFT Withdraw Tests ============
@@ -1568,6 +1596,9 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_withdraw_blockedByPauseContractUntil() public {
+        // Gated callers (membershipManager, etherFiRedemptionManager) must revert under pauseContractUntil.
+        // Permissionless claim paths (withdrawRequestNFT, priorityWithdrawalQueue) bypass this gate — see
+        // test_withdraw_byWithdrawRequestNFT_succeedsUnderPauseContractUntil below.
         vm.deal(bob, 1 ether);
         vm.prank(bob);
         liquidityPoolInstance.deposit{value: 1 ether}();
@@ -1581,6 +1612,58 @@ contract LiquidityPoolTest is TestSetup {
             abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
         );
         liquidityPoolInstance.withdraw(bob, 1 ether);
+
+        vm.prank(address(membershipManagerInstance));
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.withdraw(bob, 1 ether);
+    }
+
+    function test_withdraw_byWithdrawRequestNFT_succeedsUnderPauseContractUntil() public {
+        // Symmetric to test_WithdrawByWithdrawRequestNFT_succeedsWhenLpPaused: a finalized claim
+        // must continue to pay out under the soft `pauseContractUntil` gate too.
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(alice, 5 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(reqId);
+
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        assertGt(_lpPausedUntil(), 0, "precondition: LP must be pause-until");
+
+        uint256 aliceBalBefore = alice.balance;
+        vm.prank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        assertGe(alice.balance, aliceBalBefore + 5 ether - 1 wei);
+    }
+
+    function test_withdraw_byWithdrawRequestNFT_succeedsWhenBothPauseAndPauseUntilActive() public {
+        // Hard pause AND soft pause-until both active: permissionless claim must still succeed.
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(alice, 5 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(reqId);
+
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+
+        uint256 aliceBalBefore = alice.balance;
+        vm.prank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        assertGe(alice.balance, aliceBalBefore + 5 ether - 1 wei);
     }
 
     function test_requestWithdraw_blockedByPauseContractUntil() public {
