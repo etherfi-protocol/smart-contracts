@@ -14,6 +14,7 @@ import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
+import "./interfaces/IPriorityWithdrawalQueue.sol";
 
 interface IEtherFiPausable {
     function paused() external view returns (bool);
@@ -56,6 +57,9 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     bytes32 public constant ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE");
     bytes32 public constant ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE");
 
+    uint256 public immutable STALE_ORACLE_REPORT_BLOCK_WINDOW;
+    IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
+
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
 
@@ -64,9 +68,11 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event ValidatorApprovalTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
 
     error IncorrectRole();
+    error OracleReportNotStale();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _priorityWithdrawalQueue) {
+        priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
         _disableInitializers();
     }
 
@@ -221,6 +227,30 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit ValidatorApprovalTaskInvalidated(taskHash, _reportHash, _validators);
     }
 
+    function finalizeWithdrawalsWhenStale() external {
+        if (block.number < lastHandledReportRefBlock + STALE_ORACLE_REPORT_BLOCK_WINDOW) revert OracleReportNotStale();
+
+        uint256 liquidity = liquidityPool.totalValueInLp() - (liquidityPool.ethAmountLockedForWithdrawal() + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal());
+        uint256 currentRequestId = withdrawRequestNft.nextRequestId() - 1;
+        uint256 lastFinalizedRequestId = withdrawRequestNft.lastFinalizedRequestId();
+        uint256 requestId = lastFinalizedRequestId;
+        uint256 finalizedWithdrawalAmount;
+        while (requestId < currentRequestId) {
+            IWithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNft.getRequest(requestId + 1);
+            if (!request.isValid) {
+                continue;
+            }
+            if (liquidity < finalizedWithdrawalAmount + request.amountOfEEth) {
+                break;
+            }
+            finalizedWithdrawalAmount += request.amountOfEEth;
+            requestId++;
+        }
+        if (requestId > lastFinalizedRequestId && finalizedWithdrawalAmount > 0) {
+            _finalizeWithdrawals(requestId, finalizedWithdrawalAmount);
+        }
+    }
+
     //protocol owns the eth that was distributed to NO and treasury in eigenpods and etherfinodes 
     function _handleProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal { 
         require(_report.protocolFees >= 0, "EtherFiAdmin: protocol fees can't be negative");
@@ -288,8 +318,12 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         for (uint256 i = 0; i < _report.withdrawalRequestsToInvalidate.length; i++) {
             withdrawRequestNft.invalidateRequest(_report.withdrawalRequestsToInvalidate[i]);
         }
-        withdrawRequestNft.finalizeRequests(_report.lastFinalizedWithdrawalRequestId);
-        liquidityPool.addEthAmountLockedForWithdrawal(_report.finalizedWithdrawalAmount);
+        _finalizeWithdrawals(_report.lastFinalizedWithdrawalRequestId, _report.finalizedWithdrawalAmount);
+    }
+    
+    function _finalizeWithdrawals(uint256 _lastFinalizedRequestId, uint256 _finalizedWithdrawalAmount) internal {
+        withdrawRequestNft.finalizeRequests(_lastFinalizedRequestId);
+        liquidityPool.addEthAmountLockedForWithdrawal(_finalizedWithdrawalAmount);
     }
 
     function slotForNextReportToProcess() public view returns (uint32) {
