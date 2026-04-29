@@ -86,7 +86,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     IERC20[] public dummies;
     address public l1SyncPool;
 
-    mapping(address => bool) public pausers; // deprecated
+    mapping(address => bool) public DEPRECATED_pausers;
 
     address public etherfiRestaker;
 
