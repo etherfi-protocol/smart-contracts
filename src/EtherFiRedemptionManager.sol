@@ -101,9 +101,9 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
 
     function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate)  external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         for(uint256 i = 0; i < _exitFeeSplitToTreasuryInBps.length; i++) {
-            require(_exitFeeSplitToTreasuryInBps[i] <= BASIS_POINT_SCALE, "INVALID");
-            require(_exitFeeInBps[i] <= BASIS_POINT_SCALE, "INVALID");
-            require(_lowWatermarkInBpsOfTvl[i] <= BASIS_POINT_SCALE, "INVALID");
+            require (_exitFeeSplitToTreasuryInBps[i] <= MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS, "Exceeds max exit fee split to treasury");
+            require (_exitFeeInBps[i] <= MAX_EXIT_FEE_IN_BPS, "Exceeds max exit fee");
+            require (_lowWatermarkInBpsOfTvl[i] <= MAX_LOW_WATERMARK_IN_BPS_OF_TVL, "Exceeds max low watermark of tvl");
             tokenToRedemptionInfo[address(_tokens[i])] = RedemptionInfo({
                 limit: BucketLimiter.create(_convertToBucketUnit(_bucketCapacity[i], Math.Rounding.Down), _convertToBucketUnit(_bucketRefillRate[i], Math.Rounding.Down)),
                 exitFeeSplitToTreasuryInBps: _exitFeeSplitToTreasuryInBps[i],

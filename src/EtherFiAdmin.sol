@@ -69,9 +69,11 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error IncorrectRole();
     error InvalidAcceptableRebaseApr();
     error InvalidValidatorTaskBatchSize();
+    error InvalidMaxAcceptableRebaseApr();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(int256 _maxAcceptableRebaseAprInBps, uint256 _maxValidatorTaskBatchSize) {
+        if (_maxAcceptableRebaseAprInBps < 0 || _maxAcceptableRebaseAprInBps > 10000) revert InvalidMaxAcceptableRebaseApr();
         MAX_ACCEPTABLE_REBASE_APR_IN_BPS = _maxAcceptableRebaseAprInBps;
         MAX_VALIDATOR_TASK_BATCH_SIZE = _maxValidatorTaskBatchSize;
         _disableInitializers();

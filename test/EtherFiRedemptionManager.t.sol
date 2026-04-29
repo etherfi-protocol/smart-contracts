@@ -120,6 +120,107 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.stopPrank();
     }
 
+    function test_initializeTokenParameters_guardrails() public {
+        uint256 maxExitFee = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_IN_BPS();
+        uint256 maxSplit = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS();
+        uint256 maxLowWatermark = etherFiRedemptionManagerInstance.MAX_LOW_WATERMARK_IN_BPS_OF_TVL();
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = ETH_ADDRESS;
+        uint16[] memory exitFeeSplitBps = new uint16[](1);
+        uint16[] memory exitFeeBps = new uint16[](1);
+        uint16[] memory lowWatermarkBps = new uint16[](1);
+        uint256[] memory capacities = new uint256[](1);
+        uint256[] memory refillRates = new uint256[](1);
+        capacities[0] = 5 ether;
+        refillRates[0] = 0.001 ether;
+
+        vm.startPrank(admin);
+
+        // exit fee split above cap reverts
+        exitFeeSplitBps[0] = uint16(maxSplit + 1);
+        exitFeeBps[0] = uint16(maxExitFee);
+        lowWatermarkBps[0] = uint16(maxLowWatermark);
+        vm.expectRevert("Exceeds max exit fee split to treasury");
+        etherFiRedemptionManagerInstance.initializeTokenParameters(tokens, exitFeeSplitBps, exitFeeBps, lowWatermarkBps, capacities, refillRates);
+
+        // exit fee above cap reverts
+        exitFeeSplitBps[0] = uint16(maxSplit);
+        exitFeeBps[0] = uint16(maxExitFee + 1);
+        lowWatermarkBps[0] = uint16(maxLowWatermark);
+        vm.expectRevert("Exceeds max exit fee");
+        etherFiRedemptionManagerInstance.initializeTokenParameters(tokens, exitFeeSplitBps, exitFeeBps, lowWatermarkBps, capacities, refillRates);
+
+        // low watermark above cap reverts
+        exitFeeSplitBps[0] = uint16(maxSplit);
+        exitFeeBps[0] = uint16(maxExitFee);
+        lowWatermarkBps[0] = uint16(maxLowWatermark + 1);
+        vm.expectRevert("Exceeds max low watermark of tvl");
+        etherFiRedemptionManagerInstance.initializeTokenParameters(tokens, exitFeeSplitBps, exitFeeBps, lowWatermarkBps, capacities, refillRates);
+
+        // boundary values are accepted
+        exitFeeSplitBps[0] = uint16(maxSplit);
+        exitFeeBps[0] = uint16(maxExitFee);
+        lowWatermarkBps[0] = uint16(maxLowWatermark);
+        etherFiRedemptionManagerInstance.initializeTokenParameters(tokens, exitFeeSplitBps, exitFeeBps, lowWatermarkBps, capacities, refillRates);
+        (, uint16 storedSplit, uint16 storedFee, uint16 storedLowWM) =
+            etherFiRedemptionManagerInstance.tokenToRedemptionInfo(ETH_ADDRESS);
+        assertEq(storedSplit, uint16(maxSplit));
+        assertEq(storedFee, uint16(maxExitFee));
+        assertEq(storedLowWM, uint16(maxLowWatermark));
+
+        vm.stopPrank();
+    }
+
+    function test_constructor_max_caps_guardrail() public {
+        uint256 oneAboveBasisPoints = 10_001;
+
+        // _maxExitFeeSplitToTreasuryInBps above BASIS_POINT_SCALE reverts
+        vm.expectRevert(EtherFiRedemptionManager.InvalidAmount.selector);
+        new EtherFiRedemptionManager(
+            address(liquidityPoolInstance),
+            address(eETHInstance),
+            address(weEthInstance),
+            address(treasuryInstance),
+            address(roleRegistryInstance),
+            address(etherFiRestakerInstance),
+            address(priorityQueueInstance),
+            oneAboveBasisPoints,
+            100,
+            10_000
+        );
+
+        // _maxExitFeeInBps above BASIS_POINT_SCALE reverts
+        vm.expectRevert(EtherFiRedemptionManager.InvalidAmount.selector);
+        new EtherFiRedemptionManager(
+            address(liquidityPoolInstance),
+            address(eETHInstance),
+            address(weEthInstance),
+            address(treasuryInstance),
+            address(roleRegistryInstance),
+            address(etherFiRestakerInstance),
+            address(priorityQueueInstance),
+            10_000,
+            oneAboveBasisPoints,
+            10_000
+        );
+
+        // _maxLowWatermarkInBpsOfTvl above BASIS_POINT_SCALE reverts
+        vm.expectRevert(EtherFiRedemptionManager.InvalidAmount.selector);
+        new EtherFiRedemptionManager(
+            address(liquidityPoolInstance),
+            address(eETHInstance),
+            address(weEthInstance),
+            address(treasuryInstance),
+            address(roleRegistryInstance),
+            address(etherFiRestakerInstance),
+            address(priorityQueueInstance),
+            10_000,
+            100,
+            oneAboveBasisPoints
+        );
+    }
+
     function _admin_permission_by_token(address token) public {
         address dummy = makeAddr("dummy");
         vm.startPrank(dummy);

@@ -1047,6 +1047,23 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.updateAcceptableRebaseApr(int32(maxApr + 1));
     }
 
+    function test_constructor_maxAcceptableRebaseAprInBps_guardrail() public {
+        // boundary values are accepted
+        EtherFiAdmin lowerBoundary = new EtherFiAdmin(0, 1_000);
+        assertEq(lowerBoundary.MAX_ACCEPTABLE_REBASE_APR_IN_BPS(), 0);
+
+        EtherFiAdmin upperBoundary = new EtherFiAdmin(10_000, 1_000);
+        assertEq(upperBoundary.MAX_ACCEPTABLE_REBASE_APR_IN_BPS(), 10_000);
+
+        // negative values revert
+        vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
+        new EtherFiAdmin(-1, 1_000);
+
+        // values above 10_000 revert
+        vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
+        new EtherFiAdmin(10_001, 1_000);
+    }
+
     function test_executeValidatorApprovalTask() public {
         // RoleRegistry is already initialized and alice already has the role in setUpTests
 
