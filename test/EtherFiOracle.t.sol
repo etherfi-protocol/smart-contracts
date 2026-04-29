@@ -1404,56 +1404,20 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.unPause(true, false, false, false, false, false);
     }
 
-    // ========== Sanity-check setter tests ==========
-
-    function test_setMaxFinalizedWithdrawalAmountPerDay() public {
-        vm.prank(alice);
-        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(123 ether);
-        assertEq(etherFiAdminInstance.maxFinalizedWithdrawalAmountPerDay(), 123 ether);
-
-        vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
-        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(456 ether);
-    }
-
-    function test_setMaxNumValidatorsToApprovePerDay() public {
-        vm.prank(alice);
-        etherFiAdminInstance.setMaxNumValidatorsToApprovePerDay(50);
-        assertEq(etherFiAdminInstance.maxNumValidatorsToApprovePerDay(), 50);
-
-        vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
-        etherFiAdminInstance.setMaxNumValidatorsToApprovePerDay(100);
-    }
-
     function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsCap() public {
-        // Cap finalized withdrawals to a tiny amount so the report trips the guard.
-        vm.prank(alice);
-        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(1);
-
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        // 10 ETH finalized over a 1024-slot window (~3.4 hours) extrapolates to ~70 ETH/day.
-        report.finalizedWithdrawalAmount = 10 ether;
-
-        // Make sure the LP can absorb the lock if the cap weren't tripped — keeps the
-        // failure assertion focused on the new sanity check.
-        vm.deal(alice, 100 ether);
-        vm.prank(alice);
-        liquidityPoolInstance.deposit{value: 100 ether}();
+        report.finalizedWithdrawalAmount = 20000 ether; // > 10000 ether/day cap
 
         _moveClock(1 days / 12);
         _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal amount exceeds max");
     }
 
     function test_executeTasks_revertsWhenValidatorApprovalsExceedCap() public {
-        // Each batch holds up to validatorTaskBatchSize (100) validators. Setting the cap
-        // to zero means even a single batch trips the guard.
-        vm.prank(alice);
-        etherFiAdminInstance.setMaxNumValidatorsToApprovePerDay(0);
-
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.validatorsToApprove = new uint256[](1);
-        report.validatorsToApprove[0] = 1;
+        report.validatorsToApprove = new uint256[](400); // > 200/day cap
+        for (uint256 i = 0; i < 400; i++) {
+            report.validatorsToApprove[i] = i + 1;
+        }
 
         _moveClock(1 days / 12);
         _executeAdminTasks(report, "EtherFiAdmin: number of validators to approve exceeds max");
@@ -1463,9 +1427,6 @@ contract EtherFiOracleTest is TestSetup {
     // within the per-day cap processes cleanly and advances the LP's locked
     // accounting.
     function test_executeTasks_finalizedWithdrawalWithinCap_succeeds() public {
-        vm.prank(alice);
-        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(100 ether);
-
         vm.deal(alice, 200 ether);
         vm.prank(alice);
         liquidityPoolInstance.deposit{value: 200 ether}();
@@ -1485,10 +1446,6 @@ contract EtherFiOracleTest is TestSetup {
     // existing LP lock + priority-queue lock must not exceed the LP's ETH
     // balance.
     function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsLpLiquidity() public {
-        // Set the per-day cap high so it doesn't trip first.
-        vm.prank(alice);
-        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(1000 ether);
-
         // Deposit a small amount so the LP balance is modest.
         vm.deal(alice, 5 ether);
         vm.prank(alice);
@@ -1505,9 +1462,6 @@ contract EtherFiOracleTest is TestSetup {
     // report that fits in the LP alone can still revert once the priority lock
     // is considered.
     function test_executeTasks_revertsWhenFinalizedPlusPriorityLockExceedsLp() public {
-        vm.prank(alice);
-        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(1000 ether);
-
         vm.deal(alice, 10 ether);
         vm.prank(alice);
         liquidityPoolInstance.deposit{value: 10 ether}();
@@ -1533,9 +1487,6 @@ contract EtherFiOracleTest is TestSetup {
     // next rebase) bumps the balance while accounting lags — a finalized
     // withdrawal drawing on those funds should still pass the check.
     function test_executeTasks_finalizedWithdrawalWithinLpBalance_succeeds() public {
-        vm.prank(alice);
-        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(1000 ether);
-
         vm.deal(alice, 5 ether);
         vm.prank(alice);
         liquidityPoolInstance.deposit{value: 5 ether}();
@@ -1560,9 +1511,6 @@ contract EtherFiOracleTest is TestSetup {
     // below what totalValueInLp would suggest, the check reverts even though
     // the accounting says the withdrawal fits.
     function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsLpBalance() public {
-        vm.prank(alice);
-        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(1000 ether);
-
         vm.deal(alice, 10 ether);
         vm.prank(alice);
         liquidityPoolInstance.deposit{value: 10 ether}();

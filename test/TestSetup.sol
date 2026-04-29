@@ -665,7 +665,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         );
         priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
 
-        etherFiAdminImplementation = new EtherFiAdmin(address(priorityQueueInstance));
+        etherFiAdminImplementation = new EtherFiAdmin(address(priorityQueueInstance), 10000 ether, 200);
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
 
@@ -807,8 +807,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
-        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(1e30);
-        etherFiAdminInstance.setMaxNumValidatorsToApprovePerDay(1e30);
         liquidityPoolInstance.setValidatorSizeWei(32 ether);
         vm.stopPrank();
 
@@ -885,7 +883,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_etherfiAdmin() internal {
-        address newAdminImpl = address(new EtherFiAdmin(address(priorityQueueInstance)));
+        address newAdminImpl = address(new EtherFiAdmin(address(priorityQueueInstance), 10000 ether, 200));
         vm.prank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
@@ -939,8 +937,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), alice);
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
-        etherFiAdminInstance.setMaxFinalizedWithdrawalAmountPerDay(1e30);
-        etherFiAdminInstance.setMaxNumValidatorsToApprovePerDay(1e30);
         vm.stopPrank();
     }
 
