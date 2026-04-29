@@ -71,8 +71,9 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error OracleReportNotStale();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _priorityWithdrawalQueue) {
+    constructor(address _priorityWithdrawalQueue, uint256 _staleOracleReportBlockWindow) {
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
+        STALE_ORACLE_REPORT_BLOCK_WINDOW = _staleOracleReportBlockWindow;
         _disableInitializers();
     }
 
@@ -231,13 +232,14 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (block.number < lastHandledReportRefBlock + STALE_ORACLE_REPORT_BLOCK_WINDOW) revert OracleReportNotStale();
 
         uint256 liquidity = liquidityPool.totalValueInLp() - (liquidityPool.ethAmountLockedForWithdrawal() + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal());
-        uint256 currentRequestId = withdrawRequestNft.nextRequestId() - 1;
-        uint256 lastFinalizedRequestId = withdrawRequestNft.lastFinalizedRequestId();
-        uint256 requestId = lastFinalizedRequestId;
-        uint256 finalizedWithdrawalAmount;
+        uint32 currentRequestId = withdrawRequestNft.nextRequestId() - 1;
+        uint32 lastFinalizedRequestId = withdrawRequestNft.lastFinalizedRequestId();
+        uint32 requestId = lastFinalizedRequestId;
+        uint128 finalizedWithdrawalAmount;
         while (requestId < currentRequestId) {
             IWithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNft.getRequest(requestId + 1);
             if (!request.isValid) {
+                requestId++;
                 continue;
             }
             if (liquidity < finalizedWithdrawalAmount + request.amountOfEEth) {
@@ -321,7 +323,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         _finalizeWithdrawals(_report.lastFinalizedWithdrawalRequestId, _report.finalizedWithdrawalAmount);
     }
     
-    function _finalizeWithdrawals(uint256 _lastFinalizedRequestId, uint256 _finalizedWithdrawalAmount) internal {
+    function _finalizeWithdrawals(uint32 _lastFinalizedRequestId, uint128 _finalizedWithdrawalAmount) internal {
         withdrawRequestNft.finalizeRequests(_lastFinalizedRequestId);
         liquidityPool.addEthAmountLockedForWithdrawal(_finalizedWithdrawalAmount);
     }
