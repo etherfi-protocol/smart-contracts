@@ -177,8 +177,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function executeTasks(IEtherFiOracle.OracleReport calldata _report) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
-
         bytes32 reportHash = etherFiOracle.generateReportHash(_report);
         uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
         require(etherFiOracle.isConsensusReached(reportHash), "EtherFiAdmin: report didn't reach consensus");

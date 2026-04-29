@@ -1165,6 +1165,80 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.unPauseContract();
     }
 
+    function test_claimWithdraw_succeedsWhenPaused() public {
+        uint96 withdrawAmount = 10 ether;
+
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequest(vipUser, withdrawAmount);
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        requests[0] = request;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(requests);
+
+        // Pause AFTER fulfill so the request is finalized but the queue is paused at claim time.
+        vm.prank(alice);
+        priorityQueue.pauseContract();
+        assertTrue(priorityQueue.paused(), "precondition: queue must be paused");
+
+        uint256 userEthBefore = vipUser.balance;
+        vm.prank(regularUser);
+        priorityQueue.claimWithdraw(request);
+
+        assertApproxEqRel(vipUser.balance, userEthBefore + withdrawAmount, 0.001e18, "claim must pay out while paused");
+    }
+
+    function test_batchClaimWithdraw_succeedsWhenPaused() public {
+        uint96 amount1 = 5 ether;
+        uint96 amount2 = 3 ether;
+
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory request1) =
+            _createWithdrawRequest(vipUser, amount1);
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory request2) =
+            _createWithdrawRequest(vipUser, amount2);
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](2);
+        requests[0] = request1;
+        requests[1] = request2;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(requests);
+
+        vm.prank(alice);
+        priorityQueue.pauseContract();
+
+        uint256 ethBefore = vipUser.balance;
+        vm.prank(vipUser);
+        priorityQueue.batchClaimWithdraw(requests);
+
+        assertApproxEqRel(vipUser.balance, ethBefore + amount1 + amount2, 0.001e18, "batch claim must pay out while paused");
+    }
+
+    function test_claimWithdraw_succeedsWhenLpAndQueuePaused() public {
+        uint96 withdrawAmount = 10 ether;
+
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequest(vipUser, withdrawAmount);
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        requests[0] = request;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(requests);
+
+        // Pause both contracts (the audit's worst-case "everything paused at once" scenario).
+        vm.prank(alice);
+        priorityQueue.pauseContract();
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+        assertTrue(priorityQueue.paused(), "precondition: queue must be paused");
+        assertTrue(liquidityPoolInstance.paused(), "precondition: LP must be paused");
+
+        uint256 userEthBefore = vipUser.balance;
+        vm.prank(regularUser);
+        priorityQueue.claimWithdraw(request);
+
+        assertApproxEqRel(vipUser.balance, userEthBefore + withdrawAmount, 0.001e18, "claim must pay out while both paused");
+    }
+
     //--------------------------------------------------------------------------------------
     //------------------------  pauseContractUntil / unpauseContractUntil  -----------------
     //--------------------------------------------------------------------------------------

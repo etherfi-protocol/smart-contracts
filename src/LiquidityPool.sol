@@ -18,8 +18,9 @@ import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
+import "./ReentrancyGuardNamespaced.sol";
 
-contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, PausableUntil, ILiquidityPool {
+contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardNamespaced, PausableUntil, ILiquidityPool {
     using SafeERC20 for IERC20;
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -182,7 +183,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Pa
     }
 
     // Used by eETH staking flow
-    function deposit(address _referral) public payable whenNotPaused returns (uint256) {
+    function deposit(address _referral) public payable whenNotPaused nonReentrant returns (uint256) {
         emit Deposit(msg.sender, msg.value, SourceOfFunds.EETH, _referral);
 
         return _deposit(msg.sender, msg.value, 0);
@@ -198,7 +199,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Pa
     }
 
     // Used by ether.fan staking flow
-    function deposit(address _user, address _referral) external payable whenNotPaused returns (uint256) {
+    function deposit(address _user, address _referral) external payable whenNotPaused nonReentrant returns (uint256) {
         require(msg.sender == address(membershipManager), "Incorrect Caller");
 
         emit Deposit(msg.sender, msg.value, SourceOfFunds.ETHER_FAN, _referral);
@@ -211,7 +212,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Pa
     /// @param _recipient the recipient who will receives the ETH
     /// @param _amount the amount to withdraw from contract
     /// it returns the amount of shares burned
-    function withdraw(address _recipient, uint256 _amount) external whenNotPaused returns (uint256) {
+    function withdraw(address _recipient, uint256 _amount) external nonReentrant returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);
         require(
             msg.sender == address(withdrawRequestNFT) || 
@@ -220,6 +221,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Pa
             msg.sender == priorityWithdrawalQueue,
             "Incorrect Caller"
         );
+        // Permissionless claims via withdrawRequestNFT and priorityWithdrawalQueue are allowed even when the LP is paused; membershipManager and etherFiRedemptionManager remain gated.
+        if (msg.sender != address(withdrawRequestNFT) && msg.sender != priorityWithdrawalQueue) {
+            _requireNotPaused();
+        }
         if (totalValueInLp < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
 
@@ -248,7 +253,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Pa
     /// @param recipient address that will be issued the NFT
     /// @param amount requested amount to withdraw from contract
     /// @return uint256 requestId of the WithdrawRequestNFT
-    function requestWithdraw(address recipient, uint256 amount) public whenNotPaused returns (uint256) {
+    function requestWithdraw(address recipient, uint256 amount) public whenNotPaused nonReentrant returns (uint256) {
         uint256 share = sharesForAmount(amount);
         if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
 
@@ -283,7 +288,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Pa
     /// @param amount requested amount to withdraw from contract
     /// @param fee the burn fee to be paid by the recipient when the withdrawal is claimed (WithdrawRequestNFT.claimWithdraw)
     /// @return uint256 requestId of the WithdrawRequestNFT
-    function requestMembershipNFTWithdraw(address recipient, uint256 amount, uint256 fee) public whenNotPaused returns (uint256) {
+    function requestMembershipNFTWithdraw(address recipient, uint256 amount, uint256 fee) public whenNotPaused nonReentrant returns (uint256) {
         if (msg.sender != address(membershipManager)) revert IncorrectCaller();
         uint256 share = sharesForAmount(amount);
         if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
@@ -324,7 +329,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Pa
         IStakingManager.DepositData[] calldata _depositData,
         uint256[] calldata _bidIds,
         address _etherFiNode
-    ) external whenNotPaused {
+    ) external whenNotPaused nonReentrant {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE, msg.sender)) revert IncorrectRole();
 
         // liquidity pool supplies 1 eth per validator
@@ -341,7 +346,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Pa
         uint256[] memory _validatorIds,
         bytes[] calldata _pubkeys,
         bytes[] calldata _signatures
-    ) external whenNotPaused {
+    ) external whenNotPaused nonReentrant {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, msg.sender)) revert IncorrectRole();
         if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
         if (_validatorIds.length == 0 || _validatorIds.length != _pubkeys.length || _validatorIds.length != _signatures.length) revert InvalidArrayLengths();
@@ -384,7 +389,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Pa
     function confirmAndFundBeaconValidators(
         IStakingManager.DepositData[] calldata _depositData,
         uint256 _validatorSizeWei
-    ) external whenNotPaused {
+    ) external whenNotPaused nonReentrant {
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, msg.sender)) revert IncorrectRole();
         if (_validatorSizeWei < 32 ether || _validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
 
