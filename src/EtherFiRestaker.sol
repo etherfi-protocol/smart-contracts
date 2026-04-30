@@ -172,13 +172,17 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyClaimWithdrawalsRole {
         lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
 
-        withdrawEther();
+        _withdrawEther();
 
         emit CompletedStEthQueuedWithdrawals(_requestIds);
     }
 
     // Send the ETH back to the liquidity pool
     function withdrawEther() public onlyAdmin {
+        _withdrawEther();
+    }
+
+    function _withdrawEther() internal {
         uint256 amountToLiquidityPool = _min(address(this).balance, liquidityPool.totalValueOutOfLp());
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
         require(sent, "ETH_SEND_TO_LIQUIDITY_POOL_FAILED");
