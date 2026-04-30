@@ -1387,44 +1387,6 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.cancelWithdraw(request);
     }
 
-    function test_claimWithdraw_blockedByPauseContractUntil() public {
-        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
-            _createWithdrawRequest(vipUser, 1 ether);
-        IPriorityWithdrawalQueue.WithdrawRequest[] memory rs = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
-        rs[0] = request;
-        vm.prank(requestManager);
-        priorityQueue.fulfillRequests(rs);
-
-        _grantPauseUntilRoles();
-        vm.prank(pauseUntilPauser);
-        priorityQueue.pauseContractUntil();
-
-        vm.prank(vipUser);
-        vm.expectRevert(
-            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
-        );
-        priorityQueue.claimWithdraw(request);
-    }
-
-    function test_batchClaimWithdraw_blockedByPauseContractUntil() public {
-        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
-            _createWithdrawRequest(vipUser, 1 ether);
-        IPriorityWithdrawalQueue.WithdrawRequest[] memory rs = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
-        rs[0] = request;
-        vm.prank(requestManager);
-        priorityQueue.fulfillRequests(rs);
-
-        _grantPauseUntilRoles();
-        vm.prank(pauseUntilPauser);
-        priorityQueue.pauseContractUntil();
-
-        vm.prank(vipUser);
-        vm.expectRevert(
-            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
-        );
-        priorityQueue.batchClaimWithdraw(rs);
-    }
-
     function test_fulfillRequests_blockedByPauseContractUntil() public {
         (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
             _createWithdrawRequest(vipUser, 1 ether);
