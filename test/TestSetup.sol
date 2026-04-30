@@ -861,6 +861,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         _initOracleReportsforTesting();
         roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), alice);
         vm.stopPrank();
 
         vm.startPrank(alice);
@@ -1112,6 +1113,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.startPrank(owner);
 
         roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), owner);
 
         address admin = address(etherFiAdminInstance);
         //stakingManagerInstance.updateAdmin(admin, true);
