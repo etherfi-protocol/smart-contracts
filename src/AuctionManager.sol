@@ -93,13 +93,12 @@ contract AuctionManager is
         __ReentrancyGuard_init();
     }
 
-    function initializeOnUpgrade(address _membershipManagerContractAddress, uint128 _accumulatedRevenueThreshold, address _etherFiAdminContractAddress, address _nodeOperatorManagerAddress) external onlyOwner { 
-        require(_membershipManagerContractAddress != address(0) && _etherFiAdminContractAddress != address(0) && _nodeOperatorManagerAddress != address(0), "No Zero Addresses");
+    function initializeOnUpgrade(address _membershipManagerContractAddress, uint128 _accumulatedRevenueThreshold, address _nodeOperatorManagerAddress) external onlyOwner {
+        require(_membershipManagerContractAddress != address(0) && _nodeOperatorManagerAddress != address(0), "No Zero Addresses");
         membershipManagerContractAddress = _membershipManagerContractAddress;
         nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerAddress);
         accumulatedRevenue = 0;
         accumulatedRevenueThreshold = _accumulatedRevenueThreshold;
-        // Admin grant now happens via roleRegistry.grantRole post-deploy.
     }
 
     /// @notice Creates bid(s) for the right to run a validator node when ETH is deposited

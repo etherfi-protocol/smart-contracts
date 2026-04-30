@@ -74,19 +74,19 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         BucketLimiter.setRefillRate(limit, refillRate64);
     }
 
-    function registerToken(address token, uint256 capacity, uint256 refillRate) external onlyOwner {
+    function registerToken(address token, uint256 capacity, uint256 refillRate) external onlyAdmin {
         uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
         uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
         limitsPerToken[token] = BucketLimiter.create(capacity64, refillRate64);
     }
 
-    function setCapacityPerToken(address token, uint256 capacity) external onlyOwner {
+    function setCapacityPerToken(address token, uint256 capacity) external onlyAdmin {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
         BucketLimiter.setCapacity(limitsPerToken[token], capacity64);
     }
 
-    function setRefillRatePerSecondPerToken(address token, uint256 refillRate) external onlyOwner {
+    function setRefillRatePerSecondPerToken(address token, uint256 refillRate) external onlyAdmin {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
         BucketLimiter.setRefillRate(limitsPerToken[token], refillRate64);
