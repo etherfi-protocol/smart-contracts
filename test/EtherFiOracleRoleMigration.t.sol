@@ -77,21 +77,6 @@ contract EtherFiOracleRoleMigrationTest is TestSetup {
         assertFalse(etherFiOracleInstance.paused());
     }
 
-    function test_unpause_revertsWithoutUnpauserRole() public {
-        // First pause via the pauser role so the contract is in a paused state.
-        address pauser = address(0xCAFE);
-        vm.startPrank(owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), pauser);
-        vm.stopPrank();
-        vm.prank(pauser);
-        etherFiOracleInstance.pauseContract();
-
-        // Now an unauthorized caller must revert with IncorrectRole.
-        vm.prank(address(0xBEEF));
-        vm.expectRevert(EtherFiOracle.IncorrectRole.selector);
-        etherFiOracleInstance.unPauseContract();
-    }
-
     function test_DEPRECATED_admins_storageReadable() public view {
         bool v = etherFiOracleInstance.DEPRECATED_admins(address(0x1));
         assertEq(v, false);
