@@ -11,6 +11,7 @@ import "../src/utils/PausableUntil.sol";
 import {BeaconChainProofs} from "../src/eigenlayer-libraries/BeaconChainProofs.sol";
 import {IDelegationManagerTypes} from "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import {IEigenPodTypes} from "../src/eigenlayer-interfaces/IEigenPod.sol";
+import {EigenPodTestHelpers} from "./utils/EigenPodTestHelpers.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
 contract EtherFiNodesManagerTest is TestSetup {
@@ -559,6 +560,8 @@ contract EtherFiNodesManagerTest is TestSetup {
         IEtherFiNode etherFiNode = managerInstance.etherFiNodeFromPubkeyHash(pkHash);
         IEigenPod pod = etherFiNode.getEigenPod();
 
+        EigenPodTestHelpers.forceValidatorActive(pod, pkHash);
+
         IEigenPodTypes.WithdrawalRequest[] memory reqs = new IEigenPodTypes.WithdrawalRequest[](1);
         reqs[0] = IEigenPodTypes.WithdrawalRequest({pubkey: pubkeys[0], amountGwei: amounts[0]});
 
@@ -635,6 +638,8 @@ contract EtherFiNodesManagerTest is TestSetup {
         bytes32 pkHash = managerInstance.calculateValidatorPubkeyHash(pubkeys[0]);
         IEtherFiNode etherFiNode = managerInstance.etherFiNodeFromPubkeyHash(pkHash);
         IEigenPod pod = etherFiNode.getEigenPod();
+
+        EigenPodTestHelpers.forceValidatorActive(pod, pkHash);
 
         IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](1);
         reqs[0] = IEigenPodTypes.ConsolidationRequest({
