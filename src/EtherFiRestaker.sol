@@ -385,8 +385,10 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     // INTERNAL functions
 
     /// @dev Convert wei to gwei for rate-limiter buckets, with overflow check.
+    /// Rounds up so that any non-zero wei amount consumes at least 1 gwei from
+    /// the bucket — prevents sub-gwei dust from bypassing the rate limiter.
     function _amountToGwei(uint256 amountWei) internal pure returns (uint64) {
-        uint256 amountGwei = amountWei / 1e9;
+        uint256 amountGwei = (amountWei + 1e9 - 1) / 1e9;
         require(amountGwei <= type(uint64).max, "EtherFiRestaker: amount overflows uint64 gwei");
         return uint64(amountGwei);
     }
