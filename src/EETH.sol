@@ -166,8 +166,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     function cancelPauseUntil(address _user) external {
         require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
         require(_user != address(0), "No zero addresses");
-        delete pausedUntil[_user];
-        emit CancelledPauseUntil(_user);
+        if (pausedUntil[_user] >= block.timestamp) {
+            delete pausedUntil[_user];
+            emit CancelledPauseUntil(_user);
+        }
     }
 
     function unpause() external {

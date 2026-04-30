@@ -513,11 +513,30 @@ contract WeETHPauseTest is TestSetup {
         weEthInstance.transfer(bob, 1 ether);
     }
 
-    function test_cancelPauseUntil_emitsEvenWhenNeverArmed() public {
-        vm.expectEmit(true, false, false, true);
-        emit CancelledPauseUntil(alice);
+    /// @dev I-03 regression: cancelPauseUntil must not emit when the user was never paused.
+    function test_cancelPauseUntil_doesNotEmit_whenNeverArmed() public {
+        vm.recordLogs();
         vm.prank(pauser);
         weEthInstance.cancelPauseUntil(alice);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 0, "no event when there is nothing to cancel (I-03)");
+        assertEq(weEthInstance.pausedUntil(alice), 0);
+    }
+
+    /// @dev I-03 regression: cancelPauseUntil is a no-op once the timer has already expired.
+    function test_cancelPauseUntil_isNoOp_whenExpired() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+        uint256 staleDeadline = weEthInstance.pausedUntil(alice);
+        vm.warp(block.timestamp + 2 days);
+
+        vm.recordLogs();
+        vm.prank(pauser);
+        weEthInstance.cancelPauseUntil(alice);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        assertEq(logs.length, 0, "no event when timer already expired");
+        assertEq(weEthInstance.pausedUntil(alice), staleDeadline, "expired value is left as-is");
     }
 
     function test_cancelPauseUntil_isPerUser() public {

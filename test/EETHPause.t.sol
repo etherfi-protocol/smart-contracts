@@ -487,25 +487,31 @@ contract EETHPauseTest is TestSetup {
         eETHInstance.transfer(bob, 1 ether); // must succeed immediately
     }
 
-    /// @dev M-2-new: cancelPauseUntil emits event even when there's nothing to cancel.
-    function test_cancelPauseUntil_emitsEvenWhenNeverArmed() public {
-        vm.expectEmit(true, false, false, true);
-        emit CancelledPauseUntil(alice);
+    /// @dev I-03 regression: cancelPauseUntil must not emit when the user was never paused.
+    function test_cancelPauseUntil_doesNotEmit_whenNeverArmed() public {
+        vm.recordLogs();
         vm.prank(pauser);
         eETHInstance.cancelPauseUntil(alice);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 0, "no event when there is nothing to cancel (I-03)");
+        assertEq(eETHInstance.pausedUntil(alice), 0);
     }
 
-    function test_cancelPauseUntil_emitsEvenWhenAlreadyExpired() public {
+    /// @dev I-03 regression: cancelPauseUntil is a no-op once the timer has already expired.
+    /// The stale value is harmless (transfer checks treat past timestamps as unpaused).
+    function test_cancelPauseUntil_isNoOp_whenExpired() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
+        uint256 staleDeadline = eETHInstance.pausedUntil(alice);
         vm.warp(block.timestamp + 2 days);
 
-        vm.expectEmit(true, false, false, true);
-        emit CancelledPauseUntil(alice);
+        vm.recordLogs();
         vm.prank(pauser);
         eETHInstance.cancelPauseUntil(alice);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        assertEq(eETHInstance.pausedUntil(alice), 0, "stale timer also cleared");
+        assertEq(logs.length, 0, "no event when timer already expired");
+        assertEq(eETHInstance.pausedUntil(alice), staleDeadline, "expired value is left as-is");
     }
 
     function test_cancelPauseUntil_isPerUser_doesNotTouchOthers() public {
