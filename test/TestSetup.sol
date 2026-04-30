@@ -460,7 +460,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.startPrank(owner);
 
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
-            liquifierInstance.upgradeTo(address(new Liquifier(address(roleRegistryInstance))));
+            liquifierInstance.upgradeTo(address(new Liquifier(address(roleRegistryInstance), 100)));
         }
         vm.stopPrank();
 
@@ -619,7 +619,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), admin);
 
 
-        liquifierImplementation = new Liquifier(address(roleRegistryInstance));
+        liquifierImplementation = new Liquifier(address(roleRegistryInstance), 100);
         liquifierProxy = new UUPSProxy(address(liquifierImplementation), "");
         liquifierInstance = Liquifier(payable(liquifierProxy));
 
@@ -1586,7 +1586,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_liquifier() internal {
-        address newImpl = address(new Liquifier(address(roleRegistryInstance)));
+        address newImpl = address(new Liquifier(address(roleRegistryInstance), 100));
         vm.prank(liquifierInstance.owner());
         liquifierInstance.upgradeTo(newImpl);
     }

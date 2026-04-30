@@ -611,4 +611,124 @@ contract LiquifierTest is TestSetup {
         vm.prank(alice);
         liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
     }
+
+    // ---------------------------------------------------------------------
+    // T1-11: discount-floor hardening
+    // ---------------------------------------------------------------------
+
+    function test_constructor_revertsOnZeroMinDiscount() public {
+        vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
+        new Liquifier(address(1), 0);
+    }
+
+    function test_constructor_revertsOnMinDiscountAboveScale() public {
+        vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
+        new Liquifier(address(1), 10_001);
+    }
+
+    function test_constructor_acceptsMinDiscountAtScale() public {
+        Liquifier impl = new Liquifier(address(1), 10_000);
+        assertEq(impl.MIN_DISCOUNT_RATE_IN_BPS(), 10_000);
+    }
+
+    function test_constructor_storesMinDiscount() public {
+        Liquifier impl = new Liquifier(address(1), 250);
+        assertEq(impl.MIN_DISCOUNT_RATE_IN_BPS(), 250);
+        assertEq(impl.BASIS_POINT_SCALE(), 10_000);
+    }
+
+    function test_updateDiscountInBasisPoints_revertsOnZero() public {
+        // The exact attack scenario T1-11 closes: a compromised admin tries to
+        // set discount to 0 to mint eETH 1:1 against an LST.
+        _setUp(MAINNET_FORK);
+
+        vm.prank(owner);
+        vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 0);
+    }
+
+    function test_updateDiscountInBasisPoints_revertsBelowFloor() public {
+        _setUp(MAINNET_FORK);
+        uint256 floor = liquifierInstance.MIN_DISCOUNT_RATE_IN_BPS();
+        assertGt(floor, 0);
+
+        vm.prank(owner);
+        vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), uint16(floor - 1));
+    }
+
+    function test_updateDiscountInBasisPoints_acceptsAtFloor() public {
+        _setUp(MAINNET_FORK);
+        uint256 floor = liquifierInstance.MIN_DISCOUNT_RATE_IN_BPS();
+
+        vm.prank(owner);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), uint16(floor));
+
+        (, , , , uint16 discount, , , , , , ) = liquifierInstance.tokenInfos(address(stEth));
+        assertEq(discount, uint16(floor));
+    }
+
+    function test_updateDiscountInBasisPoints_acceptsAboveFloor() public {
+        _setUp(MAINNET_FORK);
+
+        vm.prank(owner);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500);
+
+        (, , , , uint16 discount, , , , , , ) = liquifierInstance.tokenInfos(address(stEth));
+        assertEq(discount, 500);
+    }
+
+    function test_updateDiscountInBasisPoints_revertsAboveScale() public {
+        _setUp(MAINNET_FORK);
+
+        vm.prank(owner);
+        vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 10_001);
+    }
+
+    function test_updateDiscountInBasisPoints_acceptsAtScale() public {
+        _setUp(MAINNET_FORK);
+
+        vm.prank(owner);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 10_000);
+
+        (, , , , uint16 discount, , , , , , ) = liquifierInstance.tokenInfos(address(stEth));
+        assertEq(discount, 10_000);
+    }
+
+    function test_updateDiscountInBasisPoints_revertsWithoutRole() public {
+        _setUp(MAINNET_FORK);
+
+        // bob never receives LIQUIFIER_ADMIN_ROLE in setUpLiquifier
+        vm.prank(bob);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500);
+    }
+
+    function test_quoteByDiscountedValue_appliesNewDiscount() public {
+        _setUp(MAINNET_FORK);
+
+        vm.prank(owner);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500); // 5%
+
+        uint256 amount = 10 ether;
+        uint256 marketValue = liquifierInstance.quoteByMarketValue(address(stEth), amount);
+        uint256 expected = (10_000 - 500) * marketValue / 10_000;
+        assertEq(liquifierInstance.quoteByDiscountedValue(address(stEth), amount), expected);
+    }
+
+    function test_quoteByDiscountedValue_zeroDiscountUnreachableViaSetter() public {
+        // Even if quoteByDiscountedValue would return marketValue at discount=0,
+        // the setter must prevent ever reaching that state. This pins the invariant.
+        _setUp(MAINNET_FORK);
+
+        vm.prank(owner);
+        vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
+        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 0);
+
+        // Pre-existing registration discount is 0 (from _setUp), but no admin can
+        // re-affirm or reset it to 0 going forward.
+        (, , , , uint16 discountAfter, , , , , , ) = liquifierInstance.tokenInfos(address(stEth));
+        assertEq(discountAfter, 0); // unchanged, but locked from being re-set to 0
+    }
 }

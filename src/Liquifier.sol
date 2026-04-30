@@ -92,7 +92,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     bytes32 public constant LIQUIFIER_ADMIN_ROLE = keccak256("LIQUIFIER_ADMIN_ROLE");
     bytes32 public constant LIQUIFIER_SENDER_ROLE = keccak256("LIQUIFIER_SENDER_ROLE");
+    uint256 public constant BASIS_POINT_SCALE = 10_000;
+
     IRoleRegistry public immutable roleRegistry;
+    uint256 public immutable MIN_DISCOUNT_RATE_IN_BPS;
 
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     // This event is deprecated. will be removed in the next release.
@@ -111,10 +114,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error IncorrectCaller();
     error IncorrectAmount();
     error IncorrectRole();
+    error InvalidDiscountRate();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry) {
+    constructor(address _roleRegistry, uint256 _minDiscountInBasisPoints) {
+        if (_minDiscountInBasisPoints == 0 || _minDiscountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         roleRegistry = IRoleRegistry(_roleRegistry);
+        MIN_DISCOUNT_RATE_IN_BPS = _minDiscountInBasisPoints;
         _disableInitializers();
     }
 
@@ -230,6 +236,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external {
         if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (_discountInBasisPoints < MIN_DISCOUNT_RATE_IN_BPS || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
     }
 
@@ -316,7 +323,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function quoteByDiscountedValue(address _token, uint256 _amount) public view returns (uint256) {
         uint256 marketValue = quoteByMarketValue(_token, _amount);
 
-        return (10000 - tokenInfos[_token].discountInBasisPoints) * marketValue / 10000;
+        return (BASIS_POINT_SCALE - tokenInfos[_token].discountInBasisPoints) * marketValue / BASIS_POINT_SCALE;
     }
 
     function isTokenWhitelisted(address _token) public view returns (bool) {
