@@ -480,11 +480,17 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         vm.startPrank(owner);
 
-        address impl = address(new BucketRateLimiter());
+        address impl = address(new BucketRateLimiter(address(roleRegistryInstance)));
         bucketRateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
         bucketRateLimiter.initialize();
-        bucketRateLimiter.updateConsumer(address(liquifierInstance));
+        vm.stopPrank();
 
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(bucketRateLimiter.BUCKET_RATE_LIMITER_ADMIN_ROLE(), owner);
+        vm.stopPrank();
+
+        vm.startPrank(owner);
+        bucketRateLimiter.updateConsumer(address(liquifierInstance));
         bucketRateLimiter.setCapacity(40 ether);
         bucketRateLimiter.setRefillRatePerSecond(1 ether);
 

@@ -5,17 +5,32 @@ import "forge-std/console.sol";
 
 import "../src/BucketRateLimiter.sol";
 import "../src/UUPSProxy.sol";
+import "../src/RoleRegistry.sol";
 
 contract BucketRateLimiterTest is Test {
     BucketRateLimiter limiter;
+    RoleRegistry roleRegistry;
+    address owner;
 
     function setUp() public {
-        address owner = address(10000);
+        owner = address(10000);
         vm.startPrank(owner);
-        BucketRateLimiter impl = new BucketRateLimiter();
+
+        RoleRegistry regImpl = new RoleRegistry();
+        UUPSProxy regProxy = new UUPSProxy(
+            address(regImpl),
+            abi.encodeWithSelector(RoleRegistry.initialize.selector, owner)
+        );
+        roleRegistry = RoleRegistry(address(regProxy));
+
+        BucketRateLimiter impl = new BucketRateLimiter(address(roleRegistry));
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         limiter = BucketRateLimiter(address(proxy));
         limiter.initialize();
+
+        roleRegistry.grantRole(limiter.BUCKET_RATE_LIMITER_ADMIN_ROLE(), owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), owner);
 
         limiter.updateConsumer(owner);
         limiter.setCapacity(200 ether);
@@ -91,19 +106,13 @@ contract BucketRateLimiterTest is Test {
     }
     
     function test_access_control() public {
-        vm.expectRevert("Ownable: caller is not the owner");
-        limiter.updateAdmin(address(0), true);
-
-        vm.expectRevert("Ownable: caller is not the owner");
-        limiter.updatePauser(address(0), true);
-
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
         limiter.setCapacity(100 ether);
 
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
         limiter.setRefillRatePerSecond(100 ether);
 
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
         limiter.updateConsumer(address(0));
     }
     
@@ -112,34 +121,30 @@ contract BucketRateLimiterTest is Test {
         address bob = address(2);
         address chad = address(3);
 
-        vm.expectRevert("Ownable: caller is not the owner");
-        limiter.updatePauser(alice, true);
-
         vm.prank(alice);
-        vm.expectRevert("NOT_PAUSER");
+        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
         limiter.pauseContract();
 
-        assertEq(limiter.pausers(alice), false);
+        assertEq(limiter.DEPRECATED_pausers(alice), false);
 
-        vm.startPrank(limiter.owner());
-        limiter.updatePauser(alice, true);
+        vm.startPrank(owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), alice);
         vm.stopPrank();
 
-        assertEq(limiter.pausers(alice), true);
-
         vm.prank(chad);
-        vm.expectRevert("NOT_PAUSER");
+        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
         limiter.pauseContract();
 
         vm.prank(alice);
         limiter.pauseContract();
 
         vm.prank(alice);
-        vm.expectRevert("NOT_ADMIN");
+        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
         limiter.unPauseContract();
 
-        vm.prank(limiter.owner());
-        limiter.updateAdmin(bob, true);
+        vm.startPrank(owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), bob);
+        vm.stopPrank();
 
         vm.prank(bob);
         limiter.unPauseContract();
@@ -820,116 +825,87 @@ contract BucketRateLimiterTest is Test {
 
     function test_updateConsumer_accessControl() public {
         address nonOwner = address(999);
-        
+
         vm.prank(nonOwner);
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
         limiter.updateConsumer(address(999));
     }
 
     // ============ Admin Tests ============
 
     function test_updateAdmin_emitsEvent() public {
-        vm.startPrank(limiter.owner());
-        
         address admin = address(1);
-        
-        vm.expectEmit(true, false, false, false);
-        emit BucketRateLimiter.UpdatedAdmin(admin, true);
-        limiter.updateAdmin(admin, true);
-        
-        assertEq(limiter.admins(admin), true);
-        
-        vm.expectEmit(true, false, false, false);
-        emit BucketRateLimiter.UpdatedAdmin(admin, false);
-        limiter.updateAdmin(admin, false);
-        
-        assertEq(limiter.admins(admin), false);
-        
+
+        vm.startPrank(owner);
+        roleRegistry.grantRole(limiter.BUCKET_RATE_LIMITER_ADMIN_ROLE(), admin);
         vm.stopPrank();
+
+        assertEq(limiter.DEPRECATED_admins(admin), false);
     }
 
     function test_updateAdmin_canPause() public {
-        vm.startPrank(limiter.owner());
-        
         address admin = address(1);
-        limiter.updateAdmin(admin, true);
-        
+        vm.startPrank(owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), admin);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), admin);
         vm.stopPrank();
-        
+
         vm.prank(admin);
         limiter.pauseContract();
-        
         assertTrue(limiter.paused());
-        
+
         vm.prank(admin);
         limiter.unPauseContract();
-        
         assertFalse(limiter.paused());
     }
 
     function test_updateAdmin_canUnpause() public {
-        vm.startPrank(limiter.owner());
-        
         address admin = address(1);
-        limiter.updateAdmin(admin, true);
-        limiter.pauseContract();
-        
+        vm.startPrank(owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), admin);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), admin);
         vm.stopPrank();
-        
+
+        vm.prank(owner);
+        limiter.pauseContract();
+
         vm.prank(admin);
         limiter.unPauseContract();
-        
         assertFalse(limiter.paused());
     }
 
     // ============ Pauser Tests ============
 
     function test_updatePauser_emitsEvent() public {
-        vm.startPrank(limiter.owner());
-        
         address pauser = address(1);
-        
-        vm.expectEmit(true, false, false, false);
-        emit BucketRateLimiter.UpdatedPauser(pauser, true);
-        limiter.updatePauser(pauser, true);
-        
-        assertEq(limiter.pausers(pauser), true);
-        
-        vm.expectEmit(true, false, false, false);
-        emit BucketRateLimiter.UpdatedPauser(pauser, false);
-        limiter.updatePauser(pauser, false);
-        
-        assertEq(limiter.pausers(pauser), false);
-        
+        assertEq(limiter.DEPRECATED_pausers(pauser), false);
+
+        vm.startPrank(owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), pauser);
         vm.stopPrank();
+
+        assertEq(limiter.DEPRECATED_pausers(pauser), false);
     }
 
     function test_updatePauser_ownerCanPause() public {
-        vm.startPrank(limiter.owner());
-        
+        vm.startPrank(owner);
         limiter.pauseContract();
         assertTrue(limiter.paused());
-        
+
         limiter.unPauseContract();
         assertFalse(limiter.paused());
-        
         vm.stopPrank();
     }
 
     function test_updatePauser_adminCanPause() public {
-        vm.startPrank(limiter.owner());
-        
         address admin = address(1);
-        limiter.updateAdmin(admin, true);
-        
+        vm.startPrank(owner);
+        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), admin);
         vm.stopPrank();
-        
+
         vm.prank(admin);
         limiter.pauseContract();
-        
         assertTrue(limiter.paused());
-        
-        vm.stopPrank();
     }
 
     // ============ Pause Integration Tests ============
@@ -1194,45 +1170,45 @@ contract BucketRateLimiterTest is Test {
 
     function test_upgrade_onlyOwner() public {
         vm.startPrank(limiter.owner());
-        
-        BucketRateLimiter newImpl = new BucketRateLimiter();
-        
+
+        BucketRateLimiter newImpl = new BucketRateLimiter(address(roleRegistry));
+
         limiter.upgradeTo(address(newImpl));
-        
+
         assertEq(limiter.getImplementation(), address(newImpl));
-        
+
         vm.stopPrank();
     }
 
     function test_upgrade_nonOwnerReverts() public {
         address nonOwner = address(999);
-        
-        BucketRateLimiter newImpl = new BucketRateLimiter();
-        
+
+        BucketRateLimiter newImpl = new BucketRateLimiter(address(roleRegistry));
+
         vm.prank(nonOwner);
         vm.expectRevert("Ownable: caller is not the owner");
         limiter.upgradeTo(address(newImpl));
     }
 
     function test_upgrade_preservesState() public {
-        vm.startPrank(limiter.owner());
-        
+        vm.startPrank(owner);
+
         // Set some state
         limiter.setCapacity(500 ether);
         limiter.setRefillRatePerSecond(250 ether);
-        address consumer = address(123);
-        limiter.updateConsumer(consumer);
-        
+        address newConsumer = address(123);
+        limiter.updateConsumer(newConsumer);
+
         // Upgrade
-        BucketRateLimiter newImpl = new BucketRateLimiter();
+        BucketRateLimiter newImpl = new BucketRateLimiter(address(roleRegistry));
         limiter.upgradeTo(address(newImpl));
-        
+
         // State should be preserved
-        assertEq(limiter.consumer(), consumer);
-        
+        assertEq(limiter.consumer(), newConsumer);
+
         vm.warp(block.timestamp + 1);
         assertTrue(limiter.canConsume(address(0), 250 ether, 0));
-        
+
         vm.stopPrank();
     }
 }
