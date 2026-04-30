@@ -37,6 +37,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
     mapping(address => bool) public DEPRECATED_admins;
 
+    // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;
 
     bytes32 public constant ETHERFI_ORACLE_ADMIN_ROLE = keccak256("ETHERFI_ORACLE_ADMIN_ROLE");
