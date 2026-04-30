@@ -61,7 +61,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(liquidityPool.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), admin);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), admin);
-        auctionManager.updateAdmin(admin, true);
+        roleRegistry.grantRole(auctionManager.AUCTION_MANAGER_ADMIN_ROLE(), admin);
         vm.stopPrank();
     }
 

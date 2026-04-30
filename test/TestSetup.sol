@@ -541,11 +541,11 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         nodeOperatorManagerInstance = NodeOperatorManager(address(nodeOperatorManagerProxy));
         nodeOperatorManagerInstance.initialize();
 
-        auctionImplementation = new AuctionManager();
+        auctionImplementation = new AuctionManager(address(roleRegistryInstance));
         auctionManagerProxy = new UUPSProxy(address(auctionImplementation), "");
         auctionInstance = AuctionManager(address(auctionManagerProxy));
         auctionInstance.initialize(address(nodeOperatorManagerInstance));
-        auctionInstance.updateAdmin(alice, true);
+        roleRegistryInstance.grantRole(auctionInstance.AUCTION_MANAGER_ADMIN_ROLE(), alice);
 
         stakingManagerImplementation = new StakingManager(address(liquidityPoolInstance), address(managerInstance), address(depositContractEth2), address(auctionInstance), address(node), address(roleRegistryInstance));
         stakingManagerProxy = new UUPSProxy(address(stakingManagerImplementation), "");
