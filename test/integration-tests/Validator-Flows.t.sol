@@ -73,8 +73,9 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         vm.stopPrank();
 
         // Ensure operating admin is an admin on NodeOperatorManager (required for whitelist ops)
-        vm.prank(nodeOperatorManagerInstance.owner());
-        nodeOperatorManagerInstance.updateAdmin(ETHERFI_OPERATING_ADMIN, true);
+        vm.startPrank(roleOwner);
+        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), ETHERFI_OPERATING_ADMIN);
+        vm.stopPrank();
     }
 
     function _prepareSingleValidator(address spawner)

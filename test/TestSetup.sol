@@ -530,11 +530,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         rateLimiterInstance = EtherFiRateLimiter(address(rateLimiterProxy));
         rateLimiterInstance.initialize();
 
-        nodeOperatorManagerImplementation = new NodeOperatorManager();
+        nodeOperatorManagerImplementation = new NodeOperatorManager(address(roleRegistryInstance));
         nodeOperatorManagerProxy = new UUPSProxy(address(nodeOperatorManagerImplementation), "");
         nodeOperatorManagerInstance = NodeOperatorManager(address(nodeOperatorManagerProxy));
         nodeOperatorManagerInstance.initialize();
-        nodeOperatorManagerInstance.updateAdmin(alice, true);
 
         auctionImplementation = new AuctionManager();
         auctionManagerProxy = new UUPSProxy(address(auctionImplementation), "");
@@ -850,6 +849,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         }
 
         _initOracleReportsforTesting();
+        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), owner);
         vm.stopPrank();
 
         vm.startPrank(alice);
@@ -859,7 +859,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.stopPrank();
 
         // Setup dependencies
-        vm.startPrank(alice);
+        vm.startPrank(owner);
         _approveNodeOperators();
         _setUpNodeOperatorWhitelist();
         vm.stopPrank();
