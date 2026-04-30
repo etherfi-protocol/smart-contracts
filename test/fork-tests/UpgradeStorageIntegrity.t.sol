@@ -328,12 +328,14 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // Pause WRN directly via the namespaced pauser. Instead of hunting
         // down the live pauser address, grant the role to this test via
         // RoleRegistry's owner/DEFAULT_ADMIN.
+        address roleReg = address(wrn.roleRegistry());
         bytes32 pauserRole = wrn.roleRegistry().PROTOCOL_PAUSER();
-        address roleRegOwner = IOwnableRead(address(wrn.roleRegistry())).owner();
-        vm.prank(roleRegOwner);
-        (bool granted,) = address(wrn.roleRegistry()).call(
+        address roleRegOwner = IOwnableRead(roleReg).owner();
+        vm.startPrank(roleRegOwner);
+        (bool granted,) = roleReg.call(
             abi.encodeWithSignature("grantRole(bytes32,address)", pauserRole, address(this))
         );
+        vm.stopPrank();
         require(granted, "role grant failed");
 
         wrn.pauseContract();
