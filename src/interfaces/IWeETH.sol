@@ -42,7 +42,7 @@ interface IWeETH is IERC20Upgradeable {
 
     function pause() external;
     function pauseUntil(address _user) external;
-    function extendPauseUntil(address _user, uint64 _duration) external;
+    function extendPauseUntil(address _user, uint256 _duration) external;
     function cancelPauseUntil(address _user) external;
     function unpause() external;
 

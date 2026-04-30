@@ -118,11 +118,11 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         }
     }
 
-    function extendPauseUntil(address _user, uint64 _duration) external {
+    function extendPauseUntil(address _user, uint256 _duration) external {
         require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
         require(_user != address(0), "No zero addresses");
         if (pausedUntil[_user] >= block.timestamp) {
-            pausedUntil[_user] = block.timestamp + _duration;
+            pausedUntil[_user] += _duration;
             emit PausedUntil(_user, pausedUntil[_user]);
         }
     }
