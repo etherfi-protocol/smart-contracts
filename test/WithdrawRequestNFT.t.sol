@@ -880,7 +880,11 @@ contract WithdrawRequestNFTTest is TestSetup {
         liquidityPoolInstance.requestWithdraw(bob, 1 ether);
     }
 
-    function test_claimWithdraw_blockedByPauseContractUntil() public {
+    // claimWithdraw and batchClaimWithdraw were turned permissionless (commit 54a2226), so
+    // pauseContractUntil on the WithdrawRequestNFT no longer blocks finalized claims. The pair
+    // below pins this behavior — they used to assert ContractPausedUntil reverts.
+
+    function test_claimWithdraw_succeedsUnderPauseContractUntil() public {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
@@ -892,15 +896,15 @@ contract WithdrawRequestNFTTest is TestSetup {
         _grantWrPauseUntilRoles();
         vm.prank(wrPauseUntilPauser);
         withdrawRequestNFTInstance.pauseContractUntil();
+        assertGt(_wrPausedUntil(), 0, "precondition: WR must be pause-until");
 
+        uint256 bobBalBefore = bob.balance;
         vm.prank(bob);
-        vm.expectRevert(
-            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _wrPausedUntil())
-        );
         withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertEq(bob.balance - bobBalBefore, 1 ether, "claim must pay out under pauseContractUntil");
     }
 
-    function test_batchClaimWithdraw_blockedByPauseContractUntil() public {
+    function test_batchClaimWithdraw_succeedsUnderPauseContractUntil() public {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
@@ -916,30 +920,35 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(wrPauseUntilPauser);
         withdrawRequestNFTInstance.pauseContractUntil();
 
+        uint256 bobBalBefore = bob.balance;
         vm.prank(bob);
-        vm.expectRevert(
-            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _wrPausedUntil())
-        );
         withdrawRequestNFTInstance.batchClaimWithdraw(ids);
+        assertEq(bob.balance - bobBalBefore, 1 ether, "batch claim must pay out under pauseContractUntil");
     }
 
-    function test_claimWithdraw_unblockedAfterPauseExpires() public {
+    // requestWithdraw is still gated by both pause and pause-until — pin that too.
+    function test_requestWithdraw_blockedByLpPauseContractUntil() public {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
         vm.stopPrank();
 
-        _finalizeWithdrawalRequest(requestId);
+        // Grant LP-side pause-until role and pause LP-until.
+        address lpPauser = makeAddr("lpPauser_wrTest");
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), lpPauser);
+        vm.stopPrank();
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
-        _grantWrPauseUntilRoles();
-        vm.prank(wrPauseUntilPauser);
-        withdrawRequestNFTInstance.pauseContractUntil();
-
-        vm.warp(block.timestamp + withdrawRequestNFTInstance.MAX_PAUSE_DURATION() + 1);
+        vm.prank(lpPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        uint256 lpPausedUntil = uint256(vm.load(address(liquidityPoolInstance), PAUSABLE_UNTIL_SLOT));
 
         vm.prank(bob);
-        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, lpPausedUntil)
+        );
+        liquidityPoolInstance.requestWithdraw(bob, 1 ether);
     }
 
     function test_getEEthRemainderAmount() public {
@@ -1414,6 +1423,107 @@ contract WithdrawRequestNFTTest is TestSetup {
             vm.expectRevert("Pausable: paused");
             liquidityPoolInstance.withdraw(bob, 1 ether);
         }
+    }
+
+    // -----------------------------------------------------------------
+    //  LP-side pauseContractUntil + permissionless claim parity tests
+    //  (mirror the LP-paused tests above; cover the soft pause-until gate)
+    // -----------------------------------------------------------------
+
+    /// @dev Helper: grant LP-side pause-until role and apply pauseContractUntil on the LP.
+    function _pauseLpUntil() internal returns (uint256 lpPausedUntil) {
+        address lpPauser = makeAddr("lpPauser_permissionlessClaim");
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), lpPauser);
+        vm.stopPrank();
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        vm.prank(lpPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        lpPausedUntil = uint256(vm.load(address(liquidityPoolInstance), PAUSABLE_UNTIL_SLOT));
+        require(lpPausedUntil > 0, "LP pause-until not set");
+    }
+
+    function test_claimWithdraw_succeedsWhenLpPausedUntil() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        _finalizeWithdrawalRequest(requestId);
+
+        _pauseLpUntil();
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertEq(bob.balance - bobBalBefore, 1 ether, "finalized claim must pay out while LP is pause-until");
+    }
+
+    function test_batchClaimWithdraw_succeedsWhenLpPausedUntil() public {
+        uint256 r1 = _requestFor(bob, 1 ether);
+        uint256 r2 = _requestFor(bob, 2 ether);
+        _finalizeWithdrawalRequest(r1);
+        _finalizeWithdrawalRequest(r2);
+
+        _pauseLpUntil();
+
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = r1;
+        ids[1] = r2;
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.batchClaimWithdraw(ids);
+        assertEq(bob.balance - bobBalBefore, 3 ether, "batch claim must pay out while LP is pause-until");
+    }
+
+    function test_claimWithdraw_succeedsWhenLpPauseAndPauseUntilBothActive() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        _finalizeWithdrawalRequest(requestId);
+
+        _pauseLpUntil();
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertEq(bob.balance - bobBalBefore, 1 ether, "claim must pay out when LP has both pause and pause-until set");
+    }
+
+    function test_liquidityPool_withdraw_revertsForGatedCallersWhenLpPausedUntil() public {
+        uint256 lpPausedUntil = _pauseLpUntil();
+
+        address membershipMgr = address(liquidityPoolInstance.membershipManager());
+        address redemptionMgr = address(liquidityPoolInstance.etherFiRedemptionManager());
+
+        if (membershipMgr != address(0)) {
+            vm.prank(membershipMgr);
+            vm.expectRevert(
+                abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, lpPausedUntil)
+            );
+            liquidityPoolInstance.withdraw(bob, 1 ether);
+        }
+
+        if (redemptionMgr != address(0)) {
+            vm.prank(redemptionMgr);
+            vm.expectRevert(
+                abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, lpPausedUntil)
+            );
+            liquidityPoolInstance.withdraw(bob, 1 ether);
+        }
+    }
+
+    function test_liquidityPool_requestWithdraw_revertsWhenLpPausedUntil() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        vm.stopPrank();
+
+        uint256 lpPausedUntil = _pauseLpUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, lpPausedUntil)
+        );
+        liquidityPoolInstance.requestWithdraw(bob, 1 ether);
     }
 
     function test_liquidityPool_requestWithdraw_revertsWhenLpPaused() public {

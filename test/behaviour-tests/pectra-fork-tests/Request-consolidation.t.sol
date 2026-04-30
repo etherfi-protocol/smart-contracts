@@ -12,6 +12,7 @@ import "../../../src/interfaces/IRoleRegistry.sol";
 import "../../../src/interfaces/IEtherFiRateLimiter.sol";
 import "../../../src/interfaces/IStakingManager.sol";
 import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
+import {EigenPodTestHelpers} from "../../utils/EigenPodTestHelpers.sol";
 import "../../TestSetup.sol";
 import "../../../script/deploys/Deployed.s.sol";
 /**
@@ -133,6 +134,9 @@ contract RequestConsolidationTest is TestSetup, Deployed {
 
         ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
 
+        // Target validator must be ACTIVE in pod0; here all 3 reqs target pubkeys[0].
+        EigenPodTestHelpers.forceValidatorActive(pod0, pubkeys[0]);
+
         IEigenPodTypes.ConsolidationRequest[] memory reqs = _consolidationRequestsFromPubkeys(pubkeys);
 
         uint256 feePer = pod0.getConsolidationRequestFee();
@@ -165,6 +169,10 @@ contract RequestConsolidationTest is TestSetup, Deployed {
         vm.stopPrank();  
 
         ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
+
+        // Switch-to-compounding has src == target, so the same single pubkey
+        // must be ACTIVE in pod0.
+        EigenPodTestHelpers.forceValidatorActive(pod0, pubkeys[0]);
 
         IEigenPodTypes.ConsolidationRequest[] memory reqs = _switchToCompoundingRequestsFromPubkeys(pubkeys);
 
@@ -209,8 +217,14 @@ contract RequestConsolidationTest is TestSetup, Deployed {
 
         ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
 
+        // Switch-to-compounding has src == target, so each request's pubkey
+        // must be ACTIVE in pod0.
+        for (uint256 i = 0; i < pubkeys.length; ++i) {
+            EigenPodTestHelpers.forceValidatorActive(pod0, pubkeys[i]);
+        }
+
         IEigenPodTypes.ConsolidationRequest[] memory reqs = _switchToCompoundingRequestsFromPubkeys(pubkeys);
-        
+
         uint256 feePer = pod0.getConsolidationRequestFee();
         uint256 n = reqs.length;
         uint256 valueToSend = feePer * n;

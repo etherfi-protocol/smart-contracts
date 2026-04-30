@@ -22,11 +22,11 @@ contract LiquidReferUsdPermitTest is LiquidReferPermitFuzzBaseTest {
         return 10_000e6; // cap fuzzed USDC deposits to 10k
     }
 }
-contract LiquidReferUsdPermitScrollTest is LiquidReferPermitFuzzBaseTest {
+contract LiquidReferUsdPermitOPTest is LiquidReferPermitFuzzBaseTest {
     function _assetConfig() internal pure override returns (AssetConfig memory) {
         return AssetConfig({
             teller: ILayerZeroTellerWithRateLimiting(LIQUID_USD_TELLER),
-            asset: 0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4, //usdc scroll
+            asset: 0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85, //usdc OP
             depositAmount: 1_000e6 // USDC has 6 decimals
         });
     }
@@ -39,6 +39,6 @@ contract LiquidReferUsdPermitScrollTest is LiquidReferPermitFuzzBaseTest {
         return 10_000e6; // cap fuzzed USDC deposits to 10k
     }
     function _envVar() internal pure override returns (string memory) {
-        return "SCROLL_RPC_URL";
+        return "OP_RPC_URL";
     }
 }
