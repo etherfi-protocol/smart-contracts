@@ -794,19 +794,20 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_updateAdmin() public {
         address newAdmin = address(0x1234);
-        
-        vm.prank(owner);
-        etherFiOracleInstance.updateAdmin(newAdmin, true);
-        assertEq(etherFiOracleInstance.admins(newAdmin), true);
 
-        vm.prank(owner);
-        etherFiOracleInstance.updateAdmin(newAdmin, false);
-        assertEq(etherFiOracleInstance.admins(newAdmin), false);
+        // updateAdmin replaced by RoleRegistry.grantRole / revokeRole
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), newAdmin);
+        assertTrue(roleRegistryInstance.hasRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), newAdmin));
 
-        // Test that non-owner cannot update admin
+        roleRegistryInstance.revokeRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), newAdmin);
+        assertFalse(roleRegistryInstance.hasRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), newAdmin));
+        vm.stopPrank();
+
+        // Non-owner cannot grant role
         vm.prank(chad);
         vm.expectRevert();
-        etherFiOracleInstance.updateAdmin(newAdmin, true);
+        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), newAdmin);
     }
 
     function test_getImplementation() public {

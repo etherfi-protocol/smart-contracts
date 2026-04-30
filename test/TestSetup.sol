@@ -688,7 +688,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
 
-        etherFiOracleImplementation = new EtherFiOracle();
+        etherFiOracleImplementation = new EtherFiOracle(address(roleRegistryInstance));
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
 
@@ -1100,13 +1100,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     function _initializeEtherFiAdmin() internal {
         vm.startPrank(owner);
 
-        etherFiOracleInstance.updateAdmin(alice, true);
+        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), alice);
 
         address admin = address(etherFiAdminInstance);
-        //stakingManagerInstance.updateAdmin(admin, true); 
+        //stakingManagerInstance.updateAdmin(admin, true);
         // liquidityPoolInstance.updateAdmin(admin, true);
         membershipManagerInstance.updateAdmin(admin, true);
-        etherFiOracleInstance.updateAdmin(admin, true);
+        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), admin);
 
         vm.stopPrank();
     }
