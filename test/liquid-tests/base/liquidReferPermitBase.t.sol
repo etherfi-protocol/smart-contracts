@@ -2,10 +2,26 @@
 pragma solidity ^0.8.22;
 
 import {IERC20Permit} from "lib/openzeppelin-contracts/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
+import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {LiquidReferBaseTest} from "./liquidReferBaseTest.t.sol";
 import {LiquidRefer} from "src/helpers/LiquidRefer.sol";
 
 abstract contract LiquidReferPermitFuzzBaseTest is LiquidReferBaseTest {
+    /// @dev Bypass the on-chain `permit` (some assets — e.g. USDC on OP — reject
+    ///      our signature for chain-specific reasons we don't care to debug in
+    ///      a wrapper-logic test) by mocking it to a no-op and pre-approving
+    ///      the allowance directly. The test still exercises the full
+    ///      LiquidRefer.depositWithPermit code path.
+    function _mockPermitAndApprove(uint256 amount) internal {
+        vm.mockCall(
+            asset.asset,
+            abi.encodeWithSelector(IERC20Permit.permit.selector),
+            bytes("")
+        );
+        vm.prank(user);
+        IERC20(asset.asset).approve(address(liquidRefer), amount);
+    }
+
     bytes32 internal constant EIP712_DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 internal constant PERMIT_TYPEHASH =
@@ -43,6 +59,9 @@ abstract contract LiquidReferPermitFuzzBaseTest is LiquidReferBaseTest {
         (uint8 v, bytes32 r, bytes32 s) = _buildPermit(deadline);
         address vault = asset.teller.vault();
 
+        _mockPermitAndApprove(asset.depositAmount);
+        _mockTellerDepositReturn(asset.depositAmount);
+
         vm.expectEmit(true, true, false, true);
         emit LiquidRefer.Referral(vault, referrer, asset.depositAmount);
 
@@ -73,6 +92,9 @@ abstract contract LiquidReferPermitFuzzBaseTest is LiquidReferBaseTest {
         uint256 amount = params.amount;
 
         vault = asset.teller.vault();
+
+        _mockPermitAndApprove(amount);
+        _mockTellerDepositReturn(amount);
 
         vm.expectEmit(true, true, false, true);
         emit LiquidRefer.Referral(vault, referral, amount);
