@@ -202,4 +202,8 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     function getImplementation() external view returns (address) {
         return _getImplementation();
     }
+
+    function isPausedUntil(address _user) external view returns (bool) {
+        return pausedUntil[_user] >= block.timestamp;
+    }
 }

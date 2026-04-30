@@ -266,6 +266,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         return liquidityPool.getTotalEtherClaimOf(_user);
     }
 
+    function isPausedUntil(address _user) external view returns (bool) {
+        return pausedUntil[_user] >= block.timestamp;
+    }
+
     function getImplementation() external view returns (address) {
         return _getImplementation();
     }
