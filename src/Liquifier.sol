@@ -68,12 +68,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     IStrategyManager public eigenLayerStrategyManager;
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
 
-    ICurvePool public cbEth_Eth_Pool;
-    ICurvePool public wbEth_Eth_Pool;
+    ICurvePool public DEPRECATED_cbEth_Eth_Pool;
+    ICurvePool public DEPRECATED_wbEth_Eth_Pool;
     ICurvePool public stEth_Eth_Pool;
 
-    IcbETH public cbEth;
-    IwBETH public wbEth;
+    IcbETH public DEPRECATED_cbEth;
+    IwBETH public DEPRECATED_wbEth;
     ILido public lido;
 
     IDelegationManager public eigenLayerDelegationManager;
@@ -95,7 +95,11 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     uint256 public constant BASIS_POINT_SCALE = 10_000;
 
     IRoleRegistry public immutable roleRegistry;
+    AggregatorV3Interface public immutable stEthPriceFeed;
+
     uint256 public immutable MIN_DISCOUNT_RATE_IN_BPS;
+    uint256 public immutable STALE_PRICE_WINDOW;
+    uint256 public immutable MAX_OFF_CHAIN_PREMIUM;
 
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     // This event is deprecated. will be removed in the next release.
@@ -115,18 +119,30 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error IncorrectAmount();
     error IncorrectRole();
     error InvalidDiscountRate();
+    error InvalidPriceWindow();
+    error InvalidOffChainPremium();
+    error InvalidRoleRegistry();
+    error InvalidPriceFeed();
+    error InvalidStEthPrice();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry, uint256 _minDiscountInBasisPoints) {
+    constructor(address _roleRegistry, address _stEthPriceFeed, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxOffChainPremium) {
         if (_minDiscountInBasisPoints == 0 || _minDiscountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
+        if (_stalePriceWindow == 0) revert InvalidPriceWindow();
+        if (_maxOffChainPremium == 0) revert InvalidOffChainPremium();
+        if (_roleRegistry == address(0)) revert InvalidRoleRegistry();
+        if (_stEthPriceFeed == address(0)) revert InvalidPriceFeed();
         roleRegistry = IRoleRegistry(_roleRegistry);
+        stEthPriceFeed = AggregatorV3Interface(_stEthPriceFeed);
         MIN_DISCOUNT_RATE_IN_BPS = _minDiscountInBasisPoints;
+        STALE_PRICE_WINDOW = _stalePriceWindow;
+        MAX_OFF_CHAIN_PREMIUM = _maxOffChainPremium;
         _disableInitializers();
     }
 
     /// @notice initialize to set variables on deployment
     function initialize(address _treasury, address _liquidityPool, address _eigenLayerStrategyManager, address _lidoWithdrawalQueue, 
-                        address _stEth, address _cbEth, address _wbEth, address _cbEth_Eth_Pool, address _wbEth_Eth_Pool, address _stEth_Eth_Pool,
+                        address _stEth, address _stEth_Eth_Pool,
                         uint32 _timeBoundCapRefreshInterval) initializer external {
         __Pausable_init();
         __Ownable_init();
@@ -139,10 +155,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         eigenLayerStrategyManager = IEigenLayerStrategyManager(_eigenLayerStrategyManager);
 
         lido = ILido(_stEth);
-        cbEth = IcbETH(_cbEth);
-        wbEth = IwBETH(_wbEth);
-        cbEth_Eth_Pool = ICurvePool(_cbEth_Eth_Pool);
-        wbEth_Eth_Pool = ICurvePool(_wbEth_Eth_Pool);
         stEth_Eth_Pool = ICurvePool(_stEth_Eth_Pool);
         
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
@@ -286,8 +298,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (!isTokenWhitelisted(_token)) revert NotSupportedToken();
 
         if (_token == address(lido)) return _amount * 1; /// 1:1 from stETH to eETH
-        else if (_token == address(cbEth)) return _amount * cbEth.exchangeRate() / 1e18;
-        else if (_token == address(wbEth)) return _amount * wbEth.exchangeRate() / 1e18;
         else if (tokenInfos[_token].isL2Eth) return _amount * 1; /// 1:1 from l2Eth to eETH
 
         revert NotSupportedToken();
@@ -298,22 +308,20 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return quoteByMarketValue(_token, tokenAmount);
     }
 
-    function quoteByMarketValue(address _token, uint256 _amount) public view returns (uint256) {
+    function quoteByMarketValue(address _token, uint256 _amount) public view returns (uint256 _marketValue) {
         if (!isTokenWhitelisted(_token)) revert NotSupportedToken();
 
         if (_token == address(lido)) {
             if (quoteStEthWithCurve) {
-                return _min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
+                _marketValue = _min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
+                (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
+                if (updatedAt + STALE_PRICE_WINDOW >= block.timestamp && (uint256(answer) * _amount) / 1e18 > _marketValue + MAX_OFF_CHAIN_PREMIUM) revert InvalidStEthPrice();
             } else {
-                return _amount; /// 1:1 from stETH to eETH
+                _marketValue = _amount; /// 1:1 from stETH to eETH
             }
-        } else if (_token == address(cbEth)) {
-            return _min(_amount * cbEth.exchangeRate() / 1e18, ICurvePoolQuoter2(address(cbEth_Eth_Pool)).get_dy(1, 0, _amount));
-        } else if (_token == address(wbEth)) {
-            return _min(_amount * wbEth.exchangeRate() / 1e18, ICurvePoolQuoter1(address(wbEth_Eth_Pool)).get_dy(1, 0, _amount));
         } else if (tokenInfos[_token].isL2Eth) {
             // 1:1 for all dummy tokens
-            return _amount;
+            _marketValue = _amount;
         }
 
         revert NotSupportedToken();
