@@ -39,7 +39,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
         // Grant the IMPLICIT_FEE_CLAIMER_ROLE to alice
         vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet))));
+        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(priorityQueueInstance))));
         roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
         vm.stopPrank();
 
@@ -113,7 +113,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
         // Now upgrade the contract and grant roles
         vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet))));
+        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(priorityQueueInstance))));
         roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
         vm.stopPrank();
 
@@ -194,7 +194,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
             // Grant the IMPLICIT_FEE_CLAIMER_ROLE to alice
             vm.startPrank(address(roleRegistryInstance.owner()));
-            withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet))));
+            withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(priorityQueueInstance))));
             roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
             vm.stopPrank();
 

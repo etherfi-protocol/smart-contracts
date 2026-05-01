@@ -8,6 +8,7 @@ import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IMembershipManager.sol";
+import "./interfaces/IPriorityWithdrawalQueue.sol";
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -50,6 +51,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     bytes32 public constant WITHDRAW_REQUEST_NFT_ADMIN_ROLE = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
     bytes32 public constant IMPLICIT_FEE_CLAIMER_ROLE = keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
+    IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
 
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
     event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
@@ -64,8 +66,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _treasury) {
+    constructor(address _treasury, address _priorityWithdrawalQueue) {
         treasury = _treasury;
+        priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
         
         _disableInitializers();
     }
@@ -233,7 +236,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         require(_exists(requestId), "Request does not exist");
         require(!_requests[requestId].isValid, "Request is valid");
         if (requestId <= lastFinalizedRequestId) {
-            require(_requests[requestId].amountOfEEth <= liquidityPool.totalValueInLp() - liquidityPool.ethAmountLockedForWithdrawal(), "Request amount is greater than available liquidity");
+            require(_requests[requestId].amountOfEEth <= liquidityPool.totalValueInLp() - (liquidityPool.ethAmountLockedForWithdrawal() + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal()), "Request amount is greater than available liquidity");
         }
         _requests[requestId].isValid = true;
 
