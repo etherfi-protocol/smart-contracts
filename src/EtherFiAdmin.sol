@@ -60,6 +60,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
     uint256 public immutable MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY;
     uint256 public immutable MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY;
+
+    int256 public immutable MAX_ACCEPTABLE_REBASE_APR_IN_BPS;
+    uint256 public immutable MAX_VALIDATOR_TASK_BATCH_SIZE;
+
     uint256 public immutable STALE_ORACLE_REPORT_BLOCK_WINDOW;
 
     event AdminUpdated(address _address, bool _isAdmin);
@@ -70,14 +74,29 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event ValidatorApprovalTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
 
     error IncorrectRole();
+    error InvalidPriorityWithdrawalQueue();
+    error InvalidMaxFinalizedWithdrawalAmountPerDay();
+    error InvalidMaxNumValidatorsToApprovePerDay();
+    error InvalidAcceptableRebaseApr();
+    error InvalidValidatorTaskBatchSize();
+    error InvalidMaxAcceptableRebaseApr();
+    error InvalidStaleOracleReportBlockWindow();
     error OracleReportNotStale();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _priorityWithdrawalQueue, uint256 _maxFinalizedWithdrawalAmountPerDay, uint256 _maxNumValidatorsToApprovePerDay, uint256 _staleOracleReportBlockWindow) {
+    constructor(address _priorityWithdrawalQueue, uint256 _maxFinalizedWithdrawalAmountPerDay, uint256 _maxNumValidatorsToApprovePerDay, int256 _maxAcceptableRebaseAprInBps, uint256 _maxValidatorTaskBatchSize, uint256 _staleOracleReportBlockWindow) {
+        if (_priorityWithdrawalQueue == address(0)) revert InvalidPriorityWithdrawalQueue();
+        if (_maxFinalizedWithdrawalAmountPerDay == 0) revert InvalidMaxFinalizedWithdrawalAmountPerDay();
+        if (_maxNumValidatorsToApprovePerDay == 0) revert InvalidMaxNumValidatorsToApprovePerDay();
+        if (_maxAcceptableRebaseAprInBps <= 0 || _maxAcceptableRebaseAprInBps > 10_000) revert InvalidMaxAcceptableRebaseApr();
+        if (_maxValidatorTaskBatchSize == 0) revert InvalidValidatorTaskBatchSize();
+        if (_staleOracleReportBlockWindow == 0) revert InvalidStaleOracleReportBlockWindow();
         _disableInitializers();
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
         MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = _maxFinalizedWithdrawalAmountPerDay;
         MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY = _maxNumValidatorsToApprovePerDay;
+        MAX_ACCEPTABLE_REBASE_APR_IN_BPS = _maxAcceptableRebaseAprInBps;
+        MAX_VALIDATOR_TASK_BATCH_SIZE = _maxValidatorTaskBatchSize;
         STALE_ORACLE_REPORT_BLOCK_WINDOW = _staleOracleReportBlockWindow;
     }
 
@@ -173,6 +192,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function setValidatorTaskBatchSize(uint16 _batchSize) external {
         if(!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (_batchSize == 0 || _batchSize > MAX_VALIDATOR_TASK_BATCH_SIZE) revert InvalidValidatorTaskBatchSize();
         validatorTaskBatchSize = _batchSize;
     }
 
@@ -346,6 +366,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external {
         if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (_acceptableRebaseAprInBps < 0 || _acceptableRebaseAprInBps > MAX_ACCEPTABLE_REBASE_APR_IN_BPS) revert InvalidAcceptableRebaseApr();
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
     }
 
