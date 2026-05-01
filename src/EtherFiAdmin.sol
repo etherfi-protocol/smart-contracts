@@ -84,7 +84,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (_priorityWithdrawalQueue == address(0)) revert InvalidPriorityWithdrawalQueue();
         if (_maxFinalizedWithdrawalAmountPerDay == 0) revert InvalidMaxFinalizedWithdrawalAmountPerDay();
         if (_maxNumValidatorsToApprovePerDay == 0) revert InvalidMaxNumValidatorsToApprovePerDay();
-        if (_maxAcceptableRebaseAprInBps < 0) revert InvalidMaxAcceptableRebaseApr();
+        if (_maxAcceptableRebaseAprInBps <= 0 || _maxAcceptableRebaseAprInBps > 10_000) revert InvalidMaxAcceptableRebaseApr();
         if (_maxValidatorTaskBatchSize == 0) revert InvalidValidatorTaskBatchSize();
         _disableInitializers();
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
