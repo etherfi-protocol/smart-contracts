@@ -22,6 +22,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     using SafeERC20 for IERC20;
 
     uint256 private constant BASIS_POINT_SCALE = 1e4;
+    uint256 public constant MIN_WITHDRAW_AMOUNT = 0.01 ether;
+    uint256 public constant MAX_WITHDRAW_AMOUNT = 1000 ether;
     // this treasury address is set to ethfi buyback wallet address
     address public immutable treasury;
     
@@ -62,6 +64,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     event Unpaused(address account);
 
     error IncorrectRole();
+    error InvalidWithdrawalAmount();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _treasury) {
@@ -109,6 +112,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @param fee fee to be subtracted from amount when recipient calls claimWithdraw
     /// @return uint256 id of the withdraw request
     function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external payable onlyLiquidityPool whenNotPaused returns (uint256) {
+        if (amountOfEEth < MIN_WITHDRAW_AMOUNT || amountOfEEth > MAX_WITHDRAW_AMOUNT) revert InvalidWithdrawalAmount();
         uint256 requestId = nextRequestId++;
         uint32 feeGwei = uint32(fee / 1 gwei);
 
