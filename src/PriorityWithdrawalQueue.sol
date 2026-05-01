@@ -13,6 +13,7 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IWeETH.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./utils/PausableUntil.sol";
 
 /// @title PriorityWithdrawalQueue
 /// @notice Manages priority withdrawals for whitelisted users
@@ -21,6 +22,7 @@ contract PriorityWithdrawalQueue is
     Initializable, 
     UUPSUpgradeable, 
     ReentrancyGuardUpgradeable,
+    PausableUntil,
     IPriorityWithdrawalQueue
 {
     using SafeERC20 for IERC20;
@@ -125,6 +127,7 @@ contract PriorityWithdrawalQueue is
 
     modifier whenNotPaused() {
         if (paused) revert ContractPaused();
+        _requireNotPausedUntil();
         _;
     }
 
@@ -283,7 +286,7 @@ contract PriorityWithdrawalQueue is
     /// @dev Anyone can call this to claim on behalf of the user. Funds are sent to request.user.
     ///      ETH delivery forwards gas to request.user, so third parties should avoid claiming for untrusted recipients.
     /// @param request The withdrawal request to claim
-    function claimWithdraw(WithdrawRequest calldata request) external whenNotPaused nonReentrant {
+    function claimWithdraw(WithdrawRequest calldata request) external nonReentrant {
         if (request.creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
         
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
@@ -298,7 +301,7 @@ contract PriorityWithdrawalQueue is
     /// @dev Anyone can call this to claim on behalf of users. Funds are sent to each request.user.
     ///      Each ETH delivery forwards gas to request.user, so batching untrusted recipients can be griefed.
     /// @param requests Array of withdrawal requests to claim
-    function batchClaimWithdraw(WithdrawRequest[] calldata requests) external whenNotPaused nonReentrant {
+    function batchClaimWithdraw(WithdrawRequest[] calldata requests) external nonReentrant {
         for (uint256 i = 0; i < requests.length; ++i) {
             if (requests[i].creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
             (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
@@ -432,6 +435,16 @@ contract PriorityWithdrawalQueue is
         if (!paused) revert ContractNotPaused();
         paused = false;
         emit Unpaused(msg.sender);
+    }
+
+    function pauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _pauseUntil();
+    }
+
+    function unpauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _unpauseUntil();
     }
 
     //--------------------------------------------------------------------------------------

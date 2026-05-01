@@ -8,6 +8,7 @@ import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20Burnable
 
 import "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import "../src/eigenlayer-interfaces/IStrategyManager.sol";
+import "../src/utils/PausableUntil.sol";
 
 contract DummyERC20 is ERC20BurnableUpgradeable {
     
@@ -337,28 +338,87 @@ contract LiquifierTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
-        owner = liquifierInstance.owner();
-
+        // bob has no pauser role
         vm.startPrank(bob);
-        vm.expectRevert();
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
         liquifierInstance.pauseContract();
         vm.stopPrank();
 
-        vm.prank(owner);
-        liquifierInstance.updatePauser(bob, true);
+        // grant PROTOCOL_PAUSER to bob
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), bob);
+        vm.stopPrank();
 
-        vm.startPrank(bob);
+        vm.prank(bob);
         liquifierInstance.pauseContract();
-        vm.stopPrank();
 
-        vm.startPrank(bob);
-        vm.expectRevert();
+        // bob cannot unpause — no PROTOCOL_UNPAUSER
+        vm.prank(bob);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
         liquifierInstance.unPauseContract();
-        vm.stopPrank();
 
+        // setUpLiquifier granted PROTOCOL_UNPAUSER to owner
         vm.prank(owner);
         liquifierInstance.unPauseContract();
+    }
 
+    function test_sendToEtherFiRestaker_requiresSenderRole() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+
+        // Fund the liquifier with stETH so a transfer would otherwise succeed
+        vm.deal(alice, 5 ether);
+        vm.startPrank(alice);
+        stEth.submit{value: 5 ether}(address(0));
+        stEth.transfer(address(liquifierInstance), 1 ether);
+        vm.stopPrank();
+
+        // bob has no roles
+        vm.prank(bob);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        liquifierInstance.sendToEtherFiRestaker(address(stEth), 1);
+
+        // chad has only LIQUIFIER_ADMIN_ROLE — that role is no longer accepted here
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), chad);
+        vm.stopPrank();
+        vm.prank(chad);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        liquifierInstance.sendToEtherFiRestaker(address(stEth), 1);
+    }
+
+    function test_sendToEtherFiRestaker_succeedsWithSenderRole() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+
+        vm.deal(alice, 5 ether);
+        vm.startPrank(alice);
+        stEth.submit{value: 5 ether}(address(0));
+        stEth.transfer(address(liquifierInstance), 2 ether);
+        vm.stopPrank();
+
+        address sender = makeAddr("liqSender");
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_SENDER_ROLE(), sender);
+        vm.stopPrank();
+
+        uint256 restakerBalBefore = stEth.balanceOf(address(etherFiRestakerInstance));
+        uint256 liquifierBalBefore = stEth.balanceOf(address(liquifierInstance));
+
+        vm.prank(sender);
+        liquifierInstance.sendToEtherFiRestaker(address(stEth), 1 ether);
+
+        // stETH transfer can be off by 1-2 wei due to share rounding
+        assertApproxEqAbs(stEth.balanceOf(address(etherFiRestakerInstance)), restakerBalBefore + 1 ether, 2);
+        assertApproxEqAbs(stEth.balanceOf(address(liquifierInstance)), liquifierBalBefore - 1 ether, 2);
+    }
+
+    function test_LIQUIFIER_SENDER_ROLE_constant() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+
+        assertEq(liquifierInstance.LIQUIFIER_SENDER_ROLE(), keccak256("LIQUIFIER_SENDER_ROLE"));
+        assertTrue(liquifierInstance.LIQUIFIER_ADMIN_ROLE() != liquifierInstance.LIQUIFIER_SENDER_ROLE());
     }
 
     function test_getTotalPooledEther() public {
@@ -367,5 +427,188 @@ contract LiquifierTest is TestSetup {
 
         liquidityPoolInstance.getTotalPooledEther();
         liquifierInstance.getTotalPooledEther();
+    }
+
+    //--------------------------------------------------------------------------------------
+    //--------------------------  pauseContractUntil / unpauseContractUntil  ---------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 constant PAUSABLE_UNTIL_SLOT =
+        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+    address liqPauseUntilPauser = makeAddr("liqPauseUntilPauser");
+    address liqUnpauseUntilUnpauser = makeAddr("liqUnpauseUntilUnpauser");
+
+    function _grantLiqPauseUntilRoles() internal {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), liqPauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), liqUnpauseUntilUnpauser);
+        vm.stopPrank();
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+    }
+
+    function _liqPausedUntil() internal view returns (uint256) {
+        return uint256(vm.load(address(liquifierInstance), PAUSABLE_UNTIL_SLOT));
+    }
+
+    function test_pauseContractUntil_requiresRole() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+
+        vm.prank(bob);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        liquifierInstance.pauseContractUntil();
+
+        // PROTOCOL_PAUSER alone is insufficient
+        vm.prank(owner);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        liquifierInstance.pauseContractUntil();
+    }
+
+    function test_pauseContractUntil_setsState() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+
+        vm.prank(liqPauseUntilPauser);
+        liquifierInstance.pauseContractUntil();
+        assertEq(_liqPausedUntil(), block.timestamp + liquifierInstance.MAX_PAUSE_DURATION());
+    }
+
+    function test_unpauseContractUntil_requiresRole() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+
+        vm.prank(liqPauseUntilPauser);
+        liquifierInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        liquifierInstance.unpauseContractUntil();
+
+        // PROTOCOL_UNPAUSER alone is insufficient
+        vm.prank(owner);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        liquifierInstance.unpauseContractUntil();
+    }
+
+    function test_unpauseContractUntil_clearsState() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+
+        vm.prank(liqPauseUntilPauser);
+        liquifierInstance.pauseContractUntil();
+
+        vm.prank(liqUnpauseUntilUnpauser);
+        liquifierInstance.unpauseContractUntil();
+        assertEq(_liqPausedUntil(), 0);
+    }
+
+    function test_unpauseContractUntil_revertsIfNotPaused() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+
+        vm.prank(liqUnpauseUntilUnpauser);
+        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
+        liquifierInstance.unpauseContractUntil();
+    }
+
+    // --- each gated function (whenNotPaused now also enforces pause-until via override) ---
+
+    function test_depositWithERC20_blockedByPauseContractUntil() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        stEth.submit{value: 5 ether}(address(0));
+        stEth.approve(address(liquifierInstance), 1 ether);
+        vm.stopPrank();
+
+        vm.prank(liqPauseUntilPauser);
+        liquifierInstance.pauseContractUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _liqPausedUntil())
+        );
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
+    }
+
+    function test_depositWithERC20WithPermit_blockedByPauseContractUntil() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+
+        vm.prank(liqPauseUntilPauser);
+        liquifierInstance.pauseContractUntil();
+
+        ILiquifier.PermitInput memory emptyPermit;
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _liqPausedUntil())
+        );
+        liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, address(0), emptyPermit);
+    }
+
+    function test_pauseContract_blockedWhilePauseUntilActive() public {
+        // OZ's _pause() is internally gated by whenNotPaused, which now routes through the
+        // _requireNotPaused override. So full pauseContract is blocked while paused-until is active.
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+
+        vm.prank(liqPauseUntilPauser);
+        liquifierInstance.pauseContractUntil();
+        uint256 until = block.timestamp + liquifierInstance.MAX_PAUSE_DURATION();
+
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, until));
+        liquifierInstance.pauseContract();
+    }
+
+    function test_depositWithERC20_unblockedAfterPauseExpires() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        stEth.submit{value: 5 ether}(address(0));
+        stEth.approve(address(liquifierInstance), 1 ether);
+        vm.stopPrank();
+
+        vm.prank(liqPauseUntilPauser);
+        liquifierInstance.pauseContractUntil();
+
+        vm.warp(block.timestamp + liquifierInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.prank(alice);
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
+    }
+
+    function test_depositWithERC20_unblockedAfterExplicitUnpause() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        stEth.submit{value: 5 ether}(address(0));
+        stEth.approve(address(liquifierInstance), 1 ether);
+        vm.stopPrank();
+
+        vm.prank(liqPauseUntilPauser);
+        liquifierInstance.pauseContractUntil();
+        vm.prank(liqUnpauseUntilUnpauser);
+        liquifierInstance.unpauseContractUntil();
+
+        vm.prank(alice);
+        liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
     }
 }

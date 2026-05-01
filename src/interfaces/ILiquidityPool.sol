@@ -78,6 +78,8 @@ interface ILiquidityPool {
     function pauseContract() external;
     function burnEEthShares(uint256 shares) external;
     function unPauseContract() external; 
+    function pauseContractUntil() external;
+    function unpauseContractUntil() external;
 
     function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external;  
     function setValidatorSizeWei(uint256 _size) external;

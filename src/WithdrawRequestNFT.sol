@@ -12,10 +12,12 @@ import "./interfaces/IMembershipManager.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./RoleRegistry.sol";
+import "./ReentrancyGuardNamespaced.sol";
+import "./utils/PausableUntil.sol";
 
 
 
-contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IWithdrawRequestNFT {
+contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardNamespaced, PausableUntil, IWithdrawRequestNFT {
     using Math for uint256;
     using SafeERC20 for IERC20;
 
@@ -135,7 +137,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @notice called by the NFT owner to claim their ETH
     /// @dev burns the NFT and transfers ETH from the liquidity pool to the owner minus any fee, withdraw request must be valid and finalized
     /// @param tokenId the id of the withdraw request and associated NFT
-    function claimWithdraw(uint256 tokenId) external whenNotPaused {
+    function claimWithdraw(uint256 tokenId) external nonReentrant {
         return _claimWithdraw(tokenId, ownerOf(tokenId));
     }
     
@@ -160,7 +162,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw, amountBurnedShare, recipient, 0);
     }
 
-    function batchClaimWithdraw(uint256[] calldata tokenIds) external whenNotPaused {
+    function batchClaimWithdraw(uint256[] calldata tokenIds) external nonReentrant {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             _claimWithdraw(tokenIds[i], ownerOf(tokenIds[i]));
         }
@@ -218,7 +220,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         lastFinalizedRequestId = uint32(requestId);
     }
 
+    /// @dev Admin can only invalidate requests that have NOT been finalized yet
     function invalidateRequest(uint256 requestId) external onlyAdmin {
+        require(requestId > lastFinalizedRequestId, "Cannot invalidate finalized request");
         require(isValid(requestId), "Request is not valid");
         _requests[requestId].isValid = false;
 
@@ -249,13 +253,22 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function unPauseContract() external {
-        require(isScanOfShareRemainderCompleted(), "scan is not completed");
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         if (!paused) revert("Pausable: not paused");
 
 
         paused = false;
         emit Unpaused(msg.sender);
+    }
+
+    function pauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _pauseUntil();
+    }
+
+    function unpauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _unpauseUntil();
     }
 
     /// @dev Handles the remainder of the eEth shares after the claim of the withdraw request
@@ -327,6 +340,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     modifier whenNotPaused() {
         _requireNotPaused();
+        _requireNotPausedUntil();
         _;
     }
 }

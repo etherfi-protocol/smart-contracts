@@ -18,11 +18,11 @@ contract LiquidReferBtcTest is LiquidReferBaseTest {
     }
 }
 
-contract LiquidReferBtcScrollTest is LiquidReferBaseTest {
+contract LiquidReferBtcOPTest is LiquidReferBaseTest {
     function _assetConfig() internal pure override returns (AssetConfig memory) {
         return AssetConfig({
             teller: ILayerZeroTellerWithRateLimiting(LIQUID_BTC_TELLER),
-            asset: 0x3C1BCa5a656e69edCD0D4E36BEbb3FcDAcA60Cf1, // WBTC scroll
+            asset: 0x68f180fcCe6836688e9084f035309E29Bf0A2095, // WBTC OP
             depositAmount: 1e8 // WBTC has 8 decimals
         });
     }
@@ -31,6 +31,6 @@ contract LiquidReferBtcScrollTest is LiquidReferBaseTest {
         return 2e8; // cap fuzzed WBTC deposits to 2 BTC
     }
     function _envVar() internal pure override returns (string memory) {
-        return "SCROLL_RPC_URL";
+        return "OP_RPC_URL";
     }
 }
