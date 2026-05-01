@@ -806,8 +806,10 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // Verify state changes
         assertEq(cancelledId, requestId, "Cancelled ID should match");
         assertFalse(priorityQueue.requestExists(requestId), "Request should be removed");
-        // eETH returned might have small rounding difference
-        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), eethBefore, 1, "eETH should be returned");
+        // eETH returned might have small rounding difference; the request → cancel
+        // round-trip does sharesForAmount → store → amountForShare, so up to 2 wei
+        // can be lost across the two integer divisions.
+        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), eethBefore, 2, "eETH should be returned");
     }
 
     function test_cancelWithdraw_finalized() public {
@@ -836,8 +838,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertFalse(priorityQueue.requestExists(requestId), "Request should be removed");
         assertFalse(priorityQueue.isFinalized(requestId), "Request should no longer be finalized");
         
-        // eETH should be returned (approximately due to share rounding)
-        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), eethInitial, 1, "eETH should be returned");
+        // eETH should be returned (approximately due to share rounding); request →
+        // fulfill → invalidate round-trips through two share/amount conversions.
+        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), eethInitial, 2, "eETH should be returned");
         
         // LP locked should decrease
         assertLt(priorityQueue.ethAmountLockedForPriorityWithdrawal(), lpLockedBefore, "LP locked should decrease");
@@ -987,8 +990,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Verify state changes
         assertEq(cancelledIds.length, 1, "Should cancel one request");
-        // eETH should return to approximately initial balance (small rounding due to share conversion)
-        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), eethInitial, 1, "eETH should be returned");
+        // eETH should return to approximately initial balance; up to 2 wei can be
+        // lost across the request → invalidate share/amount round-trip.
+        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), eethInitial, 2, "eETH should be returned");
     }
 
     //--------------------------------------------------------------------------------------
