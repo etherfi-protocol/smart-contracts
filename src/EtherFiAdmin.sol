@@ -247,7 +247,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (_report.accruedRewards == 0) {
             return;
         }
-        require(_report.accruedRewards > 0, "EtherFiAdmin: accrued rewards are negative");
 
         // This guard will be removed in future versions
         // Ensure that the new TVL didnt' change too much
@@ -259,7 +258,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (currentTVL > 0) {
             apr = 10000 * (_report.accruedRewards * 365 days) / (currentTVL * int256(elapsedTime));
         }
-        int256 absApr = (apr > 0) ? apr : -apr;
+        int256 absApr = (apr > 0) ? apr : - apr;
         require(absApr <= acceptableRebaseAprInBps, "EtherFiAdmin: TVL changed too much");
 
         membershipManager.rebase(_report.accruedRewards);

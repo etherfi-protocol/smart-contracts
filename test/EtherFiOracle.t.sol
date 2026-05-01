@@ -488,9 +488,9 @@ contract EtherFiOracleTest is TestSetup {
 
         _moveClock(1 days / 12);
 
-        // Negative accrued rewards now revert with the dedicated guard
+        // Change in APR is above 100%, which reverts
         report.accruedRewards = int128(-65 ether) / int128(365);
-        _executeAdminTasks(report, "EtherFiAdmin: accrued rewards are negative");
+        _executeAdminTasks(report, "EtherFiAdmin: TVL changed too much");
     }
 
     function test_SD_5() public {
