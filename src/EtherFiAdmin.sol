@@ -186,7 +186,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function setValidatorTaskBatchSize(uint16 _batchSize) external {
         if(!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        if (_batchSize > MAX_VALIDATOR_TASK_BATCH_SIZE) revert InvalidValidatorTaskBatchSize();
+        if (_batchSize == 0 || _batchSize > MAX_VALIDATOR_TASK_BATCH_SIZE) revert InvalidValidatorTaskBatchSize();
         validatorTaskBatchSize = _batchSize;
     }
 
