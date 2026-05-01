@@ -72,7 +72,16 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), OPERATING_TIMELOCK);
         vm.stopPrank();
 
-        // Ensure operating admin is an admin on NodeOperatorManager (required for whitelist ops)
+        // The mainnet NodeOperatorManager implementation predates this PR and
+        // does not expose NODE_OPERATOR_MANAGER_ADMIN_ROLE(). Upgrade in place
+        // so the new role getter and role-gated modifier are reachable, then
+        // grant the role used by whitelist ops.
+        address nodeOpMgrOwner = nodeOperatorManagerInstance.owner();
+        vm.startPrank(nodeOpMgrOwner);
+        NodeOperatorManager newNodeOpMgrImpl = new NodeOperatorManager(address(roleRegistryInstance));
+        nodeOperatorManagerInstance.upgradeTo(address(newNodeOpMgrImpl));
+        vm.stopPrank();
+
         vm.startPrank(roleOwner);
         roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), ETHERFI_OPERATING_ADMIN);
         vm.stopPrank();
