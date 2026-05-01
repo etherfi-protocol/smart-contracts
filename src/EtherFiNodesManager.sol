@@ -16,12 +16,14 @@ import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IStakingManager.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IEtherFiRateLimiter.sol";
+import "./utils/PausableUntil.sol";
 
 contract EtherFiNodesManager is
     Initializable,
     IEtherFiNodesManager,
     OwnableUpgradeable,
     PausableUpgradeable,
+    PausableUntil,
     ReentrancyGuardUpgradeable,
     UUPSUpgradeable
 {
@@ -84,6 +86,16 @@ contract EtherFiNodesManager is
     function unPauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
+    }
+
+    function pauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _pauseUntil();
+    }
+
+    function unpauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _unpauseUntil();
     }
 
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
@@ -486,5 +498,12 @@ contract EtherFiNodesManager is
     modifier onlyLegacyLinker() {
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE, msg.sender)) revert IncorrectRole();
         _;
+    }
+
+    /// @dev Route OZ's whenNotPaused through the pause-until check as well, so any function
+    ///      gated by whenNotPaused is automatically blocked during a timed pause too.
+    function _requireNotPaused() internal view override {
+        _requireNotPausedUntil();
+        super._requireNotPaused();
     }
 }

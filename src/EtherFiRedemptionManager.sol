@@ -17,6 +17,7 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IWeETH.sol";
 import "./interfaces/ILiquifier.sol";
+import "./utils/PausableUntil.sol";
 import "./EtherFiRestaker.sol";
 
 import "lib/BucketLimiter.sol";
@@ -37,7 +38,7 @@ struct RedemptionInfo {
     uint16 lowWatermarkInBpsOfTvl;
 }
 
-contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, ReentrancyGuardUpgradeable, UUPSUpgradeable {
+contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, UUPSUpgradeable {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
@@ -345,6 +346,14 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         _unpause();
     }
 
+    function pauseContractUntil() external hasRole(roleRegistry.PAUSE_UNTIL_ROLE()) {
+        _pauseUntil();
+    }
+
+    function unpauseContractUntil() external hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE()) {
+        _unpauseUntil();
+    }
+
     function _redeemEEth(uint256 eEthAmount, address receiver, address outputToken) internal {
         require(eEthAmount <= eEth.balanceOf(msg.sender), "EtherFiRedemptionManager: Insufficient balance");
         require(canRedeem(eEthAmount, outputToken), "EtherFiRedemptionManager: Exceeded total redeemable amount");
@@ -425,4 +434,10 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Reentra
         _;
     }
 
+    /// @dev Route OZ's whenNotPaused through the pause-until check as well, so any function
+    ///      gated by whenNotPaused is automatically blocked during a timed pause too.
+    function _requireNotPaused() internal view override {
+        _requireNotPausedUntil();
+        super._requireNotPaused();
+    }
 }

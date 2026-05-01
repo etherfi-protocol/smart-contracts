@@ -7,9 +7,11 @@ import "../src/interfaces/IEtherFiNodesManager.sol";
 import "../src/eigenlayer-interfaces/IEigenPod.sol";
 import "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import "../src/eigenlayer-interfaces/IStrategy.sol";
+import "../src/utils/PausableUntil.sol";
 import {BeaconChainProofs} from "../src/eigenlayer-libraries/BeaconChainProofs.sol";
 import {IDelegationManagerTypes} from "../src/eigenlayer-interfaces/IDelegationManager.sol";
 import {IEigenPodTypes} from "../src/eigenlayer-interfaces/IEigenPod.sol";
+import {EigenPodTestHelpers} from "./utils/EigenPodTestHelpers.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 
 contract EtherFiNodesManagerTest is TestSetup {
@@ -558,6 +560,8 @@ contract EtherFiNodesManagerTest is TestSetup {
         IEtherFiNode etherFiNode = managerInstance.etherFiNodeFromPubkeyHash(pkHash);
         IEigenPod pod = etherFiNode.getEigenPod();
 
+        EigenPodTestHelpers.forceValidatorActive(pod, pkHash);
+
         IEigenPodTypes.WithdrawalRequest[] memory reqs = new IEigenPodTypes.WithdrawalRequest[](1);
         reqs[0] = IEigenPodTypes.WithdrawalRequest({pubkey: pubkeys[0], amountGwei: amounts[0]});
 
@@ -634,6 +638,8 @@ contract EtherFiNodesManagerTest is TestSetup {
         bytes32 pkHash = managerInstance.calculateValidatorPubkeyHash(pubkeys[0]);
         IEtherFiNode etherFiNode = managerInstance.etherFiNodeFromPubkeyHash(pkHash);
         IEigenPod pod = etherFiNode.getEigenPod();
+
+        EigenPodTestHelpers.forceValidatorActive(pod, pkHash);
 
         IEigenPodTypes.ConsolidationRequest[] memory reqs = new IEigenPodTypes.ConsolidationRequest[](1);
         reqs[0] = IEigenPodTypes.ConsolidationRequest({
@@ -778,6 +784,299 @@ contract EtherFiNodesManagerTest is TestSetup {
     // ============================================
     // Helper Functions
     // ============================================
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------  pauseContractUntil / unpauseContractUntil  ----------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 constant PAUSABLE_UNTIL_SLOT =
+        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+    address nmPauseUntilPauser = makeAddr("nmPauseUntilPauser");
+    address nmUnpauseUntilUnpauser = makeAddr("nmUnpauseUntilUnpauser");
+
+    function _grantNmPauseUntilRoles() internal {
+        // Upgrade the RoleRegistry impl on the fork so it exposes PAUSE_UNTIL_ROLE / UNPAUSE_UNTIL_ROLE
+        vm.startPrank(roleRegistryInstance.owner());
+        RoleRegistry newImpl = new RoleRegistry();
+        roleRegistryInstance.upgradeTo(address(newImpl));
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), nmPauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), nmUnpauseUntilUnpauser);
+        vm.stopPrank();
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+    }
+
+    function _nmPausedUntil() internal view returns (uint256) {
+        return uint256(vm.load(address(managerInstance), PAUSABLE_UNTIL_SLOT));
+    }
+
+    function _pauseUntil() internal {
+        vm.prank(nmPauseUntilPauser);
+        managerInstance.pauseContractUntil();
+    }
+
+    function _expectPausedUntilRevert() internal {
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _nmPausedUntil())
+        );
+    }
+
+    function test_pauseContractUntil_requiresRole() public {
+        _grantNmPauseUntilRoles();
+        vm.prank(bob);
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        managerInstance.pauseContractUntil();
+
+        vm.prank(admin); // PROTOCOL_PAUSER alone is insufficient
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        managerInstance.pauseContractUntil();
+    }
+
+    function test_pauseContractUntil_setsState() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+        assertEq(_nmPausedUntil(), block.timestamp + managerInstance.MAX_PAUSE_DURATION());
+    }
+
+    function test_unpauseContractUntil_requiresRole() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        managerInstance.unpauseContractUntil();
+
+        vm.prank(admin); // PROTOCOL_UNPAUSER alone is insufficient
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        managerInstance.unpauseContractUntil();
+    }
+
+    function test_unpauseContractUntil_clearsState() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+
+        vm.prank(nmUnpauseUntilUnpauser);
+        managerInstance.unpauseContractUntil();
+        assertEq(_nmPausedUntil(), 0);
+    }
+
+    function test_unpauseContractUntil_revertsIfNotPaused() public {
+        _grantNmPauseUntilRoles();
+        vm.prank(nmUnpauseUntilUnpauser);
+        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
+        managerInstance.unpauseContractUntil();
+    }
+
+    // --- each whenNotPaused-gated function (now also blocked via _requireNotPaused override) ---
+    // All role-gated functions run their onlyX modifier BEFORE whenNotPaused, so we use the
+    // authorized caller on each.
+
+    function test_sweepFunds_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+        _expectPausedUntilRevert();
+        vm.prank(admin);
+        managerInstance.sweepFunds(testLegacyId);
+    }
+
+    function test_createEigenPod_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+        _expectPausedUntilRevert();
+        vm.prank(eigenlayerAdmin);
+        managerInstance.createEigenPod(testNode);
+    }
+
+    function test_startCheckpoint_byAddress_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+        _expectPausedUntilRevert();
+        vm.prank(podProver);
+        managerInstance.startCheckpoint(testNode);
+    }
+
+    function test_startCheckpoint_byId_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+        _expectPausedUntilRevert();
+        vm.prank(podProver);
+        managerInstance.startCheckpoint(testLegacyId);
+    }
+
+    function test_verifyCheckpointProofs_byAddress_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+
+        BeaconChainProofs.BalanceContainerProof memory bc;
+        BeaconChainProofs.BalanceProof[] memory bp;
+        _expectPausedUntilRevert();
+        vm.prank(podProver);
+        managerInstance.verifyCheckpointProofs(testNode, bc, bp);
+    }
+
+    function test_verifyCheckpointProofs_byId_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+
+        BeaconChainProofs.BalanceContainerProof memory bc;
+        BeaconChainProofs.BalanceProof[] memory bp;
+        _expectPausedUntilRevert();
+        vm.prank(podProver);
+        managerInstance.verifyCheckpointProofs(testLegacyId, bc, bp);
+    }
+
+    function test_setProofSubmitter_byAddress_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+        _expectPausedUntilRevert();
+        vm.prank(eigenlayerAdmin);
+        managerInstance.setProofSubmitter(testNode, bob);
+    }
+
+    function test_setProofSubmitter_byId_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+        _expectPausedUntilRevert();
+        vm.prank(eigenlayerAdmin);
+        managerInstance.setProofSubmitter(testLegacyId, bob);
+    }
+
+    function test_queueETHWithdrawal_byAddress_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+        _expectPausedUntilRevert();
+        vm.prank(eigenlayerAdmin);
+        managerInstance.queueETHWithdrawal(testNode, 1 ether);
+    }
+
+    function test_queueETHWithdrawal_byId_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+        _expectPausedUntilRevert();
+        vm.prank(eigenlayerAdmin);
+        managerInstance.queueETHWithdrawal(testLegacyId, 1 ether);
+    }
+
+    function test_completeQueuedETHWithdrawals_byAddress_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+        _expectPausedUntilRevert();
+        vm.prank(eigenlayerAdmin);
+        managerInstance.completeQueuedETHWithdrawals(testNode, true);
+    }
+
+    function test_completeQueuedETHWithdrawals_byId_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+        _expectPausedUntilRevert();
+        vm.prank(eigenlayerAdmin);
+        managerInstance.completeQueuedETHWithdrawals(testLegacyId, true);
+    }
+
+    function test_queueWithdrawals_byAddress_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+
+        IDelegationManager.QueuedWithdrawalParams[] memory params;
+        _expectPausedUntilRevert();
+        vm.prank(eigenlayerAdmin);
+        managerInstance.queueWithdrawals(testNode, params);
+    }
+
+    function test_queueWithdrawals_byId_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+
+        IDelegationManager.QueuedWithdrawalParams[] memory params;
+        _expectPausedUntilRevert();
+        vm.prank(eigenlayerAdmin);
+        managerInstance.queueWithdrawals(testLegacyId, params);
+    }
+
+    function test_completeQueuedWithdrawals_byAddress_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+
+        IDelegationManager.Withdrawal[] memory withdrawals;
+        IERC20[][] memory tokens;
+        bool[] memory receiveAsTokens;
+        _expectPausedUntilRevert();
+        vm.prank(eigenlayerAdmin);
+        managerInstance.completeQueuedWithdrawals(testNode, withdrawals, tokens, receiveAsTokens);
+    }
+
+    function test_completeQueuedWithdrawals_byId_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+
+        IDelegationManager.Withdrawal[] memory withdrawals;
+        IERC20[][] memory tokens;
+        bool[] memory receiveAsTokens;
+        _expectPausedUntilRevert();
+        vm.prank(eigenlayerAdmin);
+        managerInstance.completeQueuedWithdrawals(testLegacyId, withdrawals, tokens, receiveAsTokens);
+    }
+
+    function test_requestExecutionLayerTriggeredWithdrawal_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+
+        IEigenPod.WithdrawalRequest[] memory requests;
+        // pause modifier runs before the inline role check → any caller hits pause-until revert
+        _expectPausedUntilRevert();
+        managerInstance.requestExecutionLayerTriggeredWithdrawal(requests);
+    }
+
+    function test_requestConsolidation_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+
+        IEigenPod.ConsolidationRequest[] memory requests;
+        _expectPausedUntilRevert();
+        managerInstance.requestConsolidation(requests);
+    }
+
+    function test_linkPubkeyToNode_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+
+        bytes memory pubkey = vm.randomBytes(48);
+        _expectPausedUntilRevert();
+        vm.prank(address(stakingManagerInstance));
+        managerInstance.linkPubkeyToNode(pubkey, testNode, 9999);
+    }
+
+    function test_forwardExternalCall_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+
+        address[] memory nodes;
+        bytes[] memory data;
+        _expectPausedUntilRevert();
+        vm.prank(callForwarder);
+        managerInstance.forwardExternalCall(nodes, data, address(0));
+    }
+
+    function test_forwardEigenPodCall_blockedByPauseContractUntil() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+
+        address[] memory nodes;
+        bytes[] memory data;
+        _expectPausedUntilRevert();
+        vm.prank(callForwarder);
+        managerInstance.forwardEigenPodCall(nodes, data);
+    }
+
+    function test_sweepFunds_unblockedAfterPauseExpires() public {
+        _grantNmPauseUntilRoles();
+        _pauseUntil();
+        vm.warp(block.timestamp + managerInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.deal(testNode, 1 ether);
+        vm.prank(admin);
+        managerInstance.sweepFunds(testLegacyId);
+    }
 
     /// @notice Check if EIP-4788 beacon roots contract is available and functional
     /// @dev Tenderly VNETs don't properly simulate EIP-4788, causing checkpoint calls to fail

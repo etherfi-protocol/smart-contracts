@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "./TestSetup.sol";
 import "forge-std/Test.sol";
+import "../src/utils/PausableUntil.sol";
 
 contract LiquidityPoolTest is TestSetup {
     uint256[] public processedBids;
@@ -956,13 +957,41 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_WithdrawFailsWhenPaused() public {
+        // Permissionless claim paths (withdrawRequestNFT, priorityWithdrawalQueue) bypass the LP pause.
+        // Only the gated callers (membershipManager, etherFiRedemptionManager) must still revert at the pause gate.
         vm.prank(admin);
         liquidityPoolInstance.pauseContract();
-        
-        vm.startPrank(address(withdrawRequestNFTInstance));
+
+        vm.startPrank(address(membershipManagerInstance));
         vm.expectRevert("Pausable: paused");
         liquidityPoolInstance.withdraw(alice, 1 ether);
         vm.stopPrank();
+
+        vm.startPrank(address(etherFiRedemptionManagerInstance));
+        vm.expectRevert("Pausable: paused");
+        liquidityPoolInstance.withdraw(alice, 1 ether);
+        vm.stopPrank();
+    }
+
+    function test_WithdrawByWithdrawRequestNFT_succeedsWhenLpPaused() public {
+        // Permissionless claim path: LP.withdraw must succeed for withdrawRequestNFT even when the LP is paused.
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(alice, 5 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(reqId);
+
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+        assertTrue(liquidityPoolInstance.paused(), "precondition: LP must be paused");
+
+        uint256 aliceBalBefore = alice.balance;
+        vm.prank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        assertGe(alice.balance, aliceBalBefore + 5 ether - 1 wei);
     }
 
     // ============ Request Membership NFT Withdraw Tests ============
@@ -1451,6 +1480,306 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.rebase(10 ether);
 
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 110 ether);
+    }
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------  pauseContractUntil / unpauseContractUntil  ----------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 constant PAUSABLE_UNTIL_SLOT =
+        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+    address lpPauseUntilPauser = makeAddr("lpPauseUntilPauser");
+    address lpUnpauseUntilUnpauser = makeAddr("lpUnpauseUntilUnpauser");
+
+    function _grantLpPauseUntilRoles() internal {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), lpPauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), lpUnpauseUntilUnpauser);
+        vm.stopPrank();
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+    }
+
+    function _lpPausedUntil() internal view returns (uint256) {
+        return uint256(vm.load(address(liquidityPoolInstance), PAUSABLE_UNTIL_SLOT));
+    }
+
+    function test_pauseContractUntil_requiresRole() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        liquidityPoolInstance.pauseContractUntil();
+
+        // PROTOCOL_PAUSER (admin) alone is insufficient
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        liquidityPoolInstance.pauseContractUntil();
+    }
+
+    function test_pauseContractUntil_setsState() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        assertEq(_lpPausedUntil(), block.timestamp + liquidityPoolInstance.MAX_PAUSE_DURATION());
+    }
+
+    function test_unpauseContractUntil_requiresRole() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        liquidityPoolInstance.unpauseContractUntil();
+
+        // PROTOCOL_UNPAUSER (admin) alone is insufficient
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        liquidityPoolInstance.unpauseContractUntil();
+    }
+
+    function test_unpauseContractUntil_clearsState() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.prank(lpUnpauseUntilUnpauser);
+        liquidityPoolInstance.unpauseContractUntil();
+        assertEq(_lpPausedUntil(), 0);
+    }
+
+    function test_unpauseContractUntil_revertsIfNotPaused() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpUnpauseUntilUnpauser);
+        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
+        liquidityPoolInstance.unpauseContractUntil();
+    }
+
+    // --- each whenNotPaused function must now also revert under pauseContractUntil ---
+
+    function test_deposit_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.deposit{value: 1 ether}();
+    }
+
+    function test_depositWithReferral_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.deposit{value: 1 ether}(address(0));
+    }
+
+    function test_depositToRecipient_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.depositToRecipient(bob, 1 ether, address(0));
+    }
+
+    function test_withdraw_blockedByPauseContractUntil() public {
+        // Gated callers (membershipManager, etherFiRedemptionManager) must revert under pauseContractUntil.
+        // Permissionless claim paths (withdrawRequestNFT, priorityWithdrawalQueue) bypass this gate — see
+        // test_withdraw_byWithdrawRequestNFT_succeedsUnderPauseContractUntil below.
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.prank(address(etherFiRedemptionManagerInstance));
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.withdraw(bob, 1 ether);
+
+        vm.prank(address(membershipManagerInstance));
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.withdraw(bob, 1 ether);
+    }
+
+    function test_withdraw_byWithdrawRequestNFT_succeedsUnderPauseContractUntil() public {
+        // Symmetric to test_WithdrawByWithdrawRequestNFT_succeedsWhenLpPaused: a finalized claim
+        // must continue to pay out under the soft `pauseContractUntil` gate too.
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(alice, 5 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(reqId);
+
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        assertGt(_lpPausedUntil(), 0, "precondition: LP must be pause-until");
+
+        uint256 aliceBalBefore = alice.balance;
+        vm.prank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        assertGe(alice.balance, aliceBalBefore + 5 ether - 1 wei);
+    }
+
+    function test_withdraw_byWithdrawRequestNFT_succeedsWhenBothPauseAndPauseUntilActive() public {
+        // Hard pause AND soft pause-until both active: permissionless claim must still succeed.
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(alice, 5 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(reqId);
+
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+
+        uint256 aliceBalBefore = alice.balance;
+        vm.prank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        assertGe(alice.balance, aliceBalBefore + 5 ether - 1 wei);
+    }
+
+    function test_requestWithdraw_blockedByPauseContractUntil() public {
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+    }
+
+    function test_requestWithdrawWithPermit_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        ILiquidityPool.PermitInput memory emptyPermit;
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.requestWithdrawWithPermit(bob, 1 ether, emptyPermit);
+    }
+
+    function test_requestMembershipNFTWithdraw_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.prank(address(membershipManagerInstance));
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.requestMembershipNFTWithdraw(bob, 1 ether, 0);
+    }
+
+    function test_batchRegister_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        uint256[] memory empty;
+        IStakingManager.DepositData[] memory emptyDd;
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.batchRegister(emptyDd, empty, address(0));
+    }
+
+    function test_batchCreateBeaconValidators_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        uint256[] memory empty;
+        IStakingManager.DepositData[] memory emptyDd;
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.batchCreateBeaconValidators(emptyDd, empty, address(0));
+    }
+
+    function test_batchApproveRegistration_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        uint256[] memory empty;
+        bytes[] memory emptyBytes;
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.batchApproveRegistration(empty, emptyBytes, emptyBytes);
+    }
+
+    function test_confirmAndFundBeaconValidators_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        IStakingManager.DepositData[] memory emptyDd;
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.confirmAndFundBeaconValidators(emptyDd, 32 ether);
+    }
+
+    function test_deposit_unblockedAfterPauseExpires() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.warp(block.timestamp + liquidityPoolInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+    }
+
+    function test_deposit_unblockedAfterExplicitUnpause() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        vm.prank(lpUnpauseUntilUnpauser);
+        liquidityPoolInstance.unpauseContractUntil();
+
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
     }
 
     // ============================================================================

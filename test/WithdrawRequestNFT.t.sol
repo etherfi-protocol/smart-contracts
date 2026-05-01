@@ -5,6 +5,7 @@ pragma solidity ^0.8.13;
 
 import "forge-std/console2.sol";
 import "./TestSetup.sol";
+import "../src/utils/PausableUntil.sol";
 
 
 contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
@@ -295,6 +296,9 @@ contract WithdrawRequestNFTTest is TestSetup {
 
     // It depicts the scenario where bob's WithdrawalRequest NFT is stolen by alice.
     // The owner invalidates the request 
+    /// @dev Updated: admin MUST NOT be able to invalidate a request once it has been finalized.
+    ///      Previously this test demonstrated the legacy (unsafe) capability; it now proves the
+    ///      post-finalization invalidation path reverts and the request remains valid.
     function test_InvalidatedRequestNft_after_finalization() public returns (uint256 requestId) {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
@@ -318,7 +322,10 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertTrue(withdrawRequestNFTInstance.isValid(requestId), "Request should be valid");
 
         vm.prank(admin);
+        vm.expectRevert("Cannot invalidate finalized request");
         withdrawRequestNFTInstance.invalidateRequest(requestId);
+
+        assertTrue(withdrawRequestNFTInstance.isValid(requestId), "Request must remain valid after rejected invalidation");
     }
 
     function test_InvalidatedRequestNft_before_finalization() public returns (uint256 requestId) {
@@ -747,6 +754,203 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.unPauseContract();
     }
 
+    //--------------------------------------------------------------------------------------
+    //--------------------------  pauseContractUntil / unpauseContractUntil  ---------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 constant PAUSABLE_UNTIL_SLOT =
+        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+    address wrPauseUntilPauser = makeAddr("wrPauseUntilPauser");
+    address wrUnpauseUntilUnpauser = makeAddr("wrUnpauseUntilUnpauser");
+
+    function _grantWrPauseUntilRoles() internal {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), wrPauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), wrUnpauseUntilUnpauser);
+        vm.stopPrank();
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+    }
+
+    function _wrPausedUntil() internal view returns (uint256) {
+        return uint256(vm.load(address(withdrawRequestNFTInstance), PAUSABLE_UNTIL_SLOT));
+    }
+
+    function test_pauseContractUntil_requiresRole() public {
+        _grantWrPauseUntilRoles();
+        vm.prank(bob);
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        withdrawRequestNFTInstance.pauseContractUntil();
+
+        // PROTOCOL_PAUSER (admin) alone is insufficient
+        vm.prank(admin);
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        withdrawRequestNFTInstance.pauseContractUntil();
+    }
+
+    function test_pauseContractUntil_setsState() public {
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+        assertEq(_wrPausedUntil(), block.timestamp + withdrawRequestNFTInstance.MAX_PAUSE_DURATION());
+    }
+
+    function test_unpauseContractUntil_requiresRole() public {
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        withdrawRequestNFTInstance.unpauseContractUntil();
+
+        // PROTOCOL_UNPAUSER (admin) alone is insufficient
+        vm.prank(admin);
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        withdrawRequestNFTInstance.unpauseContractUntil();
+    }
+
+    function test_unpauseContractUntil_clearsState() public {
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+
+        vm.prank(wrUnpauseUntilUnpauser);
+        withdrawRequestNFTInstance.unpauseContractUntil();
+        assertEq(_wrPausedUntil(), 0);
+    }
+
+    function test_unpauseContractUntil_revertsIfNotPaused() public {
+        _grantWrPauseUntilRoles();
+        vm.prank(wrUnpauseUntilUnpauser);
+        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
+        withdrawRequestNFTInstance.unpauseContractUntil();
+    }
+
+    // The scan-of-share-remainder gate was removed from unPauseContract / unpauseContractUntil.
+    // Unpausing must succeed even when isScanOfShareRemainderCompleted() returns false.
+    function test_unPauseContract_worksWhenScanIncomplete() public {
+        // Force scan-incomplete state: scanFrom < scanUntil + 1
+        vm.startPrank(withdrawRequestNFTInstance.owner());
+        updateParam(1, 5);
+        vm.stopPrank();
+        assertFalse(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "scan should be incomplete");
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.pauseContract();
+        assertTrue(withdrawRequestNFTInstance.paused());
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.unPauseContract();
+        assertFalse(withdrawRequestNFTInstance.paused(), "Contract should unpause regardless of scan state");
+    }
+
+    function test_unpauseContractUntil_worksWhenScanIncomplete() public {
+        vm.startPrank(withdrawRequestNFTInstance.owner());
+        updateParam(1, 5);
+        vm.stopPrank();
+        assertFalse(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "scan should be incomplete");
+
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+        assertEq(_wrPausedUntil(), block.timestamp + withdrawRequestNFTInstance.MAX_PAUSE_DURATION());
+
+        vm.prank(wrUnpauseUntilUnpauser);
+        withdrawRequestNFTInstance.unpauseContractUntil();
+        assertEq(_wrPausedUntil(), 0, "pause-until should clear regardless of scan state");
+    }
+
+    // --- each gated function (whenNotPaused → blocked by pause-until too) ---
+
+    function test_requestWithdraw_blockedByPauseContractUntil() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        vm.stopPrank();
+
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _wrPausedUntil())
+        );
+        liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+    }
+
+    // claimWithdraw and batchClaimWithdraw were turned permissionless (commit 54a2226), so
+    // pauseContractUntil on the WithdrawRequestNFT no longer blocks finalized claims. The pair
+    // below pins this behavior — they used to assert ContractPausedUntil reverts.
+
+    function test_claimWithdraw_succeedsUnderPauseContractUntil() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(requestId);
+
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+        assertGt(_wrPausedUntil(), 0, "precondition: WR must be pause-until");
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertEq(bob.balance - bobBalBefore, 1 ether, "claim must pay out under pauseContractUntil");
+    }
+
+    function test_batchClaimWithdraw_succeedsUnderPauseContractUntil() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(requestId);
+
+        uint256[] memory ids = new uint256[](1);
+        ids[0] = requestId;
+
+        _grantWrPauseUntilRoles();
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.batchClaimWithdraw(ids);
+        assertEq(bob.balance - bobBalBefore, 1 ether, "batch claim must pay out under pauseContractUntil");
+    }
+
+    // requestWithdraw is still gated by both pause and pause-until — pin that too.
+    function test_requestWithdraw_blockedByLpPauseContractUntil() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        vm.stopPrank();
+
+        // Grant LP-side pause-until role and pause LP-until.
+        address lpPauser = makeAddr("lpPauser_wrTest");
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), lpPauser);
+        vm.stopPrank();
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        vm.prank(lpPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        uint256 lpPausedUntil = uint256(vm.load(address(liquidityPoolInstance), PAUSABLE_UNTIL_SLOT));
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, lpPausedUntil)
+        );
+        liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+    }
+
     function test_getEEthRemainderAmount() public {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
@@ -1036,6 +1240,9 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId), alice, "NFT should be transferred");
     }
 
+    /// @dev Updated: invalidation now only possible pre-finalization, so the test invalidates
+    ///      first, THEN finalizes, then asserts claim reverts on `!isValid`. End-state assertion
+    ///      (invalid request cannot be claimed) is unchanged.
     function test_claimWithdraw_InvalidRequest() public {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
@@ -1047,13 +1254,14 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
-        _finalizeWithdrawalRequest(requestId);
-
-        // Invalidate request
+        // Invalidate BEFORE finalization (the only time admin can do it now).
         vm.prank(admin);
         withdrawRequestNFTInstance.invalidateRequest(requestId);
 
-        // Cannot claim invalid request
+        // An invalid request can still be finalized (finalization cursor is monotonic and doesn't check validity).
+        _finalizeWithdrawalRequest(requestId);
+
+        // Claim still blocked by the `isValid` check inside `_claimWithdraw`.
         vm.prank(bob);
         vm.expectRevert("Request is not valid");
         withdrawRequestNFTInstance.claimWithdraw(requestId);
@@ -1069,5 +1277,318 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_isValid_NonExistent() public {
         vm.expectRevert("Request does not exist");
         withdrawRequestNFTInstance.isValid(99999);
+    }
+
+    // -----------------------------------------------------------------
+    //  Permissionless claim + no-post-finalization-invalidation tests
+    // -----------------------------------------------------------------
+
+    /// @dev Helper: make a withdraw request owned by `owner` for `amount`.
+    function _requestFor(address owner, uint96 amount) internal returns (uint256 requestId) {
+        startHoax(owner);
+        liquidityPoolInstance.deposit{value: amount}();
+        eETHInstance.approve(address(liquidityPoolInstance), amount);
+        requestId = liquidityPoolInstance.requestWithdraw(owner, amount);
+        vm.stopPrank();
+    }
+
+    function test_claimWithdraw_succeedsWhilePaused_ifFinalized() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        _finalizeWithdrawalRequest(requestId);
+
+        // Pause BEFORE the claim — finalized claim must proceed anyway.
+        vm.prank(admin);
+        withdrawRequestNFTInstance.pauseContract();
+        assertTrue(withdrawRequestNFTInstance.paused(), "precondition: must be paused");
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+
+        assertEq(bob.balance - bobBalBefore, 1 ether, "finalized claim must pay out while paused");
+    }
+
+    function test_batchClaimWithdraw_succeedsWhilePaused_ifFinalized() public {
+        uint256 r1 = _requestFor(bob, 1 ether);
+        uint256 r2 = _requestFor(bob, 2 ether);
+        _finalizeWithdrawalRequest(r1);
+        _finalizeWithdrawalRequest(r2);
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.pauseContract();
+
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = r1;
+        ids[1] = r2;
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.batchClaimWithdraw(ids);
+
+        assertEq(bob.balance - bobBalBefore, 3 ether, "batch claim must pay out while paused");
+    }
+
+    function test_claimWithdraw_revertsWhenUnfinalized_paused() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        // NOT finalized.
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.pauseContract();
+
+        vm.prank(bob);
+        vm.expectRevert("Request is not finalized");
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+    }
+
+    function test_claimWithdraw_revertsWhenUnfinalized_unpaused() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        // NOT finalized, NOT paused (matches post-setUp state).
+
+        vm.prank(bob);
+        vm.expectRevert("Request is not finalized");
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+    }
+
+    function test_claimWithdraw_succeedsWhenLiquidityPoolPaused() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        _finalizeWithdrawalRequest(requestId);
+
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+        assertTrue(liquidityPoolInstance.paused(), "precondition: LP must be paused");
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+
+        assertEq(bob.balance - bobBalBefore, 1 ether, "finalized claim must pay out while LP is paused");
+    }
+
+    function test_batchClaimWithdraw_succeedsWhenLiquidityPoolPaused() public {
+        uint256 r1 = _requestFor(bob, 1 ether);
+        uint256 r2 = _requestFor(bob, 2 ether);
+        _finalizeWithdrawalRequest(r1);
+        _finalizeWithdrawalRequest(r2);
+
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = r1;
+        ids[1] = r2;
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.batchClaimWithdraw(ids);
+
+        assertEq(bob.balance - bobBalBefore, 3 ether, "batch claim must pay out while LP is paused");
+    }
+
+    function test_claimWithdraw_succeedsWhenBothPaused() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        _finalizeWithdrawalRequest(requestId);
+
+        vm.startPrank(admin);
+        liquidityPoolInstance.pauseContract();
+        withdrawRequestNFTInstance.pauseContract();
+        vm.stopPrank();
+        assertTrue(liquidityPoolInstance.paused(), "precondition: LP must be paused");
+        assertTrue(withdrawRequestNFTInstance.paused(), "precondition: NFT must be paused");
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+
+        assertEq(bob.balance - bobBalBefore, 1 ether, "finalized claim must pay out while both are paused");
+    }
+
+    function test_liquidityPool_withdraw_revertsForOtherCallersWhenLpPaused() public {
+        // Pause the LP, then assert that the two non-permissionless callers (membershipManager and
+        // etherFiRedemptionManager) still revert at the pause gate. The pause check sits between the
+        // caller-allowlist require and the eETH-balance check, so no LP funding is needed.
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+
+        address membershipMgr = address(liquidityPoolInstance.membershipManager());
+        address redemptionMgr = address(liquidityPoolInstance.etherFiRedemptionManager());
+
+        if (membershipMgr != address(0)) {
+            vm.prank(membershipMgr);
+            vm.expectRevert("Pausable: paused");
+            liquidityPoolInstance.withdraw(bob, 1 ether);
+        }
+
+        if (redemptionMgr != address(0)) {
+            vm.prank(redemptionMgr);
+            vm.expectRevert("Pausable: paused");
+            liquidityPoolInstance.withdraw(bob, 1 ether);
+        }
+    }
+
+    // -----------------------------------------------------------------
+    //  LP-side pauseContractUntil + permissionless claim parity tests
+    //  (mirror the LP-paused tests above; cover the soft pause-until gate)
+    // -----------------------------------------------------------------
+
+    /// @dev Helper: grant LP-side pause-until role and apply pauseContractUntil on the LP.
+    function _pauseLpUntil() internal returns (uint256 lpPausedUntil) {
+        address lpPauser = makeAddr("lpPauser_permissionlessClaim");
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), lpPauser);
+        vm.stopPrank();
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        vm.prank(lpPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        lpPausedUntil = uint256(vm.load(address(liquidityPoolInstance), PAUSABLE_UNTIL_SLOT));
+        require(lpPausedUntil > 0, "LP pause-until not set");
+    }
+
+    function test_claimWithdraw_succeedsWhenLpPausedUntil() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        _finalizeWithdrawalRequest(requestId);
+
+        _pauseLpUntil();
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertEq(bob.balance - bobBalBefore, 1 ether, "finalized claim must pay out while LP is pause-until");
+    }
+
+    function test_batchClaimWithdraw_succeedsWhenLpPausedUntil() public {
+        uint256 r1 = _requestFor(bob, 1 ether);
+        uint256 r2 = _requestFor(bob, 2 ether);
+        _finalizeWithdrawalRequest(r1);
+        _finalizeWithdrawalRequest(r2);
+
+        _pauseLpUntil();
+
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = r1;
+        ids[1] = r2;
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.batchClaimWithdraw(ids);
+        assertEq(bob.balance - bobBalBefore, 3 ether, "batch claim must pay out while LP is pause-until");
+    }
+
+    function test_claimWithdraw_succeedsWhenLpPauseAndPauseUntilBothActive() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        _finalizeWithdrawalRequest(requestId);
+
+        _pauseLpUntil();
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertEq(bob.balance - bobBalBefore, 1 ether, "claim must pay out when LP has both pause and pause-until set");
+    }
+
+    function test_liquidityPool_withdraw_revertsForGatedCallersWhenLpPausedUntil() public {
+        uint256 lpPausedUntil = _pauseLpUntil();
+
+        address membershipMgr = address(liquidityPoolInstance.membershipManager());
+        address redemptionMgr = address(liquidityPoolInstance.etherFiRedemptionManager());
+
+        if (membershipMgr != address(0)) {
+            vm.prank(membershipMgr);
+            vm.expectRevert(
+                abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, lpPausedUntil)
+            );
+            liquidityPoolInstance.withdraw(bob, 1 ether);
+        }
+
+        if (redemptionMgr != address(0)) {
+            vm.prank(redemptionMgr);
+            vm.expectRevert(
+                abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, lpPausedUntil)
+            );
+            liquidityPoolInstance.withdraw(bob, 1 ether);
+        }
+    }
+
+    function test_liquidityPool_requestWithdraw_revertsWhenLpPausedUntil() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        vm.stopPrank();
+
+        uint256 lpPausedUntil = _pauseLpUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, lpPausedUntil)
+        );
+        liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+    }
+
+    function test_liquidityPool_requestWithdraw_revertsWhenLpPaused() public {
+        // Sanity: deposit / requestWithdraw remain gated by the LP pause — only the
+        // claim path is permissionless.
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+
+        vm.prank(bob);
+        vm.expectRevert("Pausable: paused");
+        liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+    }
+
+    function test_invalidateRequest_revertsForFinalizedRequest() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        _finalizeWithdrawalRequest(requestId);
+        assertTrue(withdrawRequestNFTInstance.isFinalized(requestId));
+
+        vm.prank(admin);
+        vm.expectRevert("Cannot invalidate finalized request");
+        withdrawRequestNFTInstance.invalidateRequest(requestId);
+
+        // Still valid & claimable after the rejected invalidate attempt.
+        assertTrue(withdrawRequestNFTInstance.isValid(requestId), "should still be valid");
+
+        uint256 bobBalBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertEq(bob.balance - bobBalBefore, 1 ether);
+    }
+
+    function test_invalidateRequest_succeedsForUnfinalizedRequest() public {
+        uint256 requestId = _requestFor(bob, 1 ether);
+        assertFalse(withdrawRequestNFTInstance.isFinalized(requestId));
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.invalidateRequest(requestId);
+
+        assertFalse(withdrawRequestNFTInstance.isValid(requestId), "should be invalid after admin action");
+    }
+
+    /// @dev Off-by-one: the token at EXACTLY lastFinalizedRequestId is finalized
+    ///      and therefore must NOT be invalidatable. The next token (id + 1) is
+    ///      not finalized and must still be invalidatable.
+    function test_invalidateRequest_boundary_atLastFinalizedRequestId() public {
+        uint256 r1 = _requestFor(bob, 1 ether);
+        uint256 r2 = _requestFor(bob, 1 ether);
+
+        // Finalize only r1.
+        _finalizeWithdrawalRequest(r1);
+        assertEq(uint256(withdrawRequestNFTInstance.lastFinalizedRequestId()), r1, "r1 is the boundary");
+
+        // r1 == lastFinalizedRequestId → cannot invalidate.
+        vm.prank(admin);
+        vm.expectRevert("Cannot invalidate finalized request");
+        withdrawRequestNFTInstance.invalidateRequest(r1);
+
+        // r2 == lastFinalizedRequestId + 1 → can invalidate.
+        vm.prank(admin);
+        withdrawRequestNFTInstance.invalidateRequest(r2);
+        assertFalse(withdrawRequestNFTInstance.isValid(r2), "r2 should be invalid");
     }
 }
