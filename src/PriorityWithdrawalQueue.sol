@@ -34,6 +34,7 @@ contract PriorityWithdrawalQueue is
     //--------------------------------------------------------------------------------------
 
     uint96 public constant MIN_AMOUNT = 0.01 ether;
+    uint96 public constant MAX_AMOUNT = 1000 ether;
     uint256 private constant _BASIS_POINT_SCALE = 1e4;
 
     //--------------------------------------------------------------------------------------
@@ -191,7 +192,7 @@ contract PriorityWithdrawalQueue is
         uint96 amountOfEEth,
         uint96 amountWithFee
     ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
-        if (amountOfEEth < MIN_AMOUNT) revert InvalidAmount();
+        if (amountOfEEth < MIN_AMOUNT || amountOfEEth > MAX_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
 
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(this), amountOfEEth);
@@ -205,7 +206,7 @@ contract PriorityWithdrawalQueue is
         uint96 amountWithFee,
         PermitInput calldata permit
     ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
-        if (amountOfEEth < MIN_AMOUNT) revert InvalidAmount();
+        if (amountOfEEth < MIN_AMOUNT || amountOfEEth > MAX_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
 
         try eETH.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {
@@ -234,7 +235,7 @@ contract PriorityWithdrawalQueue is
         IERC20(address(weETH)).safeTransferFrom(msg.sender, address(this), weEthAmount);
         uint96 eEthAmount = uint96(weETH.unwrap(weEthAmount));
 
-        if (eEthAmount < MIN_AMOUNT) revert InvalidAmount();
+        if (eEthAmount < MIN_AMOUNT || eEthAmount > MAX_AMOUNT) revert InvalidAmount();
 
         (requestId,) = _queueWithdrawRequest(msg.sender, eEthAmount, amountWithFee);
         _verifyRequestPostConditions(lpEthBefore, queueEEthSharesBefore, eEthAmount);
@@ -261,7 +262,7 @@ contract PriorityWithdrawalQueue is
         IERC20(address(weETH)).safeTransferFrom(msg.sender, address(this), weEthAmount);
         uint96 eEthAmount = uint96(weETH.unwrap(weEthAmount));
 
-        if (eEthAmount < MIN_AMOUNT) revert InvalidAmount();
+        if (eEthAmount < MIN_AMOUNT || eEthAmount > MAX_AMOUNT) revert InvalidAmount();
 
         (requestId,) = _queueWithdrawRequest(msg.sender, eEthAmount, amountWithFee);
         _verifyRequestPostConditions(lpEthBefore, queueEEthSharesBefore, eEthAmount);
