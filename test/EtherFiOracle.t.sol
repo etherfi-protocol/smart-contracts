@@ -1410,4 +1410,126 @@ contract EtherFiOracleTest is TestSetup {
         vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
         etherFiAdminInstance.unPause(true, false, false, false, false, false);
     }
+
+    function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsCap() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 20000 ether; // > 10000 ether/day cap
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal amount exceeds max");
+    }
+
+    function test_executeTasks_revertsWhenValidatorApprovalsExceedCap() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.validatorsToApprove = new uint256[](400); // > 200/day cap
+        for (uint256 i = 0; i < 400; i++) {
+            report.validatorsToApprove[i] = i + 1;
+        }
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: number of validators to approve exceeds max");
+    }
+
+    // Happy path: a report with a non-zero finalized-withdrawal amount that stays
+    // within the per-day cap processes cleanly and advances the LP's locked
+    // accounting.
+    function test_executeTasks_finalizedWithdrawalWithinCap_succeeds() public {
+        vm.deal(alice, 200 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 200 ether}();
+
+        uint256 lockedBefore = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 10 ether;
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report);
+
+        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), lockedBefore + 10 ether);
+    }
+
+    // LP-liquidity sanity check in _handleWithdrawals: finalized amount +
+    // existing LP lock + priority-queue lock must not exceed the LP's ETH
+    // balance.
+    function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsLpLiquidity() public {
+        // Deposit a small amount so the LP balance is modest.
+        vm.deal(alice, 5 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 6 ether; // 6 > LP balance (5)
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+    }
+
+    // The liquidity check also counts the priority-queue outstanding lock, so a
+    // report that fits in the LP alone can still revert once the priority lock
+    // is considered.
+    function test_executeTasks_revertsWhenFinalizedPlusPriorityLockExceedsLp() public {
+        vm.deal(alice, 10 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+
+        // Force the priority queue to report an outstanding lock, so the
+        // EtherFiAdmin-side check must add it to the LP's current commitments.
+        vm.mockCall(
+            address(priorityQueueInstance),
+            abi.encodeWithSelector(priorityQueueInstance.ethAmountLockedForPriorityWithdrawal.selector),
+            abi.encode(uint128(8 ether))
+        );
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 5 ether; // 5 + 0 + 8 > 10
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+    }
+
+    // The liquidity check compares against the LP's actual ETH balance, not
+    // the internal totalValueInLp accounting. ETH that arrives at the LP
+    // outside a deposit path (e.g., validator principal returning before the
+    // next rebase) bumps the balance while accounting lags — a finalized
+    // withdrawal drawing on those funds should still pass the check.
+    function test_executeTasks_finalizedWithdrawalWithinLpBalance_succeeds() public {
+        vm.deal(alice, 5 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        // Push extra ETH into the LP without touching totalValueInLp, so
+        // balance (15) > totalValueInLp (5).
+        vm.deal(address(liquidityPoolInstance), address(liquidityPoolInstance).balance + 10 ether);
+        assertGt(address(liquidityPoolInstance).balance, liquidityPoolInstance.totalValueInLp());
+
+        uint256 lockedBefore = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 6 ether; // > totalValueInLp (5), <= balance (15)
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report);
+
+        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), lockedBefore + 6 ether);
+    }
+
+    // The flip side of the balance-based check: if the LP's actual ETH falls
+    // below what totalValueInLp would suggest, the check reverts even though
+    // the accounting says the withdrawal fits.
+    function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsLpBalance() public {
+        vm.deal(alice, 10 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+
+        // Knock the LP's ETH balance below its accounting so the two diverge.
+        vm.deal(address(liquidityPoolInstance), 4 ether);
+        assertGt(liquidityPoolInstance.totalValueInLp(), address(liquidityPoolInstance).balance);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 5 ether; // <= totalValueInLp (10), > balance (4)
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+    }
 }

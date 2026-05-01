@@ -695,7 +695,16 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         membershipManagerProxy = new UUPSProxy(address(membershipManagerImplementation), "");
         membershipManagerInstance = MembershipManagerV0(payable(membershipManagerProxy));
 
-        etherFiAdminImplementation = new EtherFiAdmin();
+        // Deploy PriorityWithdrawalQueue before EtherFiAdmin so the admin's
+        // immutable priorityWithdrawalQueue constructor arg can be wired up.
+        priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
+        UUPSProxy priorityQueueProxy = new UUPSProxy(
+            address(priorityQueueImplementation),
+            abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
+        );
+        priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
+
+        etherFiAdminImplementation = new EtherFiAdmin(address(priorityQueueInstance), 10000 ether, 200);
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
 
@@ -718,13 +727,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiRestakerImplementation = new EtherFiRestaker(address(0x0), address(etherFiRedemptionManagerInstance));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
-
-        priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
-        UUPSProxy priorityQueueProxy = new UUPSProxy(
-            address(priorityQueueImplementation),
-            abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
-        );
-        priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
 
         etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance))), "");
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
@@ -916,7 +918,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_etherfiAdmin() internal {
-        address newAdminImpl = address(new EtherFiAdmin());
+        address newAdminImpl = address(new EtherFiAdmin(address(priorityQueueInstance), 10000 ether, 200));
         vm.prank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
