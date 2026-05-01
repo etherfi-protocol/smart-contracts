@@ -11,6 +11,7 @@ import "../../../src/interfaces/IRoleRegistry.sol";
 import "../../../src/interfaces/IStakingManager.sol";
 import "../../../src/interfaces/IEtherFiRateLimiter.sol";
 import {IEigenPod, IEigenPodTypes } from "../../../src/eigenlayer-interfaces/IEigenPod.sol";
+import {EigenPodTestHelpers} from "../../utils/EigenPodTestHelpers.sol";
 
 /**
  * @title ConsolidationThroughEOATest
@@ -148,6 +149,12 @@ contract ConsolidationThroughEOATest is Test {
         console2.log("Linking legacy validator ids complete");
 
         ( , IEigenPod pod0) = _resolvePod(pubkeys[0]);
+
+        // Switch-to-compounding has src == target, so each request's pubkey
+        // must be ACTIVE in pod0.
+        for (uint256 i = 0; i < pubkeys.length; ++i) {
+            EigenPodTestHelpers.forceValidatorActive(pod0, pubkeys[i]);
+        }
 
         IEigenPodTypes.ConsolidationRequest[] memory reqs = _switchToCompoundingRequestsFromPubkeys(pubkeys);
 

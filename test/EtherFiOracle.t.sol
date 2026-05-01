@@ -1347,7 +1347,7 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(wrongReport);
     }
 
-    function test_executeTasks_insufficientRole() public {
+    function test_executeTasks_permissionless() public {
         vm.prank(owner);
         etherFiOracleInstance.setQuorumSize(1);
 
@@ -1361,9 +1361,16 @@ contract EtherFiOracleTest is TestSetup {
 
         _moveClock(int256(uint256(etherFiAdminInstance.postReportWaitTimeInSlots()) + 1));
 
+        // chad has no roles; executeTasks is permissionless once consensus is reached
+        // and the report passes the freshness/sequencing checks.
+        assertFalse(roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), chad));
+        assertFalse(roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), chad));
+
         vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
         etherFiAdminInstance.executeTasks(report);
+
+        assertEq(etherFiAdminInstance.lastHandledReportRefSlot(), report.refSlotTo);
+        assertEq(etherFiAdminInstance.lastHandledReportRefBlock(), report.refBlockTo);
     }
 
     function test_pause_unPause_edgeCases() public {

@@ -18,6 +18,8 @@ interface IEtherFiRateLimiter {
     // protocol
     function pauseContract() external;
     function unPauseContract() external;
+    function pauseContractUntil() external;
+    function unpauseContractUntil() external;
 
     // view functions
     function getLimit(bytes32 id) external view returns (uint64 capacity, uint64 remaining, uint64 refillRate, uint256 lastRefill);

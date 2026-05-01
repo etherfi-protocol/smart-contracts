@@ -458,11 +458,27 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     function setUpLiquifier(uint8 forkEnum) internal {
         vm.startPrank(owner);
-            
-        if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {            
-            liquifierInstance.upgradeTo(address(new Liquifier()));
-            liquifierInstance.updateAdmin(alice, true);
+
+        if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
+            liquifierInstance.upgradeTo(address(new Liquifier(address(roleRegistryInstance))));
         }
+        vm.stopPrank();
+
+        // On fork, the live RoleRegistry impl may predate this PR and not expose PAUSE_UNTIL_ROLE().
+        // Upgrade in place so new role getters are reachable, then grant roles used by tests.
+        vm.startPrank(roleRegistryInstance.owner());
+        if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
+            roleRegistryInstance.upgradeTo(address(new RoleRegistry()));
+        }
+        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_SENDER_ROLE(), owner);
+        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_SENDER_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), owner);
+        vm.stopPrank();
+
+        vm.startPrank(owner);
 
         address impl = address(new BucketRateLimiter());
         bucketRateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
@@ -603,7 +619,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), admin);
 
 
-        liquifierImplementation = new Liquifier();
+        liquifierImplementation = new Liquifier(address(roleRegistryInstance));
         liquifierProxy = new UUPSProxy(address(liquifierImplementation), "");
         liquifierInstance = Liquifier(payable(liquifierProxy));
 
@@ -1572,7 +1588,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_liquifier() internal {
-        address newImpl = address(new Liquifier());
+        address newImpl = address(new Liquifier(address(roleRegistryInstance)));
         vm.prank(liquifierInstance.owner());
         liquifierInstance.upgradeTo(newImpl);
     }

@@ -8,8 +8,9 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "./interfaces/IEtherFiRateLimiter.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "lib/BucketLimiter.sol";
+import "./utils/PausableUntil.sol";
 
-contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, PausableUpgradeable {
+contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeable, PausableUpgradeable, PausableUntil {
 
     IRoleRegistry public immutable roleRegistry;
 
@@ -39,6 +40,13 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
 
     function _authorizeUpgrade(address newImplementation) internal override {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
+
+    /// @dev Route OZ's whenNotPaused through the pause-until check as well, so any function
+    ///      gated by whenNotPaused is automatically blocked during a timed pause too.
+    function _requireNotPaused() internal view override {
+        _requireNotPausedUntil();
+        super._requireNotPaused();
     }
 
     //-------------------------------------------------------------------------
@@ -106,6 +114,18 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     function unPauseContract() external {
         if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
+    }
+
+    /// @notice Pauses the contract until MAX_PAUSE_DURATION
+    function pauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _pauseUntil();
+    }
+
+    /// @notice Unpauses the contract from pauseUntil
+    function unpauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _unpauseUntil();
     }
 
     //--------------------------------------------------------------------------------------

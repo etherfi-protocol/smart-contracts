@@ -18,13 +18,11 @@ contract LiquidReferEthTest is LiquidReferBaseTest {
     }
 }
 
-// Obsolete: Scroll integration no longer exists.
-/*
-contract LiquidReferETHScrollTest is LiquidReferBaseTest {
+contract LiquidReferETHOPTest is LiquidReferBaseTest {
     function _assetConfig() internal pure override returns (AssetConfig memory) {
         return AssetConfig({
             teller: ILayerZeroTellerWithRateLimiting(LIQUID_ETH_TELLER),
-            asset: 0x5300000000000000000000000000000000000004, // WETH scroll
+            asset: 0x4200000000000000000000000000000000000006, // WETH OP
             depositAmount: 1 ether
         });
     }
@@ -33,7 +31,6 @@ contract LiquidReferETHScrollTest is LiquidReferBaseTest {
         return 10 ether;
     }
     function _envVar() internal pure override returns (string memory) {
-        return "SCROLL_RPC_URL";
+        return "OP_RPC_URL";
     }
 }
-*/
