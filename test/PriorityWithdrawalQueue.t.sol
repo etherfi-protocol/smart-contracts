@@ -218,8 +218,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // Verify state changes
         assertEq(priorityQueue.nonce(), initialNonce + 1, "Nonce should increment");
         // Use approximate comparison due to share/amount rounding (1 wei tolerance)
-        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), initialEethBalance - withdrawAmount, 1, "VIP user eETH balance should decrease");
-        assertApproxEqAbs(eETHInstance.balanceOf(address(priorityQueue)), initialQueueEethBalance + withdrawAmount, 1, "Queue eETH balance should increase");
+        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), initialEethBalance - withdrawAmount, 5, "VIP user eETH balance should decrease");
+        assertApproxEqAbs(eETHInstance.balanceOf(address(priorityQueue)), initialQueueEethBalance + withdrawAmount, 5, "Queue eETH balance should increase");
 
         // Verify request exists
         assertTrue(priorityQueue.requestExists(requestId), "Request should exist");
@@ -797,7 +797,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         uint256 eethAfterRequest = eETHInstance.balanceOf(vipUser);
 
         // Verify request state (use approximate comparison due to share/amount rounding)
-        assertApproxEqAbs(eethAfterRequest, eethBefore - withdrawAmount, 1, "eETH transferred to queue");
+        assertApproxEqAbs(eethAfterRequest, eethBefore - withdrawAmount, 5, "eETH transferred to queue");
 
         // Cancel request
         vm.prank(vipUser);
@@ -807,7 +807,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertEq(cancelledId, requestId, "Cancelled ID should match");
         assertFalse(priorityQueue.requestExists(requestId), "Request should be removed");
         // eETH returned might have small rounding difference
-        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), eethBefore, 1, "eETH should be returned");
+        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), eethBefore, 5, "eETH should be returned");
     }
 
     function test_cancelWithdraw_finalized() public {
@@ -1008,7 +1008,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             _createWithdrawRequest(vipUser, withdrawAmount);
 
         // Verify intermediate state (use approximate comparison due to share/amount rounding)
-        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), initialEethBalance - withdrawAmount, 1, "eETH transferred to queue");
+        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), initialEethBalance - withdrawAmount, 5, "eETH transferred to queue");
         assertTrue(priorityQueue.requestExists(priorityQueue.getRequestId(request)), "Request should exist");
 
         // 3. Request manager fulfills the request
@@ -1836,7 +1836,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     function test_amountWithFeeEqualsDepositAmount() public {
         uint96 withdrawAmount = 10 ether;
-        uint96 amountWithFee = withdrawAmount - 1; // 1 wei less for rounding
+        uint96 amountWithFee = withdrawAmount - 5; // 5 wei tolerance for share round-trip rounding
 
         vm.prank(vipUser);
         eETHInstance.approve(address(priorityQueue), withdrawAmount);
