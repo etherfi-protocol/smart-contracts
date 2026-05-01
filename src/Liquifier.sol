@@ -315,6 +315,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
             if (quoteStEthWithCurve) {
                 _marketValue = _min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
                 (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
+                if (answer <= 0) revert InvalidPriceFeed();
                 if (updatedAt + STALE_PRICE_WINDOW >= block.timestamp && (uint256(answer) * _amount) / 1e18 > _marketValue + MAX_OFF_CHAIN_PREMIUM) revert InvalidStEthPrice();
             } else {
                 _marketValue = _amount; /// 1:1 from stETH to eETH

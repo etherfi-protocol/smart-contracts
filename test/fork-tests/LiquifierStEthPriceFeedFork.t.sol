@@ -133,7 +133,7 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
         int256 answer,
         uint256 age
     ) public {
-        answer = bound(answer, 0, int256(uint256(2 ether))); // 0..2 ETH per stETH
+        answer = bound(answer, 1, int256(uint256(2 ether))); // 0..2 ETH per stETH
         uint256 staleWindow = liquifierInstance.STALE_PRICE_WINDOW();
         age = bound(age, 0, staleWindow * 2);
 
@@ -148,9 +148,8 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
         uint256 marketValue = curveOut < amount ? curveOut : amount;
         uint256 chainlinkValue = (uint256(answer) * amount) / 1e18;
         bool fresh = updatedAt + staleWindow >= block.timestamp;
-        bool shouldRevert = fresh && chainlinkValue > marketValue + liquifierInstance.MAX_OFF_CHAIN_PREMIUM();
 
-        if (shouldRevert) {
+        if (fresh && chainlinkValue > marketValue + liquifierInstance.MAX_OFF_CHAIN_PREMIUM()) {
             vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
             liquifierInstance.quoteByMarketValue(address(stEth), amount);
         } else {

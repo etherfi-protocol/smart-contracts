@@ -84,6 +84,24 @@ contract LiquifierStEthPriceFeedTest is Test {
     // Unit tests
     // -----------------------------------------------------------------------
 
+    /// Zero price feed should revert
+    function test_invalidPriceFeed_reverts() public {
+        feed.set(int256(0), block.timestamp);
+        curve.set(0.5 ether);
+
+        vm.expectRevert(Liquifier.InvalidPriceFeed.selector);
+        liquifier.quoteByMarketValue(stEth, 1 ether);
+    }
+
+    /// Negative price feed should revert
+    function test_negativePriceFeed_reverts() public {
+        feed.set(int256(-1), block.timestamp);
+        curve.set(0.5 ether);
+
+        vm.expectRevert(Liquifier.InvalidPriceFeed.selector);
+        liquifier.quoteByMarketValue(stEth, 1 ether);
+    }
+
     /// Stale price (updatedAt + window < now): check is skipped, quote returns curve value.
     function test_stalePrice_skipsCheck() public {
         feed.set(int256(1000 ether), block.timestamp - STALE_WINDOW - 1); // arbitrarily large but stale
@@ -167,15 +185,6 @@ contract LiquifierStEthPriceFeedTest is Test {
         assertEq(q, 1 ether); // 1:1 fallback path
     }
 
-    /// Zero chainlink answer cannot trip the check (chainlinkValue is 0).
-    function test_zeroChainlinkAnswer_neverReverts() public {
-        feed.set(int256(0), block.timestamp);
-        curve.set(0.5 ether);
-
-        uint256 q = liquifier.quoteByMarketValue(stEth, 1 ether);
-        assertEq(q, 0.5 ether);
-    }
-
     // -----------------------------------------------------------------------
     // Fuzz
     // -----------------------------------------------------------------------
@@ -203,9 +212,11 @@ contract LiquifierStEthPriceFeedTest is Test {
         uint256 marketValue = curveOut < amount ? curveOut : amount;
         uint256 chainlinkValue = (uint256(answer) * amount) / 1e18;
         bool fresh = updatedAt + STALE_WINDOW >= block.timestamp;
-        bool shouldRevert = fresh && chainlinkValue > marketValue + PREMIUM;
 
-        if (shouldRevert) {
+        if (answer <= 0) {
+            vm.expectRevert(Liquifier.InvalidPriceFeed.selector);
+            liquifier.quoteByMarketValue(stEth, amount);
+        } else if (fresh && chainlinkValue > marketValue + PREMIUM) {
             vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
             liquifier.quoteByMarketValue(stEth, amount);
         } else {
