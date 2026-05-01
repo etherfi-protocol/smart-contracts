@@ -322,9 +322,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         } else if (tokenInfos[_token].isL2Eth) {
             // 1:1 for all dummy tokens
             _marketValue = _amount;
+        } else {
+            revert NotSupportedToken();
         }
-
-        revert NotSupportedToken();
     }
 
     // Calculates the amount of eETH that will be minted for a given token considering the discount rate

@@ -11,6 +11,7 @@ import "./eigenlayer-mocks/BeaconChainOracleMock.sol";
 import "../src/eigenlayer-interfaces/ITimelock.sol";
 import "./mocks/MockEigenPodManager.sol";
 import "./mocks/MockDelegationManager.sol";
+import "./mocks/MockChainlinkPriceFeed.sol";
 import "./common/ArrayTestHelper.sol";
 
 import "../src/interfaces/IStakingManager.sol";
@@ -83,6 +84,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     ICurvePool public cbEth_Eth_Pool;
     ICurvePool public wbEth_Eth_Pool;
     ICurvePool public stEth_Eth_Pool;
+
+    // Chainlink stETH/ETH feed used to construct Liquifier. On mainnet this points
+    // at the live aggregator; in non-fork unit tests it points at a stale-by-default mock
+    // so the price-feed branch is a no-op.
+    address public stEthChainlinkFeed;
+    uint256 public constant LIQUIFIER_STALE_WINDOW = 24 hours;
+    uint256 public constant LIQUIFIER_MAX_OFF_CHAIN_PREMIUM = 0.01 ether;
 
     IcbETH public cbEth;
     IwBETH public wbEth;
@@ -311,6 +319,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             wbEthStrategy = IStrategy(0x7CA911E83dabf90C90dD3De5411a10F1A6112184);
             stEthStrategy = IStrategy(0x93c4b944D05dfe6df7645A86cd2206016c51564D);
             lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
+            stEthChainlinkFeed = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
 
             eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
             eigenLayerEigenPodManager = IEigenPodManager(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
@@ -379,6 +388,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             wbEthStrategy = IStrategy(0x7CA911E83dabf90C90dD3De5411a10F1A6112184);
             stEthStrategy = IStrategy(0x93c4b944D05dfe6df7645A86cd2206016c51564D);
             lidoWithdrawalQueue = ILidoWithdrawalQueue(0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1);
+            stEthChainlinkFeed = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
 
             eigenLayerStrategyManager = IEigenLayerStrategyManager(0x858646372CC42E1A627fcE94aa7A7033e7CF075A);
             eigenLayerEigenPodManager = IEigenPodManager(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
@@ -457,10 +467,16 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function setUpLiquifier(uint8 forkEnum) internal {
+        // Defensive default: realistic-fork paths skip setUpTests, so fall back to a stale
+        // mock when no fork-specific feed has been wired in.
+        if (stEthChainlinkFeed == address(0)) {
+            stEthChainlinkFeed = address(new MockChainlinkPriceFeed(int256(1 ether), 0));
+        }
+
         vm.startPrank(owner);
 
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
-            liquifierInstance.upgradeTo(address(new Liquifier(address(roleRegistryInstance), 100)));
+            liquifierInstance.upgradeTo(address(new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_OFF_CHAIN_PREMIUM)));
         }
         vm.stopPrank();
 
@@ -619,7 +635,14 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), admin);
 
 
-        liquifierImplementation = new Liquifier(address(roleRegistryInstance), 100);
+        // Default to a stale-by-default mock so the chainlink branch in quoteByMarketValue
+        // is a no-op for unit tests that don't explicitly exercise it. Fork paths set
+        // stEthChainlinkFeed earlier to the live Chainlink aggregator.
+        if (stEthChainlinkFeed == address(0)) {
+            stEthChainlinkFeed = address(new MockChainlinkPriceFeed(int256(1 ether), 0));
+        }
+
+        liquifierImplementation = new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_OFF_CHAIN_PREMIUM);
         liquifierProxy = new UUPSProxy(address(liquifierImplementation), "");
         liquifierInstance = Liquifier(payable(liquifierProxy));
 
@@ -727,10 +750,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(eigenLayerStrategyManager),
             address(lidoWithdrawalQueue),
             address(stEth),
-            address(cbEth),
-            address(wbEth),
-            address(cbEth_Eth_Pool),
-            address(wbEth_Eth_Pool),
             address(stEth_Eth_Pool),
             3600
         );
@@ -1586,7 +1605,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_liquifier() internal {
-        address newImpl = address(new Liquifier(address(roleRegistryInstance), 100));
+        address newImpl = address(new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_OFF_CHAIN_PREMIUM));
         vm.prank(liquifierInstance.owner());
         liquifierInstance.upgradeTo(newImpl);
     }

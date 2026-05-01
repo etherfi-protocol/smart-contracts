@@ -41,14 +41,9 @@ contract LiquifierTest is TestSetup {
         setUpLiquifier(forkEnum);
 
         _enable_deposit(address(stEthStrategy));
-        _enable_deposit(address(wbEthStrategy));
 
         vm.startPrank(owner);
         liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true, 0, 50, 1000, false); // 50 ether timeBoundCap, 1000 ether total cap
-        if (forkEnum == MAINNET_FORK) {
-            liquifierInstance.registerToken(address(cbEth), address(cbEthStrategy), true, 0, 50, 1000, false);
-            liquifierInstance.registerToken(address(wbEth), address(wbEthStrategy), true, 0, 50, 1000, false);
-        }
         vm.stopPrank();
 
         dummyToken = new DummyERC20();
@@ -618,23 +613,50 @@ contract LiquifierTest is TestSetup {
 
     function test_constructor_revertsOnZeroMinDiscount() public {
         vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
-        new Liquifier(address(1), 0);
+        new Liquifier(address(1), address(2), 0, 1 days, 0.01 ether);
     }
 
     function test_constructor_revertsOnMinDiscountAboveScale() public {
         vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
-        new Liquifier(address(1), 10_001);
+        new Liquifier(address(1), address(2), 10_001, 1 days, 0.01 ether);
     }
 
     function test_constructor_acceptsMinDiscountAtScale() public {
-        Liquifier impl = new Liquifier(address(1), 10_000);
+        Liquifier impl = new Liquifier(address(1), address(2), 10_000, 1 days, 0.01 ether);
         assertEq(impl.MIN_DISCOUNT_RATE_IN_BPS(), 10_000);
     }
 
     function test_constructor_storesMinDiscount() public {
-        Liquifier impl = new Liquifier(address(1), 250);
+        Liquifier impl = new Liquifier(address(1), address(2), 250, 1 days, 0.01 ether);
         assertEq(impl.MIN_DISCOUNT_RATE_IN_BPS(), 250);
         assertEq(impl.BASIS_POINT_SCALE(), 10_000);
+    }
+
+    function test_constructor_revertsOnZeroStaleWindow() public {
+        vm.expectRevert(Liquifier.InvalidPriceWindow.selector);
+        new Liquifier(address(1), address(2), 100, 0, 0.01 ether);
+    }
+
+    function test_constructor_revertsOnZeroOffChainPremium() public {
+        vm.expectRevert(Liquifier.InvalidOffChainPremium.selector);
+        new Liquifier(address(1), address(2), 100, 1 days, 0);
+    }
+
+    function test_constructor_revertsOnZeroRoleRegistry() public {
+        vm.expectRevert(Liquifier.InvalidRoleRegistry.selector);
+        new Liquifier(address(0), address(2), 100, 1 days, 0.01 ether);
+    }
+
+    function test_constructor_revertsOnZeroPriceFeed() public {
+        vm.expectRevert(Liquifier.InvalidPriceFeed.selector);
+        new Liquifier(address(1), address(0), 100, 1 days, 0.01 ether);
+    }
+
+    function test_constructor_storesPriceFeedImmutables() public {
+        Liquifier impl = new Liquifier(address(1), address(2), 250, 1 days, 0.01 ether);
+        assertEq(address(impl.stEthPriceFeed()), address(2));
+        assertEq(impl.STALE_PRICE_WINDOW(), 1 days);
+        assertEq(impl.MAX_OFF_CHAIN_PREMIUM(), 0.01 ether);
     }
 
     function test_updateDiscountInBasisPoints_revertsOnZero() public {
