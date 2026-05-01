@@ -672,7 +672,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         membershipManagerProxy = new UUPSProxy(address(membershipManagerImplementation), "");
         membershipManagerInstance = MembershipManagerV0(payable(membershipManagerProxy));
 
-        etherFiAdminImplementation = new EtherFiAdmin();
+        etherFiAdminImplementation = new EtherFiAdmin(address(0), 7200);
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
 
@@ -897,7 +897,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_etherfiAdmin() internal {
-        address newAdminImpl = address(new EtherFiAdmin());
+        address newAdminImpl = address(new EtherFiAdmin(address(priorityQueueInstance), 7200));
         vm.prank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
