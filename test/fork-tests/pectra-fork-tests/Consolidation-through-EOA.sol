@@ -110,8 +110,6 @@ contract ConsolidationThroughEOATest is Test {
         }
     }
 
-    // TODO: update pubkeys
-    /*
     function test_ConsolidationThroughEOA() public {
         console2.log("=== CONSOLIDATION THROUGH EOA TEST ===");
         
@@ -178,7 +176,6 @@ contract ConsolidationThroughEOATest is Test {
         
         console2.log("EOA successfully requested consolidation");
     }
-    */
 
     function test_RequestConsolidation_WithoutRole_Reverts() public {
         console2.log("=== REQUEST CONSOLIDATION WITHOUT ROLE TEST ===");

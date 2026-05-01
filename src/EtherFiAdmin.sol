@@ -259,7 +259,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (currentTVL > 0) {
             apr = 10000 * (_report.accruedRewards * 365 days) / (currentTVL * int256(elapsedTime));
         }
-        require(apr <= acceptableRebaseAprInBps, "EtherFiAdmin: TVL changed too much");
+        int256 absApr = (apr > 0) ? apr : -apr;
+        require(absApr <= acceptableRebaseAprInBps, "EtherFiAdmin: TVL changed too much");
 
         membershipManager.rebase(_report.accruedRewards);
     }

@@ -542,8 +542,6 @@ contract EtherFiNodesManagerTest is TestSetup {
     // Execution Layer Triggered Withdrawals Tests
     // ============================================
     
-    // TODO: update pubkey
-    /*
     function test_requestExecutionLayerTriggeredWithdrawal() public {
         bytes[] memory pubkeys = new bytes[](1);
         uint256[] memory legacyIds = new uint256[](1);
@@ -582,7 +580,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         managerInstance.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
         vm.stopPrank();
     }
-    */
     
     function test_requestExecutionLayerTriggeredWithdrawal_emptyRequest() public {
         IEigenPodTypes.WithdrawalRequest[] memory requests = new IEigenPodTypes.WithdrawalRequest[](0);
@@ -619,8 +616,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         managerInstance.requestExecutionLayerTriggeredWithdrawal(requests);
     }
     
-    // TODO: Update pubkeys
-    /*
     function test_requestConsolidation() public {
         bytes memory PK_80143 = hex"811cd0bb7dd301afbbddd1d5db15ff0ca9d5f8ada78c0b1223f75b524aca1ca9ff1ba205d9efd7c37c2174576cc123e2";
         bytes memory PK_80194 = hex"b86cb11d564b29a38cdc8a3f1f9c35e6dcd2d0f85f40da60f745e479ba42b4548c83a2b049cf02277fceaa9b421d0039";
@@ -666,7 +661,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         vm.prank(admin);
         managerInstance.requestConsolidation{value: valueToSend}(reqs);
     }
-    */
     
     function test_requestConsolidation_emptyRequest() public {
         IEigenPodTypes.ConsolidationRequest[] memory requests = new IEigenPodTypes.ConsolidationRequest[](0);
