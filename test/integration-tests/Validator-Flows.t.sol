@@ -13,6 +13,13 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
 
+        // Mainnet NodeOperatorManager hasn't been upgraded to the role-based ACL yet,
+        // so its NODE_OPERATOR_MANAGER_ADMIN_ROLE() getter doesn't exist on-chain.
+        // Upgrade in place so the new role getters used by _ensureValCreationRoles are reachable.
+        NodeOperatorManager nodeOperatorManagerImpl = new NodeOperatorManager(address(roleRegistryInstance));
+        vm.prank(nodeOperatorManagerInstance.owner());
+        nodeOperatorManagerInstance.upgradeTo(address(nodeOperatorManagerImpl));
+
         // Handle any pending oracle report that hasn't been processed yet
         _syncOracleReportState();
     }
