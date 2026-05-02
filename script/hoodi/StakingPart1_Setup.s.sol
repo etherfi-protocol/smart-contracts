@@ -98,10 +98,6 @@ contract StakingPart1 is Script {
             console.log("Whitelisting node operator...");
             
             vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
-            // Add admin rights if needed
-            if (!nodeOperatorManager.admins(depositor)) {
-                nodeOperatorManager.updateAdmin(depositor, true);
-            }
             nodeOperatorManager.addToWhitelist(nodeOp);
             vm.stopBroadcast();
         }

@@ -7,6 +7,7 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "src/interfaces/IRateLimiter.sol";
+import "src/interfaces/IRoleRegistry.sol";
 import "lib/BucketLimiter.sol";
 
 contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, OwnableUpgradeable, UUPSUpgradeable {
@@ -14,15 +15,26 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     BucketLimiter.Limit public limit;
     address public consumer;
 
-    mapping(address => bool) public admins;
-    mapping(address => bool) public pausers;
+    mapping(address => bool) public DEPRECATED_admins;
+    mapping(address => bool) public DEPRECATED_pausers;
 
     mapping(address => BucketLimiter.Limit) public limitsPerToken;
 
-    event UpdatedAdmin(address indexed admin, bool status);
-    event UpdatedPauser(address indexed pauser, bool status);
+    // Immutables are not part of proxy storage; stored in implementation bytecode only.
+    IRoleRegistry public immutable roleRegistry;
 
-    constructor() {
+    bytes32 public constant BUCKET_RATE_LIMITER_ADMIN_ROLE = keccak256("BUCKET_RATE_LIMITER_ADMIN_ROLE");
+
+    error IncorrectRole();
+
+    modifier onlyAdmin() {
+        if (!roleRegistry.hasRole(BUCKET_RATE_LIMITER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _;
+    }
+
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor(address _roleRegistry) {
+        roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
 
@@ -50,57 +62,47 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         return globalConsumable && perTokenConsumable;
     }
 
-    function setCapacity(uint256 capacity) external onlyOwner {
+    function setCapacity(uint256 capacity) external onlyAdmin {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
         BucketLimiter.setCapacity(limit, capacity64);
     }
 
-    function setRefillRatePerSecond(uint256 refillRate) external onlyOwner {
+    function setRefillRatePerSecond(uint256 refillRate) external onlyAdmin {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
         BucketLimiter.setRefillRate(limit, refillRate64);
     }
 
-    function registerToken(address token, uint256 capacity, uint256 refillRate) external onlyOwner {
+    function registerToken(address token, uint256 capacity, uint256 refillRate) external onlyAdmin {
         uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
         uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
         limitsPerToken[token] = BucketLimiter.create(capacity64, refillRate64);
     }
 
-    function setCapacityPerToken(address token, uint256 capacity) external onlyOwner {
+    function setCapacityPerToken(address token, uint256 capacity) external onlyAdmin {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
         BucketLimiter.setCapacity(limitsPerToken[token], capacity64);
     }
 
-    function setRefillRatePerSecondPerToken(address token, uint256 refillRate) external onlyOwner {
+    function setRefillRatePerSecondPerToken(address token, uint256 refillRate) external onlyAdmin {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
         BucketLimiter.setRefillRate(limitsPerToken[token], refillRate64);
     }
 
-    function updateConsumer(address _consumer) external onlyOwner {
+    function updateConsumer(address _consumer) external onlyAdmin {
         consumer = _consumer;
     }
 
-    function updateAdmin(address admin, bool status) external onlyOwner {
-        admins[admin] = status;
-        emit UpdatedAdmin(admin, status);
-    }
-
-    function updatePauser(address pauser, bool status) external onlyOwner {
-        pausers[pauser] = status;
-        emit UpdatedPauser(pauser, status);
-    }
-
     function pauseContract() external {
-        require(pausers[msg.sender] || admins[msg.sender] || msg.sender == owner(), "NOT_PAUSER");
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
     function unPauseContract() external {
-        require(admins[msg.sender] || msg.sender == owner(), "NOT_ADMIN");
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 

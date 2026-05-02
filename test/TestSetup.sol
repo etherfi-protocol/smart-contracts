@@ -437,6 +437,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
         etherFiOracleInstance = EtherFiOracle(payable(addressProviderInstance.getContractAddress("EtherFiOracle")));
         roleRegistryInstance = RoleRegistry(addressProviderInstance.getContractAddress("RoleRegistry"));
+        rateLimiterInstance = EtherFiRateLimiter(0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8);
         treasuryInstance = 0x0c83EAe1FE72c390A02E426572854931EefF93BA;
         etherFiRestakerInstance = EtherFiRestaker(payable(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf)));
         cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(0x9A8c5046a290664Bf42D065d33512fe403484534));
@@ -480,11 +481,17 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         vm.startPrank(owner);
 
-        address impl = address(new BucketRateLimiter());
+        address impl = address(new BucketRateLimiter(address(roleRegistryInstance)));
         bucketRateLimiter = BucketRateLimiter(address(new UUPSProxy(impl, "")));
         bucketRateLimiter.initialize();
-        bucketRateLimiter.updateConsumer(address(liquifierInstance));
+        vm.stopPrank();
 
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(bucketRateLimiter.BUCKET_RATE_LIMITER_ADMIN_ROLE(), owner);
+        vm.stopPrank();
+
+        vm.startPrank(owner);
+        bucketRateLimiter.updateConsumer(address(liquifierInstance));
         bucketRateLimiter.setCapacity(40 ether);
         bucketRateLimiter.setRefillRatePerSecond(1 ether);
 
@@ -499,12 +506,16 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function deployEtherFiRestaker() internal {
-        etherFiRestakerImplementation = new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance));
+        etherFiRestakerImplementation = new EtherFiRestaker(
+            address(eigenLayerRewardsCoordinator),
+            address(etherFiRedemptionManagerInstance),
+            address(roleRegistryInstance),
+            address(rateLimiterInstance)
+        );
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
         etherFiRestakerInstance.initialize(address(liquidityPoolInstance), address(liquifierInstance));
-        etherFiRestakerInstance.updateAdmin(alice, true);
 
         liquifierInstance.initializeOnUpgrade(address(etherFiRestakerInstance));
     }
@@ -530,17 +541,16 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         rateLimiterInstance = EtherFiRateLimiter(address(rateLimiterProxy));
         rateLimiterInstance.initialize();
 
-        nodeOperatorManagerImplementation = new NodeOperatorManager();
+        nodeOperatorManagerImplementation = new NodeOperatorManager(address(roleRegistryInstance));
         nodeOperatorManagerProxy = new UUPSProxy(address(nodeOperatorManagerImplementation), "");
         nodeOperatorManagerInstance = NodeOperatorManager(address(nodeOperatorManagerProxy));
         nodeOperatorManagerInstance.initialize();
-        nodeOperatorManagerInstance.updateAdmin(alice, true);
 
-        auctionImplementation = new AuctionManager();
+        auctionImplementation = new AuctionManager(address(roleRegistryInstance));
         auctionManagerProxy = new UUPSProxy(address(auctionImplementation), "");
         auctionInstance = AuctionManager(address(auctionManagerProxy));
         auctionInstance.initialize(address(nodeOperatorManagerInstance));
-        auctionInstance.updateAdmin(alice, true);
+        roleRegistryInstance.grantRole(auctionInstance.AUCTION_MANAGER_ADMIN_ROLE(), alice);
 
         stakingManagerImplementation = new StakingManager(address(liquidityPoolInstance), address(managerInstance), address(depositContractEth2), address(auctionInstance), address(node), address(roleRegistryInstance));
         stakingManagerProxy = new UUPSProxy(address(stakingManagerImplementation), "");
@@ -697,11 +707,11 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
 
-        etherFiOracleImplementation = new EtherFiOracle();
+        etherFiOracleImplementation = new EtherFiOracle(address(roleRegistryInstance));
         etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
         etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
 
-        etherFiRestakerImplementation = new EtherFiRestaker(address(0x0), address(etherFiRedemptionManagerInstance));
+        etherFiRestakerImplementation = new EtherFiRestaker(address(0x0), address(etherFiRedemptionManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance));
         etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
         etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
 
@@ -831,7 +841,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiOracleInstance.setEtherFiAdmin(address(etherFiAdminInstance));
         liquidityPoolInstance.initializeOnUpgrade(address(auctionManagerProxy), address(liquifierInstance));
         //stakingManagerInstance.initializeOnUpgrade(address(nodeOperatorManagerInstance), address(etherFiAdminInstance));
-        auctionInstance.initializeOnUpgrade(address(membershipManagerInstance), 1 ether, address(etherFiAdminInstance), address(nodeOperatorManagerInstance));
+        auctionInstance.initializeOnUpgrade(address(membershipManagerInstance), 1 ether, address(nodeOperatorManagerInstance));
         membershipNftInstance.initializeOnUpgrade(address(liquidityPoolInstance));
 
 
@@ -852,6 +862,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         }
 
         _initOracleReportsforTesting();
+        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), alice);
         vm.stopPrank();
 
         vm.startPrank(alice);
@@ -861,7 +873,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.stopPrank();
 
         // Setup dependencies
-        vm.startPrank(alice);
+        vm.startPrank(owner);
         _approveNodeOperators();
         _setUpNodeOperatorWhitelist();
         vm.stopPrank();
@@ -1102,13 +1114,14 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     function _initializeEtherFiAdmin() internal {
         vm.startPrank(owner);
 
-        etherFiOracleInstance.updateAdmin(alice, true);
+        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), owner);
 
         address admin = address(etherFiAdminInstance);
-        //stakingManagerInstance.updateAdmin(admin, true); 
+        //stakingManagerInstance.updateAdmin(admin, true);
         // liquidityPoolInstance.updateAdmin(admin, true);
         membershipManagerInstance.updateAdmin(admin, true);
-        etherFiOracleInstance.updateAdmin(admin, true);
+        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), admin);
 
         vm.stopPrank();
     }

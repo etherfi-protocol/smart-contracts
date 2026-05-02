@@ -28,7 +28,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.deal(alice, 100 ether);
 
         vm.startPrank(owner);
-        nodeOperatorManagerInstance.updateAdmin(alice, true);
+        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), alice);
         // liquidityPoolInstance.updateAdmin(alice, true);
         vm.stopPrank();
     
