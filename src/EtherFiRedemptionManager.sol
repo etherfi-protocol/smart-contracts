@@ -57,6 +57,10 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     ILido public immutable lido;
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
 
+    uint256 public immutable MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS;
+    uint256 public immutable MAX_EXIT_FEE_IN_BPS;
+    uint256 public immutable MAX_LOW_WATERMARK_IN_BPS_OF_TVL;
+
     mapping(address => RedemptionInfo) public tokenToRedemptionInfo;
 
 
@@ -69,7 +73,11 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     receive() external payable {}
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _liquidityPool, address _eEth, address _weEth, address _treasury, address _roleRegistry, address _etherFiRestaker, address _priorityWithdrawalQueue) {
+    constructor(address _liquidityPool, address _eEth, address _weEth, address _treasury, address _roleRegistry, address _etherFiRestaker, address _priorityWithdrawalQueue, uint256 _maxExitFeeSplitToTreasuryInBps, uint256 _maxExitFeeInBps, uint256 _maxLowWatermarkInBpsOfTvl) {
+        if (_maxExitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _maxExitFeeInBps > BASIS_POINT_SCALE || _maxLowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidAmount();
+        MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS = _maxExitFeeSplitToTreasuryInBps;
+        MAX_EXIT_FEE_IN_BPS = _maxExitFeeInBps;
+        MAX_LOW_WATERMARK_IN_BPS_OF_TVL = _maxLowWatermarkInBpsOfTvl;
         roleRegistry = RoleRegistry(_roleRegistry);
         treasury = _treasury;
         liquidityPool = ILiquidityPool(payable(_liquidityPool));
@@ -94,9 +102,9 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate)  external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
         for(uint256 i = 0; i < _exitFeeSplitToTreasuryInBps.length; i++) {
-            require(_exitFeeSplitToTreasuryInBps[i] <= BASIS_POINT_SCALE, "INVALID");
-            require(_exitFeeInBps[i] <= BASIS_POINT_SCALE, "INVALID");
-            require(_lowWatermarkInBpsOfTvl[i] <= BASIS_POINT_SCALE, "INVALID");
+            require (_exitFeeSplitToTreasuryInBps[i] <= MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS, "Exceeds max exit fee split to treasury");
+            require (_exitFeeInBps[i] <= MAX_EXIT_FEE_IN_BPS, "Exceeds max exit fee");
+            require (_lowWatermarkInBpsOfTvl[i] <= MAX_LOW_WATERMARK_IN_BPS_OF_TVL, "Exceeds max low watermark of tvl");
             tokenToRedemptionInfo[address(_tokens[i])] = RedemptionInfo({
                 limit: BucketLimiter.create(_convertToBucketUnit(_bucketCapacity[i], Math.Rounding.Down), _convertToBucketUnit(_bucketRefillRate[i], Math.Rounding.Down)),
                 exitFeeSplitToTreasuryInBps: _exitFeeSplitToTreasuryInBps[i],
@@ -316,17 +324,17 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param token The token to set the exit fee for
      */
     function setExitFeeBasisPoints(uint16 _exitFeeInBps, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
-        require(_exitFeeInBps <= BASIS_POINT_SCALE, "INVALID");
+        require(_exitFeeInBps <= MAX_EXIT_FEE_IN_BPS, "Exceeds max exit fee");
         tokenToRedemptionInfo[token].exitFeeInBps = _exitFeeInBps;
     }
 
     function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
-        require(_lowWatermarkInBpsOfTvl <= BASIS_POINT_SCALE, "INVALID");
+        require(_lowWatermarkInBpsOfTvl <= MAX_LOW_WATERMARK_IN_BPS_OF_TVL, "Exceeds max low watermark of tvl");
         tokenToRedemptionInfo[token].lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
     }
 
     function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps, address token) external hasRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE) {
-        require(_exitFeeSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
+        require(_exitFeeSplitToTreasuryInBps <= MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS, "Exceeds max exit fee split to treasury");
         tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
     }
 

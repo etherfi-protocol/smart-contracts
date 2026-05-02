@@ -794,19 +794,21 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_updateAdmin() public {
         address newAdmin = address(0x1234);
-        
-        vm.prank(owner);
-        etherFiOracleInstance.updateAdmin(newAdmin, true);
-        assertEq(etherFiOracleInstance.admins(newAdmin), true);
+        bytes32 oracleAdminRole = etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE();
 
-        vm.prank(owner);
-        etherFiOracleInstance.updateAdmin(newAdmin, false);
-        assertEq(etherFiOracleInstance.admins(newAdmin), false);
+        // updateAdmin replaced by RoleRegistry.grantRole / revokeRole
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(oracleAdminRole, newAdmin);
+        assertTrue(roleRegistryInstance.hasRole(oracleAdminRole, newAdmin));
 
-        // Test that non-owner cannot update admin
+        roleRegistryInstance.revokeRole(oracleAdminRole, newAdmin);
+        assertFalse(roleRegistryInstance.hasRole(oracleAdminRole, newAdmin));
+        vm.stopPrank();
+
+        // Non-owner cannot grant role
         vm.prank(chad);
         vm.expectRevert();
-        etherFiOracleInstance.updateAdmin(newAdmin, true);
+        roleRegistryInstance.grantRole(oracleAdminRole, newAdmin);
     }
 
     function test_getImplementation() public {
@@ -1011,6 +1013,90 @@ contract EtherFiOracleTest is TestSetup {
         vm.prank(chad);
         vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
         etherFiAdminInstance.setValidatorTaskBatchSize(75);
+    }
+
+    function test_setValidatorTaskBatchSize_guardrail() public {
+        uint256 maxBatchSize = etherFiAdminInstance.MAX_VALIDATOR_TASK_BATCH_SIZE();
+        assertEq(maxBatchSize, 1_000); // configured in TestSetup
+
+        // boundary value is accepted
+        vm.prank(alice);
+        etherFiAdminInstance.setValidatorTaskBatchSize(uint16(maxBatchSize));
+
+        // one above the cap reverts
+        vm.prank(alice);
+        vm.expectRevert(EtherFiAdmin.InvalidValidatorTaskBatchSize.selector);
+        etherFiAdminInstance.setValidatorTaskBatchSize(uint16(maxBatchSize + 1));
+    }
+
+    function test_updateAcceptableRebaseApr_guardrail() public {
+        int256 maxApr = etherFiAdminInstance.MAX_ACCEPTABLE_REBASE_APR_IN_BPS();
+        assertEq(maxApr, 10_000); // configured in TestSetup
+
+        // boundary value is accepted
+        vm.prank(alice);
+        etherFiAdminInstance.updateAcceptableRebaseApr(int32(maxApr));
+        assertEq(etherFiAdminInstance.acceptableRebaseAprInBps(), int32(maxApr));
+
+        // negative limit is not allowed in acceptable rebase apr
+        vm.prank(alice);
+        vm.expectRevert(EtherFiAdmin.InvalidAcceptableRebaseApr.selector);
+        etherFiAdminInstance.updateAcceptableRebaseApr(-1);
+
+        // one above the cap reverts
+        vm.prank(alice);
+        vm.expectRevert(EtherFiAdmin.InvalidAcceptableRebaseApr.selector);
+        etherFiAdminInstance.updateAcceptableRebaseApr(int32(maxApr + 1));
+    }
+
+    function test_constructor_priorityWithdrawalQueue_guardrail() public {
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidPriorityWithdrawalQueue.selector);
+        new EtherFiAdmin(address(0x0), 1_000, 1_000, 500, 1_000);
+    }
+
+    function test_constructor_maxFinalizedWithdrawalAmountPerDay_guardrail() public {
+        EtherFiAdmin nonZeroValue = new EtherFiAdmin(address(0x1234), 1_000, 1_000, 500, 1_000);
+        assertEq(nonZeroValue.MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY(), 1_000);
+
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidMaxFinalizedWithdrawalAmountPerDay.selector);
+        new EtherFiAdmin(address(0x1234), 0, 1_000, 500, 1_000);
+    }
+
+    function test_constructor_maxNumValidatorsToApprovePerDay_guardrail() public {
+        EtherFiAdmin nonZeroValue = new EtherFiAdmin(address(0x1234), 1_000, 100, 500, 1_000);
+        assertEq(nonZeroValue.MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY(), 100);
+
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidMaxNumValidatorsToApprovePerDay.selector);
+        new EtherFiAdmin(address(0x1234), 1_000, 0, 500, 1_000); // 0 is invalid
+    }
+
+    function test_constructor_maxValidatorTaskBatchSize_guardrail() public {
+        EtherFiAdmin nonZeroValue = new EtherFiAdmin(address(0x1234), 1_000, 1_000, 500, 1_000);
+        assertEq(nonZeroValue.MAX_VALIDATOR_TASK_BATCH_SIZE(), 1_000);
+
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidValidatorTaskBatchSize.selector);
+        new EtherFiAdmin(address(0x1234), 1_000, 1_000, 500, 0);
+    }
+
+    function test_constructor_maxAcceptableRebaseAprInBps_guardrail() public {
+        EtherFiAdmin validValue = new EtherFiAdmin(address(0x1234), 1_000, 1_000, 500, 1_000);
+        assertEq(validValue.MAX_ACCEPTABLE_REBASE_APR_IN_BPS(), 500);
+
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
+        new EtherFiAdmin(address(0x1234), 1_000, 1_000, 0, 1_000);
+
+        // negative values revert
+        vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
+        new EtherFiAdmin(address(0x1234), 1_000, 1_000, -1, 1_000);
+
+        // values above 10_000 revert
+        vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
+        new EtherFiAdmin(address(0x1234), 1_000, 1_000, 10_001, 1_000);
     }
 
     function test_executeValidatorApprovalTask() public {
