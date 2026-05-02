@@ -431,7 +431,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         nodeOperatorManagerInstance = NodeOperatorManager(addressProviderInstance.getContractAddress("NodeOperatorManager"));
         node = EtherFiNode(payable(addressProviderInstance.getContractAddress("EtherFiNode")));
         earlyAdopterPoolInstance = EarlyAdopterPool(payable(addressProviderInstance.getContractAddress("EarlyAdopterPool")));
-        withdrawRequestNFTInstance = WithdrawRequestNFT(addressProviderInstance.getContractAddress("WithdrawRequestNFT"));
+        withdrawRequestNFTInstance = WithdrawRequestNFT(payable(addressProviderInstance.getContractAddress("WithdrawRequestNFT")));
         liquifierInstance = Liquifier(payable(addressProviderInstance.getContractAddress("Liquifier")));
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
@@ -449,7 +449,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(priorityQueueImplementation),
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
         );
-        priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
+        priorityQueueInstance = PriorityWithdrawalQueue(payable(address(priorityQueueProxy)));
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
@@ -701,7 +701,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(priorityQueueImplementation),
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
         );
-        priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
+        priorityQueueInstance = PriorityWithdrawalQueue(payable(address(priorityQueueProxy)));
 
         etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance))), "");
         etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
@@ -925,7 +925,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 address(priorityQueueImplementation),
                 abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
             );
-            priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
+            priorityQueueInstance = PriorityWithdrawalQueue(payable(address(priorityQueueProxy)));
             EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance));
             etherFiRedemptionManagerProxy = new UUPSProxy(address(etherFiRedemptionManagerImplementation), "");
             etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));

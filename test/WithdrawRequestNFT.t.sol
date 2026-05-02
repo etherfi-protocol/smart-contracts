@@ -33,7 +33,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         address cur_impl = withdrawRequestNFTInstance.getImplementation();
         address new_impl = address(new WithdrawRequestNFTIntrusive());
         withdrawRequestNFTInstance.upgradeTo(new_impl);
-        WithdrawRequestNFTIntrusive(address(withdrawRequestNFTInstance)).updateParam(_currentRequestIdToScanFromForShareRemainder, _lastRequestIdToScanUntilForShareRemainder);
+        WithdrawRequestNFTIntrusive(payable(address(withdrawRequestNFTInstance))).updateParam(_currentRequestIdToScanFromForShareRemainder, _lastRequestIdToScanUntilForShareRemainder);
         withdrawRequestNFTInstance.upgradeTo(cur_impl);
     }
 
@@ -1590,5 +1590,87 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(admin);
         withdrawRequestNFTInstance.invalidateRequest(r2);
         assertFalse(withdrawRequestNFTInstance.isValid(r2), "r2 should be invalid");
+    }
+
+    function test_claimWithdraw_paysFromNFTBalance_afterFinalize() public {
+        address user = bob;
+        uint96 amount = 1 ether;
+
+        vm.deal(user, 10 ether);
+        vm.startPrank(user);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), amount);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(user, amount);
+        vm.stopPrank();
+
+        // Admin finalizes (NFT contract gets ETH at this step under our new flow).
+        vm.prank(address(etherFiAdminInstance));
+        withdrawRequestNFTInstance.finalizeRequests(reqId);
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(uint128(amount));
+
+        uint256 nftEthBefore  = address(withdrawRequestNFTInstance).balance;
+        uint256 userEthBefore = user.balance;
+
+        vm.prank(user);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
+
+        assertGt(user.balance, userEthBefore, "user did not receive ETH");
+        assertLt(address(withdrawRequestNFTInstance).balance, nftEthBefore, "NFT did not pay from own balance");
+    }
+
+    function test_claimWithdraw_succeedsEvenIfLPDrained() public {
+        address user = bob;
+        uint96 amount = 1 ether;
+
+        vm.deal(user, 10 ether);
+        vm.startPrank(user);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), amount);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(user, amount);
+        vm.stopPrank();
+
+        vm.prank(address(etherFiAdminInstance));
+        withdrawRequestNFTInstance.finalizeRequests(reqId);
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(uint128(amount));
+
+        // Adversarial: drain LP balance to 0.
+        vm.deal(address(liquidityPoolInstance), 0);
+
+        uint256 userEthBefore = user.balance;
+        vm.prank(user);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        assertGt(user.balance, userEthBefore, "user did not receive ETH despite drained LP");
+    }
+
+    function test_integration_fullLifecycle_withDrain() public {
+        address user = bob;
+        uint96 amount = 5 ether;
+
+        // Deposit + request.
+        vm.deal(user, 100 ether);
+        vm.startPrank(user);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), amount);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(user, amount);
+        vm.stopPrank();
+
+        // Admin finalizes (NFT contract gets ETH at this step).
+        vm.prank(address(etherFiAdminInstance));
+        withdrawRequestNFTInstance.finalizeRequests(reqId);
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(uint128(amount));
+
+        // Adversarial: drain LP balance to 0 (simulating other consumers draining LP
+        // between finalize and claim).
+        vm.deal(address(liquidityPoolInstance), 0);
+
+        // User claims — should succeed because NFT contract holds the ETH.
+        uint256 userEthBefore = user.balance;
+        vm.prank(user);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
+
+        assertGt(user.balance, userEthBefore, "user did not receive funds despite drain");
     }
 }

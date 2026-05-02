@@ -6,6 +6,8 @@ import "forge-std/Test.sol";
 import "../src/utils/PausableUntil.sol";
 
 contract LiquidityPoolTest is TestSetup {
+    using stdStorage for StdStorage;
+
     uint256[] public processedBids;
     uint256[] public validatorArray;
     uint256[] public bidIds;
@@ -1172,10 +1174,14 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_AddEthAmountLockedForWithdrawal() public {
         assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 0);
-        
+
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
         vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(10 ether);
-        
+
         assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 10 ether);
     }
 
@@ -1184,6 +1190,31 @@ contract LiquidityPoolTest is TestSetup {
         vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(10 ether);
         vm.stopPrank();
+    }
+
+    function test_addEthAmountLockedForWithdrawal_transfersEthToNFT() public {
+        // Uses the default testing-fork setUp() (matches the adjacent test_AddEthAmountLockedForWithdrawal).
+        uint128 amount = 1 ether;
+
+        // Fund LP with enough ETH and totalValueInLp accounting via a deposit.
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
+        uint128 lpInBefore        = liquidityPoolInstance.totalValueInLp();
+        uint128 lpOutBefore       = liquidityPoolInstance.totalValueOutOfLp();
+        uint256 nftBalBefore      = address(withdrawRequestNFTInstance).balance;
+        uint256 totalSharesBefore = eETHInstance.totalShares();
+        uint256 lockedBefore      = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(amount);
+
+        assertEq(liquidityPoolInstance.totalValueInLp(),  lpInBefore  - amount, "totalValueInLp not decreased");
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), lpOutBefore + amount, "totalValueOutOfLp not increased");
+        assertEq(address(withdrawRequestNFTInstance).balance, nftBalBefore + amount, "NFT balance not increased");
+        assertEq(eETHInstance.totalShares(), totalSharesBefore, "totalShares should not change");
+        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), lockedBefore + amount, "locked counter not increased");
     }
 
     // ============ Burn Shares Tests ============
@@ -1780,5 +1811,92 @@ contract LiquidityPoolTest is TestSetup {
         vm.deal(bob, 1 ether);
         vm.prank(bob);
         liquidityPoolInstance.deposit{value: 1 ether}();
+    }
+
+    function test_withdraw_segregatedCaller_skipsLpSendFund() public {
+        uint128 amount = 1 ether;
+
+        // Deposit and request a withdrawal so eETH lands in the NFT contract the real way.
+        vm.deal(alice, 100 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), amount);
+        liquidityPoolInstance.requestWithdraw(alice, amount);
+        vm.stopPrank();
+
+        // Admin locks ETH for the NFT (moves ETH from LP to NFT, increments ethAmountLockedForWithdrawal).
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(amount);
+
+        uint256 lpEthBefore        = address(liquidityPoolInstance).balance;
+        uint256 nftEthBefore       = address(withdrawRequestNFTInstance).balance;
+        uint256 recipientEthBefore = bob.balance;
+        uint128 lpInBefore         = liquidityPoolInstance.totalValueInLp();
+        uint128 lpOutBefore        = liquidityPoolInstance.totalValueOutOfLp();
+        uint256 lockedBefore       = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+
+        vm.prank(address(withdrawRequestNFTInstance));
+        liquidityPoolInstance.withdraw(bob, amount);
+
+        assertEq(address(liquidityPoolInstance).balance, lpEthBefore, "LP ETH should not change on segregated withdraw");
+        assertEq(address(withdrawRequestNFTInstance).balance, nftEthBefore, "NFT ETH unchanged by LP.withdraw alone");
+        assertEq(bob.balance, recipientEthBefore, "recipient should NOT receive ETH from LP on segregated path");
+        assertEq(liquidityPoolInstance.totalValueInLp(),  lpInBefore, "totalValueInLp should not change");
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), lpOutBefore - amount, "totalValueOutOfLp not decreased");
+        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), lockedBefore - amount, "locked counter not decreased");
+    }
+
+    function test_initializeOnUpgradeV2_sweepsLockedEth() public {
+        // Give LP plenty of ETH and totalValueInLp.
+        vm.deal(alice, 200 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 200 ether}();
+
+        uint128 nftLocked = 5 ether;
+
+        // ethAmountLockedForWithdrawal is at storage slot 220, byte offset 1 (packed uint128).
+        // Manually merge the new value: clear bytes 1-16, OR in nftLocked shifted left 8 bits.
+        {
+            bytes32 slot220 = bytes32(uint256(220));
+            bytes32 current = vm.load(address(liquidityPoolInstance), slot220);
+            // Mask: keep byte 0 (bits 0-7) and bytes 17-31 (bits 136-255); clear bits 8-135.
+            bytes32 mask = bytes32(~(uint256(type(uint128).max) << 8));
+            bytes32 newVal = (current & mask) | bytes32(uint256(nftLocked) << 8);
+            vm.store(address(liquidityPoolInstance), slot220, newVal);
+        }
+        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), nftLocked);
+
+        // escrowMigrationCompleted is at slot 226, byte offset 0 (bool).
+        // It should already be false after initializeTestingFork; no-op write to be safe.
+        {
+            bytes32 slot226 = bytes32(uint256(226));
+            bytes32 current = vm.load(address(liquidityPoolInstance), slot226);
+            bytes32 newVal  = current & bytes32(~uint256(0xff)); // clear byte 0
+            vm.store(address(liquidityPoolInstance), slot226, newVal);
+        }
+        assertFalse(liquidityPoolInstance.escrowMigrationCompleted());
+
+        // Capture before-state.
+        uint128 lpInBefore   = liquidityPoolInstance.totalValueInLp();
+        uint128 lpOutBefore  = liquidityPoolInstance.totalValueOutOfLp();
+        uint256 nftBalBefore = address(withdrawRequestNFTInstance).balance;
+        uint256 sharesBefore = eETHInstance.totalShares();
+
+        // Run migration as owner.
+        address ownerAddr = liquidityPoolInstance.owner();
+        vm.prank(ownerAddr);
+        liquidityPoolInstance.initializeOnUpgradeV2();
+
+        // ETH moved from LP to NFT; accounting rebalanced; shares unchanged; flag set.
+        assertEq(liquidityPoolInstance.totalValueInLp(),    lpInBefore  - nftLocked, "InLp not decreased");
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), lpOutBefore + nftLocked, "OutOfLp not increased");
+        assertEq(address(withdrawRequestNFTInstance).balance, nftBalBefore + nftLocked, "NFT not funded");
+        assertEq(eETHInstance.totalShares(), sharesBefore, "totalShares should not change");
+        assertTrue(liquidityPoolInstance.escrowMigrationCompleted(), "flag not set");
+
+        // Idempotency guard.
+        vm.expectRevert(bytes("already migrated"));
+        vm.prank(ownerAddr);
+        liquidityPoolInstance.initializeOnUpgradeV2();
     }
 }

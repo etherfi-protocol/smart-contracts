@@ -12,6 +12,26 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         initializeRealisticFork(MAINNET_FORK);
         vm.etch(alice, bytes(""));
         vm.etch(bob, bytes(""));
+
+        // Upgrade LP and NFT to the new escrow-aware implementations so that
+        // finalizeRequests + claimWithdraw work with the new ETH-escrow flow.
+        address lpOwner = liquidityPoolInstance.owner();
+        vm.prank(lpOwner);
+        liquidityPoolInstance.upgradeTo(
+            address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE))
+        );
+
+        address wrnOwner = withdrawRequestNFTInstance.owner();
+        vm.prank(wrnOwner);
+        withdrawRequestNFTInstance.upgradeTo(
+            address(new WithdrawRequestNFT(buybackWallet))
+        );
+
+        // One-shot migration: move pre-existing locked ETH into NFT escrow.
+        if (!liquidityPoolInstance.escrowMigrationCompleted()) {
+            vm.prank(lpOwner);
+            liquidityPoolInstance.initializeOnUpgradeV2();
+        }
     }
 
     function test_HandleRemainder() public {

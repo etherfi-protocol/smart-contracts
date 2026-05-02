@@ -170,7 +170,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
 
         // Typed getter snapshot — independent cross-check of the slot scan.
         LiquidityPool lp = LiquidityPool(payable(LIQUIDITY_POOL));
-        WithdrawRequestNFT wrn = WithdrawRequestNFT(WITHDRAW_REQUEST_NFT);
+        WithdrawRequestNFT wrn = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
 
         LPSnap memory lpPre = _snapLP(lp);
         WRNSnap memory wrnPre = _snapWRN(wrn);
@@ -245,7 +245,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     function test_postUpgrade_preExistingFinalizedRequest_isClaimable() public {
         _doUpgrade();
 
-        WithdrawRequestNFT wrn = WithdrawRequestNFT(WITHDRAW_REQUEST_NFT);
+        WithdrawRequestNFT wrn = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
         uint32 lastFin = wrn.lastFinalizedRequestId();
         require(lastFin > 0, "no finalized requests on fork");
 
@@ -302,7 +302,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     function test_postUpgrade_claimWorksWhilePaused_onMainnetData() public {
         _doUpgrade();
 
-        WithdrawRequestNFT wrn = WithdrawRequestNFT(WITHDRAW_REQUEST_NFT);
+        WithdrawRequestNFT wrn = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
         uint32 lastFin = wrn.lastFinalizedRequestId();
         require(lastFin > 0, "no finalized requests on fork");
 
@@ -361,6 +361,14 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         address wrnOwner = IOwnableRead(WITHDRAW_REQUEST_NFT).owner();
         vm.prank(wrnOwner);
         IUUPSProxy(WITHDRAW_REQUEST_NFT).upgradeTo(newWRN);
+
+        // Migrate pre-existing locked ETH from LP into the NFT escrow so that
+        // pre-existing finalized requests can be claimed against the NFT balance.
+        LiquidityPool lp = LiquidityPool(payable(LIQUIDITY_POOL));
+        if (!lp.escrowMigrationCompleted()) {
+            vm.prank(lp.owner());
+            lp.initializeOnUpgradeV2();
+        }
     }
 
     /// @dev Separately verify that, post-upgrade, the guard actually blocks
