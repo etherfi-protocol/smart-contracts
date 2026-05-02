@@ -178,7 +178,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // ------------------------------------------------------------------
         // 2. Deploy new implementation contracts (with the added guard)
         // ------------------------------------------------------------------
-        address newLP  = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE));
+        address newLP  = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, 0));
         address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE));
 
         // ------------------------------------------------------------------
@@ -352,7 +352,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      proxies to new implementations with the guard + permissionless
     ///      claim changes.
     function _doUpgrade() internal {
-        address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE));
+        address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, 0));
         address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE));
 
         vm.prank(UPGRADE_TIMELOCK);
@@ -367,7 +367,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      re-entry. This is defence-in-depth in case some ABI mismatch made
     ///      the modifier no-op.
     function test_postUpgrade_guardBlocksReentry() public {
-        address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE));
+        address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, 0));
         vm.prank(UPGRADE_TIMELOCK);
         IUUPSProxy(LIQUIDITY_POOL).upgradeTo(newLP);
 
