@@ -101,6 +101,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         totalRemainderEEthShares = 0;
     }
 
+    receive() external payable {
+        require(msg.sender == address(liquidityPool), "Only LP");
+    }
+
     /// @notice creates a withdraw request and issues an associated NFT to the recipient
     /// @dev liquidity pool contract will call this function when a user requests withdraw
     /// @param amountOfEEth amount of eETH requested for withdrawal
@@ -141,6 +145,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return _claimWithdraw(tokenId, ownerOf(tokenId));
     }
     
+    /// @dev Pays the recipient from this contract's own ETH balance (segregated at finalize via LP.addEthAmountLockedForWithdrawal). Assumes non-decreasing share rate.
     function _claimWithdraw(uint256 tokenId, address recipient) internal {
         require(ownerOf(tokenId) == msg.sender, "Not the owner of the NFT");
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
@@ -158,6 +163,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
         uint256 amountBurnedShare = liquidityPool.withdraw(recipient, amountToWithdraw);
         assert (amountBurnedShare == shareAmountToBurnForWithdrawal);
+
+        // ETH was transferred to this contract at finalize time via LP.addEthAmountLockedForWithdrawal.
+        require(address(this).balance >= amountToWithdraw, "Insufficient escrow");
+        (bool ok, ) = payable(recipient).call{value: amountToWithdraw}("");
+        require(ok, "ETH transfer failed");
 
         emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw, amountBurnedShare, recipient, 0);
     }
