@@ -95,9 +95,13 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         }
         vm.stopPrank();
 
-        // Skip rebase or do minimal rebase to create larger remainder
+        // Scale rebase to TVL so the remainder stays drift-proof: total_remainder
+        // ≈ rebase × (bob_locked / TVL), so picking rebase = TVL × p collapses to
+        // total_remainder ≈ bob_locked × p. With bob_locked = 200 ETH and p = 0.5%,
+        // expected remainder ≈ 1 ETH, well above the 0.05 floor below.
+        int128 rebaseAmount = int128(int256(liquidityPoolInstance.getTotalPooledEther() / 200));
         vm.prank(address(membershipManagerV1Instance));
-        liquidityPoolInstance.rebase(1 ether);
+        liquidityPoolInstance.rebase(rebaseAmount);
 
         // Finalize and claim all requests
         for (uint256 i = 0; i < 20; i++) {
