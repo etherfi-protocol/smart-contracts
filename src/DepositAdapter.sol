@@ -12,6 +12,7 @@ import "./interfaces/IeETH.sol";
 import "./interfaces/IWeETH.sol";
 import "./interfaces/IWETH.sol";
 import "./interfaces/IwstETH.sol";
+import "./interfaces/IRoleRegistry.sol";
 
 contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
 
@@ -22,6 +23,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     IWETH public immutable wETH;
     IERC20Upgradeable public immutable stETH;
     IwstETH public immutable wstETH;
+    IRoleRegistry public immutable roleRegistry;
 
      enum SourceOfFunds {
         ETH,
@@ -32,7 +34,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
 
     event AdapterDeposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
 
-    constructor(address _liquidityPool, address _liquifier, address _weETH, address _eETH, address _wETH, address _stETH, address _wstETH) {
+    constructor(address _liquidityPool, address _liquifier, address _weETH, address _eETH, address _wETH, address _stETH, address _wstETH, address _roleRegistry) {
         liquidityPool = ILiquidityPool(_liquidityPool);
         liquifier = ILiquifier(_liquifier);
         eETH = IeETH(_eETH);
@@ -40,6 +42,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         wETH = IWETH(_wETH);
         stETH = IERC20Upgradeable(_stETH);
         wstETH = IwstETH(_wstETH);
+        roleRegistry = IRoleRegistry(_roleRegistry);
 
         _disableInitializers();
     }
@@ -52,7 +55,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     /// @notice Deposit ETH for weETH
     /// @param _referral Address to credit rewards
     /// @return weEthAmount weETH received by the depositer
-    function depositETHForWeETH(address _referral) external payable returns (uint256) {
+    function depositETHForWeETH(address _referral) external payable nonBlacklisted returns (uint256) {
         uint256 eETHShares = liquidityPool.deposit{value: msg.value}(_referral);
         
         emit AdapterDeposit(msg.sender, msg.value, SourceOfFunds.ETH, _referral);
@@ -64,7 +67,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     /// @param _amount Amount of WETH to deposit 
     /// @param _referral Address to credit referral
     /// @return weEthAmount weETH received by the depositer
-    function depositWETHForWeETH(uint256 _amount, address _referral) external returns (uint256) {
+    function depositWETHForWeETH(uint256 _amount, address _referral) external nonBlacklisted returns (uint256) {
         require(wETH.allowance(msg.sender, address(this)) >= _amount, "ALLOWANCE_EXCEEDED");
         require(wETH.balanceOf(msg.sender) >= _amount, "INSUFFICIENT_BALANCE");
         
@@ -83,7 +86,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     /// @param _referral Address to credit referral
     /// @param _permit Permit signature
     /// @return weEthAmount weETH received by the depositer
-    function depositStETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external returns (uint256) {
+    function depositStETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external nonBlacklisted returns (uint256) {
         try IERC20PermitUpgradeable(address(stETH)).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} 
         catch {
             if (_permit.deadline < block.timestamp) revert("PERMIT_EXPIRED");
@@ -107,7 +110,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     /// @param _referral Address to credit referral
     /// @param _permit Permit signature
     /// @return weEthAmount weETH received by the depositer
-    function depositWstETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external returns (uint256) {
+    function depositWstETHForWeETHWithPermit(uint256 _amount, address _referral, ILiquifier.PermitInput calldata _permit) external nonBlacklisted returns (uint256) {
         try wstETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} 
         catch {
             if (_permit.deadline < block.timestamp) revert("PERMIT_EXPIRED");
@@ -143,4 +146,9 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    modifier nonBlacklisted() {
+        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
+        _;
+    }
 }

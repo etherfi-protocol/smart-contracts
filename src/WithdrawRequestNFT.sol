@@ -65,6 +65,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     error IncorrectRole();
     error InvalidWithdrawalAmount();
+    error BlacklistedUser();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _treasury) {
@@ -141,7 +142,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @notice called by the NFT owner to claim their ETH
     /// @dev burns the NFT and transfers ETH from the liquidity pool to the owner minus any fee, withdraw request must be valid and finalized
     /// @param tokenId the id of the withdraw request and associated NFT
-    function claimWithdraw(uint256 tokenId) external nonReentrant {
+    function claimWithdraw(uint256 tokenId) external nonReentrant nonBlacklisted {
         return _claimWithdraw(tokenId, ownerOf(tokenId));
     }
     
@@ -342,6 +343,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     modifier whenNotPaused() {
         _requireNotPaused();
         _requireNotPausedUntil();
+        _;
+    }
+
+    modifier nonBlacklisted() {
+        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
         _;
     }
 }

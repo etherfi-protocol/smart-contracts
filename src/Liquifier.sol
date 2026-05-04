@@ -124,6 +124,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error InvalidRoleRegistry();
     error InvalidPriceFeed();
     error InvalidStEthPrice();
+    error BlacklistedUser();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _roleRegistry, address _stEthPriceFeed, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) {
@@ -173,7 +174,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @param _referral The referral address
     /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
     /// If the token is l2Eth, only the l2SyncPool can call this function
-    function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {        
+    function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant nonBlacklisted returns (uint256) {        
         require(isTokenWhitelisted(_token) && (!tokenInfos[_token].isL2Eth || msg.sender == l1SyncPool), "NOT_ALLOWED");
 
         // Measure actual amount received to handle stETH's 1-2 wei rounding issue
@@ -202,7 +203,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return eEthShare;
     }
 
-    function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused returns (uint256) {
+    function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused nonBlacklisted returns (uint256) {
         try IERC20Permit(_token).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return depositWithERC20(_token, _amount, _referral);
     }
@@ -420,5 +421,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function _requireNotPaused() internal override view {
         _requireNotPausedUntil();
         super._requireNotPaused();
+    }
+
+    modifier nonBlacklisted() {
+        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
+        _;
     }
 }

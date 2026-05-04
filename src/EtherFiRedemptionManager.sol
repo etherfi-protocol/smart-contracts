@@ -68,6 +68,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     error InvalidAmount();
     error InvalidOutputToken();
+    error BlacklistedUser();
 
 
     receive() external payable {}
@@ -120,7 +121,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param receiver The address to receive the redeemed outputToken.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
+    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant nonBlacklisted {
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
 
@@ -130,7 +131,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param receiver The address to receive the redeemed outputToken.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
+    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant nonBlacklisted {
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
 
@@ -141,7 +142,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param permit The permit params.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
+    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant nonBlacklisted {
         try eEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
@@ -153,7 +154,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param permit The permit params.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
+    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant nonBlacklisted {
         try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
@@ -431,6 +432,11 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     modifier hasRole(bytes32 role) {
         _hasRole(role, msg.sender);
+        _;
+    }
+
+    modifier nonBlacklisted() {
+        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
         _;
     }
 
