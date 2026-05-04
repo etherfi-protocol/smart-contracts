@@ -90,7 +90,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     // so the price-feed branch is a no-op.
     address public stEthChainlinkFeed;
     uint256 public constant LIQUIFIER_STALE_WINDOW = 24 hours;
-    uint256 public constant LIQUIFIER_MAX_OFF_CHAIN_PREMIUM = 0.01 ether;
+    uint256 public constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 500;
 
     IcbETH public cbEth;
     IwBETH public wbEth;
@@ -477,7 +477,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.startPrank(owner);
 
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
-            liquifierInstance.upgradeTo(address(new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_OFF_CHAIN_PREMIUM)));
+            liquifierInstance.upgradeTo(address(new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS)));
         }
         vm.stopPrank();
 
@@ -652,7 +652,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             stEthChainlinkFeed = address(new MockChainlinkPriceFeed(int256(1 ether), 0));
         }
 
-        liquifierImplementation = new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_OFF_CHAIN_PREMIUM);
+        liquifierImplementation = new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS);
         liquifierProxy = new UUPSProxy(address(liquifierImplementation), "");
         liquifierInstance = Liquifier(payable(liquifierProxy));
 
@@ -1620,7 +1620,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_liquifier() internal {
-        address newImpl = address(new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_OFF_CHAIN_PREMIUM));
+        address newImpl = address(new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS));
         vm.prank(liquifierInstance.owner());
         liquifierInstance.upgradeTo(newImpl);
     }

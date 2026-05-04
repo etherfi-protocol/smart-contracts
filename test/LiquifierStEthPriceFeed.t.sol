@@ -36,7 +36,8 @@ contract LiquifierStEthPriceFeedTest is Test {
     address internal owner = address(0xA11CE);
 
     uint256 internal constant STALE_WINDOW = 1 days;
-    uint256 internal constant PREMIUM = 0.01 ether;
+    uint256 internal constant MAX_DEVIATION_BPS = 500;
+    uint256 internal constant BPS = 10_000;
     uint256 internal constant MIN_DISCOUNT = 100;
 
     function setUp() public {
@@ -54,7 +55,7 @@ contract LiquifierStEthPriceFeedTest is Test {
         feed = new MockChainlinkPriceFeed(int256(1 ether), block.timestamp);
         curve = new MockCurvePool();
 
-        Liquifier impl = new Liquifier(address(roleRegistry), address(feed), MIN_DISCOUNT, STALE_WINDOW, PREMIUM);
+        Liquifier impl = new Liquifier(address(roleRegistry), address(feed), MIN_DISCOUNT, STALE_WINDOW, MAX_DEVIATION_BPS);
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         liquifier = Liquifier(payable(address(proxy)));
 
@@ -130,9 +131,9 @@ contract LiquifierStEthPriceFeedTest is Test {
         assertEq(q, 0.5 ether);
     }
 
-    /// Fresh price within premium tolerance: passes. Curve says 0.99, chainlink says 1.0,
-    /// premium covers the 0.01 gap exactly.
-    function test_freshPrice_withinPremium_passes() public {
+    /// Fresh price within deviation tolerance: passes. Curve says 0.99, chainlink says 1.0;
+    /// deviation = 0.01 / 0.99 ≈ 101 bps, well below the 500 bps cap.
+    function test_freshPrice_withinDeviation_passes() public {
         feed.set(int256(1 ether), block.timestamp);
         curve.set(0.99 ether);
 
@@ -141,29 +142,29 @@ contract LiquifierStEthPriceFeedTest is Test {
         assertEq(q, 0.99 ether);
     }
 
-    /// Fresh price exactly at the boundary (chainlinkValue == marketValue + premium).
-    /// Condition uses strict `>`, so equality must NOT revert.
-    function test_freshPrice_atPremiumBoundary_passes() public {
+    /// Fresh price exactly at the 500 bps boundary. Predicate uses strict `>`, so
+    /// equality must NOT revert. Setup: amount=10_500, curve=10_000, feed=1 ETH.
+    /// pricefeedValue=10_500, marketValue=10_000, deviation=500 → 500*BPS/10_000 = 500 (==cap).
+    function test_freshPrice_atDeviationBoundary_passes() public {
         feed.set(int256(1 ether), block.timestamp);
-        curve.set(0.99 ether); // chainlinkValue (1) == marketValue (0.99) + premium (0.01)
+        curve.set(10_000);
 
-        uint256 q = liquifier.quoteByMarketValue(stEth, 1 ether);
-        assertEq(q, 0.99 ether);
+        uint256 q = liquifier.quoteByMarketValue(stEth, 10_500);
+        assertEq(q, 10_000);
     }
 
-    /// Fresh price one wei above the premium boundary: reverts.
-    function test_freshPrice_oneWeiAbovePremium_reverts() public {
+    /// Fresh price one unit above the 500 bps boundary: reverts. Same shape as above
+    /// with amount=10_501 → deviation=501 → 501*BPS/10_000 = 501 (>cap).
+    function test_freshPrice_oneAboveDeviation_reverts() public {
         feed.set(int256(1 ether), block.timestamp);
-        // marketValue + premium = 0.99 + 0.01 = 1 ether → set curve so that
-        // chainlinkValue (1 ether) is strictly greater by 1 wei.
-        curve.set(0.99 ether - 1);
+        curve.set(10_000);
 
         vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
-        liquifier.quoteByMarketValue(stEth, 1 ether);
+        liquifier.quoteByMarketValue(stEth, 10_501);
     }
 
     /// Curve quote above 1:1 stETH→ETH: marketValue capped at amount via _min.
-    /// Chainlink at 1.0 must still pass (chainlinkValue == cap, premium absorbs nothing).
+    /// Chainlink at 1.0 must still pass (chainlinkValue == cap, deviation = 0).
     function test_curveAboveAmount_marketValueCappedAtAmount() public {
         feed.set(int256(1 ether), block.timestamp);
         curve.set(1.5 ether); // > amount → _min returns amount
@@ -198,9 +199,11 @@ contract LiquifierStEthPriceFeedTest is Test {
         uint256 age
     ) public {
         // Bound to ranges that exercise the check without overflowing the
-        // (uint256(answer) * amount) / 1e18 product.
+        // (uint256(answer) * amount) / 1e18 product. curveOut is bounded > 0
+        // because marketValue=0 + fresh + answer>0 would div-by-zero in the
+        // BPS deviation check; that's a separate concern not covered here.
         amount   = bound(amount,   1, 1_000_000 ether);
-        curveOut = bound(curveOut, 0, 2_000_000 ether);
+        curveOut = bound(curveOut, 1, 2_000_000 ether);
         answer   = bound(answer, 0, int256(uint256(2 ether))); // 0..2 ETH per stETH
         age      = bound(age,    0, STALE_WINDOW * 2);
 
@@ -212,11 +215,12 @@ contract LiquifierStEthPriceFeedTest is Test {
         uint256 marketValue = curveOut < amount ? curveOut : amount;
         uint256 chainlinkValue = (uint256(answer) * amount) / 1e18;
         bool fresh = updatedAt + STALE_WINDOW >= block.timestamp;
+        uint256 deviation = chainlinkValue > marketValue ? chainlinkValue - marketValue : marketValue - chainlinkValue;
 
         if (answer <= 0) {
             vm.expectRevert(Liquifier.InvalidPriceFeed.selector);
             liquifier.quoteByMarketValue(stEth, amount);
-        } else if (fresh && chainlinkValue > marketValue + PREMIUM) {
+        } else if (fresh && (deviation * BPS) / marketValue > MAX_DEVIATION_BPS) {
             vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
             liquifier.quoteByMarketValue(stEth, amount);
         } else {
