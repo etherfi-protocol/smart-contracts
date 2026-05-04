@@ -116,14 +116,24 @@ contract BlacklistTest is TestSetup {
 
     function test_blacklist_EtherFiRedemptionManager_redeemEEth_reverts() public {
         address ethAddress = etherFiRedemptionManagerInstance.ETH_ADDRESS();
+
         vm.prank(blacklisted);
+        vm.expectRevert(EtherFiRedemptionManager.BlacklistedUser.selector);
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, alice, ethAddress);
+
+        vm.prank(alice);
         vm.expectRevert(EtherFiRedemptionManager.BlacklistedUser.selector);
         etherFiRedemptionManagerInstance.redeemEEth(1 ether, blacklisted, ethAddress);
     }
 
     function test_blacklist_EtherFiRedemptionManager_redeemWeEth_reverts() public {
         address ethAddress = etherFiRedemptionManagerInstance.ETH_ADDRESS();
+
         vm.prank(blacklisted);
+        vm.expectRevert(EtherFiRedemptionManager.BlacklistedUser.selector);
+        etherFiRedemptionManagerInstance.redeemWeEth(1 ether, alice, ethAddress);
+
+        vm.prank(alice);
         vm.expectRevert(EtherFiRedemptionManager.BlacklistedUser.selector);
         etherFiRedemptionManagerInstance.redeemWeEth(1 ether, blacklisted, ethAddress);
     }
@@ -131,7 +141,12 @@ contract BlacklistTest is TestSetup {
     function test_blacklist_EtherFiRedemptionManager_redeemEEthWithPermit_reverts() public {
         IeETH.PermitInput memory permit;
         address ethAddress = etherFiRedemptionManagerInstance.ETH_ADDRESS();
+
         vm.prank(blacklisted);
+        vm.expectRevert(EtherFiRedemptionManager.BlacklistedUser.selector);
+        etherFiRedemptionManagerInstance.redeemEEthWithPermit(1 ether, alice, permit, ethAddress);
+
+        vm.prank(alice);
         vm.expectRevert(EtherFiRedemptionManager.BlacklistedUser.selector);
         etherFiRedemptionManagerInstance.redeemEEthWithPermit(1 ether, blacklisted, permit, ethAddress);
     }
@@ -139,7 +154,12 @@ contract BlacklistTest is TestSetup {
     function test_blacklist_EtherFiRedemptionManager_redeemWeEthWithPermit_reverts() public {
         IWeETH.PermitInput memory permit;
         address ethAddress = etherFiRedemptionManagerInstance.ETH_ADDRESS();
+
         vm.prank(blacklisted);
+        vm.expectRevert(EtherFiRedemptionManager.BlacklistedUser.selector);
+        etherFiRedemptionManagerInstance.redeemWeEthWithPermit(1 ether, alice, permit, ethAddress);
+
+        vm.prank(alice);
         vm.expectRevert(EtherFiRedemptionManager.BlacklistedUser.selector);
         etherFiRedemptionManagerInstance.redeemWeEthWithPermit(1 ether, blacklisted, permit, ethAddress);
     }
@@ -243,6 +263,12 @@ contract BlacklistTest is TestSetup {
         vm.prank(blacklisted);
         vm.expectRevert(WithdrawRequestNFT.BlacklistedUser.selector);
         withdrawRequestNFTInstance.claimWithdraw(1);
+    }
+
+    function test_blacklist_WithdrawRequestNFT_batchClaimWithdraw_reverts() public {
+        vm.prank(blacklisted);
+        vm.expectRevert(WithdrawRequestNFT.BlacklistedUser.selector);
+        withdrawRequestNFTInstance.batchClaimWithdraw(new uint256[](1));
     }
 
     // -------------------------------------------------------------------------

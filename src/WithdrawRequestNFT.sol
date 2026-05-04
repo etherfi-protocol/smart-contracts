@@ -167,7 +167,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw, amountBurnedShare, recipient, 0);
     }
 
-    function batchClaimWithdraw(uint256[] calldata tokenIds) external nonReentrant {
+    function batchClaimWithdraw(uint256[] calldata tokenIds) external nonReentrant nonBlacklisted {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             _claimWithdraw(tokenIds[i], ownerOf(tokenIds[i]));
         }
