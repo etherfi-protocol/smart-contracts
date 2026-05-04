@@ -13,6 +13,7 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IWeETH.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./utils/PausableUntil.sol";
 
 /// @title PriorityWithdrawalQueue
 /// @notice Manages priority withdrawals for whitelisted users
@@ -21,6 +22,7 @@ contract PriorityWithdrawalQueue is
     Initializable, 
     UUPSUpgradeable, 
     ReentrancyGuardUpgradeable,
+    PausableUntil,
     IPriorityWithdrawalQueue
 {
     using SafeERC20 for IERC20;
@@ -32,6 +34,7 @@ contract PriorityWithdrawalQueue is
     //--------------------------------------------------------------------------------------
 
     uint96 public constant MIN_AMOUNT = 0.01 ether;
+    uint96 public constant MAX_AMOUNT = 1000 ether;
     uint256 private constant _BASIS_POINT_SCALE = 1e4;
 
     //--------------------------------------------------------------------------------------
@@ -125,6 +128,7 @@ contract PriorityWithdrawalQueue is
 
     modifier whenNotPaused() {
         if (paused) revert ContractPaused();
+        _requireNotPausedUntil();
         _;
     }
 
@@ -188,7 +192,7 @@ contract PriorityWithdrawalQueue is
         uint96 amountOfEEth,
         uint96 amountWithFee
     ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
-        if (amountOfEEth < MIN_AMOUNT) revert InvalidAmount();
+        if (amountOfEEth < MIN_AMOUNT || amountOfEEth > MAX_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
 
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(this), amountOfEEth);
@@ -202,7 +206,7 @@ contract PriorityWithdrawalQueue is
         uint96 amountWithFee,
         PermitInput calldata permit
     ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
-        if (amountOfEEth < MIN_AMOUNT) revert InvalidAmount();
+        if (amountOfEEth < MIN_AMOUNT || amountOfEEth > MAX_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
 
         try eETH.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {
@@ -231,7 +235,7 @@ contract PriorityWithdrawalQueue is
         IERC20(address(weETH)).safeTransferFrom(msg.sender, address(this), weEthAmount);
         uint96 eEthAmount = uint96(weETH.unwrap(weEthAmount));
 
-        if (eEthAmount < MIN_AMOUNT) revert InvalidAmount();
+        if (eEthAmount < MIN_AMOUNT || eEthAmount > MAX_AMOUNT) revert InvalidAmount();
 
         (requestId,) = _queueWithdrawRequest(msg.sender, eEthAmount, amountWithFee);
         _verifyRequestPostConditions(lpEthBefore, queueEEthSharesBefore, eEthAmount);
@@ -258,7 +262,7 @@ contract PriorityWithdrawalQueue is
         IERC20(address(weETH)).safeTransferFrom(msg.sender, address(this), weEthAmount);
         uint96 eEthAmount = uint96(weETH.unwrap(weEthAmount));
 
-        if (eEthAmount < MIN_AMOUNT) revert InvalidAmount();
+        if (eEthAmount < MIN_AMOUNT || eEthAmount > MAX_AMOUNT) revert InvalidAmount();
 
         (requestId,) = _queueWithdrawRequest(msg.sender, eEthAmount, amountWithFee);
         _verifyRequestPostConditions(lpEthBefore, queueEEthSharesBefore, eEthAmount);
@@ -283,7 +287,7 @@ contract PriorityWithdrawalQueue is
     /// @dev Anyone can call this to claim on behalf of the user. Funds are sent to request.user.
     ///      ETH delivery forwards gas to request.user, so third parties should avoid claiming for untrusted recipients.
     /// @param request The withdrawal request to claim
-    function claimWithdraw(WithdrawRequest calldata request) external whenNotPaused nonReentrant {
+    function claimWithdraw(WithdrawRequest calldata request) external nonReentrant {
         if (request.creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
         
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
@@ -298,7 +302,7 @@ contract PriorityWithdrawalQueue is
     /// @dev Anyone can call this to claim on behalf of users. Funds are sent to each request.user.
     ///      Each ETH delivery forwards gas to request.user, so batching untrusted recipients can be griefed.
     /// @param requests Array of withdrawal requests to claim
-    function batchClaimWithdraw(WithdrawRequest[] calldata requests) external whenNotPaused nonReentrant {
+    function batchClaimWithdraw(WithdrawRequest[] calldata requests) external nonReentrant {
         for (uint256 i = 0; i < requests.length; ++i) {
             if (requests[i].creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
             (uint256 lpEthBefore, uint256 queueEEthSharesBefore) = _snapshotBalances();
@@ -432,6 +436,16 @@ contract PriorityWithdrawalQueue is
         if (!paused) revert ContractNotPaused();
         paused = false;
         emit Unpaused(msg.sender);
+    }
+
+    function pauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _pauseUntil();
+    }
+
+    function unpauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _unpauseUntil();
     }
 
     //--------------------------------------------------------------------------------------

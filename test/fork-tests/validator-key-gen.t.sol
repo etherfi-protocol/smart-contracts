@@ -53,15 +53,19 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.prank(stakingManager.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
-        LiquidityPool liquidityPoolImpl = new LiquidityPool(address(0x0));
+        LiquidityPool liquidityPoolImpl = new LiquidityPool(address(0x0), 0);
         vm.prank(liquidityPool.owner());
         liquidityPool.upgradeTo(address(liquidityPoolImpl));
+
+        AuctionManager auctionManagerImpl = new AuctionManager(address(roleRegistry));
+        vm.prank(auctionManager.owner());
+        auctionManager.upgradeTo(address(auctionManagerImpl));
 
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(liquidityPool.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), admin);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), admin);
-        auctionManager.updateAdmin(admin, true);
+        roleRegistry.grantRole(auctionManager.AUCTION_MANAGER_ADMIN_ROLE(), admin);
         vm.stopPrank();
     }
 

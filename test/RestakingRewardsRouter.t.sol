@@ -56,7 +56,7 @@ contract RestakingRewardsRouterTest is Test {
         otherToken = new TestERC20("Other Token", "OTH");
 
         // Deploy LiquidityPool
-        liquidityPoolImpl = new LiquidityPool(address(0x0));
+        liquidityPoolImpl = new LiquidityPool(address(0x0), 0);
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImpl), "");
         liquidityPool = LiquidityPool(payable(address(liquidityPoolProxy)));
         
@@ -66,6 +66,10 @@ contract RestakingRewardsRouterTest is Test {
         // Set: totalValueOutOfLp = 1000 ether (lower 16 bytes), totalValueInLp = 0 (upper 16 bytes)
         bytes32 value = bytes32(uint256(1000 ether)); // Lower 16 bytes = 1000 ether, upper 16 bytes = 0
         vm.store(address(liquidityPool), bytes32(uint256(207)), value);
+
+        // LiquidityPool.receive() now calls _checkMinAmountForShare() -> eETH.totalShares().
+        // eETH is unset in this test (proxy never initialized), so mock the call to return 0.
+        vm.mockCall(address(0), abi.encodeWithSelector(IeETH.totalShares.selector), abi.encode(uint256(0)));
 
         // Deploy RestakingRewardsRouter implementation
         routerImpl = new RestakingRewardsRouter(

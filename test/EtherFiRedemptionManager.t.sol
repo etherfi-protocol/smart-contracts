@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import "forge-std/console2.sol";
 import "./TestSetup.sol";
 import "lib/BucketLimiter.sol";
+import "../src/utils/PausableUntil.sol";
 
 contract EtherFiRedemptionManagerTest is TestSetup {
 
@@ -82,8 +83,143 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100_00, ETH_ADDRESS); // 100%
         assertEq(etherFiRedemptionManagerInstance.lowWatermarkInETH(ETH_ADDRESS), 100 ether);
 
-        vm.expectRevert("INVALID");
+        vm.expectRevert("Exceeds max low watermark of tvl");
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100_01, ETH_ADDRESS); // 100.01%
+    }
+
+    function test_exit_fee_guardrail() public {
+        vm.startPrank(admin);
+
+        uint256 maxExitFee = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_IN_BPS();
+        assertEq(maxExitFee, 100); // configured in TestSetup
+
+        // boundary value is accepted
+        etherFiRedemptionManagerInstance.setExitFeeBasisPoints(uint16(maxExitFee), ETH_ADDRESS);
+        (, , uint16 exitFeeBps, ) = etherFiRedemptionManagerInstance.tokenToRedemptionInfo(ETH_ADDRESS);
+        assertEq(exitFeeBps, uint16(maxExitFee));
+
+        // one above the cap reverts
+        vm.expectRevert("Exceeds max exit fee");
+        etherFiRedemptionManagerInstance.setExitFeeBasisPoints(uint16(maxExitFee + 1), ETH_ADDRESS);
+        vm.stopPrank();
+    }
+
+    function test_exit_fee_split_to_treasury_guardrail() public {
+        vm.startPrank(admin);
+
+        uint256 maxSplit = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS();
+        assertEq(maxSplit, 10_000); // configured in TestSetup
+
+        // boundary value is accepted
+        etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(uint16(maxSplit), ETH_ADDRESS);
+        (, uint16 exitSplit, , ) = etherFiRedemptionManagerInstance.tokenToRedemptionInfo(ETH_ADDRESS);
+        assertEq(exitSplit, uint16(maxSplit));
+
+        // one above the cap reverts
+        vm.expectRevert("Exceeds max exit fee split to treasury");
+        etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(uint16(maxSplit + 1), ETH_ADDRESS);
+        vm.stopPrank();
+    }
+
+    function test_initializeTokenParameters_guardrails() public {
+        uint256 maxExitFee = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_IN_BPS();
+        uint256 maxSplit = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS();
+        uint256 maxLowWatermark = etherFiRedemptionManagerInstance.MAX_LOW_WATERMARK_IN_BPS_OF_TVL();
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = ETH_ADDRESS;
+        uint16[] memory exitFeeSplitBps = new uint16[](1);
+        uint16[] memory exitFeeBps = new uint16[](1);
+        uint16[] memory lowWatermarkBps = new uint16[](1);
+        uint256[] memory capacities = new uint256[](1);
+        uint256[] memory refillRates = new uint256[](1);
+        capacities[0] = 5 ether;
+        refillRates[0] = 0.001 ether;
+
+        vm.startPrank(admin);
+
+        // exit fee split above cap reverts
+        exitFeeSplitBps[0] = uint16(maxSplit + 1);
+        exitFeeBps[0] = uint16(maxExitFee);
+        lowWatermarkBps[0] = uint16(maxLowWatermark);
+        vm.expectRevert("Exceeds max exit fee split to treasury");
+        etherFiRedemptionManagerInstance.initializeTokenParameters(tokens, exitFeeSplitBps, exitFeeBps, lowWatermarkBps, capacities, refillRates);
+
+        // exit fee above cap reverts
+        exitFeeSplitBps[0] = uint16(maxSplit);
+        exitFeeBps[0] = uint16(maxExitFee + 1);
+        lowWatermarkBps[0] = uint16(maxLowWatermark);
+        vm.expectRevert("Exceeds max exit fee");
+        etherFiRedemptionManagerInstance.initializeTokenParameters(tokens, exitFeeSplitBps, exitFeeBps, lowWatermarkBps, capacities, refillRates);
+
+        // low watermark above cap reverts
+        exitFeeSplitBps[0] = uint16(maxSplit);
+        exitFeeBps[0] = uint16(maxExitFee);
+        lowWatermarkBps[0] = uint16(maxLowWatermark + 1);
+        vm.expectRevert("Exceeds max low watermark of tvl");
+        etherFiRedemptionManagerInstance.initializeTokenParameters(tokens, exitFeeSplitBps, exitFeeBps, lowWatermarkBps, capacities, refillRates);
+
+        // boundary values are accepted
+        exitFeeSplitBps[0] = uint16(maxSplit);
+        exitFeeBps[0] = uint16(maxExitFee);
+        lowWatermarkBps[0] = uint16(maxLowWatermark);
+        etherFiRedemptionManagerInstance.initializeTokenParameters(tokens, exitFeeSplitBps, exitFeeBps, lowWatermarkBps, capacities, refillRates);
+        (, uint16 storedSplit, uint16 storedFee, uint16 storedLowWM) =
+            etherFiRedemptionManagerInstance.tokenToRedemptionInfo(ETH_ADDRESS);
+        assertEq(storedSplit, uint16(maxSplit));
+        assertEq(storedFee, uint16(maxExitFee));
+        assertEq(storedLowWM, uint16(maxLowWatermark));
+
+        vm.stopPrank();
+    }
+
+    function test_constructor_max_caps_guardrail() public {
+        uint256 oneAboveBasisPoints = 10_001;
+
+        // _maxExitFeeSplitToTreasuryInBps above BASIS_POINT_SCALE reverts
+        vm.expectRevert(EtherFiRedemptionManager.InvalidAmount.selector);
+        new EtherFiRedemptionManager(
+            address(liquidityPoolInstance),
+            address(eETHInstance),
+            address(weEthInstance),
+            address(treasuryInstance),
+            address(roleRegistryInstance),
+            address(etherFiRestakerInstance),
+            address(priorityQueueInstance),
+            oneAboveBasisPoints,
+            100,
+            10_000
+        );
+
+        // _maxExitFeeInBps above BASIS_POINT_SCALE reverts
+        vm.expectRevert(EtherFiRedemptionManager.InvalidAmount.selector);
+        new EtherFiRedemptionManager(
+            address(liquidityPoolInstance),
+            address(eETHInstance),
+            address(weEthInstance),
+            address(treasuryInstance),
+            address(roleRegistryInstance),
+            address(etherFiRestakerInstance),
+            address(priorityQueueInstance),
+            10_000,
+            oneAboveBasisPoints,
+            10_000
+        );
+
+        // _maxLowWatermarkInBpsOfTvl above BASIS_POINT_SCALE reverts
+        vm.expectRevert(EtherFiRedemptionManager.InvalidAmount.selector);
+        new EtherFiRedemptionManager(
+            address(liquidityPoolInstance),
+            address(eETHInstance),
+            address(weEthInstance),
+            address(treasuryInstance),
+            address(roleRegistryInstance),
+            address(etherFiRestakerInstance),
+            address(priorityQueueInstance),
+            10_000,
+            100,
+            oneAboveBasisPoints
+        );
     }
 
     function _admin_permission_by_token(address token) public {
@@ -114,7 +250,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         depositAmount = bound(depositAmount, 1 ether, 1000 ether);
         redeemAmount = bound(redeemAmount, 0.1 ether, depositAmount);
         exitFeeSplitBps = bound(exitFeeSplitBps, 0, 10000);
-        exitFeeBps = uint16(bound(uint256(exitFeeBps), 0, 10000));
+        exitFeeBps = uint16(bound(uint256(exitFeeBps), 0, 100));
         lowWatermarkBps = uint16(bound(uint256(lowWatermarkBps), 0, 10000));
 
 
@@ -169,7 +305,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         depositAmount = bound(depositAmount, 1 ether, 1000 ether);
         redeemAmount = bound(redeemAmount, 0.1 ether, depositAmount);
         exitFeeSplitBps = uint16(bound(exitFeeSplitBps, 0, 10000));
-        exitFeeBps = uint16(bound(exitFeeBps, 0, 10000));
+        exitFeeBps = uint16(bound(exitFeeBps, 0, 100));
         lowWatermarkBps = uint16(bound(lowWatermarkBps, 0, 10000));
         rebase = bound(rebase, 0, int128(uint128(depositAmount) / 10));
 
@@ -1582,5 +1718,185 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         
         assertApproxEqAbs(treasuryBalanceAfter - treasuryBalanceBefore, expectedTreasuryFee, 5e11);
         vm.stopPrank();
+    }
+
+    //--------------------------------------------------------------------------------------
+    //--------------------------  pauseContractUntil / unpauseContractUntil  ---------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 constant PAUSABLE_UNTIL_SLOT =
+        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+    address rmPauseUntilPauser = makeAddr("rmPauseUntilPauser");
+    address rmUnpauseUntilUnpauser = makeAddr("rmUnpauseUntilUnpauser");
+
+    function _grantRmPauseUntilRoles() internal {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), rmPauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), rmUnpauseUntilUnpauser);
+        vm.stopPrank();
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+    }
+
+    function _rmPausedUntil() internal view returns (uint256) {
+        return uint256(vm.load(address(etherFiRedemptionManagerInstance), PAUSABLE_UNTIL_SLOT));
+    }
+
+    function _setupRedeemScenario() internal {
+        // deposit LP liquidity + user eETH balance + configure rate limiter
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
+        vm.deal(user, 10 ether);
+        vm.prank(user);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        vm.startPrank(admin);
+        etherFiRedemptionManagerInstance.setCapacity(5 ether, ETH_ADDRESS);
+        etherFiRedemptionManagerInstance.setRefillRatePerSecond(5 ether, ETH_ADDRESS);
+        vm.stopPrank();
+        vm.warp(block.timestamp + 1);
+
+        vm.prank(user);
+        eETHInstance.approve(address(etherFiRedemptionManagerInstance), type(uint256).max);
+    }
+
+    function test_pauseContractUntil_requiresRole() public {
+        _grantRmPauseUntilRoles();
+        vm.prank(bob);
+        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        // PROTOCOL_PAUSER (admin) alone is insufficient
+        vm.prank(admin);
+        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+    }
+
+    function test_pauseContractUntil_setsState() public {
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+        assertEq(_rmPausedUntil(), block.timestamp + etherFiRedemptionManagerInstance.MAX_PAUSE_DURATION());
+    }
+
+    function test_unpauseContractUntil_requiresRole() public {
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        etherFiRedemptionManagerInstance.unpauseContractUntil();
+
+        // PROTOCOL_UNPAUSER (admin) alone is insufficient
+        vm.prank(admin);
+        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        etherFiRedemptionManagerInstance.unpauseContractUntil();
+    }
+
+    function test_unpauseContractUntil_clearsState() public {
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        vm.prank(rmUnpauseUntilUnpauser);
+        etherFiRedemptionManagerInstance.unpauseContractUntil();
+        assertEq(_rmPausedUntil(), 0);
+    }
+
+    function test_unpauseContractUntil_revertsIfNotPaused() public {
+        _grantRmPauseUntilRoles();
+        vm.prank(rmUnpauseUntilUnpauser);
+        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
+        etherFiRedemptionManagerInstance.unpauseContractUntil();
+    }
+
+    // --- each gated function (whenNotPaused now also enforces pause-until via override) ---
+
+    function test_redeemEEth_blockedByPauseContractUntil() public {
+        _setupRedeemScenario();
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        vm.prank(user);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _rmPausedUntil())
+        );
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, ETH_ADDRESS);
+    }
+
+    function test_redeemWeEth_blockedByPauseContractUntil() public {
+        _setupRedeemScenario();
+        // wrap a small amount of eETH to weETH so we can attempt redeemWeEth
+        vm.startPrank(user);
+        eETHInstance.approve(address(weEthInstance), 1 ether);
+        weEthInstance.wrap(1 ether);
+        IERC20(address(weEthInstance)).approve(address(etherFiRedemptionManagerInstance), type(uint256).max);
+        vm.stopPrank();
+
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        vm.prank(user);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _rmPausedUntil())
+        );
+        etherFiRedemptionManagerInstance.redeemWeEth(0.5 ether, user, ETH_ADDRESS);
+    }
+
+    function test_redeemEEthWithPermit_blockedByPauseContractUntil() public {
+        _setupRedeemScenario();
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        IeETH.PermitInput memory emptyPermit;
+        vm.prank(user);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _rmPausedUntil())
+        );
+        etherFiRedemptionManagerInstance.redeemEEthWithPermit(1 ether, user, emptyPermit, ETH_ADDRESS);
+    }
+
+    function test_redeemWeEthWithPermit_blockedByPauseContractUntil() public {
+        _setupRedeemScenario();
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        IWeETH.PermitInput memory emptyPermit;
+        vm.prank(user);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _rmPausedUntil())
+        );
+        etherFiRedemptionManagerInstance.redeemWeEthWithPermit(1 ether, user, emptyPermit, ETH_ADDRESS);
+    }
+
+    function test_redeemEEth_unblockedAfterPauseExpires() public {
+        _setupRedeemScenario();
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+
+        vm.warp(block.timestamp + etherFiRedemptionManagerInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, ETH_ADDRESS);
+    }
+
+    function test_redeemEEth_unblockedAfterExplicitUnpause() public {
+        _setupRedeemScenario();
+        _grantRmPauseUntilRoles();
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+        vm.prank(rmUnpauseUntilUnpauser);
+        etherFiRedemptionManagerInstance.unpauseContractUntil();
+
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, ETH_ADDRESS);
     }
 }

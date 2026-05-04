@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "./TestSetup.sol";
 import "forge-std/Test.sol";
+import "../src/utils/PausableUntil.sol";
 
 contract LiquidityPoolTest is TestSetup {
     uint256[] public processedBids;
@@ -27,7 +28,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.deal(alice, 100 ether);
 
         vm.startPrank(owner);
-        nodeOperatorManagerInstance.updateAdmin(alice, true);
+        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), alice);
         // liquidityPoolInstance.updateAdmin(alice, true);
         vm.stopPrank();
     
@@ -213,7 +214,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_StakingManagerFailsNotInitializedToken() public {
-        LiquidityPool liquidityPoolNoToken = new LiquidityPool(address(0x0));
+        LiquidityPool liquidityPoolNoToken = new LiquidityPool(address(0x0), 0);
 
         vm.startPrank(alice);
         vm.deal(alice, 3 ether);
@@ -763,7 +764,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_Upgrade2_49_onlyRoleRegistryOwnerCanUpgrade() public {
-        liquidityPool = address(new LiquidityPool(address(0x0)));
+        liquidityPool = address(new LiquidityPool(address(0x0), 0));
         vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
         vm.prank(address(100));
         liquidityPoolInstance.upgradeTo(liquidityPool);
@@ -956,13 +957,41 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_WithdrawFailsWhenPaused() public {
+        // Permissionless claim paths (withdrawRequestNFT, priorityWithdrawalQueue) bypass the LP pause.
+        // Only the gated callers (membershipManager, etherFiRedemptionManager) must still revert at the pause gate.
         vm.prank(admin);
         liquidityPoolInstance.pauseContract();
-        
-        vm.startPrank(address(withdrawRequestNFTInstance));
+
+        vm.startPrank(address(membershipManagerInstance));
         vm.expectRevert("Pausable: paused");
         liquidityPoolInstance.withdraw(alice, 1 ether);
         vm.stopPrank();
+
+        vm.startPrank(address(etherFiRedemptionManagerInstance));
+        vm.expectRevert("Pausable: paused");
+        liquidityPoolInstance.withdraw(alice, 1 ether);
+        vm.stopPrank();
+    }
+
+    function test_WithdrawByWithdrawRequestNFT_succeedsWhenLpPaused() public {
+        // Permissionless claim path: LP.withdraw must succeed for withdrawRequestNFT even when the LP is paused.
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(alice, 5 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(reqId);
+
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+        assertTrue(liquidityPoolInstance.paused(), "precondition: LP must be paused");
+
+        uint256 aliceBalBefore = alice.balance;
+        vm.prank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        assertGe(alice.balance, aliceBalBefore + 5 ether - 1 wei);
     }
 
     // ============ Request Membership NFT Withdraw Tests ============
@@ -1446,10 +1475,572 @@ contract LiquidityPoolTest is TestSetup {
         vm.startPrank(alice);
         liquidityPoolInstance.deposit{value: 100 ether}();
         vm.stopPrank();
-        
+
         vm.prank(address(membershipManagerInstance));
         liquidityPoolInstance.rebase(10 ether);
-        
+
         assertEq(liquidityPoolInstance.getTotalPooledEther(), 110 ether);
+    }
+
+    //--------------------------------------------------------------------------------------
+    //-------------------------  pauseContractUntil / unpauseContractUntil  ----------------
+    //--------------------------------------------------------------------------------------
+
+    bytes32 constant PAUSABLE_UNTIL_SLOT =
+        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+    address lpPauseUntilPauser = makeAddr("lpPauseUntilPauser");
+    address lpUnpauseUntilUnpauser = makeAddr("lpUnpauseUntilUnpauser");
+
+    function _grantLpPauseUntilRoles() internal {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), lpPauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), lpUnpauseUntilUnpauser);
+        vm.stopPrank();
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+    }
+
+    function _lpPausedUntil() internal view returns (uint256) {
+        return uint256(vm.load(address(liquidityPoolInstance), PAUSABLE_UNTIL_SLOT));
+    }
+
+    function test_pauseContractUntil_requiresRole() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        liquidityPoolInstance.pauseContractUntil();
+
+        // PROTOCOL_PAUSER (admin) alone is insufficient
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        liquidityPoolInstance.pauseContractUntil();
+    }
+
+    function test_pauseContractUntil_setsState() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        assertEq(_lpPausedUntil(), block.timestamp + liquidityPoolInstance.MAX_PAUSE_DURATION());
+    }
+
+    function test_unpauseContractUntil_requiresRole() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        liquidityPoolInstance.unpauseContractUntil();
+
+        // PROTOCOL_UNPAUSER (admin) alone is insufficient
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        liquidityPoolInstance.unpauseContractUntil();
+    }
+
+    function test_unpauseContractUntil_clearsState() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.prank(lpUnpauseUntilUnpauser);
+        liquidityPoolInstance.unpauseContractUntil();
+        assertEq(_lpPausedUntil(), 0);
+    }
+
+    function test_unpauseContractUntil_revertsIfNotPaused() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpUnpauseUntilUnpauser);
+        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
+        liquidityPoolInstance.unpauseContractUntil();
+    }
+
+    // --- each whenNotPaused function must now also revert under pauseContractUntil ---
+
+    function test_deposit_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.deposit{value: 1 ether}();
+    }
+
+    function test_depositWithReferral_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.deposit{value: 1 ether}(address(0));
+    }
+
+    function test_depositToRecipient_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.depositToRecipient(bob, 1 ether, address(0));
+    }
+
+    function test_withdraw_blockedByPauseContractUntil() public {
+        // Gated callers (membershipManager, etherFiRedemptionManager) must revert under pauseContractUntil.
+        // Permissionless claim paths (withdrawRequestNFT, priorityWithdrawalQueue) bypass this gate — see
+        // test_withdraw_byWithdrawRequestNFT_succeedsUnderPauseContractUntil below.
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.prank(address(etherFiRedemptionManagerInstance));
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.withdraw(bob, 1 ether);
+
+        vm.prank(address(membershipManagerInstance));
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.withdraw(bob, 1 ether);
+    }
+
+    function test_withdraw_byWithdrawRequestNFT_succeedsUnderPauseContractUntil() public {
+        // Symmetric to test_WithdrawByWithdrawRequestNFT_succeedsWhenLpPaused: a finalized claim
+        // must continue to pay out under the soft `pauseContractUntil` gate too.
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(alice, 5 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(reqId);
+
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        assertGt(_lpPausedUntil(), 0, "precondition: LP must be pause-until");
+
+        uint256 aliceBalBefore = alice.balance;
+        vm.prank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        assertGe(alice.balance, aliceBalBefore + 5 ether - 1 wei);
+    }
+
+    function test_withdraw_byWithdrawRequestNFT_succeedsWhenBothPauseAndPauseUntilActive() public {
+        // Hard pause AND soft pause-until both active: permissionless claim must still succeed.
+        vm.deal(alice, 10 ether);
+        vm.startPrank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), type(uint256).max);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(alice, 5 ether);
+        vm.stopPrank();
+
+        _finalizeWithdrawalRequest(reqId);
+
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        vm.prank(admin);
+        liquidityPoolInstance.pauseContract();
+
+        uint256 aliceBalBefore = alice.balance;
+        vm.prank(alice);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        assertGe(alice.balance, aliceBalBefore + 5 ether - 1 wei);
+    }
+
+    function test_requestWithdraw_blockedByPauseContractUntil() public {
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+    }
+
+    function test_requestWithdrawWithPermit_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        ILiquidityPool.PermitInput memory emptyPermit;
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.requestWithdrawWithPermit(bob, 1 ether, emptyPermit);
+    }
+
+    function test_requestMembershipNFTWithdraw_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.prank(address(membershipManagerInstance));
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.requestMembershipNFTWithdraw(bob, 1 ether, 0);
+    }
+
+    function test_batchRegister_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        uint256[] memory empty;
+        IStakingManager.DepositData[] memory emptyDd;
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.batchRegister(emptyDd, empty, address(0));
+    }
+
+    function test_batchCreateBeaconValidators_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        uint256[] memory empty;
+        IStakingManager.DepositData[] memory emptyDd;
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.batchCreateBeaconValidators(emptyDd, empty, address(0));
+    }
+
+    function test_batchApproveRegistration_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        uint256[] memory empty;
+        bytes[] memory emptyBytes;
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.batchApproveRegistration(empty, emptyBytes, emptyBytes);
+    }
+
+    function test_confirmAndFundBeaconValidators_blockedByPauseContractUntil() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        IStakingManager.DepositData[] memory emptyDd;
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _lpPausedUntil())
+        );
+        liquidityPoolInstance.confirmAndFundBeaconValidators(emptyDd, 32 ether);
+    }
+
+    function test_deposit_unblockedAfterPauseExpires() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+
+        vm.warp(block.timestamp + liquidityPoolInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+    }
+
+    function test_deposit_unblockedAfterExplicitUnpause() public {
+        _grantLpPauseUntilRoles();
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        vm.prank(lpUnpauseUntilUnpauser);
+        liquidityPoolInstance.unpauseContractUntil();
+
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+    }
+
+    // ============================================================================
+    // MIN_AMOUNT_FOR_SHARE Tests
+    // ============================================================================
+    //
+    // The LiquidityPool now enforces a configurable floor on the eETH share-price.
+    // After share-supply or pooled-ether changes, `_checkMinAmountForShare()` reverts
+    // with `InvalidAmountForShare` whenever `amountForShare(1 ether) < MIN_AMOUNT_FOR_SHARE`.
+    // The check fires from: receive(), withdraw(), rebase(), burnEEthShares(),
+    // burnEEthSharesForNonETHWithdrawal(), _deposit() (every external deposit*),
+    // and _accountForEthSentOut() (validator-deposit flows).
+
+    /// @dev Deploy a fresh LiquidityPool implementation with the desired MIN and upgrade the proxy.
+    /// Preserves the existing `priorityWithdrawalQueue` immutable.
+    function _upgradeLpWithMinAmount(uint256 minAmount) internal {
+        address pq = liquidityPoolInstance.priorityWithdrawalQueue();
+        LiquidityPool newImpl = new LiquidityPool(pq, minAmount);
+        vm.prank(owner);
+        liquidityPoolInstance.upgradeTo(address(newImpl));
+    }
+
+    /// @dev Set the packed (totalValueOutOfLp, totalValueInLp) storage at slot 207.
+    /// Used to seed `totalValueOutOfLp` so a negative `rebase()` doesn't underflow before
+    /// reaching `_checkMinAmountForShare`.
+    function _setLpAccounting(uint128 valueOutOfLp, uint128 valueInLp) internal {
+        bytes32 packed = bytes32(uint256(valueOutOfLp) | (uint256(valueInLp) << 128));
+        vm.store(address(liquidityPoolInstance), bytes32(uint256(207)), packed);
+    }
+
+    // --- immutable getter ---
+
+    function test_minAmountForShare_default_is_zero_in_test_setup() public {
+        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0);
+    }
+
+    function test_minAmountForShare_immutable_is_set_via_constructor() public {
+        LiquidityPool fresh = new LiquidityPool(address(0), 0.5 ether);
+        assertEq(fresh.MIN_AMOUNT_FOR_SHARE(), 0.5 ether);
+
+        LiquidityPool fresh2 = new LiquidityPool(address(0), type(uint256).max);
+        assertEq(fresh2.MIN_AMOUNT_FOR_SHARE(), type(uint256).max);
+    }
+
+    function test_minAmountForShare_immutable_persists_through_upgrade() public {
+        _upgradeLpWithMinAmount(0.75 ether);
+        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0.75 ether);
+    }
+
+    // --- with MIN = 0 (check effectively disabled) ---
+
+    function test_minAmountForShare_zero_allows_empty_pool_operations() public {
+        // amountForShare(1 ether) returns 0 when totalShares == 0; with MIN=0 the strict `<` is false.
+        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0);
+        assertEq(eETHInstance.totalShares(), 0);
+
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+        assertEq(eETHInstance.balanceOf(alice), 1 ether);
+    }
+
+    // --- deposit / mint flow ---
+
+    function test_minAmountForShare_first_deposit_passes_at_exact_boundary() public {
+        // First deposit yields ratio = exactly 1 ether per 1 ether of shares; strict `<` allows MIN = 1 ether.
+        _upgradeLpWithMinAmount(1 ether);
+
+        vm.deal(alice, 5 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1 ether);
+    }
+
+    function test_minAmountForShare_first_deposit_reverts_when_min_above_initial_ratio() public {
+        // Initial deposit ratio is 1 ether; MIN = 1 ether + 1 wei should reject the mint.
+        _upgradeLpWithMinAmount(1 ether + 1);
+
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        vm.expectRevert(LiquidityPool.InvalidAmountForShare.selector);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+    }
+
+    function test_minAmountForShare_subsequent_deposit_succeeds_above_min() public {
+        // Establish ratio = 1.1 ether per share (positive rebase), then upgrade with MIN below it.
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(10 ether);
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1.1 ether);
+
+        _upgradeLpWithMinAmount(1.05 ether);
+
+        vm.deal(bob, 5 ether);
+        vm.prank(bob);
+        uint256 shares = liquidityPoolInstance.deposit{value: 5 ether}();
+        assertGt(shares, 0);
+        // Proportional minting preserves ratio.
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1.1 ether);
+    }
+
+    // --- rebase flow ---
+
+    function test_minAmountForShare_positive_rebase_succeeds() public {
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
+        _upgradeLpWithMinAmount(1 ether);
+
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(20 ether);
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 1.2 ether);
+    }
+
+    function test_minAmountForShare_negative_rebase_above_min_succeeds() public {
+        // Deposit 100 ether (totalShares=100, ratio=1.0), then move 50 ether to outOfLp so
+        // a negative rebase has room to subtract without underflowing.
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        _setLpAccounting(50 ether, 50 ether); // totalPooled stays at 100, ratio still 1.0
+
+        _upgradeLpWithMinAmount(0.9 ether);
+
+        // Drop totalPooled from 100 to 95 → ratio 0.95 (above MIN).
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(-5 ether);
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 0.95 ether);
+    }
+
+    function test_minAmountForShare_negative_rebase_at_exact_boundary_succeeds() public {
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        _setLpAccounting(50 ether, 50 ether);
+
+        _upgradeLpWithMinAmount(0.9 ether);
+
+        // Drop totalPooled to exactly 90 → ratio 0.9 (== MIN; strict `<` lets equality through).
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(-10 ether);
+        assertEq(liquidityPoolInstance.amountForShare(1 ether), 0.9 ether);
+    }
+
+    function test_minAmountForShare_negative_rebase_below_min_reverts() public {
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        _setLpAccounting(50 ether, 50 ether);
+
+        _upgradeLpWithMinAmount(0.9 ether);
+
+        // Drop totalPooled to 89 → ratio 0.89 < MIN, reverts on the MIN check.
+        vm.prank(address(membershipManagerInstance));
+        vm.expectRevert(LiquidityPool.InvalidAmountForShare.selector);
+        liquidityPoolInstance.rebase(-11 ether);
+    }
+
+    // --- burnEEthShares (called by RedemptionManager / withdrawRequestNFT / priorityWithdrawalQueue) ---
+
+    function test_minAmountForShare_burnEEthShares_increases_ratio() public {
+        // Burning eETH shares without removing pooled ETH only raises the ratio,
+        // so the check cannot revert on this path even with MIN equal to the prior ratio.
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
+        // Move 10 eETH worth of shares to the redemption manager.
+        vm.prank(alice);
+        eETHInstance.transfer(address(etherFiRedemptionManagerInstance), 10 ether);
+        uint256 sharesToBurn = eETHInstance.shares(address(etherFiRedemptionManagerInstance));
+
+        _upgradeLpWithMinAmount(1 ether);
+
+        vm.prank(address(etherFiRedemptionManagerInstance));
+        liquidityPoolInstance.burnEEthShares(sharesToBurn);
+
+        // ratio = 100 ether / 90 shares > 1 ether
+        assertGt(liquidityPoolInstance.amountForShare(1 ether), 1 ether);
+    }
+
+    function test_minAmountForShare_burnEEthShares_reverts_at_zero_total_shares() public {
+        // Burning the last share leaves totalShares == 0, where amountForShare returns 0.
+        // With MIN > 0 this trips the guard.
+        vm.deal(alice, 1 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+
+        // Cache the transfer amount BEFORE pranking — view calls otherwise consume vm.prank.
+        uint256 aliceBalance = eETHInstance.balanceOf(alice);
+        vm.prank(alice);
+        eETHInstance.transfer(address(etherFiRedemptionManagerInstance), aliceBalance);
+        uint256 sharesToBurn = eETHInstance.shares(address(etherFiRedemptionManagerInstance));
+
+        _upgradeLpWithMinAmount(1 ether);
+
+        vm.prank(address(etherFiRedemptionManagerInstance));
+        vm.expectRevert(LiquidityPool.InvalidAmountForShare.selector);
+        liquidityPoolInstance.burnEEthShares(sharesToBurn);
+    }
+
+    // --- receive() ---
+
+    function test_minAmountForShare_receive_reverts_when_pool_empty_and_min_positive() public {
+        _upgradeLpWithMinAmount(1 ether);
+
+        // No deposits yet → totalShares == 0 → amountForShare(1 ether) == 0 → 0 < 1 ether → revert.
+        // Note: receive() also subtracts msg.value from totalValueOutOfLp, which is 0 here, so we
+        // also expect the underflow path. We rely on `vm.expectRevert` matching either.
+        vm.deal(bob, 1 ether);
+        vm.prank(bob);
+        vm.expectRevert();
+        (bool sent, ) = address(liquidityPoolInstance).call{value: 1 ether}("");
+        sent; // silence unused-var
+    }
+
+    // --- access control on the new constructor / immutable ---
+
+    function test_minAmountForShare_immutable_independent_of_priority_queue() public {
+        // The two constructor params are independent and neither cross-contaminates the other.
+        LiquidityPool a = new LiquidityPool(address(0xBEEF), 1 ether);
+        assertEq(a.priorityWithdrawalQueue(), address(0xBEEF));
+        assertEq(a.MIN_AMOUNT_FOR_SHARE(), 1 ether);
+
+        LiquidityPool b = new LiquidityPool(address(0), 0);
+        assertEq(b.priorityWithdrawalQueue(), address(0));
+        assertEq(b.MIN_AMOUNT_FOR_SHARE(), 0);
+    }
+
+    // --- fuzz: rebase boundary ---
+
+    function testFuzz_minAmountForShare_rebase_boundary(int128 rebaseAmount) public {
+        // Anchor share-price at 1.0 ether with a 100 ether deposit.
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+        // Move pooled ETH out of LP so negative rebase has room before underflow.
+        _setLpAccounting(50 ether, 50 ether);
+
+        // Bound rebase to keep totalValueOutOfLp in [0, type(uint128).max] after the update.
+        // Pre-rebase totalValueOutOfLp == 50e18.
+        rebaseAmount = int128(bound(int256(rebaseAmount), -50 ether, 50 ether));
+
+        uint256 minAmount = 0.5 ether;
+        _upgradeLpWithMinAmount(minAmount);
+
+        // Compute resulting ratio: amountForShare(1 ether) = (1e18 * (100e18 + rebaseAmount)) / 100e18
+        int256 newPooled = 100 ether + int256(rebaseAmount);
+        uint256 expectedRatio = uint256(newPooled * 1 ether / 100 ether);
+
+        if (expectedRatio < minAmount) {
+            vm.prank(address(membershipManagerInstance));
+            vm.expectRevert(LiquidityPool.InvalidAmountForShare.selector);
+            liquidityPoolInstance.rebase(rebaseAmount);
+        } else {
+            vm.prank(address(membershipManagerInstance));
+            liquidityPoolInstance.rebase(rebaseAmount);
+            assertEq(liquidityPoolInstance.amountForShare(1 ether), expectedRatio);
+        }
     }
 }

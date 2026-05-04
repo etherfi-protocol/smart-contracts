@@ -794,19 +794,21 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_updateAdmin() public {
         address newAdmin = address(0x1234);
-        
-        vm.prank(owner);
-        etherFiOracleInstance.updateAdmin(newAdmin, true);
-        assertEq(etherFiOracleInstance.admins(newAdmin), true);
+        bytes32 oracleAdminRole = etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE();
 
-        vm.prank(owner);
-        etherFiOracleInstance.updateAdmin(newAdmin, false);
-        assertEq(etherFiOracleInstance.admins(newAdmin), false);
+        // updateAdmin replaced by RoleRegistry.grantRole / revokeRole
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(oracleAdminRole, newAdmin);
+        assertTrue(roleRegistryInstance.hasRole(oracleAdminRole, newAdmin));
 
-        // Test that non-owner cannot update admin
+        roleRegistryInstance.revokeRole(oracleAdminRole, newAdmin);
+        assertFalse(roleRegistryInstance.hasRole(oracleAdminRole, newAdmin));
+        vm.stopPrank();
+
+        // Non-owner cannot grant role
         vm.prank(chad);
         vm.expectRevert();
-        etherFiOracleInstance.updateAdmin(newAdmin, true);
+        roleRegistryInstance.grantRole(oracleAdminRole, newAdmin);
     }
 
     function test_getImplementation() public {
@@ -1011,6 +1013,90 @@ contract EtherFiOracleTest is TestSetup {
         vm.prank(chad);
         vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
         etherFiAdminInstance.setValidatorTaskBatchSize(75);
+    }
+
+    function test_setValidatorTaskBatchSize_guardrail() public {
+        uint256 maxBatchSize = etherFiAdminInstance.MAX_VALIDATOR_TASK_BATCH_SIZE();
+        assertEq(maxBatchSize, 1_000); // configured in TestSetup
+
+        // boundary value is accepted
+        vm.prank(alice);
+        etherFiAdminInstance.setValidatorTaskBatchSize(uint16(maxBatchSize));
+
+        // one above the cap reverts
+        vm.prank(alice);
+        vm.expectRevert(EtherFiAdmin.InvalidValidatorTaskBatchSize.selector);
+        etherFiAdminInstance.setValidatorTaskBatchSize(uint16(maxBatchSize + 1));
+    }
+
+    function test_updateAcceptableRebaseApr_guardrail() public {
+        int256 maxApr = etherFiAdminInstance.MAX_ACCEPTABLE_REBASE_APR_IN_BPS();
+        assertEq(maxApr, 10_000); // configured in TestSetup
+
+        // boundary value is accepted
+        vm.prank(alice);
+        etherFiAdminInstance.updateAcceptableRebaseApr(int32(maxApr));
+        assertEq(etherFiAdminInstance.acceptableRebaseAprInBps(), int32(maxApr));
+
+        // negative limit is not allowed in acceptable rebase apr
+        vm.prank(alice);
+        vm.expectRevert(EtherFiAdmin.InvalidAcceptableRebaseApr.selector);
+        etherFiAdminInstance.updateAcceptableRebaseApr(-1);
+
+        // one above the cap reverts
+        vm.prank(alice);
+        vm.expectRevert(EtherFiAdmin.InvalidAcceptableRebaseApr.selector);
+        etherFiAdminInstance.updateAcceptableRebaseApr(int32(maxApr + 1));
+    }
+
+    function test_constructor_priorityWithdrawalQueue_guardrail() public {
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidPriorityWithdrawalQueue.selector);
+        new EtherFiAdmin(address(0x0), 1_000, 1_000, 500, 1_000);
+    }
+
+    function test_constructor_maxFinalizedWithdrawalAmountPerDay_guardrail() public {
+        EtherFiAdmin nonZeroValue = new EtherFiAdmin(address(0x1234), 1_000, 1_000, 500, 1_000);
+        assertEq(nonZeroValue.MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY(), 1_000);
+
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidMaxFinalizedWithdrawalAmountPerDay.selector);
+        new EtherFiAdmin(address(0x1234), 0, 1_000, 500, 1_000);
+    }
+
+    function test_constructor_maxNumValidatorsToApprovePerDay_guardrail() public {
+        EtherFiAdmin nonZeroValue = new EtherFiAdmin(address(0x1234), 1_000, 100, 500, 1_000);
+        assertEq(nonZeroValue.MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY(), 100);
+
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidMaxNumValidatorsToApprovePerDay.selector);
+        new EtherFiAdmin(address(0x1234), 1_000, 0, 500, 1_000); // 0 is invalid
+    }
+
+    function test_constructor_maxValidatorTaskBatchSize_guardrail() public {
+        EtherFiAdmin nonZeroValue = new EtherFiAdmin(address(0x1234), 1_000, 1_000, 500, 1_000);
+        assertEq(nonZeroValue.MAX_VALIDATOR_TASK_BATCH_SIZE(), 1_000);
+
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidValidatorTaskBatchSize.selector);
+        new EtherFiAdmin(address(0x1234), 1_000, 1_000, 500, 0);
+    }
+
+    function test_constructor_maxAcceptableRebaseAprInBps_guardrail() public {
+        EtherFiAdmin validValue = new EtherFiAdmin(address(0x1234), 1_000, 1_000, 500, 1_000);
+        assertEq(validValue.MAX_ACCEPTABLE_REBASE_APR_IN_BPS(), 500);
+
+        // value 0 reverts
+        vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
+        new EtherFiAdmin(address(0x1234), 1_000, 1_000, 0, 1_000);
+
+        // negative values revert
+        vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
+        new EtherFiAdmin(address(0x1234), 1_000, 1_000, -1, 1_000);
+
+        // values above 10_000 revert
+        vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
+        new EtherFiAdmin(address(0x1234), 1_000, 1_000, 10_001, 1_000);
     }
 
     function test_executeValidatorApprovalTask() public {
@@ -1347,7 +1433,7 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(wrongReport);
     }
 
-    function test_executeTasks_insufficientRole() public {
+    function test_executeTasks_permissionless() public {
         vm.prank(owner);
         etherFiOracleInstance.setQuorumSize(1);
 
@@ -1361,9 +1447,16 @@ contract EtherFiOracleTest is TestSetup {
 
         _moveClock(int256(uint256(etherFiAdminInstance.postReportWaitTimeInSlots()) + 1));
 
+        // chad has no roles; executeTasks is permissionless once consensus is reached
+        // and the report passes the freshness/sequencing checks.
+        assertFalse(roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), chad));
+        assertFalse(roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), chad));
+
         vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
         etherFiAdminInstance.executeTasks(report);
+
+        assertEq(etherFiAdminInstance.lastHandledReportRefSlot(), report.refSlotTo);
+        assertEq(etherFiAdminInstance.lastHandledReportRefBlock(), report.refBlockTo);
     }
 
     function test_pause_unPause_edgeCases() public {
@@ -1402,5 +1495,127 @@ contract EtherFiOracleTest is TestSetup {
         vm.prank(chad);
         vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
         etherFiAdminInstance.unPause(true, false, false, false, false, false);
+    }
+
+    function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsCap() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 20000 ether; // > 10000 ether/day cap
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal amount exceeds max");
+    }
+
+    function test_executeTasks_revertsWhenValidatorApprovalsExceedCap() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.validatorsToApprove = new uint256[](400); // > 200/day cap
+        for (uint256 i = 0; i < 400; i++) {
+            report.validatorsToApprove[i] = i + 1;
+        }
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: number of validators to approve exceeds max");
+    }
+
+    // Happy path: a report with a non-zero finalized-withdrawal amount that stays
+    // within the per-day cap processes cleanly and advances the LP's locked
+    // accounting.
+    function test_executeTasks_finalizedWithdrawalWithinCap_succeeds() public {
+        vm.deal(alice, 200 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 200 ether}();
+
+        uint256 lockedBefore = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 10 ether;
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report);
+
+        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), lockedBefore + 10 ether);
+    }
+
+    // LP-liquidity sanity check in _handleWithdrawals: finalized amount +
+    // existing LP lock + priority-queue lock must not exceed the LP's ETH
+    // balance.
+    function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsLpLiquidity() public {
+        // Deposit a small amount so the LP balance is modest.
+        vm.deal(alice, 5 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 6 ether; // 6 > LP balance (5)
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+    }
+
+    // The liquidity check also counts the priority-queue outstanding lock, so a
+    // report that fits in the LP alone can still revert once the priority lock
+    // is considered.
+    function test_executeTasks_revertsWhenFinalizedPlusPriorityLockExceedsLp() public {
+        vm.deal(alice, 10 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+
+        // Force the priority queue to report an outstanding lock, so the
+        // EtherFiAdmin-side check must add it to the LP's current commitments.
+        vm.mockCall(
+            address(priorityQueueInstance),
+            abi.encodeWithSelector(priorityQueueInstance.ethAmountLockedForPriorityWithdrawal.selector),
+            abi.encode(uint128(8 ether))
+        );
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 5 ether; // 5 + 0 + 8 > 10
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+    }
+
+    // The liquidity check compares against the LP's actual ETH balance, not
+    // the internal totalValueInLp accounting. ETH that arrives at the LP
+    // outside a deposit path (e.g., validator principal returning before the
+    // next rebase) bumps the balance while accounting lags — a finalized
+    // withdrawal drawing on those funds should still pass the check.
+    function test_executeTasks_finalizedWithdrawalWithinLpBalance_succeeds() public {
+        vm.deal(alice, 5 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        // Push extra ETH into the LP without touching totalValueInLp, so
+        // balance (15) > totalValueInLp (5).
+        vm.deal(address(liquidityPoolInstance), address(liquidityPoolInstance).balance + 10 ether);
+        assertGt(address(liquidityPoolInstance).balance, liquidityPoolInstance.totalValueInLp());
+
+        uint256 lockedBefore = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 6 ether; // > totalValueInLp (5), <= balance (15)
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report);
+
+        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), lockedBefore + 6 ether);
+    }
+
+    // The flip side of the balance-based check: if the LP's actual ETH falls
+    // below what totalValueInLp would suggest, the check reverts even though
+    // the accounting says the withdrawal fits.
+    function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsLpBalance() public {
+        vm.deal(alice, 10 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+
+        // Knock the LP's ETH balance below its accounting so the two diverge.
+        vm.deal(address(liquidityPoolInstance), 4 ether);
+        assertGt(liquidityPoolInstance.totalValueInLp(), address(liquidityPoolInstance).balance);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 5 ether; // <= totalValueInLp (10), > balance (4)
+
+        _moveClock(1 days / 12);
+        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
     }
 }

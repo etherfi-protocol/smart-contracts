@@ -7,7 +7,15 @@ import {ERC1967Proxy} from "lib/openzeppelin-contracts/contracts/proxy/ERC1967/E
 import {ILayerZeroTellerWithRateLimiting} from "src/liquid-interfaces/ILayerZeroTellerWithRateLimiting.sol";
 import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IERC20Permit} from "lib/openzeppelin-contracts/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
+import {ERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
 
+/// @notice Stand-in for the BoringVault share token. We mock the live teller's
+///         `vault()` to return this contract, and mint shares to LiquidRefer
+///         before each deposit so LiquidRefer can forward them to the user.
+contract MockBoringVault is ERC20 {
+    constructor() ERC20("Mock BoringVault", "MBV") {}
+    function mint(address to, uint256 amount) external { _mint(to, amount); }
+}
 
 abstract contract LiquidReferBaseTest is Test {
     address internal constant LIQUID_ETH_TELLER = 0x9AA79C84b79816ab920bBcE20f8f74557B514734;
@@ -27,6 +35,7 @@ abstract contract LiquidReferBaseTest is Test {
     uint256 internal userPrivateKey;
     address internal referrer;
     AssetConfig internal asset;
+    MockBoringVault internal mockVault;
 
     function setUp() public virtual {
         _setup();
@@ -44,6 +53,27 @@ abstract contract LiquidReferBaseTest is Test {
 
         vm.prank(owner);
         liquidRefer.toggleWhiteList(address(asset.teller), true);
+
+        // Pin the live teller's vault() to a mock share token so the deposit
+        // path resolves to a contract under our control.
+        mockVault = new MockBoringVault();
+        vm.mockCall(
+            address(asset.teller),
+            abi.encodeWithSelector(ILayerZeroTellerWithRateLimiting.vault.selector),
+            abi.encode(address(mockVault))
+        );
+    }
+
+    /// @dev Mock `teller.deposit(asset, amount, 0)` to act as a 1:1 share
+    ///      mint, and pre-fund LiquidRefer with that many shares so the
+    ///      post-deposit transfer to the user has something to forward.
+    function _mockTellerDepositReturn(uint256 amount) internal {
+        vm.mockCall(
+            address(asset.teller),
+            abi.encodeCall(ILayerZeroTellerWithRateLimiting.deposit, (asset.asset, amount, 0)),
+            abi.encode(amount)
+        );
+        mockVault.mint(address(liquidRefer), amount);
     }
 
     function _setup() internal virtual {
@@ -76,6 +106,8 @@ abstract contract LiquidReferBaseTest is Test {
 
         vm.prank(depositor);
         IERC20(asset.asset).approve(address(liquidRefer), amount);
+
+        _mockTellerDepositReturn(amount);
 
         vm.expectEmit(true, true, false, true);
         emit LiquidRefer.Referral(vault, referral, amount);
@@ -145,4 +177,3 @@ abstract contract LiquidReferBaseTest is Test {
         _assertDepositResultsForAmount(user, shares, vault, amount);
     }
 }
-

@@ -4,9 +4,8 @@ pragma solidity ^0.8.13;
 import "../eigenlayer-interfaces/IStrategyManager.sol";
 import "../eigenlayer-interfaces/IStrategy.sol";
 import "../eigenlayer-interfaces/IPauserRegistry.sol";
+import "./IRoleRegistry.sol";
 
-// cbETH-ETH mainnet: 0x5FAE7E604FC3e24fd43A72867ceBaC94c65b404A
-// wBETH-ETH mainnet: 0xBfAb6FA95E0091ed66058ad493189D2cB29385E6
 // stETH-ETH mainnet: 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022
 interface ICurvePool {
     function exchange_underlying(uint256 i, uint256 j, uint256 dx, uint256 min_dy) external returns (uint256);
@@ -15,11 +14,11 @@ interface ICurvePool {
 }
 
 interface ICurvePoolQuoter1 {
-    function get_dy(int128 i, int128 j, uint256 dx) external view returns (uint256); // wBETH-ETH, stETH-ETH
+    function get_dy(int128 i, int128 j, uint256 dx) external view returns (uint256); // stETH-ETH
 }
 
-interface ICurvePoolQuoter2 {
-    function get_dy(uint256 i, uint256 j, uint256 dx) external view returns (uint256); // cbETH-ETH
+interface AggregatorV3Interface {
+    function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
 }
 
 // mint forwarder: 0xfae23c30d383DF59D3E031C325a73d454e8721a6
@@ -126,4 +125,11 @@ interface ILiquifier {
 
     function depositWithERC20(address _token, uint256 _amount, address _referral) external returns (uint256);
     function quoteByFairValue(address _token, uint256 _amount) external view returns (uint256);
+
+    function pauseContractUntil() external;
+    function unpauseContractUntil() external;
+
+    function roleRegistry() external view returns (IRoleRegistry);
+    function LIQUIFIER_ADMIN_ROLE() external view returns (bytes32);
+    function LIQUIFIER_SENDER_ROLE() external view returns (bytes32);
 }
