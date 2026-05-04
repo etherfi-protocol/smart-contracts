@@ -179,7 +179,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // 2. Deploy new implementation contracts (with the added guard)
         // ------------------------------------------------------------------
         address newLP  = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, 0));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PRIORITY_WITHDRAWAL_QUEUE));
 
         // ------------------------------------------------------------------
         // 3. Upgrade the proxies in place
@@ -353,7 +353,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      claim changes.
     function _doUpgrade() internal {
         address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, 0));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PRIORITY_WITHDRAWAL_QUEUE));
 
         vm.prank(UPGRADE_TIMELOCK);
         IUUPSProxy(LIQUIDITY_POOL).upgradeTo(newLP);
