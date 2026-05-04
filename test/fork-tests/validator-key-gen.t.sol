@@ -42,6 +42,12 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
         vm.deal(tom, 100 ether);
 
+        // Upgrade RoleRegistry in place so newly-added role getters (e.g.
+        // BLACKLISTED_USER) are reachable from upgraded contracts that call
+        // into roleRegistry from within their modifiers.
+        vm.prank(roleRegistry.owner());
+        roleRegistry.upgradeTo(address(new RoleRegistry()));
+
         StakingManager stakingManagerImpl = new StakingManager(
             address(liquidityPool),
             address(etherFiNodesManager),

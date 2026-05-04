@@ -11,6 +11,7 @@ import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IMembershipNFT.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IEtherFiAdmin.sol";
+import "./interfaces/IRoleRegistry.sol";
 
 import "./libraries/GlobalIndexLibrary.sol";
 
@@ -65,6 +66,8 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
     IEtherFiAdmin public etherFiAdmin;
 
+    IRoleRegistry public immutable roleRegistry;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
@@ -74,7 +77,8 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     event NftUnwrappedForEEth(address indexed _user, uint256 indexed _tokenId, uint256 _amountOfEEth, uint40 _loyaltyPoints, uint256 _feeAmount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _roleRegistry) {
+        roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
 
@@ -87,6 +91,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     error Deprecated();
     error DisallowZeroAddress();
     error WrongVersion();
+    error BlacklistedUser();
 
     // To be called for Phase 2 contract upgrade
     function initializeOnUpgrade(address _etherFiAdminAddress, uint256 _fanBoostThresholdAmount, uint16 _burnFeeWaiverPeriodInDays) external onlyOwner {
@@ -116,7 +121,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         uint256 _snapshotEthAmount,
         uint256 _points,
         bytes32[] calldata _merkleProof
-    ) external payable whenNotPaused returns (uint256) {
+    ) external payable whenNotPaused nonBlacklisted returns (uint256) {
         if (_points == 0 || msg.value < _snapshotEthAmount || msg.value > _snapshotEthAmount * 2 || msg.value != _amount + _amountForPoints) revert InvalidEAPRollover();
 
         membershipNFT.processDepositFromEapUser(msg.sender, _eapDepositBlockNumber, _snapshotEthAmount, _points, _merkleProof);
@@ -142,7 +147,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     /// @param _amount amount of ETH to earn staking rewards.
     /// @param _amountForPoints amount of ETH to boost earnings of {loyalty, tier} points
     /// @return tokenId The ID of the minted membership NFT.
-    function wrapEth(uint256 _amount, uint256 _amountForPoints, address _referral) public payable whenNotPaused returns (uint256) {
+    function wrapEth(uint256 _amount, uint256 _amountForPoints, address _referral) public payable whenNotPaused nonBlacklisted returns (uint256) {
         uint256 feeAmount = uint256(mintFee) * 0.001 ether;
         uint256 depositPerNFT = _amount + _amountForPoints;
         uint256 ethNeededPerNFT = depositPerNFT + feeAmount;
@@ -156,7 +161,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         return wrapEth(_amount, _amountForPoints, address(0));
     }
 
-    function unwrapForEEthAndBurn(uint256 _tokenId) external whenNotPaused {
+    function unwrapForEEthAndBurn(uint256 _tokenId) external whenNotPaused nonBlacklisted {
         _requireTokenOwner(_tokenId);
 
         // Claim all staking rewards before burn
@@ -181,7 +186,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     /// @param _tokenId ID of NFT token
     /// @param _amount amount of ETH to earn staking rewards.
     /// @param _amountForPoints amount of ETH to boost earnings of {loyalty, tier} points
-    function topUpDepositWithEth(uint256 _tokenId, uint128 _amount, uint128 _amountForPoints) public payable whenNotPaused {
+    function topUpDepositWithEth(uint256 _tokenId, uint128 _amount, uint128 _amountForPoints) public payable whenNotPaused nonBlacklisted {
         _requireTokenOwner(_tokenId);
 
         claim(_tokenId);
@@ -200,7 +205,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     /// @param _tokenId The ID of the membership NFT.
     /// @param _amount The amount of membership tokens to exchange.
     /// @return uint256 ID of the withdraw request NFT
-    function requestWithdraw(uint256 _tokenId, uint256 _amount) external whenNotPaused returns (uint256) {
+    function requestWithdraw(uint256 _tokenId, uint256 _amount) external whenNotPaused nonBlacklisted returns (uint256) {
         _requireTokenOwner(_tokenId);
 
         // prevent transfers for several blocks after a withdrawal to prevent frontrunning
@@ -226,7 +231,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     /// @dev burns the NFT and calls requestWithdraw on the liquidity pool
     /// @param _tokenId ID of the membership NFT to liquidate
     /// @return uint256 ID of the withdraw request NFT
-    function requestWithdrawAndBurn(uint256 _tokenId) external whenNotPaused returns (uint256) {
+    function requestWithdrawAndBurn(uint256 _tokenId) external whenNotPaused nonBlacklisted returns (uint256) {
         _requireTokenOwner(_tokenId);
 
         // Claim all staking rewards before burn
@@ -244,7 +249,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     /// @notice Claims {points, staking rewards} and update the tier, if needed.
     /// @param _tokenId The ID of the membership NFT.
     /// @dev This function allows users to claim the rewards + a new tier, if eligible.
-    function claim(uint256 _tokenId) public whenNotPaused {
+    function claim(uint256 _tokenId) public whenNotPaused nonBlacklisted {
         _claimPoints(_tokenId);
         _claimStakingRewards(_tokenId);
         _migrateFromV0ToV1(_tokenId);
@@ -785,4 +790,8 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     //------------------------------------  MODIFIER  --------------------------------------
     //--------------------------------------------------------------------------------------
 
+    modifier nonBlacklisted() {
+        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
+        _;
+    }
 }

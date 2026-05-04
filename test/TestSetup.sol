@@ -454,6 +454,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         weEthWithdrawAdapterInstance = IWeETHWithdrawAdapter(deployed.WEETH_WITHDRAW_ADAPTER());
         etherFiRedemptionManagerInstance = liquidityPoolInstance.etherFiRedemptionManager();
 
+        // Upgrade the live RoleRegistry to the local impl so newly-added role
+        // getters (e.g. BLACKLISTED_USER) are reachable from any contract that
+        // is also being upgraded in this fork.
+        vm.prank(roleRegistryInstance.owner());
+        roleRegistryInstance.upgradeTo(address(new RoleRegistry()));
+
         // Deploy PriorityWithdrawalQueue for fork testing (mainnet LP has immutable address(0) for this)
         PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
         UUPSProxy priorityQueueProxy = new UUPSProxy(
@@ -1101,7 +1107,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     function _upgradeMembershipManagerFromV0ToV1() internal {
         assertEq(membershipManagerInstance.getImplementation(), address(membershipManagerImplementation));
-        membershipManagerV1Implementation = new MembershipManager();
+        membershipManagerV1Implementation = new MembershipManager(address(roleRegistryInstance));
         vm.startPrank(owner);
         membershipManagerInstance.upgradeTo(address(membershipManagerV1Implementation));
         membershipManagerV1Instance = MembershipManager(payable(membershipManagerProxy));

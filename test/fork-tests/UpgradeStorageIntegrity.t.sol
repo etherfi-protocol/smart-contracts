@@ -6,6 +6,7 @@ import "../../script/deploys/Deployed.s.sol";
 import "../../src/LiquidityPool.sol";
 import "../../src/WithdrawRequestNFT.sol";
 import "../../src/ReentrancyGuardNamespaced.sol";
+import "../../src/RoleRegistry.sol";
 
 interface IUUPSProxy {
     function upgradeTo(address newImpl) external;
@@ -134,6 +135,13 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     function setUp() public {
         // Latest-block fork; realistic mainnet state.
         vm.createSelectFork(vm.envString("MAINNET_RPC_URL"));
+
+        // Upgrade RoleRegistry in place so newly-added role getters
+        // (e.g. BLACKLISTED_USER) are reachable from upgraded contracts that
+        // call into roleRegistry from within their modifiers.
+        address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
+        vm.prank(roleRegOwner);
+        IUUPSProxy(ROLE_REGISTRY).upgradeTo(address(new RoleRegistry()));
     }
 
     function _snap(address target, uint256 n) internal view returns (bytes32[] memory a) {

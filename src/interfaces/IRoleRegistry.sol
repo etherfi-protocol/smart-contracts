@@ -98,6 +98,12 @@ interface IRoleRegistry {
     function UNPAUSE_UNTIL_ROLE() external view returns (bytes32);
 
     /**
+     * @notice Returns the BLACKLISTED_USER role identifier
+     * @return The bytes32 identifier for the BLACKLISTED_USER role
+     */
+    function BLACKLISTED_USER() external view returns (bytes32);
+
+    /**
      * @notice Returns the current owner of the contract
      * @return The address of the current owner
      */

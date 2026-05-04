@@ -121,6 +121,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error InvalidValidatorSize();
     error InvalidArrayLengths();
     error InvalidAmountForShare();
+    error BlacklistedUser();
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -187,7 +188,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Used by eETH staking flow
-    function deposit(address _referral) public payable whenNotPaused nonReentrant returns (uint256) {
+    function deposit(address _referral) public payable whenNotPaused nonReentrant nonBlacklisted returns (uint256) {
         emit Deposit(msg.sender, msg.value, SourceOfFunds.EETH, _referral);
 
         return _deposit(msg.sender, msg.value, 0);
@@ -260,7 +261,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @param recipient address that will be issued the NFT
     /// @param amount requested amount to withdraw from contract
     /// @return uint256 requestId of the WithdrawRequestNFT
-    function requestWithdraw(address recipient, uint256 amount) public whenNotPaused nonReentrant returns (uint256) {
+    function requestWithdraw(address recipient, uint256 amount) public whenNotPaused nonReentrant nonBlacklisted returns (uint256) {
         uint256 share = sharesForAmount(amount);
         if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
 
@@ -283,6 +284,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function requestWithdrawWithPermit(address _owner, uint256 _amount, PermitInput calldata _permit)
         external
         whenNotPaused
+        nonBlacklisted
         returns (uint256)
     {
         try eETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
@@ -647,6 +649,11 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     modifier whenNotPaused() {
         _requireNotPaused();
         _requireNotPausedUntil();
+        _;
+    }
+
+    modifier nonBlacklisted() {
+        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
         _;
     }
 }

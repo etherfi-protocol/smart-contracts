@@ -52,6 +52,7 @@ contract AuctionManager is
     bytes32 public constant AUCTION_MANAGER_ADMIN_ROLE = keccak256("AUCTION_MANAGER_ADMIN_ROLE");
 
     error IncorrectRole();
+    error BlacklistedUser();
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -108,7 +109,7 @@ contract AuctionManager is
     function createBid(
         uint256 _bidSize,
         uint256 _bidAmountPerBid
-    ) external payable whenNotPaused nonReentrant returns (uint256[] memory) {
+    ) external payable whenNotPaused nonReentrant nonBlacklisted returns (uint256[] memory) {
         require(_bidSize > 0, "Bid size is too small");
         if (whitelistEnabled) {
             require(
@@ -170,7 +171,7 @@ contract AuctionManager is
     /// @notice Cancels bids in a batch by calling the 'cancelBid' function multiple times
     /// @dev Calls an internal function to perform the cancel
     /// @param _bidIds the ID's of the bids to cancel
-    function cancelBidBatch(uint256[] calldata _bidIds) external whenNotPaused {
+    function cancelBidBatch(uint256[] calldata _bidIds) external whenNotPaused nonBlacklisted {
         for (uint256 i = 0; i < _bidIds.length; i++) {
             _cancelBid(_bidIds[i]);
         }
@@ -179,7 +180,7 @@ contract AuctionManager is
     /// @notice Cancels a specified bid by de-activating it
     /// @dev Calls an internal function to perform the cancel
     /// @param _bidId the ID of the bid to cancel
-    function cancelBid(uint256 _bidId) public whenNotPaused {
+    function cancelBid(uint256 _bidId) public whenNotPaused nonBlacklisted {
         _cancelBid(_bidId);
     }
 
@@ -366,6 +367,11 @@ contract AuctionManager is
 
     modifier onlyAdmin() {
         if (!roleRegistry.hasRole(AUCTION_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _;
+    }
+
+    modifier nonBlacklisted() {
+        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
         _;
     }
 }
