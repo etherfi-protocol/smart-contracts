@@ -370,7 +370,7 @@ contract AuctionManager is
         _;
     }
 
-    modifer nonBlacklisted() {
+    modifier nonBlacklisted() {
         if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
         _;
     }

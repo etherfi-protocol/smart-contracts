@@ -34,6 +34,8 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
 
     event AdapterDeposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
 
+    error BlacklistedUser();
+
     constructor(address _liquidityPool, address _liquifier, address _weETH, address _eETH, address _wETH, address _stETH, address _wstETH, address _roleRegistry) {
         liquidityPool = ILiquidityPool(_liquidityPool);
         liquifier = ILiquifier(_liquifier);
