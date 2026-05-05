@@ -14,45 +14,55 @@ import "./interfaces/IRoleRegistry.sol";
 
 contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
 
+    IeETH public immutable eETH;
+    ILiquidityPool public immutable liquidityPool;
     IRoleRegistry public immutable roleRegistry;
 
     error IncorrectRole();
     error CannotRecoverEETH();
 
+    event Paused();
+    event PausedUntil(address indexed user, uint256 pausedUntil);
+    event CancelledPauseUntil(address indexed user);
+    event Unpaused();
+
     //--------------------------------------------------------------------------------------
     //---------------------------------  STORAGE  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    IeETH public eETH;
-    ILiquidityPool public liquidityPool;
+    IeETH public DEPRECATED_eETH;
+    ILiquidityPool public DEPRECATED_liquidityPool;
+    bool public paused;
+    mapping(address => uint256) public pausedUntil;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
     bytes32 public constant WEETH_OPERATING_ADMIN_ROLE = keccak256("WEETH_OPERATING_ADMIN_ROLE");
+    bytes32 public constant WEETH_PAUSER_ROLE = keccak256("WEETH_PAUSER_ROLE");
+    bytes32 public constant WEETH_PAUSER_UNTIL_ROLE = keccak256("WEETH_PAUSER_UNTIL_ROLE");
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry) {
-        require(_roleRegistry != address(0), "must set role registry");
+    constructor(address _eETH, address _liquidityPool, address _roleRegistry) {
+        require(_eETH != address(0), "No zero addresses");
+        require(_liquidityPool != address(0), "No zero addresses");
+        require(_roleRegistry != address(0), "No zero addresses");
+        eETH = IeETH(_eETH);
+        liquidityPool = ILiquidityPool(_liquidityPool);
         roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
 
-    function initialize(address _liquidityPool, address _eETH) external initializer {
-        require(_liquidityPool != address(0), "No zero addresses");
-        require(_eETH != address(0), "No zero addresses");
-
+    function initialize() external initializer {
         __ERC20_init("Wrapped eETH", "weETH");
         __ERC20Permit_init("Wrapped eETH");
         __UUPSUpgradeable_init();
         __Ownable_init();
-        eETH = IeETH(_eETH);
-        liquidityPool = ILiquidityPool(_liquidityPool);
     }
 
     /// @dev name changed from the version initially deployed
@@ -93,6 +103,45 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         return eETHAmount;
     }
 
+    function pause() external {
+        require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        paused = true;
+        emit Paused();
+    }
+
+    function pauseUntil(address _user) external {
+        require(roleRegistry.hasRole(WEETH_PAUSER_UNTIL_ROLE, msg.sender), "IncorrectRole");
+        require(_user != address(0), "No zero addresses");
+        if (pausedUntil[_user] < block.timestamp) {
+            pausedUntil[_user] = block.timestamp + 1 days;
+            emit PausedUntil(_user, pausedUntil[_user]);
+        }
+    }
+
+    function extendPauseUntil(address _user, uint256 _duration) external {
+        require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        require(_user != address(0), "No zero addresses");
+        if (pausedUntil[_user] >= block.timestamp) {
+            pausedUntil[_user] += _duration;
+            emit PausedUntil(_user, pausedUntil[_user]);
+        }
+    }
+
+    function cancelPauseUntil(address _user) external {
+        require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        require(_user != address(0), "No zero addresses");
+        if (pausedUntil[_user] >= block.timestamp) {
+            delete pausedUntil[_user];
+            emit CancelledPauseUntil(_user);
+        }
+    }
+
+    function unpause() external {
+        require(roleRegistry.hasRole(WEETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        paused = false;
+        emit Unpaused();
+    }
+
     function recoverETH(address payable to, uint256 amount) external {
         if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _recoverETH(to, amount);
@@ -119,6 +168,15 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 /* amount */
+    ) internal virtual override {
+        require(!paused, "PAUSED");
+        require(pausedUntil[from] < block.timestamp, "SENDER PAUSED");
+        require(pausedUntil[to] < block.timestamp, "RECIPIENT PAUSED");
+    }
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
@@ -145,5 +203,9 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    function isPausedUntil(address _user) external view returns (bool) {
+        return pausedUntil[_user] >= block.timestamp;
     }
 }

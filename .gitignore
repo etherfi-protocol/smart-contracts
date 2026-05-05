@@ -23,6 +23,9 @@ release/logs/txns/*
 cache
 artifacts
 
+# Lock files
+foundry.lock
+
 .DS_Store
 .certora_internal/*
 

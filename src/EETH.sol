@@ -16,7 +16,7 @@ import "./interfaces/IRoleRegistry.sol";
 
 contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20PermitUpgradeable, IeETH, AssetRecovery {
     using CountersUpgradeable for CountersUpgradeable.Counter;
-    ILiquidityPool public liquidityPool;
+    ILiquidityPool public DEPRECATED_liquidityPool;
 
     uint256 public totalShares;
     mapping (address => uint256) public shares;
@@ -36,15 +36,25 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     bytes32 private immutable _TYPE_HASH;
 
     IRoleRegistry public immutable roleRegistry;
+    ILiquidityPool public immutable liquidityPool;
 
     bytes32 public constant EETH_OPERATING_ADMIN_ROLE = keccak256("EETH_OPERATING_ADMIN_ROLE");
+    bytes32 public constant EETH_PAUSER_ROLE = keccak256("EETH_PAUSER_ROLE");
+    bytes32 public constant EETH_PAUSER_UNTIL_ROLE = keccak256("EETH_PAUSER_UNTIL_ROLE");
+
+    bool public paused;
+    mapping(address => uint256) public pausedUntil;
 
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
+    event Paused();
+    event PausedUntil(address indexed user, uint256 pausedUntil);
+    event CancelledPauseUntil(address indexed user);
+    event Unpaused();
 
     error IncorrectRole();
 
     // TODO: Figure our what `name` and `version` are for
-    constructor(address _roleRegistry) {
+    constructor(address _roleRegistry, address _liquidityPool) {
         bytes32 hashedName = keccak256("EETH");
         bytes32 hashedVersion = keccak256("1");
         bytes32 typeHash = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -55,21 +65,21 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         _CACHED_THIS = address(this);
         _TYPE_HASH = typeHash;
 
-        require(_roleRegistry != address(0), "must set role registry");
+        require(_liquidityPool != address(0), "No zero addresses");
+        require(_roleRegistry != address(0), "No zero addresses");
         roleRegistry = IRoleRegistry(_roleRegistry);
+        liquidityPool = ILiquidityPool(_liquidityPool);
 
         _disableInitializers(); 
     }
 
-    function initialize(address _liquidityPool) external initializer {
-        require(_liquidityPool != address(0), "No zero addresses");
-        
+    function initialize() external initializer {    
         __UUPSUpgradeable_init();
         __Ownable_init();
-        liquidityPool = ILiquidityPool(_liquidityPool);
     }
 
     function mintShares(address _user, uint256 _share) external onlyPoolContract {
+        require(!paused && pausedUntil[_user] < block.timestamp, "MINT PAUSED");
         shares[_user] += _share;
         totalShares += _share;
 
@@ -79,6 +89,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
 
     function burnShares(address _user, uint256 _share) external {
         require(msg.sender == address(liquidityPool), "Incorrect Caller");
+        require(!paused && pausedUntil[_user] < block.timestamp, "BURN PAUSED");
         require(shares[_user] >= _share, "BURN_AMOUNT_EXCEEDS_BALANCE");
         shares[_user] -= _share;
         totalShares -= _share;
@@ -126,6 +137,45 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         }
         _transfer(_sender, _recipient, _amount);
         return true;
+    }
+
+    function pause() external {
+        require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        paused = true;
+        emit Paused();
+    }
+
+    function pauseUntil(address _user) external {
+        require(_user != address(0), "No zero addresses");
+        require(roleRegistry.hasRole(EETH_PAUSER_UNTIL_ROLE, msg.sender), "IncorrectRole");
+        if (pausedUntil[_user] < block.timestamp) {
+            pausedUntil[_user] = block.timestamp + 1 days;
+            emit PausedUntil(_user, pausedUntil[_user]);
+        }
+    }
+
+    function extendPauseUntil(address _user, uint256 _duration) external {
+        require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        require(_user != address(0), "No zero addresses");
+        if (pausedUntil[_user] >= block.timestamp) {
+            pausedUntil[_user] += _duration;
+            emit PausedUntil(_user, pausedUntil[_user]);
+        }
+    }
+
+    function cancelPauseUntil(address _user) external {
+        require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        require(_user != address(0), "No zero addresses");
+        if (pausedUntil[_user] >= block.timestamp) {
+            delete pausedUntil[_user];
+            emit CancelledPauseUntil(_user);
+        }
+    }
+
+    function unpause() external {
+        require(roleRegistry.hasRole(EETH_PAUSER_ROLE, msg.sender), "IncorrectRole");
+        paused = false;
+        emit Unpaused();
     }
 
     function permit(
@@ -180,6 +230,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     }
 
     function _transferShares(address _sender, address _recipient, uint256 _sharesAmount) internal {
+        require(!paused, "PAUSED");
+        require(pausedUntil[_sender] < block.timestamp, "SENDER PAUSED");
+        require(pausedUntil[_recipient] < block.timestamp, "RECIPIENT PAUSED");
         require(_sender != address(0), "TRANSFER_FROM_THE_ZERO_ADDRESS");
         require(_recipient != address(0), "TRANSFER_TO_THE_ZERO_ADDRESS");
         require(_sharesAmount <= shares[_sender], "TRANSFER_AMOUNT_EXCEEDS_BALANCE");
@@ -213,6 +266,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
 
     function balanceOf(address _user) public view override(IeETH, IERC20Upgradeable) returns (uint256) {
         return liquidityPool.getTotalEtherClaimOf(_user);
+    }
+
+    function isPausedUntil(address _user) external view returns (bool) {
+        return pausedUntil[_user] >= block.timestamp;
     }
 
     function getImplementation() external view returns (address) {

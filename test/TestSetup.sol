@@ -608,28 +608,22 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         liquifierInstance = Liquifier(payable(liquifierProxy));
 
         // TODO - not sure what `name` and `versiona` are for
-        eETHImplementation = new EETH(address(roleRegistryInstance));
+        eETHImplementation = new EETH(address(roleRegistryInstance), address(liquidityPoolInstance));
         vm.expectRevert("Initializable: contract is already initialized");
-        eETHImplementation.initialize(payable(address(liquidityPoolInstance)));
+        eETHImplementation.initialize();
 
         eETHProxy = new UUPSProxy(address(eETHImplementation), "");
         eETHInstance = EETH(address(eETHProxy));
 
-        vm.expectRevert("No zero addresses");
-        eETHInstance.initialize(payable(address(0)));
-        eETHInstance.initialize(payable(address(liquidityPoolInstance)));
+        eETHInstance.initialize();
 
-        weEthImplementation = new WeETH(address(roleRegistryInstance));
+        weEthImplementation = new WeETH(address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance));
         vm.expectRevert("Initializable: contract is already initialized");
-        weEthImplementation.initialize(payable(address(liquidityPoolInstance)), address(eETHInstance));
+        weEthImplementation.initialize();
 
         weETHProxy = new UUPSProxy(address(weEthImplementation), "");
         weEthInstance = WeETH(address(weETHProxy));
-        vm.expectRevert("No zero addresses");
-        weEthInstance.initialize(address(0), address(eETHInstance));
-        vm.expectRevert("No zero addresses");
-        weEthInstance.initialize(payable(address(liquidityPoolInstance)), address(0));
-        weEthInstance.initialize(payable(address(liquidityPoolInstance)), address(eETHInstance));
+        weEthInstance.initialize();
 
         roleRegistryInstance.grantRole(eETHInstance.EETH_OPERATING_ADMIN_ROLE(), admin);
         roleRegistryInstance.grantRole(weEthInstance.WEETH_OPERATING_ADMIN_ROLE(), admin);
@@ -643,7 +637,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         eigenLayerEigenPodManager = new MockEigenPodManager();
         eigenLayerDelegationManager = new MockDelegationManager();
 
-        membershipNftImplementation = new MembershipNFT();
+        membershipNftImplementation = new MembershipNFT(address(eETHInstance));
         membershipNftProxy = new UUPSProxy(address(membershipNftImplementation), "");
         membershipNftInstance = MembershipNFT(payable(membershipNftProxy));
 
@@ -875,7 +869,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_weETH() internal {
-        address newWeETHImpl = address(new WeETH(address(roleRegistryInstance)));
+        address newWeETHImpl = address(new WeETH(address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance)));
         vm.prank(owner);
         weEthInstance.upgradeTo(newWeETHImpl);
     }
