@@ -355,6 +355,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     //   FORK_RPC_URL=https://your-rpc-url forge test
     function initializeRealisticForkWithBlock(uint8 forkEnum, uint256 blockNo) public {
         deployed = new Deployed();
+        // Make the locally-deployed Deployed helper persistent so it is accessible
+        // after vm.selectFork switches to the mainnet fork.
+        vm.makePersistent(address(deployed));
         if (forkEnum == MAINNET_FORK) {
             // Use FORK_RPC_URL if set, otherwise fall back to MAINNET_RPC_URL
             string memory rpcUrl = vm.envOr("FORK_RPC_URL", vm.envString("MAINNET_RPC_URL"));
