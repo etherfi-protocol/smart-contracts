@@ -190,32 +190,20 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         validatorTaskBatchSize = _batchSize;
     }
 
-    function canExecuteTasks(IEtherFiOracle.OracleReport calldata _report) external view returns (bool) {
+    function canExecuteTasks(IEtherFiOracle.OracleReport calldata _report) external view returns (bool _isValid) {
         bytes32 reportHash = etherFiOracle.generateReportHash(_report);
-        uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
-
-        if (!etherFiOracle.isConsensusReached(reportHash)) return false;
-        if (slotForNextReportToProcess() != _report.refSlotFrom) return false;
-        if (blockForNextReportToProcess() != _report.refBlockFrom) return false;
-        if (current_slot < postReportWaitTimeInSlots + etherFiOracle.getConsensusSlot(reportHash)) return false;
-        return true;
+        (_isValid,) = _validateReport(_report, reportHash);
     }
 
     function executeTasks(IEtherFiOracle.OracleReport calldata _report) external {
         bytes32 reportHash = etherFiOracle.generateReportHash(_report);
-        uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
-        require(etherFiOracle.isConsensusReached(reportHash), "EtherFiAdmin: report didn't reach consensus");
-        require(slotForNextReportToProcess() == _report.refSlotFrom, "EtherFiAdmin: report has wrong `refSlotFrom`");
-        require(blockForNextReportToProcess() == _report.refBlockFrom, "EtherFiAdmin: report has wrong `refBlockFrom`");
-        require(current_slot >= postReportWaitTimeInSlots + etherFiOracle.getConsensusSlot(reportHash), "EtherFiAdmin: report is too fresh");
+        (bool _isValid, string memory _error) = _validateReport(_report, reportHash);
+        require(_isValid, _error);
 
-        uint256 elapsedTime = (_report.refSlotTo - lastHandledReportRefSlot) * 12 seconds;
-        require(elapsedTime > 0, "EtherFiAdmin: report spans zero slots");
-
-        _handleAccruedRewards(_report, elapsedTime);
+        _handleAccruedRewards(_report);
         _handleProtocolFees(_report);
-        _handleValidators(reportHash, elapsedTime, _report);
-        _handleWithdrawals(_report, elapsedTime);
+        _handleValidators(reportHash, _report);
+        _handleWithdrawals(_report);
 
         lastHandledReportRefSlot = _report.refSlotTo;
         lastHandledReportRefBlock = _report.refBlockTo;
@@ -249,44 +237,24 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     //protocol owns the eth that was distributed to NO and treasury in eigenpods and etherfinodes 
     function _handleProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal { 
-        require(_report.protocolFees >= 0, "EtherFiAdmin: protocol fees can't be negative");
         if(_report.protocolFees == 0) {
             return;
         }
-        int128 totalRewards = _report.protocolFees + _report.accruedRewards;
-        // protocol fees are less than 20% of total rewards
-        require( _report.protocolFees * 5 <= totalRewards, "EtherFiAdmin: protocol fees exceed 20% total rewards");
-
         liquidityPool.payProtocolFees(uint128(_report.protocolFees));
     }
 
-    function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal {
+    function _handleAccruedRewards(IEtherFiOracle.OracleReport calldata _report) internal {
         if (_report.accruedRewards == 0) {
             return;
         }
 
-        // This guard will be removed in future versions
-        // Ensure that the new TVL didnt' change too much
-        // Check if the absolute change (increment, decrement) in TVL is beyond the threshold variable
-        // - 5% APR = 0.0137% per day
-        // - 10% APR = 0.0274% per day
-        int256 currentTVL = int128(uint128(liquidityPool.getTotalPooledEther()));
-        int256 apr;
-        if (currentTVL > 0) {
-            apr = 10000 * (_report.accruedRewards * 365 days) / (currentTVL * int256(elapsedTime));
-        }
-        int256 absApr = (apr > 0) ? apr : - apr;
-        require(absApr <= acceptableRebaseAprInBps, "EtherFiAdmin: TVL changed too much");
-
         membershipManager.rebase(_report.accruedRewards);
     }
 
-    function _enqueueValidatorApprovalTask(bytes32 _reportHash, uint256 elapsedTime, IEtherFiOracle.OracleReport calldata _report) internal {
+    function _enqueueValidatorApprovalTask(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report) internal {
         if(_report.validatorsToApprove.length == 0) {
             return;
         }
-        uint256 numValidatorsToApprovePerDay = (_report.validatorsToApprove.length * 1 days) / elapsedTime;
-        require(numValidatorsToApprovePerDay <= MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY, "EtherFiAdmin: number of validators to approve exceeds max");
 
         uint256 numBatches = (_report.validatorsToApprove.length + validatorTaskBatchSize - 1) / validatorTaskBatchSize;
 
@@ -305,20 +273,60 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
     }
 
-    function _handleValidators(bytes32 _reportHash, uint256 elapsedTime, IEtherFiOracle.OracleReport calldata _report) internal {
-        _enqueueValidatorApprovalTask(_reportHash, elapsedTime, _report);
+    function _handleValidators(bytes32 _reportHash, IEtherFiOracle.OracleReport calldata _report) internal {
+        _enqueueValidatorApprovalTask(_reportHash, _report);
     }
 
-    function _handleWithdrawals(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal {
-        uint256 finalizedWithdrawalAmountPerDay = (_report.finalizedWithdrawalAmount * 1 days) / elapsedTime;
-        require(finalizedWithdrawalAmountPerDay <= MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY, "EtherFiAdmin: finalized withdrawal amount exceeds max");
-
+    function _handleWithdrawals(IEtherFiOracle.OracleReport calldata _report) internal {
         for (uint256 i = 0; i < _report.withdrawalRequestsToInvalidate.length; i++) {
             withdrawRequestNft.invalidateRequest(_report.withdrawalRequestsToInvalidate[i]);
         }
         withdrawRequestNft.finalizeRequests(_report.lastFinalizedWithdrawalRequestId);
-        require(_report.finalizedWithdrawalAmount + liquidityPool.ethAmountLockedForWithdrawal() + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal() <= address(liquidityPool).balance, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
         liquidityPool.addEthAmountLockedForWithdrawal(_report.finalizedWithdrawalAmount);
+    }
+
+    function _validateReport(IEtherFiOracle.OracleReport calldata _report, bytes32 _reportHash) internal view returns (bool, string memory) {
+        uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
+        if (!etherFiOracle.isConsensusReached(_reportHash)) return (false, "EtherFiAdmin: report didn't reach consensus");
+        if (slotForNextReportToProcess() != _report.refSlotFrom) return (false, "EtherFiAdmin: report has wrong `refSlotFrom`");
+        if (blockForNextReportToProcess() != _report.refBlockFrom) return (false, "EtherFiAdmin: report has wrong `refBlockFrom`");
+        if (current_slot < postReportWaitTimeInSlots + etherFiOracle.getConsensusSlot(_reportHash)) return (false, "EtherFiAdmin: report is too fresh");
+
+        uint256 elapsedTime = (_report.refSlotTo - lastHandledReportRefSlot) * 12 seconds;
+        if (elapsedTime == 0) return (false, "EtherFiAdmin: report spans zero slots");
+
+        // validate accrued rewards
+        int256 currentTVL = int128(uint128(liquidityPool.getTotalPooledEther()));
+
+        // This guard will be removed in future versions
+        // Ensure that the new TVL didnt' change too much
+        // Check if the absolute change (increment, decrement) in TVL is beyond the threshold variable
+        // - 5% APR = 0.0137% per day
+        // - 10% APR = 0.0274% per day
+        int256 apr;
+        if (currentTVL > 0) {
+            apr = 10000 * (_report.accruedRewards * 365 days) / (currentTVL * int256(elapsedTime));
+        }
+        int256 absApr = (apr > 0) ? apr : - apr;
+        if (absApr > acceptableRebaseAprInBps) return (false, "EtherFiAdmin: TVL changed too much");
+
+        // validate protocol fees
+        if (_report.protocolFees < 0) return (false, "EtherFiAdmin: protocol fees can't be negative");
+        int128 totalRewards = _report.protocolFees + _report.accruedRewards;
+        // protocol fees are less than 20% of total rewards
+        if (_report.protocolFees > 0 && _report.protocolFees * 5 > totalRewards) return (false, "EtherFiAdmin: protocol fees exceed 20% total rewards");
+
+        // validate approvals
+        uint256 numValidatorsToApprovePerDay = (_report.validatorsToApprove.length * 1 days) / elapsedTime;
+        if (numValidatorsToApprovePerDay > MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY) return (false, "EtherFiAdmin: number of validators to approve exceeds max");
+
+        // validate withdrawals
+        uint256 finalizedWithdrawalAmountPerDay = (_report.finalizedWithdrawalAmount * 1 days) / elapsedTime;
+        if (finalizedWithdrawalAmountPerDay > MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY) return (false, "EtherFiAdmin: finalized withdrawal amount exceeds max");
+        if (_report.finalizedWithdrawalAmount + liquidityPool.ethAmountLockedForWithdrawal() + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal() > address(liquidityPool).balance) return (false, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+
+        // report is valid
+        return (true, "");
     }
 
     function slotForNextReportToProcess() public view returns (uint32) {
