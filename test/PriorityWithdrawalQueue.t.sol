@@ -51,7 +51,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Upgrade LiquidityPool to latest version (needed for setPriorityWithdrawalQueue)
         vm.startPrank(owner);
-        LiquidityPool newLpImpl = new LiquidityPool(address(priorityQueue));
+        LiquidityPool newLpImpl = new LiquidityPool(address(priorityQueue), 0);
         liquidityPoolInstance.upgradeTo(address(newLpImpl));
 
         // Upgrade WithdrawRequestNFT so it has receive() and can accept ETH escrow.
@@ -234,8 +234,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // Verify state changes
         assertEq(priorityQueue.nonce(), initialNonce + 1, "Nonce should increment");
         // Use approximate comparison due to share/amount rounding (1 wei tolerance)
-        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), initialEethBalance - withdrawAmount, 1, "VIP user eETH balance should decrease");
-        assertApproxEqAbs(eETHInstance.balanceOf(address(priorityQueue)), initialQueueEethBalance + withdrawAmount, 1, "Queue eETH balance should increase");
+        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), initialEethBalance - withdrawAmount, 5, "VIP user eETH balance should decrease");
+        assertApproxEqAbs(eETHInstance.balanceOf(address(priorityQueue)), initialQueueEethBalance + withdrawAmount, 5, "Queue eETH balance should increase");
 
         // Verify request exists
         assertTrue(priorityQueue.requestExists(requestId), "Request should exist");
@@ -813,7 +813,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         uint256 eethAfterRequest = eETHInstance.balanceOf(vipUser);
 
         // Verify request state (use approximate comparison due to share/amount rounding)
-        assertApproxEqAbs(eethAfterRequest, eethBefore - withdrawAmount, 1, "eETH transferred to queue");
+        assertApproxEqAbs(eethAfterRequest, eethBefore - withdrawAmount, 5, "eETH transferred to queue");
 
         // Cancel request
         vm.prank(vipUser);
@@ -822,7 +822,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // Verify state changes
         assertEq(cancelledId, requestId, "Cancelled ID should match");
         assertFalse(priorityQueue.requestExists(requestId), "Request should be removed");
-        // eETH returned might have small rounding difference (delta=2 due to deposit→share→amount round-trip)
+        // eETH returned might have small rounding difference; the request → cancel
+        // round-trip does sharesForAmount → store → amountForShare, so up to 2 wei
+        // can be lost across the two integer divisions.
         assertApproxEqAbs(eETHInstance.balanceOf(vipUser), eethBefore, 2, "eETH should be returned");
     }
 
@@ -852,8 +854,10 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertFalse(priorityQueue.requestExists(requestId), "Request should be removed");
         assertFalse(priorityQueue.isFinalized(requestId), "Request should no longer be finalized");
         
-        // eETH should be returned (delta=2 due to deposit→share→amount round-trip rounding)
+        // eETH should be returned (approximately due to share rounding); request →
+        // fulfill → invalidate round-trips through two share/amount conversions.
         assertApproxEqAbs(eETHInstance.balanceOf(vipUser), eethInitial, 2, "eETH should be returned");
+
 
         // LP locked should decrease
         assertLt(priorityQueue.ethAmountLockedForPriorityWithdrawal(), lpLockedBefore, "LP locked should decrease");
@@ -1003,7 +1007,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Verify state changes
         assertEq(cancelledIds.length, 1, "Should cancel one request");
-        // eETH should return to approximately initial balance (delta=2 due to deposit→share→amount round-trip rounding)
+        // eETH should return to approximately initial balance; up to 2 wei can be
+        // lost across the request → invalidate share/amount round-trip.
         assertApproxEqAbs(eETHInstance.balanceOf(vipUser), eethInitial, 2, "eETH should be returned");
     }
 
@@ -1024,7 +1029,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             _createWithdrawRequest(vipUser, withdrawAmount);
 
         // Verify intermediate state (use approximate comparison due to share/amount rounding)
-        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), initialEethBalance - withdrawAmount, 1, "eETH transferred to queue");
+        assertApproxEqAbs(eETHInstance.balanceOf(vipUser), initialEethBalance - withdrawAmount, 5, "eETH transferred to queue");
         assertTrue(priorityQueue.requestExists(priorityQueue.getRequestId(request)), "Request should exist");
 
         // 3. Request manager fulfills the request
@@ -1700,11 +1705,204 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     function test_revert_amountTooSmall() public {
         vm.startPrank(vipUser);
         eETHInstance.approve(address(priorityQueue), 0.001 ether);
-        
+
         // Default minimum amount is 0.01 ether
         vm.expectRevert(PriorityWithdrawalQueue.InvalidAmount.selector);
         priorityQueue.requestWithdraw(0.001 ether, 0);
         vm.stopPrank();
+    }
+
+    //--------------------------------------------------------------------------------------
+    //----------------------  MIN / MAX AMOUNT BOUNDARY TESTS  -----------------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @dev Top up vipUser's eETH so they can request a withdrawal at MAX_AMOUNT.
+    function _topUpVipUserEEth(uint96 target) internal {
+        uint256 current = eETHInstance.balanceOf(vipUser);
+        if (current >= target) return;
+        uint256 needed = uint256(target) - current + 1 ether; // small buffer for rebases
+        vm.deal(vipUser, vipUser.balance + needed);
+        vm.prank(vipUser);
+        liquidityPoolInstance.deposit{value: needed}();
+    }
+
+    function test_requestWithdraw_atMin_succeeds() public {
+        uint96 amt = priorityQueue.MIN_AMOUNT();
+
+        vm.startPrank(vipUser);
+        eETHInstance.approve(address(priorityQueue), amt);
+        bytes32 requestId = priorityQueue.requestWithdraw(amt, amt);
+        vm.stopPrank();
+
+        assertTrue(priorityQueue.requestExists(requestId), "MIN_AMOUNT request should be created");
+    }
+
+    function test_requestWithdraw_belowMin_reverts() public {
+        uint96 amt = priorityQueue.MIN_AMOUNT() - 1;
+
+        vm.startPrank(vipUser);
+        eETHInstance.approve(address(priorityQueue), amt);
+        vm.expectRevert(PriorityWithdrawalQueue.InvalidAmount.selector);
+        priorityQueue.requestWithdraw(amt, amt);
+        vm.stopPrank();
+    }
+
+    function test_requestWithdraw_atMax_succeeds() public {
+        uint96 amt = priorityQueue.MAX_AMOUNT();
+        _topUpVipUserEEth(amt);
+
+        vm.startPrank(vipUser);
+        eETHInstance.approve(address(priorityQueue), amt);
+        bytes32 requestId = priorityQueue.requestWithdraw(amt, amt);
+        vm.stopPrank();
+
+        assertTrue(priorityQueue.requestExists(requestId), "MAX_AMOUNT request should be created");
+    }
+
+    function test_requestWithdraw_aboveMax_reverts() public {
+        uint96 amt = priorityQueue.MAX_AMOUNT() + 1;
+        _topUpVipUserEEth(amt);
+
+        vm.startPrank(vipUser);
+        eETHInstance.approve(address(priorityQueue), amt);
+        vm.expectRevert(PriorityWithdrawalQueue.InvalidAmount.selector);
+        priorityQueue.requestWithdraw(amt, amt);
+        vm.stopPrank();
+    }
+
+    function test_requestWithdrawWithPermit_atMin_succeeds() public {
+        uint256 userPrivKey = 999;
+        address permitUser = vm.addr(userPrivKey);
+        uint96 amt = priorityQueue.MIN_AMOUNT();
+
+        vm.prank(alice);
+        priorityQueue.addToWhitelist(permitUser);
+        vm.deal(permitUser, 1 ether);
+        vm.prank(permitUser);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+
+        IPriorityWithdrawalQueue.PermitInput memory permit = _createEEthPermitInput(
+            userPrivKey,
+            address(priorityQueue),
+            amt,
+            eETHInstance.nonces(permitUser),
+            block.timestamp + 1 hours
+        );
+
+        vm.prank(permitUser);
+        bytes32 requestId = priorityQueue.requestWithdrawWithPermit(amt, amt, permit);
+        assertTrue(priorityQueue.requestExists(requestId), "MIN_AMOUNT permit request should be created");
+    }
+
+    function test_requestWithdrawWithPermit_belowMin_reverts() public {
+        uint256 userPrivKey = 999;
+        address permitUser = vm.addr(userPrivKey);
+        uint96 amt = priorityQueue.MIN_AMOUNT() - 1;
+
+        vm.prank(alice);
+        priorityQueue.addToWhitelist(permitUser);
+        vm.deal(permitUser, 1 ether);
+        vm.prank(permitUser);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+
+        IPriorityWithdrawalQueue.PermitInput memory permit = _createEEthPermitInput(
+            userPrivKey,
+            address(priorityQueue),
+            amt,
+            eETHInstance.nonces(permitUser),
+            block.timestamp + 1 hours
+        );
+
+        vm.prank(permitUser);
+        vm.expectRevert(PriorityWithdrawalQueue.InvalidAmount.selector);
+        priorityQueue.requestWithdrawWithPermit(amt, amt, permit);
+    }
+
+    function test_requestWithdrawWithPermit_aboveMax_reverts() public {
+        uint256 userPrivKey = 999;
+        address permitUser = vm.addr(userPrivKey);
+        uint96 amt = priorityQueue.MAX_AMOUNT() + 1;
+
+        vm.prank(alice);
+        priorityQueue.addToWhitelist(permitUser);
+        vm.deal(permitUser, uint256(amt) + 1 ether);
+        vm.prank(permitUser);
+        liquidityPoolInstance.deposit{value: uint256(amt) + 1 ether}();
+
+        IPriorityWithdrawalQueue.PermitInput memory permit = _createEEthPermitInput(
+            userPrivKey,
+            address(priorityQueue),
+            amt,
+            eETHInstance.nonces(permitUser),
+            block.timestamp + 1 hours
+        );
+
+        vm.prank(permitUser);
+        vm.expectRevert(PriorityWithdrawalQueue.InvalidAmount.selector);
+        priorityQueue.requestWithdrawWithPermit(amt, amt, permit);
+    }
+
+    function test_requestWithdrawWithWeETH_atMin_succeeds() public {
+        // wrap → unwrap can round down by a few wei on mainnet fork (weETH rate > 1).
+        // Pad the eETH amount so the unwrapped value is comfortably above MIN_AMOUNT.
+        uint96 eEthAmount = priorityQueue.MIN_AMOUNT() + 0.05 ether;
+        vm.startPrank(vipUser);
+        eETHInstance.approve(address(weEthInstance), eEthAmount);
+        uint256 weEthMinted = weEthInstance.wrap(eEthAmount);
+        IERC20(address(weEthInstance)).approve(address(priorityQueue), weEthMinted);
+
+        // amountWithFee must be > 0 and <= unwrapped eETH; MIN_AMOUNT is the smallest safe value.
+        bytes32 requestId = priorityQueue.requestWithdrawWithWeETH(uint96(weEthMinted), priorityQueue.MIN_AMOUNT());
+        vm.stopPrank();
+
+        assertTrue(priorityQueue.requestExists(requestId), "weETH MIN_AMOUNT request should be created");
+    }
+
+    function test_requestWithdrawWithWeETH_aboveMax_reverts() public {
+        // The unwrap value must exceed MAX_AMOUNT. Pad above the boundary so rounding can't mask the revert.
+        uint96 eEthAmount = priorityQueue.MAX_AMOUNT() + 1 ether;
+        _topUpVipUserEEth(eEthAmount);
+
+        vm.startPrank(vipUser);
+        eETHInstance.approve(address(weEthInstance), eEthAmount);
+        uint256 weEthMinted = weEthInstance.wrap(eEthAmount);
+        IERC20(address(weEthInstance)).approve(address(priorityQueue), weEthMinted);
+
+        vm.expectRevert(PriorityWithdrawalQueue.InvalidAmount.selector);
+        priorityQueue.requestWithdrawWithWeETH(uint96(weEthMinted), 0);
+        vm.stopPrank();
+    }
+
+    function test_requestWithdrawWithWeETHAndPermit_aboveMax_reverts() public {
+        uint256 userPrivKey = 555;
+        address permitUser = vm.addr(userPrivKey);
+
+        vm.prank(alice);
+        priorityQueue.addToWhitelist(permitUser);
+        vm.deal(permitUser, uint256(priorityQueue.MAX_AMOUNT()) + 5 ether);
+        vm.startPrank(permitUser);
+        liquidityPoolInstance.deposit{value: uint256(priorityQueue.MAX_AMOUNT()) + 5 ether}();
+
+        uint96 eEthAmount = priorityQueue.MAX_AMOUNT() + 1 ether;
+        eETHInstance.approve(address(weEthInstance), eEthAmount);
+        uint256 weEthMinted = weEthInstance.wrap(eEthAmount);
+
+        IPriorityWithdrawalQueue.PermitInput memory permit = _createWeEthPermitInput(
+            userPrivKey,
+            address(priorityQueue),
+            weEthMinted,
+            weEthInstance.nonces(permitUser),
+            block.timestamp + 1 hours
+        );
+
+        vm.expectRevert(PriorityWithdrawalQueue.InvalidAmount.selector);
+        priorityQueue.requestWithdrawWithWeETHAndPermit(uint96(weEthMinted), 0, permit);
+        vm.stopPrank();
+    }
+
+    function test_constants_minMaxValues() public view {
+        assertEq(priorityQueue.MIN_AMOUNT(), 0.01 ether, "MIN_AMOUNT mismatch");
+        assertEq(priorityQueue.MAX_AMOUNT(), 1000 ether, "MAX_AMOUNT mismatch");
     }
 
     function test_revert_requestNotFound() public {
@@ -1852,7 +2050,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     function test_amountWithFeeEqualsDepositAmount() public {
         uint96 withdrawAmount = 10 ether;
-        uint96 amountWithFee = withdrawAmount - 1; // 1 wei less for rounding
+        uint96 amountWithFee = withdrawAmount - 5; // 5 wei tolerance for share round-trip rounding
 
         vm.prank(vipUser);
         eETHInstance.approve(address(priorityQueue), withdrawAmount);

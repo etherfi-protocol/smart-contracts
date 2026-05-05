@@ -78,6 +78,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //--------------------------------------------------------------------------------------
 
     address public immutable priorityWithdrawalQueue;
+    uint256 public immutable MIN_AMOUNT_FOR_SHARE;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
@@ -120,14 +121,16 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error IncorrectRole();
     error InvalidValidatorSize();
     error InvalidArrayLengths();
+    error InvalidAmountForShare();
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _priorityWithdrawalQueue) {
+    constructor(address _priorityWithdrawalQueue, uint256 _minAmountForShare) {
         priorityWithdrawalQueue = _priorityWithdrawalQueue;
+        MIN_AMOUNT_FOR_SHARE = _minAmountForShare;
         _disableInitializers();
     }
 
@@ -135,6 +138,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (msg.value > type(uint128).max) revert InvalidAmount();
         totalValueOutOfLp -= uint128(msg.value);
         totalValueInLp += uint128(msg.value);
+        _checkMinAmountForShare();
     }
 
     function initialize(address _eEthAddress, address _stakingManagerAddress, address _nodesManagerAddress, address _membershipManagerAddress, address _tNftAddress, address _etherFiAdminContract, address _withdrawRequestNFT) external initializer {
@@ -268,6 +272,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (totalValueInLp < _amount) revert InsufficientLiquidity();
         totalValueInLp -= uint128(_amount);
         eETH.burnShares(msg.sender, share);
+
+        _checkMinAmountForShare();
+
         _sendFund(_recipient, _amount);
         return share;
     }
@@ -471,6 +478,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (msg.sender != address(membershipManager)) revert IncorrectCaller();
         totalValueOutOfLp = uint128(int128(totalValueOutOfLp) + _accruedRewards);
 
+        _checkMinAmountForShare();
+
         emit Rebase(getTotalPooledEther(), eETH.totalShares());
     }
 
@@ -534,9 +543,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @notice Locks ETH for finalized NFT withdrawals by transferring from LP to WithdrawRequestNFT. TVL preserved by InLp/OutOfLp rebalance; share rate unchanged.
     function addEthAmountLockedForWithdrawal(uint128 _amount) external {
         if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
-        if (totalValueInLp < _amount) revert InsufficientLiquidity();
+        if (address(this).balance < _amount) revert InsufficientLiquidity();
 
-        totalValueInLp     -= _amount;
+        // Deduct from totalValueInLp up to its current balance; any surplus comes from
+        // unaccounted ETH (e.g. validator principal returned outside the deposit path).
+        uint128 fromInLp = _amount <= totalValueInLp ? _amount : totalValueInLp;
+        totalValueInLp     -= fromInLp;
         totalValueOutOfLp  += _amount;
         ethAmountLockedForWithdrawal += _amount;
 
@@ -566,6 +578,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function burnEEthShares(uint256 shares) external {
         if (msg.sender != address(etherFiRedemptionManager) && msg.sender != address(withdrawRequestNFT) && msg.sender != priorityWithdrawalQueue) revert IncorrectCaller();
         eETH.burnShares(msg.sender, shares);
+        _checkMinAmountForShare();
     }
 
     function burnEEthSharesForNonETHWithdrawal(uint256 _amountSharesToBurn, uint256 _withdrawalValueInETH) external {
@@ -579,6 +592,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         totalValueOutOfLp -= uint128(_withdrawalValueInETH);
 
         eETH.burnShares(msg.sender, _amountSharesToBurn);
+        _checkMinAmountForShare();
         emit EEthSharesBurnedForNonETHWithdrawal(_amountSharesToBurn, _withdrawalValueInETH);
     }
 
@@ -594,6 +608,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (amount > type(uint128).max || amount == 0 || share == 0) revert InvalidAmount();
 
         eETH.mintShares(_recipient, share);
+
+        _checkMinAmountForShare();
 
         return share;
     }
@@ -615,6 +631,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function _accountForEthSentOut(uint256 _amount) internal {
         totalValueOutOfLp += uint128(_amount);
         totalValueInLp -= uint128(_amount);
+        _checkMinAmountForShare();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override {
@@ -664,6 +681,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
             return 0;
         }
         return (_share * getTotalPooledEther()) / totalShares;
+    }
+
+    function _checkMinAmountForShare() internal view {
+        if (amountForShare(1 ether) < MIN_AMOUNT_FOR_SHARE) revert InvalidAmountForShare();
     }
 
     function getImplementation() external view returns (address) {return _getImplementation();}

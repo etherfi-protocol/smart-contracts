@@ -2,6 +2,7 @@ pragma solidity ^0.8.27;
 
 import "forge-std/console2.sol";
 import "forge-std/Test.sol";
+import {StdStorage, stdStorage} from "forge-std/StdStorage.sol";
 import "../../test/common/ArrayTestHelper.sol";
 import "../../src/interfaces/ILiquidityPool.sol";
 import "../../src/interfaces/IStakingManager.sol";
@@ -21,6 +22,8 @@ import "../../src/libraries/DepositDataRootGenerator.sol";
 
 
 contract PreludeTest is Test, ArrayTestHelper {
+    using stdStorage for StdStorage;
+
 
     StakingManager stakingManager;
     ILiquidityPool liquidityPool;
@@ -79,7 +82,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(stakingManager.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
-        LiquidityPool liquidityPoolImpl = new LiquidityPool(address(0x0));
+        LiquidityPool liquidityPoolImpl = new LiquidityPool(address(0x0), 0);
         vm.prank(LiquidityPool(payable(address(liquidityPool))).owner());
         LiquidityPool(payable(address(liquidityPool))).upgradeTo(address(liquidityPoolImpl));
 
@@ -634,6 +637,17 @@ contract PreludeTest is Test, ArrayTestHelper {
         address eigenpod = etherFiNodesManager.getEigenPod(uint256(pubkeyHash));
         vm.store(eigenpod, bytes32(uint256(52)) /*slot*/, bytes32(uint256(10000 ether / 1 gwei)));
         vm.deal(eigenpod, 10000 ether);
+
+        // Slot 52 only fixes the EigenPod's own withdrawable accounting. EigenLayer
+        // also tracks `podOwnerDepositShares[node]` in EigenPodManager — at the
+        // current fork block this validator's recorded deposit shares may be below
+        // the queued amount, which would revert with `SharesNegative()`. Poke a
+        // large positive value so the queue request can subtract without underflow.
+        stdstore
+            .target(eigenPodManager)
+            .sig("podOwnerDepositShares(address)")
+            .with_key(etherFiNodeAddress)
+            .checked_write_int(int256(10_000 ether));
 
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.queueETHWithdrawal(uint256(pubkeyHash), 1 ether);

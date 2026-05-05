@@ -106,7 +106,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
         );
         pQueue = PriorityWithdrawalQueue(payable(address(proxy)));
-        liquidityPoolInstance.upgradeTo(address(new LiquidityPool(address(pQueue))));
+        liquidityPoolInstance.upgradeTo(address(new LiquidityPool(address(pQueue), 0)));
         vm.stopPrank();
     }
 
