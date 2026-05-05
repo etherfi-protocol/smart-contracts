@@ -401,6 +401,10 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance));
         // Filter out contracts that don't implement IERC721Receiver - only allow EOAs
         vm.assume(recipient.code.length == 0);
+        // Filter out precompile addresses (0x01..0xff). They have no code so the
+        // line above lets them through, but the low-level ETH transfer inside
+        // claimWithdraw fails against them -> SendFail.
+        vm.assume(uint160(recipient) > 0xff);
 
         // Setup initial balance for recipient
         vm.deal(recipient, depositAmount);

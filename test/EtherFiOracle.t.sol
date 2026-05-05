@@ -1618,4 +1618,245 @@ contract EtherFiOracleTest is TestSetup {
         _moveClock(1 days / 12);
         _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
     }
+
+    // =====================================================================
+    // canExecuteTasks unit tests
+    //
+    // canExecuteTasks and executeTasks share _validateReport. Each test
+    // exercises one gate: where the gate trips, canExecuteTasks must return
+    // false AND executeTasks must revert with the matching string. Any
+    // future drift between the two functions should fail one of these tests.
+    // =====================================================================
+
+    // Submit `_report` so it reaches consensus and clear any post-report
+    // wait time. Does NOT call executeTasks.
+    function _submitForConsensus(IEtherFiOracle.OracleReport memory _report) internal {
+        _initReportBlockStamp(_report);
+
+        uint32 currentSlot = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
+        uint32 currentEpoch = (currentSlot / 32);
+        uint32 reportEpoch = (_report.refSlotTo / 32) + 3;
+        if (currentEpoch < reportEpoch) {
+            uint32 numSlotsToMove = 32 * (reportEpoch - currentEpoch);
+            _moveClock(int256(int32(numSlotsToMove)));
+        }
+
+        vm.prank(alice);
+        etherFiOracleInstance.submitReport(_report);
+        vm.prank(bob);
+        etherFiOracleInstance.submitReport(_report);
+
+        int256 offset = int256(int16(etherFiAdminInstance.postReportWaitTimeInSlots()));
+        if (offset > 2 * 32) offset -= 2 * 32;
+        if (offset > 0) _moveClock(offset);
+    }
+
+    function test_canExecuteTasks_falseWhenNoConsensus() public {
+        _moveClock(1024 + 2 * slotsPerEpoch);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        _initReportBlockStamp(report);
+
+        // No submission, so no consensus on the hash.
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert("EtherFiAdmin: report didn't reach consensus");
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // After a successful execute, slotForNextReportToProcess() advances past
+    // the report's refSlotFrom. The same report can no longer be executed,
+    // and the refSlotFrom gate is what trips. (refBlockFrom is structurally
+    // symmetric — checked by the same once-stale-always-stale relationship.)
+    function test_canExecuteTasks_falseWhenWrongRefSlotFrom() public {
+        IEtherFiOracle.OracleReport memory firstReport = _emptyOracleReport();
+        _executeAdminTasks(firstReport);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(firstReport), false);
+
+        vm.expectRevert("EtherFiAdmin: report has wrong `refSlotFrom`");
+        etherFiAdminInstance.executeTasks(firstReport);
+    }
+
+    function test_canExecuteTasks_falseWhenTooFresh() public {
+        vm.prank(alice);
+        etherFiAdminInstance.updatePostReportWaitTimeInSlots(10);
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        _initReportBlockStamp(report);
+
+        _moveClock(1024 + 2 * slotsPerEpoch);
+
+        vm.prank(alice);
+        etherFiOracleInstance.submitReport(report);
+        vm.prank(bob);
+        etherFiOracleInstance.submitReport(report);
+
+        // Consensus reached this same block; wait window of 10 slots not yet elapsed.
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert("EtherFiAdmin: report is too fresh");
+        etherFiAdminInstance.executeTasks(report);
+
+        // Once the wait elapses, the gate flips.
+        _moveClock(11);
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
+    }
+
+    function test_canExecuteTasks_falseWhenAprAboveCap() public {
+        // Tighten the cap so any non-zero rebase trips it.
+        vm.prank(alice);
+        etherFiAdminInstance.updateAcceptableRebaseApr(0);
+
+        // TVL > 0 so the APR formula is non-trivial.
+        vm.deal(alice, 10 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.accruedRewards = 0.01 ether;
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert("EtherFiAdmin: TVL changed too much");
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // The APR check uses absApr, so a negative rebase of equal magnitude
+    // must trip the same gate.
+    function test_canExecuteTasks_falseWhenNegativeAprAboveCap() public {
+        vm.prank(alice);
+        etherFiAdminInstance.updateAcceptableRebaseApr(0);
+
+        vm.deal(alice, 10 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.accruedRewards = -0.01 ether;
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert("EtherFiAdmin: TVL changed too much");
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    function test_canExecuteTasks_falseWhenProtocolFeesNegative() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.protocolFees = -1;
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert("EtherFiAdmin: protocol fees can't be negative");
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    // Regression pin: protocolFees == 0 with a negative accruedRewards must
+    // pass validation. An earlier refactor accidentally extended the 20%
+    // rule to protocolFees == 0, which would have rejected this case
+    // (5*0 > 0 + ar when ar < 0). We only assert the validation gate here;
+    // the downstream rebase path is exercised by the existing
+    // test_huge_negative_rebaes.
+    function test_canExecuteTasks_trueWhenZeroFeesAndNegativeRewards() public {
+        vm.deal(alice, 10 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.protocolFees = 0;
+        report.accruedRewards = -1 wei;
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
+    }
+
+    // 5*pf == pf+ar -> 4*pf == ar, i.e. fees are exactly 20% of total
+    // rewards. The gate is `pf*5 > totalRewards` (strict), so equality
+    // passes.
+    function test_canExecuteTasks_trueAtTwentyPercentBoundary() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.accruedRewards = 4 ether;
+        report.protocolFees = 1 ether; // 5*1 == 1+4
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
+    }
+
+    function test_canExecuteTasks_falseWhenFeesExceedTwentyPercent() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        // 5*pf > pf+ar : pick pf=2, ar=4 -> 10 > 6.
+        report.accruedRewards = 4 ether;
+        report.protocolFees = 2 ether;
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert("EtherFiAdmin: protocol fees exceed 20% total rewards");
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    function test_canExecuteTasks_falseWhenValidatorRateAboveCap() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.validatorsToApprove = new uint256[](400); // > 200/day cap
+        for (uint256 i = 0; i < 400; i++) {
+            report.validatorsToApprove[i] = i + 1;
+        }
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert("EtherFiAdmin: number of validators to approve exceeds max");
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    function test_canExecuteTasks_falseWhenWithdrawalRateAboveCap() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 20000 ether; // > 10000 ether/day cap
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert("EtherFiAdmin: finalized withdrawal amount exceeds max");
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    function test_canExecuteTasks_falseWhenFinalizedExceedsLpLiquidity() public {
+        vm.deal(alice, 5 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        report.finalizedWithdrawalAmount = 6 ether; // 6 > LP balance (5)
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+
+        vm.expectRevert("EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+        etherFiAdminInstance.executeTasks(report);
+    }
+
+    function test_canExecuteTasks_trueOnHappyPath() public {
+        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
+        _moveClock(1 days / 12);
+        _submitForConsensus(report);
+
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), true);
+
+        etherFiAdminInstance.executeTasks(report);
+
+        // After execution the same report no longer matches the cursor.
+        assertEq(etherFiAdminInstance.canExecuteTasks(report), false);
+    }
 }
