@@ -11,6 +11,7 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IMembershipNFT.sol";
 import "./interfaces/ILiquidityPool.sol";
+import "./interfaces/IeETH.sol";
 
 import "forge-std/console.sol";
 
@@ -34,6 +35,7 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     mapping(address => bool) public admins;
 
     ILiquidityPool public liquidityPool;
+    IeETH public immutable eETH;
 
     event MerkleUpdated(bytes32, bytes32);
     event MintingPaused(bool isPaused);
@@ -44,10 +46,12 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     error InvalidEAPRollover();
     error RequireTokenUnlocked();
     error OnlyMembershipManagerContract();
+    error UserPaused();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _eETH) {
         _disableInitializers();
+        eETH = IeETH(_eETH);
     }
 
     function initialize(string calldata _metadataURI, address _membershipManagerInstance) external initializer {
@@ -147,6 +151,8 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         if (_from == address(0x00) || _to == address(0x00)) {
             return;
         }
+
+        if (eETH.isPausedUntil(_from) || eETH.isPausedUntil(_to)) revert UserPaused();
 
         // prevent transfers if token is locked
         for (uint256 x; x < _ids.length; ++x) {

@@ -637,7 +637,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         eigenLayerEigenPodManager = new MockEigenPodManager();
         eigenLayerDelegationManager = new MockDelegationManager();
 
-        membershipNftImplementation = new MembershipNFT();
+        membershipNftImplementation = new MembershipNFT(address(eETHInstance));
         membershipNftProxy = new UUPSProxy(address(membershipNftImplementation), "");
         membershipNftInstance = MembershipNFT(payable(membershipNftProxy));
 

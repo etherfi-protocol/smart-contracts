@@ -103,6 +103,7 @@ contract EETHPauseTest is TestSetup {
     function test_extendPauseUntil_onlyPauserRole() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice); // arm the timer so extend has something to do
+        uint256 armedAt = block.timestamp;
 
         vm.prank(unauthorized);
         vm.expectRevert("IncorrectRole");
@@ -114,7 +115,8 @@ contract EETHPauseTest is TestSetup {
 
         vm.prank(pauser);
         eETHInstance.extendPauseUntil(alice, 2 days);
-        assertEq(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + 2 days);
+        // Extension adds onto the existing deadline (armedAt + ONE_DAY), not block.timestamp.
+        assertEq(eETHInstance.pausedUntil(alice), armedAt + ONE_DAY + 2 days);
     }
 
     function test_cancelPauseUntil_onlyPauserRole() public {
@@ -373,11 +375,13 @@ contract EETHPauseTest is TestSetup {
     function test_extendPauseUntil_extendsLiveTimer() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
+        uint256 armedAt = block.timestamp;
 
         vm.prank(pauser);
         eETHInstance.extendPauseUntil(alice, 7 days);
 
-        assertEq(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + 7 days);
+        // Adds onto the live (armedAt + ONE_DAY) deadline, not block.timestamp.
+        assertEq(eETHInstance.pausedUntil(alice), armedAt + ONE_DAY + 7 days);
 
         vm.warp(block.timestamp + 1 days + 1); // past original 1-day expiry
         vm.prank(alice);
@@ -385,37 +389,32 @@ contract EETHPauseTest is TestSetup {
         eETHInstance.transfer(bob, 1 ether);
     }
 
-    /// @dev H-1 (HIGH): extendPauseUntil can SHORTEN a timer despite its name.
-    function test_SECURITY_extendPauseUntil_canShortenTimer() public {
+    /// @dev I-02 regression: extendPauseUntil must never produce a shorter deadline than the existing one.
+    function test_extendPauseUntil_neverShortensTimer() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice); // arms 1-day timer
+        uint256 originalDeadline = eETHInstance.pausedUntil(alice);
 
-        // Admin calls extend with 1-hour duration → new expiry is EARLIER than original.
+        // Even a tiny duration must only ADD time, not reset the countdown.
         vm.prank(pauser);
         eETHInstance.extendPauseUntil(alice, 1 hours);
 
-        assertEq(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + 1 hours);
-        assertLt(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + ONE_DAY,
-                 "extend should not allow shortening (H-1)");
+        assertGt(eETHInstance.pausedUntil(alice), originalDeadline,
+                 "extension must move deadline forward, never shorten (I-02)");
+        assertEq(eETHInstance.pausedUntil(alice), originalDeadline + 1 hours);
     }
 
-    /// @dev H-1 corollary: duration=0 effectively releases the user next block.
-    function test_SECURITY_extendPauseUntil_withZeroDuration_effectivelyCancels() public {
+    /// @dev I-02 corollary: duration=0 is a no-op that preserves the original deadline.
+    function test_extendPauseUntil_withZeroDuration_isNoOp() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
+        uint256 originalDeadline = eETHInstance.pausedUntil(alice);
 
         vm.prank(pauser);
         eETHInstance.extendPauseUntil(alice, 0);
 
-        // Current block — timer is at block.timestamp, require uses strict <, still paused.
-        vm.prank(alice);
-        vm.expectRevert("SENDER PAUSED");
-        eETHInstance.transfer(bob, 1 ether);
-
-        // But any forward progress unfreezes.
-        vm.warp(block.timestamp + 1);
-        vm.prank(alice);
-        eETHInstance.transfer(bob, 1 ether);
+        assertEq(eETHInstance.pausedUntil(alice), originalDeadline,
+                 "zero-duration extend must not alter the deadline");
     }
 
     /// @dev M-1-new: extendPauseUntil silent no-op when timer already expired.
@@ -442,7 +441,7 @@ contract EETHPauseTest is TestSetup {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
 
-        uint64 expected = uint64(block.timestamp) + 3 days;
+        uint64 expected = uint64(block.timestamp) + ONE_DAY + 3 days;
         vm.expectEmit(true, false, false, true);
         emit PausedUntil(alice, expected);
         vm.prank(pauser);
@@ -488,25 +487,31 @@ contract EETHPauseTest is TestSetup {
         eETHInstance.transfer(bob, 1 ether); // must succeed immediately
     }
 
-    /// @dev M-2-new: cancelPauseUntil emits event even when there's nothing to cancel.
-    function test_cancelPauseUntil_emitsEvenWhenNeverArmed() public {
-        vm.expectEmit(true, false, false, true);
-        emit CancelledPauseUntil(alice);
+    /// @dev I-03 regression: cancelPauseUntil must not emit when the user was never paused.
+    function test_cancelPauseUntil_doesNotEmit_whenNeverArmed() public {
+        vm.recordLogs();
         vm.prank(pauser);
         eETHInstance.cancelPauseUntil(alice);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 0, "no event when there is nothing to cancel (I-03)");
+        assertEq(eETHInstance.pausedUntil(alice), 0);
     }
 
-    function test_cancelPauseUntil_emitsEvenWhenAlreadyExpired() public {
+    /// @dev I-03 regression: cancelPauseUntil is a no-op once the timer has already expired.
+    /// The stale value is harmless (transfer checks treat past timestamps as unpaused).
+    function test_cancelPauseUntil_isNoOp_whenExpired() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
+        uint256 staleDeadline = eETHInstance.pausedUntil(alice);
         vm.warp(block.timestamp + 2 days);
 
-        vm.expectEmit(true, false, false, true);
-        emit CancelledPauseUntil(alice);
+        vm.recordLogs();
         vm.prank(pauser);
         eETHInstance.cancelPauseUntil(alice);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        assertEq(eETHInstance.pausedUntil(alice), 0, "stale timer also cleared");
+        assertEq(logs.length, 0, "no event when timer already expired");
+        assertEq(eETHInstance.pausedUntil(alice), staleDeadline, "expired value is left as-is");
     }
 
     function test_cancelPauseUntil_isPerUser_doesNotTouchOthers() public {
@@ -635,10 +640,11 @@ contract EETHPauseTest is TestSetup {
     function test_sequence_weakArms_then_strongExtends_then_strongCancels() public {
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
+        uint256 armedAt = block.timestamp;
 
         vm.prank(pauser);
         eETHInstance.extendPauseUntil(alice, 3 days);
-        assertEq(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + 3 days);
+        assertEq(eETHInstance.pausedUntil(alice), armedAt + ONE_DAY + 3 days);
 
         vm.prank(pauser);
         eETHInstance.cancelPauseUntil(alice);
@@ -727,11 +733,12 @@ contract EETHPauseTest is TestSetup {
 
         vm.prank(pauserUntil);
         eETHInstance.pauseUntil(alice);
+        uint256 originalDeadline = eETHInstance.pausedUntil(alice);
 
         vm.prank(pauser);
         eETHInstance.extendPauseUntil(alice, duration);
 
-        assertEq(eETHInstance.pausedUntil(alice), uint64(block.timestamp) + duration);
+        assertEq(eETHInstance.pausedUntil(alice), originalDeadline + duration);
     }
 
     function testFuzz_globalPause_blocksTransferAnyAmount(uint256 amount) public {

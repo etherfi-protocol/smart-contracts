@@ -128,6 +128,7 @@ contract WeETHPauseTest is TestSetup {
     function test_extendPauseUntil_onlyPauserRole() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
+        uint256 armedAt = block.timestamp;
 
         vm.prank(unauthorized);
         vm.expectRevert("IncorrectRole");
@@ -139,7 +140,8 @@ contract WeETHPauseTest is TestSetup {
 
         vm.prank(pauser);
         weEthInstance.extendPauseUntil(alice, 2 days);
-        assertEq(weEthInstance.pausedUntil(alice), uint64(block.timestamp) + 2 days);
+        // Extension adds onto the existing deadline (armedAt + ONE_DAY).
+        assertEq(weEthInstance.pausedUntil(alice), armedAt + ONE_DAY + 2 days);
     }
 
     function test_cancelPauseUntil_onlyPauserRole() public {
@@ -453,23 +455,26 @@ contract WeETHPauseTest is TestSetup {
     function test_extendPauseUntil_extendsLiveTimer() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
+        uint256 armedAt = block.timestamp;
 
         vm.prank(pauser);
         weEthInstance.extendPauseUntil(alice, 7 days);
 
-        assertEq(weEthInstance.pausedUntil(alice), uint64(block.timestamp) + 7 days);
+        assertEq(weEthInstance.pausedUntil(alice), armedAt + ONE_DAY + 7 days);
     }
 
-    /// @dev H-1 (HIGH): extendPauseUntil can shorten the timer.
-    function test_SECURITY_extendPauseUntil_canShortenTimer() public {
+    /// @dev I-02 regression: extendPauseUntil must never produce a shorter deadline than the existing one.
+    function test_extendPauseUntil_neverShortensTimer() public {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
+        uint256 originalDeadline = weEthInstance.pausedUntil(alice);
 
         vm.prank(pauser);
         weEthInstance.extendPauseUntil(alice, 1 hours);
 
-        assertLt(weEthInstance.pausedUntil(alice), uint64(block.timestamp) + ONE_DAY,
-                 "extend allowed to shorten (H-1)");
+        assertGt(weEthInstance.pausedUntil(alice), originalDeadline,
+                 "extension must move deadline forward, never shorten (I-02)");
+        assertEq(weEthInstance.pausedUntil(alice), originalDeadline + 1 hours);
     }
 
     function test_extendPauseUntil_silentNoOp_whenTimerExpired() public {
@@ -508,11 +513,30 @@ contract WeETHPauseTest is TestSetup {
         weEthInstance.transfer(bob, 1 ether);
     }
 
-    function test_cancelPauseUntil_emitsEvenWhenNeverArmed() public {
-        vm.expectEmit(true, false, false, true);
-        emit CancelledPauseUntil(alice);
+    /// @dev I-03 regression: cancelPauseUntil must not emit when the user was never paused.
+    function test_cancelPauseUntil_doesNotEmit_whenNeverArmed() public {
+        vm.recordLogs();
         vm.prank(pauser);
         weEthInstance.cancelPauseUntil(alice);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(logs.length, 0, "no event when there is nothing to cancel (I-03)");
+        assertEq(weEthInstance.pausedUntil(alice), 0);
+    }
+
+    /// @dev I-03 regression: cancelPauseUntil is a no-op once the timer has already expired.
+    function test_cancelPauseUntil_isNoOp_whenExpired() public {
+        vm.prank(pauserUntil);
+        weEthInstance.pauseUntil(alice);
+        uint256 staleDeadline = weEthInstance.pausedUntil(alice);
+        vm.warp(block.timestamp + 2 days);
+
+        vm.recordLogs();
+        vm.prank(pauser);
+        weEthInstance.cancelPauseUntil(alice);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        assertEq(logs.length, 0, "no event when timer already expired");
+        assertEq(weEthInstance.pausedUntil(alice), staleDeadline, "expired value is left as-is");
     }
 
     function test_cancelPauseUntil_isPerUser() public {
@@ -587,7 +611,7 @@ contract WeETHPauseTest is TestSetup {
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
 
-        uint64 expected = uint64(block.timestamp) + 3 days;
+        uint64 expected = uint64(block.timestamp) + ONE_DAY + 3 days;
         vm.expectEmit(true, false, false, true);
         emit PausedUntil(alice, expected);
         vm.prank(pauser);
@@ -681,11 +705,12 @@ contract WeETHPauseTest is TestSetup {
 
         vm.prank(pauserUntil);
         weEthInstance.pauseUntil(alice);
+        uint256 originalDeadline = weEthInstance.pausedUntil(alice);
 
         vm.prank(pauser);
         weEthInstance.extendPauseUntil(alice, duration);
 
-        assertEq(weEthInstance.pausedUntil(alice), uint64(block.timestamp) + duration);
+        assertEq(weEthInstance.pausedUntil(alice), originalDeadline + duration);
     }
 
     function testFuzz_globalPause_blocksTransferAnyAmount(uint256 amount) public {

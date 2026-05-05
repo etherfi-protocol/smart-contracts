@@ -21,6 +21,10 @@ interface IWeETH is IERC20Upgradeable {
     function whitelistedSpender(address spender) external view returns (bool);
     function blacklistedRecipient(address recipient) external view returns (bool);
 
+    function paused() external view returns (bool);
+    function pausedUntil(address _user) external view returns (uint256);
+    function isPausedUntil(address _user) external view returns (bool);
+
     // STATE-CHANGING FUNCTIONS
     function initialize() external;
     function wrap(uint256 _eETHAmount) external returns (uint256);
@@ -35,6 +39,12 @@ interface IWeETH is IERC20Upgradeable {
         bytes32 r,
         bytes32 s
     ) external;
+
+    function pause() external;
+    function pauseUntil(address _user) external;
+    function extendPauseUntil(address _user, uint256 _duration) external;
+    function cancelPauseUntil(address _user) external;
+    function unpause() external;
 
     function setWhitelistedSpender(address[] calldata _spenders, bool _isWhitelisted) external;
     function setBlacklistedRecipient(address[] calldata _recipients, bool _isBlacklisted) external;

@@ -202,6 +202,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     /// @return uint256 ID of the withdraw request NFT
     function requestWithdraw(uint256 _tokenId, uint256 _amount) external whenNotPaused returns (uint256) {
         _requireTokenOwner(_tokenId);
+        _requireUserNotPaused();
 
         // prevent transfers for several blocks after a withdrawal to prevent frontrunning
         membershipNFT.incrementLock(_tokenId, withdrawalLockBlocks);
@@ -228,6 +229,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     /// @return uint256 ID of the withdraw request NFT
     function requestWithdrawAndBurn(uint256 _tokenId) external whenNotPaused returns (uint256) {
         _requireTokenOwner(_tokenId);
+        _requireUserNotPaused();
 
         // Claim all staking rewards before burn
         _claimStakingRewards(_tokenId);
@@ -457,6 +459,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     }
 
     function _wrapEth(uint256 _amount, uint256 _amountForPoints, address _referral) internal returns (uint256) {
+        _requireUserNotPaused();
         liquidityPool.deposit{value: _amount + _amountForPoints}(msg.sender, _referral);
         uint256 tokenId = _mintMembershipNFT(msg.sender, _amount, _amountForPoints, 0, 0);
         _emitNftUpdateEvent(tokenId);
@@ -602,6 +605,11 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         _incrementTierDeposit(tier, amount);
         
         token.vaultShare = tierData[tier].rewardsGlobalIndex;
+    }
+
+    error UserPaused();
+    function _requireUserNotPaused() internal view {
+        if (eETH.isPausedUntil(msg.sender)) revert UserPaused();
     }
 
 

@@ -19,6 +19,10 @@ interface IeETH {
     function shares(address _user) external view returns (uint256);
     function balanceOf(address _user) external view returns (uint256);
 
+    function paused() external view returns (bool);
+    function pausedUntil(address _user) external view returns (uint256);
+    function isPausedUntil(address _user) external view returns (bool);
+
     function initialize() external;
     function mintShares(address _user, uint256 _share) external;
     function burnShares(address _user, uint256 _share) external;
@@ -27,6 +31,12 @@ interface IeETH {
     function approve(address _spender, uint256 _amount) external returns (bool);
     function increaseAllowance(address _spender, uint256 _increaseAmount) external returns (bool);
     function decreaseAllowance(address _spender, uint256 _decreaseAmount) external returns (bool);
+
+    function pause() external;
+    function pauseUntil(address _user) external;
+    function extendPauseUntil(address _user, uint256 _duration) external;
+    function cancelPauseUntil(address _user) external;
+    function unpause() external;
 
     function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external;
 }
