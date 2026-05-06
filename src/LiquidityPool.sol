@@ -60,7 +60,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     mapping(address => ValidatorSpawner) public validatorSpawner;
 
     bool public restakeBnftDeposits;
-    uint128 public ethAmountLockedForWithdrawal;
+    uint128 public DEPRECATED_ethAmountLockedForWithdrawal;
     bool public paused;
     address public DEPRECATED_auctionManager;
     ILiquifier public liquifier;
@@ -153,7 +153,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         DEPRECATED_TNFT = _tNftAddress;
         paused = true;
         restakeBnftDeposits = false;
-        ethAmountLockedForWithdrawal = 0;
+        DEPRECATED_ethAmountLockedForWithdrawal = 0;
         etherFiAdminContract = _etherFiAdminContract;
         withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
         DEPRECATED_isLpBnftHolder = false;
@@ -186,8 +186,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function initializeOnUpgradeV2() external onlyOwner {
         require(!escrowMigrationCompleted, "already migrated");
 
-        uint128 nftLocked   = ethAmountLockedForWithdrawal;
-        uint128 queueLocked = IPriorityWithdrawalQueue(priorityWithdrawalQueue).ethAmountLockedForPriorityWithdrawal();
+        uint128 nftLocked   = DEPRECATED_ethAmountLockedForWithdrawal;
+        uint128 queueLocked = priorityWithdrawalQueue != address(0)
+            ? uint128(IPriorityWithdrawalQueue(priorityWithdrawalQueue).ethAmountLockedForPriorityWithdrawal())
+            : 0;
 
         uint128 totalLocked = nftLocked + queueLocked;
         if (totalLocked > 0) {
@@ -195,7 +197,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
             totalValueInLp    -= totalLocked;
             totalValueOutOfLp += totalLocked;
 
-            if (nftLocked > 0)   _sendFund(address(withdrawRequestNFT),   nftLocked);
+            if (nftLocked > 0) {
+                DEPRECATED_ethAmountLockedForWithdrawal = 0;
+                _sendFund(address(withdrawRequestNFT), nftLocked);
+            }
             if (queueLocked > 0) _sendFund(address(priorityWithdrawalQueue), queueLocked);
         }
 
@@ -254,10 +259,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         if (fromSegregated) {
             // ETH was transferred to caller at lock time; LP only does accounting + share burn here.
-            if (msg.sender == address(withdrawRequestNFT)) {
-                if (ethAmountLockedForWithdrawal < _amount) revert InsufficientLiquidity();
-                ethAmountLockedForWithdrawal -= uint128(_amount);
-            }
+            // NFT now owns the ethAmountLockedForWithdrawal counter and guard (decremented in _claimWithdraw).
             // Queue caller decrements its own ethAmountLockedForPriorityWithdrawal in its own claim function.
 
             totalValueOutOfLp -= uint128(_amount);
@@ -547,7 +549,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         totalValueInLp     -= _amount;
         totalValueOutOfLp  += _amount;
-        ethAmountLockedForWithdrawal += _amount;
 
         _sendFund(address(withdrawRequestNFT), _amount);
     }
@@ -560,7 +561,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         totalValueInLp     -= _amount;
         totalValueOutOfLp  += _amount;
-        // ethAmountLockedForWithdrawal is for NFT only; priority queue tracks its own counter.
 
         _sendFund(priorityWithdrawalQueue, _amount);
     }

@@ -2111,7 +2111,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Set up NFT withdrawal lock of ~40 ETH
         _setupNftWithdrawal(nftUser, 40 ether);
-        uint128 nftLocked = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+        uint128 nftLocked = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
         assertGt(nftLocked, 0, "NFT queue lock must be non-zero");
 
         // Create and fulfill a priority withdrawal of 20 ETH (vipUser has 50 ETH from setUp)
@@ -2134,7 +2134,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         assertApproxEqRel(vipUser.balance, vipEthBefore + priorityAmount, 0.001e18, "Priority claim amount correct");
         assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), 0, "Priority lock cleared");
-        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT lock unchanged by priority claim");
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT lock unchanged by priority claim");
     }
 
     /// @dev Proves that the NFT queue can claim its locked ETH even when the priority queue
@@ -2144,7 +2144,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Set up NFT withdrawal lock of ~40 ETH
         (uint256 nftRequestId, uint96 nftEethAmount) = _setupNftWithdrawal(nftUser, 40 ether);
-        uint128 nftLocked = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+        uint128 nftLocked = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
         assertGt(nftLocked, 0, "NFT queue lock must be non-zero");
 
         // Create and fulfill a priority withdrawal of 20 ETH (creates priority lock)
@@ -2166,7 +2166,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         withdrawRequestNFTInstance.claimWithdraw(nftRequestId);
 
         assertApproxEqRel(nftUser.balance, nftUserEthBefore + nftEethAmount, 0.001e18, "NFT claim amount correct");
-        assertLt(liquidityPoolInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT lock decremented after claim");
+        assertLt(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT lock decremented after claim");
         assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), priorityAmount, "Priority lock unchanged by NFT claim");
     }
 

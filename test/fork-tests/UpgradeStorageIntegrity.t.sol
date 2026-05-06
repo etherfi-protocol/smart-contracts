@@ -81,7 +81,12 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         s.liquifier = address(lp.liquifier());
         s.totalIn = lp.totalValueInLp();
         s.totalOut = lp.totalValueOutOfLp();
-        s.locked = lp.ethAmountLockedForWithdrawal();
+        // Read DEPRECATED_ethAmountLockedForWithdrawal via raw slot load so this
+        // snap function works on both the old mainnet impl (which has
+        // ethAmountLockedForWithdrawal()) and the new impl (which renames it to
+        // DEPRECATED_ethAmountLockedForWithdrawal()). Slot 220, upper 16 bytes.
+        bytes32 raw = vm.load(address(lp), bytes32(uint256(220)));
+        s.locked = uint128(uint256(raw) >> 8);
         s.valSize = lp.validatorSizeWei();
         s.paused = lp.paused();
         s.restake = lp.restakeBnftDeposits();
@@ -111,7 +116,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         assertEq(a.liquifier,      b.liquifier,      "liquifier");
         assertEq(a.totalIn,        b.totalIn,        "totalValueInLp");
         assertEq(a.totalOut,       b.totalOut,       "totalValueOutOfLp");
-        assertEq(a.locked,         b.locked,         "ethAmountLockedForWithdrawal");
+        assertEq(a.locked,         b.locked,         "DEPRECATED_ethAmountLockedForWithdrawal");
         assertEq(a.valSize,        b.valSize,        "validatorSizeWei");
         assertEq(a.paused,         b.paused,         "paused");
         assertEq(a.restake,        b.restake,        "restakeBnftDeposits");

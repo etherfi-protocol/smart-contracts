@@ -1524,7 +1524,7 @@ contract EtherFiOracleTest is TestSetup {
         vm.prank(alice);
         liquidityPoolInstance.deposit{value: 200 ether}();
 
-        uint256 lockedBefore = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+        uint256 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         report.finalizedWithdrawalAmount = 10 ether;
@@ -1532,7 +1532,7 @@ contract EtherFiOracleTest is TestSetup {
         _moveClock(1 days / 12);
         _executeAdminTasks(report);
 
-        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), lockedBefore + 10 ether);
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore + 10 ether);
     }
 
     // LP-liquidity sanity check in _handleWithdrawals: finalized amount +
@@ -1588,7 +1588,7 @@ contract EtherFiOracleTest is TestSetup {
         // Deposit ensures totalValueInLp (10) >= finalizedWithdrawalAmount (6).
         assertGe(liquidityPoolInstance.totalValueInLp(), 6 ether);
 
-        uint256 lockedBefore = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+        uint256 lockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
         report.finalizedWithdrawalAmount = 6 ether; // <= totalValueInLp (10)
@@ -1596,7 +1596,7 @@ contract EtherFiOracleTest is TestSetup {
         _moveClock(1 days / 12);
         _executeAdminTasks(report);
 
-        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), lockedBefore + 6 ether);
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore + 6 ether);
     }
 
     // The flip side of the balance-based check: if the LP's actual ETH falls

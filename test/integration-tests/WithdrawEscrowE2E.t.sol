@@ -162,7 +162,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
 
         LpSnap memory baseLp        = _snapLp();
         uint256 baseTotalShares     = eETHInstance.totalShares();
-        uint128 baseLocked          = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+        uint128 baseLocked          = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
 
         uint256 reqId = _nft_step1_deposit(bob, depositAmt, baseLp, baseTotalShares);
         uint256 sharesForDeposit = eETHInstance.totalShares() - baseTotalShares;
@@ -186,7 +186,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
             2,
             "final: net totalShares (2-wei tolerance)");
         // share-rate rounding artifact: 1-wei remainder from share math stays in locked counter
-        assertApproxEqAbs(liquidityPoolInstance.ethAmountLockedForWithdrawal(), baseLocked, 1,
+        assertApproxEqAbs(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), baseLocked, 1,
             "final: ethAmountLockedForWithdrawal back to baseline");
     }
 
@@ -269,7 +269,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         LpSnap  memory preLp     = _snapLp();
         NftSnap memory preNft    = _snapNft();
         uint256 preTotalShares   = eETHInstance.totalShares();
-        uint128 preLocked        = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+        uint128 preLocked        = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
 
         vm.prank(alice);
         withdrawRequestNFTInstance.finalizeRequests(reqId);
@@ -292,7 +292,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
             "step3: totalShares unchanged at finalize");
         assertEq(liquidityPoolInstance.getTotalPooledEther(), preLp.totalPooled,
             "step3: getTotalPooledEther unchanged at finalize");
-        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(),
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(),
             preLocked + uint128(withdrawAmt),
             "step3: ethAmountLockedForWithdrawal after finalize");
         assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), reqId,
@@ -304,7 +304,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         LpSnap  memory preLp   = _snapLp();
         NftSnap memory preNft  = _snapNft();
         uint256 preTotalShares = eETHInstance.totalShares();
-        uint128 preLocked      = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+        uint128 preLocked      = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
         uint256 userEthPre     = user.balance;
 
         // Capture the actual claimable amount before the call.
@@ -340,8 +340,8 @@ contract WithdrawEscrowE2ETest is TestSetup {
             preNft.eEthBal - withdrawAmt,
             2,
             "step4: NFT eETH after claim (2-wei tolerance for share-rate rounding)"); // share-rate rounding artifact
-        // ethAmountLockedForWithdrawal decrements by claimable (LP.withdraw path)
-        assertApproxEqAbs(liquidityPoolInstance.ethAmountLockedForWithdrawal(),
+        // ethAmountLockedForWithdrawal decrements by claimable (NFT._claimWithdraw path)
+        assertApproxEqAbs(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(),
             preLocked - uint128(withdrawAmt), 1,
             "step4: ethAmountLockedForWithdrawal after claim");
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(),
