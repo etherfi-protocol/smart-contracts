@@ -566,7 +566,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /// @notice Returns ETH from the priority queue back to LP on a finalized cancel. Inverse of transferLockedEthForPriority.
-    function returnLockedEth(uint256 _amount) external payable {
+    function returnLockedEth(uint128 _amount) external payable {
         require(msg.sender == priorityWithdrawalQueue, "Incorrect Caller");
         if (msg.value != _amount || _amount == 0) revert InvalidAmount();
         totalValueOutOfLp -= uint128(_amount);

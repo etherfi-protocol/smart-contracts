@@ -603,7 +603,7 @@ contract PriorityWithdrawalQueue is
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
         if (amountForShares < request.amountWithFee) revert InvalidOutputAmount();
 
-        uint256 amountToWithdraw = request.amountWithFee;
+        uint128 amountToWithdraw = request.amountWithFee;
 
         uint256 sharesToBurn = liquidityPool.sharesForWithdrawalAmount(amountToWithdraw);
 
@@ -625,7 +625,7 @@ contract PriorityWithdrawalQueue is
 
         // Return fee ETH (amountOfEEth - amountWithFee) to LP to keep queue balance clean
         // and unwind the over-credited totalValueOutOfLp from fulfillRequests time.
-        uint256 feeEth = uint256(request.amountOfEEth) - amountToWithdraw;
+        uint128 feeEth = uint128(request.amountOfEEth) - amountToWithdraw;
         if (feeEth > 0) {
             liquidityPool.returnLockedEth{value: feeEth}(feeEth);
         }
