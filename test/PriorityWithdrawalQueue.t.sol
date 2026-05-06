@@ -2387,20 +2387,4 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertFalse(priorityQueue.requestExists(requestId), "request should be removed after claim");
     }
 
-    //--------------------------------------------------------------------------------------
-    //------------------------------  FIX 6 REGRESSION TEST  ------------------------------
-    //--------------------------------------------------------------------------------------
-
-    /// @notice LP as requester must be rejected to prevent double-decrement of totalValueOutOfLp.
-    function test_requestWithdraw_revertsIfRequesterIsLiquidityPool() public {
-        // Whitelist the LP address so the onlyWhitelisted gate passes and only the
-        // InvalidRequester check fires.
-        vm.prank(alice);
-        priorityQueue.addToWhitelist(address(liquidityPoolInstance));
-
-        // Attempt to queue a request as the LP — must revert with InvalidRequester.
-        vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert(PriorityWithdrawalQueue.InvalidRequester.selector);
-        priorityQueue.requestWithdraw(1 ether, 1 ether);
-    }
 }

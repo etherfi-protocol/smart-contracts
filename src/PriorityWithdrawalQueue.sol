@@ -121,7 +121,6 @@ contract PriorityWithdrawalQueue is
     error InvalidBurnedSharesAmount();
     error InvalidEEthSharesAfterRemainderHandling();
     error InvalidOutputAmount();
-    error InvalidRequester();
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
@@ -197,7 +196,6 @@ contract PriorityWithdrawalQueue is
         uint96 amountOfEEth,
         uint96 amountWithFee
     ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
-        if (msg.sender == address(liquidityPool)) revert InvalidRequester();
         if (amountOfEEth < MIN_AMOUNT || amountOfEEth > MAX_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
@@ -212,7 +210,6 @@ contract PriorityWithdrawalQueue is
         uint96 amountWithFee,
         PermitInput calldata permit
     ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
-        if (msg.sender == address(liquidityPool)) revert InvalidRequester();
         if (amountOfEEth < MIN_AMOUNT || amountOfEEth > MAX_AMOUNT) revert InvalidAmount();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
@@ -237,7 +234,6 @@ contract PriorityWithdrawalQueue is
         uint96 weEthAmount,
         uint96 amountWithFee
     ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
-        if (msg.sender == address(liquidityPool)) revert InvalidRequester();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
         IERC20(address(weETH)).safeTransferFrom(msg.sender, address(this), weEthAmount);
@@ -259,7 +255,6 @@ contract PriorityWithdrawalQueue is
         uint96 amountWithFee,
         PermitInput calldata permit
     ) external whenNotPaused onlyWhitelisted nonReentrant returns (bytes32 requestId) {
-        if (msg.sender == address(liquidityPool)) revert InvalidRequester();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
 
         try weETH.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {
@@ -536,7 +531,6 @@ contract PriorityWithdrawalQueue is
         uint96 amountOfEEth,
         uint96 amountWithFee
     ) internal returns (bytes32 requestId, WithdrawRequest memory req) {
-        if (user == address(liquidityPool)) revert InvalidRequester();
         uint32 requestNonce = nonce++;
 
         if (amountWithFee == 0 || amountWithFee > amountOfEEth) revert InvalidAmount();
