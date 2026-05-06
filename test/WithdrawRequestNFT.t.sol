@@ -1081,6 +1081,81 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertApproxEqAbs(receivedAmount, claimableAmount, 0.001 ether, "Bob should receive amount minus fee");
     }
 
+    /// @dev Verifies that fee ETH stranded in the NFT after a fee-bearing claim is swept back to LP
+    ///      when handleRemainder is called, and that ethAmountLockedForWithdrawal is unchanged by it.
+    function test_handleRemainder_returnsFeeEthToLP() public {
+        uint256 amount = 1 ether;
+        uint256 fee    = 0.1 ether; // 10% fee
+
+        // --- setup: deposit liquidity ---
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        // Transfer eETH into NFT contract (simulates what LP does in the real requestWithdraw path)
+        vm.prank(bob);
+        eETHInstance.transfer(address(withdrawRequestNFTInstance), amount);
+
+        // Create a fee-bearing withdraw request directly (simulating MembershipManager)
+        vm.prank(address(liquidityPoolInstance));
+        uint256 requestId = withdrawRequestNFTInstance.requestWithdraw{value: 0}(
+            uint96(amount), uint96(amount), bob, fee
+        );
+
+        // Add more liquidity and finalize
+        vm.deal(alice, 10 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 5 ether}();
+
+        _finalizeWithdrawalRequest(requestId);
+
+        // Bob claims — NFT sends net (amount - fee) to bob, but received gross from LP at finalize.
+        // After claim: NFT.balance should equal fee (stranded), counter should be 0.
+        uint256 nftBalBefore  = address(withdrawRequestNFTInstance).balance;
+        uint256 lpBalBefore   = address(liquidityPoolInstance).balance;
+
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+
+        // Counter must be zero (decremented by gross).
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), 0, "counter should be 0 after gross decrement");
+
+        // NFT balance should equal the stranded fee.
+        uint256 strandedFee = address(withdrawRequestNFTInstance).balance;
+        assertGt(strandedFee, 0, "fee ETH should be stranded in NFT");
+        assertApproxEqAbs(strandedFee, fee, 0.001 ether, "stranded amount should equal fee");
+
+        // --- trigger handleRemainder to sweep fee ETH back to LP ---
+        // First get some eETH remainder to satisfy the non-zero _eEthAmount requirement.
+        // After claim, totalRemainderEEthShares > 0 due to share-rate drift from rebase.
+        uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
+
+        vm.startPrank(owner);
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), admin);
+        vm.stopPrank();
+
+        uint256 lpBalAfterClaim  = address(liquidityPoolInstance).balance;
+        uint256 nftBalAfterClaim = address(withdrawRequestNFTInstance).balance;
+
+        vm.prank(admin);
+        if (remainderAmount > 0) {
+            withdrawRequestNFTInstance.handleRemainder(remainderAmount);
+        }
+
+        // LP balance must have increased by the stranded fee ETH.
+        assertGe(
+            address(liquidityPoolInstance).balance,
+            lpBalAfterClaim + strandedFee,
+            "LP should receive stranded fee ETH on handleRemainder"
+        );
+
+        // NFT balance must now be zero (or only residual dust).
+        assertEq(address(withdrawRequestNFTInstance).balance, 0, "NFT balance should be zero after sweep");
+
+        // Counter is still zero — handleRemainder does not touch it.
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), 0, "counter must remain 0 after handleRemainder");
+    }
+
     function test_seizeInvalidRequest_EdgeCases() public {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();

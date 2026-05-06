@@ -49,6 +49,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     bool public paused;
     RoleRegistry public roleRegistry;
 
+    uint128 public ethAmountLockedForWithdrawal;
 
     bytes32 public constant WITHDRAW_REQUEST_NFT_ADMIN_ROLE = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
     bytes32 public constant IMPLICIT_FEE_CLAIMER_ROLE = keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
@@ -106,6 +107,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     receive() external payable {
         require(msg.sender == address(liquidityPool), "Only LP");
+        ethAmountLockedForWithdrawal += uint128(msg.value);
     }
 
     /// @notice creates a withdraw request and issues an associated NFT to the recipient
@@ -162,8 +164,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         _burn(tokenId);
         delete _requests[tokenId];
 
-        // update accounting 
+        // update accounting
         totalRemainderEEthShares += request.shareOfEEth - shareAmountToBurnForWithdrawal;
+
+        require(ethAmountLockedForWithdrawal >= request.amountOfEEth, "insufficient escrow");
+        ethAmountLockedForWithdrawal -= uint128(uint256(request.amountOfEEth));
 
         uint256 amountBurnedShare = liquidityPool.withdraw(recipient, amountToWithdraw);
         assert (amountBurnedShare == shareAmountToBurnForWithdrawal);
@@ -309,6 +314,17 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         require (beforeEEthShares - eEthSharesToMoved == eETH.shares(address(this)), "Invalid eETH shares after remainder handling");
 
         emit HandledRemainderOfClaimedWithdrawRequests(eEthAmountToTreasury, eEthAmountToBurn);
+
+        // Sweep accumulated fee ETH (surplus over locked counter) back to LP.
+        // Fee ETH accrues because _claimWithdraw decrements by gross (amountOfEEth) but only
+        // sends net (amountToWithdraw = amountOfEEth - fee) to the recipient.
+        uint256 strandedFeeEth = address(this).balance > ethAmountLockedForWithdrawal
+            ? address(this).balance - uint256(ethAmountLockedForWithdrawal)
+            : 0;
+        if (strandedFeeEth > 0) {
+            (bool ok, ) = payable(address(liquidityPool)).call{value: strandedFeeEth}("");
+            require(ok, "fee return failed");
+        }
     }
 
     function getEEthRemainderAmount() public view returns (uint256) {
