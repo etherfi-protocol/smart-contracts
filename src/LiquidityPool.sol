@@ -60,7 +60,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     mapping(address => ValidatorSpawner) public validatorSpawner;
 
     bool public restakeBnftDeposits;
-    uint128 public ethAmountLockedForWithdrawal;
+    uint128 public DEPRECATED_ethAmountLockedForWithdrawal;
     bool public paused;
     address public DEPRECATED_auctionManager;
     ILiquifier public liquifier;
@@ -71,6 +71,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     IRoleRegistry public roleRegistry;
     uint256 public validatorSizeWei;
+    bool public escrowMigrationCompleted;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  IMMUTABLES  ----------------------------------
@@ -152,7 +153,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         DEPRECATED_TNFT = _tNftAddress;
         paused = true;
         restakeBnftDeposits = false;
-        ethAmountLockedForWithdrawal = 0;
+        DEPRECATED_ethAmountLockedForWithdrawal = 0;
         etherFiAdminContract = _etherFiAdminContract;
         withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
         DEPRECATED_isLpBnftHolder = false;
@@ -179,6 +180,31 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         totalValueOutOfLp = tvl - totalValueInLp;
 
         if(tvl != getTotalPooledEther()) revert();
+    }
+
+    /// @notice One-shot post-upgrade migration that sweeps existing locked ETH from LP to WithdrawRequestNFT and PriorityWithdrawalQueue.
+    function initializeOnUpgradeV2() external onlyOwner {
+        require(!escrowMigrationCompleted, "already migrated");
+
+        uint128 nftLocked   = DEPRECATED_ethAmountLockedForWithdrawal;
+        uint128 queueLocked = priorityWithdrawalQueue != address(0)
+            ? uint128(IPriorityWithdrawalQueue(priorityWithdrawalQueue).ethAmountLockedForPriorityWithdrawal())
+            : 0;
+
+        uint128 totalLocked = nftLocked + queueLocked;
+        if (totalLocked > 0) {
+            if (totalValueInLp < totalLocked) revert InsufficientLiquidity();
+            totalValueInLp    -= totalLocked;
+            totalValueOutOfLp += totalLocked;
+
+            if (nftLocked > 0) {
+                DEPRECATED_ethAmountLockedForWithdrawal = 0;
+                _sendFund(address(withdrawRequestNFT), nftLocked);
+            }
+            if (queueLocked > 0) _sendFund(address(priorityWithdrawalQueue), queueLocked);
+        }
+
+        escrowMigrationCompleted = true;
     }
 
     // Used by eETH staking flow
@@ -211,11 +237,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         return _deposit(msg.sender, msg.value, 0);
     }
 
-    /// @notice withdraw from pool
-    /// @dev Burns user share from msg.senders account & Sends equivalent amount of ETH back to the recipient
-    /// @param _recipient the recipient who will receives the ETH
-    /// @param _amount the amount to withdraw from contract
-    /// it returns the amount of shares burned
+    /// @notice Burns shares and pays ETH. For NFT/queue callers, ETH is paid by the caller from its own segregated balance; LP only does accounting. Other callers receive ETH from LP.
     function withdraw(address _recipient, uint256 _amount) external nonReentrant returns (uint256) {
         uint256 share = sharesForWithdrawalAmount(_amount);
         require(
@@ -230,28 +252,31 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
             _requireNotPaused();
             _requireNotPausedUntil();
         }
-        if (totalValueInLp < _amount || eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
+        if (eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
 
-        if (msg.sender == priorityWithdrawalQueue && (totalValueInLp - ethAmountLockedForWithdrawal < _amount)) revert InsufficientLiquidity();
-        
-        if (msg.sender == address(withdrawRequestNFT)) {
-            if (ethAmountLockedForWithdrawal < _amount) revert InsufficientLiquidity();
-            if (priorityWithdrawalQueue != address(0)) {
-                uint128 priorityLocked = uint128(IPriorityWithdrawalQueue(priorityWithdrawalQueue).ethAmountLockedForPriorityWithdrawal());
-                if (totalValueInLp - priorityLocked < _amount) revert InsufficientLiquidity();
-            }
-            ethAmountLockedForWithdrawal -= uint128(_amount);
+        bool fromSegregated = (msg.sender == address(withdrawRequestNFT) || msg.sender == priorityWithdrawalQueue);
+
+        if (fromSegregated) {
+            // ETH was transferred to caller at lock time; LP only does accounting + share burn here.
+            // NFT now owns the ethAmountLockedForWithdrawal counter and guard (decremented in _claimWithdraw).
+            // Queue caller decrements its own ethAmountLockedForPriorityWithdrawal in its own claim function.
+
+            totalValueOutOfLp -= uint128(_amount);
+            eETH.burnShares(msg.sender, share);
+            _checkMinAmountForShare();
+            // No _sendFund — caller pays recipient itself.
+            return share;
         }
 
+        // Unchanged path for membershipManager / etherFiRedemptionManager.
+        if (totalValueInLp < _amount) revert InsufficientLiquidity();
         totalValueInLp -= uint128(_amount);
-
         eETH.burnShares(msg.sender, share);
 
         _checkMinAmountForShare();
 
         _sendFund(_recipient, _amount);
-
         return share;
     }
 
@@ -516,10 +541,36 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external {
     }
 
+    /// @notice Locks ETH for finalized NFT withdrawals by transferring from LP to WithdrawRequestNFT. TVL preserved by InLp/OutOfLp rebalance; share rate unchanged.
     function addEthAmountLockedForWithdrawal(uint128 _amount) external {
-        if (!(msg.sender == address(etherFiAdminContract))) revert IncorrectCaller();
+        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
+        require(escrowMigrationCompleted, "migration not complete");
+        if (totalValueInLp < _amount) revert InsufficientLiquidity();
 
-        ethAmountLockedForWithdrawal += _amount;
+        totalValueInLp     -= _amount;
+        totalValueOutOfLp  += _amount;
+
+        _sendFund(address(withdrawRequestNFT), _amount);
+    }
+
+    /// @notice Locks ETH for the priority withdrawal queue by transferring from LP to the queue contract. TVL preserved by InLp/OutOfLp rebalance.
+    function transferLockedEthForPriority(uint128 _amount) external {
+        require(msg.sender == priorityWithdrawalQueue, "Incorrect Caller");
+        require(escrowMigrationCompleted, "migration not complete");
+        if (totalValueInLp < _amount) revert InsufficientLiquidity();
+
+        totalValueInLp     -= _amount;
+        totalValueOutOfLp  += _amount;
+
+        _sendFund(priorityWithdrawalQueue, _amount);
+    }
+
+    /// @notice Returns ETH from the priority queue back to LP on a finalized cancel. Inverse of transferLockedEthForPriority.
+    function returnLockedEth(uint256 _amount) external payable {
+        require(msg.sender == priorityWithdrawalQueue, "Incorrect Caller");
+        if (msg.value != _amount || _amount == 0) revert InvalidAmount();
+        totalValueOutOfLp -= uint128(_amount);
+        totalValueInLp    += uint128(_amount);
     }
 
     function burnEEthShares(uint256 shares) external {

@@ -46,13 +46,29 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             address(priorityQueueImpl),
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
         );
-        priorityQueue = PriorityWithdrawalQueue(address(proxy));
+        priorityQueue = PriorityWithdrawalQueue(payable(address(proxy)));
         vm.stopPrank();
 
         // Upgrade LiquidityPool to latest version (needed for setPriorityWithdrawalQueue)
         vm.startPrank(owner);
         LiquidityPool newLpImpl = new LiquidityPool(address(priorityQueue), 0);
         liquidityPoolInstance.upgradeTo(address(newLpImpl));
+
+        // Upgrade WithdrawRequestNFT so it has receive() and can accept ETH escrow.
+        // WITHDRAW_REQUEST_NFT_BUYBACK_SAFE = 0x2f5301a3D59388c509C65f8698f521377D41Fd0F
+        address wrnOwner = withdrawRequestNFTInstance.owner();
+        vm.stopPrank();
+        vm.startPrank(wrnOwner);
+        WithdrawRequestNFT newWrnImpl =
+            new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F);
+        withdrawRequestNFTInstance.upgradeTo(address(newWrnImpl));
+        vm.stopPrank();
+        vm.startPrank(owner);
+
+        // Run one-shot migration: move pre-existing locked ETH from LP into NFT escrow.
+        if (!liquidityPoolInstance.escrowMigrationCompleted()) {
+            liquidityPoolInstance.initializeOnUpgradeV2();
+        }
 
         // Grant roles
         roleRegistryInstance.grantRole(PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE, alice);
@@ -841,7 +857,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // eETH should be returned (approximately due to share rounding); request →
         // fulfill → invalidate round-trips through two share/amount conversions.
         assertApproxEqAbs(eETHInstance.balanceOf(vipUser), eethInitial, 2, "eETH should be returned");
-        
+
+
         // LP locked should decrease
         assertLt(priorityQueue.ethAmountLockedForPriorityWithdrawal(), lpLockedBefore, "LP locked should decrease");
     }
@@ -2094,7 +2111,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Set up NFT withdrawal lock of ~40 ETH
         _setupNftWithdrawal(nftUser, 40 ether);
-        uint128 nftLocked = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+        uint128 nftLocked = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
         assertGt(nftLocked, 0, "NFT queue lock must be non-zero");
 
         // Create and fulfill a priority withdrawal of 20 ETH (vipUser has 50 ETH from setUp)
@@ -2117,7 +2134,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         assertApproxEqRel(vipUser.balance, vipEthBefore + priorityAmount, 0.001e18, "Priority claim amount correct");
         assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), 0, "Priority lock cleared");
-        assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT lock unchanged by priority claim");
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT lock unchanged by priority claim");
     }
 
     /// @dev Proves that the NFT queue can claim its locked ETH even when the priority queue
@@ -2127,7 +2144,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Set up NFT withdrawal lock of ~40 ETH
         (uint256 nftRequestId, uint96 nftEethAmount) = _setupNftWithdrawal(nftUser, 40 ether);
-        uint128 nftLocked = liquidityPoolInstance.ethAmountLockedForWithdrawal();
+        uint128 nftLocked = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
         assertGt(nftLocked, 0, "NFT queue lock must be non-zero");
 
         // Create and fulfill a priority withdrawal of 20 ETH (creates priority lock)
@@ -2149,7 +2166,225 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         withdrawRequestNFTInstance.claimWithdraw(nftRequestId);
 
         assertApproxEqRel(nftUser.balance, nftUserEthBefore + nftEethAmount, 0.001e18, "NFT claim amount correct");
-        assertLt(liquidityPoolInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT lock decremented after claim");
+        assertLt(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT lock decremented after claim");
         assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), priorityAmount, "Priority lock unchanged by NFT claim");
     }
+
+    //--------------------------------------------------------------------------------------
+    //-----  Tasks 8 & 9: ETH escrow via transferLockedEthForPriority / _claimWithdraw  ----
+    //--------------------------------------------------------------------------------------
+
+    /// @dev Shared setup: deposit → whitelist → request → fulfill.
+    ///      Returns the fulfilled WithdrawRequest struct ready for claimWithdraw.
+    function _setupFulfilledRequest(address user, uint96 amount)
+        internal
+        returns (IPriorityWithdrawalQueue.WithdrawRequest memory request)
+    {
+        // Deposit so user has eETH
+        vm.deal(user, amount + 1 ether);
+        vm.prank(user);
+        liquidityPoolInstance.deposit{value: amount + 1 ether}();
+
+        // Whitelist the user
+        vm.prank(alice);
+        priorityQueue.addToWhitelist(user);
+
+        // Create the pending request (helper also warps past MIN_DELAY)
+        (, request) = _createWithdrawRequest(user, amount);
+
+        // Fulfill the request as the request manager
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory batch =
+            new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        batch[0] = request;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(batch);
+    }
+
+    function test_fulfillRequests_transfersEthToQueue() public {
+        address user = makeAddr("escrowUser8");
+        uint96 amount = 1 ether;
+
+        uint128 lpInBefore   = liquidityPoolInstance.totalValueInLp();
+        uint128 lpOutBefore  = liquidityPoolInstance.totalValueOutOfLp();
+        uint256 queueEthBefore = address(priorityQueue).balance;
+        uint128 lockedBefore = priorityQueue.ethAmountLockedForPriorityWithdrawal();
+
+        IPriorityWithdrawalQueue.WithdrawRequest memory request = _setupFulfilledRequest(user, amount);
+
+        assertEq(
+            liquidityPoolInstance.totalValueInLp(),
+            lpInBefore + uint128(amount + 1 ether) - uint128(request.amountOfEEth),
+            "LP totalValueInLp not decreased by amountOfEEth"
+        );
+        assertEq(
+            liquidityPoolInstance.totalValueOutOfLp(),
+            lpOutBefore + uint128(request.amountOfEEth),
+            "LP totalValueOutOfLp not increased by amountOfEEth"
+        );
+        assertEq(
+            address(priorityQueue).balance,
+            queueEthBefore + request.amountOfEEth,
+            "queue ETH escrow not increased"
+        );
+        assertEq(
+            priorityQueue.ethAmountLockedForPriorityWithdrawal(),
+            lockedBefore + uint128(request.amountOfEEth),
+            "queue counter not increased"
+        );
+    }
+
+    function test_claimWithdraw_paysFromQueueBalance() public {
+        address user = makeAddr("escrowUser9");
+        uint96 amount = 1 ether;
+
+        IPriorityWithdrawalQueue.WithdrawRequest memory request = _setupFulfilledRequest(user, amount);
+
+        uint256 userEthBefore   = user.balance;
+        uint256 queueEthBefore  = address(priorityQueue).balance;
+
+        vm.prank(user);
+        priorityQueue.claimWithdraw(request);
+
+        assertGt(user.balance, userEthBefore, "user did not receive ETH");
+        assertLt(address(priorityQueue).balance, queueEthBefore, "queue did not pay from own balance");
+    }
+
+    //-----  Tasks 10-12: returnLockedEth / finalized cancel return path  ----
+
+    function test_cancelWithdraw_finalized_returnsEthToLP() public {
+        address user = makeAddr("cancelFinalizedUser10");
+        uint96 amount = 1 ether;
+
+        IPriorityWithdrawalQueue.WithdrawRequest memory req = _setupFulfilledRequest(user, amount);
+
+        uint128 lpInBefore  = liquidityPoolInstance.totalValueInLp();
+        uint128 lpOutBefore = liquidityPoolInstance.totalValueOutOfLp();
+        uint256 queueEthBefore = address(priorityQueue).balance;
+        uint128 lockedBefore   = priorityQueue.ethAmountLockedForPriorityWithdrawal();
+        uint256 lpEthBefore    = address(liquidityPoolInstance).balance;
+
+        vm.prank(user);
+        priorityQueue.cancelWithdraw(req);
+
+        assertEq(liquidityPoolInstance.totalValueInLp(),    lpInBefore  + uint128(req.amountOfEEth), "LP InLp not increased");
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), lpOutBefore - uint128(req.amountOfEEth), "LP OutOfLp not decreased");
+        assertEq(address(priorityQueue).balance, queueEthBefore - req.amountOfEEth, "queue ETH not returned");
+        assertEq(address(liquidityPoolInstance).balance, lpEthBefore + req.amountOfEEth, "LP ETH not received back");
+        assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), lockedBefore - req.amountOfEEth, "counter not decreased");
+    }
+
+    function test_cancelWithdraw_pending_noEthMovement() public {
+        address user = makeAddr("cancelPendingUser10");
+        uint96 amount = 1 ether;
+
+        vm.deal(user, amount + 1 ether);
+        vm.prank(user);
+        liquidityPoolInstance.deposit{value: amount + 1 ether}();
+
+        vm.prank(alice);
+        priorityQueue.addToWhitelist(user);
+
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory req) = _createWithdrawRequest(user, amount);
+
+        uint256 lpEthBefore    = address(liquidityPoolInstance).balance;
+        uint256 queueEthBefore = address(priorityQueue).balance;
+
+        vm.prank(user);
+        priorityQueue.cancelWithdraw(req);
+
+        assertEq(address(liquidityPoolInstance).balance,    lpEthBefore,    "LP ETH should not change");
+        assertEq(address(priorityQueue).balance, queueEthBefore, "queue ETH should not change");
+    }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------  FEE ETH RETURN TESTS  --------------------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @notice Fulfill a request with a non-zero fee, claim it, then assert:
+    ///   - User received amountWithFee ETH
+    ///   - Queue ETH balance returns to its pre-fulfill baseline (no fee residue)
+    ///   - LP totalValueInLp increased by feeEth
+    ///   - LP totalValueOutOfLp decreased by amountOfEEth total (amountWithFee + feeEth)
+    ///   - ethAmountLockedForPriorityWithdrawal decreased by amountOfEEth
+    function test_claimWithdraw_returnsFeeEthToLP() public {
+        uint96 amountOfEEth  = 10 ether;
+        uint96 feeAmount     = 0.5 ether;
+        uint96 amountWithFee = amountOfEEth - feeAmount; // 9.5 ether
+
+        // Create request with a fee (amountWithFee < amountOfEEth).
+        (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequestWithFee(vipUser, amountOfEEth, amountWithFee);
+
+        // Capture pre-fulfill baselines.
+        uint256 queueEthBaseline = address(priorityQueue).balance;
+        uint256 userEthBefore    = vipUser.balance;
+
+        // Fulfill: LP sends amountOfEEth to queue, LP balance drops by amountOfEEth.
+        uint256 lpEthBeforeFulfill   = address(liquidityPoolInstance).balance;
+        uint128 lpInBeforeFulfill    = liquidityPoolInstance.totalValueInLp();
+        uint128 lpOutBeforeFulfill   = liquidityPoolInstance.totalValueOutOfLp();
+        uint128 lockedBeforeFulfill  = priorityQueue.ethAmountLockedForPriorityWithdrawal();
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests =
+            new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        requests[0] = request;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(requests);
+
+        // After fulfill: queue received amountOfEEth from LP.
+        assertEq(
+            priorityQueue.ethAmountLockedForPriorityWithdrawal(),
+            lockedBeforeFulfill + amountOfEEth,
+            "locked counter +amountOfEEth after fulfill"
+        );
+        assertEq(
+            address(priorityQueue).balance,
+            queueEthBaseline + amountOfEEth,
+            "queue ETH +amountOfEEth after fulfill"
+        );
+
+        // Capture LP state right before claim.
+        uint128 lpInBeforeClaim  = liquidityPoolInstance.totalValueInLp();
+        uint128 lpOutBeforeClaim = liquidityPoolInstance.totalValueOutOfLp();
+
+        // Claim: user gets amountWithFee, feeEth returns to LP.
+        priorityQueue.claimWithdraw(request);
+
+        // User received amountWithFee.
+        assertEq(vipUser.balance, userEthBefore + amountWithFee, "user should receive amountWithFee");
+
+        // Queue ETH balance returns to pre-fulfill baseline (no fee residue).
+        assertEq(
+            address(priorityQueue).balance,
+            queueEthBaseline,
+            "queue ETH should return to pre-fulfill baseline"
+        );
+
+        // LP totalValueInLp rose by feeEth (returned via returnLockedEth).
+        assertEq(
+            liquidityPoolInstance.totalValueInLp(),
+            lpInBeforeClaim + feeAmount,
+            "LP totalValueInLp should increase by feeEth"
+        );
+
+        // LP totalValueOutOfLp fell by amountWithFee (LP.withdraw decrements by amountWithFee)
+        // then fell again by feeEth (returnLockedEth decrements totalValueOutOfLp).
+        // Net: totalValueOutOfLp decreased by amountOfEEth relative to before claim.
+        assertEq(
+            liquidityPoolInstance.totalValueOutOfLp(),
+            lpOutBeforeClaim - amountOfEEth,
+            "LP totalValueOutOfLp should decrease by amountOfEEth"
+        );
+
+        // Counter decreased by amountOfEEth.
+        assertEq(
+            priorityQueue.ethAmountLockedForPriorityWithdrawal(),
+            lockedBeforeFulfill,
+            "locked counter should be back to pre-fulfill baseline"
+        );
+
+        // Request no longer exists.
+        assertFalse(priorityQueue.requestExists(requestId), "request should be removed after claim");
+    }
+
 }
