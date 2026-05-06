@@ -543,12 +543,10 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @notice Locks ETH for finalized NFT withdrawals by transferring from LP to WithdrawRequestNFT. TVL preserved by InLp/OutOfLp rebalance; share rate unchanged.
     function addEthAmountLockedForWithdrawal(uint128 _amount) external {
         if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
-        if (address(this).balance < _amount) revert InsufficientLiquidity();
+        require(escrowMigrationCompleted, "migration not complete");
+        if (totalValueInLp < _amount) revert InsufficientLiquidity();
 
-        // Deduct from totalValueInLp up to its current balance; any surplus comes from
-        // unaccounted ETH (e.g. validator principal returned outside the deposit path).
-        uint128 fromInLp = _amount <= totalValueInLp ? _amount : totalValueInLp;
-        totalValueInLp     -= fromInLp;
+        totalValueInLp     -= _amount;
         totalValueOutOfLp  += _amount;
         ethAmountLockedForWithdrawal += _amount;
 
@@ -558,6 +556,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @notice Locks ETH for the priority withdrawal queue by transferring from LP to the queue contract. TVL preserved by InLp/OutOfLp rebalance.
     function transferLockedEthForPriority(uint128 _amount) external {
         require(msg.sender == priorityWithdrawalQueue, "Incorrect Caller");
+        require(escrowMigrationCompleted, "migration not complete");
         if (totalValueInLp < _amount) revert InsufficientLiquidity();
 
         totalValueInLp     -= _amount;

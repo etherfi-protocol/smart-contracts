@@ -506,7 +506,7 @@ contract PriorityWithdrawalQueue is
     }
 
     /// @dev Verify post-conditions after a claim operation
-    /// @param lpEthBefore ETH balance of LiquidityPool before operation (should be unchanged; ETH moved at fulfill)
+    /// @param lpEthBefore ETH balance of LiquidityPool before operation
     /// @param queueEEthSharesBefore eETH shares held by queue before operation
     /// @param queueEthBefore ETH balance of this contract before operation
     /// @param userEthBefore ETH balance of user before operation
@@ -518,10 +518,10 @@ contract PriorityWithdrawalQueue is
         uint256 userEthBefore,
         address user
     ) internal view {
-        // LP ETH balance is unchanged during claim — ETH was already moved to queue at fulfillRequests time.
-        if (address(liquidityPool).balance != lpEthBefore) revert UnexpectedBalanceChange();
+        // LP ETH balance may increase by feeEth (returned from queue to LP via returnLockedEth).
+        if (address(liquidityPool).balance < lpEthBefore) revert UnexpectedBalanceChange();
         if (eETH.shares(address(this)) >= queueEEthSharesBefore) revert UnexpectedBalanceChange();
-        // Queue paid ETH to the user from its own escrow balance.
+        // Queue paid ETH to the user (and optionally fee back to LP) from its own escrow balance.
         if (address(this).balance >= queueEthBefore) revert UnexpectedBalanceChange();
         if (user.balance <= userEthBefore) revert UnexpectedBalanceChange();
     }
@@ -597,7 +597,7 @@ contract PriorityWithdrawalQueue is
     /// @dev Pays the user from this contract's own ETH balance (escrowed at fulfillRequests time). LP only does share burn + accounting on the segregated path.
     function _claimWithdraw(WithdrawRequest calldata request) internal {
         bytes32 requestId = keccak256(abi.encode(request));
-        
+
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
@@ -609,8 +609,8 @@ contract PriorityWithdrawalQueue is
 
         _finalizedRequests.remove(requestId);
 
-        uint256 remainder = request.shareOfEEth > sharesToBurn 
-            ? request.shareOfEEth - sharesToBurn 
+        uint256 remainder = request.shareOfEEth > sharesToBurn
+            ? request.shareOfEEth - sharesToBurn
             : 0;
         totalRemainderShares += uint96(remainder);
 
@@ -622,6 +622,13 @@ contract PriorityWithdrawalQueue is
         require(address(this).balance >= amountToWithdraw, "Insufficient escrow");
         (bool ok, ) = payable(request.user).call{value: amountToWithdraw}("");
         require(ok, "ETH transfer failed");
+
+        // Return fee ETH (amountOfEEth - amountWithFee) to LP to keep queue balance clean
+        // and unwind the over-credited totalValueOutOfLp from fulfillRequests time.
+        uint256 feeEth = uint256(request.amountOfEEth) - amountToWithdraw;
+        if (feeEth > 0) {
+            liquidityPool.returnLockedEth{value: feeEth}(feeEth);
+        }
 
         emit WithdrawRequestClaimed(requestId, request.user, uint96(amountToWithdraw), uint96(sharesToBurn), request.nonce, uint32(block.timestamp));
     }
