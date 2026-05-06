@@ -187,9 +187,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         require(!escrowMigrationCompleted, "already migrated");
 
         uint128 nftLocked   = ethAmountLockedForWithdrawal;
-        uint128 queueLocked = priorityWithdrawalQueue == address(0)
-            ? uint128(0)
-            : uint128(IPriorityWithdrawalQueue(priorityWithdrawalQueue).ethAmountLockedForPriorityWithdrawal());
+        uint128 queueLocked = IPriorityWithdrawalQueue(priorityWithdrawalQueue).ethAmountLockedForPriorityWithdrawal();
 
         uint128 totalLocked = nftLocked + queueLocked;
         if (totalLocked > 0) {

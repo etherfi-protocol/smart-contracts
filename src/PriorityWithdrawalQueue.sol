@@ -597,7 +597,7 @@ contract PriorityWithdrawalQueue is
     /// @dev Pays the user from this contract's own ETH balance (escrowed at fulfillRequests time). LP only does share burn + accounting on the segregated path.
     function _claimWithdraw(WithdrawRequest calldata request) internal {
         bytes32 requestId = keccak256(abi.encode(request));
-
+        
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
