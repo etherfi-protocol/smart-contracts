@@ -1551,29 +1551,6 @@ contract EtherFiOracleTest is TestSetup {
         _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
     }
 
-    // The liquidity check also counts the priority-queue outstanding lock, so a
-    // report that fits in the LP alone can still revert once the priority lock
-    // is considered.
-    function test_executeTasks_revertsWhenFinalizedPlusPriorityLockExceedsLp() public {
-        vm.deal(alice, 10 ether);
-        vm.prank(alice);
-        liquidityPoolInstance.deposit{value: 10 ether}();
-
-        // Force the priority queue to report an outstanding lock, so the
-        // EtherFiAdmin-side check must add it to the LP's current commitments.
-        vm.mockCall(
-            address(priorityQueueInstance),
-            abi.encodeWithSelector(priorityQueueInstance.ethAmountLockedForPriorityWithdrawal.selector),
-            abi.encode(uint128(8 ether))
-        );
-
-        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.finalizedWithdrawalAmount = 5 ether; // 5 + 0 + 8 > 10
-
-        _moveClock(1 days / 12);
-        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
-    }
-
     // The liquidity check compares against the LP's actual ETH balance, not
     // the internal totalValueInLp accounting. ETH that arrives at the LP
     // outside a deposit path (e.g., validator principal returning before the

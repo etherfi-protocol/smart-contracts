@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import "../../script/deploys/Deployed.s.sol";
 import "../../src/LiquidityPool.sol";
 import "../../src/WithdrawRequestNFT.sol";
+import "../../src/PriorityWithdrawalQueue.sol";
 import "../../src/ReentrancyGuardNamespaced.sol";
 
 interface IUUPSProxy {
@@ -353,12 +354,17 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         assertGt(nftOwner.balance, balBefore, "paused WRN must not block finalized claim");
     }
 
-    /// @dev Internal helper used by the integrity test above - upgrades both
-    ///      proxies to new implementations with the guard + permissionless
-    ///      claim changes.
+    /// @dev Internal helper used by the integrity test above - upgrades all
+    ///      three proxies (LP, WRN, PriorityWithdrawalQueue) to the new impls.
+    ///      The queue must be upgraded before initializeOnUpgradeV2 because the
+    ///      migration sweeps queue-locked ETH into the queue contract via
+    ///      receive(); the master queue impl has no receive() and would revert.
     function _doUpgrade() internal {
         address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, 0));
         address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE));
+        address newPQ = address(new PriorityWithdrawalQueue(
+            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, TREASURY, 1 hours
+        ));
 
         vm.prank(UPGRADE_TIMELOCK);
         IUUPSProxy(LIQUIDITY_POOL).upgradeTo(newLP);
@@ -366,6 +372,9 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         address wrnOwner = IOwnableRead(WITHDRAW_REQUEST_NFT).owner();
         vm.prank(wrnOwner);
         IUUPSProxy(WITHDRAW_REQUEST_NFT).upgradeTo(newWRN);
+
+        vm.prank(UPGRADE_TIMELOCK);
+        IUUPSProxy(PRIORITY_WITHDRAWAL_QUEUE).upgradeTo(newPQ);
 
         // Migrate pre-existing locked ETH from LP into the NFT escrow so that
         // pre-existing finalized requests can be claimed against the NFT balance.

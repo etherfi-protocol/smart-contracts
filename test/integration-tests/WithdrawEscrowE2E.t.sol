@@ -175,9 +175,9 @@ contract WithdrawEscrowE2ETest is TestSetup {
         // ── FINAL: Net protocol invariants ───────────────────────────────────
         assertApproxEqAbs(eETHInstance.balanceOf(bob), depositAmt - withdrawAmt, 2,
             "final: user residual eETH");
-        // share-rate rounding artifact: claimable ETH may be 1 wei less than raw withdrawAmt
+        // share-rate rounding artifact: claimable ETH may be up to 2 wei less than raw withdrawAmt
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(),
-            baseLp.totalPooled + depositAmt - withdrawAmt, 1,
+            baseLp.totalPooled + depositAmt - withdrawAmt, 2,
             "final: net getTotalPooledEther");
         // Allow 2 wei for share-rate rounding on the deposit→share round-trip
         assertApproxEqAbs(
@@ -185,8 +185,8 @@ contract WithdrawEscrowE2ETest is TestSetup {
             baseTotalShares + sharesForDeposit - expectedSharesBurned,
             2,
             "final: net totalShares (2-wei tolerance)");
-        // share-rate rounding artifact: 1-wei remainder from share math stays in locked counter
-        assertApproxEqAbs(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), baseLocked, 1,
+        // share-rate rounding artifact: up to 2-wei remainder from share math stays in locked counter
+        assertApproxEqAbs(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), baseLocked, 2,
             "final: ethAmountLockedForWithdrawal back to baseline");
     }
 
@@ -318,18 +318,20 @@ contract WithdrawEscrowE2ETest is TestSetup {
         withdrawRequestNFTInstance.claimWithdraw(reqId);
 
         // User received ETH from NFT's balance; LP raw ETH unchanged (segregated path)
-        // share-rate rounding artifact: claimable may be 1 wei less than raw withdrawAmt
-        assertApproxEqAbs(user.balance, userEthPre + withdrawAmt, 1,
+        // share-rate rounding artifact: claimable may be up to 2 wei less than raw withdrawAmt
+        // (deposit→share→amountForShare round-trip can drop 2 wei at the live mainnet share rate)
+        assertApproxEqAbs(user.balance, userEthPre + withdrawAmt, 2,
             "step4: user raw ETH after claim");
-        assertApproxEqAbs(address(withdrawRequestNFTInstance).balance, preNft.rawEth - withdrawAmt, 1,
+        assertApproxEqAbs(address(withdrawRequestNFTInstance).balance, preNft.rawEth - withdrawAmt, 2,
             "step4: NFT raw ETH after claim");
         assertEq(address(liquidityPoolInstance).balance, preLp.rawEth,
             "step4: LP raw ETH unchanged at claim");
         assertEq(liquidityPoolInstance.totalValueInLp(), preLp.inLp,
             "step4: totalValueInLp unchanged at claim");
         // totalValueOutOfLp decrements by claimable (the actual ETH paid), not raw withdrawAmt
+        // — share-rate round-trip can drift by 2 wei at the live mainnet share rate
         assertApproxEqAbs(liquidityPoolInstance.totalValueOutOfLp(),
-            preLp.outLp - uint128(withdrawAmt), 1,
+            preLp.outLp - uint128(withdrawAmt), 2,
             "step4: totalValueOutOfLp after claim");
         assertEq(eETHInstance.totalShares(),
             preTotalShares - expectedSharesBurned,
@@ -341,11 +343,12 @@ contract WithdrawEscrowE2ETest is TestSetup {
             2,
             "step4: NFT eETH after claim (2-wei tolerance for share-rate rounding)"); // share-rate rounding artifact
         // ethAmountLockedForWithdrawal decrements by claimable (NFT._claimWithdraw path)
+        // — share-rate rounding artifact: claimable can be up to 2 wei less than withdrawAmt
         assertApproxEqAbs(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(),
-            preLocked - uint128(withdrawAmt), 1,
+            preLocked - uint128(withdrawAmt), 2,
             "step4: ethAmountLockedForWithdrawal after claim");
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(),
-            preLp.totalPooled - withdrawAmt, 1,
+            preLp.totalPooled - withdrawAmt, 2,
             "step4: getTotalPooledEther after claim");
         // NFT burned — ownerOf must revert
         vm.expectRevert();
