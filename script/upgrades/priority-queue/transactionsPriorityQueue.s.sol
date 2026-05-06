@@ -254,12 +254,12 @@ contract PriorityQueueTransactions is Script, Utils {
         console2.log("=== Verifying Deployed Bytecode ===");
         console2.log("");
 
-        LiquidityPool newLiquidityPoolImpl = new LiquidityPool(priorityWithdrawalQueueProxy);
+        LiquidityPool newLiquidityPoolImpl = new LiquidityPool(priorityWithdrawalQueueProxy, 0);
         PriorityWithdrawalQueue newPWQImpl = new PriorityWithdrawalQueue(
             LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_MIN_DELAY
         );
         EtherFiRedemptionManager newRedemptionManagerImpl = new EtherFiRedemptionManager(
-            LIQUIDITY_POOL, EETH, WEETH, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, ROLE_REGISTRY, ETHERFI_RESTAKER, priorityWithdrawalQueueProxy
+            LIQUIDITY_POOL, EETH, WEETH, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, ROLE_REGISTRY, ETHERFI_RESTAKER, priorityWithdrawalQueueProxy, 10_000, 100, 10_000
         );
 
         contractCodeChecker.verifyContractByteCodeMatch(liquidityPoolImpl, address(newLiquidityPoolImpl));

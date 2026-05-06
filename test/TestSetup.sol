@@ -364,6 +364,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     //   FORK_RPC_URL=https://your-rpc-url forge test
     function initializeRealisticForkWithBlock(uint8 forkEnum, uint256 blockNo) public {
         deployed = new Deployed();
+        // Make the locally-deployed Deployed helper persistent so it is accessible
+        // after vm.selectFork switches to the mainnet fork.
+        vm.makePersistent(address(deployed));
         if (forkEnum == MAINNET_FORK) {
             // Use FORK_RPC_URL if set, otherwise fall back to MAINNET_RPC_URL
             string memory rpcUrl = vm.envOr("FORK_RPC_URL", vm.envString("MAINNET_RPC_URL"));
@@ -441,7 +444,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         nodeOperatorManagerInstance = NodeOperatorManager(addressProviderInstance.getContractAddress("NodeOperatorManager"));
         node = EtherFiNode(payable(addressProviderInstance.getContractAddress("EtherFiNode")));
         earlyAdopterPoolInstance = EarlyAdopterPool(payable(addressProviderInstance.getContractAddress("EarlyAdopterPool")));
-        withdrawRequestNFTInstance = WithdrawRequestNFT(addressProviderInstance.getContractAddress("WithdrawRequestNFT"));
+        withdrawRequestNFTInstance = WithdrawRequestNFT(payable(addressProviderInstance.getContractAddress("WithdrawRequestNFT")));
         liquifierInstance = Liquifier(payable(addressProviderInstance.getContractAddress("Liquifier")));
         etherFiTimelockInstance = EtherFiTimelock(payable(addressProviderInstance.getContractAddress("EtherFiTimelock")));
         etherFiAdminInstance = EtherFiAdmin(payable(addressProviderInstance.getContractAddress("EtherFiAdmin")));
@@ -460,7 +463,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(priorityQueueImplementation),
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
         );
-        priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
+        priorityQueueInstance = PriorityWithdrawalQueue(payable(address(priorityQueueProxy)));
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
@@ -712,7 +715,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(priorityQueueImplementation),
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
         );
-        priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
+        priorityQueueInstance = PriorityWithdrawalQueue(payable(address(priorityQueueProxy)));
 
         etherFiAdminImplementation = new EtherFiAdmin(address(priorityQueueInstance), 10000 ether, 200, 10_000, 1_000);
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
@@ -745,6 +748,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
         liquidityPoolInstance.initializeVTwoDotFourNine(address(roleRegistryInstance), address(etherFiRedemptionManagerInstance));
+        // Run one-shot escrow migration so addEthAmountLockedForWithdrawal and
+        // transferLockedEthForPriority are callable in all testing-fork tests.
+        liquidityPoolInstance.initializeOnUpgradeV2();
 
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
         withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolInstance)), payable(address(eETHInstance)), payable(address(membershipManagerInstance)));
@@ -958,7 +964,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 address(priorityQueueImplementation),
                 abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
             );
-            priorityQueueInstance = PriorityWithdrawalQueue(address(priorityQueueProxy));
+            priorityQueueInstance = PriorityWithdrawalQueue(payable(address(priorityQueueProxy)));
             EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance), 10_000, 100, 10_000);
             etherFiRedemptionManagerProxy = new UUPSProxy(address(etherFiRedemptionManagerImplementation), "");
             etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
