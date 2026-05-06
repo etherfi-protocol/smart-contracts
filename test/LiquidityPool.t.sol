@@ -1181,7 +1181,7 @@ contract LiquidityPoolTest is TestSetup {
 
         vm.prank(address(etherFiAdminInstance));
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(10 ether);
-
+        
         assertEq(liquidityPoolInstance.ethAmountLockedForWithdrawal(), 10 ether);
     }
 

@@ -609,8 +609,8 @@ contract PriorityWithdrawalQueue is
 
         _finalizedRequests.remove(requestId);
 
-        uint256 remainder = request.shareOfEEth > sharesToBurn
-            ? request.shareOfEEth - sharesToBurn
+        uint256 remainder = request.shareOfEEth > sharesToBurn 
+            ? request.shareOfEEth - sharesToBurn 
             : 0;
         totalRemainderShares += uint96(remainder);
 
