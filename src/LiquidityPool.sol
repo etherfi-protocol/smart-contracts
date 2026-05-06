@@ -263,6 +263,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
             // Queue caller decrements its own ethAmountLockedForPriorityWithdrawal in its own claim function.
 
             totalValueOutOfLp -= uint128(_amount);
+            _checkMinAmountForShare();
             eETH.burnShares(msg.sender, share);
             // No _sendFund — caller pays recipient itself.
             return share;
