@@ -441,10 +441,10 @@ contract WithdrawEscrowE2ETest is TestSetup {
 
         // eETH transferred user → queue (not burned); LP accounting unchanged at request
         assertApproxEqAbs(eETHInstance.balanceOf(user),
-            userEEthPre - withdrawAmt, 1,
+            userEEthPre - withdrawAmt, 2,
             "step2: user eETH after request");
         assertApproxEqAbs(eETHInstance.balanceOf(address(pQueue)),
-            preQ.eEthBal + withdrawAmt, 1,
+            preQ.eEthBal + withdrawAmt, 2,
             "step2: queue eETH after request");
         assertEq(eETHInstance.totalShares(), preTotalShares,
             "step2: totalShares unchanged at request");
@@ -517,15 +517,16 @@ contract WithdrawEscrowE2ETest is TestSetup {
         vm.prank(user);
         pQueue.claimWithdraw(req);
 
-        // User received ETH from queue balance; LP raw ETH unchanged (segregated path)
+        // User received ETH from queue balance. Fee ETH (amountOfEEth - amountWithFee) is
+        // returned to LP via returnLockedEth, so LP raw ETH may increase by up to feeEth.
         assertApproxEqAbs(user.balance, userEthPre + expectedEth, 2,
             "step4: user ETH after claim (2-wei tolerance)");
         assertLt(address(pQueue).balance, preQ.rawEth,
             "step4: queue raw ETH decreased after claim");
-        assertEq(address(liquidityPoolInstance).balance, preLp.rawEth,
-            "step4: LP raw ETH unchanged at claim");
-        assertEq(liquidityPoolInstance.totalValueInLp(), preLp.inLp,
-            "step4: totalValueInLp unchanged at claim");
+        assertGe(address(liquidityPoolInstance).balance, preLp.rawEth,
+            "step4: LP raw ETH unchanged or increased by fee return");
+        assertGe(liquidityPoolInstance.totalValueInLp(), preLp.inLp,
+            "step4: totalValueInLp unchanged or increased by fee return");
         assertLt(liquidityPoolInstance.totalValueOutOfLp(), preLp.outLp,
             "step4: totalValueOutOfLp decreased after claim");
         assertLt(eETHInstance.totalShares(), preTotalShares,

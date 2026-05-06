@@ -2295,4 +2295,95 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertEq(address(liquidityPoolInstance).balance,    lpEthBefore,    "LP ETH should not change");
         assertEq(address(priorityQueue).balance, queueEthBefore, "queue ETH should not change");
     }
+
+    //--------------------------------------------------------------------------------------
+    //------------------------------  FEE ETH RETURN TESTS  --------------------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @notice Fulfill a request with a non-zero fee, claim it, then assert:
+    ///   - User received amountWithFee ETH
+    ///   - Queue ETH balance returns to its pre-fulfill baseline (no fee residue)
+    ///   - LP totalValueInLp increased by feeEth
+    ///   - LP totalValueOutOfLp decreased by amountOfEEth total (amountWithFee + feeEth)
+    ///   - ethAmountLockedForPriorityWithdrawal decreased by amountOfEEth
+    function test_claimWithdraw_returnsFeeEthToLP() public {
+        uint96 amountOfEEth  = 10 ether;
+        uint96 feeAmount     = 0.5 ether;
+        uint96 amountWithFee = amountOfEEth - feeAmount; // 9.5 ether
+
+        // Create request with a fee (amountWithFee < amountOfEEth).
+        (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequestWithFee(vipUser, amountOfEEth, amountWithFee);
+
+        // Capture pre-fulfill baselines.
+        uint256 queueEthBaseline = address(priorityQueue).balance;
+        uint256 userEthBefore    = vipUser.balance;
+
+        // Fulfill: LP sends amountOfEEth to queue, LP balance drops by amountOfEEth.
+        uint256 lpEthBeforeFulfill   = address(liquidityPoolInstance).balance;
+        uint128 lpInBeforeFulfill    = liquidityPoolInstance.totalValueInLp();
+        uint128 lpOutBeforeFulfill   = liquidityPoolInstance.totalValueOutOfLp();
+        uint128 lockedBeforeFulfill  = priorityQueue.ethAmountLockedForPriorityWithdrawal();
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests =
+            new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        requests[0] = request;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(requests);
+
+        // After fulfill: queue received amountOfEEth from LP.
+        assertEq(
+            priorityQueue.ethAmountLockedForPriorityWithdrawal(),
+            lockedBeforeFulfill + amountOfEEth,
+            "locked counter +amountOfEEth after fulfill"
+        );
+        assertEq(
+            address(priorityQueue).balance,
+            queueEthBaseline + amountOfEEth,
+            "queue ETH +amountOfEEth after fulfill"
+        );
+
+        // Capture LP state right before claim.
+        uint128 lpInBeforeClaim  = liquidityPoolInstance.totalValueInLp();
+        uint128 lpOutBeforeClaim = liquidityPoolInstance.totalValueOutOfLp();
+
+        // Claim: user gets amountWithFee, feeEth returns to LP.
+        priorityQueue.claimWithdraw(request);
+
+        // User received amountWithFee.
+        assertEq(vipUser.balance, userEthBefore + amountWithFee, "user should receive amountWithFee");
+
+        // Queue ETH balance returns to pre-fulfill baseline (no fee residue).
+        assertEq(
+            address(priorityQueue).balance,
+            queueEthBaseline,
+            "queue ETH should return to pre-fulfill baseline"
+        );
+
+        // LP totalValueInLp rose by feeEth (returned via returnLockedEth).
+        assertEq(
+            liquidityPoolInstance.totalValueInLp(),
+            lpInBeforeClaim + feeAmount,
+            "LP totalValueInLp should increase by feeEth"
+        );
+
+        // LP totalValueOutOfLp fell by amountWithFee (LP.withdraw decrements by amountWithFee)
+        // then fell again by feeEth (returnLockedEth decrements totalValueOutOfLp).
+        // Net: totalValueOutOfLp decreased by amountOfEEth relative to before claim.
+        assertEq(
+            liquidityPoolInstance.totalValueOutOfLp(),
+            lpOutBeforeClaim - amountOfEEth,
+            "LP totalValueOutOfLp should decrease by amountOfEEth"
+        );
+
+        // Counter decreased by amountOfEEth.
+        assertEq(
+            priorityQueue.ethAmountLockedForPriorityWithdrawal(),
+            lockedBeforeFulfill,
+            "locked counter should be back to pre-fulfill baseline"
+        );
+
+        // Request no longer exists.
+        assertFalse(priorityQueue.requestExists(requestId), "request should be removed after claim");
+    }
 }

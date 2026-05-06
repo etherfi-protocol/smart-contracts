@@ -1580,19 +1580,18 @@ contract EtherFiOracleTest is TestSetup {
     // next rebase) bumps the balance while accounting lags — a finalized
     // withdrawal drawing on those funds should still pass the check.
     function test_executeTasks_finalizedWithdrawalWithinLpBalance_succeeds() public {
-        vm.deal(alice, 5 ether);
+        vm.deal(alice, 10 ether);
         vm.prank(alice);
-        liquidityPoolInstance.deposit{value: 5 ether}();
+        liquidityPoolInstance.deposit{value: 10 ether}();
 
-        // Push extra ETH into the LP without touching totalValueInLp, so
-        // balance (15) > totalValueInLp (5).
-        vm.deal(address(liquidityPoolInstance), address(liquidityPoolInstance).balance + 10 ether);
-        assertGt(address(liquidityPoolInstance).balance, liquidityPoolInstance.totalValueInLp());
+        // addEthAmountLockedForWithdrawal now requires totalValueInLp >= amount (strict guard).
+        // Deposit ensures totalValueInLp (10) >= finalizedWithdrawalAmount (6).
+        assertGe(liquidityPoolInstance.totalValueInLp(), 6 ether);
 
         uint256 lockedBefore = liquidityPoolInstance.ethAmountLockedForWithdrawal();
 
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.finalizedWithdrawalAmount = 6 ether; // > totalValueInLp (5), <= balance (15)
+        report.finalizedWithdrawalAmount = 6 ether; // <= totalValueInLp (10)
 
         _moveClock(1 days / 12);
         _executeAdminTasks(report);

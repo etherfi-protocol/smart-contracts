@@ -399,8 +399,12 @@ contract WithdrawRequestNFTTest is TestSetup {
         rebaseAmount = uint96(bound(rebaseAmount, 0.5 ether, depositAmount));
         remainderSplitBps = uint16(bound(remainderSplitBps, 0, 10000));
         vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance));
-        // Filter out contracts that don't implement IERC721Receiver - only allow EOAs
+        // Filter out contracts that don't implement IERC721Receiver - only allow EOAs.
         vm.assume(recipient.code.length == 0);
+        // Exclude precompile addresses (0x1–0xff); they have no code in Forge's EVM but
+        // cannot accept ETH via call{value}, causing the ETH transfer to fail.
+        // This covers all current and near-future EVM precompiles (currently up to 0x0a).
+        vm.assume(uint160(recipient) > 0xff);
 
         // Setup initial balance for recipient
         vm.deal(recipient, depositAmount);

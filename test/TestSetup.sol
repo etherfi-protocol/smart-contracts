@@ -748,6 +748,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
         liquidityPoolInstance.initializeVTwoDotFourNine(address(roleRegistryInstance), address(etherFiRedemptionManagerInstance));
+        // Run one-shot escrow migration so addEthAmountLockedForWithdrawal and
+        // transferLockedEthForPriority are callable in all testing-fork tests.
+        liquidityPoolInstance.initializeOnUpgradeV2();
 
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
         withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolInstance)), payable(address(eETHInstance)), payable(address(membershipManagerInstance)));

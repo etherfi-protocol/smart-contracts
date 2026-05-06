@@ -1186,6 +1186,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_AddEthAmountLockedForWithdrawalFailsIfNotEtherFiAdmin() public {
+        // Migration guard fires after access-control check, so IncorrectCaller still reverts first.
         vm.startPrank(alice);
         vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(10 ether);
@@ -2160,5 +2161,37 @@ contract LiquidityPoolTest is TestSetup {
             liquidityPoolInstance.rebase(rebaseAmount);
             assertEq(liquidityPoolInstance.amountForShare(1 ether), expectedRatio);
         }
+    }
+
+    // ============================================================================
+    // Migration Guard Tests
+    // ============================================================================
+
+    /// @dev Both lock functions must revert when called before initializeOnUpgradeV2 runs.
+    function test_addEthAmountLockedForWithdrawal_revertsIfMigrationIncomplete() public {
+        // setUp already ran initializeOnUpgradeV2. Reset the flag to simulate pre-migration state.
+        {
+            bytes32 slot226 = bytes32(uint256(226));
+            bytes32 current = vm.load(address(liquidityPoolInstance), slot226);
+            bytes32 newVal  = current & bytes32(~uint256(0xff)); // clear byte 0 (the bool)
+            vm.store(address(liquidityPoolInstance), slot226, newVal);
+        }
+        assertFalse(liquidityPoolInstance.escrowMigrationCompleted(), "pre-condition: migration flag reset");
+
+        vm.deal(alice, 100 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 100 ether}();
+
+        // addEthAmountLockedForWithdrawal must revert with "migration not complete".
+        vm.prank(address(etherFiAdminInstance));
+        vm.expectRevert(bytes("migration not complete"));
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(1 ether);
+
+        // transferLockedEthForPriority must also revert before migration completes.
+        // LP's priorityWithdrawalQueue immutable is address(0) in the testing-fork setup,
+        // so we impersonate address(0) to pass the caller check and reach the migration guard.
+        vm.prank(address(0));
+        vm.expectRevert(bytes("migration not complete"));
+        liquidityPoolInstance.transferLockedEthForPriority(1 ether);
     }
 }
