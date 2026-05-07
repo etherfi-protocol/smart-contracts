@@ -313,7 +313,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
         if (_token == address(lido)) {
             if (quoteStEthWithCurve) {
+                // check market value from curve pool, stETH price is on avrage always lower than ETH (this is essentially the capital efficiency of the protocol)
+                // if stETH price is temporarily larger than underlying ETH value, we set market value as 1:1 
                 _marketValue = _min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
+
+                // We also validate against chainlink price feed to ensure there's no significant price deviation 
+                // If price feed is stale, we skip the check
+                // If price feed is negative or deviation is too high, we do not allow the stETH deposit at all, something is wrong with the markets and deposit
+                // via stETH will be blocked until it stablises (either because of underlying lido solvency/liquidity issue or oracle manipulation)
                 (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
                 if (answer <= 0) revert InvalidPriceFeed();
                 if (updatedAt + STALE_PRICE_WINDOW >= block.timestamp) {
