@@ -82,7 +82,7 @@ contract PausableUntilTest is Test {
     }
 
     function test_constants() public view {
-        assertEq(harness.MAX_PAUSE_DURATION(), 1 days);
+        assertEq(harness.MAX_PAUSE_DURATION(), 7 days);
         assertEq(harness.PAUSER_UNTIL_COOLDOWN(), 1 days);
     }
 
@@ -415,7 +415,7 @@ contract PausableUntilIntegrationTest is Test {
     function test_consume_unblockedAfterPauseUntilExpires() public {
         vm.prank(pauseUntilPauser);
         limiter.pauseContractUntil();
-        vm.warp(block.timestamp + 1 days + 1);
+        vm.warp(block.timestamp + 7 days + 1);
 
         vm.prank(consumer);
         limiter.consume(LIMIT_ID, 1_000);
