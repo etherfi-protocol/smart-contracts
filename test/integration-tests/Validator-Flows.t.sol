@@ -13,6 +13,13 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
 
+        // Mainnet NodeOperatorManager hasn't been upgraded to the role-based ACL yet,
+        // so its NODE_OPERATOR_MANAGER_ADMIN_ROLE() getter doesn't exist on-chain.
+        // Upgrade in place so the new role getters used by _ensureValCreationRoles are reachable.
+        NodeOperatorManager nodeOperatorManagerImpl = new NodeOperatorManager(address(roleRegistryInstance));
+        vm.prank(nodeOperatorManagerInstance.owner());
+        nodeOperatorManagerInstance.upgradeTo(address(nodeOperatorManagerImpl));
+
         // Handle any pending oracle report that hasn't been processed yet
         _syncOracleReportState();
     }
@@ -72,9 +79,19 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), OPERATING_TIMELOCK);
         vm.stopPrank();
 
-        // Ensure operating admin is an admin on NodeOperatorManager (required for whitelist ops)
-        vm.prank(nodeOperatorManagerInstance.owner());
-        nodeOperatorManagerInstance.updateAdmin(ETHERFI_OPERATING_ADMIN, true);
+        // The mainnet NodeOperatorManager implementation predates this PR and
+        // does not expose NODE_OPERATOR_MANAGER_ADMIN_ROLE(). Upgrade in place
+        // so the new role getter and role-gated modifier are reachable, then
+        // grant the role used by whitelist ops.
+        address nodeOpMgrOwner = nodeOperatorManagerInstance.owner();
+        vm.startPrank(nodeOpMgrOwner);
+        NodeOperatorManager newNodeOpMgrImpl = new NodeOperatorManager(address(roleRegistryInstance));
+        nodeOperatorManagerInstance.upgradeTo(address(newNodeOpMgrImpl));
+        vm.stopPrank();
+
+        vm.startPrank(roleOwner);
+        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), ETHERFI_OPERATING_ADMIN);
+        vm.stopPrank();
     }
 
     function _prepareSingleValidator(address spawner)

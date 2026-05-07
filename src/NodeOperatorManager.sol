@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "../src/interfaces/INodeOperatorManager.sol";
 import "../src/interfaces/IAuctionManager.sol";
+import "../src/interfaces/IRoleRegistry.sol";
 import "../src/LiquidityPool.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
@@ -32,15 +33,23 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     mapping(address => bool) private whitelistedAddresses;
     mapping(address => bool) public registered;
 
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
     mapping(address => mapping(ILiquidityPool.SourceOfFunds => bool)) public operatorApprovedTags;
+
+    // Immutables are not part of proxy storage; stored in implementation bytecode only.
+    IRoleRegistry public immutable roleRegistry;
+
+    bytes32 public constant NODE_OPERATOR_MANAGER_ADMIN_ROLE = keccak256("NODE_OPERATOR_MANAGER_ADMIN_ROLE");
+
+    error IncorrectRole();
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _roleRegistry) {
+        roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
 
@@ -164,12 +173,14 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     }
 
     //Pauses the contract
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 
@@ -235,13 +246,6 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         auctionManagerContractAddress = _auctionContractAddress;
     }
 
-    /// @notice Updates the address of the admin
-    /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        require(_address != address(0), "Cannot be address zero");
-        admins[_address] = _isAdmin;
-    }
-
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
@@ -263,7 +267,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     }
 
     modifier onlyAdmin() {
-        require(admins[msg.sender], "Caller is not the admin");
+        if (!roleRegistry.hasRole(NODE_OPERATOR_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 }

@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/INodeOperatorManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
+import "./interfaces/IRoleRegistry.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -43,7 +44,14 @@ contract AuctionManager is
     uint128 public accumulatedRevenue;
     uint128 public accumulatedRevenueThreshold;
 
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
+
+    // Immutables are not part of proxy storage; stored in implementation bytecode only.
+    IRoleRegistry public immutable roleRegistry;
+
+    bytes32 public constant AUCTION_MANAGER_ADMIN_ROLE = keccak256("AUCTION_MANAGER_ADMIN_ROLE");
+
+    error IncorrectRole();
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -56,7 +64,8 @@ contract AuctionManager is
     event WhitelistEnabled(bool whitelistStatus);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _roleRegistry) {
+        roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
 
@@ -84,13 +93,12 @@ contract AuctionManager is
         __ReentrancyGuard_init();
     }
 
-    function initializeOnUpgrade(address _membershipManagerContractAddress, uint128 _accumulatedRevenueThreshold, address _etherFiAdminContractAddress, address _nodeOperatorManagerAddress) external onlyOwner { 
-        require(_membershipManagerContractAddress != address(0) && _etherFiAdminContractAddress != address(0) && _nodeOperatorManagerAddress != address(0), "No Zero Addresses");
+    function initializeOnUpgrade(address _membershipManagerContractAddress, uint128 _accumulatedRevenueThreshold, address _nodeOperatorManagerAddress) external onlyOwner {
+        require(_membershipManagerContractAddress != address(0) && _nodeOperatorManagerAddress != address(0), "No Zero Addresses");
         membershipManagerContractAddress = _membershipManagerContractAddress;
         nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerAddress);
         accumulatedRevenue = 0;
         accumulatedRevenueThreshold = _accumulatedRevenueThreshold;
-        admins[_etherFiAdminContractAddress] = true;
     }
 
     /// @notice Creates bid(s) for the right to run a validator node when ETH is deposited
@@ -240,12 +248,14 @@ contract AuctionManager is
     }
 
     //Pauses the contract
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 
@@ -345,13 +355,6 @@ contract AuctionManager is
         );
     }
 
-    /// @notice Updates the address of the admin
-    /// @param _address the new address to set as admin
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        require(_address != address(0), "Cannot be address zero");
-        admins[_address] = _isAdmin;
-    }
-
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
@@ -362,7 +365,7 @@ contract AuctionManager is
     }
 
     modifier onlyAdmin() {
-        require(admins[msg.sender], "Caller is not the admin");
+        if (!roleRegistry.hasRole(AUCTION_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 }

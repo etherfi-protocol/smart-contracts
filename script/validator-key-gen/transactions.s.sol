@@ -174,8 +174,8 @@ contract ValidatorKeyGenTransactions is Script {
     }
 
     function forkTestOne() public {
-        vm.prank(auctionManager.owner());
-        auctionManager.updateAdmin(ETHERFI_OPERATING_ADMIN, true);
+        vm.prank(roleRegistry.owner());
+        roleRegistry.grantRole(auctionManager.AUCTION_MANAGER_ADMIN_ROLE(), ETHERFI_OPERATING_ADMIN);
 
         address spawner = vm.addr(0x1234);
         

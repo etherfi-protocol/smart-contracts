@@ -227,24 +227,55 @@ contract EtherFiRestakerTest is TestSetup {
         EtherFiRestaker restaker = EtherFiRestaker(payable(deployed.ETHERFI_RESTAKER()));
         address _claimer = address(liquidityPoolInstance); // dummy claimer
 
-        address newRestakerImpl = address(new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance)));
-        vm.startPrank(restaker.owner());
+        address newRestakerImpl = address(new EtherFiRestaker(address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance)));
 
+        address restakerOwner = restaker.owner();
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(keccak256("ETHERFI_RESTAKER_ADMIN_ROLE"), restakerOwner);
+        vm.stopPrank();
+
+        vm.startPrank(restakerOwner);
         restaker.upgradeTo(newRestakerImpl);
         restaker.setRewardsClaimer(_claimer);
-
         vm.stopPrank();
+
         assertEq(eigenLayerRewardsCoordinator.claimerFor(address(restaker)), _claimer);
     }
 
     function test_upgrade() public {
         address newRestakerImpl = address(new EtherFiRestaker(
             address(etherFiRestakerInstance.rewardsCoordinator()),
-            address(etherFiRestakerInstance.etherFiRedemptionManager())
+            address(etherFiRestakerInstance.etherFiRedemptionManager()),
+            address(roleRegistryInstance),
+            address(rateLimiterInstance)
         ));
-        
+
         vm.startPrank(owner);
         etherFiRestakerInstance.upgradeTo(newRestakerImpl);
+        vm.stopPrank();
+
+        // Grant all restaker roles to owner so existing tests continue to work
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE(), owner);
+        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE(), owner);
+        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE(), owner);
+        roleRegistryInstance.grantRole(rateLimiterInstance.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), owner);
+        vm.stopPrank();
+
+        // Create rate-limiter buckets and register restaker as a consumer (idempotent)
+        uint64 maxUint64 = type(uint64).max;
+        address restakerAddr = address(etherFiRestakerInstance);
+        vm.startPrank(owner);
+        bytes32 stEthId = etherFiRestakerInstance.STETH_REQUEST_WITHDRAWAL_LIMIT_ID();
+        bytes32 queueId = etherFiRestakerInstance.QUEUE_WITHDRAWALS_LIMIT_ID();
+        bytes32 depositId = etherFiRestakerInstance.DEPOSIT_INTO_STRATEGY_LIMIT_ID();
+        if (!rateLimiterInstance.limitExists(stEthId)) rateLimiterInstance.createNewLimiter(stEthId, maxUint64, maxUint64);
+        rateLimiterInstance.updateConsumers(stEthId, restakerAddr, true);
+        if (!rateLimiterInstance.limitExists(queueId)) rateLimiterInstance.createNewLimiter(queueId, maxUint64, maxUint64);
+        rateLimiterInstance.updateConsumers(queueId, restakerAddr, true);
+        if (!rateLimiterInstance.limitExists(depositId)) rateLimiterInstance.createNewLimiter(depositId, maxUint64, maxUint64);
+        rateLimiterInstance.updateConsumers(depositId, restakerAddr, true);
         vm.stopPrank();
     }
 

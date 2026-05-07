@@ -256,7 +256,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function finalizeWithdrawalsWhenStale() external {
         if (block.number < lastHandledReportRefBlock + STALE_ORACLE_REPORT_BLOCK_WINDOW) revert OracleReportNotStale();
 
-        uint256 liquidity = liquidityPool.totalValueInLp() - (liquidityPool.ethAmountLockedForWithdrawal() + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal());
+        uint256 liquidity = liquidityPool.totalValueInLp() - (withdrawRequestNft.ethAmountLockedForWithdrawal() + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal());
         uint32 currentRequestId = withdrawRequestNft.nextRequestId() - 1;
         uint32 lastFinalizedRequestId = withdrawRequestNft.lastFinalizedRequestId();
         uint32 requestId = lastFinalizedRequestId;
@@ -347,7 +347,9 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         for (uint256 i = 0; i < _report.withdrawalRequestsToInvalidate.length; i++) {
             withdrawRequestNft.invalidateRequest(_report.withdrawalRequestsToInvalidate[i]);
         }
-        require(_report.finalizedWithdrawalAmount + liquidityPool.ethAmountLockedForWithdrawal() + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal() <= address(liquidityPool).balance, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+        // Post-migration, locked ETH has physically left LP into the NFT/queue contracts;
+        // address(liquidityPool).balance already excludes it. Don't subtract again.
+        require(_report.finalizedWithdrawalAmount <= address(liquidityPool).balance, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
         _finalizeWithdrawals(_report.lastFinalizedWithdrawalRequestId, _report.finalizedWithdrawalAmount);
     }
     

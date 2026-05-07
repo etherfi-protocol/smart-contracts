@@ -254,7 +254,9 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     function getInstantLiquidityAmount(address token) public view returns (uint256) {
         if(token == ETH_ADDRESS) {
-            return address(liquidityPool).balance - liquidityPool.ethAmountLockedForWithdrawal() - priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal();
+            // Post-escrow-migration, locked ETH has physically left LP into the holder
+            // contracts, so LP.balance already excludes it. No further subtraction needed.
+            return address(liquidityPool).balance;
         } else if (token == address(lido)) {
             return lido.balanceOf(address(etherFiRestaker));
         }

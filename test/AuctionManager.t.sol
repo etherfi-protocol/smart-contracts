@@ -151,7 +151,7 @@ contract AuctionManagerTest is TestSetup {
     function test_DisableWhitelist() public {
         assertTrue(auctionInstance.whitelistEnabled());
 
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert(AuctionManager.IncorrectRole.selector);
         vm.prank(owner);
         auctionInstance.disableWhitelist();
 
@@ -169,7 +169,7 @@ contract AuctionManagerTest is TestSetup {
 
         assertFalse(auctionInstance.whitelistEnabled());
 
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert(AuctionManager.IncorrectRole.selector);
         vm.prank(owner);
         auctionInstance.enableWhitelist();
 
@@ -738,7 +738,7 @@ contract AuctionManagerTest is TestSetup {
         auctionInstance.setMaxBidPrice(0.001 ether);
 
         vm.prank(owner);
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert(AuctionManager.IncorrectRole.selector);
         auctionInstance.setMaxBidPrice(10 ether);
 
         assertEq(auctionInstance.maxBidAmount(), 5 ether);
@@ -753,7 +753,7 @@ contract AuctionManagerTest is TestSetup {
         auctionInstance.setMinBidPrice(5 ether);
 
         vm.prank(owner);
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert(AuctionManager.IncorrectRole.selector);
         auctionInstance.setMinBidPrice(0.005 ether);
 
         assertEq(auctionInstance.minBidAmount(), 0.01 ether);
@@ -846,7 +846,7 @@ contract AuctionManagerTest is TestSetup {
 
     function test_SetAccumulatedRevenueThreshold() public {
         vm.prank(bob);
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert(AuctionManager.IncorrectRole.selector);
         auctionInstance.setAccumulatedRevenueThreshold(0.005 ether);
 
         // TODO: consider if 0 is an invalid threshold amount

@@ -9,6 +9,7 @@ import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 
 import "./interfaces/IEtherFiOracle.sol";
 import "./interfaces/IEtherFiAdmin.sol";
+import "./interfaces/IRoleRegistry.sol";
 
 
 contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IEtherFiOracle {
@@ -34,7 +35,14 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
     IEtherFiAdmin etherFiAdmin;
 
-    mapping(address => bool) public admins;
+    mapping(address => bool) public DEPRECATED_admins;
+
+    // Immutables are not part of proxy storage; stored in implementation bytecode only.
+    IRoleRegistry public immutable roleRegistry;
+
+    bytes32 public constant ETHERFI_ORACLE_ADMIN_ROLE = keccak256("ETHERFI_ORACLE_ADMIN_ROLE");
+
+    error IncorrectRole();
 
     event CommitteeMemberAdded(address indexed member);
     event CommitteeMemberRemoved(address indexed member);
@@ -49,7 +57,8 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _roleRegistry) {
+        roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
 
@@ -306,15 +315,13 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         lastPublishedReportRefBlock = _lastPublishedReportRefBlock;
     }
 
-    function updateAdmin(address _address, bool _isAdmin) external onlyOwner {
-        admins[_address] = _isAdmin;
-    }
-
-    function pauseContract() external isAdmin {
+    function pauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
-    function unPauseContract() external isAdmin {
+    function unPauseContract() external {
+        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 
@@ -325,7 +332,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     modifier isAdmin() {
-        require(admins[msg.sender] || msg.sender == owner(), "EtherFiAdmin: not an admin");
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _;
     }
 }

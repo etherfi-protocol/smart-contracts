@@ -12,6 +12,36 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         initializeRealisticFork(MAINNET_FORK);
         vm.etch(alice, bytes(""));
         vm.etch(bob, bytes(""));
+
+        // Upgrade LP and NFT to the new escrow-aware implementations so that
+        // finalizeRequests + claimWithdraw work with the new ETH-escrow flow.
+        address lpOwner = liquidityPoolInstance.owner();
+        vm.prank(lpOwner);
+        liquidityPoolInstance.upgradeTo(
+            address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, 0))
+        );
+
+        address wrnOwner = withdrawRequestNFTInstance.owner();
+        vm.prank(wrnOwner);
+        withdrawRequestNFTInstance.upgradeTo(
+            address(new WithdrawRequestNFT(buybackWallet, PRIORITY_WITHDRAWAL_QUEUE))
+        );
+
+        // The production queue proxy on mainnet still runs the master impl which
+        // has no receive(); initializeOnUpgradeV2 below sweeps queue-locked ETH
+        // into the queue and would revert with SendFail. Upgrade the queue first.
+        address newPQ = address(new PriorityWithdrawalQueue(
+            address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance),
+            address(roleRegistryInstance), treasuryInstance, 1 hours
+        ));
+        vm.prank(UPGRADE_TIMELOCK);
+        PriorityWithdrawalQueue(payable(PRIORITY_WITHDRAWAL_QUEUE)).upgradeTo(newPQ);
+
+        // One-shot migration: move pre-existing locked ETH into NFT escrow.
+        if (!liquidityPoolInstance.escrowMigrationCompleted()) {
+            vm.prank(lpOwner);
+            liquidityPoolInstance.initializeOnUpgradeV2();
+        }
     }
 
     function test_HandleRemainder() public {
@@ -95,9 +125,13 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         }
         vm.stopPrank();
 
-        // Skip rebase or do minimal rebase to create larger remainder
+        // Scale rebase to TVL so the remainder stays drift-proof: total_remainder
+        // ≈ rebase × (bob_locked / TVL), so picking rebase = TVL × p collapses to
+        // total_remainder ≈ bob_locked × p. With bob_locked = 200 ETH and p = 0.5%,
+        // expected remainder ≈ 1 ETH, well above the 0.05 floor below.
+        int128 rebaseAmount = int128(int256(liquidityPoolInstance.getTotalPooledEther() / 200));
         vm.prank(address(membershipManagerV1Instance));
-        liquidityPoolInstance.rebase(1 ether);
+        liquidityPoolInstance.rebase(rebaseAmount);
 
         // Finalize and claim all requests
         for (uint256 i = 0; i < 20; i++) {
