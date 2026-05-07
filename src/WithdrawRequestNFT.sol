@@ -255,7 +255,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         require(_exists(requestId), "Request does not exist");
         require(!_requests[requestId].isValid, "Request is valid");
         if (requestId <= lastFinalizedRequestId) {
-            require(_requests[requestId].amountOfEEth <= liquidityPool.totalValueInLp() - (ethAmountLockedForWithdrawal + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal()), "Request amount is greater than available liquidity");
+            require(_requests[requestId].amountOfEEth <= address(liquidityPool).balance, "Request amount is greater than available liquidity");
         }
         _requests[requestId].isValid = true;
 
