@@ -661,7 +661,7 @@ contract LiquifierTest is TestSetup {
         Liquifier impl = new Liquifier(address(1), address(2), 250, 1 days, 500);
         assertEq(address(impl.stEthPriceFeed()), address(2));
         assertEq(impl.STALE_PRICE_WINDOW(), 1 days);
-        assertEq(impl.MAX_PRICE_DEVIATION_In_BPS(), 500);
+        assertEq(impl.MAX_PRICE_DEVIATION_IN_BPS(), 500);
     }
 
     function test_updateDiscountInBasisPoints_revertsOnZero() public {

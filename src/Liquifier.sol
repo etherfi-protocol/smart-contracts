@@ -99,7 +99,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     uint256 public immutable MIN_DISCOUNT_RATE_IN_BPS;
     uint256 public immutable STALE_PRICE_WINDOW;
-    uint256 public immutable MAX_PRICE_DEVIATION_In_BPS;
+    uint256 public immutable MAX_PRICE_DEVIATION_IN_BPS;
 
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     // This event is deprecated. will be removed in the next release.
@@ -136,7 +136,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         stEthPriceFeed = AggregatorV3Interface(_stEthPriceFeed);
         MIN_DISCOUNT_RATE_IN_BPS = _minDiscountInBasisPoints;
         STALE_PRICE_WINDOW = _stalePriceWindow;
-        MAX_PRICE_DEVIATION_In_BPS = _maxPriceDeviationInBps;
+        MAX_PRICE_DEVIATION_IN_BPS = _maxPriceDeviationInBps;
         _disableInitializers();
     }
 
@@ -319,7 +319,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
                 if (updatedAt + STALE_PRICE_WINDOW >= block.timestamp) {
                     uint256 pricefeedValue = (uint256(answer) * _amount) / 1e18;
                     uint256 deviation = pricefeedValue > _marketValue ? pricefeedValue - _marketValue : _marketValue - pricefeedValue;
-                    if (deviation * BASIS_POINT_SCALE / _marketValue > MAX_PRICE_DEVIATION_In_BPS) revert InvalidStEthPrice();
+                    if (deviation * BASIS_POINT_SCALE / _marketValue > MAX_PRICE_DEVIATION_IN_BPS) revert InvalidStEthPrice();
                 }
             } else {
                 _marketValue = _amount; /// 1:1 from stETH to eETH
