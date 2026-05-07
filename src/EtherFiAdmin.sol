@@ -323,7 +323,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // validate withdrawals
         uint256 finalizedWithdrawalAmountPerDay = (_report.finalizedWithdrawalAmount * 1 days) / elapsedTime;
         if (finalizedWithdrawalAmountPerDay > MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY) return (false, "EtherFiAdmin: finalized withdrawal amount exceeds max");
-        if (_report.finalizedWithdrawalAmount + liquidityPool.ethAmountLockedForWithdrawal() + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal() > address(liquidityPool).balance) return (false, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+        if (_report.finalizedWithdrawalAmount > address(liquidityPool).balance) return (false, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
 
         // report is valid
         return (true, "");

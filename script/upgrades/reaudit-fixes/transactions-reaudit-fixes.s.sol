@@ -203,10 +203,10 @@ contract ReauditFixesTransactions is Utils {
         console2.log("");
 
         EtherFiNode newEtherFiNodeImplementation = new EtherFiNode(address(LIQUIDITY_POOL), address(ETHERFI_NODES_MANAGER), address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER), address(ROLE_REGISTRY));
-        EtherFiRedemptionManager newEtherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(LIQUIDITY_POOL), address(EETH), address(WEETH), address(TREASURY), address(ROLE_REGISTRY), address(ETHERFI_RESTAKER), address(0x0));
+        EtherFiRedemptionManager newEtherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(LIQUIDITY_POOL), address(EETH), address(WEETH), address(TREASURY), address(ROLE_REGISTRY), address(ETHERFI_RESTAKER), address(0x0), 10_000, 100, 10_000);
         EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(EIGENLAYER_REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER), address(ROLE_REGISTRY), address(ETHERFI_RATE_LIMITER));
         EtherFiRewardsRouter newEtherFiRewardsRouterImplementation = new EtherFiRewardsRouter(address(LIQUIDITY_POOL), address(TREASURY), address(ROLE_REGISTRY));
-        Liquifier newLiquifierImplementation = new Liquifier(address(ROLE_REGISTRY));
+        Liquifier newLiquifierImplementation = new Liquifier(address(ROLE_REGISTRY), 0x86392dC19c0b719886221c78AB11eb8Cf5c52812, 100, 24 hours, 500);
         WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE));
         EtherFiViewer newEtherFiViewerImplementation = new EtherFiViewer(address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
 

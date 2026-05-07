@@ -51,6 +51,23 @@ contract MinAmountForShareForkTest is TestSetup, Deployed {
     /// @dev Wire the redemption manager so a redeem call doesn't get rejected by the
     /// rate limiter or the lowWatermark on a live fork.
     function _openRedemptionManager() internal {
+        // The deployed redemption-manager impl on mainnet still calls
+        // `liquidityPool.ethAmountLockedForWithdrawal()` inside getInstantLiquidityAmount;
+        // that getter was removed when storage moved to WithdrawRequestNFT, so without
+        // upgrading the impl here, redeemEEth reverts on the missing selector.
+        EtherFiRedemptionManager newImpl = new EtherFiRedemptionManager(
+            address(liquidityPoolInstance),
+            address(eETHInstance),
+            address(weEthInstance),
+            treasuryInstance,
+            address(roleRegistryInstance),
+            address(etherFiRestakerInstance),
+            address(0),       // preserve mainnet immutable: priorityWithdrawalQueue
+            10_000, 100, 10_000
+        );
+        vm.prank(roleRegistryInstance.owner());
+        etherFiRedemptionManagerInstance.upgradeTo(address(newImpl));
+
         vm.startPrank(OPERATING_TIMELOCK);
         etherFiRedemptionManagerInstance.setCapacity(3000 ether, ETH_ADDRESS);
         etherFiRedemptionManagerInstance.setRefillRatePerSecond(3000 ether, ETH_ADDRESS);
