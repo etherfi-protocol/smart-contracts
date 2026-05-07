@@ -43,7 +43,7 @@ contract LiquifierTest is TestSetup {
         _enable_deposit(address(stEthStrategy));
 
         vm.startPrank(owner);
-        liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true, 0, 50, 1000, false); // 50 ether timeBoundCap, 1000 ether total cap
+        liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true, 100, 50, 1000, false); // 1% discount, 50 ether timeBoundCap, 1000 ether total cap
         vm.stopPrank();
 
         dummyToken = new DummyERC20();
@@ -179,7 +179,7 @@ contract LiquifierTest is TestSetup {
 
         vm.startPrank(owner);
         dummyToken = new DummyERC20();
-        liquifierInstance.registerToken(address(dummyToken), address(0), true, 0, 50, 1000, true);
+        liquifierInstance.registerToken(address(dummyToken), address(0), true, 100, 50, 1000, true);
         vm.stopPrank();
 
         vm.warp(block.timestamp + 20);
@@ -300,7 +300,7 @@ contract LiquifierTest is TestSetup {
 
         vm.startPrank(owner);
         DummyERC20 dummyToken2 = new DummyERC20();
-        liquifierInstance.registerToken(address(dummyToken2), address(0), true, 0, 50, 1000, true);
+        liquifierInstance.registerToken(address(dummyToken2), address(0), true, 100, 50, 1000, true);
         vm.stopPrank();
 
         uint256 x = 5 ether;
@@ -664,6 +664,22 @@ contract LiquifierTest is TestSetup {
         assertEq(impl.MAX_PRICE_DEVIATION_IN_BPS(), 500);
     }
 
+    function test_registerToken_revertsOnZeroDiscountRate() public {
+        _setUp(MAINNET_FORK);
+
+        vm.prank(owner);
+        vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
+        liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true, 0, 50, 1000, false);
+    }
+
+    function test_registerToken_revertsOnDiscountRateAboveScale() public {
+        _setUp(MAINNET_FORK);
+
+        vm.prank(owner);
+        vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
+        liquifierInstance.registerToken(address(stEth), address(stEthStrategy), true, 10_001, 50, 1000, false);
+    }
+
     function test_updateDiscountInBasisPoints_revertsOnZero() public {
         // The exact attack scenario T1-11 closes: a compromised admin tries to
         // set discount to 0 to mint eETH 1:1 against an LST.
@@ -742,20 +758,5 @@ contract LiquifierTest is TestSetup {
         uint256 marketValue = liquifierInstance.quoteByMarketValue(address(stEth), amount);
         uint256 expected = (10_000 - 500) * marketValue / 10_000;
         assertEq(liquifierInstance.quoteByDiscountedValue(address(stEth), amount), expected);
-    }
-
-    function test_quoteByDiscountedValue_zeroDiscountUnreachableViaSetter() public {
-        // Even if quoteByDiscountedValue would return marketValue at discount=0,
-        // the setter must prevent ever reaching that state. This pins the invariant.
-        _setUp(MAINNET_FORK);
-
-        vm.prank(owner);
-        vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
-        liquifierInstance.updateDiscountInBasisPoints(address(stEth), 0);
-
-        // Pre-existing registration discount is 0 (from _setUp), but no admin can
-        // re-affirm or reset it to 0 going forward.
-        (, , , , uint16 discountAfter, , , , , , ) = liquifierInstance.tokenInfos(address(stEth));
-        assertEq(discountAfter, 0); // unchanged, but locked from being re-set to 0
     }
 }
