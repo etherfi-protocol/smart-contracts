@@ -256,7 +256,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function finalizeWithdrawalsWhenStale() external {
         if (block.number < lastHandledReportRefBlock + STALE_ORACLE_REPORT_BLOCK_WINDOW) revert OracleReportNotStale();
 
-        uint256 liquidity = liquidityPool.totalValueInLp() - (withdrawRequestNft.ethAmountLockedForWithdrawal() + priorityWithdrawalQueue.ethAmountLockedForPriorityWithdrawal());
+        uint256 liquidity = address(liquidityPool).balance;
         uint32 currentRequestId = withdrawRequestNft.nextRequestId() - 1;
         uint32 lastFinalizedRequestId = withdrawRequestNft.lastFinalizedRequestId();
         uint32 requestId = lastFinalizedRequestId;
