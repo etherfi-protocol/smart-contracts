@@ -178,6 +178,12 @@ contract BlacklistTest is TestSetup {
     function test_blacklist_LiquidityPool_requestWithdraw_reverts() public {
         vm.prank(blacklisted);
         vm.expectRevert(LiquidityPool.BlacklistedUser.selector);
+        liquidityPoolInstance.requestWithdraw(alice, 1 ether);
+    }
+
+    function test_blacklist_LiquidityPool_requestWithdraw_reverts_blacklisted_recipient() public {
+        vm.prank(alice);
+        vm.expectRevert(LiquidityPool.BlacklistedUser.selector);
         liquidityPoolInstance.requestWithdraw(blacklisted, 1 ether);
     }
 
@@ -185,7 +191,7 @@ contract BlacklistTest is TestSetup {
         ILiquidityPool.PermitInput memory permit;
         vm.prank(blacklisted);
         vm.expectRevert(LiquidityPool.BlacklistedUser.selector);
-        liquidityPoolInstance.requestWithdrawWithPermit(blacklisted, 1 ether, permit);
+        liquidityPoolInstance.requestWithdrawWithPermit(alice, 1 ether, permit);
     }
 
     // -------------------------------------------------------------------------

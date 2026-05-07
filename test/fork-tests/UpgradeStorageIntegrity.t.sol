@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import "../../script/deploys/Deployed.s.sol";
 import "../../src/LiquidityPool.sol";
 import "../../src/WithdrawRequestNFT.sol";
+import "../../src/PriorityWithdrawalQueue.sol";
 import "../../src/ReentrancyGuardNamespaced.sol";
 import "../../src/RoleRegistry.sol";
 
@@ -82,7 +83,12 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         s.liquifier = address(lp.liquifier());
         s.totalIn = lp.totalValueInLp();
         s.totalOut = lp.totalValueOutOfLp();
-        s.locked = lp.ethAmountLockedForWithdrawal();
+        // Read DEPRECATED_ethAmountLockedForWithdrawal via raw slot load so this
+        // snap function works on both the old mainnet impl (which has
+        // ethAmountLockedForWithdrawal()) and the new impl (which renames it to
+        // DEPRECATED_ethAmountLockedForWithdrawal()). Slot 220, upper 16 bytes.
+        bytes32 raw = vm.load(address(lp), bytes32(uint256(220)));
+        s.locked = uint128(uint256(raw) >> 8);
         s.valSize = lp.validatorSizeWei();
         s.paused = lp.paused();
         s.restake = lp.restakeBnftDeposits();
@@ -112,7 +118,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         assertEq(a.liquifier,      b.liquifier,      "liquifier");
         assertEq(a.totalIn,        b.totalIn,        "totalValueInLp");
         assertEq(a.totalOut,       b.totalOut,       "totalValueOutOfLp");
-        assertEq(a.locked,         b.locked,         "ethAmountLockedForWithdrawal");
+        assertEq(a.locked,         b.locked,         "DEPRECATED_ethAmountLockedForWithdrawal");
         assertEq(a.valSize,        b.valSize,        "validatorSizeWei");
         assertEq(a.paused,         b.paused,         "paused");
         assertEq(a.restake,        b.restake,        "restakeBnftDeposits");
@@ -178,7 +184,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
 
         // Typed getter snapshot — independent cross-check of the slot scan.
         LiquidityPool lp = LiquidityPool(payable(LIQUIDITY_POOL));
-        WithdrawRequestNFT wrn = WithdrawRequestNFT(WITHDRAW_REQUEST_NFT);
+        WithdrawRequestNFT wrn = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
 
         LPSnap memory lpPre = _snapLP(lp);
         WRNSnap memory wrnPre = _snapWRN(wrn);
@@ -253,7 +259,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     function test_postUpgrade_preExistingFinalizedRequest_isClaimable() public {
         _doUpgrade();
 
-        WithdrawRequestNFT wrn = WithdrawRequestNFT(WITHDRAW_REQUEST_NFT);
+        WithdrawRequestNFT wrn = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
         uint32 lastFin = wrn.lastFinalizedRequestId();
         require(lastFin > 0, "no finalized requests on fork");
 
@@ -310,7 +316,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     function test_postUpgrade_claimWorksWhilePaused_onMainnetData() public {
         _doUpgrade();
 
-        WithdrawRequestNFT wrn = WithdrawRequestNFT(WITHDRAW_REQUEST_NFT);
+        WithdrawRequestNFT wrn = WithdrawRequestNFT(payable(WITHDRAW_REQUEST_NFT));
         uint32 lastFin = wrn.lastFinalizedRequestId();
         require(lastFin > 0, "no finalized requests on fork");
 
@@ -356,12 +362,17 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         assertGt(nftOwner.balance, balBefore, "paused WRN must not block finalized claim");
     }
 
-    /// @dev Internal helper used by the integrity test above - upgrades both
-    ///      proxies to new implementations with the guard + permissionless
-    ///      claim changes.
+    /// @dev Internal helper used by the integrity test above - upgrades all
+    ///      three proxies (LP, WRN, PriorityWithdrawalQueue) to the new impls.
+    ///      The queue must be upgraded before initializeOnUpgradeV2 because the
+    ///      migration sweeps queue-locked ETH into the queue contract via
+    ///      receive(); the master queue impl has no receive() and would revert.
     function _doUpgrade() internal {
         address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, 0));
         address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE));
+        address newPQ = address(new PriorityWithdrawalQueue(
+            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, TREASURY, 1 hours
+        ));
 
         vm.prank(UPGRADE_TIMELOCK);
         IUUPSProxy(LIQUIDITY_POOL).upgradeTo(newLP);
@@ -369,6 +380,17 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         address wrnOwner = IOwnableRead(WITHDRAW_REQUEST_NFT).owner();
         vm.prank(wrnOwner);
         IUUPSProxy(WITHDRAW_REQUEST_NFT).upgradeTo(newWRN);
+
+        vm.prank(UPGRADE_TIMELOCK);
+        IUUPSProxy(PRIORITY_WITHDRAWAL_QUEUE).upgradeTo(newPQ);
+
+        // Migrate pre-existing locked ETH from LP into the NFT escrow so that
+        // pre-existing finalized requests can be claimed against the NFT balance.
+        LiquidityPool lp = LiquidityPool(payable(LIQUIDITY_POOL));
+        if (!lp.escrowMigrationCompleted()) {
+            vm.prank(lp.owner());
+            lp.initializeOnUpgradeV2();
+        }
     }
 
     /// @dev Separately verify that, post-upgrade, the guard actually blocks
