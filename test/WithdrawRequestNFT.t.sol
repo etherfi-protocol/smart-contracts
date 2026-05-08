@@ -1032,7 +1032,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         
         // Direct call to requestWithdraw with fee (simulating MembershipManager)
         vm.prank(address(liquidityPoolInstance));
-        uint256 requestId = withdrawRequestNFTInstance.requestWithdraw{value: 0}(1 ether, 1 ether, bob, fee);
+        uint256 requestId = withdrawRequestNFTInstance.requestWithdraw(1 ether, 1 ether, bob, fee);
 
         WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
         assertEq(request.feeGwei, uint32(fee / 1 gwei), "Fee should be stored correctly");
@@ -1055,7 +1055,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Create request with fee via direct call
         vm.prank(address(liquidityPoolInstance));
-        uint256 requestId = withdrawRequestNFTInstance.requestWithdraw{value: 0}(uint96(amount), uint96(amount), bob, fee);
+        uint256 requestId = withdrawRequestNFTInstance.requestWithdraw(uint96(amount), uint96(amount), bob, fee);
 
         // Add more liquidity to ensure withdrawal can be fulfilled
         vm.deal(alice, 10 ether);
@@ -1098,7 +1098,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Create a fee-bearing withdraw request directly (simulating MembershipManager)
         vm.prank(address(liquidityPoolInstance));
-        uint256 requestId = withdrawRequestNFTInstance.requestWithdraw{value: 0}(
+        uint256 requestId = withdrawRequestNFTInstance.requestWithdraw(
             uint96(amount), uint96(amount), bob, fee
         );
 
