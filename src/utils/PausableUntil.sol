@@ -17,7 +17,7 @@ contract PausableUntil {
         }
     }
 
-    uint256 public constant MAX_PAUSE_DURATION = 1 days;
+    uint256 public constant MAX_PAUSE_DURATION = 7 days;
     uint256 public constant PAUSER_UNTIL_COOLDOWN = 1 days;
 
     event PausedUntil(uint256 pausedUntil);

@@ -99,7 +99,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     uint256 public immutable MIN_DISCOUNT_RATE_IN_BPS;
     uint256 public immutable STALE_PRICE_WINDOW;
-    uint256 public immutable MAX_PRICE_DEVIATION_In_BPS;
+    uint256 public immutable MAX_PRICE_DEVIATION_IN_BPS;
 
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     // This event is deprecated. will be removed in the next release.
@@ -137,7 +137,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         stEthPriceFeed = AggregatorV3Interface(_stEthPriceFeed);
         MIN_DISCOUNT_RATE_IN_BPS = _minDiscountInBasisPoints;
         STALE_PRICE_WINDOW = _stalePriceWindow;
-        MAX_PRICE_DEVIATION_In_BPS = _maxPriceDeviationInBps;
+        MAX_PRICE_DEVIATION_IN_BPS = _maxPriceDeviationInBps;
         _disableInitializers();
     }
 
@@ -232,6 +232,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
     
     function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyOwner {
+        if (_discountInBasisPoints < MIN_DISCOUNT_RATE_IN_BPS || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
             if (_token == address(0) || _target != address(0)) revert();
@@ -314,13 +315,20 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
         if (_token == address(lido)) {
             if (quoteStEthWithCurve) {
+                // check market value from curve pool, stETH price is on avrage always lower than ETH (this is essentially the capital efficiency of the protocol)
+                // if stETH price is temporarily larger than underlying ETH value, we set market value as 1:1 
                 _marketValue = _min(_amount, ICurvePoolQuoter1(address(stEth_Eth_Pool)).get_dy(1, 0, _amount));
+
+                // We also validate against chainlink price feed to ensure there's no significant price deviation 
+                // If price feed is stale, we skip the check
+                // If price feed is negative or deviation is too high, we do not allow the stETH deposit at all, something is wrong with the markets and deposit
+                // via stETH will be blocked until it stablises (either because of underlying lido solvency/liquidity issue or oracle manipulation)
                 (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
                 if (answer <= 0) revert InvalidPriceFeed();
                 if (updatedAt + STALE_PRICE_WINDOW >= block.timestamp) {
                     uint256 pricefeedValue = (uint256(answer) * _amount) / 1e18;
                     uint256 deviation = pricefeedValue > _marketValue ? pricefeedValue - _marketValue : _marketValue - pricefeedValue;
-                    if (deviation * BASIS_POINT_SCALE / _marketValue > MAX_PRICE_DEVIATION_In_BPS) revert InvalidStEthPrice();
+                    if (deviation * BASIS_POINT_SCALE / _marketValue > MAX_PRICE_DEVIATION_IN_BPS) revert InvalidStEthPrice();
                 }
             } else {
                 _marketValue = _amount; /// 1:1 from stETH to eETH
