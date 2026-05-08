@@ -18,6 +18,7 @@ import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
+import "./interfaces/IBlacklister.sol";
 import "./ReentrancyGuardNamespaced.sol";
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardNamespaced, PausableUntil, ILiquidityPool {
@@ -78,6 +79,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //--------------------------------------------------------------------------------------
 
     address public immutable priorityWithdrawalQueue;
+    address public immutable blacklister;
     uint256 public immutable MIN_AMOUNT_FOR_SHARE;
 
     //--------------------------------------------------------------------------------------
@@ -122,15 +124,15 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error InvalidValidatorSize();
     error InvalidArrayLengths();
     error InvalidAmountForShare();
-    error BlacklistedUser();
 
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _priorityWithdrawalQueue, uint256 _minAmountForShare) {
+    constructor(address _priorityWithdrawalQueue, address _blacklister, uint256 _minAmountForShare) {
         priorityWithdrawalQueue = _priorityWithdrawalQueue;
+        blacklister = _blacklister;
         MIN_AMOUNT_FOR_SHARE = _minAmountForShare;
         _disableInitializers();
     }
@@ -287,7 +289,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @param amount requested amount to withdraw from contract
     /// @return uint256 requestId of the WithdrawRequestNFT
     function requestWithdraw(address recipient, uint256 amount) public whenNotPaused nonReentrant nonBlacklisted returns (uint256) {
-        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), recipient)) revert BlacklistedUser();
+        IBlacklister(blacklister).nonBlacklisted(recipient);
         uint256 share = sharesForAmount(amount);
         if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
 
@@ -705,7 +707,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     modifier nonBlacklisted() {
-        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
+        IBlacklister(blacklister).nonBlacklisted(msg.sender);
         _;
     }
 }

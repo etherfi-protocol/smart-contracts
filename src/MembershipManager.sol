@@ -12,6 +12,7 @@ import "./interfaces/IMembershipNFT.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IEtherFiAdmin.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./interfaces/IBlacklister.sol";
 
 import "./libraries/GlobalIndexLibrary.sol";
 
@@ -67,6 +68,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     IEtherFiAdmin public etherFiAdmin;
 
     IRoleRegistry public immutable roleRegistry;
+    IBlacklister public immutable blacklister;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -77,8 +79,9 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     event NftUnwrappedForEEth(address indexed _user, uint256 indexed _tokenId, uint256 _amountOfEEth, uint40 _loyaltyPoints, uint256 _feeAmount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry) {
+    constructor(address _roleRegistry, address _blacklister) {
         roleRegistry = IRoleRegistry(_roleRegistry);
+        blacklister = IBlacklister(_blacklister);
         _disableInitializers();
     }
 
@@ -791,7 +794,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     //--------------------------------------------------------------------------------------
 
     modifier nonBlacklisted() {
-        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
+        blacklister.nonBlacklisted(msg.sender);
         _;
     }
 }

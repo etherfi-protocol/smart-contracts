@@ -5,6 +5,7 @@ import "./interfaces/IAuctionManager.sol";
 import "./interfaces/INodeOperatorManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./interfaces/IBlacklister.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -48,11 +49,11 @@ contract AuctionManager is
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;
+    IBlacklister public immutable blacklister;
 
     bytes32 public constant AUCTION_MANAGER_ADMIN_ROLE = keccak256("AUCTION_MANAGER_ADMIN_ROLE");
 
     error IncorrectRole();
-    error BlacklistedUser();
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -65,8 +66,9 @@ contract AuctionManager is
     event WhitelistEnabled(bool whitelistStatus);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry) {
+    constructor(address _roleRegistry, address _blacklister) {
         roleRegistry = IRoleRegistry(_roleRegistry);
+        blacklister = IBlacklister(_blacklister);
         _disableInitializers();
     }
 
@@ -371,7 +373,7 @@ contract AuctionManager is
     }
 
     modifier nonBlacklisted() {
-        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
+        blacklister.nonBlacklisted(msg.sender);
         _;
     }
 }

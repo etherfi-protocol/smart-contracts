@@ -13,6 +13,7 @@ import "./interfaces/IWeETH.sol";
 import "./interfaces/IWETH.sol";
 import "./interfaces/IwstETH.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./interfaces/IBlacklister.sol";
 
 contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
 
@@ -24,6 +25,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     IERC20Upgradeable public immutable stETH;
     IwstETH public immutable wstETH;
     IRoleRegistry public immutable roleRegistry;
+    IBlacklister public immutable blacklister;
 
      enum SourceOfFunds {
         ETH,
@@ -34,9 +36,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
 
     event AdapterDeposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
 
-    error BlacklistedUser();
-
-    constructor(address _liquidityPool, address _liquifier, address _weETH, address _eETH, address _wETH, address _stETH, address _wstETH, address _roleRegistry) {
+    constructor(address _liquidityPool, address _liquifier, address _weETH, address _eETH, address _wETH, address _stETH, address _wstETH, address _roleRegistry, address _blacklister) {
         liquidityPool = ILiquidityPool(_liquidityPool);
         liquifier = ILiquifier(_liquifier);
         eETH = IeETH(_eETH);
@@ -45,6 +45,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         stETH = IERC20Upgradeable(_stETH);
         wstETH = IwstETH(_wstETH);
         roleRegistry = IRoleRegistry(_roleRegistry);
+        blacklister = IBlacklister(_blacklister);
 
         _disableInitializers();
     }
@@ -150,7 +151,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     modifier nonBlacklisted() {
-        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
+        blacklister.nonBlacklisted(msg.sender);
         _;
     }
 }

@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/ILiquifier.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./interfaces/IBlacklister.sol";
 import "./utils/PausableUntil.sol";
 
 import "./eigenlayer-interfaces/IStrategyManager.sol";
@@ -96,6 +97,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     IRoleRegistry public immutable roleRegistry;
     AggregatorV3Interface public immutable stEthPriceFeed;
+    IBlacklister public immutable blacklister;
 
     uint256 public immutable MIN_DISCOUNT_RATE_IN_BPS;
     uint256 public immutable STALE_PRICE_WINDOW;
@@ -123,18 +125,20 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error InvalidMaxPriceDeviationInBps();
     error InvalidRoleRegistry();
     error InvalidPriceFeed();
+    error InvalidBlacklister();
     error InvalidStEthPrice();
-    error BlacklistedUser();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry, address _stEthPriceFeed, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) {
+    constructor(address _roleRegistry, address _stEthPriceFeed, address _blacklister, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) {
         if (_minDiscountInBasisPoints == 0 || _minDiscountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (_stalePriceWindow == 0) revert InvalidPriceWindow();
         if (_maxPriceDeviationInBps == 0 || _maxPriceDeviationInBps > BASIS_POINT_SCALE) revert InvalidMaxPriceDeviationInBps();
         if (_roleRegistry == address(0)) revert InvalidRoleRegistry();
         if (_stEthPriceFeed == address(0)) revert InvalidPriceFeed();
+        if (_blacklister == address(0)) revert InvalidBlacklister();
         roleRegistry = IRoleRegistry(_roleRegistry);
         stEthPriceFeed = AggregatorV3Interface(_stEthPriceFeed);
+        blacklister = IBlacklister(_blacklister);
         MIN_DISCOUNT_RATE_IN_BPS = _minDiscountInBasisPoints;
         STALE_PRICE_WINDOW = _stalePriceWindow;
         MAX_PRICE_DEVIATION_IN_BPS = _maxPriceDeviationInBps;
@@ -432,7 +436,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     modifier nonBlacklisted() {
-        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
+        blacklister.nonBlacklisted(msg.sender);
         _;
     }
 }

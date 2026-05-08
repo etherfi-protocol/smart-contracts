@@ -24,6 +24,7 @@ import "lib/BucketLimiter.sol";
 
 import "./RoleRegistry.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
+import "./interfaces/IBlacklister.sol";
 
 /*
     The contract allows instant redemption of eETH and weETH tokens to ETH or stETH with an exit fee.
@@ -56,6 +57,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     EtherFiRestaker public immutable etherFiRestaker;
     ILido public immutable lido;
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
+    IBlacklister public immutable blacklister;
 
     uint256 public immutable MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS;
     uint256 public immutable MAX_EXIT_FEE_IN_BPS;
@@ -74,7 +76,18 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     receive() external payable {}
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _liquidityPool, address _eEth, address _weEth, address _treasury, address _roleRegistry, address _etherFiRestaker, address _priorityWithdrawalQueue, uint256 _maxExitFeeSplitToTreasuryInBps, uint256 _maxExitFeeInBps, uint256 _maxLowWatermarkInBpsOfTvl) {
+    constructor(
+        address _liquidityPool, 
+        address _eEth, address _weEth, 
+        address _treasury, 
+        address _roleRegistry, 
+        address _etherFiRestaker, 
+        address _priorityWithdrawalQueue, 
+        address _blacklister, 
+        uint256 _maxExitFeeSplitToTreasuryInBps, 
+        uint256 _maxExitFeeInBps, 
+        uint256 _maxLowWatermarkInBpsOfTvl)
+    {
         if (_maxExitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _maxExitFeeInBps > BASIS_POINT_SCALE || _maxLowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidAmount();
         MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS = _maxExitFeeSplitToTreasuryInBps;
         MAX_EXIT_FEE_IN_BPS = _maxExitFeeInBps;
@@ -87,6 +100,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         etherFiRestaker = EtherFiRestaker(payable(_etherFiRestaker));
         lido = etherFiRestaker.lido();
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
+        blacklister = IBlacklister(_blacklister);
 
         _disableInitializers();
     }
@@ -438,8 +452,8 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     }
 
     modifier nonBlacklisted(address receiver) {
-        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), msg.sender)) revert BlacklistedUser();
-        if (roleRegistry.hasRole(roleRegistry.BLACKLISTED_USER(), receiver)) revert BlacklistedUser();
+        blacklister.nonBlacklisted(msg.sender);
+        blacklister.nonBlacklisted(receiver);
         _;
     }
 
