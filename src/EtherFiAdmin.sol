@@ -54,12 +54,15 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     RoleRegistry public roleRegistry;
 
+    uint256 public maxFinalizedWithdrawalAmountPerDay;
+    uint256 public maxNumValidatorsToApprovePerDay;
+
     bytes32 public constant ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE");
     bytes32 public constant ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE");
 
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
-    uint256 public immutable MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY;
-    uint256 public immutable MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY;
+    uint256 public constant MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
+    uint256 public constant MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY = 500;
 
     int256 public immutable MAX_ACCEPTABLE_REBASE_APR_IN_BPS;
     uint256 public immutable MAX_VALIDATOR_TASK_BATCH_SIZE;
@@ -80,18 +83,14 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InvalidMaxAcceptableRebaseApr();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _priorityWithdrawalQueue, uint256 _maxFinalizedWithdrawalAmountPerDay, uint256 _maxNumValidatorsToApprovePerDay, int256 _maxAcceptableRebaseAprInBps, uint256 _maxValidatorTaskBatchSize) {
+    constructor(address _priorityWithdrawalQueue, int256 _maxAcceptableRebaseAprInBps, uint256 _maxValidatorTaskBatchSize) {
         if (_priorityWithdrawalQueue == address(0)) revert InvalidPriorityWithdrawalQueue();
-        if (_maxFinalizedWithdrawalAmountPerDay == 0) revert InvalidMaxFinalizedWithdrawalAmountPerDay();
-        if (_maxNumValidatorsToApprovePerDay == 0) revert InvalidMaxNumValidatorsToApprovePerDay();
         if (_maxAcceptableRebaseAprInBps <= 0 || _maxAcceptableRebaseAprInBps > 10_000) revert InvalidMaxAcceptableRebaseApr();
         if (_maxValidatorTaskBatchSize == 0) revert InvalidValidatorTaskBatchSize();
-        _disableInitializers();
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
-        MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = _maxFinalizedWithdrawalAmountPerDay;
-        MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY = _maxNumValidatorsToApprovePerDay;
         MAX_ACCEPTABLE_REBASE_APR_IN_BPS = _maxAcceptableRebaseAprInBps;
         MAX_VALIDATOR_TASK_BATCH_SIZE = _maxValidatorTaskBatchSize;
+        _disableInitializers();
     }
 
     function initialize(
@@ -318,11 +317,11 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
         // validate approvals
         uint256 numValidatorsToApprovePerDay = (_report.validatorsToApprove.length * 1 days) / elapsedTime;
-        if (numValidatorsToApprovePerDay > MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY) return (false, "EtherFiAdmin: number of validators to approve exceeds max");
+        if (numValidatorsToApprovePerDay > maxNumValidatorsToApprovePerDay) return (false, "EtherFiAdmin: number of validators to approve exceeds max");
 
         // validate withdrawals
         uint256 finalizedWithdrawalAmountPerDay = (_report.finalizedWithdrawalAmount * 1 days) / elapsedTime;
-        if (finalizedWithdrawalAmountPerDay > MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY) return (false, "EtherFiAdmin: finalized withdrawal amount exceeds max");
+        if (finalizedWithdrawalAmountPerDay > maxFinalizedWithdrawalAmountPerDay) return (false, "EtherFiAdmin: finalized withdrawal amount exceeds max");
         if (_report.finalizedWithdrawalAmount > address(liquidityPool).balance) return (false, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
 
         // report is valid
@@ -335,6 +334,18 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function blockForNextReportToProcess() public view returns (uint32) {
         return (lastHandledReportRefBlock == 0) ? 0 : lastHandledReportRefBlock + 1;
+    }
+
+    function updateMaxFinalizedWithdrawalAmountPerDay(uint256 _maxFinalizedWithdrawalAmountPerDay) external {
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (_maxFinalizedWithdrawalAmountPerDay == 0 || _maxFinalizedWithdrawalAmountPerDay > MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY) revert InvalidMaxFinalizedWithdrawalAmountPerDay();
+        maxFinalizedWithdrawalAmountPerDay = _maxFinalizedWithdrawalAmountPerDay;
+    }
+
+    function updateMaxNumValidatorsToApprovePerDay(uint256 _maxNumValidatorsToApprovePerDay) external {
+        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (_maxNumValidatorsToApprovePerDay > MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY) revert InvalidMaxNumValidatorsToApprovePerDay();
+        maxNumValidatorsToApprovePerDay = _maxNumValidatorsToApprovePerDay;
     }
 
     function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external {
