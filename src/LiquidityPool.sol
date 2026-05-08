@@ -81,6 +81,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     uint256 public immutable MIN_AMOUNT_FOR_SHARE;
 
     //--------------------------------------------------------------------------------------
+    //---------------------------------  CONSTANTS  ---------------------------------------
+    //--------------------------------------------------------------------------------------
+    uint256 public constant MIN_WITHDRAW_AMOUNT = 0.01 ether;
+    uint256 public constant MAX_WITHDRAW_AMOUNT = 1000 ether;
+
+    //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
@@ -115,6 +121,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     error IncorrectCaller();
     error InvalidAmount();
+    error InvalidWithdrawalAmount();
+    error InvalidShareAmount();
     error DataNotSet();
     error InsufficientLiquidity();
     error SendFail();
@@ -291,8 +299,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @param amount requested amount to withdraw from contract
     /// @return uint256 requestId of the WithdrawRequestNFT
     function requestWithdraw(address recipient, uint256 amount) public whenNotPaused nonReentrant returns (uint256) {
+        if (amount < MIN_WITHDRAW_AMOUNT || amount > MAX_WITHDRAW_AMOUNT) revert InvalidWithdrawalAmount();
         uint256 share = sharesForAmount(amount);
-        if (amount > type(uint96).max || amount == 0 || share == 0) revert InvalidAmount();
+        if (share == 0) revert InvalidShareAmount();
 
         // transfer shares to WithdrawRequestNFT contract from this contract
         IERC20(address(eETH)).safeTransferFrom(msg.sender, address(withdrawRequestNFT), amount);

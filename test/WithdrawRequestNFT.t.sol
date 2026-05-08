@@ -246,9 +246,9 @@ contract WithdrawRequestNFTTest is TestSetup {
     }
 
     // Sub-wei rounding scenario from the original SD-6 report. The MIN_WITHDRAW_AMOUNT
-    // gate now blocks any request smaller than 0.01 ether, so the rounding path is
-    // unreachable from the public API. Pin the new behavior: the legacy 9-wei request
-    // reverts with InvalidWithdrawalAmount before any state is touched.
+    // gate (now on the LiquidityPool) blocks any request smaller than 0.01 ether, so
+    // the rounding path is unreachable from the public API. Pin the new behavior: the
+    // legacy 9-wei request reverts with InvalidWithdrawalAmount before any state is touched.
     function test_SD_6_requestBelowMinReverts() public {
         vm.deal(bob, 98);
 
@@ -261,7 +261,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         liquidityPoolInstance.rebase(2);
 
         vm.prank(bob);
-        vm.expectRevert(WithdrawRequestNFT.InvalidWithdrawalAmount.selector);
+        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
         liquidityPoolInstance.requestWithdraw(bob, 9);
     }
 
@@ -338,7 +338,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     function testFuzz_RequestWithdraw(uint96 depositAmount, uint96 withdrawAmount, address recipient) public {
         // Assume valid conditions — withdraw amount must satisfy [MIN_WITHDRAW_AMOUNT, MAX_WITHDRAW_AMOUNT].
         vm.assume(depositAmount >= 1 ether && depositAmount <= 1000 ether);
-        vm.assume(withdrawAmount >= withdrawRequestNFTInstance.MIN_WITHDRAW_AMOUNT() && withdrawAmount <= depositAmount);
+        vm.assume(withdrawAmount >= liquidityPoolInstance.MIN_WITHDRAW_AMOUNT() && withdrawAmount <= depositAmount);
         vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance));
         // Filter out contracts that don't implement IERC721Receiver - only allow EOAs
         vm.assume(recipient.code.length == 0);
@@ -368,8 +368,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)), withdrawAmount, "Incorrect contract eETH balance");
         assertEq(withdrawRequestNFTInstance.nextRequestId(), requestId + 1, "Incorrect next request ID");
 
-        uint256 minAmount = withdrawRequestNFTInstance.MIN_WITHDRAW_AMOUNT();
-        uint256 maxAmount = withdrawRequestNFTInstance.MAX_WITHDRAW_AMOUNT();
+        uint256 minAmount = liquidityPoolInstance.MIN_WITHDRAW_AMOUNT();
+        uint256 maxAmount = liquidityPoolInstance.MAX_WITHDRAW_AMOUNT();
         if (eETHInstance.balanceOf(bob) >= minAmount) {
             uint256 reqAmount = eETHInstance.balanceOf(bob);
             if (reqAmount > maxAmount) reqAmount = maxAmount;
@@ -392,8 +392,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         // [MIN_WITHDRAW_AMOUNT, MAX_WITHDRAW_AMOUNT] gate; without bound() the cascading
         // vm.assume calls hit forge's input-rejection cap at low probability.
         depositAmount = uint96(bound(depositAmount, 1 ether, 1e6 ether));
-        uint96 maxWithdraw = uint96(withdrawRequestNFTInstance.MAX_WITHDRAW_AMOUNT());
-        uint96 minWithdraw = uint96(withdrawRequestNFTInstance.MIN_WITHDRAW_AMOUNT());
+        uint96 maxWithdraw = uint96(liquidityPoolInstance.MAX_WITHDRAW_AMOUNT());
+        uint96 minWithdraw = uint96(liquidityPoolInstance.MIN_WITHDRAW_AMOUNT());
         uint96 withdrawCeil = depositAmount < maxWithdraw ? depositAmount : maxWithdraw;
         withdrawAmount = uint96(bound(withdrawAmount, minWithdraw, withdrawCeil));
         rebaseAmount = uint96(bound(rebaseAmount, 0.5 ether, depositAmount));
@@ -517,7 +517,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     function testFuzz_InvalidateRequest(uint96 depositAmount, uint96 withdrawAmount, address recipient) public {
         // Assume valid conditions — withdraw amount must satisfy [MIN_WITHDRAW_AMOUNT, MAX_WITHDRAW_AMOUNT].
         vm.assume(depositAmount >= 1 ether && depositAmount <= 1000 ether);
-        vm.assume(withdrawAmount >= withdrawRequestNFTInstance.MIN_WITHDRAW_AMOUNT() && withdrawAmount <= depositAmount);
+        vm.assume(withdrawAmount >= liquidityPoolInstance.MIN_WITHDRAW_AMOUNT() && withdrawAmount <= depositAmount);
         vm.assume(recipient != address(0) && recipient != address(liquidityPoolInstance) && recipient != alice && recipient != admin && recipient != (address(etherFiAdminInstance)) && recipient != roleRegistryInstance.owner());
         // Filter out contracts that don't implement IERC721Receiver - only allow EOAs
         vm.assume(recipient.code.length == 0);
@@ -1632,98 +1632,6 @@ contract WithdrawRequestNFTTest is TestSetup {
     /// @dev Off-by-one: the token at EXACTLY lastFinalizedRequestId is finalized
     ///      and therefore must NOT be invalidatable. The next token (id + 1) is
     ///      not finalized and must still be invalidatable.
-    //--------------------------------------------------------------------------------------
-    //----------------------  MIN / MAX WITHDRAW AMOUNT TESTS  -----------------------------
-    //--------------------------------------------------------------------------------------
-
-    function test_constants_minMaxWithdrawAmount() public view {
-        assertEq(withdrawRequestNFTInstance.MIN_WITHDRAW_AMOUNT(), 0.01 ether, "MIN_WITHDRAW_AMOUNT mismatch");
-        assertEq(withdrawRequestNFTInstance.MAX_WITHDRAW_AMOUNT(), 1000 ether, "MAX_WITHDRAW_AMOUNT mismatch");
-    }
-
-    function test_requestWithdraw_atMin_succeeds() public {
-        uint96 amt = uint96(withdrawRequestNFTInstance.MIN_WITHDRAW_AMOUNT());
-
-        startHoax(bob);
-        liquidityPoolInstance.deposit{value: 1 ether}();
-        eETHInstance.approve(address(liquidityPoolInstance), amt);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amt);
-        vm.stopPrank();
-
-        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
-        assertEq(request.amountOfEEth, amt, "MIN_WITHDRAW_AMOUNT request should be created");
-    }
-
-    function test_requestWithdraw_belowMin_reverts() public {
-        uint96 amt = uint96(withdrawRequestNFTInstance.MIN_WITHDRAW_AMOUNT()) - 1;
-
-        startHoax(bob);
-        liquidityPoolInstance.deposit{value: 1 ether}();
-        eETHInstance.approve(address(liquidityPoolInstance), amt);
-        vm.expectRevert(WithdrawRequestNFT.InvalidWithdrawalAmount.selector);
-        liquidityPoolInstance.requestWithdraw(bob, amt);
-        vm.stopPrank();
-    }
-
-    function test_requestWithdraw_atMax_succeeds() public {
-        uint96 amt = uint96(withdrawRequestNFTInstance.MAX_WITHDRAW_AMOUNT());
-
-        vm.deal(bob, uint256(amt) + 1 ether);
-        vm.startPrank(bob);
-        liquidityPoolInstance.deposit{value: uint256(amt) + 1 ether}();
-        eETHInstance.approve(address(liquidityPoolInstance), amt);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amt);
-        vm.stopPrank();
-
-        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
-        assertEq(request.amountOfEEth, amt, "MAX_WITHDRAW_AMOUNT request should be created");
-    }
-
-    function test_requestWithdraw_aboveMax_reverts() public {
-        uint96 amt = uint96(withdrawRequestNFTInstance.MAX_WITHDRAW_AMOUNT()) + 1;
-
-        vm.deal(bob, uint256(amt) + 1 ether);
-        vm.startPrank(bob);
-        liquidityPoolInstance.deposit{value: uint256(amt) + 1 ether}();
-        eETHInstance.approve(address(liquidityPoolInstance), amt);
-        vm.expectRevert(WithdrawRequestNFT.InvalidWithdrawalAmount.selector);
-        liquidityPoolInstance.requestWithdraw(bob, amt);
-        vm.stopPrank();
-    }
-
-    /// @dev Direct call (bypassing LP) hits the gate first.
-    function test_requestWithdraw_direct_belowMin_reverts() public {
-        uint96 amt = uint96(withdrawRequestNFTInstance.MIN_WITHDRAW_AMOUNT()) - 1;
-
-        vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert(WithdrawRequestNFT.InvalidWithdrawalAmount.selector);
-        withdrawRequestNFTInstance.requestWithdraw(amt, amt, bob, 0);
-    }
-
-    function test_requestWithdraw_direct_aboveMax_reverts() public {
-        uint96 amt = uint96(withdrawRequestNFTInstance.MAX_WITHDRAW_AMOUNT()) + 1;
-
-        vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert(WithdrawRequestNFT.InvalidWithdrawalAmount.selector);
-        withdrawRequestNFTInstance.requestWithdraw(amt, amt, bob, 0);
-    }
-
-    function test_requestWithdraw_direct_atMin_succeeds() public {
-        uint96 amt = uint96(withdrawRequestNFTInstance.MIN_WITHDRAW_AMOUNT());
-
-        vm.prank(address(liquidityPoolInstance));
-        uint256 requestId = withdrawRequestNFTInstance.requestWithdraw(amt, amt, bob, 0);
-        assertEq(withdrawRequestNFTInstance.getRequest(requestId).amountOfEEth, amt);
-    }
-
-    function test_requestWithdraw_direct_atMax_succeeds() public {
-        uint96 amt = uint96(withdrawRequestNFTInstance.MAX_WITHDRAW_AMOUNT());
-
-        vm.prank(address(liquidityPoolInstance));
-        uint256 requestId = withdrawRequestNFTInstance.requestWithdraw(amt, amt, bob, 0);
-        assertEq(withdrawRequestNFTInstance.getRequest(requestId).amountOfEEth, amt);
-    }
-
     function test_invalidateRequest_boundary_atLastFinalizedRequestId() public {
         uint256 r1 = _requestFor(bob, 1 ether);
         uint256 r2 = _requestFor(bob, 1 ether);
