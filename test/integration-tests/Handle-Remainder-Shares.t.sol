@@ -24,7 +24,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         address wrnOwner = withdrawRequestNFTInstance.owner();
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(buybackWallet, PRIORITY_WITHDRAWAL_QUEUE))
+            address(new WithdrawRequestNFT(buybackWallet))
         );
 
         // The production queue proxy on mainnet still runs the master impl which
@@ -69,7 +69,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
         // Grant the IMPLICIT_FEE_CLAIMER_ROLE to alice
         vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(priorityQueueInstance))));
+        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet))));
         roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
         vm.stopPrank();
 
@@ -147,7 +147,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
         // Now upgrade the contract and grant roles
         vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(priorityQueueInstance))));
+        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet))));
         roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
         vm.stopPrank();
 
@@ -228,7 +228,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
             // Grant the IMPLICIT_FEE_CLAIMER_ROLE to alice
             vm.startPrank(address(roleRegistryInstance.owner()));
-            withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(priorityQueueInstance))));
+            withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet))));
             roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
             vm.stopPrank();
 

@@ -60,7 +60,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.stopPrank();
         vm.startPrank(wrnOwner);
         WithdrawRequestNFT newWrnImpl =
-            new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F, address(priorityQueue));
+            new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F);
         withdrawRequestNFTInstance.upgradeTo(address(newWrnImpl));
         vm.stopPrank();
         vm.startPrank(owner);

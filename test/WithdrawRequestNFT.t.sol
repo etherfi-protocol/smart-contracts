@@ -10,7 +10,7 @@ import "../src/utils/PausableUntil.sol";
 
 contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
 
-    constructor() WithdrawRequestNFT(address(0), address(0)) {}
+    constructor() WithdrawRequestNFT(address(0)) {}
 
     function updateParam(uint32 _currentRequestIdToScanFromForShareRemainder, uint32 _lastRequestIdToScanUntilForShareRemainder) external {
         currentRequestIdToScanFromForShareRemainder = _currentRequestIdToScanFromForShareRemainder;
@@ -327,7 +327,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_handleRemainder() public {
         initializeRealisticFork(MAINNET_FORK);
         vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(priorityQueueInstance))));
+        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet))));
         roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
         vm.stopPrank();
         uint256 implicitFee = withdrawRequestNFTInstance.getEEthRemainderAmount();
@@ -668,6 +668,123 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(admin);
         vm.expectRevert("Request is valid");
         withdrawRequestNFTInstance.validateRequest(requestId);
+    }
+
+    /// @dev Re-validating a request that was invalidated *before* finalization but
+    ///      whose id has since been overtaken by `lastFinalizedRequestId` must
+    ///      pull the previously-unlocked ETH back into NFT escrow. The helper
+    ///      `_finalizeWithdrawalRequest` only locks ETH for valid requests at
+    ///      finalize time, so a finalized-but-invalid request's ETH is still on
+    ///      the LP — `validateRequest` is the contract's mechanism to re-lock it.
+    function test_validateRequest_finalized_locksEthFromLp() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 5 ether);
+        uint256 reqA = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        uint256 reqB = liquidityPoolInstance.requestWithdraw(bob, 2 ether);
+        vm.stopPrank();
+
+        // Invalidate reqA, then finalize past it via reqB. reqA is now
+        // (id <= lastFinalizedRequestId) AND invalid → its ETH is still on LP.
+        vm.prank(admin);
+        withdrawRequestNFTInstance.invalidateRequest(reqA);
+        _finalizeWithdrawalRequest(reqB);
+        assertGe(uint256(withdrawRequestNFTInstance.lastFinalizedRequestId()), reqA, "reqA must be finalized for the new branch");
+        assertFalse(withdrawRequestNFTInstance.isValid(reqA), "reqA precondition: invalid");
+
+        uint256 lpBalBefore       = address(liquidityPoolInstance).balance;
+        uint256 nftBalBefore      = address(withdrawRequestNFTInstance).balance;
+        uint128 inLpBefore        = uint128(liquidityPoolInstance.totalValueInLp());
+        uint128 outOfLpBefore     = uint128(liquidityPoolInstance.totalValueOutOfLp());
+        uint128 nftLockedBefore   = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.validateRequest(reqA);
+
+        assertTrue(withdrawRequestNFTInstance.isValid(reqA), "reqA should be valid after re-validate");
+        assertEq(address(liquidityPoolInstance).balance, lpBalBefore - 1 ether, "LP balance should decrease by 1 ETH");
+        assertEq(address(withdrawRequestNFTInstance).balance, nftBalBefore + 1 ether, "NFT balance should increase by 1 ETH");
+        assertEq(liquidityPoolInstance.totalValueInLp(), inLpBefore - 1 ether, "totalValueInLp should decrease by 1 ETH");
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), outOfLpBefore + 1 ether, "totalValueOutOfLp should increase by 1 ETH");
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), nftLockedBefore + 1 ether, "NFT locked counter should increase by 1 ETH");
+    }
+
+    /// @dev When the LP can no longer cover the request amount (drained between
+    ///      invalidate and re-validate), `validateRequest` must revert before
+    ///      touching state. We stage the same finalized-but-invalid setup and
+    ///      then `vm.deal(LP, 0)` to force the precondition to fail.
+    function test_validateRequest_finalized_revertsOnInsufficientLpBalance() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 5 ether);
+        uint256 reqA = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        uint256 reqB = liquidityPoolInstance.requestWithdraw(bob, 2 ether);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.invalidateRequest(reqA);
+        _finalizeWithdrawalRequest(reqB);
+
+        // Drain LP so it can't cover the 1 ETH request.
+        vm.deal(address(liquidityPoolInstance), 0);
+
+        vm.prank(admin);
+        vm.expectRevert("Request amount is greater than available liquidity");
+        withdrawRequestNFTInstance.validateRequest(reqA);
+    }
+
+    /// @dev Re-validating a not-yet-finalized request must NOT touch LP escrow
+    ///      bookkeeping. Pins the `if (requestId <= lastFinalizedRequestId)` guard.
+    function test_validateRequest_unfinalized_doesNotTouchLpEscrow() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        uint256 reqId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        vm.stopPrank();
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.invalidateRequest(reqId);
+
+        uint256 lpBalBefore     = address(liquidityPoolInstance).balance;
+        uint256 nftBalBefore    = address(withdrawRequestNFTInstance).balance;
+        uint128 nftLockedBefore = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
+
+        vm.prank(admin);
+        withdrawRequestNFTInstance.validateRequest(reqId);
+
+        assertEq(address(liquidityPoolInstance).balance, lpBalBefore, "LP balance must not change");
+        assertEq(address(withdrawRequestNFTInstance).balance, nftBalBefore, "NFT balance must not change");
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), nftLockedBefore, "NFT locked counter must not change");
+    }
+
+    /// @dev `addEthAmountLockedForWithdrawal` must accept calls from the
+    ///      WithdrawRequestNFT contract (new) so `validateRequest` can re-lock
+    ///      ETH for finalized invalidated requests.
+    function test_addEthAmountLockedForWithdrawal_acceptsFromNftContract() public {
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        uint256 lpBalBefore     = address(liquidityPoolInstance).balance;
+        uint256 nftBalBefore    = address(withdrawRequestNFTInstance).balance;
+        uint128 inLpBefore      = uint128(liquidityPoolInstance.totalValueInLp());
+        uint128 outOfLpBefore   = uint128(liquidityPoolInstance.totalValueOutOfLp());
+
+        vm.prank(address(withdrawRequestNFTInstance));
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(1 ether);
+
+        assertEq(address(liquidityPoolInstance).balance, lpBalBefore - 1 ether, "LP balance should decrease");
+        assertEq(address(withdrawRequestNFTInstance).balance, nftBalBefore + 1 ether, "NFT balance should increase");
+        assertEq(liquidityPoolInstance.totalValueInLp(), inLpBefore - 1 ether);
+        assertEq(liquidityPoolInstance.totalValueOutOfLp(), outOfLpBefore + 1 ether);
+    }
+
+    /// @dev Any caller other than `etherFiAdminContract` or `withdrawRequestNFT`
+    ///      must be rejected. Ensures the new NFT carve-out didn't widen the gate.
+    function test_addEthAmountLockedForWithdrawal_revertsForOtherCaller() public {
+        vm.prank(alice);
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(1 ether);
     }
 
     function test_updateShareRemainderSplitToTreasuryInBps() public {
