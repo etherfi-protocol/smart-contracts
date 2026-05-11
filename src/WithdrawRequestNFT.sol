@@ -253,6 +253,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function validateRequest(uint256 requestId) external onlyAdmin {
         require(_exists(requestId), "Request does not exist");
         require(!_requests[requestId].isValid, "Request is valid");
+        if (requestId <= lastFinalizedRequestId) {
+            uint256 amount = _requests[requestId].amountOfEEth;
+            require(amount <= address(liquidityPool).balance, "Request amount is greater than available liquidity");
+            liquidityPool.addEthAmountLockedForWithdrawal(uint128(amount));
+        }
         _requests[requestId].isValid = true;
 
         emit WithdrawRequestValidated(uint32(requestId));
