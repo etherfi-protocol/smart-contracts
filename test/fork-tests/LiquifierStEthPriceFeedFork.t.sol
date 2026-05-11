@@ -30,7 +30,7 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
     function test_immutables_pointAtLiveChainlinkFeed() public view {
         assertEq(address(liquifierInstance.stEthPriceFeed()), CHAINLINK_STETH_ETH_FEED);
         assertEq(liquifierInstance.STALE_PRICE_WINDOW(), 24 hours);
-        assertEq(liquifierInstance.MAX_PRICE_DEVIATION_In_BPS(), 500);
+        assertEq(liquifierInstance.MAX_PRICE_DEVIATION_IN_BPS(), 500);
     }
 
     function test_liveFeed_returnsFreshAnswer() public view {
@@ -151,7 +151,7 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
         uint256 deviation = chainlinkValue > marketValue ? chainlinkValue - marketValue : marketValue - chainlinkValue;
         uint256 bps = liquifierInstance.BASIS_POINT_SCALE();
 
-        if (fresh && (deviation * bps) / marketValue > liquifierInstance.MAX_PRICE_DEVIATION_In_BPS()) {
+        if (fresh && (deviation * bps) / marketValue > liquifierInstance.MAX_PRICE_DEVIATION_IN_BPS()) {
             vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
             liquifierInstance.quoteByMarketValue(address(stEth), amount);
         } else {
