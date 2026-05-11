@@ -11,7 +11,7 @@ contract Blacklister is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     IRoleRegistry public immutable roleRegistry;
     bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
 
-    mapping(address => bool) public isBalcklisted;
+    mapping(address => bool) public isBlacklisted;
 
     error BlacklistedUser(address user);
     error IncorrectRole();
@@ -35,18 +35,18 @@ contract Blacklister is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function blacklistUser(address user) external {
         if (!roleRegistry.hasRole(BLACKLISTER_ROLE, msg.sender)) revert IncorrectRole();
-        isBalcklisted[user] = true;
+        isBlacklisted[user] = true;
         emit UserBlacklisted(user);
     }
 
     function unblacklistUser(address user) external {
         if (!roleRegistry.hasRole(BLACKLISTER_ROLE, msg.sender)) revert IncorrectRole();
-        isBalcklisted[user] = false;
+        isBlacklisted[user] = false;
         emit UserUnblacklisted(user);
     }
 
     function nonBlacklisted(address user) external view {
-        if (isBalcklisted[user]) revert BlacklistedUser(user);
+        if (isBlacklisted[user]) revert BlacklistedUser(user);
     }
 
     function getImplementation() external view returns (address) { 
