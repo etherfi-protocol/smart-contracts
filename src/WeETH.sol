@@ -11,10 +11,15 @@ import "./interfaces/IRateProvider.sol";
 
 import "./AssetRecovery.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./interfaces/IBlacklister.sol";
 
 contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
 
     IRoleRegistry public immutable roleRegistry;
+    IBlacklister public immutable blacklister;
+
+    event Paused();
+    event Unpaused();
 
     error IncorrectRole();
     error CannotRecoverEETH();
@@ -25,6 +30,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
 
     IeETH public eETH;
     ILiquidityPool public liquidityPool;
+    bool public paused;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
@@ -37,9 +43,11 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry) {
+    constructor(address _roleRegistry, address _blacklister) {
         require(_roleRegistry != address(0), "must set role registry");
+        require(_blacklister != address(0), "must set blacklister");
         roleRegistry = IRoleRegistry(_roleRegistry);
+        blacklister = IBlacklister(_blacklister);
         _disableInitializers();
     }
 
@@ -93,6 +101,18 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         return eETHAmount;
     }
 
+    function pause() external {
+        if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        paused = true;
+        emit Paused();
+    }
+
+    function unpause() external {
+        if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        paused = false;
+        emit Unpaused();
+    }
+
     function recoverETH(address payable to, uint256 amount) external {
         if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         _recoverETH(to, amount);
@@ -119,6 +139,15 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 /* amount */
+    ) internal virtual override {
+        require(!paused, "PAUSED");
+        blacklister.nonBlacklisted(from);
+        blacklister.nonBlacklisted(to);
+    }
 
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------

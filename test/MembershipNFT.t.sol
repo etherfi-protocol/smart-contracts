@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "./TestSetup.sol";
 import "forge-std/console2.sol";
+import "../src/helpers/Blacklister.sol";
 
 contract MembershipNFTTest is TestSetup {
 
@@ -131,5 +132,119 @@ contract MembershipNFTTest is TestSetup {
         membershipNftInstance.mint(alice, 1);
         membershipNftInstance.burn(alice, 1, 1);
         vm.stopPrank();
+    }
+
+    // -------------------------------------------------------------------------
+    // Blacklist on _beforeTokenTransfer (ERC1155)
+    //
+    // The hook short-circuits when `_from == 0` (mint) or `_to == 0` (burn),
+    // so mint/burn must remain callable for blacklisted holders. For real
+    // transfers, the blacklist gate fires for any of `operator`, `from`, or
+    // `to`. A time-bounded blacklist auto-opens at its expiry.
+    // -------------------------------------------------------------------------
+
+    function _expectBlacklistedRevert(address user) internal {
+        vm.expectRevert(abi.encodeWithSelector(Blacklister.BlacklistedUser.selector, user));
+    }
+
+    /// @dev Mint a single NFT to `recipient` via the membership manager and
+    /// return the token id. Pulled out because the existing tests inline this
+    /// boilerplate.
+    function _mintNftTo(address recipient) internal returns (uint256 tokenId) {
+        vm.prank(address(membershipManagerInstance));
+        tokenId = membershipNftInstance.mint(recipient, 1);
+    }
+
+    // ---- mint / burn bypass the blacklist gate (early return on zero side) -
+
+    function test_MembershipNFT_mint_skipsBlacklistForRecipient() public {
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        // mint is `from = address(0)` → hook returns early, so this succeeds
+        // even though alice is blacklisted.
+        uint256 tokenId = _mintNftTo(alice);
+        assertEq(membershipNftInstance.balanceOf(alice, tokenId), 1);
+    }
+
+    function test_MembershipNFT_burn_skipsBlacklistForHolder() public {
+        uint256 tokenId = _mintNftTo(alice);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        // burn is `to = address(0)` → hook returns early.
+        vm.prank(address(membershipManagerInstance));
+        membershipNftInstance.burn(alice, tokenId, 1);
+        assertEq(membershipNftInstance.balanceOf(alice, tokenId), 0);
+    }
+
+    // ---- real transfers respect the gate ------------------------------------
+
+    function test_MembershipNFT_transfer_revertsWhenSenderBlacklisted() public {
+        uint256 tokenId = _mintNftTo(alice);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(alice);
+        _expectBlacklistedRevert(alice);
+        membershipNftInstance.safeTransferFrom(alice, bob, tokenId, 1, "");
+    }
+
+    function test_MembershipNFT_transfer_revertsWhenRecipientBlacklisted() public {
+        uint256 tokenId = _mintNftTo(alice);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(bob);
+
+        vm.prank(alice);
+        _expectBlacklistedRevert(bob);
+        membershipNftInstance.safeTransferFrom(alice, bob, tokenId, 1, "");
+    }
+
+    function test_MembershipNFT_transfer_revertsWhenOperatorBlacklisted() public {
+        // Operator-distinct path: chad pulls alice's token after approval.
+        uint256 tokenId = _mintNftTo(alice);
+
+        vm.prank(alice);
+        membershipNftInstance.setApprovalForAll(chad, true);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(chad);
+
+        vm.prank(chad);
+        _expectBlacklistedRevert(chad);
+        membershipNftInstance.safeTransferFrom(alice, bob, tokenId, 1, "");
+    }
+
+    function test_MembershipNFT_transfer_succeedsAfterBlacklistExpires() public {
+        uint256 tokenId = _mintNftTo(alice);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUserUntil(alice, 1 days);
+
+        vm.prank(alice);
+        _expectBlacklistedRevert(alice);
+        membershipNftInstance.safeTransferFrom(alice, bob, tokenId, 1, "");
+
+        vm.warp(block.timestamp + 1 days);
+
+        vm.prank(alice);
+        membershipNftInstance.safeTransferFrom(alice, bob, tokenId, 1, "");
+        assertEq(membershipNftInstance.balanceOf(bob, tokenId), 1);
+    }
+
+    function test_MembershipNFT_transfer_succeedsAfterUnblacklist() public {
+        uint256 tokenId = _mintNftTo(alice);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+        vm.prank(owner);
+        blacklisterInstance.unblacklistUser(alice);
+
+        vm.prank(alice);
+        membershipNftInstance.safeTransferFrom(alice, bob, tokenId, 1, "");
+        assertEq(membershipNftInstance.balanceOf(bob, tokenId), 1);
     }
 }
