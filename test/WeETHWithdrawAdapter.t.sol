@@ -205,7 +205,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
         _setupUserWithWeETH(bob, 1 ether, 1 ether);
 
         vm.prank(owner);
-        blacklisterInstance.blacklistUserUntil(bob, 1 days);
+        blacklisterInstance.extendBlacklistUntil(bob, 1 days);
 
         // Inside the window: blocked.
         vm.prank(bob);

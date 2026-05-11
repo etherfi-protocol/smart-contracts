@@ -222,7 +222,7 @@ contract MembershipNFTTest is TestSetup {
         uint256 tokenId = _mintNftTo(alice);
 
         vm.prank(owner);
-        blacklisterInstance.blacklistUserUntil(alice, 1 days);
+        blacklisterInstance.extendBlacklistUntil(alice, 1 days);
 
         vm.prank(alice);
         _expectBlacklistedRevert(alice);

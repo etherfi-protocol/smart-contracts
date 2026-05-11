@@ -640,7 +640,7 @@ contract EETHTest is TestSetup {
         _aliceWithEEth(1 ether);
 
         vm.prank(owner);
-        blacklisterInstance.blacklistUserUntil(alice, 1 days);
+        blacklisterInstance.extendBlacklistUntil(alice, 1 days);
 
         vm.prank(alice);
         _expectBlacklistedRevert(alice);

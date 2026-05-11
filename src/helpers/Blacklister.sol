@@ -41,7 +41,7 @@ contract Blacklister is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         emit UserBlacklistedUntil(user, block.timestamp + 1 days);
     }
 
-    function blacklistUserUntil(address user, uint256 until) external {
+    function extendBlacklistUntil(address user, uint256 until) external {
         if (!roleRegistry.hasRole(BLACKLISTER_ROLE, msg.sender)) revert IncorrectRole();
         blacklistedUntil[user] = block.timestamp + until;
         emit UserBlacklistedUntil(user, block.timestamp + until);
