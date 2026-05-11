@@ -717,7 +717,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         );
         priorityQueueInstance = PriorityWithdrawalQueue(payable(address(priorityQueueProxy)));
 
-        etherFiAdminImplementation = new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000);
+        etherFiAdminImplementation = new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000, 7200);
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
 
@@ -936,7 +936,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_etherfiAdmin() internal {
-        address newAdminImpl = address(new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000));
+        address newAdminImpl = address(new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000, 7200));
         vm.prank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }

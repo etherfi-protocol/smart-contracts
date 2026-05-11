@@ -543,7 +543,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /// @notice Locks ETH for finalized NFT withdrawals by transferring from LP to WithdrawRequestNFT. TVL preserved by InLp/OutOfLp rebalance; share rate unchanged.
     function addEthAmountLockedForWithdrawal(uint128 _amount) external {
-        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
+        if (msg.sender != address(etherFiAdminContract) && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
         require(escrowMigrationCompleted, "migration not complete");
         if (totalValueInLp < _amount) revert InsufficientLiquidity();
 

@@ -67,6 +67,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     int256 public immutable MAX_ACCEPTABLE_REBASE_APR_IN_BPS;
     uint256 public immutable MAX_VALIDATOR_TASK_BATCH_SIZE;
 
+    uint256 public immutable STALE_ORACLE_REPORT_BLOCK_WINDOW;
+
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
 
@@ -81,16 +83,21 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InvalidAcceptableRebaseApr();
     error InvalidValidatorTaskBatchSize();
     error InvalidMaxAcceptableRebaseApr();
+    error InvalidStaleOracleReportBlockWindow();
+    error OracleReportNotStale();
+    error NoWithdrawalsToFinalize();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _priorityWithdrawalQueue, int256 _maxAcceptableRebaseAprInBps, uint256 _maxValidatorTaskBatchSize) {
+    constructor(address _priorityWithdrawalQueue, int256 _maxAcceptableRebaseAprInBps, uint256 _maxValidatorTaskBatchSize, uint256 _staleOracleReportBlockWindow) {
         if (_priorityWithdrawalQueue == address(0)) revert InvalidPriorityWithdrawalQueue();
         if (_maxAcceptableRebaseAprInBps <= 0 || _maxAcceptableRebaseAprInBps > 10_000) revert InvalidMaxAcceptableRebaseApr();
         if (_maxValidatorTaskBatchSize == 0) revert InvalidValidatorTaskBatchSize();
+        if (_staleOracleReportBlockWindow == 0) revert InvalidStaleOracleReportBlockWindow();
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
         MAX_ACCEPTABLE_REBASE_APR_IN_BPS = _maxAcceptableRebaseAprInBps;
         MAX_VALIDATOR_TASK_BATCH_SIZE = _maxValidatorTaskBatchSize;
-        _disableInitializers();
+        STALE_ORACLE_REPORT_BLOCK_WINDOW = _staleOracleReportBlockWindow;
+         _disableInitializers();
     }
 
     function initialize(
@@ -234,6 +241,30 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit ValidatorApprovalTaskInvalidated(taskHash, _reportHash, _validators);
     }
 
+    function finalizeWithdrawalsWhenStale() external {
+        if (block.number < lastHandledReportRefBlock + STALE_ORACLE_REPORT_BLOCK_WINDOW) revert OracleReportNotStale();
+
+        uint256 liquidity = address(liquidityPool).balance;
+        uint32 currentRequestId = withdrawRequestNft.nextRequestId() - 1;
+        uint32 lastFinalizedRequestId = withdrawRequestNft.lastFinalizedRequestId();
+        uint32 requestId = lastFinalizedRequestId;
+        uint128 finalizedWithdrawalAmount;
+        while (requestId < currentRequestId) {
+            IWithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNft.getRequest(requestId + 1);
+            if (!request.isValid) {
+                requestId++;
+                continue;
+            }
+            if (liquidity < finalizedWithdrawalAmount + request.amountOfEEth) {
+                break;
+            }
+            finalizedWithdrawalAmount += request.amountOfEEth;
+            requestId++;
+        }
+        if (finalizedWithdrawalAmount == 0) revert NoWithdrawalsToFinalize();
+        _finalizeWithdrawals(requestId, finalizedWithdrawalAmount);
+    }
+
     //protocol owns the eth that was distributed to NO and treasury in eigenpods and etherfinodes 
     function _handleProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal { 
         if(_report.protocolFees == 0) {
@@ -280,8 +311,12 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         for (uint256 i = 0; i < _report.withdrawalRequestsToInvalidate.length; i++) {
             withdrawRequestNft.invalidateRequest(_report.withdrawalRequestsToInvalidate[i]);
         }
-        withdrawRequestNft.finalizeRequests(_report.lastFinalizedWithdrawalRequestId);
-        liquidityPool.addEthAmountLockedForWithdrawal(_report.finalizedWithdrawalAmount);
+        _finalizeWithdrawals(_report.lastFinalizedWithdrawalRequestId, _report.finalizedWithdrawalAmount);
+    }
+    
+    function _finalizeWithdrawals(uint32 _lastFinalizedRequestId, uint128 _finalizedWithdrawalAmount) internal {
+        withdrawRequestNft.finalizeRequests(_lastFinalizedRequestId);
+        liquidityPool.addEthAmountLockedForWithdrawal(_finalizedWithdrawalAmount);
     }
 
     function _validateReport(IEtherFiOracle.OracleReport calldata _report, bytes32 _reportHash) internal view returns (bool, string memory) {
