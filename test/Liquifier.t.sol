@@ -613,52 +613,57 @@ contract LiquifierTest is TestSetup {
 
     function test_constructor_revertsOnZeroMinDiscount() public {
         vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
-        new Liquifier(address(1), address(2), 0, 1 days, 500);
+        new Liquifier(address(1), address(2), address(3), 0, 1 days, 500);
     }
 
     function test_constructor_revertsOnMinDiscountAboveScale() public {
         vm.expectRevert(Liquifier.InvalidDiscountRate.selector);
-        new Liquifier(address(1), address(2), 10_001, 1 days, 500);
+        new Liquifier(address(1), address(2), address(3), 10_001, 1 days, 500);
     }
 
     function test_constructor_acceptsMinDiscountAtScale() public {
-        Liquifier impl = new Liquifier(address(1), address(2), 10_000, 1 days, 500);
+        Liquifier impl = new Liquifier(address(1), address(2), address(3), 10_000, 1 days, 500);
         assertEq(impl.MIN_DISCOUNT_RATE_IN_BPS(), 10_000);
     }
 
     function test_constructor_storesMinDiscount() public {
-        Liquifier impl = new Liquifier(address(1), address(2), 250, 1 days, 500);
+        Liquifier impl = new Liquifier(address(1), address(2), address(3), 250, 1 days, 500);
         assertEq(impl.MIN_DISCOUNT_RATE_IN_BPS(), 250);
         assertEq(impl.BASIS_POINT_SCALE(), 10_000);
     }
 
     function test_constructor_revertsOnZeroStaleWindow() public {
         vm.expectRevert(Liquifier.InvalidPriceWindow.selector);
-        new Liquifier(address(1), address(2), 100, 0, 500);
+        new Liquifier(address(1), address(2), address(3), 100, 0, 500);
     }
 
     function test_constructor_revertsOnZeroMaxPriceDeviation() public {
         vm.expectRevert(Liquifier.InvalidMaxPriceDeviationInBps.selector);
-        new Liquifier(address(1), address(2), 100, 1 days, 0);
+        new Liquifier(address(1), address(2), address(3), 100, 1 days, 0);
     }
 
     function test_constructor_revertsOnMaxPriceDeviationAboveScale() public {
         vm.expectRevert(Liquifier.InvalidMaxPriceDeviationInBps.selector);
-        new Liquifier(address(1), address(2), 100, 1 days, 10_001);
+        new Liquifier(address(1), address(2), address(3), 100, 1 days, 10_001);
     }
 
     function test_constructor_revertsOnZeroRoleRegistry() public {
         vm.expectRevert(Liquifier.InvalidRoleRegistry.selector);
-        new Liquifier(address(0), address(2), 100, 1 days, 500);
+        new Liquifier(address(0), address(2), address(3), 100, 1 days, 500);
     }
 
     function test_constructor_revertsOnZeroPriceFeed() public {
         vm.expectRevert(Liquifier.InvalidPriceFeed.selector);
-        new Liquifier(address(1), address(0), 100, 1 days, 500);
+        new Liquifier(address(1), address(0), address(3), 100, 1 days, 500);
+    }
+
+    function test_constructor_revertsOnZeroBlacklister() public {
+        vm.expectRevert(Liquifier.InvalidBlacklister.selector);
+        new Liquifier(address(1), address(2), address(0), 100, 1 days, 500);
     }
 
     function test_constructor_storesPriceFeedImmutables() public {
-        Liquifier impl = new Liquifier(address(1), address(2), 250, 1 days, 500);
+        Liquifier impl = new Liquifier(address(1), address(2), address(3), 250, 1 days, 500);
         assertEq(address(impl.stEthPriceFeed()), address(2));
         assertEq(impl.STALE_PRICE_WINDOW(), 1 days);
         assertEq(impl.MAX_PRICE_DEVIATION_IN_BPS(), 500);

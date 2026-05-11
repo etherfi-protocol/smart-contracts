@@ -38,7 +38,7 @@ contract MinAmountForShareForkTest is TestSetup, Deployed {
     /// the proxy. The `priorityWithdrawalQueue` immutable on mainnet is `address(0)` today;
     /// preserve that so we don't introduce unrelated changes through the fork upgrade.
     function _upgradeLpWithMinAmount(uint256 minAmount) internal {
-        LiquidityPool newImpl = new LiquidityPool(address(0), minAmount);
+        LiquidityPool newImpl = new LiquidityPool(address(0), address(blacklisterInstance), minAmount);
         vm.prank(roleRegistryInstance.owner());
         liquidityPoolInstance.upgradeTo(address(newImpl));
         assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), minAmount);
@@ -63,6 +63,7 @@ contract MinAmountForShareForkTest is TestSetup, Deployed {
             address(roleRegistryInstance),
             address(etherFiRestakerInstance),
             address(0),       // preserve mainnet immutable: priorityWithdrawalQueue
+            address(blacklisterInstance),
             10_000, 100, 10_000
         );
         vm.prank(roleRegistryInstance.owner());

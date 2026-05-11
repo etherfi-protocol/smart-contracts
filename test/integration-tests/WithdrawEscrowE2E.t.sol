@@ -106,7 +106,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
         );
         pQueue = PriorityWithdrawalQueue(payable(address(proxy)));
-        liquidityPoolInstance.upgradeTo(address(new LiquidityPool(address(pQueue), 0)));
+        liquidityPoolInstance.upgradeTo(address(new LiquidityPool(address(pQueue), address(blacklisterInstance), 0)));
         vm.stopPrank();
     }
 
@@ -114,7 +114,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         address wrnOwner = withdrawRequestNFTInstance.owner();
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F))
+            address(new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F, address(blacklisterInstance)))
         );
     }
 

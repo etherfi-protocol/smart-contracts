@@ -8,6 +8,8 @@ import "../../src/WithdrawRequestNFT.sol";
 import "../../src/PriorityWithdrawalQueue.sol";
 import "../../src/ReentrancyGuardNamespaced.sol";
 import "../../src/RoleRegistry.sol";
+import "../../src/UUPSProxy.sol";
+import "../../src/helpers/Blacklister.sol";
 
 interface IUUPSProxy {
     function upgradeTo(address newImpl) external;
@@ -42,6 +44,8 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     uint256 internal constant SCAN_SLOTS = 400;
     bytes32 internal constant GUARD_SLOT =
         0xcd24049d7dcc1fde21494dba8ad7a067afb6b8f14dfe804abeeec84903344e97;
+
+    Blacklister internal blacklisterInstance;
 
     struct LPSnap {
         address eeth;
@@ -142,12 +146,19 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // Latest-block fork; realistic mainnet state.
         vm.createSelectFork(vm.envString("MAINNET_RPC_URL"));
 
-        // Upgrade RoleRegistry in place so newly-added role getters
-        // (e.g. BLACKLISTED_USER) are reachable from upgraded contracts that
-        // call into roleRegistry from within their modifiers.
+        // Upgrade RoleRegistry in place so newly-added role getters are
+        // reachable from upgraded contracts that call into roleRegistry from
+        // within their modifiers.
         address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
         vm.prank(roleRegOwner);
         IUUPSProxy(ROLE_REGISTRY).upgradeTo(address(new RoleRegistry()));
+
+        // Deploy a fresh Blacklister — newly-upgraded impls (LP, WRN, etc.)
+        // now wire it as an immutable. Storage-integrity assertions don't care
+        // about its address; we just need a non-zero target so the constructor
+        // input is well-formed.
+        Blacklister bImpl = new Blacklister(ROLE_REGISTRY);
+        blacklisterInstance = Blacklister(address(new UUPSProxy(address(bImpl), abi.encodeWithSelector(Blacklister.initialize.selector))));
     }
 
     function _snap(address target, uint256 n) internal view returns (bytes32[] memory a) {
@@ -192,8 +203,8 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // ------------------------------------------------------------------
         // 2. Deploy new implementation contracts (with the added guard)
         // ------------------------------------------------------------------
-        address newLP  = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, 0));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE));
+        address newLP  = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, address(blacklisterInstance), 0));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance)));
 
         // ------------------------------------------------------------------
         // 3. Upgrade the proxies in place
@@ -368,8 +379,8 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      migration sweeps queue-locked ETH into the queue contract via
     ///      receive(); the master queue impl has no receive() and would revert.
     function _doUpgrade() internal {
-        address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, 0));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE));
+        address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, address(blacklisterInstance), 0));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance)));
         address newPQ = address(new PriorityWithdrawalQueue(
             LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, TREASURY, 1 hours
         ));
@@ -397,7 +408,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      re-entry. This is defence-in-depth in case some ABI mismatch made
     ///      the modifier no-op.
     function test_postUpgrade_guardBlocksReentry() public {
-        address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, 0));
+        address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, address(blacklisterInstance), 0));
         vm.prank(UPGRADE_TIMELOCK);
         IUUPSProxy(LIQUIDITY_POOL).upgradeTo(newLP);
 

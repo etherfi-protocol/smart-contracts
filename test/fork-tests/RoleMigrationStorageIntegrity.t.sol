@@ -99,7 +99,7 @@ contract RoleMigrationStorageIntegrityTest is Test, Deployed {
         bytes32[] memory preAM = _snapshot(AUCTION_MANAGER);
         bytes32[] memory preER = _snapshot(ETHERFI_RESTAKER);
 
-        address newAM = address(new AuctionManager(ROLE_REGISTRY));
+        address newAM = address(new AuctionManager(ROLE_REGISTRY, address(0)));
         address newER = address(new EtherFiRestaker(
             EIGENLAYER_REWARDS_COORDINATOR,
             ETHERFI_REDEMPTION_MANAGER,
