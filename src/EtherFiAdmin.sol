@@ -82,6 +82,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InvalidMaxAcceptableRebaseApr();
     error InvalidStaleOracleReportBlockWindow();
     error OracleReportNotStale();
+    error NoWithdrawalsToFinalize();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _priorityWithdrawalQueue, uint256 _maxFinalizedWithdrawalAmountPerDay, uint256 _maxNumValidatorsToApprovePerDay, int256 _maxAcceptableRebaseAprInBps, uint256 _maxValidatorTaskBatchSize, uint256 _staleOracleReportBlockWindow) {
@@ -273,9 +274,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             finalizedWithdrawalAmount += request.amountOfEEth;
             requestId++;
         }
-        if (requestId > lastFinalizedRequestId && finalizedWithdrawalAmount > 0) {
-            _finalizeWithdrawals(requestId, finalizedWithdrawalAmount);
-        }
+        if (finalizedWithdrawalAmount == 0) revert NoWithdrawalsToFinalize();
+        _finalizeWithdrawals(requestId, finalizedWithdrawalAmount);
     }
 
     //protocol owns the eth that was distributed to NO and treasury in eigenpods and etherfinodes 
