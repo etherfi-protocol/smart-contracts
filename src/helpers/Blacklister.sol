@@ -10,14 +10,16 @@ import "../interfaces/IRoleRegistry.sol";
 contract Blacklister is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     IRoleRegistry public immutable roleRegistry;
     bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
+    bytes32 public constant BLACKLIST_UNTIL_ROLE = keccak256("BLACKLIST_UNTIL_ROLE");
 
-    mapping(address => bool) public isBlacklisted;
+    mapping(address => uint256) public blacklistedUntil;
 
     error BlacklistedUser(address user);
     error IncorrectRole();
 
     event UserBlacklisted(address user);
     event UserUnblacklisted(address user);
+    event UserBlacklistedUntil(address user, uint256 until);
 
     constructor(address _roleRegistry) {
         roleRegistry = IRoleRegistry(_roleRegistry);
@@ -33,20 +35,32 @@ contract Blacklister is Initializable, UUPSUpgradeable, OwnableUpgradeable {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
+    function blacklistUserUntil(address user) external {
+        if (!roleRegistry.hasRole(BLACKLIST_UNTIL_ROLE, msg.sender)) revert IncorrectRole();
+        blacklistedUntil[user] = block.timestamp + 1 days;
+        emit UserBlacklistedUntil(user, block.timestamp + 1 days);
+    }
+
+    function blacklistUserUntil(address user, uint256 until) external {
+        if (!roleRegistry.hasRole(BLACKLISTER_ROLE, msg.sender)) revert IncorrectRole();
+        blacklistedUntil[user] = block.timestamp + until;
+        emit UserBlacklistedUntil(user, block.timestamp + until);
+    }
+
     function blacklistUser(address user) external {
         if (!roleRegistry.hasRole(BLACKLISTER_ROLE, msg.sender)) revert IncorrectRole();
-        isBlacklisted[user] = true;
+        blacklistedUntil[user] = type(uint256).max;
         emit UserBlacklisted(user);
     }
 
     function unblacklistUser(address user) external {
         if (!roleRegistry.hasRole(BLACKLISTER_ROLE, msg.sender)) revert IncorrectRole();
-        isBlacklisted[user] = false;
+        blacklistedUntil[user] = 0;
         emit UserUnblacklisted(user);
     }
 
     function nonBlacklisted(address user) external view {
-        if (isBlacklisted[user]) revert BlacklistedUser(user);
+        if (blacklistedUntil[user] > block.timestamp) revert BlacklistedUser(user);
     }
 
     function getImplementation() external view returns (address) { 

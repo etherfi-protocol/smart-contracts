@@ -56,13 +56,13 @@ contract BlacklistTest is TestSetup {
     }
 
     function test_blacklist_user_is_blacklisted() public {
-        assertTrue(blacklisterInstance.isBlacklisted(blacklisted));
+        assertTrue(blacklisterInstance.blacklistedUntil(blacklisted) > block.timestamp);
     }
 
     function test_blacklist_unblacklist_clears_flag() public {
         vm.prank(owner);
         blacklisterInstance.unblacklistUser(blacklisted);
-        assertFalse(blacklisterInstance.isBlacklisted(blacklisted));
+        assertFalse(blacklisterInstance.blacklistedUntil(blacklisted) > block.timestamp);
     }
 
     function test_blacklist_requires_role() public {
@@ -310,6 +310,186 @@ contract BlacklistTest is TestSetup {
             assertTrue(
                 keccak256(reason) != keccak256(abi.encodeWithSelector(Blacklister.BlacklistedUser.selector, alice)),
                 "non-blacklisted user hit BlacklistedUser gate"
+            );
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Time-bounded blacklist (`blacklistUserUntil`)
+    //
+    // The Blacklister now stores an expiry timestamp instead of a boolean.
+    // `nonBlacklisted` reverts iff `blacklistedUntil[user] > block.timestamp`,
+    // so the gate must auto-open once the timestamp catches up.
+    // -------------------------------------------------------------------------
+
+    address internal tempBlacklisted = vm.addr(0xC0FFEE);
+
+    function _grantBlacklistUntilRoleTo(address who) internal {
+        // Resolve the role getter BEFORE vm.prank — an external call in the
+        // grantRole arg list would consume the prank. Same pattern is used in
+        // TestSetup.sol around the BLACKLISTER_ROLE grant.
+        bytes32 role = blacklisterInstance.BLACKLIST_UNTIL_ROLE();
+        vm.prank(owner);
+        roleRegistryInstance.grantRole(role, who);
+    }
+
+    function test_blacklistUserUntil_default_sets_one_day_window() public {
+        _grantBlacklistUntilRoleTo(owner);
+
+        uint256 t0 = block.timestamp;
+        vm.prank(owner);
+        blacklisterInstance.blacklistUserUntil(tempBlacklisted);
+
+        assertEq(blacklisterInstance.blacklistedUntil(tempBlacklisted), t0 + 1 days);
+
+        // Inside the window: gate closed.
+        _expectBlacklistedRevert(tempBlacklisted);
+        blacklisterInstance.nonBlacklisted(tempBlacklisted);
+
+        // One second before expiry: still closed.
+        vm.warp(t0 + 1 days - 1);
+        _expectBlacklistedRevert(tempBlacklisted);
+        blacklisterInstance.nonBlacklisted(tempBlacklisted);
+
+        // At expiry (strict `>` check): gate opens.
+        vm.warp(t0 + 1 days);
+        blacklisterInstance.nonBlacklisted(tempBlacklisted);
+
+        // After expiry: still open.
+        vm.warp(t0 + 1 days + 1);
+        blacklisterInstance.nonBlacklisted(tempBlacklisted);
+    }
+
+    function test_blacklistUserUntil_default_requires_BLACKLIST_UNTIL_ROLE() public {
+        // `owner` only holds BLACKLISTER_ROLE in setUp; the default-window
+        // overload requires the separate BLACKLIST_UNTIL_ROLE.
+        vm.prank(owner);
+        vm.expectRevert(Blacklister.IncorrectRole.selector);
+        blacklisterInstance.blacklistUserUntil(tempBlacklisted);
+    }
+
+    function test_blacklistUserUntil_default_emits_event() public {
+        _grantBlacklistUntilRoleTo(owner);
+
+        vm.expectEmit(false, false, false, true, address(blacklisterInstance));
+        emit Blacklister.UserBlacklistedUntil(tempBlacklisted, block.timestamp + 1 days);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUserUntil(tempBlacklisted);
+    }
+
+    function test_blacklistUserUntil_custom_duration_expires() public {
+        uint256 duration = 7 days;
+        uint256 t0 = block.timestamp;
+
+        // The custom-duration overload requires BLACKLISTER_ROLE, which `owner`
+        // already holds.
+        vm.prank(owner);
+        blacklisterInstance.blacklistUserUntil(tempBlacklisted, duration);
+
+        assertEq(blacklisterInstance.blacklistedUntil(tempBlacklisted), t0 + duration);
+
+        _expectBlacklistedRevert(tempBlacklisted);
+        blacklisterInstance.nonBlacklisted(tempBlacklisted);
+
+        vm.warp(t0 + duration);
+        blacklisterInstance.nonBlacklisted(tempBlacklisted);
+    }
+
+    function test_blacklistUserUntil_custom_requires_BLACKLISTER_ROLE() public {
+        address rando = vm.addr(0xB16B00B5);
+        vm.prank(rando);
+        vm.expectRevert(Blacklister.IncorrectRole.selector);
+        blacklisterInstance.blacklistUserUntil(tempBlacklisted, 1 days);
+    }
+
+    function test_blacklistUserUntil_zero_duration_is_immediately_open() public {
+        // `blacklistedUntil = block.timestamp + 0` ⇒ `nonBlacklisted` passes
+        // immediately because the check is strict `>`.
+        vm.prank(owner);
+        blacklisterInstance.blacklistUserUntil(tempBlacklisted, 0);
+
+        assertEq(blacklisterInstance.blacklistedUntil(tempBlacklisted), block.timestamp);
+        blacklisterInstance.nonBlacklisted(tempBlacklisted);
+    }
+
+    function test_blacklistUserUntil_extends_existing_blacklist() public {
+        // Initial: indefinite blacklist via `blacklistUser` is overwritten by
+        // a finite window if BLACKLISTER_ROLE caller chooses to.
+        vm.prank(owner);
+        blacklisterInstance.blacklistUserUntil(tempBlacklisted, 1 days);
+        uint256 firstUntil = blacklisterInstance.blacklistedUntil(tempBlacklisted);
+
+        vm.warp(block.timestamp + 12 hours);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUserUntil(tempBlacklisted, 1 days);
+        uint256 secondUntil = blacklisterInstance.blacklistedUntil(tempBlacklisted);
+
+        assertGt(secondUntil, firstUntil, "second call should push expiry further out");
+    }
+
+    function test_blacklistUserUntil_can_reblacklist_after_expiry() public {
+        vm.prank(owner);
+        blacklisterInstance.blacklistUserUntil(tempBlacklisted, 1 days);
+
+        vm.warp(block.timestamp + 1 days + 1);
+        blacklisterInstance.nonBlacklisted(tempBlacklisted); // open
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUserUntil(tempBlacklisted, 2 days);
+
+        _expectBlacklistedRevert(tempBlacklisted);
+        blacklisterInstance.nonBlacklisted(tempBlacklisted);
+    }
+
+    function test_blacklistUser_indefinite_does_not_expire() public {
+        // The original setUp blacklisted `blacklisted` indefinitely via
+        // `blacklistUser` (sets expiry to type(uint256).max). It must not open
+        // even after large jumps.
+        vm.warp(block.timestamp + 365 days * 100);
+        _expectBlacklistedRevert(blacklisted);
+        blacklisterInstance.nonBlacklisted(blacklisted);
+        assertEq(blacklisterInstance.blacklistedUntil(blacklisted), type(uint256).max);
+    }
+
+    function test_unblacklistUser_clears_timed_blacklist() public {
+        vm.prank(owner);
+        blacklisterInstance.blacklistUserUntil(tempBlacklisted, 30 days);
+
+        _expectBlacklistedRevert(tempBlacklisted);
+        blacklisterInstance.nonBlacklisted(tempBlacklisted);
+
+        vm.prank(owner);
+        blacklisterInstance.unblacklistUser(tempBlacklisted);
+
+        assertEq(blacklisterInstance.blacklistedUntil(tempBlacklisted), 0);
+        blacklisterInstance.nonBlacklisted(tempBlacklisted);
+    }
+
+    // Integration: a real gated contract must reflect the time-based open/close
+    // transition end-to-end (not just the Blacklister view function).
+    function test_blacklistUserUntil_LiquidityPool_gate_opens_after_expiry() public {
+        address user = vm.addr(0xDA7A);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUserUntil(user, 1 days);
+
+        vm.deal(user, 2 ether);
+        vm.prank(user);
+        _expectBlacklistedRevert(user);
+        liquidityPoolInstance.deposit{value: 1 ether}(address(0));
+
+        vm.warp(block.timestamp + 1 days);
+
+        // After expiry the BlacklistedUser revert must not be the one we hit.
+        vm.prank(user);
+        try liquidityPoolInstance.deposit{value: 1 ether}(address(0)) returns (uint256) {
+            // ok
+        } catch (bytes memory reason) {
+            assertTrue(
+                keccak256(reason) != keccak256(abi.encodeWithSelector(Blacklister.BlacklistedUser.selector, user)),
+                "gate should have opened after expiry"
             );
         }
     }
