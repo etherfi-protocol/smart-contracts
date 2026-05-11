@@ -1013,6 +1013,109 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     //--------------------------------------------------------------------------------------
+    //------ _checkEthAmountLockedForPriorityWithdrawal: queue-own-balance invariant -------
+    //
+    // Regression: the check used to read liquidityPool.balance instead of
+    // address(this).balance. Since the LP normally holds far more ETH than
+    // the queue's own escrow, a real shortfall (queue.balance < locked)
+    // would silently pass the buggy check, while an unrelated dip in LP
+    // balance could trip it spuriously. Each test below arranges
+    // queue.balance < ethAmountLockedForPriorityWithdrawal with LP healthy,
+    // then triggers one of the three call sites and asserts the fixed
+    // check reverts with InsufficientLiquidity. Under the pre-fix code
+    // these operations completed silently, leaving the invariant broken.
+    //--------------------------------------------------------------------------------------
+
+    // receive() path — fulfillRequests → LP.transferLockedEthForPriority →
+    // queue.receive() bumps locked and runs the check.
+    function test_checkEthLockedInvariant_revertsInReceiveWhenQueueDrained() public {
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory r1) =
+            _createWithdrawRequest(vipUser, 10 ether);
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory batch =
+            new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        batch[0] = r1;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(batch);
+
+        assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), 10 ether);
+        assertEq(address(priorityQueue).balance, 10 ether);
+
+        // Drain queue's ETH without touching the counter; LP stays healthy
+        // so the old (buggy) LP-balance check would still pass.
+        vm.deal(address(priorityQueue), 5 ether);
+        assertGt(
+            address(liquidityPoolInstance).balance,
+            priorityQueue.ethAmountLockedForPriorityWithdrawal(),
+            "LP still healthy - bug would mask the shortfall"
+        );
+
+        // Fulfilling r2 sends 1 ETH from LP -> queue. receive() bumps locked
+        // to 11; queue.balance becomes 6. New check: 11 > 6 -> revert with
+        // InsufficientLiquidity, which LP._sendFund re-wraps as "SendFail"
+        // when the value-bearing call returns false.
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory r2) =
+            _createWithdrawRequest(vipUser, 1 ether);
+        batch[0] = r2;
+        vm.prank(requestManager);
+        vm.expectRevert(bytes("SendFail"));
+        priorityQueue.fulfillRequests(batch);
+    }
+
+    // _cancelWithdrawRequest path — invalidateRequests on a finalized
+    // request decrements locked, returns ETH to LP, then runs the check.
+    function test_checkEthLockedInvariant_revertsInCancelWhenQueueDrained() public {
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory r1) =
+            _createWithdrawRequest(vipUser, 10 ether);
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory r2) =
+            _createWithdrawRequest(vipUser, 10 ether);
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory batch =
+            new IPriorityWithdrawalQueue.WithdrawRequest[](2);
+        batch[0] = r1;
+        batch[1] = r2;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(batch);
+
+        assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), 20 ether);
+        assertEq(address(priorityQueue).balance, 20 ether);
+
+        // Drain to 15 — leaves enough to fund the cancel's ETH return to LP
+        // (queue needs 10 to send back), but post-op state has
+        // queue.balance = 5 < locked = 10 → new check trips.
+        vm.deal(address(priorityQueue), 15 ether);
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory cancelBatch =
+            new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        cancelBatch[0] = r1;
+        vm.prank(requestManager);
+        vm.expectRevert(PriorityWithdrawalQueue.InsufficientLiquidity.selector);
+        priorityQueue.invalidateRequests(cancelBatch);
+    }
+
+    // _claimWithdraw path — user-facing claim sends ETH to user, then runs
+    // the check. No fee here (amountWithFee == amountOfEEth at 1:1 share rate),
+    // so the post-claim balance comparison is the direct shortfall test.
+    function test_checkEthLockedInvariant_revertsInClaimWhenQueueDrained() public {
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory r1) =
+            _createWithdrawRequest(vipUser, 10 ether);
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory r2) =
+            _createWithdrawRequest(vipUser, 10 ether);
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory batch =
+            new IPriorityWithdrawalQueue.WithdrawRequest[](2);
+        batch[0] = r1;
+        batch[1] = r2;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(batch);
+
+        // Drain to 15: claim r1 (10 to user, no fee) leaves queue.balance = 5
+        // and locked = 10 → check trips.
+        vm.deal(address(priorityQueue), 15 ether);
+
+        vm.prank(vipUser);
+        vm.expectRevert(PriorityWithdrawalQueue.InsufficientLiquidity.selector);
+        priorityQueue.claimWithdraw(r1);
+    }
+
+    //--------------------------------------------------------------------------------------
     //------------------------------  FULL FLOW TESTS  -------------------------------------
     //--------------------------------------------------------------------------------------
 

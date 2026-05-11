@@ -639,7 +639,7 @@ contract PriorityWithdrawalQueue is
     }
 
     function _checkEthAmountLockedForPriorityWithdrawal() internal {
-        if (ethAmountLockedForPriorityWithdrawal > address(liquidityPool).balance) revert InsufficientLiquidity();
+        if (ethAmountLockedForPriorityWithdrawal > address(this).balance) revert InsufficientLiquidity();
     }
 
     function _authorizeUpgrade(address) internal override {
