@@ -24,9 +24,9 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    IeETH public eETH;
-    ILiquidityPool public liquidityPool;
-    IMembershipNFT public membershipNFT;
+    IeETH public DEPRECATED_eETH;
+    ILiquidityPool public DEPRECATED_liquidityPool;
+    IMembershipNFT public DEPRECATED_membershipNFT;
     address public treasury;
     address public DEPRECATED_protocolRevenueManager;
 
@@ -65,8 +65,12 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     // Phase 2
     TierVault[] public tierVaults;
 
-    IEtherFiAdmin public etherFiAdmin;
+    IEtherFiAdmin public DEPRECATED_etherFiAdmin;
 
+    IeETH public immutable eETH;
+    ILiquidityPool public immutable liquidityPool;
+    IMembershipNFT public immutable membershipNFT;
+    IEtherFiAdmin public immutable etherFiAdmin;
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
@@ -79,7 +83,11 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     event NftUnwrappedForEEth(address indexed _user, uint256 indexed _tokenId, uint256 _amountOfEEth, uint40 _loyaltyPoints, uint256 _feeAmount);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry, address _blacklister) {
+    constructor(address _eETH, address _liquidityPool, address _membershipNFT, address _etherFiAdmin, address _roleRegistry, address _blacklister) {
+        eETH = IeETH(_eETH);
+        liquidityPool = ILiquidityPool(_liquidityPool);
+        membershipNFT = IMembershipNFT(_membershipNFT);
+        etherFiAdmin = IEtherFiAdmin(_etherFiAdmin);
         roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
         _disableInitializers();
@@ -98,7 +106,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
     // To be called for Phase 2 contract upgrade
     function initializeOnUpgrade(address _etherFiAdminAddress, uint256 _fanBoostThresholdAmount, uint16 _burnFeeWaiverPeriodInDays) external onlyOwner {
-        etherFiAdmin = IEtherFiAdmin(_etherFiAdminAddress);
+        DEPRECATED_etherFiAdmin = IEtherFiAdmin(_etherFiAdminAddress);
         fanBoostThreshold = uint16(_fanBoostThresholdAmount / 0.001 ether);
         burnFeeWaiverPeriodInDays = _burnFeeWaiverPeriodInDays;
         while (tierVaults.length < tierData.length) {

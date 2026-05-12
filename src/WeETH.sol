@@ -15,6 +15,8 @@ import "./interfaces/IBlacklister.sol";
 
 contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
 
+    IeETH public immutable eETH;
+    ILiquidityPool public immutable liquidityPool;
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
@@ -28,8 +30,8 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     //---------------------------------  STORAGE  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    IeETH public eETH;
-    ILiquidityPool public liquidityPool;
+    IeETH public DEPRECATED_eETH;
+    ILiquidityPool public DEPRECATED_liquidityPool;
     bool public paused;
 
     //--------------------------------------------------------------------------------------
@@ -43,9 +45,13 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry, address _blacklister) {
+    constructor(address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister) {
+        require(_eETH != address(0), "must set eETH");
+        require(_liquidityPool != address(0), "must set liquidity pool");
         require(_roleRegistry != address(0), "must set role registry");
         require(_blacklister != address(0), "must set blacklister");
+        eETH = IeETH(_eETH);
+        liquidityPool = ILiquidityPool(_liquidityPool);
         roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
         _disableInitializers();
@@ -59,8 +65,8 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         __ERC20Permit_init("Wrapped eETH");
         __UUPSUpgradeable_init();
         __Ownable_init();
-        eETH = IeETH(_eETH);
-        liquidityPool = ILiquidityPool(_liquidityPool);
+        DEPRECATED_eETH = IeETH(_eETH);
+        DEPRECATED_liquidityPool = ILiquidityPool(_liquidityPool);
     }
 
     /// @dev name changed from the version initially deployed

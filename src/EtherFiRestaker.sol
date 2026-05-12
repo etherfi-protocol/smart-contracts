@@ -33,6 +33,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     address public immutable etherFiRedemptionManager;
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
+    LiquidityPool public immutable liquidityPool;
+    Liquifier public immutable liquifier;
+    ILidoWithdrawalQueue public immutable lidoWithdrawalQueue;
+    ILido public immutable lido;
+    IDelegationManager public immutable eigenLayerDelegationManager;
+    IStrategyManager public immutable eigenLayerStrategyManager;
     IRoleRegistry public immutable roleRegistry;
     IEtherFiRateLimiter public immutable rateLimiter;
 
@@ -47,12 +53,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     error IncorrectRole();
 
-    LiquidityPool public liquidityPool;
-    Liquifier public liquifier;
-    ILidoWithdrawalQueue public lidoWithdrawalQueue;
-    ILido public lido;
-    IDelegationManager public eigenLayerDelegationManager;
-    IStrategyManager public eigenLayerStrategyManager;
+    LiquidityPool public DEPRECATED_liquidityPool;
+    Liquifier public DEPRECATED_liquifier;
+    ILidoWithdrawalQueue public DEPRECATED_lidoWithdrawalQueue;
+    ILido public DEPRECATED_lido;
+    IDelegationManager public DEPRECATED_eigenLayerDelegationManager;
+    IStrategyManager public DEPRECATED_eigenLayerStrategyManager;
 
     mapping(address => bool) public DEPRECATED_pausers;
     mapping(address => bool) public DEPRECATED_admins;
@@ -78,11 +84,19 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
+        address _liquidityPool,
+        address _liquifier,
         address _rewardsCoordinator,
         address _etherFiRedemptionManager,
         address _roleRegistry,
         address _rateLimiter
     ) {
+        liquidityPool = LiquidityPool(payable(_liquidityPool));
+        liquifier = Liquifier(payable(_liquifier));
+        lido = liquifier.lido();
+        lidoWithdrawalQueue = liquifier.lidoWithdrawalQueue();
+        eigenLayerStrategyManager = liquifier.eigenLayerStrategyManager();
+        eigenLayerDelegationManager = liquifier.eigenLayerDelegationManager();
         rewardsCoordinator = IRewardsCoordinator(_rewardsCoordinator);
         etherFiRedemptionManager = _etherFiRedemptionManager;
         roleRegistry = IRoleRegistry(_roleRegistry);
@@ -96,14 +110,14 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         __Pausable_init();
         __UUPSUpgradeable_init();
 
-        liquidityPool = LiquidityPool(payable(_liquidityPool));
-        liquifier = Liquifier(payable(_liquifier));
+        DEPRECATED_liquidityPool = LiquidityPool(payable(_liquidityPool));
+        DEPRECATED_liquifier = Liquifier(payable(_liquifier));
 
-        lido = liquifier.lido();
-        lidoWithdrawalQueue = liquifier.lidoWithdrawalQueue();
+        DEPRECATED_lido = DEPRECATED_liquifier.lido();
+        DEPRECATED_lidoWithdrawalQueue = DEPRECATED_liquifier.lidoWithdrawalQueue();
 
-        eigenLayerStrategyManager = liquifier.eigenLayerStrategyManager();
-        eigenLayerDelegationManager = liquifier.eigenLayerDelegationManager();
+        DEPRECATED_eigenLayerStrategyManager = DEPRECATED_liquifier.eigenLayerStrategyManager();
+        DEPRECATED_eigenLayerDelegationManager = DEPRECATED_liquifier.eigenLayerDelegationManager();
 
         (,, IStrategy strategy,,,,,,,,) = liquifier.tokenInfos(address(lido));
         tokenInfos[address(lido)] = TokenInfo({

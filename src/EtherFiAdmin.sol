@@ -28,13 +28,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         bool exists;
     }
 
-    IEtherFiOracle public etherFiOracle;
-    IStakingManager public stakingManager;
-    IAuctionManager public auctionManager;
-    IEtherFiNodesManager public etherFiNodesManager;
-    ILiquidityPool public liquidityPool;
-    IMembershipManager public membershipManager;
-    IWithdrawRequestNFT public withdrawRequestNft;
+    IEtherFiOracle public DEPRECATED_etherFiOracle;
+    IStakingManager public DEPRECATED_stakingManager;
+    IAuctionManager public DEPRECATED_auctionManager;
+    IEtherFiNodesManager public DEPRECATED_etherFiNodesManager;
+    ILiquidityPool public DEPRECATED_liquidityPool;
+    IMembershipManager public DEPRECATED_membershipManager;
+    IWithdrawRequestNFT public DEPRECATED_withdrawRequestNft;
 
     mapping(address => bool) public DEPRECATED_admins;
 
@@ -52,7 +52,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     mapping(bytes32 => TaskStatus) public validatorApprovalTaskStatus;
     uint16 validatorTaskBatchSize;
 
-    RoleRegistry public roleRegistry;
+    RoleRegistry public DEPRECATED_roleRegistry;
 
     uint256 public maxFinalizedWithdrawalAmountPerDay;
     uint256 public maxNumValidatorsToApprovePerDay;
@@ -60,14 +60,35 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     bytes32 public constant ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE");
     bytes32 public constant ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE");
 
-    IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
     uint256 public constant MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
     uint256 public constant MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY = 500;
+
+    IEtherFiOracle public immutable etherFiOracle;
+    IStakingManager public immutable stakingManager;
+    IAuctionManager public immutable auctionManager;
+    IEtherFiNodesManager public immutable etherFiNodesManager;
+    ILiquidityPool public immutable liquidityPool;
+    IMembershipManager public immutable membershipManager;
+    IWithdrawRequestNFT public immutable withdrawRequestNft;
+    RoleRegistry public immutable roleRegistry;
+    IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
 
     int256 public immutable MAX_ACCEPTABLE_REBASE_APR_IN_BPS;
     uint256 public immutable MAX_VALIDATOR_TASK_BATCH_SIZE;
 
     uint256 public immutable STALE_ORACLE_REPORT_BLOCK_WINDOW;
+
+    struct ConstructorAddresses {
+        address etherFiOracle;
+        address stakingManager;
+        address auctionManager;
+        address etherFiNodesManager;
+        address liquidityPool;
+        address membershipManager;
+        address withdrawRequestNft;
+        address roleRegistry;
+        address priorityWithdrawalQueue;
+    }
 
     event AdminUpdated(address _address, bool _isAdmin);
     event AdminOperationsExecuted(address indexed _address, bytes32 indexed _reportHash);
@@ -88,15 +109,25 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error NoWithdrawalsToFinalize();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _priorityWithdrawalQueue, int256 _maxAcceptableRebaseAprInBps, uint256 _maxValidatorTaskBatchSize, uint256 _staleOracleReportBlockWindow) {
-        if (_priorityWithdrawalQueue == address(0)) revert InvalidPriorityWithdrawalQueue();
+    constructor(ConstructorAddresses memory _constructorAddresses, int256 _maxAcceptableRebaseAprInBps, uint256 _maxValidatorTaskBatchSize, uint256 _staleOracleReportBlockWindow) {
         if (_maxAcceptableRebaseAprInBps <= 0 || _maxAcceptableRebaseAprInBps > 10_000) revert InvalidMaxAcceptableRebaseApr();
         if (_maxValidatorTaskBatchSize == 0) revert InvalidValidatorTaskBatchSize();
         if (_staleOracleReportBlockWindow == 0) revert InvalidStaleOracleReportBlockWindow();
-        priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
+
+        etherFiOracle = IEtherFiOracle(_constructorAddresses.etherFiOracle);
+        stakingManager = IStakingManager(_constructorAddresses.stakingManager);
+        auctionManager = IAuctionManager(_constructorAddresses.auctionManager);
+        etherFiNodesManager = IEtherFiNodesManager(_constructorAddresses.etherFiNodesManager);
+        liquidityPool = ILiquidityPool(_constructorAddresses.liquidityPool);
+        membershipManager = IMembershipManager(_constructorAddresses.membershipManager);
+        withdrawRequestNft = IWithdrawRequestNFT(_constructorAddresses.withdrawRequestNft);
+        roleRegistry = RoleRegistry(_constructorAddresses.roleRegistry);
+        priorityWithdrawalQueue = IPriorityWithdrawalQueue(_constructorAddresses.priorityWithdrawalQueue);
+
         MAX_ACCEPTABLE_REBASE_APR_IN_BPS = _maxAcceptableRebaseAprInBps;
         MAX_VALIDATOR_TASK_BATCH_SIZE = _maxValidatorTaskBatchSize;
         STALE_ORACLE_REPORT_BLOCK_WINDOW = _staleOracleReportBlockWindow;
+
          _disableInitializers();
     }
 
@@ -114,13 +145,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __Ownable_init();
         __UUPSUpgradeable_init();
 
-        etherFiOracle = IEtherFiOracle(_etherFiOracle);
-        stakingManager = IStakingManager(_stakingManager);
-        auctionManager = IAuctionManager(_auctionManager);
-        etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
-        liquidityPool = ILiquidityPool(_liquidityPool);
-        membershipManager = IMembershipManager(_membershipManager);
-        withdrawRequestNft = IWithdrawRequestNFT(_withdrawRequestNft);
+        DEPRECATED_etherFiOracle = IEtherFiOracle(_etherFiOracle);
+        DEPRECATED_stakingManager = IStakingManager(_stakingManager);
+        DEPRECATED_auctionManager = IAuctionManager(_auctionManager);
+        DEPRECATED_etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
+        DEPRECATED_liquidityPool = ILiquidityPool(_liquidityPool);
+        DEPRECATED_membershipManager = IMembershipManager(_membershipManager);
+        DEPRECATED_withdrawRequestNft = IWithdrawRequestNFT(_withdrawRequestNft);
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
@@ -185,7 +216,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function initializeRoleRegistry(address _roleRegistry) external onlyOwner {
         require(address(roleRegistry) == address(0x00), "already initialized");
-        roleRegistry = RoleRegistry(_roleRegistry);
+        DEPRECATED_roleRegistry = RoleRegistry(_roleRegistry);
         validatorTaskBatchSize = 100;
     }
 

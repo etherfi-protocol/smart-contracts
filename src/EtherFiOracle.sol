@@ -33,11 +33,12 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     uint32 public numCommitteeMembers; // the total number of committee members
     uint32 public numActiveCommitteeMembers; // the number of active (enabled) committee members
 
-    IEtherFiAdmin etherFiAdmin;
+    IEtherFiAdmin DEPRECATED_etherFiAdmin;
 
     mapping(address => bool) public DEPRECATED_admins;
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
+    IEtherFiAdmin public immutable etherFiAdmin;
     IRoleRegistry public immutable roleRegistry;
 
     bytes32 public constant ETHERFI_ORACLE_ADMIN_ROLE = keccak256("ETHERFI_ORACLE_ADMIN_ROLE");
@@ -57,7 +58,8 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry) {
+    constructor(address _etherFiAdmin, address _roleRegistry) {
+        etherFiAdmin = IEtherFiAdmin(_etherFiAdmin);
         roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
@@ -296,11 +298,6 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         consensusVersion = _consensusVersion;
 
         emit ConsensusVersionUpdated(_consensusVersion);
-    }
-
-    function setEtherFiAdmin(address _etherFiAdminAddress) external onlyOwner {
-        require(etherFiAdmin == IEtherFiAdmin(address(0)), "EtherFiAdmin is already set");
-        etherFiAdmin = IEtherFiAdmin(_etherFiAdminAddress);
     }
     
     function unpublishReport(bytes32 _hash) external isAdmin {
