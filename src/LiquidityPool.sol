@@ -714,7 +714,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     function _checkTotalValueInLp() internal view {
-        if (totalValueInLp != address(this).balance) revert InsufficientLiquidity();
+        if (totalValueInLp > address(this).balance) revert InsufficientLiquidity();
     }
 
     function _checkMinAmountForShare() internal view {
