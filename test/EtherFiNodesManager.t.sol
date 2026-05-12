@@ -52,6 +52,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), deployed.STAKING_MANAGER());
         managerInstance.upgradeTo(nodesManagerImplementation);
         roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), elTriggerExit);
+        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_SWEEPER_ROLE(), admin);
         vm.stopPrank();
         
         // Setup rate limiter - check if limiters already exist before creating

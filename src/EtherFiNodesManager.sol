@@ -51,6 +51,7 @@ contract EtherFiNodesManager is
     bytes32 public constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
     bytes32 public constant ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE = keccak256("ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE");
+    bytes32 public constant ETHERFI_NODES_MANAGER_SWEEPER_ROLE = keccak256("ETHERFI_NODES_MANAGER_SWEEPER_ROLE");
 
     //-------------------------------------------------------------------------
     //-----------------------------  Rate Limiter Buckets ---------------------
@@ -100,7 +101,7 @@ contract EtherFiNodesManager is
 
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
     ///   the eth to the liquidity pool in the event of ETH being accidentally sent there
-    function sweepFunds(uint256 id) external onlyAdmin whenNotPaused {
+    function sweepFunds(uint256 id) external onlySweeper whenNotPaused {
         address nodeAddr = etherfiNodeAddress(id);
         uint256 balance = IEtherFiNode(nodeAddr).sweepFunds();
         if(balance > 0) {
@@ -168,15 +169,15 @@ contract EtherFiNodesManager is
         return queueETHWithdrawal(etherfiNodeAddress(id), amount);
     }
 
-    function completeQueuedETHWithdrawals(address node, bool receiveAsTokens) public onlyEigenlayerAdmin whenNotPaused {
+    function completeQueuedETHWithdrawals(address node, bool receiveAsTokens) public onlySweeperOrEigenlayerAdmin whenNotPaused {
         _validateNode(node);
         uint256 balance = IEtherFiNode(node).completeQueuedETHWithdrawals(receiveAsTokens);
         if(balance > 0) {
             emit FundsTransferred(node, balance);
         }
     }
-    
-    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
+
+    function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlySweeperOrEigenlayerAdmin whenNotPaused {
         completeQueuedETHWithdrawals(etherfiNodeAddress(id), receiveAsTokens);
     }
 
@@ -191,12 +192,12 @@ contract EtherFiNodesManager is
         queueWithdrawals(etherfiNodeAddress(id), params);
     }
 
-    function completeQueuedWithdrawals(address node, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) public onlyEigenlayerAdmin whenNotPaused {
+    function completeQueuedWithdrawals(address node, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) public onlySweeperOrEigenlayerAdmin whenNotPaused {
         _validateNode(node);
         IEtherFiNode(node).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
     }
-    
-    function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
+
+    function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlySweeperOrEigenlayerAdmin whenNotPaused {
         completeQueuedWithdrawals(etherfiNodeAddress(id), withdrawals, tokens, receiveAsTokens);
     }
 
@@ -497,6 +498,19 @@ contract EtherFiNodesManager is
 
     modifier onlyLegacyLinker() {
         if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE, msg.sender)) revert IncorrectRole();
+        _;
+    }
+
+    modifier onlySweeper() {
+        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_SWEEPER_ROLE, msg.sender)) revert IncorrectRole();
+        _;
+    }
+
+    modifier onlySweeperOrEigenlayerAdmin() {
+        if (
+            !roleRegistry.hasRole(ETHERFI_NODES_MANAGER_SWEEPER_ROLE, msg.sender) &&
+            !roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE, msg.sender)
+        ) revert IncorrectRole();
         _;
     }
 
