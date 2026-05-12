@@ -175,7 +175,7 @@ contract EtherFiNodesManager is
             emit FundsTransferred(node, balance);
         }
     }
-
+    
     function completeQueuedETHWithdrawals(uint256 id, bool receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
         completeQueuedETHWithdrawals(etherfiNodeAddress(id), receiveAsTokens);
     }
@@ -195,7 +195,7 @@ contract EtherFiNodesManager is
         _validateNode(node);
         IEtherFiNode(node).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
     }
-
+    
     function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
         completeQueuedWithdrawals(etherfiNodeAddress(id), withdrawals, tokens, receiveAsTokens);
     }
