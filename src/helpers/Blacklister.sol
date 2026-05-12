@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "../interfaces/IRoleRegistry.sol";
 
-contract Blacklister is Initializable, UUPSUpgradeable, OwnableUpgradeable {
+contract Blacklister is Initializable, UUPSUpgradeable {
     IRoleRegistry public immutable roleRegistry;
 
     mapping(address => uint256) public blacklistedUntil;
@@ -27,7 +26,6 @@ contract Blacklister is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function initialize() external initializer {
         __UUPSUpgradeable_init();
-        __Ownable_init();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override {

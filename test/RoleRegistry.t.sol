@@ -197,7 +197,7 @@ contract RoleRegistryTest is Test {
 
     function test_RevokePauserUntilRole() public {
         vm.startPrank(revokeUntilRole);
-        registry.revokePauserUntilRole(user1);
+        registry.revokePauserUntilRole(pauseUntilRole);
         assertFalse(registry.hasRole(registry.PAUSE_UNTIL_ROLE(), user1));
         vm.stopPrank();
     }
@@ -211,7 +211,7 @@ contract RoleRegistryTest is Test {
     
     function test_RevokeBlacklistUntilRole() public {
         vm.startPrank(revokeUntilRole);
-        registry.revokeBlacklistUntilRole(user1);
+        registry.revokeBlacklistUntilRole(blacklistRole);
         assertFalse(registry.hasRole(registry.BLACKLIST_UNTIL_ROLE(), user1));
         vm.stopPrank();
     }
