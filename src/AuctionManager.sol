@@ -5,6 +5,7 @@ import "./interfaces/IAuctionManager.sol";
 import "./interfaces/INodeOperatorManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./interfaces/IBlacklister.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -48,6 +49,7 @@ contract AuctionManager is
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;
+    IBlacklister public immutable blacklister;
 
     bytes32 public constant AUCTION_MANAGER_ADMIN_ROLE = keccak256("AUCTION_MANAGER_ADMIN_ROLE");
 
@@ -64,8 +66,9 @@ contract AuctionManager is
     event WhitelistEnabled(bool whitelistStatus);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry) {
+    constructor(address _roleRegistry, address _blacklister) {
         roleRegistry = IRoleRegistry(_roleRegistry);
+        blacklister = IBlacklister(_blacklister);
         _disableInitializers();
     }
 
@@ -108,7 +111,7 @@ contract AuctionManager is
     function createBid(
         uint256 _bidSize,
         uint256 _bidAmountPerBid
-    ) external payable whenNotPaused nonReentrant returns (uint256[] memory) {
+    ) external payable whenNotPaused nonReentrant nonBlacklisted returns (uint256[] memory) {
         require(_bidSize > 0, "Bid size is too small");
         if (whitelistEnabled) {
             require(
@@ -170,7 +173,7 @@ contract AuctionManager is
     /// @notice Cancels bids in a batch by calling the 'cancelBid' function multiple times
     /// @dev Calls an internal function to perform the cancel
     /// @param _bidIds the ID's of the bids to cancel
-    function cancelBidBatch(uint256[] calldata _bidIds) external whenNotPaused {
+    function cancelBidBatch(uint256[] calldata _bidIds) external whenNotPaused nonBlacklisted {
         for (uint256 i = 0; i < _bidIds.length; i++) {
             _cancelBid(_bidIds[i]);
         }
@@ -179,7 +182,7 @@ contract AuctionManager is
     /// @notice Cancels a specified bid by de-activating it
     /// @dev Calls an internal function to perform the cancel
     /// @param _bidId the ID of the bid to cancel
-    function cancelBid(uint256 _bidId) public whenNotPaused {
+    function cancelBid(uint256 _bidId) public whenNotPaused nonBlacklisted {
         _cancelBid(_bidId);
     }
 
@@ -366,6 +369,11 @@ contract AuctionManager is
 
     modifier onlyAdmin() {
         if (!roleRegistry.hasRole(AUCTION_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _;
+    }
+
+    modifier nonBlacklisted() {
+        blacklister.nonBlacklisted(msg.sender);
         _;
     }
 }

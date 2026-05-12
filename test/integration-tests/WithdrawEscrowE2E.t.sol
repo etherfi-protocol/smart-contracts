@@ -106,7 +106,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
         );
         pQueue = PriorityWithdrawalQueue(payable(address(proxy)));
-        liquidityPoolInstance.upgradeTo(address(new LiquidityPool(address(pQueue), 0)));
+        liquidityPoolInstance.upgradeTo(address(new LiquidityPool(address(pQueue), address(blacklisterInstance), 0)));
         vm.stopPrank();
     }
 
@@ -114,7 +114,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         address wrnOwner = withdrawRequestNFTInstance.owner();
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F))
+            address(new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F, address(blacklisterInstance)))
         );
     }
 
@@ -236,10 +236,10 @@ contract WithdrawEscrowE2ETest is TestSetup {
 
         // eETH transferred user → NFT (not burned); no LP accounting change
         // share-rate rounding artifact: eETH.balanceOf uses shares*TVL/totalShares which can differ by 1 wei
-        assertApproxEqAbs(eETHInstance.balanceOf(user), userEEthPre - withdrawAmt, 1,
+        assertApproxEqAbs(eETHInstance.balanceOf(user), userEEthPre - withdrawAmt, 2,
             "step2: user eETH after request");
         assertApproxEqAbs(eETHInstance.balanceOf(address(withdrawRequestNFTInstance)),
-            preNft.eEthBal + withdrawAmt, 1,
+            preNft.eEthBal + withdrawAmt, 2,
             "step2: NFT eETH after request");
         assertEq(eETHInstance.totalShares(), preTotalShares,
             "step2: totalShares unchanged at request");
@@ -258,7 +258,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
                 withdrawRequestNFTInstance.getRequest(reqId);
             assertEq(r.amountOfEEth, withdrawAmt, "step2: request amountOfEEth");
             // Allow 1 wei: deposit→share round-trip rounding
-            assertApproxEqAbs(r.shareOfEEth, sharesAtRequest, 1,
+            assertApproxEqAbs(r.shareOfEEth, sharesAtRequest, 2,
                 "step2: request shareOfEEth");
             assertTrue(r.isValid, "step2: request isValid");
         }

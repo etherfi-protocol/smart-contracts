@@ -216,7 +216,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_StakingManagerFailsNotInitializedToken() public {
-        LiquidityPool liquidityPoolNoToken = new LiquidityPool(address(0x0), 0);
+        LiquidityPool liquidityPoolNoToken = new LiquidityPool(address(0x0), address(blacklisterInstance), 0);
 
         vm.startPrank(alice);
         vm.deal(alice, 3 ether);
@@ -766,7 +766,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_Upgrade2_49_onlyRoleRegistryOwnerCanUpgrade() public {
-        liquidityPool = address(new LiquidityPool(address(0x0), 0));
+        liquidityPool = address(new LiquidityPool(address(0x0), address(blacklisterInstance), 0));
         vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
         vm.prank(address(100));
         liquidityPoolInstance.upgradeTo(liquidityPool);
@@ -1920,7 +1920,7 @@ contract LiquidityPoolTest is TestSetup {
     /// Preserves the existing `priorityWithdrawalQueue` immutable.
     function _upgradeLpWithMinAmount(uint256 minAmount) internal {
         address pq = liquidityPoolInstance.priorityWithdrawalQueue();
-        LiquidityPool newImpl = new LiquidityPool(pq, minAmount);
+        LiquidityPool newImpl = new LiquidityPool(pq, address(blacklisterInstance), minAmount);
         vm.prank(owner);
         liquidityPoolInstance.upgradeTo(address(newImpl));
     }
@@ -1940,10 +1940,10 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_minAmountForShare_immutable_is_set_via_constructor() public {
-        LiquidityPool fresh = new LiquidityPool(address(0), 0.5 ether);
+        LiquidityPool fresh = new LiquidityPool(address(0), address(blacklisterInstance), 0.5 ether);
         assertEq(fresh.MIN_AMOUNT_FOR_SHARE(), 0.5 ether);
 
-        LiquidityPool fresh2 = new LiquidityPool(address(0), type(uint256).max);
+        LiquidityPool fresh2 = new LiquidityPool(address(0), address(blacklisterInstance), type(uint256).max);
         assertEq(fresh2.MIN_AMOUNT_FOR_SHARE(), type(uint256).max);
     }
 
@@ -2126,11 +2126,11 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_minAmountForShare_immutable_independent_of_priority_queue() public {
         // The two constructor params are independent and neither cross-contaminates the other.
-        LiquidityPool a = new LiquidityPool(address(0xBEEF), 1 ether);
+        LiquidityPool a = new LiquidityPool(address(0xBEEF), address(blacklisterInstance), 1 ether);
         assertEq(a.priorityWithdrawalQueue(), address(0xBEEF));
         assertEq(a.MIN_AMOUNT_FOR_SHARE(), 1 ether);
 
-        LiquidityPool b = new LiquidityPool(address(0), 0);
+        LiquidityPool b = new LiquidityPool(address(0), address(blacklisterInstance), 0);
         assertEq(b.priorityWithdrawalQueue(), address(0));
         assertEq(b.MIN_AMOUNT_FOR_SHARE(), 0);
     }

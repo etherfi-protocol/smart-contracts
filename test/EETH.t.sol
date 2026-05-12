@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 import "./TestERC20.sol";
 import "./TestERC721.sol";
+import "../src/helpers/Blacklister.sol";
 
 // Helper contract to force ETH into a contract using selfdestruct
 contract ForceETHSender {
@@ -467,6 +468,202 @@ contract EETHTest is TestSetup {
         vm.prank(admin);
         eETHInstance.recoverERC721(address(0), alice, tokenId);
     }
-    
 
+    // -------------------------------------------------------------------------
+    // Pause + blacklist
+    //
+    // The eETH share-mutating paths (`mintShares`, `burnShares`,
+    // `_transferShares`) all carry the new `whenNotPaused` modifier and call
+    // `blacklister.nonBlacklisted` on the affected addresses. Pause is gated
+    // by RoleRegistry's PROTOCOL_PAUSER / PROTOCOL_UNPAUSER. The blacklist
+    // check is `blacklistedUntil[user] > block.timestamp`, so a time-bounded
+    // entry auto-opens at expiry.
+    // -------------------------------------------------------------------------
+
+    function _expectBlacklistedRevert(address user) internal {
+        vm.expectRevert(abi.encodeWithSelector(Blacklister.BlacklistedUser.selector, user));
+    }
+
+    function _aliceWithEEth(uint256 amount) internal {
+        startHoax(alice);
+        liquidityPoolInstance.deposit{value: amount}();
+        vm.stopPrank();
+    }
+
+    // ---- pause role gating --------------------------------------------------
+
+    function test_EETH_pause_requiresPauserRole() public {
+        // Distinct holder so we don't accidentally rely on `admin`/`alice` overlap.
+        vm.prank(bob);
+        vm.expectRevert(EETH.IncorrectRole.selector);
+        eETHInstance.pause();
+
+        // PROTOCOL_UNPAUSER alone is insufficient — needs PROTOCOL_PAUSER. Resolve
+        // role getter BEFORE vm.prank — an inline external call consumes the prank.
+        address unpauserOnly = vm.addr(0xBADC0DE);
+        bytes32 unpauseRole = roleRegistryInstance.PROTOCOL_UNPAUSER();
+        vm.prank(owner);
+        roleRegistryInstance.grantRole(unpauseRole, unpauserOnly);
+        vm.prank(unpauserOnly);
+        vm.expectRevert(EETH.IncorrectRole.selector);
+        eETHInstance.pause();
+
+        // `admin` holds PROTOCOL_PAUSER from setUpTests (see TestSetup.sol:666).
+        vm.prank(admin);
+        eETHInstance.pause();
+        assertTrue(eETHInstance.paused());
+    }
+
+    function test_EETH_unpause_requiresUnpauserRole() public {
+        vm.prank(admin);
+        eETHInstance.pause();
+
+        vm.prank(bob);
+        vm.expectRevert(EETH.IncorrectRole.selector);
+        eETHInstance.unpause();
+
+        vm.prank(admin);
+        eETHInstance.unpause();
+        assertFalse(eETHInstance.paused());
+    }
+
+    // ---- paused blocks all share-mutating paths -----------------------------
+
+    function test_EETH_mintShares_revertsWhenPaused() public {
+        vm.prank(admin);
+        eETHInstance.pause();
+
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert("PAUSED");
+        eETHInstance.mintShares(alice, 100);
+    }
+
+    function test_EETH_burnShares_revertsWhenPaused() public {
+        vm.prank(address(liquidityPoolInstance));
+        eETHInstance.mintShares(alice, 100);
+
+        vm.prank(admin);
+        eETHInstance.pause();
+
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert("PAUSED");
+        eETHInstance.burnShares(alice, 50);
+    }
+
+    function test_EETH_transfer_revertsWhenPaused() public {
+        _aliceWithEEth(1 ether);
+
+        vm.prank(admin);
+        eETHInstance.pause();
+
+        vm.prank(alice);
+        vm.expectRevert("PAUSED");
+        eETHInstance.transfer(bob, 0.5 ether);
+    }
+
+    function test_EETH_transfer_succeedsAfterUnpause() public {
+        _aliceWithEEth(1 ether);
+
+        vm.prank(admin);
+        eETHInstance.pause();
+        vm.prank(admin);
+        eETHInstance.unpause();
+
+        vm.prank(alice);
+        eETHInstance.transfer(bob, 0.5 ether);
+
+        assertEq(eETHInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    // ---- blacklist gates mint/burn/transfer ---------------------------------
+
+    function test_EETH_mintShares_revertsForBlacklistedRecipient() public {
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(address(liquidityPoolInstance));
+        _expectBlacklistedRevert(alice);
+        eETHInstance.mintShares(alice, 100);
+    }
+
+    function test_EETH_burnShares_revertsForBlacklistedUser() public {
+        vm.prank(address(liquidityPoolInstance));
+        eETHInstance.mintShares(alice, 100);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(address(liquidityPoolInstance));
+        _expectBlacklistedRevert(alice);
+        eETHInstance.burnShares(alice, 50);
+    }
+
+    function test_EETH_transfer_revertsWhenSenderBlacklisted() public {
+        _aliceWithEEth(1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(alice);
+        _expectBlacklistedRevert(alice);
+        eETHInstance.transfer(bob, 0.5 ether);
+    }
+
+    function test_EETH_transfer_revertsWhenRecipientBlacklisted() public {
+        _aliceWithEEth(1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(bob);
+
+        vm.prank(alice);
+        _expectBlacklistedRevert(bob);
+        eETHInstance.transfer(bob, 0.5 ether);
+    }
+
+    function test_EETH_transferFrom_revertsForBlacklistedParticipants() public {
+        // transferFrom path also routes through `_transferShares`, so both
+        // sender and recipient checks apply here too. Spender (msg.sender) is
+        // not in the gate, only the share-side `from`/`to`.
+        _aliceWithEEth(1 ether);
+        vm.prank(alice);
+        eETHInstance.approve(bob, 1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+
+        vm.prank(bob);
+        _expectBlacklistedRevert(alice);
+        eETHInstance.transferFrom(alice, bob, 0.5 ether);
+    }
+
+    function test_EETH_transfer_succeedsAfterBlacklistExpires() public {
+        _aliceWithEEth(1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.extendBlacklistUntil(alice, 1 days);
+
+        vm.prank(alice);
+        _expectBlacklistedRevert(alice);
+        eETHInstance.transfer(bob, 0.5 ether);
+
+        // Strict `>` comparison in Blacklister.nonBlacklisted ⇒ opens at exactly `until`.
+        vm.warp(block.timestamp + 1 days);
+
+        vm.prank(alice);
+        eETHInstance.transfer(bob, 0.5 ether);
+        assertEq(eETHInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    function test_EETH_transfer_succeedsAfterUnblacklist() public {
+        _aliceWithEEth(1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(alice);
+        vm.prank(owner);
+        blacklisterInstance.unblacklistUser(alice);
+
+        vm.prank(alice);
+        eETHInstance.transfer(bob, 0.5 ether);
+        assertEq(eETHInstance.balanceOf(bob), 0.5 ether);
+    }
 }

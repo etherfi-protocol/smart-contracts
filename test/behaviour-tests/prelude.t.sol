@@ -19,6 +19,7 @@ import "../../src/NodeOperatorManager.sol";
 import "../../src/interfaces/ITNFT.sol";
 import "../../src/interfaces/IBNFT.sol";
 import "../../src/AuctionManager.sol";
+import "../../src/helpers/Blacklister.sol";
 import "../../src/libraries/DepositDataRootGenerator.sol";
 
 
@@ -61,6 +62,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
     TestValidatorParams defaultTestValidatorParams;
     EtherFiRateLimiter rateLimiter;
+    Blacklister blacklisterInstance;
 
     function setUp() public {
 
@@ -83,7 +85,12 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(stakingManager.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
-        LiquidityPool liquidityPoolImpl = new LiquidityPool(address(0x0), 0);
+        // Deploy a fresh Blacklister so any upgraded impl that wires it as an immutable
+        // has a non-zero target to call into.
+        Blacklister blacklisterImpl = new Blacklister(address(roleRegistry));
+        blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImpl), abi.encodeWithSelector(Blacklister.initialize.selector))));
+
+        LiquidityPool liquidityPoolImpl = new LiquidityPool(address(0x0), address(blacklisterInstance), 0);
         vm.prank(LiquidityPool(payable(address(liquidityPool))).owner());
         LiquidityPool(payable(address(liquidityPool))).upgradeTo(address(liquidityPoolImpl));
 

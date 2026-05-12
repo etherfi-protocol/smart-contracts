@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "./TestSetup.sol";
 import "../src/helpers/WeETHWithdrawAdapter.sol";
+import "../src/helpers/Blacklister.sol";
 import "../src/interfaces/IWeETHWithdrawAdapter.sol";
 import "../src/utils/PausableUntil.sol";
 
@@ -26,7 +27,8 @@ contract WeETHWithdrawAdapterTest is TestSetup {
             address(eETHInstance),
             address(liquidityPoolInstance),
             address(withdrawRequestNFTInstance),
-            address(roleRegistryInstance)
+            address(roleRegistryInstance),
+            address(blacklisterInstance)
         );
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         adapter = WeETHWithdrawAdapter(address(proxy));
@@ -158,5 +160,120 @@ contract WeETHWithdrawAdapterTest is TestSetup {
 
         vm.prank(bob);
         adapter.requestWithdraw(0.5 ether, bob);
+    }
+
+    // -------------------------------------------------------------------------
+    // Blacklist gate on requestWithdraw / requestWithdrawWithPermit
+    //
+    // `requestWithdraw` carries the `nonBlacklisted` modifier directly;
+    // `requestWithdrawWithPermit` inherits the gate transitively because it
+    // forwards into `requestWithdraw`. Both call paths must observe the same
+    // open/close transitions.
+    // -------------------------------------------------------------------------
+
+    function _expectBlacklistedRevert(address user) internal {
+        vm.expectRevert(abi.encodeWithSelector(Blacklister.BlacklistedUser.selector, user));
+    }
+
+    function test_requestWithdraw_blockedByBlacklist() public {
+        _setupUserWithWeETH(bob, 1 ether, 1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(bob);
+
+        vm.prank(bob);
+        _expectBlacklistedRevert(bob);
+        adapter.requestWithdraw(0.5 ether, bob);
+    }
+
+    function test_requestWithdrawWithPermit_blockedByBlacklist() public {
+        // Permit path doesn't carry the modifier itself — it inherits the gate
+        // by forwarding into `requestWithdraw`. Explicit test guards against a
+        // future refactor that breaks that forwarding.
+        _setupUserWithWeETH(bob, 1 ether, 1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(bob);
+
+        IWeETHWithdrawAdapter.PermitInput memory emptyPermit;
+        vm.prank(bob);
+        _expectBlacklistedRevert(bob);
+        adapter.requestWithdrawWithPermit(0.5 ether, bob, emptyPermit);
+    }
+
+    function test_requestWithdraw_unblockedAfterBlacklistExpires() public {
+        _setupUserWithWeETH(bob, 1 ether, 1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.extendBlacklistUntil(bob, 1 days);
+
+        // Inside the window: blocked.
+        vm.prank(bob);
+        _expectBlacklistedRevert(bob);
+        adapter.requestWithdraw(0.5 ether, bob);
+
+        // At expiry (strict `>` check in Blacklister): gate opens and the
+        // withdrawal goes through end-to-end.
+        vm.warp(block.timestamp + 1 days);
+
+        vm.prank(bob);
+        adapter.requestWithdraw(0.5 ether, bob);
+    }
+
+    function test_requestWithdraw_unblockedAfterExplicitUnblacklist() public {
+        _setupUserWithWeETH(bob, 1 ether, 1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(bob);
+
+        vm.prank(bob);
+        _expectBlacklistedRevert(bob);
+        adapter.requestWithdraw(0.5 ether, bob);
+
+        vm.prank(owner);
+        blacklisterInstance.unblacklistUser(bob);
+
+        vm.prank(bob);
+        adapter.requestWithdraw(0.5 ether, bob);
+    }
+
+    function test_requestWithdraw_pauseAndBlacklistInteract() public {
+        // Both gates active: pause check runs first (modifier order on
+        // requestWithdraw is `whenNotPaused`, then `nonBlacklisted`), so the
+        // pause revert is what surfaces.
+        _setupUserWithWeETH(bob, 1 ether, 1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        adapter.pauseContractUntil();
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(bob);
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
+        );
+        adapter.requestWithdraw(0.5 ether, bob);
+
+        // After unpause, the blacklist gate takes over.
+        vm.prank(unpauseUntilUnpauser);
+        adapter.unpauseContractUntil();
+
+        vm.prank(bob);
+        _expectBlacklistedRevert(bob);
+        adapter.requestWithdraw(0.5 ether, bob);
+    }
+
+    function test_constructor_revertsOnZeroBlacklister() public {
+        vm.expectRevert(WeETHWithdrawAdapter.ZeroAddress.selector);
+        new WeETHWithdrawAdapter(
+            address(weEthInstance),
+            address(eETHInstance),
+            address(liquidityPoolInstance),
+            address(withdrawRequestNFTInstance),
+            address(roleRegistryInstance),
+            address(0)
+        );
     }
 }

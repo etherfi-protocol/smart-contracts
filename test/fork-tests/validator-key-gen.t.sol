@@ -18,6 +18,8 @@ import "../../src/EtherFiNode.sol";
 import "../../src/NodeOperatorManager.sol";
 import "../../src/AuctionManager.sol";
 import "../../src/RoleRegistry.sol";
+import "../../src/UUPSProxy.sol";
+import "../../src/helpers/Blacklister.sol";
 
 // Command to run this test: forge test --match-contract ValidatorKeyGenTest
 
@@ -43,6 +45,17 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
         vm.deal(tom, 100 ether);
 
+        // Upgrade RoleRegistry in place so newly-added role getters (e.g.
+        // BLACKLISTED_USER) are reachable from upgraded contracts that call
+        // into roleRegistry from within their modifiers.
+        vm.prank(roleRegistry.owner());
+        roleRegistry.upgradeTo(address(new RoleRegistry()));
+
+        // Deploy a Blacklister so impls that wire it as an immutable have a
+        // non-zero target.
+        Blacklister bImpl = new Blacklister(address(roleRegistry));
+        Blacklister blacklister = Blacklister(address(new UUPSProxy(address(bImpl), abi.encodeWithSelector(Blacklister.initialize.selector))));
+
         StakingManager stakingManagerImpl = new StakingManager(
             address(liquidityPool),
             address(etherFiNodesManager),
@@ -54,11 +67,11 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.prank(stakingManager.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
-        LiquidityPool liquidityPoolImpl = new LiquidityPool(address(0x0), 0);
+        LiquidityPool liquidityPoolImpl = new LiquidityPool(address(0x0), address(blacklister), 0);
         vm.prank(liquidityPool.owner());
         liquidityPool.upgradeTo(address(liquidityPoolImpl));
 
-        AuctionManager auctionManagerImpl = new AuctionManager(address(roleRegistry));
+        AuctionManager auctionManagerImpl = new AuctionManager(address(roleRegistry), address(blacklister));
         vm.prank(auctionManager.owner());
         auctionManager.upgradeTo(address(auctionManagerImpl));
 

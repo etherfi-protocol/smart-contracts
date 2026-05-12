@@ -186,6 +186,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
             address(roleRegistryInstance),
             address(etherFiRestakerInstance),
             address(priorityQueueInstance),
+            address(blacklisterInstance),
             oneAboveBasisPoints,
             100,
             10_000
@@ -201,6 +202,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
             address(roleRegistryInstance),
             address(etherFiRestakerInstance),
             address(priorityQueueInstance),
+            address(blacklisterInstance),
             10_000,
             oneAboveBasisPoints,
             10_000
@@ -216,6 +218,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
             address(roleRegistryInstance),
             address(etherFiRestakerInstance),
             address(priorityQueueInstance),
+            address(blacklisterInstance),
             10_000,
             100,
             oneAboveBasisPoints

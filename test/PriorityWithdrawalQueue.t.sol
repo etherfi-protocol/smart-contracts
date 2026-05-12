@@ -51,7 +51,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Upgrade LiquidityPool to latest version (needed for setPriorityWithdrawalQueue)
         vm.startPrank(owner);
-        LiquidityPool newLpImpl = new LiquidityPool(address(priorityQueue), 0);
+        LiquidityPool newLpImpl = new LiquidityPool(address(priorityQueue), address(blacklisterInstance), 0);
         liquidityPoolInstance.upgradeTo(address(newLpImpl));
 
         // Upgrade WithdrawRequestNFT so it has receive() and can accept ETH escrow.
@@ -60,7 +60,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.stopPrank();
         vm.startPrank(wrnOwner);
         WithdrawRequestNFT newWrnImpl =
-            new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F);
+            new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F, address(blacklisterInstance));
         withdrawRequestNFTInstance.upgradeTo(address(newWrnImpl));
         vm.stopPrank();
         vm.startPrank(owner);
