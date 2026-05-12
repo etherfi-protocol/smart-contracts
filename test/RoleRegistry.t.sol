@@ -47,7 +47,7 @@ contract RoleRegistryTest is Test {
 
         vm.startPrank(owner);
         registry.grantRole(registry.PAUSE_UNTIL_ROLE(), pauseUntilRole);
-        registry.grantRole(registry.BLACKLISTER_ROLE(), blacklistRole);
+        registry.grantRole(registry.BLACKLIST_UNTIL_ROLE(), blacklistRole);
         registry.grantRole(registry.REVOKE_UNTIL_ROLE(), revokeUntilRole);
         vm.stopPrank();
     }
@@ -189,6 +189,7 @@ contract RoleRegistryTest is Test {
     }
 
     function test_RevokePauserUntilRole_only_REVOKE_UNTIL_ROLE_can_revoke() public {
+        assertTrue(registry.hasRole(registry.PAUSE_UNTIL_ROLE(), pauseUntilRole));
         vm.startPrank(user1);
         vm.expectRevert(RoleRegistry.IncorrectRole.selector);
         registry.revokePauserUntilRole(user1);
@@ -196,6 +197,7 @@ contract RoleRegistryTest is Test {
     }
 
     function test_RevokePauserUntilRole() public {
+        assertTrue(registry.hasRole(registry.PAUSE_UNTIL_ROLE(), pauseUntilRole));
         vm.startPrank(revokeUntilRole);
         registry.revokePauserUntilRole(pauseUntilRole);
         assertFalse(registry.hasRole(registry.PAUSE_UNTIL_ROLE(), user1));
@@ -203,6 +205,7 @@ contract RoleRegistryTest is Test {
     }
 
     function test_RevokeBlacklistUntilRole_only_REVOKE_UNTIL_ROLE_can_revoke() public {
+        assertTrue(registry.hasRole(registry.BLACKLIST_UNTIL_ROLE(), blacklistRole));
         vm.startPrank(user1);
         vm.expectRevert(RoleRegistry.IncorrectRole.selector);
         registry.revokeBlacklistUntilRole(user1);
@@ -210,6 +213,7 @@ contract RoleRegistryTest is Test {
     }
     
     function test_RevokeBlacklistUntilRole() public {
+        assertTrue(registry.hasRole(registry.BLACKLIST_UNTIL_ROLE(), blacklistRole));
         vm.startPrank(revokeUntilRole);
         registry.revokeBlacklistUntilRole(blacklistRole);
         assertFalse(registry.hasRole(registry.BLACKLIST_UNTIL_ROLE(), user1));
