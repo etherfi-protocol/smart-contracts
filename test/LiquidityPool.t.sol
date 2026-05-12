@@ -59,7 +59,7 @@ contract LiquidityPoolTest is TestSetup {
 
         liquidityPoolInstance.deposit{value: 1 ether}();
 
-        vm.expectRevert(LiquidityPool.InvalidShareAmount.selector);
+        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
         liquidityPoolInstance.requestWithdraw(alice, 0);
 
         vm.stopPrank();
@@ -2306,9 +2306,9 @@ contract LiquidityPoolTest is TestSetup {
         uint256 dust = liquidityPoolInstance.MIN_WITHDRAW_AMOUNT() - 1;
         uint256 large = liquidityPoolInstance.MAX_WITHDRAW_AMOUNT() + 1 ether;
 
-        vm.deal(bob, large + 1 ether);
+        vm.deal(bob, dust - 10);
         vm.startPrank(bob);
-        liquidityPoolInstance.deposit{value: large + 1 ether}();
+        liquidityPoolInstance.deposit{value: dust - 10}();
         uint256 balance = eETHInstance.balanceOf(bob);
         eETHInstance.approve(address(liquidityPoolInstance), balance);
 
