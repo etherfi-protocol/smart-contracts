@@ -2221,18 +2221,14 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(request.amountOfEEth, amt, "MIN_WITHDRAW_AMOUNT request should be created");
     }
 
-    function test_requestWithdraw_belowMin_withdrawsFullBalance() public {
+    function test_requestWithdraw_belowMin_amountNotEqualToBalance_reverts() public {
         uint96 amt = uint96(liquidityPoolInstance.MIN_WITHDRAW_AMOUNT()) - 1;
 
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 1 ether}();
-        uint256 balance = eETHInstance.balanceOf(bob);
-        eETHInstance.approve(address(liquidityPoolInstance), balance);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amt);
+        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
+        liquidityPoolInstance.requestWithdraw(bob, amt);
         vm.stopPrank();
-
-        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
-        assertEq(request.amountOfEEth, balance, "below-MIN request should withdraw full balance");
     }
 
     function test_requestWithdraw_atMax_succeeds() public {
@@ -2306,9 +2302,9 @@ contract LiquidityPoolTest is TestSetup {
         uint256 dust = liquidityPoolInstance.MIN_WITHDRAW_AMOUNT() - 1;
         uint256 large = liquidityPoolInstance.MAX_WITHDRAW_AMOUNT() + 1 ether;
 
-        vm.deal(bob, dust - 10);
+        vm.deal(bob, dust);
         vm.startPrank(bob);
-        liquidityPoolInstance.deposit{value: dust - 10}();
+        liquidityPoolInstance.deposit{value: dust}();
         uint256 balance = eETHInstance.balanceOf(bob);
         eETHInstance.approve(address(liquidityPoolInstance), balance);
 
