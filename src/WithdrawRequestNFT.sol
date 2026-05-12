@@ -53,6 +53,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint128 public ethAmountLockedForWithdrawal;
 
     bytes32 public constant WITHDRAW_REQUEST_NFT_ADMIN_ROLE = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
+    bytes32 public constant INVALIDATE_WITHDRAW_REQUEST_ROLE = keccak256("INVALIDATE_WITHDRAW_REQUEST_ROLE");
     bytes32 public constant IMPLICIT_FEE_CLAIMER_ROLE = keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
 
     IBlacklister public immutable blacklister;
@@ -244,7 +245,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     /// @dev Admin can only invalidate requests that have NOT been finalized yet
-    function invalidateRequest(uint256 requestId) external onlyAdmin {
+    function invalidateRequest(uint256 requestId) external {
+        if (!roleRegistry.hasRole(INVALIDATE_WITHDRAW_REQUEST_ROLE, msg.sender)) revert IncorrectRole();
         require(requestId > lastFinalizedRequestId, "Cannot invalidate finalized request");
         require(isValid(requestId), "Request is not valid");
         _requests[requestId].isValid = false;

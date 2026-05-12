@@ -308,9 +308,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _handleWithdrawals(IEtherFiOracle.OracleReport calldata _report) internal {
-        for (uint256 i = 0; i < _report.withdrawalRequestsToInvalidate.length; i++) {
-            withdrawRequestNft.invalidateRequest(_report.withdrawalRequestsToInvalidate[i]);
-        }
         _finalizeWithdrawals(_report.lastFinalizedWithdrawalRequestId, _report.finalizedWithdrawalAmount);
     }
     

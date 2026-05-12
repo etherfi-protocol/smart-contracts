@@ -20,6 +20,16 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         vm.prank(nodeOperatorManagerInstance.owner());
         nodeOperatorManagerInstance.upgradeTo(address(nodeOperatorManagerImpl));
 
+        // Upgrade Oracle and Admin to local impls so the new OracleReport ABI matches.
+        _upgradeOracleAndAdminForFork();
+
+        // Raise the per-day approval cap so executeTasks doesn't reject the validator approval.
+        address rrOwner = roleRegistryInstance.owner();
+        vm.startPrank(rrOwner);
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), rrOwner);
+        etherFiAdminInstance.updateMaxNumValidatorsToApprovePerDay(etherFiAdminInstance.MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY());
+        vm.stopPrank();
+
         // Handle any pending oracle report that hasn't been processed yet
         _syncOracleReportState();
     }
@@ -202,7 +212,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
-            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
         );
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
