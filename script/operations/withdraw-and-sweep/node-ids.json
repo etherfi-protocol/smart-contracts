@@ -1,0 +1,67 @@
+{
+  "nodes": [
+    {
+      "node": "0x4cb9384e3cc72f9302288f64edade772d7f2dd06",
+      "id": "15734",
+      "kind": "legacy",
+      "pubkey": "0x9504155ede3c395506e723aa243a5bc465c7e9294e25e6a4d1047c079c261c4cf65bbe0babafeb05666853bde910848a",
+      "etherfi_id": 15734
+    },
+    {
+      "node": "0x1df4fd06bb3866d7d66e0db8428b24fd829b2e9b",
+      "id": "50974",
+      "kind": "legacy",
+      "pubkey": "0xabf36798a2d56c7b41632f4759ea1fcf594c28bfccc578feb893a4b5468bddad601832174455abc2598ec56db7fdc8c5",
+      "etherfi_id": 50974
+    },
+    {
+      "node": "0x4c0456404760794a5b69550e5b76fc0265710ddb",
+      "id": "39329",
+      "kind": "legacy",
+      "pubkey": "0xb56e65003f93ecb45bd167dc323d225ea4db3ce5e52ee3b795a872984cd802da738c0cf0cab18b31ec6c5eedba230145",
+      "etherfi_id": 39329
+    },
+    {
+      "node": "0x92316ab4bee3662709dd6a96ea19b06692409b2e",
+      "id": "90568",
+      "kind": "legacy",
+      "pubkey": "0xb43be1ed495e2d1fae63ef26b8bd26e194a1652d16e5afd26dd73a81218a7dca78870abd006cb49b0f7c1d138ac2f0a9",
+      "etherfi_id": 90568
+    },
+    {
+      "node": "0x0a72f682e70f3dc64a3701b684d3be09fc7a9d3a",
+      "id": "9489",
+      "kind": "legacy",
+      "pubkey": "0x8e13efdefdda5f7e1024cff3f4419b29ce04180f2182c2ca04ec904bf73853fd4ffa6bab19d9c209c499d11932f7faa1",
+      "etherfi_id": 9489
+    },
+    {
+      "node": "0x828d2f327b985ce817b18ddb6dfcc299ca93a692",
+      "id": "102120",
+      "kind": "legacy",
+      "pubkey": "0x8078d6afd7cc15f20658eb70097d498a96075d67b7f4a33f9a189c52025abf0b3a5208d288b7b9748c5ce00927bdd14b",
+      "etherfi_id": 102120
+    },
+    {
+      "node": "0xdd2b96f0e708f2de5af69cbad82824330ac182ee",
+      "id": "27839",
+      "kind": "legacy",
+      "pubkey": "0x937c81203948760fa776f65c8e4ec4fb4c996fc9c83fda646a328b274ad00c09ac088334e2d337290ec4415f053b393f",
+      "etherfi_id": 27839
+    },
+    {
+      "node": "0x4e7a000995358e75010e1cd361dbd73a365fec74",
+      "id": "102116",
+      "kind": "legacy",
+      "pubkey": "0xac9c04c2059393bc1d83798ed30460bb83e267fda2bb186d614ae3d0d0bab88413199540c387d6b7ef4fed76e932cd63",
+      "etherfi_id": 102116
+    },
+    {
+      "node": "0x6847c6c2e10d1315a172869c49eb5c7bbcd9b55a",
+      "id": "3971",
+      "kind": "legacy",
+      "pubkey": "0xa3b5387c00fd7ca23a50bcf8bd9de2823a5cd915b3b29c33f29fe34c02764de66a0bf78822136d725a6e1d70e9dbd9e3",
+      "etherfi_id": 3971
+    }
+  ]
+}
