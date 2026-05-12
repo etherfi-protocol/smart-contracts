@@ -302,8 +302,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @param amount requested amount to withdraw from contract
     /// @return uint256 requestId of the WithdrawRequestNFT
     function requestWithdraw(address recipient, uint256 amount) public whenNotPaused nonReentrant nonBlacklisted returns (uint256) {
-        if (amount < MIN_WITHDRAW_AMOUNT || amount > MAX_WITHDRAW_AMOUNT) revert InvalidWithdrawalAmount();
+        if (amount == 0) revert InvalidShareAmount();
+        if (amount > MAX_WITHDRAW_AMOUNT) revert InvalidWithdrawalAmount();
         IBlacklister(blacklister).nonBlacklisted(recipient);
+        if (amount < MIN_WITHDRAW_AMOUNT) {
+            amount = IERC20(address(eETH)).balanceOf(msg.sender);
+        }
         uint256 share = sharesForAmount(amount);
         if (share == 0) revert InvalidShareAmount();
 

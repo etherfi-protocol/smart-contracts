@@ -59,7 +59,7 @@ contract LiquidityPoolTest is TestSetup {
 
         liquidityPoolInstance.deposit{value: 1 ether}();
 
-        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
+        vm.expectRevert(LiquidityPool.InvalidShareAmount.selector);
         liquidityPoolInstance.requestWithdraw(alice, 0);
 
         vm.stopPrank();
@@ -2221,15 +2221,18 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(request.amountOfEEth, amt, "MIN_WITHDRAW_AMOUNT request should be created");
     }
 
-    function test_requestWithdraw_belowMin_reverts() public {
+    function test_requestWithdraw_belowMin_withdrawsFullBalance() public {
         uint96 amt = uint96(liquidityPoolInstance.MIN_WITHDRAW_AMOUNT()) - 1;
 
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 1 ether}();
-        eETHInstance.approve(address(liquidityPoolInstance), amt);
-        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
-        liquidityPoolInstance.requestWithdraw(bob, amt);
+        uint256 balance = eETHInstance.balanceOf(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), balance);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amt);
         vm.stopPrank();
+
+        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
+        assertEq(request.amountOfEEth, balance, "below-MIN request should withdraw full balance");
     }
 
     function test_requestWithdraw_atMax_succeeds() public {
@@ -2295,20 +2298,23 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(request.amountOfEEth, large, "membership-burn whale withdraw should bypass MAX cap");
     }
 
-    /// @dev Contrast: same amounts that `requestMembershipNFTWithdraw` accepts
-    ///      MUST revert via the user-facing `requestWithdraw` path. Locks in
-    ///      that the exemption is scoped to the membership-manager entry point.
-    function test_requestWithdraw_userFlow_rejectsAmountsMembershipFlowAccepts() public {
+    /// @dev Contrast with `requestMembershipNFTWithdraw`, which accepts both dust
+    ///      and whale amounts unchanged. Via the user-facing `requestWithdraw`:
+    ///        - dust (< MIN) is rewritten to the caller's full eETH balance
+    ///        - large (> MAX) still reverts with InvalidWithdrawalAmount
+    function test_requestWithdraw_userFlow_dustWithdrawsFullBalance_largeReverts() public {
         uint256 dust = liquidityPoolInstance.MIN_WITHDRAW_AMOUNT() - 1;
         uint256 large = liquidityPoolInstance.MAX_WITHDRAW_AMOUNT() + 1 ether;
 
         vm.deal(bob, large + 1 ether);
         vm.startPrank(bob);
         liquidityPoolInstance.deposit{value: large + 1 ether}();
-        eETHInstance.approve(address(liquidityPoolInstance), large);
+        uint256 balance = eETHInstance.balanceOf(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), balance);
 
-        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
-        liquidityPoolInstance.requestWithdraw(bob, dust);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, dust);
+        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
+        assertEq(request.amountOfEEth, balance, "dust request should withdraw bob's full balance");
 
         vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
         liquidityPoolInstance.requestWithdraw(bob, large);
