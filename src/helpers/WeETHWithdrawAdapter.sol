@@ -13,6 +13,7 @@ import {IeETH} from "../interfaces/IeETH.sol";
 import {ILiquidityPool} from "../interfaces/ILiquidityPool.sol";
 import {IWithdrawRequestNFT} from "../interfaces/IWithdrawRequestNFT.sol";
 import {IRoleRegistry} from "../interfaces/IRoleRegistry.sol";
+import {IBlacklister} from "../interfaces/IBlacklister.sol";
 import {PausableUntil} from "../utils/PausableUntil.sol";
 
 /**
@@ -38,6 +39,7 @@ contract WeETHWithdrawAdapter is
     ILiquidityPool public immutable liquidityPool;
     IWithdrawRequestNFT public immutable withdrawRequestNFT;
     IRoleRegistry public immutable roleRegistry;
+    IBlacklister public immutable blacklister;
 
     bool public paused;
 
@@ -74,13 +76,15 @@ contract WeETHWithdrawAdapter is
         address _eETH,
         address _liquidityPool,
         address _withdrawRequestNFT,
-        address _roleRegistry
+        address _roleRegistry,
+        address _blacklister
     ) {
-        if (_weETH == address(0) || 
-            _eETH == address(0) || 
-            _liquidityPool == address(0) || 
+        if (_weETH == address(0) ||
+            _eETH == address(0) ||
+            _liquidityPool == address(0) ||
             _withdrawRequestNFT == address(0) ||
-            _roleRegistry == address(0)) {
+            _roleRegistry == address(0) ||
+            _blacklister == address(0)) {
             revert ZeroAddress();
         }
 
@@ -89,7 +93,8 @@ contract WeETHWithdrawAdapter is
         liquidityPool = ILiquidityPool(_liquidityPool);
         withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
         roleRegistry = IRoleRegistry(_roleRegistry);
-        
+        blacklister = IBlacklister(_blacklister);
+
         _disableInitializers();
     }
 
@@ -114,6 +119,7 @@ contract WeETHWithdrawAdapter is
     function requestWithdraw(uint256 weETHAmount, address recipient) 
         public 
         whenNotPaused 
+        nonBlacklisted
         returns (uint256 requestId) 
     {
         if (weETHAmount == 0) revert ZeroAmount();
@@ -251,6 +257,11 @@ contract WeETHWithdrawAdapter is
     modifier whenNotPaused() {
         _requireNotPaused();
         _requireNotPausedUntil();
+        _;
+    }
+
+    modifier nonBlacklisted() {
+        blacklister.nonBlacklisted(msg.sender);
         _;
     }
 }

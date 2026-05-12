@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 
 contract AuctionManagerV2Test is AuctionManager {
-    constructor(address _roleRegistry) AuctionManager(_roleRegistry) {}
+    constructor(address _roleRegistry, address _blacklister) AuctionManager(_roleRegistry, _blacklister) {}
     function isUpgraded() public pure returns(bool){
         return true;
     }
@@ -131,7 +131,7 @@ contract AddressProviderTest is TestSetup {
         assertEq(addressProviderInstance.getImplementationAddress("RegulationsManager"), address(regulationsManagerImplementation));
         assertEq(addressProviderInstance.getImplementationAddress("AuctionManager"), address(auctionImplementation));
 
-        AuctionManagerV2Test auctionManagerV2Implementation = new AuctionManagerV2Test(address(roleRegistryInstance));
+        AuctionManagerV2Test auctionManagerV2Implementation = new AuctionManagerV2Test(address(roleRegistryInstance), address(blacklisterInstance));
         auctionInstance.upgradeTo(address(auctionManagerV2Implementation));
 
         assertEq(addressProviderInstance.getImplementationAddress("AuctionManager"), address(auctionManagerV2Implementation));

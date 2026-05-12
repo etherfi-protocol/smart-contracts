@@ -8,6 +8,7 @@ import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IMembershipManager.sol";
+import "./interfaces/IBlacklister.sol";
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -54,6 +55,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     bytes32 public constant WITHDRAW_REQUEST_NFT_ADMIN_ROLE = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
     bytes32 public constant IMPLICIT_FEE_CLAIMER_ROLE = keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
 
+    IBlacklister public immutable blacklister;
+
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
     event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
     event WithdrawRequestInvalidated(uint32 indexed requestId);
@@ -68,9 +71,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     error InvalidWithdrawalAmount();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _treasury) {
+    constructor(address _treasury, address _blacklister) {
         treasury = _treasury;
-        
+        blacklister = IBlacklister(_blacklister);
+
         _disableInitializers();
     }
 
@@ -147,7 +151,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @notice called by the NFT owner to claim their ETH
     /// @dev burns the NFT and transfers ETH from the liquidity pool to the owner minus any fee, withdraw request must be valid and finalized
     /// @param tokenId the id of the withdraw request and associated NFT
-    function claimWithdraw(uint256 tokenId) external nonReentrant {
+    function claimWithdraw(uint256 tokenId) external nonReentrant nonBlacklisted {
         return _claimWithdraw(tokenId, ownerOf(tokenId));
     }
     
@@ -181,7 +185,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw, amountBurnedShare, recipient, 0);
     }
 
-    function batchClaimWithdraw(uint256[] calldata tokenIds) external nonReentrant {
+    function batchClaimWithdraw(uint256[] calldata tokenIds) external nonReentrant nonBlacklisted {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             _claimWithdraw(tokenIds[i], ownerOf(tokenIds[i]));
         }
@@ -343,7 +347,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     // the withdraw request NFT is transferrable
     // - if the request is valid, it can be transferred by the owner of the NFT
     // - if the request is invalid, it can be transferred only by the owner of the WithdarwRequestNFT contract
+    // - the transfer is not allowed if the from or to is blacklisted
     function _beforeTokenTransfer(address from, address to, uint256 firstTokenId, uint256 batchSize) internal override {
+        blacklister.nonBlacklisted(from);
+        blacklister.nonBlacklisted(to);
         for (uint256 i = 0; i < batchSize; i++) {
             uint256 tokenId = firstTokenId + i;
             require(_requests[tokenId].isValid || msg.sender == owner(), "INVALID_REQUEST");
@@ -373,6 +380,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     modifier whenNotPaused() {
         _requireNotPaused();
         _requireNotPausedUntil();
+        _;
+    }
+
+    modifier nonBlacklisted() {
+        blacklister.nonBlacklisted(msg.sender);
         _;
     }
 }

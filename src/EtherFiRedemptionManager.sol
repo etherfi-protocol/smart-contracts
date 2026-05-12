@@ -24,6 +24,7 @@ import "lib/BucketLimiter.sol";
 
 import "./RoleRegistry.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
+import "./interfaces/IBlacklister.sol";
 
 /*
     The contract allows instant redemption of eETH and weETH tokens to ETH or stETH with an exit fee.
@@ -56,6 +57,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     EtherFiRestaker public immutable etherFiRestaker;
     ILido public immutable lido;
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
+    IBlacklister public immutable blacklister;
 
     uint256 public immutable MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS;
     uint256 public immutable MAX_EXIT_FEE_IN_BPS;
@@ -68,12 +70,24 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     error InvalidAmount();
     error InvalidOutputToken();
+    error BlacklistedUser();
 
 
     receive() external payable {}
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _liquidityPool, address _eEth, address _weEth, address _treasury, address _roleRegistry, address _etherFiRestaker, address _priorityWithdrawalQueue, uint256 _maxExitFeeSplitToTreasuryInBps, uint256 _maxExitFeeInBps, uint256 _maxLowWatermarkInBpsOfTvl) {
+    constructor(
+        address _liquidityPool, 
+        address _eEth, address _weEth, 
+        address _treasury, 
+        address _roleRegistry, 
+        address _etherFiRestaker, 
+        address _priorityWithdrawalQueue, 
+        address _blacklister, 
+        uint256 _maxExitFeeSplitToTreasuryInBps, 
+        uint256 _maxExitFeeInBps, 
+        uint256 _maxLowWatermarkInBpsOfTvl)
+    {
         if (_maxExitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _maxExitFeeInBps > BASIS_POINT_SCALE || _maxLowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidAmount();
         MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS = _maxExitFeeSplitToTreasuryInBps;
         MAX_EXIT_FEE_IN_BPS = _maxExitFeeInBps;
@@ -86,6 +100,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         etherFiRestaker = EtherFiRestaker(payable(_etherFiRestaker));
         lido = etherFiRestaker.lido();
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_priorityWithdrawalQueue);
+        blacklister = IBlacklister(_blacklister);
 
         _disableInitializers();
     }
@@ -120,7 +135,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param receiver The address to receive the redeemed outputToken.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
+    function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant nonBlacklisted(receiver) {
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
 
@@ -130,7 +145,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param receiver The address to receive the redeemed outputToken.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant {
+    function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant nonBlacklisted(receiver) {
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
 
@@ -141,7 +156,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param permit The permit params.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
+    function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant nonBlacklisted(receiver) {
         try eEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
@@ -153,7 +168,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param permit The permit params.
      * @param outputToken The token to redeem to (ETH or stETH).
      */
-    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant {
+    function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant nonBlacklisted(receiver) {
         try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
@@ -433,6 +448,12 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     modifier hasRole(bytes32 role) {
         _hasRole(role, msg.sender);
+        _;
+    }
+
+    modifier nonBlacklisted(address receiver) {
+        blacklister.nonBlacklisted(msg.sender);
+        blacklister.nonBlacklisted(receiver);
         _;
     }
 

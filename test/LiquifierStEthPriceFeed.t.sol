@@ -55,7 +55,7 @@ contract LiquifierStEthPriceFeedTest is Test {
         feed = new MockChainlinkPriceFeed(int256(1 ether), block.timestamp);
         curve = new MockCurvePool();
 
-        Liquifier impl = new Liquifier(address(roleRegistry), address(feed), MIN_DISCOUNT, STALE_WINDOW, MAX_DEVIATION_BPS);
+        Liquifier impl = new Liquifier(address(roleRegistry), address(feed), address(0xDEAD), MIN_DISCOUNT, STALE_WINDOW, MAX_DEVIATION_BPS);
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         liquifier = Liquifier(payable(address(proxy)));
 

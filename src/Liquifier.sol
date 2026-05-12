@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/ILiquifier.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRoleRegistry.sol";
+import "./interfaces/IBlacklister.sol";
 import "./utils/PausableUntil.sol";
 
 import "./eigenlayer-interfaces/IStrategyManager.sol";
@@ -96,6 +97,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     IRoleRegistry public immutable roleRegistry;
     AggregatorV3Interface public immutable stEthPriceFeed;
+    IBlacklister public immutable blacklister;
 
     uint256 public immutable MIN_DISCOUNT_RATE_IN_BPS;
     uint256 public immutable STALE_PRICE_WINDOW;
@@ -123,17 +125,20 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error InvalidMaxPriceDeviationInBps();
     error InvalidRoleRegistry();
     error InvalidPriceFeed();
+    error InvalidBlacklister();
     error InvalidStEthPrice();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry, address _stEthPriceFeed, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) {
+    constructor(address _roleRegistry, address _stEthPriceFeed, address _blacklister, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) {
         if (_minDiscountInBasisPoints == 0 || _minDiscountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (_stalePriceWindow == 0) revert InvalidPriceWindow();
         if (_maxPriceDeviationInBps == 0 || _maxPriceDeviationInBps > BASIS_POINT_SCALE) revert InvalidMaxPriceDeviationInBps();
         if (_roleRegistry == address(0)) revert InvalidRoleRegistry();
         if (_stEthPriceFeed == address(0)) revert InvalidPriceFeed();
+        if (_blacklister == address(0)) revert InvalidBlacklister();
         roleRegistry = IRoleRegistry(_roleRegistry);
         stEthPriceFeed = AggregatorV3Interface(_stEthPriceFeed);
+        blacklister = IBlacklister(_blacklister);
         MIN_DISCOUNT_RATE_IN_BPS = _minDiscountInBasisPoints;
         STALE_PRICE_WINDOW = _stalePriceWindow;
         MAX_PRICE_DEVIATION_IN_BPS = _maxPriceDeviationInBps;
@@ -173,7 +178,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @param _referral The referral address
     /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
     /// If the token is l2Eth, only the l2SyncPool can call this function
-    function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {        
+    function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant nonBlacklisted returns (uint256) {        
         require(isTokenWhitelisted(_token) && (!tokenInfos[_token].isL2Eth || msg.sender == l1SyncPool), "NOT_ALLOWED");
 
         // Measure actual amount received to handle stETH's 1-2 wei rounding issue
@@ -202,7 +207,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return eEthShare;
     }
 
-    function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused returns (uint256) {
+    function depositWithERC20WithPermit(address _token, uint256 _amount, address _referral, PermitInput calldata _permit) external whenNotPaused nonBlacklisted returns (uint256) {
         try IERC20Permit(_token).permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
         return depositWithERC20(_token, _amount, _referral);
     }
@@ -428,5 +433,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function _requireNotPaused() internal override view {
         _requireNotPausedUntil();
         super._requireNotPaused();
+    }
+
+    modifier nonBlacklisted() {
+        blacklister.nonBlacklisted(msg.sender);
+        _;
     }
 }
