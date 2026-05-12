@@ -472,7 +472,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImplementation), abi.encodeWithSelector(Blacklister.initialize.selector))));
         // Resolve both arguments before vm.prank — every interleaved external
         // call would otherwise consume the prank before grantRole executes.
-        bytes32 _blacklisterRole = blacklisterInstance.BLACKLISTER_ROLE();
+        bytes32 _blacklisterRole = roleRegistryInstance.BLACKLISTER_ROLE();
         address _roleRegOwner = roleRegistryInstance.owner();
         vm.prank(_roleRegOwner);
         roleRegistryInstance.grantRole(_blacklisterRole, _roleRegOwner);
@@ -582,7 +582,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         blacklisterImplementation = new Blacklister(address(roleRegistryInstance));
         blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImplementation), abi.encodeWithSelector(Blacklister.initialize.selector))));
-        roleRegistryInstance.grantRole(blacklisterInstance.BLACKLISTER_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.BLACKLISTER_ROLE(), owner);
 
         nodeOperatorManagerImplementation = new NodeOperatorManager(address(roleRegistryInstance));
         nodeOperatorManagerProxy = new UUPSProxy(address(nodeOperatorManagerImplementation), "");

@@ -33,6 +33,9 @@ contract MockRegistry is IRoleRegistry {
     bytes32 public constant UNPAUSE_UNTIL_ROLE = keccak256("UNPAUSE_UNTIL_ROLE");
     bytes32 public constant PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
     bytes32 public constant PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
+    bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
+    bytes32 public constant BLACKLIST_UNTIL_ROLE = keccak256("BLACKLIST_UNTIL_ROLE");
+    bytes32 public constant REVOKE_UNTIL_ROLE = keccak256("REVOKE_UNTIL_ROLE");
 
     constructor() { owner = msg.sender; }
     function initialize(address _o) external override { owner = _o; }

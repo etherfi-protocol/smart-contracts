@@ -14,8 +14,13 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     bytes32 public constant PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
     bytes32 public constant PAUSE_UNTIL_ROLE = keccak256("PAUSE_UNTIL_ROLE");
     bytes32 public constant UNPAUSE_UNTIL_ROLE = keccak256("UNPAUSE_UNTIL_ROLE");
+    bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
+    bytes32 public constant BLACKLIST_UNTIL_ROLE = keccak256("BLACKLIST_UNTIL_ROLE");
+    bytes32 public constant REVOKE_UNTIL_ROLE = keccak256("REVOKE_UNTIL_ROLE");
+
 
     error OnlyProtocolUpgrader();
+    error IncorrectRole();
 
     /// @notice Returns the maximum allowed role value
     /// @dev This is used by EnumerableRoles._validateRole to ensure roles are within valid range
@@ -65,6 +70,22 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     /// @param account The address to revoke the role from
     function revokeRole(bytes32 role, address account) public {
         setRole(account, uint256(role), false);  
+    }
+
+    /// @notice Revokes the PAUSE_UNTIL_ROLE from an account
+    /// @dev Only callable by the REVOKE_UNTIL_ROLE role (for fast revoke, contract owner is behind timelock)
+    /// @param account The address to revoke the role from
+    function revokePauserUntilRole(address account) public {
+        if (!hasRole(REVOKE_UNTIL_ROLE, msg.sender)) revert IncorrectRole();
+        _setRole(account, uint256(PAUSE_UNTIL_ROLE), false);
+    }
+
+    /// @notice Revokes the BLACKLIST_UNTIL_ROLE from an account
+    /// @dev Only callable by the REVOKE_UNTIL_ROLE role (for fast revoke, contract owner is behind timelock)
+    /// @param account The address to revoke the role from
+    function revokeBlacklistUntilRole(address account) public {
+        if (!hasRole(REVOKE_UNTIL_ROLE, msg.sender)) revert IncorrectRole();
+        _setRole(account, uint256(BLACKLIST_UNTIL_ROLE), false);
     }
 
     /// @notice Gets all addresses that have a specific role

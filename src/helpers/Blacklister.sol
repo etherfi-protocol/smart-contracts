@@ -9,8 +9,6 @@ import "../interfaces/IRoleRegistry.sol";
 
 contract Blacklister is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     IRoleRegistry public immutable roleRegistry;
-    bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
-    bytes32 public constant BLACKLIST_UNTIL_ROLE = keccak256("BLACKLIST_UNTIL_ROLE");
 
     mapping(address => uint256) public blacklistedUntil;
 
@@ -37,26 +35,26 @@ contract Blacklister is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     }
 
     function blacklistUserUntil(address user) external {
-        if (!roleRegistry.hasRole(BLACKLIST_UNTIL_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.BLACKLIST_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
         if (blacklistedUntil[user] > block.timestamp) revert UserAlreadyBlacklisted(user);
         blacklistedUntil[user] = block.timestamp + 1 days;
         emit UserBlacklistedUntil(user, block.timestamp + 1 days);
     }
 
     function extendBlacklistUntil(address user, uint256 until) external {
-        if (!roleRegistry.hasRole(BLACKLISTER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.BLACKLISTER_ROLE(), msg.sender)) revert IncorrectRole();
         blacklistedUntil[user] = block.timestamp + until;
         emit UserBlacklistedUntil(user, block.timestamp + until);
     }
 
     function blacklistUser(address user) external {
-        if (!roleRegistry.hasRole(BLACKLISTER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.BLACKLISTER_ROLE(), msg.sender)) revert IncorrectRole();
         blacklistedUntil[user] = type(uint256).max;
         emit UserBlacklisted(user);
     }
 
     function unblacklistUser(address user) external {
-        if (!roleRegistry.hasRole(BLACKLISTER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.BLACKLISTER_ROLE(), msg.sender)) revert IncorrectRole();
         blacklistedUntil[user] = 0;
         emit UserUnblacklisted(user);
     }

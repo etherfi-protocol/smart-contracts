@@ -328,7 +328,7 @@ contract BlacklistTest is TestSetup {
         // Resolve the role getter BEFORE vm.prank — an external call in the
         // grantRole arg list would consume the prank. Same pattern is used in
         // TestSetup.sol around the BLACKLISTER_ROLE grant.
-        bytes32 role = blacklisterInstance.BLACKLIST_UNTIL_ROLE();
+        bytes32 role = roleRegistryInstance.BLACKLIST_UNTIL_ROLE();
         vm.prank(owner);
         roleRegistryInstance.grantRole(role, who);
     }
