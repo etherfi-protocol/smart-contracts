@@ -743,6 +743,11 @@ contract PreludeTest is Test, ArrayTestHelper {
         uint256 lpBefore = address(liquidityPool).balance;
         uint256 nodeBefore = nodeAddr.balance;
 
+        // Manager wrapper must emit FundsTransferred(nodeAddr, amount) for off-chain indexers.
+        // Topic check only — amount depends on dynamic pre-existing pod state.
+        vm.expectEmit(true, false, false, false, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.FundsTransferred(nodeAddr, 0);
+
         vm.prank(eigenlayerAdmin);
         etherFiNodesManager.completeQueuedWithdrawals(uint256(pubkeyHash), withdrawals, tokens, receiveAsTokens);
 

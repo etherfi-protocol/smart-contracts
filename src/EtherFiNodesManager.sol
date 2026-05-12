@@ -193,7 +193,10 @@ contract EtherFiNodesManager is
 
     function completeQueuedWithdrawals(address node, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) public onlyEigenlayerAdmin whenNotPaused {
         _validateNode(node);
-        IEtherFiNode(node).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+        uint256 balance = IEtherFiNode(node).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+        if (balance > 0) {
+            emit FundsTransferred(node, balance);
+        }
     }
     
     function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {

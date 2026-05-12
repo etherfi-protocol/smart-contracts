@@ -136,15 +136,15 @@ contract EtherFiNode is IEtherFiNode {
 
     /// @dev complete an arbitrary withdrawal from eigenlayer.
     ///   For the general case of claiming beaconETH withdrawals you can use completeQueuedETHWithdrawals instead.
-    ///   Any ETH that lands on this node as a result of the completion is auto-swept to the liquidity pool
-    ///   (the sweep emits FundsTransferred from the node).
+    ///   Any ETH that lands on this node as a result of the completion is auto-swept to the liquidity pool;
+    ///   the swept amount is returned so the manager can emit FundsTransferred at the wrapper level too.
     function completeQueuedWithdrawals(
         IDelegationManager.Withdrawal[] calldata withdrawals,
         IERC20[][] calldata tokens,
         bool[] calldata receiveAsTokens
-    ) external onlyEtherFiNodesManager {
+    ) external onlyEtherFiNodesManager returns (uint256 balance) {
         delegationManager.completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
-        _sweepToLiquidityPool();
+        return _sweepToLiquidityPool();
     }
 
     // @notice transfers any funds held by the node to the liquidity pool.

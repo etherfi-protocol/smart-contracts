@@ -73,21 +73,17 @@ contract EtherFiNodesManagerTest is TestSetup {
         rateLimiterInstance.updateConsumers(managerInstance.CONSOLIDATION_REQUEST_LIMIT_ID(), address(managerInstance), true);
         vm.stopPrank();
         
-        // // Create a proper beacon and upgrade the node implementation
-        // // First, create a new EtherFiNode implementation
-        // address eigenPodManager = address(eigenLayerEigenPodManager);
-        // address delegationManager = address(eigenLayerDelegationManager);
-        // EtherFiNode nodeImpl = new EtherFiNode(
-        //     address(liquidityPoolInstance),
-        //     address(managerInstance),
-        //     eigenPodManager,
-        //     delegationManager,
-        //     address(roleRegistryInstance)
-        // );
-        
-        // // Upgrade the beacon to use the new implementation
-        // vm.prank(stakingManagerInstance.owner());
-        // stakingManagerInstance.upgradeEtherFiNode(address(nodeImpl));
+        // Upgrade the EtherFiNode beacon impl to the locally compiled one so the new
+        // completeQueuedWithdrawals return type matches what the manager wrapper decodes.
+        EtherFiNode nodeImpl = new EtherFiNode(
+            address(liquidityPoolInstance),
+            address(managerInstance),
+            address(eigenLayerEigenPodManager),
+            address(eigenLayerDelegationManager),
+            address(roleRegistryInstance)
+        );
+        vm.prank(stakingManagerInstance.owner());
+        stakingManagerInstance.upgradeEtherFiNode(address(nodeImpl));
         
         // // Now create a test node
         // vm.prank(address(liquidityPoolInstance));
