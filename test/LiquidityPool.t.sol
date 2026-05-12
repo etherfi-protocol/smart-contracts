@@ -1158,7 +1158,6 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.setFeeRecipient(bob);
         vm.stopPrank();
 
-        vm.deal(address(liquidityPoolInstance), 10 ether);
         vm.startPrank(address(etherFiAdminInstance));
         liquidityPoolInstance.payProtocolFees(5 ether);
         assertEq(eETHInstance.balanceOf(bob), 5 ether);
