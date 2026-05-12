@@ -52,7 +52,6 @@ contract EtherFiNodesManagerTest is TestSetup {
         roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), deployed.STAKING_MANAGER());
         managerInstance.upgradeTo(nodesManagerImplementation);
         roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), elTriggerExit);
-        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_SWEEPER_ROLE(), admin);
         vm.stopPrank();
         
         // Setup rate limiter - check if limiters already exist before creating
@@ -231,26 +230,31 @@ contract EtherFiNodesManagerTest is TestSetup {
     function test_sweepFunds() public {
         // Send ETH to node
         vm.deal(testNode, 1 ether);
-        
-        vm.prank(admin);
+
+        vm.prank(eigenlayerAdmin);
         managerInstance.sweepFunds(testLegacyId);
-        
+
         // Check event was emitted (if balance > 0)
         // Note: This depends on node implementation
     }
-    
+
     function test_sweepFunds_unauthorized() public {
         vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
         vm.prank(bob);
         managerInstance.sweepFunds(testLegacyId);
+
+        // ADMIN_ROLE alone is not enough — sweepFunds requires EIGENLAYER_ADMIN_ROLE.
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.prank(admin);
+        managerInstance.sweepFunds(testLegacyId);
     }
-    
+
     function test_sweepFunds_whenPaused() public {
         vm.prank(admin);
         managerInstance.pauseContract();
-        
+
         vm.expectRevert();
-        vm.prank(admin);
+        vm.prank(eigenlayerAdmin);
         managerInstance.sweepFunds(testLegacyId);
     }
 
@@ -876,7 +880,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _grantNmPauseUntilRoles();
         _pauseUntil();
         _expectPausedUntilRevert();
-        vm.prank(admin);
+        vm.prank(eigenlayerAdmin);
         managerInstance.sweepFunds(testLegacyId);
     }
 
@@ -1075,7 +1079,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         vm.warp(block.timestamp + managerInstance.MAX_PAUSE_DURATION() + 1);
 
         vm.deal(testNode, 1 ether);
-        vm.prank(admin);
+        vm.prank(eigenlayerAdmin);
         managerInstance.sweepFunds(testLegacyId);
     }
 

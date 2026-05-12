@@ -133,7 +133,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), elExiter);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_SWEEPER_ROLE(), admin);
         vm.stopPrank();
 
         vm.startPrank(admin);
@@ -670,50 +669,25 @@ contract PreludeTest is Test, ArrayTestHelper {
         assertGe(address(liquidityPool).balance, startingBalance + 1 ether);
     }
 
-    function test_sweeperRole_gates_sweepFunds() public {
-        address sweeper = makeAddr("sweeper");
-        uint256 nodeId = 10885; // any pre-linked legacy id
-        // ensure id resolves
+    function test_sweepFunds_gated_by_eigenlayerAdmin() public {
+        uint256 nodeId = 10885; // pre-linked legacy id used elsewhere
         address nodeAddr = etherFiNodesManager.etherfiNodeAddress(nodeId);
         if (nodeAddr == address(0)) return; // skip if fork no longer has this legacy id
 
-        // without role -> revert
-        vm.prank(sweeper);
+        // Random caller: revert.
+        address rando = makeAddr("rando");
+        vm.prank(rando);
         vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
         etherFiNodesManager.sweepFunds(nodeId);
 
-        // grant SWEEPER_ROLE
-        bytes32 sweeperRole = etherFiNodesManager.ETHERFI_NODES_MANAGER_SWEEPER_ROLE();
-        vm.prank(roleRegistry.owner());
-        roleRegistry.grantRole(sweeperRole, sweeper);
-
-        // now succeeds (no-op if node has no balance, still must not revert)
-        vm.prank(sweeper);
-        etherFiNodesManager.sweepFunds(nodeId);
-    }
-
-    function test_sweeperRole_can_complete_when_no_eigenlayerAdmin() public {
-        address sweeper = makeAddr("sweeper-complete");
-        // sweeper is fresh — no roles
-        vm.prank(sweeper);
+        // ADMIN_ROLE alone (held by `admin`) no longer satisfies sweep.
+        vm.prank(admin);
         vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
-        etherFiNodesManager.completeQueuedETHWithdrawals(uint256(1), true);
+        etherFiNodesManager.sweepFunds(nodeId);
 
-        // grant SWEEPER_ROLE — should now pass the modifier check (downstream may still revert for other reasons)
-        bytes32 sweeperRole = etherFiNodesManager.ETHERFI_NODES_MANAGER_SWEEPER_ROLE();
-        vm.prank(roleRegistry.owner());
-        roleRegistry.grantRole(sweeperRole, sweeper);
-
-        // confirm modifier no longer blocks: a different revert (UnknownNode / NoCompleteableWithdrawals / etc.) is fine,
-        // we only assert IncorrectRole is no longer the reason.
-        vm.prank(sweeper);
-        try etherFiNodesManager.completeQueuedETHWithdrawals(uint256(1), true) {
-            // ok
-        } catch (bytes memory raw) {
-            bytes4 sel;
-            assembly { sel := mload(add(raw, 0x20)) }
-            assertTrue(sel != IEtherFiNodesManager.IncorrectRole.selector, "modifier should pass once SWEEPER granted");
-        }
+        // EIGENLAYER_ADMIN_ROLE can sweep (no-op when node has no balance).
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.sweepFunds(nodeId);
     }
 
     function test_completeQueuedWithdrawals_autoSweeps_to_LP() public {
