@@ -347,7 +347,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     // the withdraw request NFT is transferrable
     // - if the request is valid, it can be transferred by the owner of the NFT
     // - if the request is invalid, it can be transferred only by the owner of the WithdarwRequestNFT contract
+    // - the transfer is not allowed if the from or to is blacklisted
     function _beforeTokenTransfer(address from, address to, uint256 firstTokenId, uint256 batchSize) internal override {
+        blacklister.nonBlacklisted(from);
+        blacklister.nonBlacklisted(to);
+        blacklister.nonBlacklisted(owner());
         for (uint256 i = 0; i < batchSize; i++) {
             uint256 tokenId = firstTokenId + i;
             require(_requests[tokenId].isValid || msg.sender == owner(), "INVALID_REQUEST");

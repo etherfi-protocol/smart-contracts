@@ -15,6 +15,7 @@ contract Blacklister is Initializable, UUPSUpgradeable, OwnableUpgradeable {
     mapping(address => uint256) public blacklistedUntil;
 
     error BlacklistedUser(address user);
+    error UserAlreadyBlacklisted(address user);
     error IncorrectRole();
 
     event UserBlacklisted(address user);
@@ -37,6 +38,7 @@ contract Blacklister is Initializable, UUPSUpgradeable, OwnableUpgradeable {
 
     function blacklistUserUntil(address user) external {
         if (!roleRegistry.hasRole(BLACKLIST_UNTIL_ROLE, msg.sender)) revert IncorrectRole();
+        if (blacklistedUntil[user] > block.timestamp) revert UserAlreadyBlacklisted(user);
         blacklistedUntil[user] = block.timestamp + 1 days;
         emit UserBlacklistedUntil(user, block.timestamp + 1 days);
     }
