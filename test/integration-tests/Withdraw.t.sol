@@ -15,6 +15,9 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         initializeRealisticFork(MAINNET_FORK);
         vm.etch(alice, bytes(""));
 
+        // Upgrade Oracle and Admin to local impls so the new OracleReport ABI matches.
+        _upgradeOracleAndAdminForFork();
+
         // Handle any pending oracle report that hasn't been processed yet
         _syncOracleReportState();
     }
@@ -267,7 +270,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
-            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
 
@@ -331,7 +334,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
                 IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
-            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
 
@@ -403,7 +406,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
-            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
 
@@ -503,7 +506,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
-            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
 
@@ -588,7 +591,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
         report = IEtherFiOracle.OracleReport(
-            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0
+            etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
 

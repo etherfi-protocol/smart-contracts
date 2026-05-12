@@ -539,14 +539,10 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Non-admin cannot invalidate
         vm.prank(recipient);
-        vm.expectRevert("Caller is not admin");
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
         withdrawRequestNFTInstance.invalidateRequest(requestId);
 
         // Admin invalidates request
-        vm.startPrank(roleRegistryInstance.owner());
-        console.log("roleRegistryInstance.owner()", roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), admin);
-        vm.stopPrank();
         vm.prank(admin);
         withdrawRequestNFTInstance.invalidateRequest(requestId);
 

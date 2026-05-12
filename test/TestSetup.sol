@@ -880,6 +880,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(admin));
 
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.INVALIDATE_WITHDRAW_REQUEST_ROLE(), address(alice));
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.INVALIDATE_WITHDRAW_REQUEST_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.INVALIDATE_WITHDRAW_REQUEST_ROLE(), address(admin));
+
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         liquidityPoolInstance.setValidatorSizeWei(32 ether);
@@ -965,6 +969,16 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
 
+    function _upgradeOracleAndAdminForFork() internal {
+        address newOracleImpl = address(new EtherFiOracle(address(roleRegistryInstance)));
+        vm.prank(etherFiOracleInstance.owner());
+        etherFiOracleInstance.upgradeTo(newOracleImpl);
+
+        address newAdminImpl = address(new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000, 7200));
+        vm.prank(roleRegistryInstance.owner());
+        etherFiAdminInstance.upgradeTo(newAdminImpl);
+    }
+
     function setupRoleRegistry() public {
         // TODO: I don't love the coupling here but it was too easy to make tests
         // where the roleRegistry global var diverged from the one set in the manager instance.
@@ -1022,16 +1036,15 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         uint256[] memory validatorsToExit = new uint256[](0);
         uint256[] memory exitedValidators = new uint256[](0);
         uint32[] memory  exitTimestamps = new uint32[](0);
-        uint256[] memory withdrawalRequestsToInvalidate = new uint256[](0);
-        reportAtPeriod2A = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, withdrawalRequestsToInvalidate, 0, 0);
-        reportAtPeriod2B = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, withdrawalRequestsToInvalidate, 1, 0);
-        reportAtPeriod2C = IEtherFiOracle.OracleReport(2, 0, 1024 - 1, 0, 1024 - 1, 1, 0, validatorsToApprove, withdrawalRequestsToInvalidate, 1, 0);
-        reportAtPeriod3 = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 0, 2048 - 1, 1, 0, validatorsToApprove, withdrawalRequestsToInvalidate, 1, 0);
-        reportAtPeriod3A = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 0, 3 * 1024 - 1, 1, 0, validatorsToApprove, withdrawalRequestsToInvalidate, 1, 0);
-        reportAtPeriod3B = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 1, 2 * 1024 - 1, 1, 0, validatorsToApprove, withdrawalRequestsToInvalidate, 1, 0);
-        reportAtPeriod4 = IEtherFiOracle.OracleReport(1, 2 * 1024, 1024 * 3 - 1, 2 * 1024, 3 * 1024 - 1, 0, 0, validatorsToApprove, withdrawalRequestsToInvalidate, 1, 0);
-        reportAtSlot3071 = IEtherFiOracle.OracleReport(1, 2048, 3072 - 1, 2048, 3072 - 1, 1, 0, validatorsToApprove, withdrawalRequestsToInvalidate, 1, 0);
-        reportAtSlot4287 = IEtherFiOracle.OracleReport(1, 3264, 4288 - 1, 3264, 4288 - 1, 1, 0, validatorsToApprove, withdrawalRequestsToInvalidate, 1, 0);
+        reportAtPeriod2A = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, 0, 0);
+        reportAtPeriod2B = IEtherFiOracle.OracleReport(1, 0, 1024 - 1, 0, 1024 - 1, 1, 0,validatorsToApprove, 1, 0);
+        reportAtPeriod2C = IEtherFiOracle.OracleReport(2, 0, 1024 - 1, 0, 1024 - 1, 1, 0, validatorsToApprove, 1, 0);
+        reportAtPeriod3 = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 0, 2048 - 1, 1, 0, validatorsToApprove, 1, 0);
+        reportAtPeriod3A = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 0, 3 * 1024 - 1, 1, 0, validatorsToApprove, 1, 0);
+        reportAtPeriod3B = IEtherFiOracle.OracleReport(1, 0, 2048 - 1, 1, 2 * 1024 - 1, 1, 0, validatorsToApprove, 1, 0);
+        reportAtPeriod4 = IEtherFiOracle.OracleReport(1, 2 * 1024, 1024 * 3 - 1, 2 * 1024, 3 * 1024 - 1, 0, 0, validatorsToApprove, 1, 0);
+        reportAtSlot3071 = IEtherFiOracle.OracleReport(1, 2048, 3072 - 1, 2048, 3072 - 1, 1, 0, validatorsToApprove, 1, 0);
+        reportAtSlot4287 = IEtherFiOracle.OracleReport(1, 3264, 4288 - 1, 3264, 4288 - 1, 1, 0, validatorsToApprove, 1, 0);
     }
 
     function _merkleSetup() internal {
@@ -1263,7 +1276,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         uint256[] memory emptyVals = new uint256[](0);
         uint32[] memory emptyVals32 = new uint32[](0);
         uint32 consensusVersion = etherFiOracleInstance.consensusVersion();
-        report = IEtherFiOracle.OracleReport(consensusVersion, 0, 0, 0, 0, 0, 0, emptyVals, emptyVals, 0, 0);
+        report = IEtherFiOracle.OracleReport(consensusVersion, 0, 0, 0, 0, 0, 0, emptyVals, 0, 0);
     }
 
     function calculatePermitDigest(address _owner, address spender, uint256 value, uint256 nonce, uint256 deadline, bytes32 domainSeparator) public pure returns (bytes32) {
