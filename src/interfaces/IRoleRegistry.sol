@@ -59,6 +59,14 @@ interface IRoleRegistry {
     function revokeRole(bytes32 role, address account) external;
 
     /**
+     * @notice Revokes a role from an account quickly
+     * @dev Only callable by the revoke admin
+     * @param role The role to revoke (as bytes32)
+     * @param account The address to revoke the role from
+     */
+    function revokeFast(bytes32 role, address account) external;
+
+    /**
      * @notice Gets all addresses that have a specific role
      * @dev Wrapper around EnumerableRoles roleHolders function
      * @param role The role to query (as bytes32)

@@ -151,7 +151,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // within their modifiers.
         address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
         vm.prank(roleRegOwner);
-        IUUPSProxy(ROLE_REGISTRY).upgradeTo(address(new RoleRegistry()));
+        IUUPSProxy(ROLE_REGISTRY).upgradeTo(address(new RoleRegistry(address(0))));
 
         // Deploy a fresh Blacklister — newly-upgraded impls (LP, WRN, etc.)
         // now wire it as an immutable. Storage-integrity assertions don't care

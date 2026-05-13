@@ -24,7 +24,6 @@ contract MockRoleRegistry is IRoleRegistry {
     bytes32 public constant UNPAUSE_UNTIL_ROLE = keccak256("UNPAUSE_UNTIL_ROLE");
     bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
     bytes32 public constant BLACKLIST_UNTIL_ROLE = keccak256("BLACKLIST_UNTIL_ROLE");
-    bytes32 public constant REVOKE_UNTIL_ROLE = keccak256("REVOKE_UNTIL_ROLE");
 
     constructor() {
         owner = msg.sender;
@@ -43,6 +42,10 @@ contract MockRoleRegistry is IRoleRegistry {
     }
 
     function revokeRole(bytes32 role, address account) external {
+        roleAssignments[role][account] = false;
+    }
+
+    function revokeFast(bytes32 role, address account) external {
         roleAssignments[role][account] = false;
     }
 

@@ -798,7 +798,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     function _grantNmPauseUntilRoles() internal {
         // Upgrade the RoleRegistry impl on the fork so it exposes PAUSE_UNTIL_ROLE / UNPAUSE_UNTIL_ROLE
         vm.startPrank(roleRegistryInstance.owner());
-        RoleRegistry newImpl = new RoleRegistry();
+        RoleRegistry newImpl = new RoleRegistry(address(0));
         roleRegistryInstance.upgradeTo(address(newImpl));
         roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), nmPauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), nmUnpauseUntilUnpauser);

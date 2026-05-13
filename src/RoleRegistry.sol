@@ -16,11 +16,12 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     bytes32 public constant UNPAUSE_UNTIL_ROLE = keccak256("UNPAUSE_UNTIL_ROLE");
     bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
     bytes32 public constant BLACKLIST_UNTIL_ROLE = keccak256("BLACKLIST_UNTIL_ROLE");
-    bytes32 public constant REVOKE_UNTIL_ROLE = keccak256("REVOKE_UNTIL_ROLE");
 
+
+    address public immutable revokeAdmin;
 
     error OnlyProtocolUpgrader();
-    error IncorrectRole();
+    error IncorrectRole();    error OnlyRevokeAdmin();
 
     /// @notice Returns the maximum allowed role value
     /// @dev This is used by EnumerableRoles._validateRole to ensure roles are within valid range
@@ -30,7 +31,8 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _revokeAdmin) {
+        revokeAdmin = _revokeAdmin;
         _disableInitializers();
     }
 
@@ -72,20 +74,13 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
         setRole(account, uint256(role), false);  
     }
 
-    /// @notice Revokes the PAUSE_UNTIL_ROLE from an account
-    /// @dev Only callable by the REVOKE_UNTIL_ROLE role (for fast revoke, contract owner is behind timelock)
+    /// @notice Revokes a role from an account quickly
+    /// @dev Only callable by the revoke admin
+    /// @param role The role to revoke (as bytes32)
     /// @param account The address to revoke the role from
-    function revokePauserUntilRole(address account) public {
-        if (!hasRole(REVOKE_UNTIL_ROLE, msg.sender)) revert IncorrectRole();
-        _setRole(account, uint256(PAUSE_UNTIL_ROLE), false);
-    }
-
-    /// @notice Revokes the BLACKLIST_UNTIL_ROLE from an account
-    /// @dev Only callable by the REVOKE_UNTIL_ROLE role (for fast revoke, contract owner is behind timelock)
-    /// @param account The address to revoke the role from
-    function revokeBlacklistUntilRole(address account) public {
-        if (!hasRole(REVOKE_UNTIL_ROLE, msg.sender)) revert IncorrectRole();
-        _setRole(account, uint256(BLACKLIST_UNTIL_ROLE), false);
+    function revokeFast(bytes32 role, address account) public {
+        if (msg.sender != revokeAdmin) revert OnlyRevokeAdmin();
+        _setRole(account, uint256(role), false);
     }
 
     /// @notice Gets all addresses that have a specific role

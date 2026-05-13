@@ -48,7 +48,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         // BLACKLISTED_USER) are reachable from upgraded contracts that call
         // into roleRegistry from within their modifiers.
         vm.prank(roleRegistry.owner());
-        roleRegistry.upgradeTo(address(new RoleRegistry()));
+        roleRegistry.upgradeTo(address(new RoleRegistry(address(0))));
 
         // Deploy a Blacklister so impls that wire it as an immutable have a
         // non-zero target.

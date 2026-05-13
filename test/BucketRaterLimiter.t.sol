@@ -16,7 +16,7 @@ contract BucketRateLimiterTest is Test {
         owner = address(10000);
         vm.startPrank(owner);
 
-        RoleRegistry regImpl = new RoleRegistry();
+        RoleRegistry regImpl = new RoleRegistry(address(0));
         UUPSProxy regProxy = new UUPSProxy(
             address(regImpl),
             abi.encodeWithSelector(RoleRegistry.initialize.selector, owner)

@@ -35,13 +35,13 @@ contract MockRegistry is IRoleRegistry {
     bytes32 public constant PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
     bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
     bytes32 public constant BLACKLIST_UNTIL_ROLE = keccak256("BLACKLIST_UNTIL_ROLE");
-    bytes32 public constant REVOKE_UNTIL_ROLE = keccak256("REVOKE_UNTIL_ROLE");
 
     constructor() { owner = msg.sender; }
     function initialize(address _o) external override { owner = _o; }
     function MAX_ROLE() external pure override returns (uint256) { return type(uint256).max; }
     function grantRole(bytes32 r, address a) external override { _roles[r][a] = true; }
     function revokeRole(bytes32 r, address a) external override { _roles[r][a] = false; }
+    function revokeFast(bytes32 r, address a) external override { _roles[r][a] = false; }
     function hasRole(bytes32 r, address a) external view override returns (bool) { return _roles[r][a]; }
     function roleHolders(bytes32) external pure override returns (address[] memory) { return new address[](0); }
     function checkRoles(address, bytes memory) external pure override {}

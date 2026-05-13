@@ -12,9 +12,6 @@ contract RoleRegistryTest is Test {
     address public owner;
     address public user1;
     address public user2;
-    address public pauseUntilRole;
-    address public blacklistRole;
-    address public revokeUntilRole;
     
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
@@ -25,12 +22,9 @@ contract RoleRegistryTest is Test {
         owner = makeAddr("owner");
         user1 = makeAddr("user1");
         user2 = makeAddr("user2");
-        pauseUntilRole = makeAddr("pauseUntilRole");
-        blacklistRole = makeAddr("blacklistRole");
-        revokeUntilRole = makeAddr("revokeUntilRole");
         
         // Deploy implementation
-        implementation = new RoleRegistry();
+        implementation = new RoleRegistry(address(0));
         
         // Deploy proxy
         bytes memory initData = abi.encodeWithSelector(
@@ -44,12 +38,6 @@ contract RoleRegistryTest is Test {
         );
         
         registry = RoleRegistry(address(proxy));
-
-        vm.startPrank(owner);
-        registry.grantRole(registry.PAUSE_UNTIL_ROLE(), pauseUntilRole);
-        registry.grantRole(registry.BLACKLIST_UNTIL_ROLE(), blacklistRole);
-        registry.grantRole(registry.REVOKE_UNTIL_ROLE(), revokeUntilRole);
-        vm.stopPrank();
     }
     
     function test_Initialization() public {
@@ -138,7 +126,7 @@ contract RoleRegistryTest is Test {
     
     function test_Upgradeability() public {
         // Deploy new implementation
-        RoleRegistry newImplementation = new RoleRegistry();
+        RoleRegistry newImplementation = new RoleRegistry(address(0));
         
         // Only owner can upgrade
         vm.prank(user1);
@@ -186,37 +174,5 @@ contract RoleRegistryTest is Test {
         // Verify new owner
         assertEq(registry.owner(), user1);
         assertEq(registry.pendingOwner(), address(0));
-    }
-
-    function test_RevokePauserUntilRole_only_REVOKE_UNTIL_ROLE_can_revoke() public {
-        assertTrue(registry.hasRole(registry.PAUSE_UNTIL_ROLE(), pauseUntilRole));
-        vm.startPrank(user1);
-        vm.expectRevert(RoleRegistry.IncorrectRole.selector);
-        registry.revokePauserUntilRole(user1);
-        vm.stopPrank();
-    }
-
-    function test_RevokePauserUntilRole() public {
-        assertTrue(registry.hasRole(registry.PAUSE_UNTIL_ROLE(), pauseUntilRole));
-        vm.startPrank(revokeUntilRole);
-        registry.revokePauserUntilRole(pauseUntilRole);
-        assertFalse(registry.hasRole(registry.PAUSE_UNTIL_ROLE(), user1));
-        vm.stopPrank();
-    }
-
-    function test_RevokeBlacklistUntilRole_only_REVOKE_UNTIL_ROLE_can_revoke() public {
-        assertTrue(registry.hasRole(registry.BLACKLIST_UNTIL_ROLE(), blacklistRole));
-        vm.startPrank(user1);
-        vm.expectRevert(RoleRegistry.IncorrectRole.selector);
-        registry.revokeBlacklistUntilRole(user1);
-        vm.stopPrank();
-    }
-    
-    function test_RevokeBlacklistUntilRole() public {
-        assertTrue(registry.hasRole(registry.BLACKLIST_UNTIL_ROLE(), blacklistRole));
-        vm.startPrank(revokeUntilRole);
-        registry.revokeBlacklistUntilRole(blacklistRole);
-        assertFalse(registry.hasRole(registry.BLACKLIST_UNTIL_ROLE(), user1));
-        vm.stopPrank();
     }
 }
