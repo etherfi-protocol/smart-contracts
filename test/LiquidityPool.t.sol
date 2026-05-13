@@ -59,7 +59,7 @@ contract LiquidityPoolTest is TestSetup {
 
         liquidityPoolInstance.deposit{value: 1 ether}();
 
-        vm.expectRevert(LiquidityPool.InvalidAmount.selector);
+        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
         liquidityPoolInstance.requestWithdraw(alice, 0);
 
         vm.stopPrank();
@@ -1158,7 +1158,6 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.setFeeRecipient(bob);
         vm.stopPrank();
 
-        vm.deal(address(liquidityPoolInstance), 10 ether);
         vm.startPrank(address(etherFiAdminInstance));
         liquidityPoolInstance.payProtocolFees(5 ether);
         assertEq(eETHInstance.balanceOf(bob), 5 ether);
@@ -1464,7 +1463,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.startPrank(alice);
         liquidityPoolInstance.deposit{value: tooLargeAmount}();
         eETHInstance.approve(address(liquidityPoolInstance), tooLargeAmount);
-        vm.expectRevert(LiquidityPool.InvalidAmount.selector);
+        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
         liquidityPoolInstance.requestWithdraw(alice, tooLargeAmount);
         vm.stopPrank();
     }
@@ -2197,5 +2196,123 @@ contract LiquidityPoolTest is TestSetup {
         vm.prank(address(0));
         vm.expectRevert(bytes("migration not complete"));
         liquidityPoolInstance.transferLockedEthForPriority(1 ether);
+    }
+
+    //--------------------------------------------------------------------------------------
+    //----------------------  MIN / MAX WITHDRAW AMOUNT TESTS  -----------------------------
+    //--------------------------------------------------------------------------------------
+
+    function test_constants_minMaxWithdrawAmount() public view {
+        assertEq(liquidityPoolInstance.MIN_WITHDRAW_AMOUNT(), 0.01 ether, "MIN_WITHDRAW_AMOUNT mismatch");
+        assertEq(liquidityPoolInstance.MAX_WITHDRAW_AMOUNT(), 1000 ether, "MAX_WITHDRAW_AMOUNT mismatch");
+    }
+
+    function test_requestWithdraw_atMin_succeeds() public {
+        uint96 amt = uint96(liquidityPoolInstance.MIN_WITHDRAW_AMOUNT());
+
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), amt);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amt);
+        vm.stopPrank();
+
+        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
+        assertEq(request.amountOfEEth, amt, "MIN_WITHDRAW_AMOUNT request should be created");
+    }
+
+    function test_requestWithdraw_belowMin_amountNotEqualToBalance_reverts() public {
+        uint96 amt = uint96(liquidityPoolInstance.MIN_WITHDRAW_AMOUNT()) - 1;
+
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 1 ether}();
+        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
+        liquidityPoolInstance.requestWithdraw(bob, amt);
+        vm.stopPrank();
+    }
+
+    function test_requestWithdraw_atMax_succeeds() public {
+        uint96 amt = uint96(liquidityPoolInstance.MAX_WITHDRAW_AMOUNT());
+
+        vm.deal(bob, uint256(amt) + 1 ether);
+        vm.startPrank(bob);
+        liquidityPoolInstance.deposit{value: uint256(amt) + 1 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), amt);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amt);
+        vm.stopPrank();
+
+        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
+        assertEq(request.amountOfEEth, amt, "MAX_WITHDRAW_AMOUNT request should be created");
+    }
+
+    function test_requestWithdraw_aboveMax_reverts() public {
+        uint96 amt = uint96(liquidityPoolInstance.MAX_WITHDRAW_AMOUNT()) + 1;
+
+        vm.deal(bob, uint256(amt) + 1 ether);
+        vm.startPrank(bob);
+        liquidityPoolInstance.deposit{value: uint256(amt) + 1 ether}();
+        eETHInstance.approve(address(liquidityPoolInstance), amt);
+        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
+        liquidityPoolInstance.requestWithdraw(bob, amt);
+        vm.stopPrank();
+    }
+
+    /// @dev MembershipManager-originated withdrawals (`requestMembershipNFTWithdraw`)
+    ///      go through a dedicated LP entry point and must NOT be subject to the
+    ///      user-facing MIN/MAX cap — otherwise membership-burn flows break for
+    ///      tiny dust balances or whales above the cap. These tests pin the
+    ///      exemption: identical amounts that would revert via `requestWithdraw`
+    ///      must succeed via `requestMembershipNFTWithdraw`.
+    function test_requestMembershipNFTWithdraw_belowMin_succeeds() public {
+        // Seed the MembershipManager with eETH.
+        vm.deal(address(membershipManagerInstance), 1 ether);
+        vm.startPrank(address(membershipManagerInstance));
+        liquidityPoolInstance.deposit{value: 1 ether}(address(membershipManagerInstance), address(0));
+
+        uint256 dust = liquidityPoolInstance.MIN_WITHDRAW_AMOUNT() - 1; // below user cap
+        eETHInstance.approve(address(liquidityPoolInstance), dust);
+        uint256 reqId = liquidityPoolInstance.requestMembershipNFTWithdraw(alice, dust, 0);
+        vm.stopPrank();
+
+        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(reqId);
+        assertEq(request.amountOfEEth, dust, "membership-burn dust withdraw should bypass MIN cap");
+    }
+
+    function test_requestMembershipNFTWithdraw_aboveMax_succeeds() public {
+        uint256 large = liquidityPoolInstance.MAX_WITHDRAW_AMOUNT() + 1 ether; // above user cap
+
+        // Seed the MembershipManager with enough eETH to cover the large request.
+        vm.deal(address(membershipManagerInstance), large + 1 ether);
+        vm.startPrank(address(membershipManagerInstance));
+        liquidityPoolInstance.deposit{value: large + 1 ether}(address(membershipManagerInstance), address(0));
+
+        eETHInstance.approve(address(liquidityPoolInstance), large);
+        uint256 reqId = liquidityPoolInstance.requestMembershipNFTWithdraw(alice, large, 0);
+        vm.stopPrank();
+
+        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(reqId);
+        assertEq(request.amountOfEEth, large, "membership-burn whale withdraw should bypass MAX cap");
+    }
+
+    /// @dev Contrast with `requestMembershipNFTWithdraw`, which accepts both dust
+    ///      and whale amounts unchanged. Via the user-facing `requestWithdraw`:
+    ///        - dust (< MIN) is rewritten to the caller's full eETH balance
+    ///        - large (> MAX) still reverts with InvalidWithdrawalAmount
+    function test_requestWithdraw_userFlow_dustWithdrawsFullBalance_largeReverts() public {
+        uint256 dust = liquidityPoolInstance.MIN_WITHDRAW_AMOUNT() - 1;
+        uint256 large = liquidityPoolInstance.MAX_WITHDRAW_AMOUNT() + 1 ether;
+
+        vm.deal(bob, dust);
+        vm.startPrank(bob);
+        liquidityPoolInstance.deposit{value: dust}();
+        uint256 balance = eETHInstance.balanceOf(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), balance);
+
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, dust);
+        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
+        assertEq(request.amountOfEEth, balance, "dust request should withdraw bob's full balance");
+
+        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
+        liquidityPoolInstance.requestWithdraw(bob, large);
+        vm.stopPrank();
     }
 }

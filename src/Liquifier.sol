@@ -126,6 +126,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error InvalidRoleRegistry();
     error InvalidPriceFeed();
     error InvalidBlacklister();
+    error StalePriceFeed();
     error InvalidStEthPrice();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -329,11 +330,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
                 // via stETH will be blocked until it stablises (either because of underlying lido solvency/liquidity issue or oracle manipulation)
                 (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
                 if (answer <= 0) revert InvalidPriceFeed();
-                if (updatedAt + STALE_PRICE_WINDOW >= block.timestamp) {
-                    uint256 pricefeedValue = (uint256(answer) * _amount) / 1e18;
-                    uint256 deviation = pricefeedValue > _marketValue ? pricefeedValue - _marketValue : _marketValue - pricefeedValue;
-                    if (deviation * BASIS_POINT_SCALE / _marketValue > MAX_PRICE_DEVIATION_IN_BPS) revert InvalidStEthPrice();
-                }
+                if (updatedAt + STALE_PRICE_WINDOW < block.timestamp) revert StalePriceFeed();
+                uint256 pricefeedValue = (uint256(answer) * _amount) / 1e18;
+                uint256 deviation = pricefeedValue > _marketValue ? pricefeedValue - _marketValue : _marketValue - pricefeedValue;
+                if (deviation * BASIS_POINT_SCALE / _marketValue > MAX_PRICE_DEVIATION_IN_BPS) revert InvalidStEthPrice();
             } else {
                 _marketValue = _amount; /// 1:1 from stETH to eETH
             }

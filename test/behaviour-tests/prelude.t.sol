@@ -4,6 +4,7 @@ import "forge-std/console2.sol";
 import "forge-std/Test.sol";
 import {StdStorage, stdStorage} from "forge-std/StdStorage.sol";
 import "../../test/common/ArrayTestHelper.sol";
+import {fundContract} from "../TestSetup.sol";
 import "../../src/interfaces/ILiquidityPool.sol";
 import "../../src/interfaces/IStakingManager.sol";
 import "../../src/StakingManager.sol";
@@ -130,10 +131,15 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
         roleRegistry.grantRole(stakingManager.STAKING_MANAGER_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), admin);
+        roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), admin);
         roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
         roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), elExiter);
         vm.stopPrank();
+
+        // register admin as a validator spawner so helper_createValidator can drive validator creation through LP entry points
+        vm.prank(admin);
+        liquidityPool.registerValidatorSpawner(admin);
 
         vm.startPrank(admin);
         rateLimiter.createNewLimiter(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), 172_800_000_000_000, 2_000_000_000);
@@ -222,13 +228,15 @@ contract PreludeTest is Test, ArrayTestHelper {
             depositDataRoot: initialDepositRoot,
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
-        vm.deal(address(liquidityPool), 10000 ether);
+        // Fund the LP through receive() so balance and totalValueInLp stay in sync (vm.deal would clobber balance only).
+        fundContract(address(liquidityPool), 10000 ether);
 
-        vm.prank(address(liquidityPool));
-        stakingManager.registerBeaconValidators(toArray(initialDepositData), toArray_u256(params.bidId), params.etherFiNode);
+        // Drive validator creation through LP entry points so _accountForEthSentOut keeps accounting consistent.
+        vm.prank(admin);
+        liquidityPool.batchRegister(toArray(initialDepositData), toArray_u256(params.bidId), params.etherFiNode);
 
-        vm.prank(address(liquidityPool));
-        stakingManager.createBeaconValidators{value: 1 ether}(toArray(initialDepositData), toArray_u256(params.bidId), params.etherFiNode);
+        vm.prank(admin);
+        liquidityPool.batchCreateBeaconValidators(toArray(initialDepositData), toArray_u256(params.bidId), params.etherFiNode);
 
         uint256 confirmAmount = params.validatorSize - 1 ether;
 
@@ -245,8 +253,8 @@ contract PreludeTest is Test, ArrayTestHelper {
             depositDataRoot: confirmDepositRoot,
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
-        vm.prank(address(liquidityPool));
-        stakingManager.confirmAndFundBeaconValidators{value: confirmAmount}(toArray(confirmDepositData), params.validatorSize);
+        vm.prank(admin);
+        liquidityPool.confirmAndFundBeaconValidators(toArray(confirmDepositData), params.validatorSize);
 
         if (params.withdrawable) {
             // Poke some withdrawable funds into the restakedExecutionLayerGwei storage slot of the eigenpod.
@@ -591,12 +599,15 @@ contract PreludeTest is Test, ArrayTestHelper {
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
 
-        vm.deal(address(liquidityPool), 100 ether);
-        vm.prank(address(liquidityPool));
-        stakingManager.registerBeaconValidators(toArray(initialDepositData), bidIds, etherFiNode);
-        
-        vm.prank(address(liquidityPool));
-        stakingManager.createBeaconValidators{value: 1 ether}(toArray(initialDepositData), bidIds, etherFiNode);
+        // Fund the LP through receive() so balance and totalValueInLp stay in sync.
+        fundContract(address(liquidityPool), 100 ether);
+
+        // Drive validator creation through LP entry points so _accountForEthSentOut keeps accounting consistent.
+        vm.prank(admin);
+        liquidityPool.batchRegister(toArray(initialDepositData), bidIds, etherFiNode);
+
+        vm.prank(admin);
+        liquidityPool.batchCreateBeaconValidators(toArray(initialDepositData), bidIds, etherFiNode);
 
         uint256 validatorSize = 32 ether;
         uint256 confirmAmount = validatorSize - 1 ether;
@@ -615,8 +626,8 @@ contract PreludeTest is Test, ArrayTestHelper {
             ipfsHashForEncryptedValidatorKey: "test_ipfs_hash"
         });
 
-        vm.prank(address(liquidityPool));
-        stakingManager.confirmAndFundBeaconValidators{value: confirmAmount}(toArray(confirmDepositData), validatorSize);
+        vm.prank(admin);
+        liquidityPool.confirmAndFundBeaconValidators(toArray(confirmDepositData), validatorSize);
     }
 
     function test_withdrawRestakedValidatorETH() public {

@@ -65,7 +65,11 @@ contract LiquifierTest is TestSetup {
 
         vm.deal(alice, 1000000000 ether);
 
-        vm.startPrank(liquifierInstance.owner());
+        vm.startPrank(owner);
+        // Curve quoting on a 20k stETH input incurs heavy slippage and trips
+        // the chainlink/curve deviation predicate before the cap check fires.
+        // This test is about the cap, so quote 1:1 instead.
+        liquifierInstance.updateQuoteStEthWithCurve(false);
         liquifierInstance.updateDepositCap(address(stEth), 50, 100);
         vm.stopPrank();
 
@@ -83,6 +87,7 @@ contract LiquifierTest is TestSetup {
     function test_deposit_stEth() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
+        _mockFreshStEthFeed();
 
         vm.deal(alice, 100 ether);
 
@@ -127,6 +132,7 @@ contract LiquifierTest is TestSetup {
     function test_deopsit_stEth_with_explicit_permit() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
+        _mockFreshStEthFeed();
 
         // Clear any code at alice's address to make it act like an EOA (External Owned Account)
         vm.etch(alice, "");
@@ -160,6 +166,18 @@ contract LiquifierTest is TestSetup {
         permitInput = createPermitInput(2, address(liquifierInstance), 1 ether, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         permitInput2 = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, address(0), permitInput2);
+    }
+
+    /// On realistic mainnet fork, the live stETH/ETH feed has a ~24h heartbeat
+    /// and may sit just past STALE_PRICE_WINDOW depending on fork-block timing
+    /// (or after vm.warp). Pin it to a fresh, ~1:1 answer so deposits exercising
+    /// the curve-quoting path don't revert with StalePriceFeed.
+    function _mockFreshStEthFeed() internal {
+        vm.mockCall(
+            stEthChainlinkFeed,
+            abi.encodeWithSignature("latestRoundData()"),
+            abi.encode(uint80(0), int256(1 ether), uint256(0), block.timestamp, uint80(0))
+        );
     }
 
     function _enable_deposit(address _strategy) internal {
@@ -582,6 +600,8 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.pauseContractUntil();
 
         vm.warp(block.timestamp + liquifierInstance.MAX_PAUSE_DURATION() + 1);
+        // Refresh after warp — pause window is days, well past STALE_PRICE_WINDOW.
+        _mockFreshStEthFeed();
 
         vm.prank(alice);
         liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
@@ -591,6 +611,7 @@ contract LiquifierTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
         _grantLiqPauseUntilRoles();
+        _mockFreshStEthFeed();
 
         vm.deal(alice, 10 ether);
         vm.startPrank(alice);

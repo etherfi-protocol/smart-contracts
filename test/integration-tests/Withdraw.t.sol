@@ -20,6 +20,35 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
 
         // Handle any pending oracle report that hasn't been processed yet
         _syncOracleReportState();
+
+        // The new sum-of-requests sanity check in EtherFiAdmin requires every request
+        // in (lastFinalizedRequestId, lastFinalizedWithdrawalRequestId] to be summed
+        // into the report's finalizedWithdrawalAmount. On a realistic mainnet fork,
+        // there is a pre-existing backlog of pending requests that would otherwise
+        // dominate the sum and trip the per-day cap. Fast-forward lastFinalizedRequestId
+        // to nextRequestId-1 so each test starts from a clean "no pending backlog" state.
+        _flushPendingWithdrawalBacklog();
+    }
+
+    function _flushPendingWithdrawalBacklog() internal {
+        address roleOwner = roleRegistryInstance.owner();
+
+        vm.startPrank(roleOwner);
+        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(this));
+        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), address(this));
+        vm.stopPrank();
+
+        uint32 head = withdrawRequestNFTInstance.nextRequestId();
+        if (head > 0) {
+            withdrawRequestNFTInstance.finalizeRequests(head - 1);
+        }
+
+        // The per-day cap is checked as (amount * 1 days / elapsedTime). Tests warp only
+        // a few epochs forward, so even a 1-ETH finalization blows up to ~10k ETH/day.
+        // Raise the cap to the contract-enforced ceiling so realistic-fork tests can run.
+        etherFiAdminInstance.updateMaxFinalizedWithdrawalAmountPerDay(
+            etherFiAdminInstance.MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY()
+        );
     }
 
     /// @dev Syncs oracle/admin state so AVS_OPERATOR_1 and AVS_OPERATOR_2 can submit reports.
@@ -60,6 +89,20 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_2);
         etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_2);
         vm.stopPrank();
+    }
+
+    /// @dev Mirrors EtherFiAdmin._validateReport's sum-of-requests sanity check.
+    ///      On a realistic mainnet fork there are pending requests between
+    ///      `lastFinalizedRequestId()` and the test's new request, all of which
+    ///      contribute to the report's required `finalizedWithdrawalAmount`.
+    function _sumValidRequestAmounts(uint32 _lastFinalizedRequestIdInclusive) internal view returns (uint128) {
+        uint256 sum;
+        uint32 from = withdrawRequestNFTInstance.lastFinalizedRequestId() + 1;
+        for (uint256 i = from; i <= _lastFinalizedRequestIdInclusive; i++) {
+            IWithdrawRequestNFT.WithdrawRequest memory r = withdrawRequestNFTInstance.getRequest(i);
+            if (r.isValid) sum += r.amountOfEEth;
+        }
+        return uint128(sum);
     }
 
     function test_Withdraw_EtherFiRedemptionManager_redeemEEth() public {
@@ -273,6 +316,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
             etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+        report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
         // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
@@ -337,6 +381,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
             etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+        report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
         // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
@@ -409,6 +454,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
             etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+        report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
         // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
@@ -509,6 +555,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
             etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+        report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
         // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock
@@ -594,6 +641,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
             etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
         );
         report.lastFinalizedWithdrawalRequestId = uint32(requestId);
+        report.finalizedWithdrawalAmount = _sumValidRequestAmounts(report.lastFinalizedWithdrawalRequestId);
 
         (report.refSlotFrom, report.refSlotTo, report.refBlockFrom) = etherFiOracleInstance.blockStampForNextReport();
         // Set refBlockTo to a block number that is < block.number and > lastAdminExecutionBlock

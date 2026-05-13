@@ -51,6 +51,7 @@ interface ILiquidityPool {
     function amountForShare(uint256 _share) external view returns (uint256);
     function eETH() external view returns (IeETH);
     function DEPRECATED_ethAmountLockedForWithdrawal() external view returns (uint128);
+    function escrowMigrationCompleted() external view returns (bool);
 
     function deposit() external payable returns (uint256);
     function deposit(address _referral) external payable returns (uint256);
