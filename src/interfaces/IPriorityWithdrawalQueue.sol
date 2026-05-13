@@ -65,6 +65,7 @@ interface IPriorityWithdrawalQueue {
     function unPauseContract() external;
     function pauseContractUntil() external;
     function unpauseContractUntil() external;
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external;
 
     // Immutables
     function treasury() external view returns (address);

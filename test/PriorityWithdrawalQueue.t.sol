@@ -1372,6 +1372,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     address pauseUntilPauser = makeAddr("pauseUntilPauser");
     address unpauseUntilUnpauser = makeAddr("unpauseUntilUnpauser");
+    address pauseUntilDurationSetter = makeAddr("pauseUntilDurationSetter");
 
     function _grantPauseUntilRoles() internal {
         // On the mainnet fork, the live RoleRegistry predates this PR and doesn't expose
@@ -1383,8 +1384,13 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         roleRegistryInstance.upgradeTo(address(newImpl));
         roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        uint256 maxDur = priorityQueue.MAX_PAUSE_DURATION();
+        vm.prank(pauseUntilDurationSetter);
+        priorityQueue.setPauseUntilDuration(maxDur);
     }
 
     function _pausedUntil() internal view returns (uint256) {
@@ -1440,6 +1446,48 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.prank(unpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
         priorityQueue.unpauseContractUntil();
+    }
+
+    // --- setPauseUntilDuration ---
+
+    function test_setPauseUntilDuration_requiresRole() public {
+        _grantPauseUntilRoles();
+        uint256 maxDur = priorityQueue.MAX_PAUSE_DURATION();
+
+        vm.prank(regularUser);
+        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        priorityQueue.setPauseUntilDuration(maxDur);
+
+        // PAUSE_UNTIL_ROLE alone is insufficient
+        vm.prank(pauseUntilPauser);
+        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        priorityQueue.setPauseUntilDuration(maxDur);
+    }
+
+    function test_setPauseUntilDuration_setsValue() public {
+        _grantPauseUntilRoles();
+        uint256 d = priorityQueue.MIN_PAUSE_DURATION() + 1 hours;
+
+        vm.prank(pauseUntilDurationSetter);
+        priorityQueue.setPauseUntilDuration(d);
+
+        vm.prank(pauseUntilPauser);
+        priorityQueue.pauseContractUntil();
+        assertEq(_pausedUntil(), block.timestamp + d);
+    }
+
+    function test_setPauseUntilDuration_revertsOnInvalidValue() public {
+        _grantPauseUntilRoles();
+        uint256 belowMin = priorityQueue.MIN_PAUSE_DURATION() - 1;
+        uint256 aboveMax = priorityQueue.MAX_PAUSE_DURATION() + 1;
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        priorityQueue.setPauseUntilDuration(belowMin);
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        priorityQueue.setPauseUntilDuration(aboveMax);
     }
 
     // --- each gated function (whenNotPaused → blocked by pause-until too) ---

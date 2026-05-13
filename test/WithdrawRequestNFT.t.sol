@@ -866,13 +866,19 @@ contract WithdrawRequestNFTTest is TestSetup {
 
     address wrPauseUntilPauser = makeAddr("wrPauseUntilPauser");
     address wrUnpauseUntilUnpauser = makeAddr("wrUnpauseUntilUnpauser");
+    address wrPauseUntilDurationSetter = makeAddr("wrPauseUntilDurationSetter");
 
     function _grantWrPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), wrPauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), wrUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), wrPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        uint256 maxDur = withdrawRequestNFTInstance.MAX_PAUSE_DURATION();
+        vm.prank(wrPauseUntilDurationSetter);
+        withdrawRequestNFTInstance.setPauseUntilDuration(maxDur);
     }
 
     function _wrPausedUntil() internal view returns (uint256) {
@@ -928,6 +934,48 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(wrUnpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
         withdrawRequestNFTInstance.unpauseContractUntil();
+    }
+
+    // --- setPauseUntilDuration ---
+
+    function test_setPauseUntilDuration_requiresRole() public {
+        _grantWrPauseUntilRoles();
+        uint256 maxDur = withdrawRequestNFTInstance.MAX_PAUSE_DURATION();
+
+        vm.prank(bob);
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        withdrawRequestNFTInstance.setPauseUntilDuration(maxDur);
+
+        // PAUSE_UNTIL_ROLE alone is insufficient
+        vm.prank(wrPauseUntilPauser);
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        withdrawRequestNFTInstance.setPauseUntilDuration(maxDur);
+    }
+
+    function test_setPauseUntilDuration_setsValue() public {
+        _grantWrPauseUntilRoles();
+        uint256 d = withdrawRequestNFTInstance.MIN_PAUSE_DURATION() + 1 hours;
+
+        vm.prank(wrPauseUntilDurationSetter);
+        withdrawRequestNFTInstance.setPauseUntilDuration(d);
+
+        vm.prank(wrPauseUntilPauser);
+        withdrawRequestNFTInstance.pauseContractUntil();
+        assertEq(_wrPausedUntil(), block.timestamp + d);
+    }
+
+    function test_setPauseUntilDuration_revertsOnInvalidValue() public {
+        _grantWrPauseUntilRoles();
+        uint256 belowMin = withdrawRequestNFTInstance.MIN_PAUSE_DURATION() - 1;
+        uint256 aboveMax = withdrawRequestNFTInstance.MAX_PAUSE_DURATION() + 1;
+
+        vm.prank(wrPauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        withdrawRequestNFTInstance.setPauseUntilDuration(belowMin);
+
+        vm.prank(wrPauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        withdrawRequestNFTInstance.setPauseUntilDuration(aboveMax);
     }
 
     // The scan-of-share-remainder gate was removed from unPauseContract / unpauseContractUntil.
