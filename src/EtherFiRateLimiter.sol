@@ -20,11 +20,6 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     mapping(bytes32 bucketId => BucketLimiter.Limit) limits;
     mapping(bytes32 bucketId => mapping(address consumer => bool allowed)) consumers;
 
-    //---------------------------------------------------------------------------
-    //----------------------------  ROLES  --------------------------------------
-    //---------------------------------------------------------------------------
-    bytes32 public constant ETHERFI_RATE_LIMITER_ADMIN_ROLE = keccak256("ETHERFI_RATE_LIMITER_ADMIN_ROLE");
-
     //-------------------------------------------------------------------------
     //-------------------------  Deployment  ----------------------------------
     //-------------------------------------------------------------------------
@@ -198,7 +193,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     //--------------------------------------------------------------------------------------
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(ETHERFI_RATE_LIMITER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 }

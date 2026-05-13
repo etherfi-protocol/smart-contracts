@@ -44,14 +44,6 @@ contract StakingManager is
     mapping(address => bool) public deployedEtherFiNodes;
     mapping(bytes32 => ValidatorCreationStatus) public validatorCreationStatus;
 
-    //---------------------------------------------------------------------------
-    //---------------------------  ROLES  ---------------------------------------
-    //---------------------------------------------------------------------------
-
-    bytes32 public constant STAKING_MANAGER_NODE_CREATOR_ROLE = keccak256("STAKING_MANAGER_NODE_CREATOR_ROLE");
-    bytes32 public constant STAKING_MANAGER_ADMIN_ROLE = keccak256("STAKING_MANAGER_ADMIN_ROLE");
-    bytes32 public constant STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE = keccak256("STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE");
-
     //-------------------------------------------------------------------------
     //-----------------------------  Admin  -----------------------------------
     //-------------------------------------------------------------------------
@@ -92,7 +84,7 @@ contract StakingManager is
     //---------------------------------------------------------------------------
     
     function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external {
-        if (!roleRegistry.hasRole(STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), msg.sender)) revert IncorrectRole();
         bytes32 validatorCreationDataHash = keccak256(abi.encode(depositData.publicKey, depositData.signature, depositData.depositDataRoot, depositData.ipfsHashForEncryptedValidatorKey, bidId, etherFiNode));
         if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.REGISTERED) revert InvalidValidatorCreationStatus();
         validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.INVALIDATED;
@@ -232,7 +224,7 @@ contract StakingManager is
     /// @dev create a new proxy instance of the etherFiNode withdrawal safe contract.
     /// @param _createEigenPod whether or not to create an associated eigenPod contract.
     function instantiateEtherFiNode(bool _createEigenPod) external returns (address) {
-        if (!roleRegistry.hasRole(STAKING_MANAGER_NODE_CREATOR_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.STAKING_MANAGER_NODE_CREATOR_ROLE(), msg.sender)) revert IncorrectRole();
 
         BeaconProxy proxy = new BeaconProxy(address(etherFiNodeBeacon), "");
         address node = address(proxy);
@@ -264,7 +256,7 @@ contract StakingManager is
     //--------------------------------------------------------------------------------------
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(STAKING_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.STAKING_MANAGER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 

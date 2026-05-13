@@ -91,8 +91,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     address public etherfiRestaker;
 
-    bytes32 public constant LIQUIFIER_ADMIN_ROLE = keccak256("LIQUIFIER_ADMIN_ROLE");
-    bytes32 public constant LIQUIFIER_SENDER_ROLE = keccak256("LIQUIFIER_SENDER_ROLE");
     uint256 public constant BASIS_POINT_SCALE = 10_000;
 
     IRoleRegistry public immutable roleRegistry;
@@ -214,14 +212,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
     function withdrawEther() external {
-        if (!roleRegistry.hasRole(LIQUIFIER_SENDER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.LIQUIFIER_SENDER_ROLE(), msg.sender)) revert IncorrectRole();
         uint256 amountToLiquidityPool = _min(address(this).balance, liquidityPool.totalValueOutOfLp());
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
         if (!sent) revert EthTransferFailed();
     }
 
     function sendToEtherFiRestaker(address _token, uint256 _amount) external {
-        if (!roleRegistry.hasRole(LIQUIFIER_SENDER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.LIQUIFIER_SENDER_ROLE(), msg.sender)) revert IncorrectRole();
         IERC20(_token).safeTransfer(etherfiRestaker, _amount);
     }
 
@@ -230,7 +228,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.LIQUIFIER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
     }
@@ -253,13 +251,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.LIQUIFIER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         if (_discountInBasisPoints < MIN_DISCOUNT_RATE_IN_BPS || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
     }
 
     function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external {
-        if (!roleRegistry.hasRole(LIQUIFIER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.LIQUIFIER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         quoteStEthWithCurve = _quoteStEthWithCurve;
     }
 

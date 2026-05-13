@@ -23,12 +23,10 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;
 
-    bytes32 public constant BUCKET_RATE_LIMITER_ADMIN_ROLE = keccak256("BUCKET_RATE_LIMITER_ADMIN_ROLE");
-
     error IncorrectRole();
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(BUCKET_RATE_LIMITER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.BUCKET_RATE_LIMITER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 

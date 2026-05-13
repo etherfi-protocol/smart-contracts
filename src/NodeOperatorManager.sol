@@ -39,8 +39,6 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;
 
-    bytes32 public constant NODE_OPERATOR_MANAGER_ADMIN_ROLE = keccak256("NODE_OPERATOR_MANAGER_ADMIN_ROLE");
-
     error IncorrectRole();
 
     //--------------------------------------------------------------------------------------
@@ -267,7 +265,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     }
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(NODE_OPERATOR_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 }

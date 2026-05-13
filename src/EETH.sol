@@ -40,8 +40,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
-    bytes32 public constant EETH_OPERATING_ADMIN_ROLE = keccak256("EETH_OPERATING_ADMIN_ROLE");
-
     event Paused();
     event Unpaused();
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
@@ -170,18 +168,15 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         _approve(owner, spender, value);
     }
 
-    function recoverETH(address payable to, uint256 amount) external {
-        if(!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function recoverETH(address payable to, uint256 amount) external onlyAdmin {
         _recoverETH(to, amount);
     }
 
-    function recoverERC20(address token, address to, uint256 amount) external {
-        if(!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function recoverERC20(address token, address to, uint256 amount) external onlyAdmin{
         _recoverERC20(token, to, amount);
     }
 
-    function recoverERC721(address token, address to, uint256 tokenId) external {
-        if(!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function recoverERC721(address token, address to, uint256 tokenId) external onlyAdmin {
         _recoverERC721(token, to, tokenId);
     }
 
@@ -273,6 +268,11 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
     // [MODIFIERS]
     modifier onlyPoolContract() {
         require(msg.sender == address(liquidityPool), "Only pool contract function");
+        _;
+    }
+
+    modifier onlyAdmin() {
+        if(!roleRegistry.hasRole(roleRegistry.EETH_OPERATING_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 

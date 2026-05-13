@@ -41,17 +41,6 @@ contract EtherFiNodesManager is
     mapping(address => mapping(bytes4 => mapping(address => bool))) public allowedForwardedExternalCalls; // Call Forwarding: user -> functionSelector -> targetAddress -> allowed
     mapping(bytes32 => IEtherFiNode) public etherFiNodeFromPubkeyHash;
 
-    //--------------------------------------------------------------------------------------
-    //-------------------------------------  ROLES  ----------------------------------------
-    //--------------------------------------------------------------------------------------
-    bytes32 public constant ETHERFI_NODES_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_ADMIN_ROLE");
-    bytes32 public constant ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = keccak256("ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
-    bytes32 public constant ETHERFI_NODES_MANAGER_POD_PROVER_ROLE = keccak256("ETHERFI_NODES_MANAGER_POD_PROVER_ROLE");
-    bytes32 public constant ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256("ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE");
-    bytes32 public constant ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE");
-    bytes32 public constant ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE = keccak256("ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
-    bytes32 public constant ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE = keccak256("ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE");
-
     //-------------------------------------------------------------------------
     //-----------------------------  Rate Limiter Buckets ---------------------
     //-------------------------------------------------------------------------
@@ -227,7 +216,7 @@ contract EtherFiNodesManager is
      * @custom:fee Send EXACT ETH to cover sum of (feePerPod * requestsForPod).
      */
     function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable whenNotPaused nonReentrant {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), msg.sender)) revert IncorrectRole();
         if (requests.length == 0) revert EmptyWithdrawalsRequest();
 
         // rate limit the amount of the that can be withdrawn from beacon chain
@@ -272,7 +261,7 @@ contract EtherFiNodesManager is
      * @custom:fee Send EXACT ETH to cover consolidation fees.
      */
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable whenNotPaused nonReentrant {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), msg.sender)) revert IncorrectRole();
         if (requests.length == 0) revert EmptyConsolidationRequest();
 
         // rate limit consolidation requests - each request could affect up to FULL_EXIT_GWEI
@@ -476,27 +465,27 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyEigenlayerAdmin() {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyCallForwarder() {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyPodProver() {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_POD_PROVER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_POD_PROVER_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyLegacyLinker() {
-        if (!roleRegistry.hasRole(ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 

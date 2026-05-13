@@ -51,8 +51,6 @@ contract AuctionManager is
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
-    bytes32 public constant AUCTION_MANAGER_ADMIN_ROLE = keccak256("AUCTION_MANAGER_ADMIN_ROLE");
-
     error IncorrectRole();
 
     //--------------------------------------------------------------------------------------
@@ -368,7 +366,7 @@ contract AuctionManager is
     }
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(AUCTION_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.AUCTION_MANAGER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 

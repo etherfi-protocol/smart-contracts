@@ -40,8 +40,6 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;
 
-    bytes32 public constant ETHERFI_ORACLE_ADMIN_ROLE = keccak256("ETHERFI_ORACLE_ADMIN_ROLE");
-
     error IncorrectRole();
 
     event CommitteeMemberAdded(address indexed member);
@@ -332,7 +330,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     modifier isAdmin() {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_ORACLE_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 }

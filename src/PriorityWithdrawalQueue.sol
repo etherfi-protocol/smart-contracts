@@ -67,15 +67,6 @@ contract PriorityWithdrawalQueue is
     uint128 public ethAmountLockedForPriorityWithdrawal;
 
     //--------------------------------------------------------------------------------------
-    //-------------------------------------  ROLES  ----------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE = keccak256("PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE");
-    bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = keccak256("PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE");
-    bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE = keccak256("PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE");
-    bytes32 public constant IMPLICIT_FEE_CLAIMER_ROLE = keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
-
-    //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
@@ -138,12 +129,12 @@ contract PriorityWithdrawalQueue is
     }
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyRequestManager() {
-        if (!roleRegistry.hasRole(PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
@@ -358,20 +349,20 @@ contract PriorityWithdrawalQueue is
     //--------------------------------------------------------------------------------------
 
     function addToWhitelist(address user) external {
-        if (!roleRegistry.hasRole(PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE(), msg.sender)) revert IncorrectRole();
         if (user == address(0)) revert AddressZero();
         isWhitelisted[user] = true;
         emit WhitelistUpdated(user, true);
     }
 
     function removeFromWhitelist(address user) external {
-        if (!roleRegistry.hasRole(PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE(), msg.sender)) revert IncorrectRole();
         isWhitelisted[user] = false;
         emit WhitelistUpdated(user, false);
     }
 
     function batchUpdateWhitelist(address[] calldata users, bool[] calldata statuses) external {
-        if (!roleRegistry.hasRole(PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE(), msg.sender)) revert IncorrectRole();
         if (users.length != statuses.length) revert ArrayLengthMismatch();
         for (uint256 i = 0; i < users.length; ++i) {
             if (users[i] == address(0)) revert AddressZero();
@@ -404,7 +395,7 @@ contract PriorityWithdrawalQueue is
     ///      - Burn: the rest of the remainder is burned
     /// @param eEthAmount Amount of eETH remainder to handle
     function handleRemainder(uint256 eEthAmount) external {
-        if (!roleRegistry.hasRole(IMPLICIT_FEE_CLAIMER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.IMPLICIT_FEE_CLAIMER_ROLE(), msg.sender)) revert IncorrectRole();
         if (eEthAmount == 0) revert BadInput();
         if (eEthAmount > liquidityPool.amountForShare(totalRemainderShares)) revert BadInput();
 

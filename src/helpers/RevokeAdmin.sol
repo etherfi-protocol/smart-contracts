@@ -7,8 +7,6 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "../interfaces/IRoleRegistry.sol";
 
 contract Blacklister is Initializable, UUPSUpgradeable {
-    bytes32 public constant REVOKE_ADMIN_ROLE = keccak256("REVOKE_ADMIN_ROLE");
-
     IRoleRegistry public immutable roleRegistry;
 
     error IncorrectRole();
@@ -35,7 +33,7 @@ contract Blacklister is Initializable, UUPSUpgradeable {
     }
 
     modifier onlyRevokeAdmin() {
-        if (!roleRegistry.hasRole(REVOKE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.REVOKE_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 }

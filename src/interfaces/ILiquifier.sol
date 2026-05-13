@@ -130,6 +130,4 @@ interface ILiquifier {
     function unpauseContractUntil() external;
 
     function roleRegistry() external view returns (IRoleRegistry);
-    function LIQUIFIER_ADMIN_ROLE() external view returns (bytes32);
-    function LIQUIFIER_SENDER_ROLE() external view returns (bytes32);
 }

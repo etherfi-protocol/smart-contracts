@@ -14,7 +14,7 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     address public immutable revokeAdmin;
 
     error OnlyProtocolUpgrader();
-    error IncorrectRole();    error OnlyRevokeAdmin();
+    error OnlyRevokeAdmin();
 
     /// @notice Returns the maximum allowed role value
     /// @dev This is used by EnumerableRoles._validateRole to ensure roles are within valid range

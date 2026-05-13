@@ -33,12 +33,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     bool public paused;
 
     //--------------------------------------------------------------------------------------
-    //-------------------------------------  ROLES  ---------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    bytes32 public constant WEETH_OPERATING_ADMIN_ROLE = keccak256("WEETH_OPERATING_ADMIN_ROLE");
-
-    //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
 
@@ -114,18 +108,18 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     }
 
     function recoverETH(address payable to, uint256 amount) external {
-        if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(roleRegistry.WEETH_OPERATING_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _recoverETH(to, amount);
     }
 
     function recoverERC20(address token, address to, uint256 amount) external {
-        if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(roleRegistry.WEETH_OPERATING_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         if (token == address(eETH)) revert CannotRecoverEETH();
         _recoverERC20(token, to, amount);
     }
 
     function recoverERC721(address token, address to, uint256 tokenId) external {
-        if(!roleRegistry.hasRole(WEETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(roleRegistry.WEETH_OPERATING_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _recoverERC721(token, to, tokenId);
     }
 

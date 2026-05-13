@@ -14,12 +14,6 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
     address public immutable rewardTokenAddress;
     IRoleRegistry public immutable roleRegistry;
 
-    bytes32 public constant ETHERFI_REWARDS_ROUTER_ADMIN_ROLE =
-        keccak256("ETHERFI_REWARDS_ROUTER_ADMIN_ROLE");
-
-    bytes32 public constant ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE =
-        keccak256("ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE");
-
     address public recipientAddress;
 
     event EthSent(address indexed from, address indexed to, address indexed sender, uint256 value);
@@ -63,7 +57,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
 
     function setRecipientAddress(address _recipient) external {
         if (
-            !roleRegistry.hasRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, msg.sender)
+            !roleRegistry.hasRole(roleRegistry.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), msg.sender)
         ) revert IncorrectRole();
         if (_recipient == address(0)) revert InvalidAddress();
         recipientAddress = _recipient;
@@ -74,7 +68,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
     function recoverERC20() external {
         if (
             !roleRegistry.hasRole(
-                ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE,
+                roleRegistry.ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE(),
                 msg.sender
             )
         ) revert IncorrectRole();

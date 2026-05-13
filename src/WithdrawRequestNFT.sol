@@ -52,9 +52,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     uint128 public ethAmountLockedForWithdrawal;
 
-    bytes32 public constant WITHDRAW_REQUEST_NFT_ADMIN_ROLE = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
-    bytes32 public constant IMPLICIT_FEE_CLAIMER_ROLE = keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
-
     IBlacklister public immutable blacklister;
 
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
@@ -303,7 +300,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     ///   - Burn: the rest of the remainder is burned
     /// @param _eEthAmount: the remainder of the eEth amount
     function handleRemainder(uint256 _eEthAmount) external {
-        if(!roleRegistry.hasRole(IMPLICIT_FEE_CLAIMER_ROLE, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(roleRegistry.IMPLICIT_FEE_CLAIMER_ROLE(), msg.sender)) revert IncorrectRole();
         require(_eEthAmount != 0, "EETH amount cannot be 0"); 
         require(isScanOfShareRemainderCompleted(), "Not all prev requests have been scanned");
         require(getEEthRemainderAmount() >= _eEthAmount, "Not enough eETH remainder");
@@ -368,7 +365,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     modifier onlyAdmin() {
-        require(roleRegistry.hasRole(WITHDRAW_REQUEST_NFT_ADMIN_ROLE, msg.sender), "Caller is not admin");
+        require(roleRegistry.hasRole(roleRegistry.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), msg.sender), "Caller is not admin");
         _;
     }
 

@@ -36,11 +36,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     IRoleRegistry public immutable roleRegistry;
     IEtherFiRateLimiter public immutable rateLimiter;
 
-    bytes32 public constant ETHERFI_RESTAKER_ADMIN_ROLE                 = keccak256("ETHERFI_RESTAKER_ADMIN_ROLE");
-    bytes32 public constant ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE   = keccak256("ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE");
-    bytes32 public constant ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE     = keccak256("ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE");
-    bytes32 public constant ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE = keccak256("ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE");
-
     bytes32 public constant STETH_REQUEST_WITHDRAWAL_LIMIT_ID = keccak256("STETH_REQUEST_WITHDRAWAL_LIMIT_ID");
     bytes32 public constant QUEUE_WITHDRAWALS_LIMIT_ID        = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
     bytes32 public constant DEPOSIT_INTO_STRATEGY_LIMIT_ID    = keccak256("DEPOSIT_INTO_STRATEGY_LIMIT_ID");
@@ -421,22 +416,22 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     /* MODIFIERS */
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(ETHERFI_RESTAKER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_RESTAKER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyRequestWithdrawalsRole() {
-        if (!roleRegistry.hasRole(ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyClaimWithdrawalsRole() {
-        if (!roleRegistry.hasRole(ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyDepositIntoStrategyRole() {
-        if (!roleRegistry.hasRole(ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 }

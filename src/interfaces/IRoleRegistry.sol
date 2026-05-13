@@ -117,9 +117,63 @@ interface IRoleRegistry {
      */
     function BLACKLIST_UNTIL_ROLE() external view returns (bytes32);
 
-    /**
-     * @notice Returns the current owner of the contract
-     * @return The address of the current owner
-     */
-    function owner() external view returns (address);
+    function AUCTION_MANAGER_ADMIN_ROLE() external view returns (bytes32);
+
+    function BUCKET_RATE_LIMITER_ADMIN_ROLE() external view returns (bytes32);
+
+    function CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE() external view returns (bytes32);
+    function CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE() external view returns (bytes32);
+
+    function EETH_OPERATING_ADMIN_ROLE() external view returns (bytes32);
+
+    function ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE() external view returns (bytes32);
+    function ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE() external view returns (bytes32);
+
+    function ETHERFI_NODES_MANAGER_ADMIN_ROLE() external view returns (bytes32);
+    function ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE() external view returns (bytes32);
+    function ETHERFI_NODES_MANAGER_POD_PROVER_ROLE() external view returns (bytes32);
+    function ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE() external view returns (bytes32);
+    function ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE() external view returns (bytes32);
+    function ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE() external view returns (bytes32);
+    function ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE() external view returns (bytes32);
+
+    function ETHERFI_ORACLE_ADMIN_ROLE() external view returns (bytes32);
+
+    function LIQUIFIER_ADMIN_ROLE() external view returns (bytes32);
+    function LIQUIFIER_SENDER_ROLE() external view returns (bytes32);
+
+    function WEETH_OPERATING_ADMIN_ROLE() external view returns (bytes32);
+
+    function NODE_OPERATOR_MANAGER_ADMIN_ROLE() external view returns (bytes32);
+
+    function WITHDRAW_REQUEST_NFT_ADMIN_ROLE() external view returns (bytes32);
+    function IMPLICIT_FEE_CLAIMER_ROLE() external view returns (bytes32);
+
+    function ETHERFI_RATE_LIMITER_ADMIN_ROLE() external view returns (bytes32);
+
+    function ETHERFI_REWARDS_ROUTER_ADMIN_ROLE() external view returns (bytes32);
+    function ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE() external view returns (bytes32);
+
+    function LIQUIDITY_POOL_ADMIN_ROLE() external view returns (bytes32);
+    function LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE() external view returns (bytes32);
+    function LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE() external view returns (bytes32);
+
+    function PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE() external view returns (bytes32);
+    function PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE() external view returns (bytes32);
+    function PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE() external view returns (bytes32);
+
+    function ETHERFI_RESTAKER_ADMIN_ROLE() external view returns (bytes32);
+    function ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE() external view returns (bytes32);
+    function ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE() external view returns (bytes32);
+    function ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE() external view returns (bytes32);
+
+    function STAKING_MANAGER_NODE_CREATOR_ROLE() external view returns (bytes32);
+    function STAKING_MANAGER_ADMIN_ROLE() external view returns (bytes32);
+    function STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE() external view returns (bytes32);
+
+    function ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE() external view returns (bytes32);
+
+    function WEETH_WITHDRAW_ADAPTER_ADMIN_ROLE() external view returns (bytes32);
+
+    function REVOKE_ADMIN_ROLE() external view returns (bytes32);
 }

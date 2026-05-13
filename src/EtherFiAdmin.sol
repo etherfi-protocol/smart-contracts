@@ -57,9 +57,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint256 public maxFinalizedWithdrawalAmountPerDay;
     uint256 public maxNumValidatorsToApprovePerDay;
 
-    bytes32 public constant ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE");
-    bytes32 public constant ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE");
-
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
     uint256 public constant MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
     uint256 public constant MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY = 500;
@@ -191,7 +188,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
 
     function setValidatorTaskBatchSize(uint16 _batchSize) external {
-        if(!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(roleRegistry.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         if (_batchSize == 0 || _batchSize > MAX_VALIDATOR_TASK_BATCH_SIZE) revert InvalidValidatorTaskBatchSize();
         validatorTaskBatchSize = _batchSize;
     }
@@ -219,7 +216,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), msg.sender)) revert IncorrectRole();
 
         require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
@@ -232,7 +229,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
 
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
         require(validatorApprovalTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
@@ -372,25 +369,25 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function updateMaxFinalizedWithdrawalAmountPerDay(uint256 _maxFinalizedWithdrawalAmountPerDay) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         if (_maxFinalizedWithdrawalAmountPerDay == 0 || _maxFinalizedWithdrawalAmountPerDay > MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY) revert InvalidMaxFinalizedWithdrawalAmountPerDay();
         maxFinalizedWithdrawalAmountPerDay = _maxFinalizedWithdrawalAmountPerDay;
     }
 
     function updateMaxNumValidatorsToApprovePerDay(uint256 _maxNumValidatorsToApprovePerDay) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         if (_maxNumValidatorsToApprovePerDay > MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY) revert InvalidMaxNumValidatorsToApprovePerDay();
         maxNumValidatorsToApprovePerDay = _maxNumValidatorsToApprovePerDay;
     }
 
     function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
         if (_acceptableRebaseAprInBps < 0 || _acceptableRebaseAprInBps > MAX_ACCEPTABLE_REBASE_APR_IN_BPS) revert InvalidAcceptableRebaseApr();
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
     }
 
     function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
 
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
