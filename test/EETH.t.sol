@@ -4,6 +4,7 @@ import "./TestSetup.sol";
 import "./TestERC20.sol";
 import "./TestERC721.sol";
 import "../src/helpers/Blacklister.sol";
+import "../src/utils/PausableUntil.sol";
 
 // Helper contract to force ETH into a contract using selfdestruct
 contract ForceETHSender {
@@ -665,5 +666,194 @@ contract EETHTest is TestSetup {
         vm.prank(alice);
         eETHInstance.transfer(bob, 0.5 ether);
         assertEq(eETHInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    // -------------------------------------------------------------------------
+    // pauseContractUntil / unpauseContractUntil
+    //
+    // EETH inherits PausableUntil; `mintShares` and `burnShares` carry the
+    // `whenNotPausedUntil` modifier. Entry points are gated by PAUSE_UNTIL_ROLE
+    // / UNPAUSE_UNTIL_ROLE on RoleRegistry. The state lives in a fixed namespaced
+    // storage slot — read via vm.load when we need to assert it.
+    // -------------------------------------------------------------------------
+
+    bytes32 constant PAUSABLE_UNTIL_SLOT =
+        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+    address pauseUntilPauser = makeAddr("pauseUntilPauser");
+    address unpauseUntilUnpauser = makeAddr("unpauseUntilUnpauser");
+
+    function _grantPauseUntilRoles() internal {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
+        vm.stopPrank();
+        // Foundry's default block.timestamp is too small — the cooldown check is
+        // `lastPauseTimestamp + MAX_PAUSE_DURATION + COOLDOWN > block.timestamp`,
+        // which fires on the very first call unless we warp forward past that sum.
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+    }
+
+    function _eETHPausedUntil() internal view returns (uint256) {
+        return uint256(vm.load(address(eETHInstance), PAUSABLE_UNTIL_SLOT));
+    }
+
+    // ---- pauseContractUntil role gating -------------------------------------
+
+    function test_EETH_pauseContractUntil_requiresRole() public {
+        _grantPauseUntilRoles();
+
+        vm.prank(bob);
+        vm.expectRevert(EETH.IncorrectRole.selector);
+        eETHInstance.pauseContractUntil();
+
+        // PROTOCOL_PAUSER (admin) alone is insufficient — needs PAUSE_UNTIL_ROLE.
+        vm.prank(admin);
+        vm.expectRevert(EETH.IncorrectRole.selector);
+        eETHInstance.pauseContractUntil();
+
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+        assertEq(_eETHPausedUntil(), block.timestamp + eETHInstance.MAX_PAUSE_DURATION());
+    }
+
+    function test_EETH_unpauseContractUntil_requiresRole() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(EETH.IncorrectRole.selector);
+        eETHInstance.unpauseContractUntil();
+
+        // PROTOCOL_UNPAUSER (admin) alone is insufficient — needs UNPAUSE_UNTIL_ROLE.
+        vm.prank(admin);
+        vm.expectRevert(EETH.IncorrectRole.selector);
+        eETHInstance.unpauseContractUntil();
+
+        vm.prank(unpauseUntilUnpauser);
+        eETHInstance.unpauseContractUntil();
+        assertEq(_eETHPausedUntil(), 0);
+    }
+
+    function test_EETH_unpauseContractUntil_revertsIfNotPaused() public {
+        _grantPauseUntilRoles();
+        vm.prank(unpauseUntilUnpauser);
+        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
+        eETHInstance.unpauseContractUntil();
+    }
+
+    function test_EETH_pauseContractUntil_revertsIfAlreadyPaused() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        // Re-pausing while already paused-until hits _requireNotPausedUntil inside _pauseUntil.
+        vm.prank(pauseUntilPauser);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _eETHPausedUntil())
+        );
+        eETHInstance.pauseContractUntil();
+    }
+
+    function test_EETH_pauseContractUntil_cooldownEnforced() public {
+        _grantPauseUntilRoles();
+
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        // Unpause and re-attempt before cooldown ends. Cooldown = MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN.
+        vm.prank(unpauseUntilUnpauser);
+        eETHInstance.unpauseContractUntil();
+
+        // Warp past MAX_PAUSE_DURATION (so we are no longer pausedUntil) but not past the cooldown.
+        vm.warp(block.timestamp + eETHInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.prank(pauseUntilPauser);
+        vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
+        eETHInstance.pauseContractUntil();
+
+        // After the cooldown window also passes, same pauser can re-pause.
+        vm.warp(block.timestamp + eETHInstance.PAUSER_UNTIL_COOLDOWN());
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+    }
+
+    // ---- pause-until blocks mint/burn ---------------------------------------
+
+    function test_EETH_mintShares_revertsWhenPausedUntil() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _eETHPausedUntil();
+
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        eETHInstance.mintShares(alice, 100);
+    }
+
+    function test_EETH_burnShares_revertsWhenPausedUntil() public {
+        // Mint before pausing — mint path is also gated, so we can't do it after.
+        vm.prank(address(liquidityPoolInstance));
+        eETHInstance.mintShares(alice, 100);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _eETHPausedUntil();
+
+        vm.prank(address(liquidityPoolInstance));
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        eETHInstance.burnShares(alice, 50);
+    }
+
+    // ---- pause-until does NOT block transfers -------------------------------
+    // Only mint/burn carry the modifier; transfers route through `_transferShares`
+    // which is gated only by `whenNotPaused` (the legacy boolean pause).
+
+    function test_EETH_transfer_notBlockedByPauseContractUntil() public {
+        _aliceWithEEth(1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        vm.prank(alice);
+        eETHInstance.transfer(bob, 0.5 ether);
+        assertEq(eETHInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    // ---- recovery paths -----------------------------------------------------
+
+    function test_EETH_mintShares_unblockedAfterPauseExpires() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        // Strict `>=` comparison in _requireNotPausedUntil ⇒ opens at exactly `pausedUntil + 1`.
+        vm.warp(block.timestamp + eETHInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.prank(address(liquidityPoolInstance));
+        eETHInstance.mintShares(alice, 100);
+        assertEq(eETHInstance.shares(alice), 100);
+    }
+
+    function test_EETH_mintShares_unblockedAfterManualUnpause() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        vm.prank(unpauseUntilUnpauser);
+        eETHInstance.unpauseContractUntil();
+
+        vm.prank(address(liquidityPoolInstance));
+        eETHInstance.mintShares(alice, 100);
+        assertEq(eETHInstance.shares(alice), 100);
     }
 }
