@@ -3,7 +3,7 @@ pragma solidity ^0.8.27;
 
 import "../interfaces/IRoleRegistry.sol";
 
-contract PausableUntil {
+abstract contract PausableUntil {
     struct PausableUntilStorage {
         uint256 pausedUntil;
         mapping(address => uint256) lastPauseTimestamp;

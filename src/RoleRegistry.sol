@@ -4,20 +4,13 @@ pragma solidity ^0.8.24;
 import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
 import {UUPSUpgradeable, Initializable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {EnumerableRoles} from "solady/auth/EnumerableRoles.sol";
+import {RolesLibrary} from "./utils/RolesLibrary.sol";
 
 /// @title RoleRegistry - An upgradeable role-based access control system
 /// @notice Provides functionality for managing and querying roles with enumeration capabilities
 /// @dev Implements UUPS upgradeability pattern and uses Solady's EnumerableRoles for efficient role management
 /// @author EtherFi
-contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, EnumerableRoles {
-    bytes32 public constant PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
-    bytes32 public constant PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
-    bytes32 public constant PAUSE_UNTIL_ROLE = keccak256("PAUSE_UNTIL_ROLE");
-    bytes32 public constant UNPAUSE_UNTIL_ROLE = keccak256("UNPAUSE_UNTIL_ROLE");
-    bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
-    bytes32 public constant BLACKLIST_UNTIL_ROLE = keccak256("BLACKLIST_UNTIL_ROLE");
-
-
+contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, EnumerableRoles, RolesLibrary {
     address public immutable revokeAdmin;
 
     error OnlyProtocolUpgrader();
