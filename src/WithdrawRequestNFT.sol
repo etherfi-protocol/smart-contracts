@@ -23,8 +23,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     using SafeERC20 for IERC20;
 
     uint256 private constant BASIS_POINT_SCALE = 1e4;
-    uint256 public constant MIN_WITHDRAW_AMOUNT = 0.01 ether;
-    uint256 public constant MAX_WITHDRAW_AMOUNT = 1000 ether;
     // this treasury address is set to ethfi buyback wallet address
     address public immutable treasury;
     
@@ -73,7 +71,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     event Unpaused(address account);
 
     error IncorrectRole();
-    error InvalidWithdrawalAmount();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _treasury, address _eETH, address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister) {
@@ -121,6 +118,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     receive() external payable {
         require(msg.sender == address(liquidityPool), "Only LP");
         ethAmountLockedForWithdrawal += uint128(msg.value);
+        _checkEthAmountLockedForWithdrawal();
     }
 
     /// @notice creates a withdraw request and issues an associated NFT to the recipient
@@ -130,8 +128,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     /// @param recipient address to recieve with WithdrawRequestNFT
     /// @param fee fee to be subtracted from amount when recipient calls claimWithdraw
     /// @return uint256 id of the withdraw request
-    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external payable onlyLiquidityPool whenNotPaused returns (uint256) {
-        if (amountOfEEth < MIN_WITHDRAW_AMOUNT || amountOfEEth > MAX_WITHDRAW_AMOUNT) revert InvalidWithdrawalAmount();
+    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient, uint256 fee) external onlyLiquidityPool whenNotPaused returns (uint256) {
         uint256 requestId = nextRequestId++;
         uint32 feeGwei = uint32(fee / 1 gwei);
 
@@ -144,6 +141,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function getClaimableAmount(uint256 tokenId) public view returns (uint256) {
+        (uint256 amountToTransfer, uint256 fee) = _getClaimableAmount(tokenId);
+        return amountToTransfer - fee;
+    }
+
+    function _getClaimableAmount(uint256 tokenId) internal view returns (uint256, uint256) {
         require(tokenId <= lastFinalizedRequestId, "Request is not finalized");
         require(ownerOf(tokenId) != address(0), "Already Claimed");
 
@@ -153,8 +155,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
         uint256 amountToTransfer = (request.amountOfEEth < amountForShares) ? request.amountOfEEth : amountForShares;
         uint256 fee = uint256(request.feeGwei) * 1 gwei;
-
-        return amountToTransfer - fee;
+        return (amountToTransfer, fee);
     }
 
     /// @notice called by the NFT owner to claim their ETH
@@ -170,7 +171,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
         require(request.isValid, "Request is not valid");
 
-        uint256 amountToWithdraw = getClaimableAmount(tokenId);
+        (uint256 amountToTransfer, uint256 fee) = _getClaimableAmount(tokenId);
+        uint256 amountToWithdraw = amountToTransfer - fee;
         uint256 shareAmountToBurnForWithdrawal = liquidityPool.sharesForWithdrawalAmount(amountToWithdraw);
 
         // transfer eth to recipient
@@ -180,16 +182,16 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         // update accounting
         totalRemainderEEthShares += request.shareOfEEth - shareAmountToBurnForWithdrawal;
 
-        require(ethAmountLockedForWithdrawal >= request.amountOfEEth, "insufficient escrow");
-        ethAmountLockedForWithdrawal -= uint128(uint256(request.amountOfEEth));
+        require(ethAmountLockedForWithdrawal >= amountToTransfer, "insufficient escrow");
+        ethAmountLockedForWithdrawal -= uint128(amountToTransfer);
 
         uint256 amountBurnedShare = liquidityPool.withdraw(recipient, amountToWithdraw);
         assert (amountBurnedShare == shareAmountToBurnForWithdrawal);
 
-        // ETH was transferred to this contract at finalize time via LP.addEthAmountLockedForWithdrawal.
-        require(address(this).balance >= amountToWithdraw, "Insufficient escrow");
         (bool ok, ) = payable(recipient).call{value: amountToWithdraw}("");
         require(ok, "ETH transfer failed");
+
+        _checkEthAmountLockedForWithdrawal();
 
         emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw, amountBurnedShare, recipient, 0);
     }
@@ -306,6 +308,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         _unpauseUntil();
     }
 
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+        _setPauseUntilDuration(_pauseUntilDuration);
+    }
+
     /// @dev Handles the remainder of the eEth shares after the claim of the withdraw request
     /// the remainder eETH share for a request = request.shareOfEEth - request.amountOfEEth / (eETH amount to eETH shares rate)
     /// - Splits the remainder into two parts:
@@ -343,6 +350,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         if (strandedFeeEth > 0) {
             (bool ok, ) = payable(address(liquidityPool)).call{value: strandedFeeEth}("");
             require(ok, "fee return failed");
+            _checkEthAmountLockedForWithdrawal();
         }
     }
 
@@ -365,6 +373,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
             uint256 tokenId = firstTokenId + i;
             require(_requests[tokenId].isValid || msg.sender == owner(), "INVALID_REQUEST");
         }
+    }
+
+    function _checkEthAmountLockedForWithdrawal() internal view {
+        require(address(this).balance >= ethAmountLockedForWithdrawal, "Insufficient escrow");
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

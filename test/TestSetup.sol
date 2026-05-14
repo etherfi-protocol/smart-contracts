@@ -66,6 +66,27 @@ import "../src/PriorityWithdrawalQueue.sol";
 import "../src/helpers/Blacklister.sol";
 import "./common/PlaceholderImpl.sol";
 
+/// @notice Funds a contract by sending ETH from a fresh EOA via low-level call so the target's
+///         receive()/fallback runs and any accounting it does stays in sync with its balance.
+///         Use instead of vm.deal whenever the target relies on receive() side effects.
+function fundContract(address target, uint256 amount) {
+    Vm cheats = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+    address funder = address(uint160(uint256(keccak256("test.eth.funder"))));
+    cheats.deal(funder, funder.balance + amount);
+    cheats.prank(funder);
+    (bool ok, ) = target.call{value: amount}("");
+    require(ok, "fundContract: send failed");
+}
+
+/// @notice Same as fundContract, but pranks `from` instead of a generic EOA. Use when receive() is caller-gated.
+function fundContractFrom(address target, uint256 amount, address from) {
+    Vm cheats = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+    cheats.deal(from, from.balance + amount);
+    cheats.prank(from);
+    (bool ok, ) = target.call{value: amount}("");
+    require(ok, "fundContractFrom: send failed");
+}
+
 contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     using stdStorage for StdStorage;
 

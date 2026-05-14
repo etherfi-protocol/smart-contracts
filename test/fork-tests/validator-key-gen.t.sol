@@ -4,6 +4,7 @@ pragma solidity ^0.8.27;
 import "forge-std/console2.sol";
 import "forge-std/Test.sol";
 import "../../test/common/ArrayTestHelper.sol";
+import {fundContract} from "../TestSetup.sol";
 
 import "../../src/libraries/DepositDataRootGenerator.sol";
 
@@ -524,7 +525,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         uint256[] memory bidIds = new uint256[](1);
         bidIds[0] = 999999;
 
-        vm.deal(address(liquidityPool), 100 ether);
+        fundContract(address(liquidityPool), 100 ether);
 
         vm.prank(admin);
         // Will revert because validator is not in REGISTERED status
@@ -573,7 +574,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         liquidityPool.batchRegister(depositDataArray, createdBids, etherFiNode);
 
         // Fund LP with sufficient ETH (1 ether per validator)
-        vm.deal(address(liquidityPool), 100 ether);
+        fundContract(address(liquidityPool), 100 ether);
 
         // Now create validators
         vm.prank(admin);
@@ -620,11 +621,11 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.prank(spawner);
         liquidityPool.batchRegister(depositDataArray, createdBids, etherFiNode);
 
-        // Record initial balances
+        fundContract(address(liquidityPool), 100 ether);
+
+        // Record balances after funding so the assertions measure only the validator-creation delta
         uint128 initialTotalOut = liquidityPool.totalValueOutOfLp();
         uint128 initialTotalIn = liquidityPool.totalValueInLp();
-
-        vm.deal(address(liquidityPool), 100 ether);
 
         uint256 expectedEthOut = 1 ether; // 1 ether per validator
 
@@ -689,7 +690,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.prank(spawner);
         liquidityPool.batchRegister(depositData, createdBids, etherFiNode);
 
-        vm.deal(address(liquidityPool), 100 ether);
+        fundContract(address(liquidityPool), 100 ether);
 
         // Create all validators - should require 3 ether
         vm.prank(admin);
@@ -791,7 +792,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         liquidityPool.batchRegister(toArray(depositData), createdBids, etherFiNode);
 
         // Confirm the validator
-        vm.deal(address(liquidityPool), 100 ether);
+        fundContract(address(liquidityPool), 100 ether);
         vm.prank(admin);
         liquidityPool.batchCreateBeaconValidators(toArray(depositData), createdBids, etherFiNode);
 

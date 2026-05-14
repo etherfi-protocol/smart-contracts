@@ -15,6 +15,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
 
     address pauseUntilPauser = makeAddr("pauseUntilPauser");
     address unpauseUntilUnpauser = makeAddr("unpauseUntilUnpauser");
+    address pauseUntilDurationSetter = makeAddr("pauseUntilDurationSetter");
 
     function setUp() public {
         setUpTests();
@@ -39,8 +40,13 @@ contract WeETHWithdrawAdapterTest is TestSetup {
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        uint256 maxDur = adapter.MAX_PAUSE_DURATION();
+        vm.prank(pauseUntilDurationSetter);
+        adapter.setPauseUntilDuration(maxDur);
     }
 
     function _pausedUntil() internal view returns (uint256) {
@@ -105,6 +111,48 @@ contract WeETHWithdrawAdapterTest is TestSetup {
         vm.prank(unpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
         adapter.unpauseContractUntil();
+    }
+
+    // --- setPauseUntilDuration ---
+
+    function test_setPauseUntilDuration_requiresRole() public {
+        _grantPauseUntilRoles();
+        uint256 maxDur = adapter.MAX_PAUSE_DURATION();
+
+        vm.prank(bob);
+        vm.expectRevert(WeETHWithdrawAdapter.IncorrectRole.selector);
+        adapter.setPauseUntilDuration(maxDur);
+
+        // PAUSE_UNTIL_ROLE alone is insufficient
+        vm.prank(pauseUntilPauser);
+        vm.expectRevert(WeETHWithdrawAdapter.IncorrectRole.selector);
+        adapter.setPauseUntilDuration(maxDur);
+    }
+
+    function test_setPauseUntilDuration_setsValue() public {
+        _grantPauseUntilRoles();
+        uint256 d = adapter.MIN_PAUSE_DURATION() + 1 hours;
+
+        vm.prank(pauseUntilDurationSetter);
+        adapter.setPauseUntilDuration(d);
+
+        vm.prank(pauseUntilPauser);
+        adapter.pauseContractUntil();
+        assertEq(_pausedUntil(), block.timestamp + d);
+    }
+
+    function test_setPauseUntilDuration_revertsOnInvalidValue() public {
+        _grantPauseUntilRoles();
+        uint256 belowMin = adapter.MIN_PAUSE_DURATION() - 1;
+        uint256 aboveMax = adapter.MAX_PAUSE_DURATION() + 1;
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        adapter.setPauseUntilDuration(belowMin);
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        adapter.setPauseUntilDuration(aboveMax);
     }
 
     // --- each gated function (whenNotPaused → blocked by pause-until too) ---

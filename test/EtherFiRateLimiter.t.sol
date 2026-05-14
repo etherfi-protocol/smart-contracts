@@ -22,6 +22,7 @@ contract MockRoleRegistry is IRoleRegistry {
     bytes32 public constant PROTOCOL_UNPAUSER_ROLE = keccak256("PROTOCOL_UNPAUSER");
     bytes32 public constant PAUSE_UNTIL_ROLE = keccak256("PAUSE_UNTIL_ROLE");
     bytes32 public constant UNPAUSE_UNTIL_ROLE = keccak256("UNPAUSE_UNTIL_ROLE");
+    bytes32 public constant PAUSE_DURATION_SETTER = keccak256("PAUSE_DURATION_SETTER");
 
     constructor() {
         owner = msg.sender;
@@ -95,6 +96,7 @@ contract EtherFiRateLimiterTest is Test {
     address public upgrader = makeAddr("upgrader");
     address public pauseUntilPauser = makeAddr("pauseUntilPauser");
     address public unpauseUntilUnpauser = makeAddr("unpauseUntilUnpauser");
+    address public pauseUntilDurationSetter = makeAddr("pauseUntilDurationSetter");
 
     bytes32 public constant LIMIT_ID_1 = keccak256("LIMIT_1");
     bytes32 public constant LIMIT_ID_2 = keccak256("LIMIT_2");
@@ -131,11 +133,16 @@ contract EtherFiRateLimiterTest is Test {
         roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER_ROLE(), unpauser);
         roleRegistry.grantRole(roleRegistry.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
         roleRegistry.grantRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
+        roleRegistry.grantRole(roleRegistry.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
         roleRegistry.setProtocolUpgrader(upgrader, true);
 
         // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so a first pauseContractUntil
         // is not blocked by the per-pauser cooldown (which treats 0 as unix 0)
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        uint256 maxDur = rateLimiter.MAX_PAUSE_DURATION();
+        vm.prank(pauseUntilDurationSetter);
+        rateLimiter.setPauseUntilDuration(maxDur);
     }
 
     //--------------------------------------------------------------------------------------
@@ -1294,6 +1301,45 @@ contract EtherFiRateLimiterTest is Test {
         vm.prank(unpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
         rateLimiter.unpauseContractUntil();
+    }
+
+    // --- setPauseUntilDuration ---
+
+    function test_setPauseUntilDuration_requiresRole() public {
+        uint256 maxDur = rateLimiter.MAX_PAUSE_DURATION();
+
+        vm.prank(unauthorizedUser);
+        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        rateLimiter.setPauseUntilDuration(maxDur);
+
+        // PAUSE_UNTIL_ROLE alone must not grant pause-duration capability
+        vm.prank(pauseUntilPauser);
+        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        rateLimiter.setPauseUntilDuration(maxDur);
+    }
+
+    function test_setPauseUntilDuration_setsValue() public {
+        uint256 d = rateLimiter.MIN_PAUSE_DURATION() + 1 hours;
+        vm.prank(pauseUntilDurationSetter);
+        rateLimiter.setPauseUntilDuration(d);
+
+        // verify by pausing and checking the resulting pausedUntil
+        vm.prank(pauseUntilPauser);
+        rateLimiter.pauseContractUntil();
+        assertEq(_pausedUntil(), block.timestamp + d);
+    }
+
+    function test_setPauseUntilDuration_revertsOnInvalidValue() public {
+        uint256 belowMin = rateLimiter.MIN_PAUSE_DURATION() - 1;
+        uint256 aboveMax = rateLimiter.MAX_PAUSE_DURATION() + 1;
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        rateLimiter.setPauseUntilDuration(belowMin);
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        rateLimiter.setPauseUntilDuration(aboveMax);
     }
 
     // --- gated function: consume() ---

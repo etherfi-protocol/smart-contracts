@@ -65,7 +65,11 @@ contract LiquifierTest is TestSetup {
 
         vm.deal(alice, 1000000000 ether);
 
-        vm.startPrank(liquifierInstance.owner());
+        vm.startPrank(owner);
+        // Curve quoting on a 20k stETH input incurs heavy slippage and trips
+        // the chainlink/curve deviation predicate before the cap check fires.
+        // This test is about the cap, so quote 1:1 instead.
+        liquifierInstance.updateQuoteStEthWithCurve(false);
         liquifierInstance.updateDepositCap(address(stEth), 50, 100);
         vm.stopPrank();
 
@@ -83,6 +87,7 @@ contract LiquifierTest is TestSetup {
     function test_deposit_stEth() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
+        _mockFreshStEthFeed();
 
         vm.deal(alice, 100 ether);
 
@@ -127,6 +132,7 @@ contract LiquifierTest is TestSetup {
     function test_deopsit_stEth_with_explicit_permit() public {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
+        _mockFreshStEthFeed();
 
         // Clear any code at alice's address to make it act like an EOA (External Owned Account)
         vm.etch(alice, "");
@@ -160,6 +166,18 @@ contract LiquifierTest is TestSetup {
         permitInput = createPermitInput(2, address(liquifierInstance), 1 ether, stEth.nonces(alice), 2**256 - 1, stEth.DOMAIN_SEPARATOR());
         permitInput2 = ILiquifier.PermitInput({value: permitInput.value, deadline: permitInput.deadline, v: permitInput.v, r: permitInput.r, s: permitInput.s});
         liquifierInstance.depositWithERC20WithPermit(address(stEth), 1 ether, address(0), permitInput2);
+    }
+
+    /// On realistic mainnet fork, the live stETH/ETH feed has a ~24h heartbeat
+    /// and may sit just past STALE_PRICE_WINDOW depending on fork-block timing
+    /// (or after vm.warp). Pin it to a fresh, ~1:1 answer so deposits exercising
+    /// the curve-quoting path don't revert with StalePriceFeed.
+    function _mockFreshStEthFeed() internal {
+        vm.mockCall(
+            stEthChainlinkFeed,
+            abi.encodeWithSignature("latestRoundData()"),
+            abi.encode(uint80(0), int256(1 ether), uint256(0), block.timestamp, uint80(0))
+        );
     }
 
     function _enable_deposit(address _strategy) internal {
@@ -433,13 +451,19 @@ contract LiquifierTest is TestSetup {
 
     address liqPauseUntilPauser = makeAddr("liqPauseUntilPauser");
     address liqUnpauseUntilUnpauser = makeAddr("liqUnpauseUntilUnpauser");
+    address liqPauseUntilDurationSetter = makeAddr("liqPauseUntilDurationSetter");
 
     function _grantLiqPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), liqPauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), liqUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), liqPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        uint256 maxDur = liquifierInstance.MAX_PAUSE_DURATION();
+        vm.prank(liqPauseUntilDurationSetter);
+        liquifierInstance.setPauseUntilDuration(maxDur);
     }
 
     function _liqPausedUntil() internal view returns (uint256) {
@@ -512,6 +536,54 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.unpauseContractUntil();
     }
 
+    // --- setPauseUntilDuration ---
+
+    function test_setPauseUntilDuration_requiresRole() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+        uint256 maxDur = liquifierInstance.MAX_PAUSE_DURATION();
+
+        vm.prank(bob);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        liquifierInstance.setPauseUntilDuration(maxDur);
+
+        // PAUSE_UNTIL_ROLE alone is insufficient
+        vm.prank(liqPauseUntilPauser);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        liquifierInstance.setPauseUntilDuration(maxDur);
+    }
+
+    function test_setPauseUntilDuration_setsValue() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+        uint256 d = liquifierInstance.MIN_PAUSE_DURATION() + 1 hours;
+
+        vm.prank(liqPauseUntilDurationSetter);
+        liquifierInstance.setPauseUntilDuration(d);
+
+        vm.prank(liqPauseUntilPauser);
+        liquifierInstance.pauseContractUntil();
+        assertEq(_liqPausedUntil(), block.timestamp + d);
+    }
+
+    function test_setPauseUntilDuration_revertsOnInvalidValue() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+        uint256 belowMin = liquifierInstance.MIN_PAUSE_DURATION() - 1;
+        uint256 aboveMax = liquifierInstance.MAX_PAUSE_DURATION() + 1;
+
+        vm.prank(liqPauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        liquifierInstance.setPauseUntilDuration(belowMin);
+
+        vm.prank(liqPauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        liquifierInstance.setPauseUntilDuration(aboveMax);
+    }
+
     // --- each gated function (whenNotPaused now also enforces pause-until via override) ---
 
     function test_depositWithERC20_blockedByPauseContractUntil() public {
@@ -582,6 +654,8 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.pauseContractUntil();
 
         vm.warp(block.timestamp + liquifierInstance.MAX_PAUSE_DURATION() + 1);
+        // Refresh after warp — pause window is days, well past STALE_PRICE_WINDOW.
+        _mockFreshStEthFeed();
 
         vm.prank(alice);
         liquifierInstance.depositWithERC20(address(stEth), 1 ether, address(0));
@@ -591,6 +665,7 @@ contract LiquifierTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
         _grantLiqPauseUntilRoles();
+        _mockFreshStEthFeed();
 
         vm.deal(alice, 10 ether);
         vm.startPrank(alice);

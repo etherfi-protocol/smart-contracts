@@ -14,8 +14,9 @@ import "./interfaces/ILiquidityPool.sol";
 import "./AssetRecovery.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
+import "./utils/PausableUntil.sol";
 
-contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20PermitUpgradeable, IeETH, AssetRecovery {
+contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery {
     using CountersUpgradeable for CountersUpgradeable.Counter;
     ILiquidityPool public DEPRECATED_liquidityPool;
 
@@ -79,7 +80,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         DEPRECATED_liquidityPool = ILiquidityPool(_liquidityPool);
     }
 
-    function mintShares(address _user, uint256 _share) external onlyPoolContract whenNotPaused {
+    function mintShares(address _user, uint256 _share) external onlyPoolContract whenNotPaused whenNotPausedUntil {
         blacklister.nonBlacklisted(_user);
         shares[_user] += _share;
         totalShares += _share;
@@ -88,7 +89,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         emit TransferShares(address(0), _user, _share);
     }
 
-    function burnShares(address _user, uint256 _share) external whenNotPaused {
+    function burnShares(address _user, uint256 _share) external whenNotPaused whenNotPausedUntil {
         require(msg.sender == address(liquidityPool), "Incorrect Caller");
         blacklister.nonBlacklisted(_user);
         require(shares[_user] >= _share, "BURN_AMOUNT_EXCEEDS_BALANCE");
@@ -150,6 +151,21 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, IERC20P
         if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         paused = false;
         emit Unpaused();
+    }
+
+    function pauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _pauseUntil();
+    }
+
+    function unpauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _unpauseUntil();
+    }
+
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+        _setPauseUntilDuration(_pauseUntilDuration);
     }
 
     function permit(

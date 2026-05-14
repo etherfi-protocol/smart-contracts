@@ -121,6 +121,7 @@ contract PriorityWithdrawalQueue is
     error InvalidBurnedSharesAmount();
     error InvalidEEthSharesAfterRemainderHandling();
     error InvalidOutputAmount();
+    error InsufficientLiquidity();
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
@@ -174,6 +175,10 @@ contract PriorityWithdrawalQueue is
 
     receive() external payable {
         require(msg.sender == address(liquidityPool), "Only LP");
+        if (liquidityPool.escrowMigrationCompleted()) {
+            ethAmountLockedForPriorityWithdrawal += uint128(msg.value);
+        }
+        _checkEthAmountLockedForPriorityWithdrawal();
     }
 
     function initialize() external initializer {
@@ -346,8 +351,6 @@ contract PriorityWithdrawalQueue is
             emit WithdrawRequestFinalized(requestId, request.user, request.amountOfEEth, request.shareOfEEth, request.nonce, uint32(block.timestamp));
         }
 
-        ethAmountLockedForPriorityWithdrawal += uint128(totalAmountToLock);
-
         if (totalAmountToLock > 0) {
             liquidityPool.transferLockedEthForPriority(uint128(totalAmountToLock));
         }
@@ -457,6 +460,11 @@ contract PriorityWithdrawalQueue is
     function unpauseContractUntil() external {
         if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
         _unpauseUntil();
+    }
+
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+        _setPauseUntilDuration(_pauseUntilDuration);
     }
 
     //--------------------------------------------------------------------------------------
@@ -586,6 +594,7 @@ contract PriorityWithdrawalQueue is
         if (wasFinalized) {
             ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
             liquidityPool.returnLockedEth{value: request.amountOfEEth}(request.amountOfEEth);
+            _checkEthAmountLockedForPriorityWithdrawal();
         }
 
         uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
@@ -629,8 +638,13 @@ contract PriorityWithdrawalQueue is
         if (feeEth > 0) {
             liquidityPool.returnLockedEth{value: feeEth}(feeEth);
         }
+        _checkEthAmountLockedForPriorityWithdrawal();
 
         emit WithdrawRequestClaimed(requestId, request.user, uint96(amountToWithdraw), uint96(sharesToBurn), request.nonce, uint32(block.timestamp));
+    }
+
+    function _checkEthAmountLockedForPriorityWithdrawal() internal {
+        if (ethAmountLockedForPriorityWithdrawal > address(this).balance) revert InsufficientLiquidity();
     }
 
     function _authorizeUpgrade(address) internal override {
