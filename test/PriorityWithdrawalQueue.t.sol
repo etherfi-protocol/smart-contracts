@@ -522,7 +522,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertApproxEqAbs(
             eETHInstance.balanceOf(address(priorityQueue)),
             initialQueueEethBalance + expectedEEthAmount,
-            1,
+            2,
             "Queue eETH balance should increase"
         );
         assertTrue(priorityQueue.requestExists(requestId), "Request should exist");

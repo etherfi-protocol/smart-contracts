@@ -8,35 +8,37 @@ import {UUPSProxy} from "../src/UUPSProxy.sol";
 contract RoleRegistryTest is Test {
     RoleRegistry public implementation;
     RoleRegistry public registry;
-    
+
     address public owner;
     address public user1;
     address public user2;
-    
+    address public revokeAdmin;
+
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
-   event RoleSet(address indexed holder, uint256 indexed role, bool active); 
+   event RoleSet(address indexed holder, uint256 indexed role, bool indexed active);
 
     function setUp() public {
         owner = makeAddr("owner");
         user1 = makeAddr("user1");
         user2 = makeAddr("user2");
-        
+        revokeAdmin = makeAddr("revokeAdmin");
+
         // Deploy implementation
-        implementation = new RoleRegistry(address(0));
-        
+        implementation = new RoleRegistry(revokeAdmin);
+
         // Deploy proxy
         bytes memory initData = abi.encodeWithSelector(
             RoleRegistry.initialize.selector,
             owner
         );
-        
+
         UUPSProxy proxy = new UUPSProxy(
             address(implementation),
             initData
         );
-        
+
         registry = RoleRegistry(address(proxy));
     }
     
@@ -158,6 +160,114 @@ contract RoleRegistryTest is Test {
         vm.stopPrank();
     }
     
+    function test_RevokeAdminImmutable() public {
+        assertEq(registry.revokeAdmin(), revokeAdmin);
+    }
+
+    function test_RevokeFast() public {
+        // Owner grants the role
+        vm.prank(owner);
+        registry.grantRole(ADMIN_ROLE, user1);
+        assertTrue(registry.hasRole(ADMIN_ROLE, user1));
+
+        // Revoke admin can revoke instantly without owner privileges
+        vm.prank(revokeAdmin);
+        registry.revokeFast(ADMIN_ROLE, user1);
+
+        assertFalse(registry.hasRole(ADMIN_ROLE, user1));
+
+        address[] memory holders = registry.roleHolders(ADMIN_ROLE);
+        assertEq(holders.length, 0);
+    }
+
+    function test_RevokeFast_OnlyRevokeAdmin() public {
+        // Setup: owner grants role
+        vm.prank(owner);
+        registry.grantRole(ADMIN_ROLE, user1);
+
+        // Owner cannot call revokeFast
+        vm.prank(owner);
+        vm.expectRevert(RoleRegistry.OnlyRevokeAdmin.selector);
+        registry.revokeFast(ADMIN_ROLE, user1);
+
+        // Random user cannot call revokeFast
+        vm.prank(user2);
+        vm.expectRevert(RoleRegistry.OnlyRevokeAdmin.selector);
+        registry.revokeFast(ADMIN_ROLE, user1);
+
+        // Role is still held
+        assertTrue(registry.hasRole(ADMIN_ROLE, user1));
+    }
+
+    function test_RevokeFast_RoleNotHeld() public {
+        // revokeFast should be a no-op when the account does not have the role
+        assertFalse(registry.hasRole(ADMIN_ROLE, user1));
+
+        vm.prank(revokeAdmin);
+        registry.revokeFast(ADMIN_ROLE, user1);
+
+        assertFalse(registry.hasRole(ADMIN_ROLE, user1));
+    }
+
+    function test_RevokeFast_OnlyAffectsTargetAccount() public {
+        // Grant the role to two users
+        vm.startPrank(owner);
+        registry.grantRole(ADMIN_ROLE, user1);
+        registry.grantRole(ADMIN_ROLE, user2);
+        vm.stopPrank();
+
+        // Revoke only from user1
+        vm.prank(revokeAdmin);
+        registry.revokeFast(ADMIN_ROLE, user1);
+
+        assertFalse(registry.hasRole(ADMIN_ROLE, user1));
+        assertTrue(registry.hasRole(ADMIN_ROLE, user2));
+
+        address[] memory holders = registry.roleHolders(ADMIN_ROLE);
+        assertEq(holders.length, 1);
+        assertEq(holders[0], user2);
+    }
+
+    function test_RevokeFast_OnlyAffectsTargetRole() public {
+        // Grant two different roles to the same user
+        vm.startPrank(owner);
+        registry.grantRole(ADMIN_ROLE, user1);
+        registry.grantRole(OPERATOR_ROLE, user1);
+        vm.stopPrank();
+
+        // Revoke only ADMIN_ROLE
+        vm.prank(revokeAdmin);
+        registry.revokeFast(ADMIN_ROLE, user1);
+
+        assertFalse(registry.hasRole(ADMIN_ROLE, user1));
+        assertTrue(registry.hasRole(OPERATOR_ROLE, user1));
+    }
+
+    function test_RevokeFast_EmitsRoleSetEvent() public {
+        vm.prank(owner);
+        registry.grantRole(ADMIN_ROLE, user1);
+
+        vm.expectEmit(true, true, true, true, address(registry));
+        emit RoleSet(user1, uint256(ADMIN_ROLE), false);
+
+        vm.prank(revokeAdmin);
+        registry.revokeFast(ADMIN_ROLE, user1);
+    }
+
+    function test_RevokeFast_AfterRevokeOwnerCanRegrant() public {
+        vm.prank(owner);
+        registry.grantRole(ADMIN_ROLE, user1);
+
+        vm.prank(revokeAdmin);
+        registry.revokeFast(ADMIN_ROLE, user1);
+        assertFalse(registry.hasRole(ADMIN_ROLE, user1));
+
+        // Owner can grant it again — revokeFast does not blacklist the account
+        vm.prank(owner);
+        registry.grantRole(ADMIN_ROLE, user1);
+        assertTrue(registry.hasRole(ADMIN_ROLE, user1));
+    }
+
     function test_TwoStepOwnershipTransfer() public {
         // Start transfer
         vm.prank(owner);

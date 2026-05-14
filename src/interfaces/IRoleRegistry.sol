@@ -185,7 +185,5 @@ interface IRoleRegistry {
 
     function ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE() external view returns (bytes32);
 
-    function WEETH_WITHDRAW_ADAPTER_ADMIN_ROLE() external view returns (bytes32);
-
     function REVOKE_ADMIN_ROLE() external view returns (bytes32);
 }

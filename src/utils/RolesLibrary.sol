@@ -67,7 +67,5 @@ abstract contract RolesLibrary {
 
     bytes32 public constant ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE");
 
-    bytes32 public constant WEETH_WITHDRAW_ADAPTER_ADMIN_ROLE = keccak256("WEETH_WITHDRAW_ADAPTER_ADMIN_ROLE");
-
     bytes32 public constant REVOKE_ADMIN_ROLE = keccak256("REVOKE_ADMIN_ROLE");
 }
