@@ -124,7 +124,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         roleRegistryInstance.grantRole(PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE, queueRequestManager);
         roleRegistryInstance.grantRole(IMPLICIT_FEE_CLAIMER_ROLE, alice);
         roleRegistryInstance.grantRole(WITHDRAW_REQUEST_NFT_ADMIN_ROLE, alice);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
         // WithdrawRequestNFT.unPauseContract requires PROTOCOL_UNPAUSER on the caller
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), alice);

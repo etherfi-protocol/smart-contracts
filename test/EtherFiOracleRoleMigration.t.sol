@@ -30,7 +30,7 @@ contract EtherFiOracleRoleMigrationTest is TestSetup {
         address admin = address(0xA11CE);
         // Use startPrank so the .owner() call does not consume the prank before grantRole.
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_ORACLE_ADMIN_ROLE(), admin);
         vm.stopPrank();
 
         // setConsensusVersion is gated by isAdmin and only requires the new value to be greater

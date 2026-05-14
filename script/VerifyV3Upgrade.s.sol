@@ -285,7 +285,7 @@ contract VerifyV3Upgrade is Script {
         // At least check that the role exists in the system
         checkCondition(
             STAKING_MANAGER_NODE_CREATOR_ROLE ==
-                stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(),
+                roleRegistry.STAKING_MANAGER_NODE_CREATOR_ROLE(),
             "STAKING_MANAGER_NODE_CREATOR_ROLE constant matches"
         );
 
@@ -303,18 +303,17 @@ contract VerifyV3Upgrade is Script {
         console2.log("Checking EtherFiNodesManager roles...");
         checkCondition(
             ETHERFI_NODES_MANAGER_ADMIN_ROLE ==
-                etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(),
+                roleRegistry.ETHERFI_NODES_MANAGER_ADMIN_ROLE(),
             "ETHERFI_NODES_MANAGER_ADMIN_ROLE constant matches"
         );
         checkCondition(
             ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE ==
-                etherFiNodesManager
-                    .ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(),
+                roleRegistry.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(),
             "ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE constant matches"
         );
         checkCondition(
             ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE ==
-                etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(),
+                roleRegistry.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(),
             "ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE constant matches"
         );
 

@@ -159,7 +159,7 @@ contract StakingPart1 is Script {
             console.log("Depositor already has STAKING_MANAGER_NODE_CREATOR_ROLE");
         }
 
-        console.log("Has role?",roleRegistry.hasRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), vm.addr(vm.envUint("PRIVATE_KEY"))));
+        console.log("Has role?",roleRegistry.hasRole(roleRegistry.STAKING_MANAGER_NODE_CREATOR_ROLE(), vm.addr(vm.envUint("PRIVATE_KEY"))));
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
         console.log("Role reg: %s",address(stakingManager.roleRegistry()));
         console.log("Role Reg: %s",address(roleRegistry));

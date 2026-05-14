@@ -256,11 +256,11 @@ contract EtherFiRestakerTest is TestSetup {
 
         // Grant all restaker roles to owner so existing tests continue to work
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_ADMIN_ROLE(), owner);
-        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE(), owner);
-        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE(), owner);
-        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE(), owner);
-        roleRegistryInstance.grantRole(rateLimiterInstance.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_RESTAKER_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), owner);
         vm.stopPrank();
 
         // Create rate-limiter buckets and register restaker as a consumer (idempotent)

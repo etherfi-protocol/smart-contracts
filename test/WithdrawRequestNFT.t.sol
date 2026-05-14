@@ -328,7 +328,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         vm.startPrank(address(roleRegistryInstance.owner()));
         withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance))));
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
         vm.stopPrank();
         uint256 implicitFee = withdrawRequestNFTInstance.getEEthRemainderAmount();
         vm.prank(alice);
@@ -502,7 +502,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         if (dustEEthAmount > 0) {
             // Grant the required role to admin
             vm.startPrank(address(roleRegistryInstance.owner()));
-            roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), admin);
+            roleRegistryInstance.grantRole(roleRegistryInstance.IMPLICIT_FEE_CLAIMER_ROLE(), admin);
             vm.stopPrank();
             
             // Handle remainder (use half to avoid edge cases)
@@ -545,7 +545,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Admin invalidates request
         vm.startPrank(roleRegistryInstance.owner());
         console.log("roleRegistryInstance.owner()", roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), admin);
         vm.stopPrank();
         vm.prank(admin);
         withdrawRequestNFTInstance.invalidateRequest(requestId);
@@ -1248,7 +1248,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
 
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.IMPLICIT_FEE_CLAIMER_ROLE(), admin);
         vm.stopPrank();
 
         uint256 lpBalAfterClaim  = address(liquidityPoolInstance).balance;
@@ -1331,7 +1331,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         if (remainderAmount > 0) {
             // Grant role
             vm.startPrank(address(roleRegistryInstance.owner()));
-            roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), admin);
+            roleRegistryInstance.grantRole(roleRegistryInstance.IMPLICIT_FEE_CLAIMER_ROLE(), admin);
             vm.stopPrank();
 
             // Cannot handle zero amount

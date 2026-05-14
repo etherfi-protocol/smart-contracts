@@ -375,7 +375,7 @@ contract LiquifierTest is TestSetup {
 
         // chad has only LIQUIFIER_ADMIN_ROLE — that role is no longer accepted here
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), chad);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIFIER_ADMIN_ROLE(), chad);
         vm.stopPrank();
         vm.prank(chad);
         vm.expectRevert(Liquifier.IncorrectRole.selector);
@@ -394,7 +394,7 @@ contract LiquifierTest is TestSetup {
 
         address sender = makeAddr("liqSender");
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_SENDER_ROLE(), sender);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIFIER_SENDER_ROLE(), sender);
         vm.stopPrank();
 
         uint256 restakerBalBefore = stEth.balanceOf(address(etherFiRestakerInstance));
@@ -412,8 +412,8 @@ contract LiquifierTest is TestSetup {
         initializeRealisticFork(MAINNET_FORK);
         setUpLiquifier(MAINNET_FORK);
 
-        assertEq(liquifierInstance.LIQUIFIER_SENDER_ROLE(), keccak256("LIQUIFIER_SENDER_ROLE"));
-        assertTrue(liquifierInstance.LIQUIFIER_ADMIN_ROLE() != liquifierInstance.LIQUIFIER_SENDER_ROLE());
+        assertEq(roleRegistryInstance.LIQUIFIER_SENDER_ROLE(), keccak256("LIQUIFIER_SENDER_ROLE"));
+        assertTrue(roleRegistryInstance.LIQUIFIER_ADMIN_ROLE() != roleRegistryInstance.LIQUIFIER_SENDER_ROLE());
     }
 
     function test_getTotalPooledEther() public {

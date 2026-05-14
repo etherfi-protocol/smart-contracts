@@ -74,7 +74,7 @@ contract LiquifierStEthPriceFeedTest is Test {
         liquifier.updateWhitelistedToken(stEth, true);
 
         vm.startPrank(owner);
-        roleRegistry.grantRole(liquifier.LIQUIFIER_ADMIN_ROLE(), owner);
+        roleRegistry.grantRole(roleRegistry.LIQUIFIER_ADMIN_ROLE(), owner);
         vm.stopPrank();
 
         vm.prank(owner);

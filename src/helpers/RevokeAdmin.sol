@@ -6,7 +6,7 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "../interfaces/IRoleRegistry.sol";
 
-contract Blacklister is Initializable, UUPSUpgradeable {
+contract RevokeAdmin is Initializable, UUPSUpgradeable {
     IRoleRegistry public immutable roleRegistry;
 
     error IncorrectRole();

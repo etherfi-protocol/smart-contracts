@@ -17,7 +17,7 @@ contract BucketRateLimiterRoleMigrationTest is TestSetup {
 
     function _grantAdmin(address who) internal {
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(limiter.BUCKET_RATE_LIMITER_ADMIN_ROLE(), who);
+        roleRegistryInstance.grantRole(roleRegistryInstance.BUCKET_RATE_LIMITER_ADMIN_ROLE(), who);
         vm.stopPrank();
     }
 

@@ -799,7 +799,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_updateAdmin() public {
         address newAdmin = address(0x1234);
-        bytes32 oracleAdminRole = etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE();
+        bytes32 oracleAdminRole = roleRegistryInstance.ETHERFI_ORACLE_ADMIN_ROLE();
 
         // updateAdmin replaced by RoleRegistry.grantRole / revokeRole
         vm.startPrank(roleRegistryInstance.owner());
@@ -1445,8 +1445,8 @@ contract EtherFiOracleTest is TestSetup {
 
         // chad has no roles; executeTasks is permissionless once consensus is reached
         // and the report passes the freshness/sequencing checks.
-        assertFalse(roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), chad));
-        assertFalse(roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), chad));
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), chad));
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), chad));
 
         vm.prank(chad);
         etherFiAdminInstance.executeTasks(report);
@@ -2163,8 +2163,8 @@ contract EtherFiOracleTest is TestSetup {
 
         _advanceToStaleBoundary();
 
-        assertFalse(roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), chad));
-        assertFalse(roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), chad));
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), chad));
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), chad));
 
         vm.prank(chad);
         etherFiAdminInstance.finalizeWithdrawalsWhenStale();

@@ -510,10 +510,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
             roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0))));
         }
-        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), owner);
-        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_SENDER_ROLE(), owner);
-        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_SENDER_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIFIER_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIFIER_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIFIER_SENDER_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIFIER_SENDER_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), owner);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), owner);
         vm.stopPrank();
@@ -526,7 +526,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.stopPrank();
 
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(bucketRateLimiter.BUCKET_RATE_LIMITER_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.BUCKET_RATE_LIMITER_ADMIN_ROLE(), owner);
         vm.stopPrank();
 
         vm.startPrank(owner);
@@ -593,7 +593,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         auctionManagerProxy = new UUPSProxy(address(auctionImplementation), "");
         auctionInstance = AuctionManager(address(auctionManagerProxy));
         auctionInstance.initialize(address(nodeOperatorManagerInstance));
-        roleRegistryInstance.grantRole(auctionInstance.AUCTION_MANAGER_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.AUCTION_MANAGER_ADMIN_ROLE(), alice);
 
         stakingManagerImplementation = new StakingManager(address(liquidityPoolInstance), address(managerInstance), address(depositContractEth2), address(auctionInstance), address(node), address(roleRegistryInstance));
         stakingManagerProxy = new UUPSProxy(address(stakingManagerImplementation), "");
@@ -662,13 +662,13 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImplementation),"");
         liquidityPoolInstance = LiquidityPool(payable(address(liquidityPoolProxy)));
 
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), admin);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin);
 
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
         roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), admin);
 
 
@@ -707,8 +707,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         weEthInstance.initialize(payable(address(liquidityPoolInstance)), address(0));
         weEthInstance.initialize(payable(address(liquidityPoolInstance)), address(eETHInstance));
 
-        roleRegistryInstance.grantRole(eETHInstance.EETH_OPERATING_ADMIN_ROLE(), admin);
-        roleRegistryInstance.grantRole(weEthInstance.WEETH_OPERATING_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.EETH_OPERATING_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.WEETH_OPERATING_ADMIN_ROLE(), admin);
 
         vm.stopPrank();
 
@@ -751,8 +751,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(address(cumulativeMerkleRewardsDistributorProxy));
         cumulativeMerkleRewardsDistributorInstance.initialize();
 
-        roleRegistryInstance.grantRole(cumulativeMerkleRewardsDistributorInstance.CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE(), admin);
-        roleRegistryInstance.grantRole(cumulativeMerkleRewardsDistributorInstance.CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE(), admin);
 
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
@@ -869,16 +869,16 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.startPrank(owner);
 
         etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
 
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(alice));
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(admin));
+        roleRegistryInstance.grantRole(roleRegistryInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(alice));
+        roleRegistryInstance.grantRole(roleRegistryInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(roleRegistryInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(admin));
 
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
@@ -911,8 +911,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         }
 
         _initOracleReportsforTesting();
-        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), owner);
-        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), alice);
         vm.stopPrank();
 
         vm.startPrank(alice);
@@ -1001,17 +1001,17 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         }
 
         vm.startPrank(admin);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), admin);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin); 
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
 
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), alice);
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         vm.stopPrank();
@@ -1163,14 +1163,14 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     function _initializeEtherFiAdmin() internal {
         vm.startPrank(owner);
 
-        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_ORACLE_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_ORACLE_ADMIN_ROLE(), owner);
 
         address admin = address(etherFiAdminInstance);
         //stakingManagerInstance.updateAdmin(admin, true);
         // liquidityPoolInstance.updateAdmin(admin, true);
         membershipManagerInstance.updateAdmin(admin, true);
-        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_ORACLE_ADMIN_ROLE(), admin);
 
         vm.stopPrank();
     }

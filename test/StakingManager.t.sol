@@ -1374,8 +1374,8 @@ contract StakingManagerTest is TestSetup {
 
     function test_instantiateEtherFiNode() public {
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), alice);
-        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManagerInstance));
+        roleRegistryInstance.grantRole(roleRegistryInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManagerInstance));
         vm.stopPrank();
         
         vm.prank(alice);
@@ -1391,7 +1391,7 @@ contract StakingManagerTest is TestSetup {
 
     function test_backfillExistingEtherFiNodes() public {
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.STAKING_MANAGER_ADMIN_ROLE(), alice);
         vm.stopPrank();
         
         address[] memory nodes = new address[](2);
@@ -1407,7 +1407,7 @@ contract StakingManagerTest is TestSetup {
 
     function test_backfillExistingEtherFiNodesSkipsDuplicates() public {
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_ADMIN_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.STAKING_MANAGER_ADMIN_ROLE(), alice);
         vm.stopPrank();
         
         address[] memory nodes = new address[](2);
@@ -1476,7 +1476,7 @@ contract StakingManagerTest is TestSetup {
 
     function test_createBeaconValidators() public {
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManagerInstance));
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManagerInstance));
         vm.stopPrank();
 
         vm.prank(admin);
@@ -1493,7 +1493,7 @@ contract StakingManagerTest is TestSetup {
         uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
         
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), alice);
         vm.stopPrank();
         
         vm.prank(alice);

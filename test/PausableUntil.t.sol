@@ -2,10 +2,9 @@
 pragma solidity ^0.8.27;
 
 import "forge-std/Test.sol";
+import "./TestSetup.sol";
 import "../src/utils/PausableUntil.sol";
 import "../src/EtherFiRateLimiter.sol";
-import "../src/UUPSProxy.sol";
-import "../src/interfaces/IRoleRegistry.sol";
 import "../src/interfaces/IEtherFiRateLimiter.sol";
 
 contract PausableUntilHarness is PausableUntil {
@@ -23,29 +22,6 @@ contract PausableUntilHarness is PausableUntil {
     }
 
     function gated() external view whenNotPausedUntil returns (bool) { return true; }
-}
-
-contract MockRegistry is IRoleRegistry {
-    mapping(bytes32 => mapping(address => bool)) private _roles;
-    address public override owner;
-
-    bytes32 public constant PAUSE_UNTIL_ROLE = keccak256("PAUSE_UNTIL_ROLE");
-    bytes32 public constant UNPAUSE_UNTIL_ROLE = keccak256("UNPAUSE_UNTIL_ROLE");
-    bytes32 public constant PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
-    bytes32 public constant PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
-    bytes32 public constant BLACKLISTER_ROLE = keccak256("BLACKLISTER_ROLE");
-    bytes32 public constant BLACKLIST_UNTIL_ROLE = keccak256("BLACKLIST_UNTIL_ROLE");
-
-    constructor() { owner = msg.sender; }
-    function initialize(address _o) external override { owner = _o; }
-    function MAX_ROLE() external pure override returns (uint256) { return type(uint256).max; }
-    function grantRole(bytes32 r, address a) external override { _roles[r][a] = true; }
-    function revokeRole(bytes32 r, address a) external override { _roles[r][a] = false; }
-    function revokeFast(bytes32 r, address a) external override { _roles[r][a] = false; }
-    function hasRole(bytes32 r, address a) external view override returns (bool) { return _roles[r][a]; }
-    function roleHolders(bytes32) external pure override returns (address[] memory) { return new address[](0); }
-    function checkRoles(address, bytes memory) external pure override {}
-    function onlyProtocolUpgrader(address) external pure override {}
 }
 
 contract PausableUntilTest is Test {
@@ -340,11 +316,9 @@ contract PausableUntilTest is Test {
 //  Integration: role-gated paths through EtherFiRateLimiter
 // --------------------------------------------------------
 
-contract PausableUntilIntegrationTest is Test {
+contract PausableUntilIntegrationTest is TestSetup {
     EtherFiRateLimiter limiter;
-    MockRegistry registry;
 
-    address admin = makeAddr("admin");
     address pauser = makeAddr("pauser");
     address unpauser = makeAddr("unpauser");
     address pauseUntilPauser = makeAddr("pauseUntilPauser");
@@ -355,17 +329,16 @@ contract PausableUntilIntegrationTest is Test {
     bytes32 constant LIMIT_ID = keccak256("LIMIT");
 
     function setUp() public {
-        registry = new MockRegistry();
-        EtherFiRateLimiter impl = new EtherFiRateLimiter(address(registry));
-        UUPSProxy proxy = new UUPSProxy(address(impl), "");
-        limiter = EtherFiRateLimiter(address(proxy));
-        limiter.initialize();
+        setUpTests();
+        limiter = rateLimiterInstance;
 
-        registry.grantRole(limiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
-        registry.grantRole(registry.PROTOCOL_PAUSER(), pauser);
-        registry.grantRole(registry.PROTOCOL_UNPAUSER(), unpauser);
-        registry.grantRole(registry.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
-        registry.grantRole(registry.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
+        vm.startPrank(owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), pauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), unpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
+        vm.stopPrank();
 
         vm.startPrank(admin);
         limiter.createNewLimiter(LIMIT_ID, 1_000_000_000_000, 1_000_000);

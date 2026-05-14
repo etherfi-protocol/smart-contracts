@@ -40,18 +40,18 @@ contract EtherFiNodesManagerTest is TestSetup {
         address nodesManagerImplementation = address(new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance)));
 
         vm.startPrank(managerInstance.owner());
-        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
-        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
-        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_POD_PROVER_ROLE(), podProver);
-        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), callForwarder);
-        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elTriggerExit);
-        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), address(liquidityPoolInstance));
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_NODES_MANAGER_POD_PROVER_ROLE(), podProver);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), callForwarder);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elTriggerExit);
+        roleRegistryInstance.grantRole(roleRegistryInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), address(liquidityPoolInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), admin);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin);
-        roleRegistryInstance.grantRole(rateLimiterInstance.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
-        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), deployed.STAKING_MANAGER());
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), deployed.STAKING_MANAGER());
         managerInstance.upgradeTo(nodesManagerImplementation);
-        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), elTriggerExit);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), elTriggerExit);
         vm.stopPrank();
         
         // Setup rate limiter - check if limiters already exist before creating
@@ -258,7 +258,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     // ============================================
     
     function test_createEigenPod() public {
-        address nodeCreatorRole = roleRegistryInstance.roleHolders(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE())[0];
+        address nodeCreatorRole = roleRegistryInstance.roleHolders(roleRegistryInstance.STAKING_MANAGER_NODE_CREATOR_ROLE())[0];
         vm.prank(nodeCreatorRole);
         address newNode = stakingManagerInstance.instantiateEtherFiNode(false);
         
@@ -575,7 +575,7 @@ contract EtherFiNodesManagerTest is TestSetup {
             managerInstance.calculateValidatorPubkeyHash(pubkeys[0]), 
             pubkeys[0]
         );
-        address elTriggerExit = roleRegistryInstance.roleHolders(managerInstance.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE())[0];
+        address elTriggerExit = roleRegistryInstance.roleHolders(roleRegistryInstance.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE())[0];
         vm.prank(elTriggerExit);
         managerInstance.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
         vm.stopPrank();

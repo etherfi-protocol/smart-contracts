@@ -12,7 +12,7 @@ contract NodeOperatorManagerRoleMigrationTest is TestSetup {
     function _grantAdmin(address who) internal {
         vm.startPrank(owner);
         roleRegistryInstance.grantRole(
-            nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(),
+            roleRegistryInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(),
             who
         );
         vm.stopPrank();

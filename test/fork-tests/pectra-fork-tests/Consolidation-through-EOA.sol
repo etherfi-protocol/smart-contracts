@@ -43,15 +43,19 @@ contract ConsolidationThroughEOATest is Test {
         console2.log("=== SETUP ===");
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
 
+        // Upgrade RoleRegistry in place so newly-added role getters defined in
+        // RolesLibrary are reachable on the deployed proxy.
+        vm.prank(roleRegistry.owner());
+        roleRegistry.upgradeTo(address(new RoleRegistry(address(0))));
+
         //upgrade the etherfi nodes manager contract
         newEtherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter)); 
         vm.startPrank(roleRegistry.owner());
         etherFiNodesManager.upgradeTo(address(newEtherFiNodesManagerImpl));
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), realElExiter);
+        roleRegistry.grantRole(roleRegistry.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), realElExiter);
 
         // Setup consolidation rate limiter bucket (required for new rate limiting)
-        bytes32 rateLimiterAdminRole = keccak256("ETHERFI_RATE_LIMITER_ADMIN_ROLE");
-        roleRegistry.grantRole(rateLimiterAdminRole, roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), roleRegistry.owner());
         
         vm.stopPrank();
 
@@ -124,10 +128,10 @@ contract ConsolidationThroughEOATest is Test {
         // and checks if msg.sender equals the result. In a proxy context, this can fail.
         // We need to ensure the prank is set up correctly before the grantRole call.
         vm.startPrank(roleRegistryOwner);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), realElExiter);
+        roleRegistry.grantRole(roleRegistry.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), realElExiter);
         vm.stopPrank();
         // Verify the role was granted
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), realElExiter);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), realElExiter);
         require(hasRole, "test: EOA does not have the EL Consolidation Role");
         console2.log("Granted ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE to EOA:", realElExiter);
         bytes[] memory pubkeys = new bytes[](3);
@@ -184,7 +188,7 @@ contract ConsolidationThroughEOATest is Test {
         address eoaWithoutRole = makeAddr("eoaWithoutRole");
                 
         // Verify the EOA does not have the role
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), eoaWithoutRole);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), eoaWithoutRole);
         require(!hasRole, "test: EOA should not have the EL Consolidation Role");
 
         bytes[] memory pubkeys = new bytes[](3);

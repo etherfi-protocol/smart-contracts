@@ -28,11 +28,6 @@ contract RestakingRewardsRouterTest is Test {
     address public recipient = vm.addr(5);
     address public user = vm.addr(6);
 
-    bytes32 public constant ETHERFI_REWARDS_ROUTER_ADMIN_ROLE =
-        keccak256("ETHERFI_REWARDS_ROUTER_ADMIN_ROLE");
-    bytes32 public constant ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE =
-        keccak256("ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE");
-
     event EthSent(address indexed from, address indexed to, address indexed sender, uint256 value);
     event RecipientAddressSet(address indexed recipient);
     event Erc20Recovered(
@@ -79,14 +74,14 @@ contract RestakingRewardsRouterTest is Test {
         );
 
         // Grant admin role
-        roleRegistry.grantRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, admin);
+        roleRegistry.grantRole(roleRegistry.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), admin);
         // Grant transfer role
         roleRegistry.grantRole(
-            ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE,
+            roleRegistry.ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE(),
             admin
         );
         roleRegistry.grantRole(
-            ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE,
+            roleRegistry.ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE(),
             transferRoleUser
         );
         vm.stopPrank();
@@ -367,16 +362,18 @@ contract RestakingRewardsRouterTest is Test {
         address newAdmin = vm.addr(100);
 
         // Grant role
-        vm.prank(owner);
-        roleRegistry.grantRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, newAdmin);
+        vm.startPrank(owner);
+        roleRegistry.grantRole(roleRegistry.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), newAdmin);
+        vm.stopPrank();
 
         vm.prank(newAdmin);
         router.setRecipientAddress(recipient);
         assertEq(router.recipientAddress(), recipient);
 
         // Revoke role
-        vm.prank(owner);
-        roleRegistry.revokeRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, newAdmin);
+        vm.startPrank(owner);
+        roleRegistry.revokeRole(roleRegistry.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), newAdmin);
+        vm.stopPrank();
 
         vm.prank(newAdmin);
         vm.expectRevert(RestakingRewardsRouter.IncorrectRole.selector);

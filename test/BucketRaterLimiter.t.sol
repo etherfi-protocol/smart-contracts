@@ -28,7 +28,7 @@ contract BucketRateLimiterTest is Test {
         limiter = BucketRateLimiter(address(proxy));
         limiter.initialize();
 
-        roleRegistry.grantRole(limiter.BUCKET_RATE_LIMITER_ADMIN_ROLE(), owner);
+        roleRegistry.grantRole(roleRegistry.BUCKET_RATE_LIMITER_ADMIN_ROLE(), owner);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), owner);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), owner);
 
@@ -837,7 +837,7 @@ contract BucketRateLimiterTest is Test {
         address admin = address(1);
 
         vm.startPrank(owner);
-        roleRegistry.grantRole(limiter.BUCKET_RATE_LIMITER_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.BUCKET_RATE_LIMITER_ADMIN_ROLE(), admin);
         vm.stopPrank();
 
         assertEq(limiter.DEPRECATED_admins(admin), false);

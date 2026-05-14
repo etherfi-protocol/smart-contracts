@@ -72,11 +72,11 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
 
         // Ensure the operating admin can manage LP spawners + create validators.
         vm.startPrank(roleOwner);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), ETHERFI_OPERATING_ADMIN);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), ETHERFI_OPERATING_ADMIN);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_ADMIN_ROLE(), ETHERFI_OPERATING_ADMIN);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), ETHERFI_OPERATING_ADMIN);
 
         // Ensure operating timelock can create nodes.
-        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), OPERATING_TIMELOCK);
+        roleRegistryInstance.grantRole(roleRegistryInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), OPERATING_TIMELOCK);
         vm.stopPrank();
 
         // The mainnet NodeOperatorManager implementation predates this PR and
@@ -90,7 +90,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         vm.stopPrank();
 
         vm.startPrank(roleOwner);
-        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), ETHERFI_OPERATING_ADMIN);
+        roleRegistryInstance.grantRole(roleRegistryInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), ETHERFI_OPERATING_ADMIN);
         vm.stopPrank();
     }
 

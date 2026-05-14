@@ -75,10 +75,10 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         auctionManager.upgradeTo(address(auctionManagerImpl));
 
         vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(liquidityPool.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), admin);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
-        roleRegistry.grantRole(stakingManager.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), admin);
-        roleRegistry.grantRole(auctionManager.AUCTION_MANAGER_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
+        roleRegistry.grantRole(roleRegistry.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.AUCTION_MANAGER_ADMIN_ROLE(), admin);
         vm.stopPrank();
     }
 
@@ -457,7 +457,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
     }
 
     function test_roleGrant_succeeds() public {
-        assertEq(roleRegistry.hasRole(keccak256("STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE"), address(admin)), true);
+        assertEq(roleRegistry.hasRole(roleRegistry.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), address(admin)), true);
     }
 
     // ==================== batchCreateBeaconValidators Tests ====================

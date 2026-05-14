@@ -77,7 +77,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         roleRegistryInstance.grantRole(IMPLICIT_FEE_CLAIMER_ROLE, alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), alice);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
 
         // Configure LiquidityPool to use PriorityWithdrawalQueue (owner has LP admin role now)
         vm.stopPrank();

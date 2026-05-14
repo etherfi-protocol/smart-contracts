@@ -117,6 +117,12 @@ interface IRoleRegistry {
      */
     function BLACKLIST_UNTIL_ROLE() external view returns (bytes32);
 
+    /**
+     * @notice Returns the current owner of the contract
+     * @return The address of the current owner
+     */
+    function owner() external view returns (address);
+
     function AUCTION_MANAGER_ADMIN_ROLE() external view returns (bytes32);
 
     function BUCKET_RATE_LIMITER_ADMIN_ROLE() external view returns (bytes32);

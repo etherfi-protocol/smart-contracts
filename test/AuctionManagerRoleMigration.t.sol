@@ -11,7 +11,7 @@ contract AuctionManagerRoleMigrationTest is TestSetup {
 
     function _grantAdmin(address who) internal {
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(auctionInstance.AUCTION_MANAGER_ADMIN_ROLE(), who);
+        roleRegistryInstance.grantRole(roleRegistryInstance.AUCTION_MANAGER_ADMIN_ROLE(), who);
         vm.stopPrank();
     }
 
