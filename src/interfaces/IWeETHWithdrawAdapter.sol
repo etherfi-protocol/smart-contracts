@@ -45,4 +45,5 @@ interface IWeETHWithdrawAdapter {
 
     function pauseContractUntil() external;
     function unpauseContractUntil() external;
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external;
 }

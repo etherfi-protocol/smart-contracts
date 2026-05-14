@@ -558,6 +558,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _unpauseUntil();
     }
 
+    /// @notice Sets the pause duration for the contract
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+        _setPauseUntilDuration(_pauseUntilDuration);
+    }
+
     // Deprecated, just existing not to touch EtherFiAdmin contract
     function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external {
     }

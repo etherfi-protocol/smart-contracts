@@ -1522,13 +1522,19 @@ contract LiquidityPoolTest is TestSetup {
 
     address lpPauseUntilPauser = makeAddr("lpPauseUntilPauser");
     address lpUnpauseUntilUnpauser = makeAddr("lpUnpauseUntilUnpauser");
+    address lpPauseUntilDurationSetter = makeAddr("lpPauseUntilDurationSetter");
 
     function _grantLpPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), lpPauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), lpUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), lpPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        uint256 maxDur = liquidityPoolInstance.MAX_PAUSE_DURATION();
+        vm.prank(lpPauseUntilDurationSetter);
+        liquidityPoolInstance.setPauseUntilDuration(maxDur);
     }
 
     function _lpPausedUntil() internal view returns (uint256) {
@@ -1584,6 +1590,48 @@ contract LiquidityPoolTest is TestSetup {
         vm.prank(lpUnpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
         liquidityPoolInstance.unpauseContractUntil();
+    }
+
+    // --- setPauseUntilDuration ---
+
+    function test_setPauseUntilDuration_requiresRole() public {
+        _grantLpPauseUntilRoles();
+        uint256 maxDur = liquidityPoolInstance.MAX_PAUSE_DURATION();
+
+        vm.prank(chad);
+        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        liquidityPoolInstance.setPauseUntilDuration(maxDur);
+
+        // PAUSE_UNTIL_ROLE alone is insufficient
+        vm.prank(lpPauseUntilPauser);
+        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        liquidityPoolInstance.setPauseUntilDuration(maxDur);
+    }
+
+    function test_setPauseUntilDuration_setsValue() public {
+        _grantLpPauseUntilRoles();
+        uint256 d = liquidityPoolInstance.MIN_PAUSE_DURATION() + 1 hours;
+
+        vm.prank(lpPauseUntilDurationSetter);
+        liquidityPoolInstance.setPauseUntilDuration(d);
+
+        vm.prank(lpPauseUntilPauser);
+        liquidityPoolInstance.pauseContractUntil();
+        assertEq(_lpPausedUntil(), block.timestamp + d);
+    }
+
+    function test_setPauseUntilDuration_revertsOnInvalidValue() public {
+        _grantLpPauseUntilRoles();
+        uint256 belowMin = liquidityPoolInstance.MIN_PAUSE_DURATION() - 1;
+        uint256 aboveMax = liquidityPoolInstance.MAX_PAUSE_DURATION() + 1;
+
+        vm.prank(lpPauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        liquidityPoolInstance.setPauseUntilDuration(belowMin);
+
+        vm.prank(lpPauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        liquidityPoolInstance.setPauseUntilDuration(aboveMax);
     }
 
     // --- each whenNotPaused function must now also revert under pauseContractUntil ---

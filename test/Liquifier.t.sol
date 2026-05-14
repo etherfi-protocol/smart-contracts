@@ -451,13 +451,19 @@ contract LiquifierTest is TestSetup {
 
     address liqPauseUntilPauser = makeAddr("liqPauseUntilPauser");
     address liqUnpauseUntilUnpauser = makeAddr("liqUnpauseUntilUnpauser");
+    address liqPauseUntilDurationSetter = makeAddr("liqPauseUntilDurationSetter");
 
     function _grantLiqPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), liqPauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), liqUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), liqPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        uint256 maxDur = liquifierInstance.MAX_PAUSE_DURATION();
+        vm.prank(liqPauseUntilDurationSetter);
+        liquifierInstance.setPauseUntilDuration(maxDur);
     }
 
     function _liqPausedUntil() internal view returns (uint256) {
@@ -528,6 +534,54 @@ contract LiquifierTest is TestSetup {
         vm.prank(liqUnpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
         liquifierInstance.unpauseContractUntil();
+    }
+
+    // --- setPauseUntilDuration ---
+
+    function test_setPauseUntilDuration_requiresRole() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+        uint256 maxDur = liquifierInstance.MAX_PAUSE_DURATION();
+
+        vm.prank(bob);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        liquifierInstance.setPauseUntilDuration(maxDur);
+
+        // PAUSE_UNTIL_ROLE alone is insufficient
+        vm.prank(liqPauseUntilPauser);
+        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        liquifierInstance.setPauseUntilDuration(maxDur);
+    }
+
+    function test_setPauseUntilDuration_setsValue() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+        uint256 d = liquifierInstance.MIN_PAUSE_DURATION() + 1 hours;
+
+        vm.prank(liqPauseUntilDurationSetter);
+        liquifierInstance.setPauseUntilDuration(d);
+
+        vm.prank(liqPauseUntilPauser);
+        liquifierInstance.pauseContractUntil();
+        assertEq(_liqPausedUntil(), block.timestamp + d);
+    }
+
+    function test_setPauseUntilDuration_revertsOnInvalidValue() public {
+        initializeRealisticFork(MAINNET_FORK);
+        setUpLiquifier(MAINNET_FORK);
+        _grantLiqPauseUntilRoles();
+        uint256 belowMin = liquifierInstance.MIN_PAUSE_DURATION() - 1;
+        uint256 aboveMax = liquifierInstance.MAX_PAUSE_DURATION() + 1;
+
+        vm.prank(liqPauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        liquifierInstance.setPauseUntilDuration(belowMin);
+
+        vm.prank(liqPauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        liquifierInstance.setPauseUntilDuration(aboveMax);
     }
 
     // --- each gated function (whenNotPaused now also enforces pause-until via override) ---
