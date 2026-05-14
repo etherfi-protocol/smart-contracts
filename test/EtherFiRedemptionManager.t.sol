@@ -1735,13 +1735,19 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     address rmPauseUntilPauser = makeAddr("rmPauseUntilPauser");
     address rmUnpauseUntilUnpauser = makeAddr("rmUnpauseUntilUnpauser");
+    address rmPauseUntilDurationSetter = makeAddr("rmPauseUntilDurationSetter");
 
     function _grantRmPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), rmPauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), rmUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), rmPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        uint256 maxDur = etherFiRedemptionManagerInstance.MAX_PAUSE_DURATION();
+        vm.prank(rmPauseUntilDurationSetter);
+        etherFiRedemptionManagerInstance.setPauseUntilDuration(maxDur);
     }
 
     function _rmPausedUntil() internal view returns (uint256) {
@@ -1817,6 +1823,48 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.prank(rmUnpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
         etherFiRedemptionManagerInstance.unpauseContractUntil();
+    }
+
+    // --- setPauseUntilDuration ---
+
+    function test_setPauseUntilDuration_requiresRole() public {
+        _grantRmPauseUntilRoles();
+        uint256 maxDur = etherFiRedemptionManagerInstance.MAX_PAUSE_DURATION();
+
+        vm.prank(bob);
+        vm.expectRevert();
+        etherFiRedemptionManagerInstance.setPauseUntilDuration(maxDur);
+
+        // PAUSE_UNTIL_ROLE alone is insufficient
+        vm.prank(rmPauseUntilPauser);
+        vm.expectRevert();
+        etherFiRedemptionManagerInstance.setPauseUntilDuration(maxDur);
+    }
+
+    function test_setPauseUntilDuration_setsValue() public {
+        _grantRmPauseUntilRoles();
+        uint256 d = etherFiRedemptionManagerInstance.MIN_PAUSE_DURATION() + 1 hours;
+
+        vm.prank(rmPauseUntilDurationSetter);
+        etherFiRedemptionManagerInstance.setPauseUntilDuration(d);
+
+        vm.prank(rmPauseUntilPauser);
+        etherFiRedemptionManagerInstance.pauseContractUntil();
+        assertEq(_rmPausedUntil(), block.timestamp + d);
+    }
+
+    function test_setPauseUntilDuration_revertsOnInvalidValue() public {
+        _grantRmPauseUntilRoles();
+        uint256 belowMin = etherFiRedemptionManagerInstance.MIN_PAUSE_DURATION() - 1;
+        uint256 aboveMax = etherFiRedemptionManagerInstance.MAX_PAUSE_DURATION() + 1;
+
+        vm.prank(rmPauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        etherFiRedemptionManagerInstance.setPauseUntilDuration(belowMin);
+
+        vm.prank(rmPauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        etherFiRedemptionManagerInstance.setPauseUntilDuration(aboveMax);
     }
 
     // --- each gated function (whenNotPaused now also enforces pause-until via override) ---

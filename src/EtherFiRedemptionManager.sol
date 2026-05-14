@@ -371,6 +371,10 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         _unpauseUntil();
     }
 
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external hasRole(roleRegistry.PAUSE_DURATION_SETTER()) {
+        _setPauseUntilDuration(_pauseUntilDuration);
+    }
+
     function _redeemEEth(uint256 eEthAmount, address receiver, address outputToken) internal {
         require(eEthAmount <= eEth.balanceOf(msg.sender), "EtherFiRedemptionManager: Insufficient balance");
         require(canRedeem(eEthAmount, outputToken), "EtherFiRedemptionManager: Exceeded total redeemable amount");

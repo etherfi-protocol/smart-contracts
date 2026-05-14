@@ -288,6 +288,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         _unpauseUntil();
     }
 
+    /// @notice Sets the pause duration for the contract
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+        _setPauseUntilDuration(_pauseUntilDuration);
+    }
+
     // ETH comes in, L2ETH is burnt
     function unwrapL2Eth(address _l2Eth) external payable nonReentrant returns (uint256) {
         if (msg.sender != l1SyncPool) revert IncorrectCaller();

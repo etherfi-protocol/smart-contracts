@@ -159,6 +159,11 @@ using SafeERC20 for IERC20;
         _unpauseUntil();
     }
 
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+        _setPauseUntilDuration(_pauseUntilDuration);
+    }
+
 
     function getImplementation() external view returns (address) {return _getImplementation();}
 

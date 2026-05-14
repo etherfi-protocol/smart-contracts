@@ -6,6 +6,7 @@ import "../interfaces/IRoleRegistry.sol";
 contract PausableUntil {
     struct PausableUntilStorage {
         uint256 pausedUntil;
+        uint256 pauseUntilDuration;
         mapping(address => uint256) lastPauseTimestamp;
     }
 
@@ -17,15 +18,30 @@ contract PausableUntil {
         }
     }
 
-    uint256 public constant MAX_PAUSE_DURATION = 7 days;
+    uint256 public constant MIN_PAUSE_DURATION = 8 hours;
+    uint256 public constant MAX_PAUSE_DURATION = 3 days;
     uint256 public constant PAUSER_UNTIL_COOLDOWN = 1 days;
 
+    event PauseUntilDurationSet(uint256 pauseUntilDuration);
     event PausedUntil(uint256 pausedUntil);
     event UnpausedUntil();
 
     error ContractPausedUntil(uint256 pausedUntil);
     error ContractNotPausedUntil();
     error PauserCooldownStillActive();
+    error InvalidPauseUntilDuration();
+
+    function pausedUntil() external view returns (uint256) {
+        return _getPausableUntilStorage().pausedUntil;
+    }
+
+    function pauseUntilDuration() external view returns (uint256) {
+        return _getPausableUntilStorage().pauseUntilDuration;
+    }
+
+    function lastPauseTimestamp(address pauser) external view returns (uint256) {
+        return _getPausableUntilStorage().lastPauseTimestamp[pauser];
+    }
 
     function _requireNotPausedUntil() internal view {
         uint256 pausedUntil = _getPausableUntilStorage().pausedUntil;
@@ -40,8 +56,9 @@ contract PausableUntil {
     function _pauseUntil() internal {
         _requireNotPausedUntil();
         PausableUntilStorage storage $ = _getPausableUntilStorage();
-        if ($.lastPauseTimestamp[msg.sender] + MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN > block.timestamp) revert PauserCooldownStillActive();
-        $.pausedUntil = block.timestamp + MAX_PAUSE_DURATION;
+        uint256 pauseUntilDuration = $.pauseUntilDuration;
+        if ($.lastPauseTimestamp[msg.sender] + pauseUntilDuration + PAUSER_UNTIL_COOLDOWN > block.timestamp) revert PauserCooldownStillActive();
+        $.pausedUntil = block.timestamp + pauseUntilDuration;
         $.lastPauseTimestamp[msg.sender] = block.timestamp;
         emit PausedUntil($.pausedUntil);
     }
@@ -51,6 +68,12 @@ contract PausableUntil {
         PausableUntilStorage storage $ = _getPausableUntilStorage();
         $.pausedUntil = 0;
         emit UnpausedUntil();
+    }
+
+    function _setPauseUntilDuration(uint256 _pauseUntilDuration) internal {
+        if (_pauseUntilDuration < MIN_PAUSE_DURATION || _pauseUntilDuration > MAX_PAUSE_DURATION) revert InvalidPauseUntilDuration();
+        _getPausableUntilStorage().pauseUntilDuration = _pauseUntilDuration;
+        emit PauseUntilDurationSet(_pauseUntilDuration);
     }
 
     modifier whenNotPausedUntil() {

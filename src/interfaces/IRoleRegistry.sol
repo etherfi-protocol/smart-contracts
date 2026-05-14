@@ -98,6 +98,12 @@ interface IRoleRegistry {
     function UNPAUSE_UNTIL_ROLE() external view returns (bytes32);
 
     /**
+     * @notice Returns the PAUSE_DURATION_SETTER role identifier
+     * @return The bytes32 identifier for the PAUSE_DURATION_SETTER role
+     */
+    function PAUSE_DURATION_SETTER() external view returns (bytes32);
+
+    /**
      * @notice Returns the current owner of the contract
      * @return The address of the current owner
      */
