@@ -103,13 +103,13 @@ contract LiquifierStEthPriceFeedTest is Test {
         liquifier.quoteByMarketValue(stEth, 1 ether);
     }
 
-    /// Stale price (updatedAt + window < now): check is skipped, quote returns curve value.
-    function test_stalePrice_skipsCheck() public {
+    /// Stale price (updatedAt + window < now): check reverts
+    function test_stalePrice_reverts() public {
         feed.set(int256(1000 ether), block.timestamp - STALE_WINDOW - 1); // arbitrarily large but stale
         curve.set(0.99 ether);
 
-        uint256 q = liquifier.quoteByMarketValue(stEth, 1 ether);
-        assertEq(q, 0.99 ether);
+        vm.expectRevert(Liquifier.StalePriceFeed.selector);
+        liquifier.quoteByMarketValue(stEth, 1 ether);
     }
 
     /// Boundary: updatedAt + window == block.timestamp counts as fresh (`>=`),
@@ -122,13 +122,13 @@ contract LiquifierStEthPriceFeedTest is Test {
         liquifier.quoteByMarketValue(stEth, 1 ether);
     }
 
-    /// Boundary: one second past the window — stale, check skipped.
+    /// Boundary: one second past the window — stale, reverts.
     function test_stalenessBoundary_oneSecondPastWindow_skipped() public {
         feed.set(int256(2 ether), block.timestamp - STALE_WINDOW - 1);
         curve.set(0.5 ether);
 
-        uint256 q = liquifier.quoteByMarketValue(stEth, 1 ether);
-        assertEq(q, 0.5 ether);
+        vm.expectRevert(Liquifier.StalePriceFeed.selector);
+        liquifier.quoteByMarketValue(stEth, 1 ether);
     }
 
     /// Fresh price within deviation tolerance: passes. Curve says 0.99, chainlink says 1.0;
@@ -220,7 +220,10 @@ contract LiquifierStEthPriceFeedTest is Test {
         if (answer <= 0) {
             vm.expectRevert(Liquifier.InvalidPriceFeed.selector);
             liquifier.quoteByMarketValue(stEth, amount);
-        } else if (fresh && (deviation * BPS) / marketValue > MAX_DEVIATION_BPS) {
+        } else if (!fresh) {
+            vm.expectRevert(Liquifier.StalePriceFeed.selector);
+            liquifier.quoteByMarketValue(stEth, amount);
+        } else if ((deviation * BPS) / marketValue > MAX_DEVIATION_BPS) {
             vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
             liquifier.quoteByMarketValue(stEth, amount);
         } else {

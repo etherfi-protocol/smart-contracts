@@ -794,6 +794,7 @@ contract EtherFiNodesManagerTest is TestSetup {
 
     address nmPauseUntilPauser = makeAddr("nmPauseUntilPauser");
     address nmUnpauseUntilUnpauser = makeAddr("nmUnpauseUntilUnpauser");
+    address nmPauseUntilDurationSetter = makeAddr("nmPauseUntilDurationSetter");
 
     function _grantNmPauseUntilRoles() internal {
         // Upgrade the RoleRegistry impl on the fork so it exposes PAUSE_UNTIL_ROLE / UNPAUSE_UNTIL_ROLE
@@ -802,8 +803,13 @@ contract EtherFiNodesManagerTest is TestSetup {
         roleRegistryInstance.upgradeTo(address(newImpl));
         roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), nmPauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), nmUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), nmPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        uint256 maxDur = managerInstance.MAX_PAUSE_DURATION();
+        vm.prank(nmPauseUntilDurationSetter);
+        managerInstance.setPauseUntilDuration(maxDur);
     }
 
     function _nmPausedUntil() internal view returns (uint256) {
@@ -865,6 +871,47 @@ contract EtherFiNodesManagerTest is TestSetup {
         vm.prank(nmUnpauseUntilUnpauser);
         vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
         managerInstance.unpauseContractUntil();
+    }
+
+    // --- setPauseUntilDuration ---
+
+    function test_setPauseUntilDuration_requiresRole() public {
+        _grantNmPauseUntilRoles();
+        uint256 maxDur = managerInstance.MAX_PAUSE_DURATION();
+
+        vm.prank(bob);
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        managerInstance.setPauseUntilDuration(maxDur);
+
+        // PAUSE_UNTIL_ROLE alone is insufficient
+        vm.prank(nmPauseUntilPauser);
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        managerInstance.setPauseUntilDuration(maxDur);
+    }
+
+    function test_setPauseUntilDuration_setsValue() public {
+        _grantNmPauseUntilRoles();
+        uint256 d = managerInstance.MIN_PAUSE_DURATION() + 1 hours;
+
+        vm.prank(nmPauseUntilDurationSetter);
+        managerInstance.setPauseUntilDuration(d);
+
+        _pauseUntil();
+        assertEq(_nmPausedUntil(), block.timestamp + d);
+    }
+
+    function test_setPauseUntilDuration_revertsOnInvalidValue() public {
+        _grantNmPauseUntilRoles();
+        uint256 belowMin = managerInstance.MIN_PAUSE_DURATION() - 1;
+        uint256 aboveMax = managerInstance.MAX_PAUSE_DURATION() + 1;
+
+        vm.prank(nmPauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        managerInstance.setPauseUntilDuration(belowMin);
+
+        vm.prank(nmPauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        managerInstance.setPauseUntilDuration(aboveMax);
     }
 
     // --- each whenNotPaused-gated function (now also blocked via _requireNotPaused override) ---

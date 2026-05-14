@@ -205,6 +205,15 @@ contract WeETHWithdrawAdapter is
         _unpauseUntil();
     }
 
+    /**
+     * @notice Sets the pause duration for the contract
+     * @param _pauseUntilDuration The new pause duration
+     */
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+        _setPauseUntilDuration(_pauseUntilDuration);
+    }
+
     //--------------------------------------------------------------------------------------
     //------------------------------------  GETTERS  ---------------------------------------
     //--------------------------------------------------------------------------------------

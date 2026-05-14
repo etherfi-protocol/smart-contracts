@@ -182,15 +182,21 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
 
    address pauseUntilPauser = makeAddr("pauseUntilPauser");
    address unpauseUntilUnpauser = makeAddr("unpauseUntilUnpauser");
+   address pauseUntilDurationSetter = makeAddr("pauseUntilDurationSetter");
 
    function _grantPauseUntilRoles(address pauserAddr, address unpauserAddr) internal {
        vm.startPrank(owner);
        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauserAddr);
        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauserAddr);
+       roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
        vm.stopPrank();
        // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so the first-pause cooldown
        // (which treats lastPauseTimestamp[pauser] = 0 as unix 0) is satisfied
        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+       uint256 maxDur = cumulativeMerkleRewardsDistributorInstance.MAX_PAUSE_DURATION();
+       vm.prank(pauseUntilDurationSetter);
+       cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(maxDur);
    }
 
    function _pausedUntil() internal view returns (uint256) {
@@ -248,6 +254,48 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
        vm.prank(unpauseUntilUnpauser);
        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
        cumulativeMerkleRewardsDistributorInstance.unpauseContractUntil();
+   }
+
+   // --- setPauseUntilDuration ---
+
+   function test_setPauseUntilDuration_requiresRole() public {
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       uint256 maxDur = cumulativeMerkleRewardsDistributorInstance.MAX_PAUSE_DURATION();
+
+       vm.prank(chad);
+       vm.expectRevert(ICumulativeMerkleRewardsDistributor.IncorrectRole.selector);
+       cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(maxDur);
+
+       // PAUSE_UNTIL_ROLE alone is insufficient
+       vm.prank(pauseUntilPauser);
+       vm.expectRevert(ICumulativeMerkleRewardsDistributor.IncorrectRole.selector);
+       cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(maxDur);
+   }
+
+   function test_setPauseUntilDuration_setsValue() public {
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       uint256 d = cumulativeMerkleRewardsDistributorInstance.MIN_PAUSE_DURATION() + 1 hours;
+
+       vm.prank(pauseUntilDurationSetter);
+       cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(d);
+
+       vm.prank(pauseUntilPauser);
+       cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
+       assertEq(_pausedUntil(), block.timestamp + d);
+   }
+
+   function test_setPauseUntilDuration_revertsOnInvalidValue() public {
+       _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
+       uint256 belowMin = cumulativeMerkleRewardsDistributorInstance.MIN_PAUSE_DURATION() - 1;
+       uint256 aboveMax = cumulativeMerkleRewardsDistributorInstance.MAX_PAUSE_DURATION() + 1;
+
+       vm.prank(pauseUntilDurationSetter);
+       vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+       cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(belowMin);
+
+       vm.prank(pauseUntilDurationSetter);
+       vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+       cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(aboveMax);
    }
 
    // --- each gated function (whenNotPaused → also blocked by pause-until) ---

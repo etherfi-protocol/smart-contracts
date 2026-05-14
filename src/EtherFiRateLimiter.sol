@@ -123,6 +123,12 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
         _unpauseUntil();
     }
 
+    /// @notice Sets the pause duration for the contract
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+        _setPauseUntilDuration(_pauseUntilDuration);
+    }
+
     //--------------------------------------------------------------------------------------
     //-----------------------------------  Core  -------------------------------------------
     //--------------------------------------------------------------------------------------

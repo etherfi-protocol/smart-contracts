@@ -223,7 +223,6 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
        bytes32 chunk3 = keccak256(
             abi.encode(
-                _report.withdrawalRequestsToInvalidate,
                 _report.lastFinalizedWithdrawalRequestId,
                 _report.finalizedWithdrawalAmount
             )

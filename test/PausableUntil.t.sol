@@ -10,16 +10,9 @@ import "../src/interfaces/IEtherFiRateLimiter.sol";
 contract PausableUntilHarness is PausableUntil {
     function pauseUntil() external { _pauseUntil(); }
     function unpauseUntil() external { _unpauseUntil(); }
+    function setPauseUntilDuration(uint256 d) external { _setPauseUntilDuration(d); }
     function requireNotPausedUntil() external view { _requireNotPausedUntil(); }
     function requirePausedUntil() external view { _requirePausedUntil(); }
-
-    function pausedUntil() external view returns (uint256) {
-        return _getPausableUntilStorage().pausedUntil;
-    }
-
-    function lastPauseTimestamp(address pauser) external view returns (uint256) {
-        return _getPausableUntilStorage().lastPauseTimestamp[pauser];
-    }
 
     function gated() external view whenNotPausedUntil returns (bool) { return true; }
 }
@@ -31,6 +24,7 @@ contract PausableUntilTest is Test {
 
     bytes32 constant EXPECTED_SLOT = 0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
 
+    event PauseUntilDurationSet(uint256 pauseUntilDuration);
     event PausedUntil(uint256 pausedUntil);
     event UnpausedUntil();
 
@@ -40,6 +34,7 @@ contract PausableUntilTest is Test {
         // (which treats lastPauseTimestamp[pauser] = 0 as literally "last paused at unix 0")
         // does not block the first pause in tests. On mainnet this is a non-issue.
         vm.warp(1_700_000_000);
+        harness.setPauseUntilDuration(harness.MAX_PAUSE_DURATION());
     }
 
     // --------------------------------------------------------
@@ -61,8 +56,69 @@ contract PausableUntilTest is Test {
     }
 
     function test_constants() public view {
-        assertEq(harness.MAX_PAUSE_DURATION(), 7 days);
+        assertEq(harness.MIN_PAUSE_DURATION(), 8 hours);
+        assertEq(harness.MAX_PAUSE_DURATION(), 3 days);
         assertEq(harness.PAUSER_UNTIL_COOLDOWN(), 1 days);
+    }
+
+    // --------------------------------------------------------
+    //  _setPauseUntilDuration
+    // --------------------------------------------------------
+
+    function test_setPauseUntilDuration_setsStateAndEmits() public {
+        uint256 d = harness.MIN_PAUSE_DURATION() + 1 hours;
+        vm.expectEmit(false, false, false, true);
+        emit PauseUntilDurationSet(d);
+        harness.setPauseUntilDuration(d);
+        assertEq(harness.pauseUntilDuration(), d);
+    }
+
+    function test_setPauseUntilDuration_acceptsMinBoundary() public {
+        harness.setPauseUntilDuration(harness.MIN_PAUSE_DURATION());
+        assertEq(harness.pauseUntilDuration(), harness.MIN_PAUSE_DURATION());
+    }
+
+    function test_setPauseUntilDuration_acceptsMaxBoundary() public {
+        harness.setPauseUntilDuration(harness.MAX_PAUSE_DURATION());
+        assertEq(harness.pauseUntilDuration(), harness.MAX_PAUSE_DURATION());
+    }
+
+    function test_setPauseUntilDuration_revertsBelowMin() public {
+        uint256 belowMin = harness.MIN_PAUSE_DURATION() - 1;
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        harness.setPauseUntilDuration(belowMin);
+    }
+
+    function test_setPauseUntilDuration_revertsAboveMax() public {
+        uint256 aboveMax = harness.MAX_PAUSE_DURATION() + 1;
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        harness.setPauseUntilDuration(aboveMax);
+    }
+
+    function test_setPauseUntilDuration_revertsOnZero() public {
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        harness.setPauseUntilDuration(0);
+    }
+
+    function test_setPauseUntilDuration_pausesForUpdatedDuration() public {
+        uint256 d = harness.MIN_PAUSE_DURATION();
+        harness.setPauseUntilDuration(d);
+
+        vm.prank(pauserA);
+        harness.pauseUntil();
+        assertEq(harness.pausedUntil(), block.timestamp + d);
+    }
+
+    function testFuzz_setPauseUntilDuration_acceptsInRange(uint256 d) public {
+        d = bound(d, harness.MIN_PAUSE_DURATION(), harness.MAX_PAUSE_DURATION());
+        harness.setPauseUntilDuration(d);
+        assertEq(harness.pauseUntilDuration(), d);
+    }
+
+    function testFuzz_setPauseUntilDuration_rejectsOutOfRange(uint256 d) public {
+        vm.assume(d < harness.MIN_PAUSE_DURATION() || d > harness.MAX_PAUSE_DURATION());
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        harness.setPauseUntilDuration(d);
     }
 
     // --------------------------------------------------------
@@ -323,6 +379,7 @@ contract PausableUntilIntegrationTest is TestSetup {
     address unpauser = makeAddr("unpauser");
     address pauseUntilPauser = makeAddr("pauseUntilPauser");
     address unpauseUntilUnpauser = makeAddr("unpauseUntilUnpauser");
+    address pauseUntilDurationSetter = makeAddr("pauseUntilDurationSetter");
     address consumer = makeAddr("consumer");
     address outsider = makeAddr("outsider");
 
@@ -338,6 +395,7 @@ contract PausableUntilIntegrationTest is TestSetup {
         roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), unpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
         vm.stopPrank();
 
         vm.startPrank(admin);
@@ -346,6 +404,10 @@ contract PausableUntilIntegrationTest is TestSetup {
         vm.stopPrank();
 
         vm.warp(1_700_000_000);
+
+        uint256 maxDur = limiter.MAX_PAUSE_DURATION();
+        vm.prank(pauseUntilDurationSetter);
+        limiter.setPauseUntilDuration(maxDur);
     }
 
     // --- role gating ---
@@ -460,6 +522,53 @@ contract PausableUntilIntegrationTest is TestSetup {
         // paused-until still blocks consume()
         vm.prank(consumer);
         vm.expectRevert();
+        limiter.consume(LIMIT_ID, 1_000);
+    }
+
+    // --- setPauseUntilDuration role gating & effects ---
+
+    function test_setPauseUntilDuration_requiresRole() public {
+        uint256 maxDur = limiter.MAX_PAUSE_DURATION();
+
+        vm.prank(outsider);
+        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        limiter.setPauseUntilDuration(maxDur);
+
+        // PROTOCOL_PAUSER alone must not grant pause-duration capability
+        vm.prank(pauser);
+        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        limiter.setPauseUntilDuration(maxDur);
+
+        // PAUSE_UNTIL_ROLE alone must not grant pause-duration capability
+        vm.prank(pauseUntilPauser);
+        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        limiter.setPauseUntilDuration(maxDur);
+    }
+
+    function test_setPauseUntilDuration_revertsOnInvalidValue() public {
+        uint256 belowMin = limiter.MIN_PAUSE_DURATION() - 1;
+        uint256 aboveMax = limiter.MAX_PAUSE_DURATION() + 1;
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        limiter.setPauseUntilDuration(belowMin);
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        limiter.setPauseUntilDuration(aboveMax);
+    }
+
+    function test_setPauseUntilDuration_changesEffectivePauseLength() public {
+        uint256 d = limiter.MIN_PAUSE_DURATION();
+        vm.prank(pauseUntilDurationSetter);
+        limiter.setPauseUntilDuration(d);
+
+        vm.prank(pauseUntilPauser);
+        limiter.pauseContractUntil();
+
+        // pause should now lift after MIN_PAUSE_DURATION rather than MAX_PAUSE_DURATION
+        vm.warp(block.timestamp + d + 1);
+        vm.prank(consumer);
         limiter.consume(LIMIT_ID, 1_000);
     }
 

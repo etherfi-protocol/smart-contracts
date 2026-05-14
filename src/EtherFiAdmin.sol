@@ -305,9 +305,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _handleWithdrawals(IEtherFiOracle.OracleReport calldata _report) internal {
-        for (uint256 i = 0; i < _report.withdrawalRequestsToInvalidate.length; i++) {
-            withdrawRequestNft.invalidateRequest(_report.withdrawalRequestsToInvalidate[i]);
-        }
         _finalizeWithdrawals(_report.lastFinalizedWithdrawalRequestId, _report.finalizedWithdrawalAmount);
     }
     
@@ -355,6 +352,18 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 finalizedWithdrawalAmountPerDay = (_report.finalizedWithdrawalAmount * 1 days) / elapsedTime;
         if (finalizedWithdrawalAmountPerDay > maxFinalizedWithdrawalAmountPerDay) return (false, "EtherFiAdmin: finalized withdrawal amount exceeds max");
         if (_report.finalizedWithdrawalAmount > address(liquidityPool).balance) return (false, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+
+        // valdate finalized request id
+        uint32 lastFinalizedRequestId = withdrawRequestNft.lastFinalizedRequestId();
+        if (_report.lastFinalizedWithdrawalRequestId < lastFinalizedRequestId) return (false, "EtherFiAdmin: finalized withdrawal request id is less than last finalized request id");
+        uint256 sumOfRequests;
+        for (uint256 i = lastFinalizedRequestId + 1; i <= _report.lastFinalizedWithdrawalRequestId; i++) {
+            IWithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNft.getRequest(i);
+            if (request.isValid) {
+                sumOfRequests += request.amountOfEEth;
+            }
+        }
+        if (sumOfRequests != _report.finalizedWithdrawalAmount) return (false, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount");
 
         // report is valid
         return (true, "");

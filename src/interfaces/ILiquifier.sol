@@ -128,6 +128,7 @@ interface ILiquifier {
 
     function pauseContractUntil() external;
     function unpauseContractUntil() external;
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external;
 
     function roleRegistry() external view returns (IRoleRegistry);
 }
