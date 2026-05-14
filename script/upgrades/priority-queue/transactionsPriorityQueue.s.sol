@@ -214,7 +214,7 @@ contract PriorityQueueTransactions is Script, Utils {
         console2.log("LiquidityPool implementation verified:", impl);
 
         // Verify priorityWithdrawalQueue is set correctly in LiquidityPool
-        address pwq = liquidityPool.priorityWithdrawalQueue();
+        address pwq = address(liquidityPool.priorityWithdrawalQueue());
         require(pwq == priorityWithdrawalQueueProxy, "PriorityWithdrawalQueue address mismatch");
         console2.log("PriorityWithdrawalQueue in LiquidityPool:", pwq);
 
@@ -254,7 +254,22 @@ contract PriorityQueueTransactions is Script, Utils {
         console2.log("=== Verifying Deployed Bytecode ===");
         console2.log("");
 
-        LiquidityPool newLiquidityPoolImpl = new LiquidityPool(priorityWithdrawalQueueProxy, address(0), 0);
+        LiquidityPool newLiquidityPoolImpl = new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: address(0),
+                nodesManager: address(0),
+                eETH: EETH,
+                withdrawRequestNFT: address(0),
+                liquifier: address(0),
+                etherFiRedemptionManager: ETHERFI_REDEMPTION_MANAGER,
+                roleRegistry: ROLE_REGISTRY,
+                priorityWithdrawalQueue: priorityWithdrawalQueueProxy,
+                blacklister: address(0),
+                etherFiAdminContract: address(0),
+                membershipManager: address(0)
+            }),
+            0
+        );
         PriorityWithdrawalQueue newPWQImpl = new PriorityWithdrawalQueue(
             LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_MIN_DELAY
         );
@@ -414,7 +429,7 @@ contract PriorityQueueTransactions is Script, Utils {
 
         // 4. LiquidityPool: new priorityWithdrawalQueue immutable set correctly
         {
-            address pwq = LiquidityPool(payable(LIQUIDITY_POOL)).priorityWithdrawalQueue();
+            address pwq = address(LiquidityPool(payable(LIQUIDITY_POOL)).priorityWithdrawalQueue());
             require(pwq == priorityWithdrawalQueueProxy, "LiquidityPool: wrong priorityWithdrawalQueue immutable");
             console2.log("[IMMUTABLES OK] LiquidityPool.priorityWithdrawalQueue:", pwq);
         }

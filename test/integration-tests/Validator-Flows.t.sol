@@ -16,7 +16,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // Mainnet NodeOperatorManager hasn't been upgraded to the role-based ACL yet,
         // so its NODE_OPERATOR_MANAGER_ADMIN_ROLE() getter doesn't exist on-chain.
         // Upgrade in place so the new role getters used by _ensureValCreationRoles are reachable.
-        NodeOperatorManager nodeOperatorManagerImpl = new NodeOperatorManager(address(roleRegistryInstance));
+        NodeOperatorManager nodeOperatorManagerImpl = new NodeOperatorManager(address(roleRegistryInstance), address(auctionInstance));
         vm.prank(nodeOperatorManagerInstance.owner());
         nodeOperatorManagerInstance.upgradeTo(address(nodeOperatorManagerImpl));
 
@@ -95,7 +95,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // grant the role used by whitelist ops.
         address nodeOpMgrOwner = nodeOperatorManagerInstance.owner();
         vm.startPrank(nodeOpMgrOwner);
-        NodeOperatorManager newNodeOpMgrImpl = new NodeOperatorManager(address(roleRegistryInstance));
+        NodeOperatorManager newNodeOpMgrImpl = new NodeOperatorManager(address(roleRegistryInstance), address(auctionInstance));
         nodeOperatorManagerInstance.upgradeTo(address(newNodeOpMgrImpl));
         vm.stopPrank();
 

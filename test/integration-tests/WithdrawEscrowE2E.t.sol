@@ -106,7 +106,22 @@ contract WithdrawEscrowE2ETest is TestSetup {
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
         );
         pQueue = PriorityWithdrawalQueue(payable(address(proxy)));
-        liquidityPoolInstance.upgradeTo(address(new LiquidityPool(address(pQueue), address(blacklisterInstance), 0)));
+        liquidityPoolInstance.upgradeTo(address(new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: address(stakingManagerInstance),
+                nodesManager: address(managerInstance),
+                eETH: address(eETHInstance),
+                withdrawRequestNFT: address(withdrawRequestNFTInstance),
+                liquifier: address(liquifierInstance),
+                etherFiRedemptionManager: address(etherFiRedemptionManagerInstance),
+                roleRegistry: address(roleRegistryInstance),
+                priorityWithdrawalQueue: address(pQueue),
+                blacklister: address(blacklisterInstance),
+                etherFiAdminContract: address(etherFiAdminInstance),
+                membershipManager: address(membershipManagerInstance)
+            }),
+            0
+        )));
         vm.stopPrank();
     }
 
@@ -114,7 +129,14 @@ contract WithdrawEscrowE2ETest is TestSetup {
         address wrnOwner = withdrawRequestNFTInstance.owner();
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F, address(blacklisterInstance)))
+            address(new WithdrawRequestNFT(
+                0x2f5301a3D59388c509C65f8698f521377D41Fd0F,
+                address(eETHInstance),
+                address(liquidityPoolInstance),
+                address(membershipManagerInstance),
+                address(roleRegistryInstance),
+                address(blacklisterInstance)
+            ))
         );
     }
 

@@ -66,11 +66,28 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         vm.prank(stakingManager.owner());
         stakingManager.upgradeTo(address(stakingManagerImpl));
 
-        LiquidityPool liquidityPoolImpl = new LiquidityPool(address(0x0), address(blacklister), 0);
+        // Wire LP immutables to real mainnet proxy addresses so calls into
+        // eETH / withdrawRequestNFT / etc. land on live contracts.
+        LiquidityPool liquidityPoolImpl = new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: address(stakingManager),
+                nodesManager: address(etherFiNodesManager),
+                eETH: 0x35fA164735182de50811E8e2E824cFb9B6118ac2,
+                withdrawRequestNFT: 0x7d5706f6ef3F89B3951E23e557CDFBC3239D4E2c,
+                liquifier: 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F,
+                etherFiRedemptionManager: 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0,
+                roleRegistry: address(roleRegistry),
+                priorityWithdrawalQueue: 0x35e7D6feF6f72aDd3c3e39dEc6d9CCc29e3345FA,
+                blacklister: address(blacklister),
+                etherFiAdminContract: 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705,
+                membershipManager: 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000
+            }),
+            0
+        );
         vm.prank(liquidityPool.owner());
         liquidityPool.upgradeTo(address(liquidityPoolImpl));
 
-        AuctionManager auctionManagerImpl = new AuctionManager(address(roleRegistry), address(blacklister));
+        AuctionManager auctionManagerImpl = new AuctionManager(address(roleRegistry), address(blacklister), address(nodeOperatorManager), address(stakingManager), 0x3d320286E014C3e1ce99Af6d6B00f0C1D63E3000);
         vm.prank(auctionManager.owner());
         auctionManager.upgradeTo(address(auctionManagerImpl));
 

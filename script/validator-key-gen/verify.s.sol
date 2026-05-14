@@ -40,6 +40,7 @@ contract VerifyValidatorKeyGen is Script {
     address constant RATE_LIMITER_PROXY = 0x6C7c54cfC2225fA985cD25F04d923B93c60a02F8;
     address constant REWARDS_COORDINATOR = 0x7750d328b314EfFa365A0402CcfD489B80B0adda;
     address constant ETHERFI_REDEMPTION_MANAGER = 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0;
+    address constant LIQUIFIER = 0x9FFDF407cDe9a93c47611799DA23924Af3EF764F;
     
     address constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
     address constant realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
@@ -78,7 +79,7 @@ contract VerifyValidatorKeyGen is Script {
         // LiquidityPool newLiquidityPoolImplementation = new LiquidityPool(address(0x0));
         StakingManager newStakingManagerImplementation = new StakingManager(address(LIQUIDITY_POOL_PROXY), address(ETHERFI_NODES_MANAGER_PROXY), address(ETH_DEPOSIT_CONTRACT), address(AUCTION_MANAGER), address(ETHERFI_NODE_BEACON), address(ROLE_REGISTRY));
         EtherFiNodesManager newEtherFiNodesManagerImplementation = new EtherFiNodesManager(address(STAKING_MANAGER_PROXY), address(ROLE_REGISTRY), address(RATE_LIMITER_PROXY));
-        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER), address(ROLE_REGISTRY), address(RATE_LIMITER_PROXY));
+        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(LIQUIDITY_POOL_PROXY), address(LIQUIFIER), address(REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER), address(ROLE_REGISTRY), address(RATE_LIMITER_PROXY));
 
         // contractCodeChecker.verifyContractByteCodeMatch(LIQUIDITY_POOL_IMPL, address(newLiquidityPoolImplementation));
         contractCodeChecker.verifyContractByteCodeMatch(STAKING_MANAGER_IMPL, address(newStakingManagerImplementation));

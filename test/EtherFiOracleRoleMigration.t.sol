@@ -14,7 +14,7 @@ contract EtherFiOracleRoleMigrationTest is TestSetup {
         setUpTests();
 
         // Deploy a fresh implementation with the correct constructor arg and upgrade the proxy.
-        freshImpl = new EtherFiOracle(address(roleRegistryInstance));
+        freshImpl = new EtherFiOracle(address(etherFiAdminInstance), address(roleRegistryInstance));
         vm.prank(owner);
         etherFiOracleInstance.upgradeTo(address(freshImpl));
     }

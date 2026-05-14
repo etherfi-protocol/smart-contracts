@@ -50,7 +50,7 @@ contract AuctionManager is
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
-    INodeOperatorManager public nodeOperatorManager;
+    INodeOperatorManager public immutable nodeOperatorManager;
     address public immutable stakingManagerContractAddress;
     address public immutable membershipManagerContractAddress;
 
@@ -346,12 +346,6 @@ contract AuctionManager is
     ) external onlyOwner {
         require(_newAmount < minBidAmount && _newAmount > 0, "Invalid Amount");
         whitelistBidAmount = _newAmount;
-    }
-
-    function updateNodeOperatorManager(address _address) external onlyOwner {
-        nodeOperatorManager = INodeOperatorManager(
-            _address
-        );
     }
 
     //--------------------------------------------------------------------------------------
