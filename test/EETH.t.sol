@@ -682,16 +682,25 @@ contract EETHTest is TestSetup {
 
     address pauseUntilPauser = makeAddr("pauseUntilPauser");
     address unpauseUntilUnpauser = makeAddr("unpauseUntilUnpauser");
+    address pauseUntilDurationSetter = makeAddr("pauseUntilDurationSetter");
 
     function _grantPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
         vm.stopPrank();
         // Foundry's default block.timestamp is too small — the cooldown check is
         // `lastPauseTimestamp + MAX_PAUSE_DURATION + COOLDOWN > block.timestamp`,
         // which fires on the very first call unless we warp forward past that sum.
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        // Resolve MAX_PAUSE_DURATION before the prank — otherwise the nested
+        // staticcall consumes the prank and setPauseUntilDuration is called by
+        // the test contract instead of pauseUntilDurationSetter.
+        uint256 maxDuration = eETHInstance.MAX_PAUSE_DURATION();
+        vm.prank(pauseUntilDurationSetter);
+        eETHInstance.setPauseUntilDuration(maxDuration);
     }
 
     function _eETHPausedUntil() internal view returns (uint256) {
@@ -855,5 +864,47 @@ contract EETHTest is TestSetup {
         vm.prank(address(liquidityPoolInstance));
         eETHInstance.mintShares(alice, 100);
         assertEq(eETHInstance.shares(alice), 100);
+    }
+
+    // --- setPauseUntilDuration ---
+
+    function test_setPauseUntilDuration_requiresRole() public {
+        _grantPauseUntilRoles();
+        uint256 maxDur = eETHInstance.MAX_PAUSE_DURATION();
+
+        vm.prank(bob);
+        vm.expectRevert(EETH.IncorrectRole.selector);
+        eETHInstance.setPauseUntilDuration(maxDur);
+
+        // PAUSE_UNTIL_ROLE alone is insufficient
+        vm.prank(pauseUntilPauser);
+        vm.expectRevert(EETH.IncorrectRole.selector);
+        eETHInstance.setPauseUntilDuration(maxDur);
+    }
+
+    function test_setPauseUntilDuration_setsValue() public {
+        _grantPauseUntilRoles();
+        uint256 d = eETHInstance.MIN_PAUSE_DURATION() + 1 hours;
+
+        vm.prank(pauseUntilDurationSetter);
+        eETHInstance.setPauseUntilDuration(d);
+
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+        assertEq(eETHInstance.pausedUntil(), block.timestamp + d);
+    }
+
+    function test_setPauseUntilDuration_revertsOnInvalidValue() public {
+        _grantPauseUntilRoles();
+        uint256 belowMin = eETHInstance.MIN_PAUSE_DURATION() - 1;
+        uint256 aboveMax = eETHInstance.MAX_PAUSE_DURATION() + 1;
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        eETHInstance.setPauseUntilDuration(belowMin);
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        eETHInstance.setPauseUntilDuration(aboveMax);
     }
 }
