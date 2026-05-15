@@ -68,27 +68,27 @@ contract EtherFiNodesManager is
     }
 
     function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
     function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 
     function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.GUARDIAN_ROLE(), msg.sender)) revert IncorrectRole();
         _pauseUntil();
     }
 
     function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _unpauseUntil();
     }
 
     function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -220,8 +220,7 @@ contract EtherFiNodesManager is
      *        - amountGwei: 0 for full exit, >0 for partial to pod
      * @custom:fee Send EXACT ETH to cover sum of (feePerPod * requestsForPod).
      */
-    function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable whenNotPaused nonReentrant {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), msg.sender)) revert IncorrectRole();
+    function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable onlyConsolidationExecutor whenNotPaused nonReentrant {
         if (requests.length == 0) revert EmptyWithdrawalsRequest();
 
         // rate limit the amount of the that can be withdrawn from beacon chain
@@ -265,8 +264,7 @@ contract EtherFiNodesManager is
      * @dev EigenLayer validates that validators belong to the pod automatically.
      * @custom:fee Send EXACT ETH to cover consolidation fees.
      */
-    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable whenNotPaused nonReentrant {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), msg.sender)) revert IncorrectRole();
+    function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable onlyConsolidationExecutor whenNotPaused nonReentrant {
         if (requests.length == 0) revert EmptyConsolidationRequest();
 
         // rate limit consolidation requests - each request could affect up to FULL_EXIT_GWEI
@@ -377,7 +375,7 @@ contract EtherFiNodesManager is
 
     /// @dev this method is for linking our old legacy validator ids that were created before
     ///    we started tracking the pubkeys onchain. We can delete this method once we have linked all of our legacy validators
-    function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyLegacyLinker {
+    function linkLegacyValidatorIds(uint256[] calldata validatorIds, bytes[] calldata pubkeys) external onlyConsolidationExecutor {
         if (validatorIds.length != pubkeys.length) revert LengthMismatch();
         for (uint256 i = 0; i < validatorIds.length; i++) {
 
@@ -419,7 +417,7 @@ contract EtherFiNodesManager is
     }
 
     /// @notice forward a whitelisted call to a whitelisted external contract with the EtherFiNode as the caller
-    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
+    function forwardExternalCall(address[] calldata nodes, bytes[] calldata data, address target) external onlyPodProver whenNotPaused returns (bytes[] memory returnData) {
         if (nodes.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](nodes.length);
@@ -439,7 +437,7 @@ contract EtherFiNodesManager is
 
     /// @notice forward a whitelisted call to the associated eigenPod of the EtherFiNode with the EtherFiNode as the caller.
     ///   This serves to allow us to support minor eigenlayer upgrades without needing to immediately upgrade our contracts.
-    function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external onlyCallForwarder whenNotPaused returns (bytes[] memory returnData) {
+    function forwardEigenPodCall(address[] calldata nodes, bytes[] calldata data) external onlyPodProver whenNotPaused returns (bytes[] memory returnData) {
         if (nodes.length != data.length) revert InvalidForwardedCall();
 
         returnData = new bytes[](nodes.length);
@@ -470,27 +468,22 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyEigenlayerAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender) || msg.sender != address(stakingManager)) revert IncorrectRole();
         _;
     }
 
-    modifier onlyCallForwarder() {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), msg.sender)) revert IncorrectRole();
+    modifier onlyConsolidationExecutor() {
+        if (!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyPodProver() {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_POD_PROVER_ROLE(), msg.sender)) revert IncorrectRole();
-        _;
-    }
-
-    modifier onlyLegacyLinker() {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_4(), msg.sender)) revert IncorrectRole();
         _;
     }
 

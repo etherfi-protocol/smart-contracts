@@ -51,6 +51,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint128 public ethAmountLockedForWithdrawal;
 
     IBlacklister public immutable blacklister;
+    address public immutable etherFiAdmin;
 
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
     event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
@@ -65,10 +66,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _treasury, address _blacklister) {
+    constructor(address _treasury, address _blacklister, address _etherFiAdmin) {
         treasury = _treasury;
         blacklister = IBlacklister(_blacklister);
-
+        etherFiAdmin = _etherFiAdmin;
         _disableInitializers();
     }
 
@@ -236,7 +237,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return _requests[requestId].isValid;
     }
 
-    function finalizeRequests(uint256 requestId) external onlyAdmin {
+    function finalizeRequests(uint256 requestId) external {
+        if (msg.sender != address(etherFiAdmin)) revert IncorrectRole();
         require(requestId >= lastFinalizedRequestId, "Cannot undo finalization");
         require(requestId < nextRequestId, "Cannot finalize future requests");
         lastFinalizedRequestId = uint32(requestId);
@@ -244,7 +246,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     /// @dev Admin can only invalidate requests that have NOT been finalized yet
     function invalidateRequest(uint256 requestId) external {
-        if (!roleRegistry.hasRole(roleRegistry.INVALIDATE_WITHDRAW_REQUEST_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.GUARDIAN_ROLE(), msg.sender)) revert IncorrectRole();
         require(requestId > lastFinalizedRequestId, "Cannot invalidate finalized request");
         require(isValid(requestId), "Request is not valid");
         _requests[requestId].isValid = false;
@@ -252,7 +254,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestInvalidated(uint32(requestId));
     }
 
-    function validateRequest(uint256 requestId) external onlyAdmin {
+    function validateRequest(uint256 requestId) external {
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         require(_exists(requestId), "Request does not exist");
         require(!_requests[requestId].isValid, "Request is valid");
         if (requestId <= lastFinalizedRequestId) {
@@ -271,14 +274,14 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         if (paused) revert("Pausable: already paused");
         paused = true;
         emit Paused(msg.sender);
     }
 
     function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         if (!paused) revert("Pausable: not paused");
 
 
@@ -287,17 +290,17 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.GUARDIAN_ROLE(), msg.sender)) revert IncorrectRole();
         _pauseUntil();
     }
 
     function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _unpauseUntil();
     }
 
     function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -308,7 +311,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     ///   - Burn: the rest of the remainder is burned
     /// @param _eEthAmount: the remainder of the eEth amount
     function handleRemainder(uint256 _eEthAmount) external {
-        if(!roleRegistry.hasRole(roleRegistry.IMPLICIT_FEE_CLAIMER_ROLE(), msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender)) revert IncorrectRole();
         require(_eEthAmount != 0, "EETH amount cannot be 0"); 
         require(isScanOfShareRemainderCompleted(), "Not all prev requests have been scanned");
         require(getEEthRemainderAmount() >= _eEthAmount, "Not enough eETH remainder");
@@ -375,11 +378,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     function _requireNotPaused() internal view virtual {
         require(!paused, "Pausable: paused");
-    }
-
-    modifier onlyAdmin() {
-        require(roleRegistry.hasRole(roleRegistry.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), msg.sender), "Caller is not admin");
-        _;
     }
 
     modifier onlyLiquidityPool() {

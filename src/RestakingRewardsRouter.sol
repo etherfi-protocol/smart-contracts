@@ -57,7 +57,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
 
     function setRecipientAddress(address _recipient) external {
         if (
-            !roleRegistry.hasRole(roleRegistry.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), msg.sender)
+            !roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)
         ) revert IncorrectRole();
         if (_recipient == address(0)) revert InvalidAddress();
         recipientAddress = _recipient;
@@ -68,7 +68,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
     function recoverERC20() external {
         if (
             !roleRegistry.hasRole(
-                roleRegistry.ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE(),
+                roleRegistry.EOA_2(),
                 msg.sender
             )
         ) revert IncorrectRole();

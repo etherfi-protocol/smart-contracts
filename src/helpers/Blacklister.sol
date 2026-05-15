@@ -33,26 +33,26 @@ contract Blacklister is Initializable, UUPSUpgradeable {
     }
 
     function blacklistUserUntil(address user) external {
-        if (!roleRegistry.hasRole(roleRegistry.BLACKLIST_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.GUARDIAN_ROLE(), msg.sender)) revert IncorrectRole();
         if (blacklistedUntil[user] > block.timestamp) revert UserAlreadyBlacklisted(user);
         blacklistedUntil[user] = block.timestamp + 1 days;
         emit UserBlacklistedUntil(user, block.timestamp + 1 days);
     }
 
     function extendBlacklistUntil(address user, uint256 until) external {
-        if (!roleRegistry.hasRole(roleRegistry.BLACKLISTER_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         blacklistedUntil[user] = block.timestamp + until;
         emit UserBlacklistedUntil(user, block.timestamp + until);
     }
 
     function blacklistUser(address user) external {
-        if (!roleRegistry.hasRole(roleRegistry.BLACKLISTER_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         blacklistedUntil[user] = type(uint256).max;
         emit UserBlacklisted(user);
     }
 
     function unblacklistUser(address user) external {
-        if (!roleRegistry.hasRole(roleRegistry.BLACKLISTER_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         blacklistedUntil[user] = 0;
         emit UserUnblacklisted(user);
     }

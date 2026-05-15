@@ -26,7 +26,7 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     error IncorrectRole();
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.BUCKET_RATE_LIMITER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
@@ -95,12 +95,12 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     }
 
     function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
     function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 

@@ -25,15 +25,15 @@ contract RevokeAdmin is Initializable, UUPSUpgradeable {
     }
 
     function revokePauserUntilRole(address account) external onlyRevokeAdmin {
-        roleRegistry.revokeFast(roleRegistry.PAUSE_UNTIL_ROLE(), account);
+        roleRegistry.revokeFast(roleRegistry.GUARDIAN_ROLE(), account);
     }
 
     function revokeBlacklistUntilRole(address account) external onlyRevokeAdmin {
-        roleRegistry.revokeFast(roleRegistry.BLACKLIST_UNTIL_ROLE(), account);
+        roleRegistry.revokeFast(roleRegistry.GUARDIAN_ROLE(), account);
     }
 
     modifier onlyRevokeAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.REVOKE_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 }

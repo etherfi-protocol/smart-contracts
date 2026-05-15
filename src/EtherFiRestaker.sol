@@ -371,13 +371,13 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     // Pauses the contract
     function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _pause();
     }
 
     // Unpauses the contract
     function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _unpause();
     }
 
@@ -416,22 +416,22 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     /* MODIFIERS */
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_RESTAKER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyRequestWithdrawalsRole() {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyClaimWithdrawalsRole() {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyDepositIntoStrategyRole() {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
         _;
     }
 }

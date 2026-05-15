@@ -171,7 +171,7 @@ contract WeETHWithdrawAdapter is
      * @notice Pause the contract
      */
     function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         if (paused) revert("Pausable: already paused");
 
         paused = true;
@@ -182,7 +182,7 @@ contract WeETHWithdrawAdapter is
      * @notice Unpause the contract
      */
     function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         if (!paused) revert("Pausable: not paused");
 
         paused = false;
@@ -193,7 +193,7 @@ contract WeETHWithdrawAdapter is
      * @notice Pause the contract until MAX_PAUSE_DURATION
      */
     function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.GUARDIAN_ROLE(), msg.sender)) revert IncorrectRole();
         _pauseUntil();
     }
 
@@ -201,7 +201,7 @@ contract WeETHWithdrawAdapter is
      * @notice Unpause the contract from pauseUntil
      */
     function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _unpauseUntil();
     }
 
@@ -210,7 +210,7 @@ contract WeETHWithdrawAdapter is
      * @param _pauseUntilDuration The new pause duration
      */
     function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
