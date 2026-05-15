@@ -22,12 +22,24 @@ contract RevokeAdmin is Initializable, UUPSUpgradeable {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
-    function revokePauserUntilRole(address account) external onlyAdmin {
+    function revokeGuardianRole(address account) external onlyAdmin {
         roleRegistry.revokeFast(roleRegistry.GUARDIAN_ROLE(), account);
     }
 
-    function revokeBlacklistUntilRole(address account) external onlyAdmin {
-        roleRegistry.revokeFast(roleRegistry.GUARDIAN_ROLE(), account);
+    function revokeEOA1Role(address account) external onlyAdmin {
+        roleRegistry.revokeFast(roleRegistry.EOA_1(), account);
+    }
+
+    function revokeEOA2Role(address account) external onlyAdmin {
+        roleRegistry.revokeFast(roleRegistry.EOA_2(), account);
+    }
+
+    function revokeEOA3Role(address account) external onlyAdmin {
+        roleRegistry.revokeFast(roleRegistry.EOA_3(), account);
+    }
+
+    function revokeEOA4Role(address account) external onlyAdmin {
+        roleRegistry.revokeFast(roleRegistry.EOA_4(), account);
     }
 
     modifier onlyAdmin() {
