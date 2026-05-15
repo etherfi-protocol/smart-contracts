@@ -822,16 +822,155 @@ contract EETHTest is TestSetup {
         eETHInstance.burnShares(alice, 50);
     }
 
-    // ---- pause-until does NOT block transfers -------------------------------
-    // Only mint/burn carry the modifier; transfers route through `_transferShares`
-    // which is gated only by `whenNotPaused` (the legacy boolean pause).
+    // ---- pause-until blocks the full ERC20 surface --------------------------
+    // Symmetric with the WeETH PausableUntil scope (PR #405): `transfer`,
+    // `transferFrom`, `approve`, `permit`, `increaseAllowance`,
+    // `decreaseAllowance`, plus `_transferShares` itself, all carry
+    // `whenNotPausedUntil`.
 
-    function test_EETH_transfer_notBlockedByPauseContractUntil() public {
+    function test_EETH_transfer_revertsWhenPausedUntil() public {
         _aliceWithEEth(1 ether);
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
         eETHInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _eETHPausedUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        eETHInstance.transfer(bob, 0.5 ether);
+    }
+
+    function test_EETH_transferFrom_revertsWhenPausedUntil() public {
+        _aliceWithEEth(1 ether);
+        vm.prank(alice);
+        eETHInstance.approve(bob, 1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _eETHPausedUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        eETHInstance.transferFrom(alice, bob, 0.5 ether);
+    }
+
+    function test_EETH_approve_revertsWhenPausedUntil() public {
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _eETHPausedUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        eETHInstance.approve(bob, 1 ether);
+    }
+
+    function test_EETH_increaseAllowance_revertsWhenPausedUntil() public {
+        // Seed an allowance before the pause window opens.
+        vm.prank(alice);
+        eETHInstance.approve(bob, 1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _eETHPausedUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        eETHInstance.increaseAllowance(bob, 1 ether);
+    }
+
+    function test_EETH_decreaseAllowance_revertsWhenPausedUntil() public {
+        vm.prank(alice);
+        eETHInstance.approve(bob, 1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _eETHPausedUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        eETHInstance.decreaseAllowance(bob, 0.5 ether);
+    }
+
+    function test_EETH_permit_revertsWhenPausedUntil() public {
+        // Pre-compute a valid permit on eEth for alice (priv key = 2).
+        uint256 aliceNonce = eETHInstance.nonces(alice);
+        ILiquidityPool.PermitInput memory permitInput = createPermitInput(
+            2, bob, 1 ether, aliceNonce, 2 ** 256 - 1, eETHInstance.DOMAIN_SEPARATOR()
+        );
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _eETHPausedUntil();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        eETHInstance.permit(alice, bob, 1 ether, 2 ** 256 - 1, permitInput.v, permitInput.r, permitInput.s);
+    }
+
+    function test_EETH_erc20Surface_unblockedAfterPauseExpires() public {
+        _aliceWithEEth(1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        // Strict `>=` comparison in _requireNotPausedUntil ⇒ opens at exactly `pausedUntil + 1`.
+        vm.warp(block.timestamp + eETHInstance.MAX_PAUSE_DURATION() + 1);
+
+        // Every gated surface should now work again without a manual unpause.
+        vm.prank(alice);
+        eETHInstance.approve(bob, 1 ether);
+        assertEq(eETHInstance.allowance(alice, bob), 1 ether);
+
+        vm.prank(alice);
+        eETHInstance.increaseAllowance(bob, 0.5 ether);
+        assertEq(eETHInstance.allowance(alice, bob), 1.5 ether);
+
+        vm.prank(alice);
+        eETHInstance.decreaseAllowance(bob, 0.5 ether);
+        assertEq(eETHInstance.allowance(alice, bob), 1 ether);
+
+        vm.prank(alice);
+        eETHInstance.transfer(bob, 0.25 ether);
+        assertEq(eETHInstance.balanceOf(bob), 0.25 ether);
+
+        vm.prank(bob);
+        eETHInstance.transferFrom(alice, bob, 0.25 ether);
+        assertEq(eETHInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    function test_EETH_transfer_unblockedAfterManualUnpauseUntil() public {
+        _aliceWithEEth(1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        vm.prank(unpauseUntilUnpauser);
+        eETHInstance.unpauseContractUntil();
 
         vm.prank(alice);
         eETHInstance.transfer(bob, 0.5 ether);

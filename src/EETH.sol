@@ -97,7 +97,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit TransferShares(_user, address(0), _share);
     }
 
-    function transfer(address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
+    function transfer(address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) whenNotPausedUntil returns (bool) {
         _transfer(msg.sender, _recipient, _amount);
         return true;
     }
@@ -106,19 +106,19 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return allowances[_owner][_spender];
     }
 
-    function approve(address _spender, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
+    function approve(address _spender, uint256 _amount) external override(IeETH, IERC20Upgradeable) whenNotPaused whenNotPausedUntil returns (bool) {
         _approve(msg.sender, _spender, _amount);
         return true;
     }
 
-    function increaseAllowance(address _spender, uint256 _increaseAmount) external returns (bool) {
+    function increaseAllowance(address _spender, uint256 _increaseAmount) external whenNotPaused whenNotPausedUntil returns (bool) {
         address owner = msg.sender;
         uint256 currentAllowance = allowance(owner, _spender);
         _approve(owner, _spender,currentAllowance + _increaseAmount);
         return true;
     }
 
-    function decreaseAllowance(address _spender, uint256 _decreaseAmount) external returns (bool) {
+    function decreaseAllowance(address _spender, uint256 _decreaseAmount) external whenNotPaused whenNotPausedUntil returns (bool) {
         address owner = msg.sender;
         uint256 currentAllowance = allowance(owner, _spender);
         require(currentAllowance >= _decreaseAmount, "ERC20: decreased allowance below zero");
@@ -128,7 +128,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return true;
     }
 
-    function transferFrom(address _sender, address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
+    function transferFrom(address _sender, address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) whenNotPausedUntil returns (bool) {
         uint256 currentAllowance = allowances[_sender][msg.sender];
         require(currentAllowance >= _amount, "TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
         unchecked {
@@ -173,7 +173,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) public virtual override(IeETH, IERC20PermitUpgradeable) {
+    ) public virtual override(IeETH, IERC20PermitUpgradeable) whenNotPaused whenNotPausedUntil {
         require(block.timestamp <= deadline, "ERC20Permit: expired deadline");
 
         bytes32 structHash = keccak256(abi.encode(_PERMIT_TYPEHASH, owner, spender, value, _useNonce(owner), deadline));
@@ -216,7 +216,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit Approval(_owner, _spender, _amount);
     }
 
-    function _transferShares(address _sender, address _recipient, uint256 _sharesAmount) internal whenNotPaused {
+    function _transferShares(address _sender, address _recipient, uint256 _sharesAmount) internal whenNotPaused whenNotPausedUntil {
         blacklister.nonBlacklisted(_sender);
         blacklister.nonBlacklisted(_recipient);
         require(_sender != address(0), "TRANSFER_FROM_THE_ZERO_ADDRESS");
