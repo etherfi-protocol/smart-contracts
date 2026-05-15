@@ -125,8 +125,6 @@ contract BucketRateLimiterTest is Test {
         vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
         limiter.pauseContract();
 
-        assertEq(limiter.DEPRECATED_pausers(alice), false);
-
         vm.startPrank(owner);
         roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), alice);
         vm.stopPrank();
@@ -833,16 +831,6 @@ contract BucketRateLimiterTest is Test {
 
     // ============ Admin Tests ============
 
-    function test_updateAdmin_emitsEvent() public {
-        address admin = address(1);
-
-        vm.startPrank(owner);
-        roleRegistry.grantRole(limiter.BUCKET_RATE_LIMITER_ADMIN_ROLE(), admin);
-        vm.stopPrank();
-
-        assertEq(limiter.DEPRECATED_admins(admin), false);
-    }
-
     function test_updateAdmin_canPause() public {
         address admin = address(1);
         vm.startPrank(owner);
@@ -875,17 +863,6 @@ contract BucketRateLimiterTest is Test {
     }
 
     // ============ Pauser Tests ============
-
-    function test_updatePauser_emitsEvent() public {
-        address pauser = address(1);
-        assertEq(limiter.DEPRECATED_pausers(pauser), false);
-
-        vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), pauser);
-        vm.stopPrank();
-
-        assertEq(limiter.DEPRECATED_pausers(pauser), false);
-    }
 
     function test_updatePauser_ownerCanPause() public {
         vm.startPrank(owner);

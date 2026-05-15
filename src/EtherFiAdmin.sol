@@ -28,15 +28,15 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         bool exists;
     }
 
-    IEtherFiOracle public DEPRECATED_etherFiOracle;
-    IStakingManager public DEPRECATED_stakingManager;
-    IAuctionManager public DEPRECATED_auctionManager;
-    IEtherFiNodesManager public DEPRECATED_etherFiNodesManager;
-    ILiquidityPool public DEPRECATED_liquidityPool;
-    IMembershipManager public DEPRECATED_membershipManager;
-    IWithdrawRequestNFT public DEPRECATED_withdrawRequestNft;
+    IEtherFiOracle private DEPRECATED_etherFiOracle;
+    IStakingManager private DEPRECATED_stakingManager;
+    IAuctionManager private DEPRECATED_auctionManager;
+    IEtherFiNodesManager private DEPRECATED_etherFiNodesManager;
+    ILiquidityPool private DEPRECATED_liquidityPool;
+    IMembershipManager private DEPRECATED_membershipManager;
+    IWithdrawRequestNFT private DEPRECATED_withdrawRequestNft;
 
-    mapping(address => bool) public DEPRECATED_admins;
+    mapping(address => bool) private DEPRECATED_admins;
 
     uint32 public lastHandledReportRefSlot;
     uint32 public lastHandledReportRefBlock;
@@ -47,12 +47,12 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint16 public postReportWaitTimeInSlots;
     uint32 public lastAdminExecutionBlock;
 
-    mapping(address => bool) public DEPRECATED_pausers;
+    mapping(address => bool) private DEPRECATED_pausers;
 
     mapping(bytes32 => TaskStatus) public validatorApprovalTaskStatus;
     uint16 validatorTaskBatchSize;
 
-    RoleRegistry public DEPRECATED_roleRegistry;
+    RoleRegistry private DEPRECATED_roleRegistry;
 
     uint256 public maxFinalizedWithdrawalAmountPerDay;
     uint256 public maxNumValidatorsToApprovePerDay;

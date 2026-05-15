@@ -57,11 +57,6 @@ contract NodeOperatorManagerRoleMigrationTest is TestSetup {
         assertTrue(nodeOperatorManagerInstance.paused());
     }
 
-    function test_DEPRECATED_admins_storageReadable() public view {
-        bool v = nodeOperatorManagerInstance.DEPRECATED_admins(address(0x1));
-        assertEq(v, false);
-    }
-
     function test_updateAdmin_selectorRemoved() public {
         (bool ok,) = address(nodeOperatorManagerInstance).call(
             abi.encodeWithSignature("updateAdmin(address,bool)", address(this), true)

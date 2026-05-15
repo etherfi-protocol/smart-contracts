@@ -1933,7 +1933,7 @@ contract LiquidityPoolTest is TestSetup {
             bytes32 newVal = (current & mask) | bytes32(uint256(nftLocked) << 8);
             vm.store(address(liquidityPoolInstance), slot220, newVal);
         }
-        assertEq(liquidityPoolInstance.DEPRECATED_ethAmountLockedForWithdrawal(), nftLocked);
+        assertEq(uint128(uint256(vm.load(address(liquidityPoolInstance), bytes32(uint256(220)))) >> 8), nftLocked);
 
         // escrowMigrationCompleted is at slot 226, byte offset 0 (bool).
         // It should already be false after initializeTestingFork; no-op write to be safe.
@@ -1962,7 +1962,7 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(address(withdrawRequestNFTInstance).balance, nftBalBefore + nftLocked, "NFT not funded");
         assertEq(eETHInstance.totalShares(), sharesBefore, "totalShares should not change");
         assertTrue(liquidityPoolInstance.escrowMigrationCompleted(), "flag not set");
-        assertEq(liquidityPoolInstance.DEPRECATED_ethAmountLockedForWithdrawal(), 0, "deprecated LP slot not zeroed");
+        assertEq(uint128(uint256(vm.load(address(liquidityPoolInstance), bytes32(uint256(220)))) >> 8), 0, "deprecated LP slot not zeroed");
         assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT counter not set by migration");
 
         // Idempotency guard.

@@ -81,11 +81,6 @@ contract EtherFiRestakerRoleMigrationTest is TestSetup {
         assertTrue(restaker.paused());
     }
 
-    function test_DEPRECATED_admins_storageReadable() public view {
-        assertEq(restaker.DEPRECATED_admins(address(0x1)), false);
-        assertEq(restaker.DEPRECATED_pausers(address(0x1)), false);
-    }
-
     function test_updateAdmin_selectorRemoved() public {
         (bool ok,) = address(restaker).call(
             abi.encodeWithSignature("updateAdmin(address,bool)", address(this), true)

@@ -10,8 +10,8 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    address public DEPRECATED_stakingManagerAddress;
-    address public DEPRECATED_etherFiNodesManagerAddress;
+    address private DEPRECATED_stakingManagerAddress;
+    address private DEPRECATED_etherFiNodesManagerAddress;
 
     address public immutable stakingManagerAddress;
     address public immutable etherFiNodesManagerAddress;

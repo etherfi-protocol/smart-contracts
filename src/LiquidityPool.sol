@@ -27,14 +27,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    IStakingManager public DEPRECATED_stakingManager;
-    IEtherFiNodesManager public DEPRECATED_nodesManager;
-    address public DEPRECATED_regulationsManager;
-    address public DEPRECATED_membershipManager;
-    address public DEPRECATED_TNFT;
-    IeETH public DEPRECATED_eETH; 
+    IStakingManager private DEPRECATED_stakingManager;
+    IEtherFiNodesManager private DEPRECATED_nodesManager;
+    address private DEPRECATED_regulationsManager;
+    address private DEPRECATED_membershipManager;
+    address private DEPRECATED_TNFT;
+    IeETH private DEPRECATED_eETH;
 
-    bool public DEPRECATED_eEthliquidStakingOpened;
+    bool private DEPRECATED_eEthliquidStakingOpened;
 
     uint128 public totalValueOutOfLp;
     uint128 public totalValueInLp;
@@ -43,34 +43,34 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     uint32 public numPendingDeposits; // number of validator deposits, which needs 'registerValidator'
 
-    address public DEPRECATED_bNftTreasury;
-    IWithdrawRequestNFT public DEPRECATED_withdrawRequestNFT;
+    address private DEPRECATED_bNftTreasury;
+    IWithdrawRequestNFT private DEPRECATED_withdrawRequestNFT;
 
-    BnftHolder[] public DEPRECATED_bnftHolders;
-    uint128 public DEPRECATED_maxValidatorsPerOwner;
-    uint128 public DEPRECATED_schedulingPeriodInSeconds;
+    BnftHolder[] private DEPRECATED_bnftHolders;
+    uint128 private DEPRECATED_maxValidatorsPerOwner;
+    uint128 private DEPRECATED_schedulingPeriodInSeconds;
 
-    HoldersUpdate public DEPRECATED_holdersUpdate;
+    HoldersUpdate private DEPRECATED_holdersUpdate;
 
-    mapping(address => bool) public DEPRECATED_admins;
-    mapping(SourceOfFunds => FundStatistics) public DEPRECATED_fundStatistics;
+    mapping(address => bool) private DEPRECATED_admins;
+    mapping(SourceOfFunds => FundStatistics) private DEPRECATED_fundStatistics;
     mapping(uint256 => bytes32) public depositDataRootForApprovalDeposits;
-    address public DEPRECATED_etherFiAdminContract;
-    bool public DEPRECATED_whitelistEnabled;
-    mapping(address => bool) public DEPRECATED_whitelisted;
+    address private DEPRECATED_etherFiAdminContract;
+    bool private DEPRECATED_whitelistEnabled;
+    mapping(address => bool) private DEPRECATED_whitelisted;
     mapping(address => ValidatorSpawner) public validatorSpawner;
 
     bool public restakeBnftDeposits;
-    uint128 public DEPRECATED_ethAmountLockedForWithdrawal;
+    uint128 private DEPRECATED_ethAmountLockedForWithdrawal;
     bool public paused;
-    address public DEPRECATED_auctionManager;
-    ILiquifier public DEPRECATED_liquifier;
+    address private DEPRECATED_auctionManager;
+    ILiquifier private DEPRECATED_liquifier;
 
     bool private DEPRECATED_isLpBnftHolder;
 
-    EtherFiRedemptionManager public DEPRECATED_etherFiRedemptionManager;
+    EtherFiRedemptionManager private DEPRECATED_etherFiRedemptionManager;
 
-    IRoleRegistry public DEPRECATED_roleRegistry;
+    IRoleRegistry private DEPRECATED_roleRegistry;
     uint256 public validatorSizeWei;
     bool public escrowMigrationCompleted;
 

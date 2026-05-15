@@ -33,9 +33,9 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     uint32 public numCommitteeMembers; // the total number of committee members
     uint32 public numActiveCommitteeMembers; // the number of active (enabled) committee members
 
-    IEtherFiAdmin DEPRECATED_etherFiAdmin;
+    IEtherFiAdmin private DEPRECATED_etherFiAdmin;
 
-    mapping(address => bool) public DEPRECATED_admins;
+    mapping(address => bool) private DEPRECATED_admins;
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IEtherFiAdmin public immutable etherFiAdmin;

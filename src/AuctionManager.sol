@@ -30,22 +30,22 @@ contract AuctionManager is
     uint256 public numberOfBids;
     uint256 public numberOfActiveBids;
 
-    INodeOperatorManager public DEPRECATED_nodeOperatorManager;
-    IProtocolRevenueManager public DEPRECATED_protocolRevenueManager;
+    INodeOperatorManager private DEPRECATED_nodeOperatorManager;
+    IProtocolRevenueManager private DEPRECATED_protocolRevenueManager;
 
-    address public DEPRECATED_stakingManagerContractAddress;
+    address private DEPRECATED_stakingManagerContractAddress;
     bool public whitelistEnabled;
 
     mapping(uint256 => Bid) public bids;
 
-    address public DEPRECATED_admin;
+    address private DEPRECATED_admin;
 
     // new state variables for phase 2
-    address public DEPRECATED_membershipManagerContractAddress;
+    address private DEPRECATED_membershipManagerContractAddress;
     uint128 public accumulatedRevenue;
     uint128 public accumulatedRevenueThreshold;
 
-    mapping(address => bool) public DEPRECATED_admins;
+    mapping(address => bool) private DEPRECATED_admins;
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;

@@ -15,8 +15,8 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     BucketLimiter.Limit public limit;
     address public consumer;
 
-    mapping(address => bool) public DEPRECATED_admins;
-    mapping(address => bool) public DEPRECATED_pausers;
+    mapping(address => bool) private DEPRECATED_admins;
+    mapping(address => bool) private DEPRECATED_pausers;
 
     mapping(address => BucketLimiter.Limit) public limitsPerToken;
 

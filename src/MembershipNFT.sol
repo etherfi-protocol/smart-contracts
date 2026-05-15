@@ -17,7 +17,7 @@ import "forge-std/console.sol";
 
 contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ERC1155Upgradeable, IMembershipNFT {
 
-    IMembershipManager DEPRECATED_membershipManager;
+    IMembershipManager private DEPRECATED_membershipManager;
     uint32 public nextMintTokenId;
     uint32 public maxTokenId;
     bool public mintingPaused;
@@ -30,11 +30,11 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
 
     string private contractMetadataURI; /// @dev opensea contract-level metadata
 
-    address public DEPRECATED_admin;
+    address private DEPRECATED_admin;
 
     mapping(address => bool) public admins;
 
-    ILiquidityPool public DEPRECATED_liquidityPool;
+    ILiquidityPool private DEPRECATED_liquidityPool;
 
     ILiquidityPool public immutable liquidityPool;
     IMembershipManager public immutable membershipManager;

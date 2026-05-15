@@ -61,11 +61,6 @@ contract BucketRateLimiterRoleMigrationTest is TestSetup {
         assertTrue(limiter.paused());
     }
 
-    function test_DEPRECATED_storageReadable() public view {
-        assertEq(limiter.DEPRECATED_admins(address(0x1)), false);
-        assertEq(limiter.DEPRECATED_pausers(address(0x1)), false);
-    }
-
     function test_updateAdmin_selectorRemoved() public {
         (bool ok,) = address(limiter).call(
             abi.encodeWithSignature("updateAdmin(address,bool)", address(this), true)

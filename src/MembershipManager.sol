@@ -24,11 +24,11 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    IeETH public DEPRECATED_eETH;
-    ILiquidityPool public DEPRECATED_liquidityPool;
-    IMembershipNFT public DEPRECATED_membershipNFT;
+    IeETH private DEPRECATED_eETH;
+    ILiquidityPool private DEPRECATED_liquidityPool;
+    IMembershipNFT private DEPRECATED_membershipNFT;
     address public treasury;
-    address public DEPRECATED_protocolRevenueManager;
+    address private DEPRECATED_protocolRevenueManager;
 
     mapping (uint256 => uint256) public allTimeHighDepositAmount;
     mapping (uint256 => TokenDeposit) public tokenDeposits;
@@ -46,8 +46,8 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     uint16 private mintFee; // fee = 0.001 ETH * 'mintFee'
     uint16 private burnFee; // fee = 0.001 ETH * 'burnFee'
     uint16 private upgradeFee; // fee = 0.001 ETH * 'upgradeFee'
-    uint8 public DEPRECATED_treasuryFeeSplitPercent;
-    uint8 public DEPRECATED_protocolRevenueFeeSplitPercent;
+    uint8 private DEPRECATED_treasuryFeeSplitPercent;
+    uint8 private DEPRECATED_protocolRevenueFeeSplitPercent;
 
     uint32 public topUpCooltimePeriod;
     uint32 public withdrawalLockBlocks;
@@ -57,15 +57,15 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
     // [END] SLOT 261 END
 
-    uint128 public DEPRECATED_sharesReservedForRewards;
+    uint128 private DEPRECATED_sharesReservedForRewards;
 
-    address public DEPRECATED_admin;
+    address private DEPRECATED_admin;
     mapping(address => bool) public admins;
 
     // Phase 2
     TierVault[] public tierVaults;
 
-    IEtherFiAdmin public DEPRECATED_etherFiAdmin;
+    IEtherFiAdmin private DEPRECATED_etherFiAdmin;
 
     IeETH public immutable eETH;
     ILiquidityPool public immutable liquidityPool;

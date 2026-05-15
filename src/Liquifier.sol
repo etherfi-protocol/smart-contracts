@@ -53,28 +53,28 @@ interface IERC20Burnable is IERC20 {
 contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, ILiquifier {
     using SafeERC20 for IERC20;
 
-    uint32 public DEPRECATED_eigenLayerWithdrawalClaimGasCost;
+    uint32 private DEPRECATED_eigenLayerWithdrawalClaimGasCost;
     uint32 public timeBoundCapRefreshInterval; // seconds
 
     bool public quoteStEthWithCurve;
 
-    uint128 public DEPRECATED_accumulatedFee;
+    uint128 private DEPRECATED_accumulatedFee;
 
     mapping(address => TokenInfo) public tokenInfos;
     mapping(bytes32 => bool) public isRegisteredQueuedWithdrawals;
-    mapping(address => bool) public DEPRECATED_admins;
+    mapping(address => bool) private DEPRECATED_admins;
 
     address public treasury;
     ILiquidityPool public liquidityPool;
     IStrategyManager public eigenLayerStrategyManager;
     ILidoWithdrawalQueue public lidoWithdrawalQueue;
 
-    ICurvePool public DEPRECATED_cbEth_Eth_Pool;
-    ICurvePool public DEPRECATED_wbEth_Eth_Pool;
+    ICurvePool private DEPRECATED_cbEth_Eth_Pool;
+    ICurvePool private DEPRECATED_wbEth_Eth_Pool;
     ICurvePool public stEth_Eth_Pool;
 
-    IcbETH public DEPRECATED_cbEth;
-    IwBETH public DEPRECATED_wbEth;
+    IcbETH private DEPRECATED_cbEth;
+    IwBETH private DEPRECATED_wbEth;
     ILido public lido;
 
     IDelegationManager public eigenLayerDelegationManager;
@@ -87,7 +87,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     IERC20[] public dummies;
     address public l1SyncPool;
 
-    mapping(address => bool) public DEPRECATED_pausers;
+    mapping(address => bool) private DEPRECATED_pausers;
 
     address public etherfiRestaker;
 

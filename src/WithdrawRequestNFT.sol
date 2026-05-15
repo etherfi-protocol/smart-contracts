@@ -26,12 +26,12 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     // this treasury address is set to ethfi buyback wallet address
     address public immutable treasury;
     
-    ILiquidityPool public DEPRECATED_liquidityPool;
-    IeETH public DEPRECATED_eETH; 
-    IMembershipManager public DEPRECATED_membershipManager;
+    ILiquidityPool private DEPRECATED_liquidityPool;
+    IeETH private DEPRECATED_eETH;
+    IMembershipManager private DEPRECATED_membershipManager;
 
     mapping(uint256 => IWithdrawRequestNFT.WithdrawRequest) private _requests;
-    mapping(address => bool) public DEPRECATED_admins;
+    mapping(address => bool) private DEPRECATED_admins;
 
     uint32 public nextRequestId;
     uint32 public lastFinalizedRequestId;
@@ -46,7 +46,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint256 public totalRemainderEEthShares;
 
     bool public paused;
-    RoleRegistry public DEPRECATED_roleRegistry;
+    RoleRegistry private DEPRECATED_roleRegistry;
 
     uint128 public ethAmountLockedForWithdrawal;
 

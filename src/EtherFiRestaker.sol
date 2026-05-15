@@ -53,20 +53,20 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     error IncorrectRole();
 
-    LiquidityPool public DEPRECATED_liquidityPool;
-    Liquifier public DEPRECATED_liquifier;
-    ILidoWithdrawalQueue public DEPRECATED_lidoWithdrawalQueue;
-    ILido public DEPRECATED_lido;
-    IDelegationManager public DEPRECATED_eigenLayerDelegationManager;
-    IStrategyManager public DEPRECATED_eigenLayerStrategyManager;
+    LiquidityPool private DEPRECATED_liquidityPool;
+    Liquifier private DEPRECATED_liquifier;
+    ILidoWithdrawalQueue private DEPRECATED_lidoWithdrawalQueue;
+    ILido private DEPRECATED_lido;
+    IDelegationManager private DEPRECATED_eigenLayerDelegationManager;
+    IStrategyManager private DEPRECATED_eigenLayerStrategyManager;
 
-    mapping(address => bool) public DEPRECATED_pausers;
-    mapping(address => bool) public DEPRECATED_admins;
+    mapping(address => bool) private DEPRECATED_pausers;
+    mapping(address => bool) private DEPRECATED_admins;
 
     mapping(address => TokenInfo) public tokenInfos;
 
     EnumerableSet.Bytes32Set private withdrawalRootsSet;
-    mapping(bytes32 => IDelegationManager.Withdrawal) public DEPRECATED_withdrawalRootToWithdrawal;
+    mapping(bytes32 => IDelegationManager.Withdrawal) private DEPRECATED_withdrawalRootToWithdrawal;
 
 
     event QueuedStEthWithdrawals(uint256[] _reqIds);

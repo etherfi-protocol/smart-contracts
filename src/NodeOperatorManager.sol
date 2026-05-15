@@ -26,14 +26,14 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    address public DEPRECATED_auctionManagerContractAddress;
+    address private DEPRECATED_auctionManagerContractAddress;
 
     // user address => OperaterData Struct
     mapping(address => KeyData) public addressToOperatorData;
     mapping(address => bool) private whitelistedAddresses;
     mapping(address => bool) public registered;
 
-    mapping(address => bool) public DEPRECATED_admins;
+    mapping(address => bool) private DEPRECATED_admins;
     mapping(address => mapping(ILiquidityPool.SourceOfFunds => bool)) public operatorApprovedTags;
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.

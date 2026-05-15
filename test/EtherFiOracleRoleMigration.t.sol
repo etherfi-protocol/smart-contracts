@@ -77,11 +77,6 @@ contract EtherFiOracleRoleMigrationTest is TestSetup {
         assertFalse(etherFiOracleInstance.paused());
     }
 
-    function test_DEPRECATED_admins_storageReadable() public view {
-        bool v = etherFiOracleInstance.DEPRECATED_admins(address(0x1));
-        assertEq(v, false);
-    }
-
     function test_updateAdmin_selectorRemoved() public {
         (bool ok,) = address(etherFiOracleInstance).call(
             abi.encodeWithSignature("updateAdmin(address,bool)", address(this), true)

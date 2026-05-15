@@ -18,7 +18,7 @@ import "./utils/PausableUntil.sol";
 
 contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery {
     using CountersUpgradeable for CountersUpgradeable.Counter;
-    ILiquidityPool public DEPRECATED_liquidityPool;
+    ILiquidityPool private DEPRECATED_liquidityPool;
 
     uint256 public totalShares;
     mapping (address => uint256) public shares;
