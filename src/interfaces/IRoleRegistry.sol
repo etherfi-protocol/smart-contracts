@@ -82,6 +82,27 @@ interface IRoleRegistry {
     function onlyProtocolUpgrader(address account) external view;
 
     /**
+     * @notice Checks if an account is the operating timelock
+     * @dev Reverts if the account is not the operating timelock
+     * @param account The address to check
+     */
+    function onlyOperatingTimelock(address account) external view;
+
+    /**
+     * @notice Checks if an account is the operating multisig
+     * @dev Reverts if the account is not the operating multisig
+     * @param account The address to check
+     */
+    function onlyOperatingMultisig(address account) external view;
+
+    /**
+     * @notice Checks if an account is the guardian
+     * @dev Reverts if the account is not the guardian
+     * @param account The address to check
+     */
+    function onlyGuardian(address account) external view;
+
+    /**
      * @notice Returns the current owner of the contract
      * @return The address of the current owner
      */

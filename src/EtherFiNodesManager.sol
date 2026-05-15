@@ -67,28 +67,23 @@ contract EtherFiNodesManager is
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyPauser {
         _pause();
     }
 
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyPauser {
         _unpause();
     }
 
-    function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.GUARDIAN_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContractUntil() external onlyGuardian {
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unpauseContractUntil() external onlyPauser {
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyPauser {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -468,7 +463,17 @@ contract EtherFiNodesManager is
     //--------------------------------------------------------------------------------------
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyPauser() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 

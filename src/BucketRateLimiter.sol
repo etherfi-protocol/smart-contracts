@@ -23,13 +23,6 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;
 
-    error IncorrectRole();
-
-    modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
-        _;
-    }
-
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _roleRegistry) {
         roleRegistry = IRoleRegistry(_roleRegistry);
@@ -94,18 +87,21 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         consumer = _consumer;
     }
 
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyAdmin {
         _pause();
     }
 
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyAdmin {
         _unpause();
     }
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

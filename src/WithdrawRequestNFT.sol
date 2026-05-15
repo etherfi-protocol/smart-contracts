@@ -215,8 +215,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     // Seize the request simply by transferring it to another recipient
-    function seizeInvalidRequest(uint256 requestId, address recipient) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
+    function seizeInvalidRequest(uint256 requestId, address recipient) external onlyAdmin {
         require(!_requests[requestId].isValid, "Request is valid");
         require(_exists(requestId), "Request does not exist");
 
@@ -246,8 +245,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     /// @dev Admin can only invalidate requests that have NOT been finalized yet
-    function invalidateRequest(uint256 requestId) external {
-        if (!roleRegistry.hasRole(roleRegistry.GUARDIAN_ROLE(), msg.sender)) revert IncorrectRole();
+    function invalidateRequest(uint256 requestId) external onlyGuardian {
         require(requestId > lastFinalizedRequestId, "Cannot invalidate finalized request");
         require(isValid(requestId), "Request is not valid");
         _requests[requestId].isValid = false;
@@ -255,8 +253,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestInvalidated(uint32(requestId));
     }
 
-    function validateRequest(uint256 requestId) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function validateRequest(uint256 requestId) external onlyAdmin {
         require(_exists(requestId), "Request does not exist");
         require(!_requests[requestId].isValid, "Request is valid");
         if (requestId <= lastFinalizedRequestId) {
@@ -269,21 +266,18 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestValidated(uint32(requestId));
     }
 
-    function updateShareRemainderSplitToTreasuryInBps(uint16 _shareRemainderSplitToTreasuryInBps) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
+    function updateShareRemainderSplitToTreasuryInBps(uint16 _shareRemainderSplitToTreasuryInBps) external onlyAdmin {
         require(_shareRemainderSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
         shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
     }
 
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyPauser {
         if (paused) revert("Pausable: already paused");
         paused = true;
         emit Paused(msg.sender);
     }
 
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyPauser {
         if (!paused) revert("Pausable: not paused");
 
 
@@ -291,18 +285,15 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit Unpaused(msg.sender);
     }
 
-    function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.GUARDIAN_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContractUntil() external onlyGuardian {
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unpauseContractUntil() external onlyPauser {
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyPauser {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -384,6 +375,21 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     modifier onlyLiquidityPool() {
         require(msg.sender == address(liquidityPool), "Caller is not the liquidity pool");
+        _;
+    }
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyPauser() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 

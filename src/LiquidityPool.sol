@@ -450,16 +450,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @dev set the size of validators created when caling batchApproveRegistration().
     ///   In a future upgrade this will be a parameter to that call but was done like this to
     ///   to limit changes to other dependent contracts
-    function setValidatorSizeWei(uint256 _validatorSizeWei) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
+    function setValidatorSizeWei(uint256 _validatorSizeWei) external onlyAdmin {
         if (_validatorSizeWei < 32 ether || _validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
         validatorSizeWei = _validatorSizeWei;
     }
 
     /// @notice The admin can register an address to become a BNFT holder
     /// @param _user The address of the Validator Spawner to register
-    function registerValidatorSpawner(address _user) public {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
+    function registerValidatorSpawner(address _user) public onlyAdmin {
         require(!validatorSpawner[_user].registered, "Already registered");  
 
         validatorSpawner[_user] = ValidatorSpawner({registered: true});
@@ -469,9 +467,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /// @notice Removes a Validator Spawner
     /// @param _user the address of the Validator Spawner to remove
-    function unregisterValidatorSpawner(address _user) external {
+    function unregisterValidatorSpawner(address _user) external onlyAdmin {
         require(validatorSpawner[_user].registered, "Not registered");
-        require(roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender), "Incorrect Caller");
 
         delete validatorSpawner[_user];
 
@@ -479,8 +476,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /// @notice Send the exit requests as the T-NFT holder of the LiquidityPool validators
-    function DEPRECATED_sendExitRequests(uint256[] calldata _validatorIds) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
+    function DEPRECATED_sendExitRequests(uint256[] calldata _validatorIds) external onlyAdmin {
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             emit ValidatorExitRequested(_validatorIds[i]);
@@ -507,22 +503,19 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /// @notice Set the fee recipient address
     /// @param _feeRecipient The address to set as the fee recipient
-    function setFeeRecipient(address _feeRecipient) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
+    function setFeeRecipient(address _feeRecipient) external onlyAdmin {
         feeRecipient = _feeRecipient;
         emit UpdatedFeeRecipient(_feeRecipient);
     }
 
     /// @notice Whether or not nodes created via bNFT deposits should be restaked
-    function setRestakeBnftDeposits(bool _restake) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
+    function setRestakeBnftDeposits(bool _restake) external onlyAdmin {
 
         restakeBnftDeposits = _restake;
     }
 
     // Pauses the contract
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyPauser {
         if (paused) revert("Pausable: already paused");
 
         paused = true;
@@ -530,8 +523,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Unpauses the contract
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyPauser {
         if (!paused) revert("Pausable: not paused");
 
         paused = false;
@@ -539,20 +531,17 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Pauses contract until MAX_PAUSE_DURATION
-    function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.GUARDIAN_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContractUntil() external onlyGuardian {
         _pauseUntil();
     }
 
     // Unpauses contract from pauseUntil
-    function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unpauseContractUntil() external onlyPauser {
         _unpauseUntil();
     }
 
     /// @notice Sets the pause duration for the contract
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyPauser {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -737,6 +726,21 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     modifier nonBlacklisted() {
         IBlacklister(blacklister).nonBlacklisted(msg.sender);
+        _;
+    }
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyPauser() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 

@@ -114,7 +114,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         __ReentrancyGuard_init();
     }
 
-    function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate)  external hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE()) {
+    function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate)  external onlyAdmin {
         for(uint256 i = 0; i < _exitFeeSplitToTreasuryInBps.length; i++) {
             require (_exitFeeSplitToTreasuryInBps[i] <= MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS, "Exceeds max exit fee split to treasury");
             require (_exitFeeInBps[i] <= MAX_EXIT_FEE_IN_BPS, "Exceeds max exit fee");
@@ -317,7 +317,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param capacity The capacity of the bucket.
      * @param token The token to set the capacity for
      */
-    function setCapacity(uint256 capacity, address token) external hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE()) {
+    function setCapacity(uint256 capacity, address token) external onlyAdmin {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 bucketUnit = _convertToBucketUnit(capacity, Math.Rounding.Down);
         BucketLimiter.setCapacity(tokenToRedemptionInfo[token].limit, bucketUnit);
@@ -328,7 +328,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param refillRate The rate at which the bucket is refilled per second.
      * @param token The token to set the refill rate for
      */
-    function setRefillRatePerSecond(uint256 refillRate, address token) external hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE()) {
+    function setRefillRatePerSecond(uint256 refillRate, address token) external onlyAdmin {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 bucketUnit = _convertToBucketUnit(refillRate, Math.Rounding.Down);
         BucketLimiter.setRefillRate(tokenToRedemptionInfo[token].limit, bucketUnit);
@@ -339,38 +339,38 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param _exitFeeInBps The exit fee.
      * @param token The token to set the exit fee for
      */
-    function setExitFeeBasisPoints(uint16 _exitFeeInBps, address token) external hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE()) {
+    function setExitFeeBasisPoints(uint16 _exitFeeInBps, address token) external onlyAdmin {
         require(_exitFeeInBps <= MAX_EXIT_FEE_IN_BPS, "Exceeds max exit fee");
         tokenToRedemptionInfo[token].exitFeeInBps = _exitFeeInBps;
     }
 
-    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl, address token) external hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE()) {
+    function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl, address token) external onlyAdmin {
         require(_lowWatermarkInBpsOfTvl <= MAX_LOW_WATERMARK_IN_BPS_OF_TVL, "Exceeds max low watermark of tvl");
         tokenToRedemptionInfo[token].lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
     }
 
-    function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps, address token) external hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE()) {
+    function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps, address token) external onlyAdmin {
         require(_exitFeeSplitToTreasuryInBps <= MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS, "Exceeds max exit fee split to treasury");
         tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
     }
 
-    function pauseContract() external hasRole(roleRegistry.OPERATION_MULTISIG_ROLE()) {
+    function pauseContract() external onlyPauser {
         _pause();
     }
 
-    function unPauseContract() external hasRole(roleRegistry.OPERATION_MULTISIG_ROLE()) {
+    function unPauseContract() external onlyPauser {
         _unpause();
     }
 
-    function pauseContractUntil() external hasRole(roleRegistry.GUARDIAN_ROLE()) {
+    function pauseContractUntil() external onlyGuardian {
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external hasRole(roleRegistry.OPERATION_MULTISIG_ROLE()) {
+    function unpauseContractUntil() external onlyPauser {
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external hasRole(roleRegistry.OPERATION_MULTISIG_ROLE()) {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyPauser {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -445,12 +445,18 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         return _getImplementation();
     }
 
-    function _hasRole(bytes32 role, address account) internal view returns (bool) {
-        require(roleRegistry.hasRole(role, account), "EtherFiRedemptionManager: Unauthorized");
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
     }
 
-    modifier hasRole(bytes32 role) {
-        _hasRole(role, msg.sender);
+    modifier onlyPauser() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 

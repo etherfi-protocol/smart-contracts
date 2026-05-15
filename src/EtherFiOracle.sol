@@ -271,7 +271,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit QuorumUpdated(_quorumSize);
     }
 
-    function setOracleReportPeriod(uint32 _reportPeriodSlot) public isAdmin {
+    function setOracleReportPeriod(uint32 _reportPeriodSlot) public onlyAdmin {
         require(_reportPeriodSlot != 0, "Report period cannot be zero");
         require(_reportPeriodSlot % SLOTS_PER_EPOCH == 0, "Report period must be a multiple of the epoch");
         reportPeriodSlot = _reportPeriodSlot;
@@ -279,7 +279,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit OracleReportPeriodUpdated(_reportPeriodSlot);
     }
 
-    function setConsensusVersion(uint32 _consensusVersion) public isAdmin {
+    function setConsensusVersion(uint32 _consensusVersion) public onlyAdmin {
         require(_consensusVersion > consensusVersion, "New consensus version must be greater than the current one");
         consensusVersion = _consensusVersion;
 
@@ -287,19 +287,17 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     }
     
     function unpublishReport(bytes32 _hash) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         require(consensusStates[_hash].consensusReached, "Consensus is not reached yet");
         consensusStates[_hash].support = 0;
         consensusStates[_hash].consensusReached = false;
     }
 
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyPauser {
         _pause();
     }
 
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyPauser {
         _unpause();
     }
 
@@ -309,8 +307,13 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    modifier isAdmin() {
-        if (msg.sender != address(etherFiAdmin)) revert IncorrectRole();
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyPauser() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 

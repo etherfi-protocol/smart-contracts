@@ -100,32 +100,27 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     }
 
     /// @notice Pauses the contract, preventing consumption operations
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyAdmin {
         _pause();
     }
 
     /// @notice Unpauses the contract, allowing consumption operations
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyAdmin {
         _unpause();
     }
 
     /// @notice Pauses the contract until MAX_PAUSE_DURATION
-    function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.GUARDIAN_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContractUntil() external onlyGuardian {
         _pauseUntil();
     }
 
     /// @notice Unpauses the contract from pauseUntil
-    function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unpauseContractUntil() external onlyAdmin {
         _unpauseUntil();
     }
 
     /// @notice Sets the pause duration for the contract
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -199,7 +194,12 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     //--------------------------------------------------------------------------------------
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 }

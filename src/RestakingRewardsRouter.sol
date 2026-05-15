@@ -55,10 +55,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
         __UUPSUpgradeable_init();
     }
 
-    function setRecipientAddress(address _recipient) external {
-        if (
-            !roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)
-        ) revert IncorrectRole();
+    function setRecipientAddress(address _recipient) external onlyAdmin {
         if (_recipient == address(0)) revert InvalidAddress();
         recipientAddress = _recipient;
         emit RecipientAddressSet(_recipient);
@@ -93,5 +90,10 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
     }
 }

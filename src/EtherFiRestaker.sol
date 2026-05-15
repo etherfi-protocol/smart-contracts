@@ -370,14 +370,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // Pauses the contract
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyAdmin {
         _pause();
     }
 
     // Unpauses the contract
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyAdmin {
         _unpause();
     }
 
@@ -416,7 +414,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     /* MODIFIERS */
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 

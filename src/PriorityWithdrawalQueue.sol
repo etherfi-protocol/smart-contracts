@@ -130,12 +130,22 @@ contract PriorityWithdrawalQueue is
     }
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyPauser() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 
     modifier onlyRequestManager() {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_1(), msg.sender)) revert IncorrectRole();
         _;
     }
 
@@ -426,32 +436,27 @@ contract PriorityWithdrawalQueue is
         emit ShareRemainderSplitUpdated(_shareRemainderSplitToTreasuryInBps);
     }
 
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyPauser {
         if (paused) revert ContractPaused();
         paused = true;
         emit Paused(msg.sender);
     }
 
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyPauser {
         if (!paused) revert ContractNotPaused();
         paused = false;
         emit Unpaused(msg.sender);
     }
 
-    function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.GUARDIAN_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContractUntil() external onlyGuardian {
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unpauseContractUntil() external onlyPauser {
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyPauser {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 

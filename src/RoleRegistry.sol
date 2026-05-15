@@ -14,7 +14,9 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     address public immutable revokeAdmin;
 
     error OnlyProtocolUpgrader();
-    error OnlyRevokeAdmin();
+    error OnlyOperatingTimelock();
+    error OnlyOperatingMultisig();
+    error OnlyGuardian();
 
     /// @notice Returns the maximum allowed role value
     /// @dev This is used by EnumerableRoles._validateRole to ensure roles are within valid range
@@ -72,7 +74,7 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     /// @param role The role to revoke (as bytes32)
     /// @param account The address to revoke the role from
     function revokeFast(bytes32 role, address account) public {
-        if (msg.sender != revokeAdmin) revert OnlyRevokeAdmin();
+        onlyOperatingMultisig(msg.sender);
         _setRole(account, uint256(role), false);
     }
 
@@ -86,6 +88,18 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
 
     function onlyProtocolUpgrader(address account) public view {
         if (owner() != account) revert OnlyProtocolUpgrader();
+    }
+
+    function onlyOperatingTimelock(address account) public view {
+        if (!hasRole(OPERATION_TIMELOCK_ROLE, account)) revert OnlyOperatingTimelock();
+    }
+
+    function onlyOperatingMultisig(address account) public view {
+        if (!hasRole(OPERATION_MULTISIG_ROLE, account)) revert OnlyOperatingMultisig();
+    }
+
+    function onlyGuardian(address account) public view {
+        if (!hasRole(GUARDIAN_ROLE, account)) revert OnlyGuardian();
     }
 
     function __revertEnumerableRolesUnauthorized() private pure {

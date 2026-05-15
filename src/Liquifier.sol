@@ -224,19 +224,16 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         IERC20(_token).safeTransfer(etherfiRestaker, _amount);
     }
 
-    function updateWhitelistedToken(address _token, bool _isWhitelisted) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
+    function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyAdmin {
         tokenInfos[_token].isWhitelisted = _isWhitelisted;
     }
 
-    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyAdmin {
         tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
     }
     
-    function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
+    function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyAdmin {
         if (_discountInBasisPoints < MIN_DISCOUNT_RATE_IN_BPS || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
@@ -249,49 +246,41 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0, _isL2Eth);
     }
 
-    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
+    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyAdmin {
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
     }
 
-    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyAdmin {
         if (_discountInBasisPoints < MIN_DISCOUNT_RATE_IN_BPS || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
     }
 
-    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyAdmin {
         quoteStEthWithCurve = _quoteStEthWithCurve;
     }
 
     //Pauses the contract
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyAdmin {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyAdmin {
         _unpause();
     }
 
     /// @notice Pauses the contract until MAX_PAUSE_DURATION
-    function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.GUARDIAN_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContractUntil() external onlyGuardian {
         _pauseUntil();
     }
 
     /// @notice Unpauses the contract from pauseUntil
-    function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unpauseContractUntil() external onlyAdmin {
         _unpauseUntil();
     }
 
     /// @notice Sets the pause duration for the contract
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -440,6 +429,16 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     function _requireNotPaused() internal override view {
         _requireNotPausedUntil();
         super._requireNotPaused();
+    }
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
+        _;
     }
 
     modifier nonBlacklisted() {

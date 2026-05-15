@@ -249,14 +249,12 @@ contract AuctionManager is
     }
 
     //Pauses the contract
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyAdmin {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyAdmin {
         _unpause();
     }
 
@@ -366,7 +364,7 @@ contract AuctionManager is
     }
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 

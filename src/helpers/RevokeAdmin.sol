@@ -9,8 +9,6 @@ import "../interfaces/IRoleRegistry.sol";
 contract RevokeAdmin is Initializable, UUPSUpgradeable {
     IRoleRegistry public immutable roleRegistry;
 
-    error IncorrectRole();
-
     constructor(address _roleRegistry) {
         roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
@@ -24,16 +22,16 @@ contract RevokeAdmin is Initializable, UUPSUpgradeable {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
-    function revokePauserUntilRole(address account) external onlyRevokeAdmin {
+    function revokePauserUntilRole(address account) external onlyAdmin {
         roleRegistry.revokeFast(roleRegistry.GUARDIAN_ROLE(), account);
     }
 
-    function revokeBlacklistUntilRole(address account) external onlyRevokeAdmin {
+    function revokeBlacklistUntilRole(address account) external onlyAdmin {
         roleRegistry.revokeFast(roleRegistry.GUARDIAN_ROLE(), account);
     }
 
-    modifier onlyRevokeAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), msg.sender)) revert IncorrectRole();
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 }
