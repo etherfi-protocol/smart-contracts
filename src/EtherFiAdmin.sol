@@ -60,9 +60,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     bytes32 public constant ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE");
     bytes32 public constant ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE");
 
-    uint256 public constant MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
-    uint256 public constant MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY = 500;
-
     IEtherFiOracle public immutable etherFiOracle;
     IStakingManager public immutable stakingManager;
     IAuctionManager public immutable auctionManager;
@@ -75,7 +72,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     int256 public immutable MAX_ACCEPTABLE_REBASE_APR_IN_BPS;
     uint256 public immutable MAX_VALIDATOR_TASK_BATCH_SIZE;
-
+    uint256 public immutable MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY;
+    uint256 public immutable MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY;
     uint256 public immutable STALE_ORACLE_REPORT_BLOCK_WINDOW;
 
     struct ConstructorAddresses {
@@ -109,10 +107,19 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error NoWithdrawalsToFinalize();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(ConstructorAddresses memory _constructorAddresses, int256 _maxAcceptableRebaseAprInBps, uint256 _maxValidatorTaskBatchSize, uint256 _staleOracleReportBlockWindow) {
+    constructor(
+        ConstructorAddresses memory _constructorAddresses,
+        int256 _maxAcceptableRebaseAprInBps,
+        uint256 _maxValidatorTaskBatchSize,
+        uint256 _staleOracleReportBlockWindow,
+        uint256 _maxFinalizedWithdrawalAmountPerDay,
+        uint256 _maxNumValidatorsToApprovePerDay
+    ) {
         if (_maxAcceptableRebaseAprInBps <= 0 || _maxAcceptableRebaseAprInBps > 10_000) revert InvalidMaxAcceptableRebaseApr();
         if (_maxValidatorTaskBatchSize == 0) revert InvalidValidatorTaskBatchSize();
         if (_staleOracleReportBlockWindow == 0) revert InvalidStaleOracleReportBlockWindow();
+        if (_maxFinalizedWithdrawalAmountPerDay == 0) revert InvalidMaxFinalizedWithdrawalAmountPerDay();
+        // _maxNumValidatorsToApprovePerDay = 0 is allowed (signals "pause new validators") per author intent
 
         etherFiOracle = IEtherFiOracle(_constructorAddresses.etherFiOracle);
         stakingManager = IStakingManager(_constructorAddresses.stakingManager);
@@ -127,6 +134,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         MAX_ACCEPTABLE_REBASE_APR_IN_BPS = _maxAcceptableRebaseAprInBps;
         MAX_VALIDATOR_TASK_BATCH_SIZE = _maxValidatorTaskBatchSize;
         STALE_ORACLE_REPORT_BLOCK_WINDOW = _staleOracleReportBlockWindow;
+        MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = _maxFinalizedWithdrawalAmountPerDay;
+        MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY = _maxNumValidatorsToApprovePerDay;
 
          _disableInitializers();
     }
