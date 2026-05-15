@@ -136,6 +136,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param outputToken The token to redeem to (ETH or stETH).
      */
     function redeemEEth(uint256 eEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant nonBlacklisted(receiver) {
+        blacklister.nonBlacklisted(msg.sender);
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
 
@@ -146,6 +147,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param outputToken The token to redeem to (ETH or stETH).
      */
     function redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) public whenNotPaused nonReentrant nonBlacklisted(receiver) {
+        blacklister.nonBlacklisted(msg.sender);
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
 
@@ -157,6 +159,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param outputToken The token to redeem to (ETH or stETH).
      */
     function redeemEEthWithPermit(uint256 eEthAmount, address receiver, IeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant nonBlacklisted(receiver) {
+        blacklister.nonBlacklisted(msg.sender);
         try eEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s) {} catch {}
         _redeemEEth(eEthAmount, receiver, outputToken);
     }
@@ -169,6 +172,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param outputToken The token to redeem to (ETH or stETH).
      */
     function redeemWeEthWithPermit(uint256 weEthAmount, address receiver, IWeETH.PermitInput calldata permit, address outputToken) external whenNotPaused nonReentrant nonBlacklisted(receiver) {
+        blacklister.nonBlacklisted(msg.sender);
         try weEth.permit(msg.sender, address(this), permit.value, permit.deadline, permit.v, permit.r, permit.s)  {} catch {}
         _redeemWeEth(weEthAmount, receiver, outputToken);
     }
@@ -456,7 +460,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     }
 
     modifier nonBlacklisted(address receiver) {
-        blacklister.nonBlacklisted(msg.sender);
         blacklister.nonBlacklisted(receiver);
         _;
     }

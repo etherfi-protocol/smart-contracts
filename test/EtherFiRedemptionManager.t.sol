@@ -1953,4 +1953,158 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.prank(user);
         etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, ETH_ADDRESS);
     }
+
+    //--------------------------------------------------------------------------------------
+    //--------------------------  Blacklist: caller + receiver  ----------------------------
+    //--------------------------------------------------------------------------------------
+
+    function _expectBlacklistedRevert(address u) internal {
+        vm.expectRevert(abi.encodeWithSelector(Blacklister.BlacklistedUser.selector, u));
+    }
+
+    function _blacklist(address u) internal {
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(u);
+    }
+
+    function _setupBlacklistRedeemScenario() internal {
+        // Standard liquidity + user eETH/weETH balance + rate limiter.
+        _setupRedeemScenario();
+        // Pre-stage a weETH balance + approval so redeemWeEth tests can run end-to-end
+        // for the "neither blacklisted" smoke case.
+        vm.startPrank(user);
+        eETHInstance.approve(address(weEthInstance), 2 ether);
+        weEthInstance.wrap(2 ether);
+        IERC20(address(weEthInstance)).approve(address(etherFiRedemptionManagerInstance), type(uint256).max);
+        vm.stopPrank();
+    }
+
+    // 1) Caller blacklisted, receiver clean -> revert with BlacklistedUser(msg.sender)
+    function test_redeemEEth_revertsWhenCallerBlacklisted() public {
+        _setupBlacklistRedeemScenario();
+        address cleanReceiver = makeAddr("cleanReceiver");
+
+        _blacklist(user);
+
+        _expectBlacklistedRevert(user);
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, cleanReceiver, ETH_ADDRESS);
+    }
+
+    function test_redeemWeEth_revertsWhenCallerBlacklisted() public {
+        _setupBlacklistRedeemScenario();
+        address cleanReceiver = makeAddr("cleanReceiver");
+
+        _blacklist(user);
+
+        _expectBlacklistedRevert(user);
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemWeEth(0.5 ether, cleanReceiver, ETH_ADDRESS);
+    }
+
+    function test_redeemEEthWithPermit_revertsWhenCallerBlacklistedBeforePermit() public {
+        _setupBlacklistRedeemScenario();
+        address cleanReceiver = makeAddr("cleanReceiver");
+
+        _blacklist(user);
+
+        // Permit input is irrelevant — the caller check must trip before the permit attempt.
+        IeETH.PermitInput memory emptyPermit;
+        _expectBlacklistedRevert(user);
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemEEthWithPermit(1 ether, cleanReceiver, emptyPermit, ETH_ADDRESS);
+    }
+
+    function test_redeemWeEthWithPermit_revertsWhenCallerBlacklistedBeforePermit() public {
+        _setupBlacklistRedeemScenario();
+        address cleanReceiver = makeAddr("cleanReceiver");
+
+        _blacklist(user);
+
+        IWeETH.PermitInput memory emptyPermit;
+        _expectBlacklistedRevert(user);
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemWeEthWithPermit(0.5 ether, cleanReceiver, emptyPermit, ETH_ADDRESS);
+    }
+
+    // 2) Caller clean, receiver blacklisted -> revert with BlacklistedUser(receiver) (regression)
+    function test_redeemEEth_revertsWhenReceiverBlacklisted() public {
+        _setupBlacklistRedeemScenario();
+        address dirtyReceiver = makeAddr("dirtyReceiver");
+
+        _blacklist(dirtyReceiver);
+
+        _expectBlacklistedRevert(dirtyReceiver);
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, dirtyReceiver, ETH_ADDRESS);
+    }
+
+    function test_redeemWeEth_revertsWhenReceiverBlacklisted() public {
+        _setupBlacklistRedeemScenario();
+        address dirtyReceiver = makeAddr("dirtyReceiver");
+
+        _blacklist(dirtyReceiver);
+
+        _expectBlacklistedRevert(dirtyReceiver);
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemWeEth(0.5 ether, dirtyReceiver, ETH_ADDRESS);
+    }
+
+    // 3) Both blacklisted -> still reverts.
+    //
+    // The `nonBlacklisted(receiver)` modifier wraps the function body, so the receiver
+    // check fires before the inline `blacklister.nonBlacklisted(msg.sender)` call. The
+    // exact revert address is therefore the receiver. What matters for defense-in-depth
+    // is that the call reverts when *either* party is blacklisted; we lock down the
+    // ordering with this test so future refactors that move the caller check ahead of
+    // the modifier (or merge it back into the modifier) surface as an intentional change.
+    function test_redeemEEth_revertsWhenBothBlacklisted() public {
+        _setupBlacklistRedeemScenario();
+        address dirtyReceiver = makeAddr("dirtyReceiver");
+
+        _blacklist(user);
+        _blacklist(dirtyReceiver);
+
+        _expectBlacklistedRevert(dirtyReceiver);
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, dirtyReceiver, ETH_ADDRESS);
+    }
+
+    function test_redeemEEthWithPermit_revertsWhenBothBlacklisted() public {
+        _setupBlacklistRedeemScenario();
+        address dirtyReceiver = makeAddr("dirtyReceiver");
+
+        _blacklist(user);
+        _blacklist(dirtyReceiver);
+
+        IeETH.PermitInput memory emptyPermit;
+        _expectBlacklistedRevert(dirtyReceiver);
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemEEthWithPermit(1 ether, dirtyReceiver, emptyPermit, ETH_ADDRESS);
+    }
+
+    // 4) Neither blacklisted -> smoke test that the entrypoint still succeeds
+    function test_redeemEEth_succeedsWhenNeitherBlacklisted() public {
+        _setupBlacklistRedeemScenario();
+        address cleanReceiver = makeAddr("cleanReceiver");
+
+        uint256 receiverBalBefore = cleanReceiver.balance;
+
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemEEth(1 ether, cleanReceiver, ETH_ADDRESS);
+
+        assertGt(cleanReceiver.balance, receiverBalBefore);
+    }
+
+    function test_redeemWeEth_succeedsWhenNeitherBlacklisted() public {
+        _setupBlacklistRedeemScenario();
+        address cleanReceiver = makeAddr("cleanReceiver");
+
+        uint256 receiverBalBefore = cleanReceiver.balance;
+
+        vm.prank(user);
+        etherFiRedemptionManagerInstance.redeemWeEth(0.5 ether, cleanReceiver, ETH_ADDRESS);
+
+        assertGt(cleanReceiver.balance, receiverBalBefore);
+    }
 }
