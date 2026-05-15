@@ -478,7 +478,7 @@ contract EtherFiNodesManager is
     }
 
     modifier onlyEigenlayerAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender) || msg.sender != address(stakingManager)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender) && msg.sender != address(stakingManager)) revert IncorrectRole();
         _;
     }
 

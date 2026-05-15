@@ -17,6 +17,7 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     error OnlyOperatingTimelock();
     error OnlyOperatingMultisig();
     error OnlyGuardian();
+    error OnlyRevokeAdmin();
 
     /// @notice Returns the maximum allowed role value
     /// @dev This is used by EnumerableRoles._validateRole to ensure roles are within valid range
@@ -74,7 +75,7 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     /// @param role The role to revoke (as bytes32)
     /// @param account The address to revoke the role from
     function revokeFast(bytes32 role, address account) public {
-        onlyOperatingMultisig(msg.sender);
+        if (msg.sender != revokeAdmin) revert OnlyRevokeAdmin();
         _setRole(account, uint256(role), false);
     }
 
