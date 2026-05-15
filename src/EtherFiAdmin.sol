@@ -337,16 +337,47 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _validateReport(IEtherFiOracle.OracleReport calldata _report, bytes32 _reportHash) internal view returns (bool, string memory) {
+        bool ok;
+        string memory err;
+
+        // Stage 1: report freshness / consensus
+        (ok, err) = _validateReportFreshness(_report, _reportHash);
+        if (!ok) return (false, err);
+
+        // Stage 2: derive timing
+        uint256 elapsedSlots = _report.refSlotTo - lastHandledReportRefSlot;
+        uint256 elapsedTime = elapsedSlots * 12 seconds;
+        if (elapsedTime == 0) return (false, "EtherFiAdmin: report spans zero slots");
+
+        // Stage 3: rebase APR cap
+        (ok, err) = _validateRebaseApr(_report, elapsedTime);
+        if (!ok) return (false, err);
+
+        // Stage 4: protocol fees
+        (ok, err) = _validateProtocolFees(_report);
+        if (!ok) return (false, err);
+
+        // Stage 5: validator approvals per day
+        (ok, err) = _validateValidatorApprovals(_report, elapsedTime);
+        if (!ok) return (false, err);
+
+        // Stage 6: withdrawals
+        (ok, err) = _validateWithdrawals(_report, elapsedTime);
+        if (!ok) return (false, err);
+
+        return (true, "");
+    }
+
+    function _validateReportFreshness(IEtherFiOracle.OracleReport calldata _report, bytes32 _reportHash) internal view returns (bool, string memory) {
         uint32 current_slot = etherFiOracle.computeSlotAtTimestamp(block.timestamp);
         if (!etherFiOracle.isConsensusReached(_reportHash)) return (false, "EtherFiAdmin: report didn't reach consensus");
         if (slotForNextReportToProcess() != _report.refSlotFrom) return (false, "EtherFiAdmin: report has wrong `refSlotFrom`");
         if (blockForNextReportToProcess() != _report.refBlockFrom) return (false, "EtherFiAdmin: report has wrong `refBlockFrom`");
         if (current_slot < postReportWaitTimeInSlots + etherFiOracle.getConsensusSlot(_reportHash)) return (false, "EtherFiAdmin: report is too fresh");
+        return (true, "");
+    }
 
-        uint256 elapsedTime = (_report.refSlotTo - lastHandledReportRefSlot) * 12 seconds;
-        if (elapsedTime == 0) return (false, "EtherFiAdmin: report spans zero slots");
-
-        // validate accrued rewards
+    function _validateRebaseApr(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal view returns (bool, string memory) {
         int256 currentTVL = int128(uint128(liquidityPool.getTotalPooledEther()));
 
         // TVL change guard: caps reported APR (absolute, positive or negative) at acceptableRebaseAprInBps.
@@ -359,18 +390,24 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
         int256 absApr = (apr > 0) ? apr : - apr;
         if (absApr > acceptableRebaseAprInBps) return (false, "EtherFiAdmin: TVL changed too much");
+        return (true, "");
+    }
 
-        // validate protocol fees
+    function _validateProtocolFees(IEtherFiOracle.OracleReport calldata _report) internal pure returns (bool, string memory) {
         if (_report.protocolFees < 0) return (false, "EtherFiAdmin: protocol fees can't be negative");
         int128 totalRewards = _report.protocolFees + _report.accruedRewards;
         // protocol fees are less than 20% of total rewards
         if (_report.protocolFees > 0 && _report.protocolFees * int256(uint256(MAX_PROTOCOL_FEE_INV_RATIO)) > totalRewards) return (false, "EtherFiAdmin: protocol fees exceed 20% total rewards");
+        return (true, "");
+    }
 
-        // validate approvals
+    function _validateValidatorApprovals(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal view returns (bool, string memory) {
         uint256 numValidatorsToApprovePerDay = (_report.validatorsToApprove.length * 1 days) / elapsedTime;
         if (numValidatorsToApprovePerDay > maxNumValidatorsToApprovePerDay) return (false, "EtherFiAdmin: number of validators to approve exceeds max");
+        return (true, "");
+    }
 
-        // validate withdrawals
+    function _validateWithdrawals(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal view returns (bool, string memory) {
         uint256 finalizedWithdrawalAmountPerDay = (_report.finalizedWithdrawalAmount * 1 days) / elapsedTime;
         if (finalizedWithdrawalAmountPerDay > maxFinalizedWithdrawalAmountPerDay) return (false, "EtherFiAdmin: finalized withdrawal amount exceeds max");
         if (_report.finalizedWithdrawalAmount > address(liquidityPool).balance) return (false, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
@@ -386,8 +423,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             }
         }
         if (sumOfRequests != _report.finalizedWithdrawalAmount) return (false, "EtherFiAdmin: sum of requests does not match finalized withdrawal amount");
-
-        // report is valid
         return (true, "");
     }
 
