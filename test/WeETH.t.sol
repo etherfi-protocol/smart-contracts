@@ -6,6 +6,7 @@ import "./TestERC20.sol";
 import "./TestERC721.sol";
 import {ForceETHSender} from "./EETH.t.sol";
 import "../src/helpers/Blacklister.sol";
+import "../src/utils/PausableUntil.sol";
 
 contract WeETHTest is TestSetup {
     function setUp() public {
@@ -665,6 +666,303 @@ contract WeETHTest is TestSetup {
         blacklisterInstance.blacklistUser(alice);
         vm.prank(owner);
         blacklisterInstance.unblacklistUser(alice);
+
+        vm.prank(alice);
+        weEthInstance.transfer(bob, 0.5 ether);
+        assertEq(weEthInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    // -------------------------------------------------------------------------
+    // pauseContractUntil / unpauseContractUntil
+    //
+    // WeETH inherits PausableUntil; wrap/unwrap and the ERC20 surface
+    // (transfer / transferFrom / approve / permit / wrapWithPermit) all carry
+    // the `whenNotPausedUntil` modifier. Entry points are gated by
+    // PAUSE_UNTIL_ROLE / UNPAUSE_UNTIL_ROLE / PAUSE_DURATION_SETTER on
+    // RoleRegistry. State lives in a fixed namespaced storage slot.
+    // -------------------------------------------------------------------------
+
+    bytes32 constant WEETH_PAUSABLE_UNTIL_SLOT =
+        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
+
+    address pauseUntilPauser = makeAddr("weEthPauseUntilPauser");
+    address unpauseUntilUnpauser = makeAddr("weEthUnpauseUntilUnpauser");
+    address pauseUntilDurationSetter = makeAddr("weEthPauseUntilDurationSetter");
+
+    function _grantWeEthPauseUntilRoles() internal {
+        vm.startPrank(roleRegistryInstance.owner());
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
+        vm.stopPrank();
+        // Foundry's default block.timestamp is too small — the cooldown check is
+        // `lastPauseTimestamp + pauseUntilDuration + COOLDOWN > block.timestamp`,
+        // which fires on the very first call unless we warp forward past that sum.
+        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
+
+        // Resolve MAX_PAUSE_DURATION before the prank — otherwise the nested
+        // staticcall consumes the prank and setPauseUntilDuration is called by
+        // the test contract instead of pauseUntilDurationSetter.
+        uint256 maxDuration = weEthInstance.MAX_PAUSE_DURATION();
+        vm.prank(pauseUntilDurationSetter);
+        weEthInstance.setPauseUntilDuration(maxDuration);
+    }
+
+    function _weEthPausedUntil() internal view returns (uint256) {
+        return uint256(vm.load(address(weEthInstance), WEETH_PAUSABLE_UNTIL_SLOT));
+    }
+
+    // ---- pauseContractUntil role gating -------------------------------------
+
+    function test_WeETH_pauseContractUntil_requiresRole() public {
+        _grantWeEthPauseUntilRoles();
+
+        vm.prank(bob);
+        vm.expectRevert(WeETH.IncorrectRole.selector);
+        weEthInstance.pauseContractUntil();
+
+        // PROTOCOL_PAUSER (admin) alone is insufficient — needs PAUSE_UNTIL_ROLE.
+        vm.prank(admin);
+        vm.expectRevert(WeETH.IncorrectRole.selector);
+        weEthInstance.pauseContractUntil();
+
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseContractUntil();
+        assertEq(_weEthPausedUntil(), block.timestamp + weEthInstance.MAX_PAUSE_DURATION());
+    }
+
+    function test_WeETH_unpauseContractUntil_requiresRole() public {
+        _grantWeEthPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseContractUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(WeETH.IncorrectRole.selector);
+        weEthInstance.unpauseContractUntil();
+
+        // PROTOCOL_UNPAUSER (admin) alone is insufficient — needs UNPAUSE_UNTIL_ROLE.
+        vm.prank(admin);
+        vm.expectRevert(WeETH.IncorrectRole.selector);
+        weEthInstance.unpauseContractUntil();
+
+        vm.prank(unpauseUntilUnpauser);
+        weEthInstance.unpauseContractUntil();
+        assertEq(_weEthPausedUntil(), 0);
+    }
+
+    function test_WeETH_setPauseUntilDuration_requiresRole() public {
+        _grantWeEthPauseUntilRoles();
+        uint256 maxDur = weEthInstance.MAX_PAUSE_DURATION();
+
+        vm.prank(bob);
+        vm.expectRevert(WeETH.IncorrectRole.selector);
+        weEthInstance.setPauseUntilDuration(maxDur);
+
+        // PAUSE_UNTIL_ROLE alone is insufficient.
+        vm.prank(pauseUntilPauser);
+        vm.expectRevert(WeETH.IncorrectRole.selector);
+        weEthInstance.setPauseUntilDuration(maxDur);
+    }
+
+    function test_WeETH_setPauseUntilDuration_revertsOnInvalidValue() public {
+        _grantWeEthPauseUntilRoles();
+        uint256 belowMin = weEthInstance.MIN_PAUSE_DURATION() - 1;
+        uint256 aboveMax = weEthInstance.MAX_PAUSE_DURATION() + 1;
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        weEthInstance.setPauseUntilDuration(belowMin);
+
+        vm.prank(pauseUntilDurationSetter);
+        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
+        weEthInstance.setPauseUntilDuration(aboveMax);
+    }
+
+    function test_WeETH_pauseContractUntil_cooldownEnforced() public {
+        _grantWeEthPauseUntilRoles();
+
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseContractUntil();
+
+        // Unpause and re-attempt before cooldown ends.
+        // Cooldown = MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN.
+        vm.prank(unpauseUntilUnpauser);
+        weEthInstance.unpauseContractUntil();
+
+        // Warp past MAX_PAUSE_DURATION (so we are no longer pausedUntil) but not past the cooldown.
+        vm.warp(block.timestamp + weEthInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.prank(pauseUntilPauser);
+        vm.expectRevert(PausableUntil.PauserCooldownStillActive.selector);
+        weEthInstance.pauseContractUntil();
+
+        // After the cooldown window also passes, same pauser can re-pause.
+        vm.warp(block.timestamp + weEthInstance.PAUSER_UNTIL_COOLDOWN());
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseContractUntil();
+    }
+
+    // ---- pause-until blocks wrap/unwrap -------------------------------------
+
+    function test_WeETH_wrap_revertsWhenPausedUntil() public {
+        _aliceWithEEth(1 ether);
+
+        _grantWeEthPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _weEthPausedUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        weEthInstance.wrap(1 ether);
+    }
+
+    function test_WeETH_wrapWithPermit_revertsWhenPausedUntil() public {
+        // Set up alice with eEth and a valid permit signature.
+        vm.deal(bob, 10 ether);
+        vm.prank(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+
+        startHoax(alice);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+
+        uint256 aliceNonce = eETHInstance.nonces(alice);
+        ILiquidityPool.PermitInput memory permitInput = createPermitInput(
+            2, address(weEthInstance), 5 ether, aliceNonce, 2 ** 256 - 1, eETHInstance.DOMAIN_SEPARATOR()
+        );
+
+        _grantWeEthPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _weEthPausedUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        weEthInstance.wrapWithPermit(5 ether, permitInput);
+    }
+
+    function test_WeETH_unwrap_revertsWhenPausedUntil() public {
+        _aliceWithWeEth(1 ether);
+
+        _grantWeEthPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _weEthPausedUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        weEthInstance.unwrap(0.5 ether);
+    }
+
+    // ---- pause-until blocks ERC20 surface -----------------------------------
+
+    function test_WeETH_transfer_revertsWhenPausedUntil() public {
+        _aliceWithWeEth(1 ether);
+
+        _grantWeEthPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _weEthPausedUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        weEthInstance.transfer(bob, 0.5 ether);
+    }
+
+    function test_WeETH_transferFrom_revertsWhenPausedUntil() public {
+        _aliceWithWeEth(1 ether);
+        vm.prank(alice);
+        weEthInstance.approve(bob, 1 ether);
+
+        _grantWeEthPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _weEthPausedUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        weEthInstance.transferFrom(alice, bob, 0.5 ether);
+    }
+
+    function test_WeETH_approve_revertsWhenPausedUntil() public {
+        _aliceWithWeEth(1 ether);
+
+        _grantWeEthPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _weEthPausedUntil();
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        weEthInstance.approve(bob, 1 ether);
+    }
+
+    function test_WeETH_permit_revertsWhenPausedUntil() public {
+        _aliceWithWeEth(1 ether);
+
+        // Pre-compute a valid permit on weEth for alice (priv key = 2).
+        uint256 aliceNonce = weEthInstance.nonces(alice);
+        ILiquidityPool.PermitInput memory permitInput = createPermitInput(
+            2, bob, 1 ether, aliceNonce, 2 ** 256 - 1, weEthInstance.DOMAIN_SEPARATOR()
+        );
+
+        _grantWeEthPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseContractUntil();
+
+        uint256 pausedUntilTs = _weEthPausedUntil();
+
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        weEthInstance.permit(alice, bob, 1 ether, 2 ** 256 - 1, permitInput.v, permitInput.r, permitInput.s);
+    }
+
+    // ---- recovery: pause-until window elapses or manual unpause -------------
+
+    function test_WeETH_wrap_unblockedAfterPauseExpires() public {
+        _aliceWithEEth(1 ether);
+
+        _grantWeEthPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseContractUntil();
+
+        // Strict `>=` comparison in _requireNotPausedUntil ⇒ opens at exactly `pausedUntil + 1`.
+        vm.warp(block.timestamp + weEthInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.prank(alice);
+        weEthInstance.wrap(1 ether);
+        assertEq(weEthInstance.balanceOf(alice), 1 ether);
+    }
+
+    function test_WeETH_transfer_unblockedAfterManualUnpause() public {
+        _aliceWithWeEth(1 ether);
+
+        _grantWeEthPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        weEthInstance.pauseContractUntil();
+
+        vm.prank(unpauseUntilUnpauser);
+        weEthInstance.unpauseContractUntil();
 
         vm.prank(alice);
         weEthInstance.transfer(bob, 0.5 ether);

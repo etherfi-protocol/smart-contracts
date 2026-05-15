@@ -12,8 +12,9 @@ import "./interfaces/IRateProvider.sol";
 import "./AssetRecovery.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
+import "./utils/PausableUntil.sol";
 
-contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
+contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider, AssetRecovery, PausableUntil {
 
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
@@ -71,7 +72,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     /// @notice Wraps eEth
     /// @param _eETHAmount the amount of eEth to wrap
     /// @return returns the amount of weEth the user receives
-    function wrap(uint256 _eETHAmount) public returns (uint256) {
+    function wrap(uint256 _eETHAmount) public whenNotPausedUntil returns (uint256) {
         require(_eETHAmount > 0, "weETH: can't wrap zero eETH");
         uint256 weEthAmount = liquidityPool.sharesForAmount(_eETHAmount);
         _mint(msg.sender, weEthAmount);
@@ -84,6 +85,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     /// @return returns the amount of weEth the user receives
     function wrapWithPermit(uint256 _eETHAmount, ILiquidityPool.PermitInput calldata _permit)
         external
+        whenNotPausedUntil
         returns (uint256)
     {
         try eETH.permit(msg.sender, address(this), _permit.value, _permit.deadline, _permit.v, _permit.r, _permit.s) {} catch {}
@@ -93,7 +95,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
     /// @notice Unwraps weETH
     /// @param _weETHAmount the amount of weETH to unwrap
     /// @return returns the amount of eEth the user receives
-    function unwrap(uint256 _weETHAmount) external returns (uint256) {
+    function unwrap(uint256 _weETHAmount) external whenNotPausedUntil returns (uint256) {
         require(_weETHAmount > 0, "Cannot unwrap a zero amount");
         uint256 eETHAmount = liquidityPool.amountForShare(_weETHAmount);
         _burn(msg.sender, _weETHAmount);
@@ -111,6 +113,49 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
         paused = false;
         emit Unpaused();
+    }
+
+    function pauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _pauseUntil();
+    }
+
+    function unpauseContractUntil() external {
+        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+        _unpauseUntil();
+    }
+
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
+        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+        _setPauseUntilDuration(_pauseUntilDuration);
+    }
+
+    // --- ERC20 overrides gated under PausableUntil ---
+    // The legacy `paused` boolean (gated through `_beforeTokenTransfer`) is
+    // preserved alongside this — the two pause systems are orthogonal.
+
+    function transfer(address to, uint256 amount) public override whenNotPausedUntil returns (bool) {
+        return super.transfer(to, amount);
+    }
+
+    function transferFrom(address from, address to, uint256 amount) public override whenNotPausedUntil returns (bool) {
+        return super.transferFrom(from, to, amount);
+    }
+
+    function approve(address spender, uint256 amount) public override whenNotPausedUntil returns (bool) {
+        return super.approve(spender, amount);
+    }
+
+    function permit(
+        address owner,
+        address spender,
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) public override whenNotPausedUntil {
+        super.permit(owner, spender, value, deadline, v, r, s);
     }
 
     function recoverETH(address payable to, uint256 amount) external {
