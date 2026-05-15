@@ -234,7 +234,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         return BEACON_GENESIS_TIME;
     }
 
-    function addCommitteeMember(address _address) public onlyOwner {
+    function addCommitteeMember(address _address) public onlyQuorumManager {
         require(committeeMemberStates[_address].registered == false, "Already registered");
         numCommitteeMembers++;
         numActiveCommitteeMembers++;
@@ -243,7 +243,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit CommitteeMemberAdded(_address);
     }
 
-    function removeCommitteeMember(address _address) public onlyOwner {
+    function removeCommitteeMember(address _address) public onlyQuorumManager {
         require(committeeMemberStates[_address].registered == true, "Not registered");
         numCommitteeMembers--;
         if (committeeMemberStates[_address].enabled) numActiveCommitteeMembers--;
@@ -252,7 +252,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit CommitteeMemberRemoved(_address);
     }
 
-    function manageCommitteeMember(address _address, bool _enabled) public onlyOwner {
+    function manageCommitteeMember(address _address, bool _enabled) public onlyQuorumManager {
         require(committeeMemberStates[_address].registered == true, "Not registered");
         require(committeeMemberStates[_address].enabled != _enabled, "Already in the target state");
         committeeMemberStates[_address].enabled = _enabled;
@@ -265,7 +265,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit CommitteeMemberUpdated(_address, _enabled);
     }
 
-    function setQuorumSize(uint32 _quorumSize) public onlyOwner {
+    function setQuorumSize(uint32 _quorumSize) public onlyQuorumManager {
         quorumSize = _quorumSize;
 
         emit QuorumUpdated(_quorumSize);
@@ -311,6 +311,11 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
     modifier isAdmin() {
         if (msg.sender != address(etherFiAdmin)) revert IncorrectRole();
+        _;
+    }
+
+    modifier onlyQuorumManager() {
+        if (!roleRegistry.hasRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 }

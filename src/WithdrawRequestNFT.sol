@@ -215,7 +215,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     // Seize the request simply by transferring it to another recipient
-    function seizeInvalidRequest(uint256 requestId, address recipient) external onlyOwner {
+    function seizeInvalidRequest(uint256 requestId, address recipient) external {
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
         require(!_requests[requestId].isValid, "Request is valid");
         require(_exists(requestId), "Request does not exist");
 
@@ -268,7 +269,8 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         emit WithdrawRequestValidated(uint32(requestId));
     }
 
-    function updateShareRemainderSplitToTreasuryInBps(uint16 _shareRemainderSplitToTreasuryInBps) external onlyOwner {
+    function updateShareRemainderSplitToTreasuryInBps(uint16 _shareRemainderSplitToTreasuryInBps) external {
+        if (!roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), msg.sender)) revert IncorrectRole();
         require(_shareRemainderSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
         shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
     }
