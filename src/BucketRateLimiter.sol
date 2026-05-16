@@ -15,8 +15,8 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     BucketLimiter.Limit public limit;
     address public consumer;
 
-    mapping(address => bool) public DEPRECATED_admins;
-    mapping(address => bool) public DEPRECATED_pausers;
+    mapping(address => bool) private DEPRECATED_admins;
+    mapping(address => bool) private DEPRECATED_pausers;
 
     mapping(address => BucketLimiter.Limit) public limitsPerToken;
 
@@ -26,11 +26,6 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     bytes32 public constant BUCKET_RATE_LIMITER_ADMIN_ROLE = keccak256("BUCKET_RATE_LIMITER_ADMIN_ROLE");
 
     error IncorrectRole();
-
-    modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(BUCKET_RATE_LIMITER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        _;
-    }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _roleRegistry) {
@@ -111,5 +106,10 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    modifier onlyAdmin() {
+        if (!roleRegistry.hasRole(BUCKET_RATE_LIMITER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _;
+    }
 
 }

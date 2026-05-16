@@ -45,7 +45,7 @@ contract AuctionManager is
     uint128 public accumulatedRevenue;
     uint128 public accumulatedRevenueThreshold;
 
-    mapping(address => bool) public DEPRECATED_admins;
+    mapping(address => bool) private DEPRECATED_admins;
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;
