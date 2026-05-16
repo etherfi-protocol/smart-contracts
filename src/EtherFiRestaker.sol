@@ -51,8 +51,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     bytes32 public constant QUEUE_WITHDRAWALS_LIMIT_ID        = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
     bytes32 public constant DEPOSIT_INTO_STRATEGY_LIMIT_ID    = keccak256("DEPOSIT_INTO_STRATEGY_LIMIT_ID");
 
-    error IncorrectRole();
-
     LiquidityPool private DEPRECATED_liquidityPool;
     Liquifier private DEPRECATED_liquifier;
     ILidoWithdrawalQueue private DEPRECATED_lidoWithdrawalQueue;
@@ -73,6 +71,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     event CompletedStEthQueuedWithdrawals(uint256[] _reqIds);
     event CompletedQueuedWithdrawal(bytes32 _withdrawalRoot);
 
+    error IncorrectRole();
     error NotEnoughBalance();
     error IncorrectAmount();
     error StrategyShareNotEnough();

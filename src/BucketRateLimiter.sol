@@ -27,11 +27,6 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
 
     error IncorrectRole();
 
-    modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(BUCKET_RATE_LIMITER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        _;
-    }
-
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _roleRegistry) {
         roleRegistry = IRoleRegistry(_roleRegistry);
@@ -111,5 +106,10 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    modifier onlyAdmin() {
+        if (!roleRegistry.hasRole(BUCKET_RATE_LIMITER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        _;
+    }
 
 }
