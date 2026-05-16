@@ -990,17 +990,6 @@ contract EtherFiOracleTest is TestSetup {
 
     // ========== EtherFiAdmin Additional Coverage Tests ==========
 
-    function test_initializeRoleRegistry() public {
-        // RoleRegistry is already initialized in setUpTests
-        address roleRegistryAddr = address(roleRegistryInstance);
-        assertEq(address(etherFiAdminInstance.roleRegistry()), roleRegistryAddr);
-        
-        // Test: can only initialize once
-        vm.prank(owner);
-        vm.expectRevert("already initialized");
-        etherFiAdminInstance.initializeRoleRegistry(roleRegistryAddr);
-    }
-
     function test_setValidatorTaskBatchSize() public {
         // RoleRegistry is already initialized and alice already has the role in setUpTests
         vm.prank(alice);

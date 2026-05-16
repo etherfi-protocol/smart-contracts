@@ -110,15 +110,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         __Pausable_init();
         __UUPSUpgradeable_init();
 
-        DEPRECATED_liquidityPool = LiquidityPool(payable(_liquidityPool));
-        DEPRECATED_liquifier = Liquifier(payable(_liquifier));
-
-        DEPRECATED_lido = DEPRECATED_liquifier.lido();
-        DEPRECATED_lidoWithdrawalQueue = DEPRECATED_liquifier.lidoWithdrawalQueue();
-
-        DEPRECATED_eigenLayerStrategyManager = DEPRECATED_liquifier.eigenLayerStrategyManager();
-        DEPRECATED_eigenLayerDelegationManager = DEPRECATED_liquifier.eigenLayerDelegationManager();
-
         (,, IStrategy strategy,,,,,,,,) = liquifier.tokenInfos(address(lido));
         tokenInfos[address(lido)] = TokenInfo({
             elStrategy: strategy

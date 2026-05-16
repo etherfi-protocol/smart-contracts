@@ -103,18 +103,6 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
     error DisallowZeroAddress();
     error WrongVersion();
     error BlacklistedUser();
-
-    // To be called for Phase 2 contract upgrade
-    function initializeOnUpgrade(address _etherFiAdminAddress, uint256 _fanBoostThresholdAmount, uint16 _burnFeeWaiverPeriodInDays) external onlyOwner {
-        DEPRECATED_etherFiAdmin = IEtherFiAdmin(_etherFiAdminAddress);
-        fanBoostThreshold = uint16(_fanBoostThresholdAmount / 0.001 ether);
-        burnFeeWaiverPeriodInDays = _burnFeeWaiverPeriodInDays;
-        while (tierVaults.length < tierData.length) {
-            tierVaults.push(TierVault(0, 0));
-        }
-        admins[_etherFiAdminAddress] = true;
-    }
-
     error InvalidEAPRollover();
 
     /// @notice EarlyAdopterPool users can re-deposit and mint a membership NFT claiming their points & tiers

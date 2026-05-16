@@ -94,18 +94,13 @@ contract AuctionManager is
         numberOfBids = 1;
         whitelistEnabled = true;
 
-        DEPRECATED_nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerContract);
-
         __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
     }
 
-    function initializeOnUpgrade(address _membershipManagerContractAddress, uint128 _accumulatedRevenueThreshold, address _nodeOperatorManagerAddress) external onlyOwner {
-        require(_membershipManagerContractAddress != address(0) && _nodeOperatorManagerAddress != address(0), "No Zero Addresses");
-        DEPRECATED_membershipManagerContractAddress = _membershipManagerContractAddress;
-        DEPRECATED_nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerAddress);
+    function initializeOnUpgrade(uint128 _accumulatedRevenueThreshold) external onlyOwner {
         accumulatedRevenue = 0;
         accumulatedRevenueThreshold = _accumulatedRevenueThreshold;
     }

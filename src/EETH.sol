@@ -77,7 +77,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         
         __UUPSUpgradeable_init();
         __Ownable_init();
-        DEPRECATED_liquidityPool = ILiquidityPool(_liquidityPool);
     }
 
     function mintShares(address _user, uint256 _share) external onlyPoolContract whenNotPaused whenNotPausedUntil {

@@ -65,8 +65,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         __ERC20Permit_init("Wrapped eETH");
         __UUPSUpgradeable_init();
         __Ownable_init();
-        DEPRECATED_eETH = IeETH(_eETH);
-        DEPRECATED_liquidityPool = ILiquidityPool(_liquidityPool);
     }
 
     /// @dev name changed from the version initially deployed

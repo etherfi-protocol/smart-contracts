@@ -755,7 +755,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         BNFTProxy = new UUPSProxy(address(BNFTImplementation), "");
         BNFTInstance = BNFT(address(BNFTProxy));
         BNFTInstance.initialize(address(stakingManagerInstance));
-        BNFTInstance.initializeOnUpgrade(address(managerInstance));
 
         // ProtocolRevenueManager (archive — no circular deps)
         protocolRevenueManagerImplementation = new ProtocolRevenueManager();
@@ -961,7 +960,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         liquidityPoolInstance.initializeOnUpgradeV2();
 
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
-        membershipNftInstance.initializeOnUpgrade(address(liquidityPoolProxy));
 
         withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolProxy)), payable(address(eETHProxy)), payable(address(membershipManagerProxy)));
         // initializeOnUpgrade now reverts (checks immutable roleRegistry == 0). Set the
@@ -1055,10 +1053,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.stopPrank();
 
         vm.startPrank(owner);
-        liquidityPoolInstance.initializeOnUpgrade(address(auctionManagerProxy), address(liquifierInstance));
-        //stakingManagerInstance.initializeOnUpgrade(address(nodeOperatorManagerInstance), address(etherFiAdminInstance));
-        auctionInstance.initializeOnUpgrade(address(membershipManagerInstance), 1 ether, address(nodeOperatorManagerInstance));
-
         // configure eigenlayer dependency differently for mainnet vs testnet because we rely
         // on the contracts already deployed by eigenlayer on those chains
         bool restakingBnftDeposits;
@@ -1179,12 +1173,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance), address(blacklisterInstance), 10_000, 100, 10_000);
             etherFiRedemptionManagerProxy = new UUPSProxy(address(etherFiRedemptionManagerImplementation), "");
             etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
-            etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark
-            liquidityPoolInstance.initializeVTwoDotFourNine(address(roleRegistryInstance), address(etherFiRedemptionManagerInstance));  
-        } 
-        if (address(etherFiAdminInstance.roleRegistry()) == address(0x0)) {
-            vm.startPrank(owner);
-            etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));    
+            etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark  
         }
 
         vm.startPrank(admin);
@@ -1329,8 +1318,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         membershipManagerInstance.upgradeTo(address(membershipManagerV1Implementation));
         membershipManagerV1Instance = MembershipManager(payable(membershipManagerProxy));
         assertEq(membershipManagerV1Instance.getImplementation(), address(membershipManagerV1Implementation));
-
-        membershipManagerV1Instance.initializeOnUpgrade(address(etherFiAdminInstance), 0.3 ether, 30);
         vm.stopPrank();
     }
 

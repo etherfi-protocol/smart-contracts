@@ -91,28 +91,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         __Ownable_init();
         __UUPSUpgradeable_init();
 
-        DEPRECATED_liquidityPool = ILiquidityPool(_liquidityPoolAddress);
-        DEPRECATED_eETH = IeETH(_eEthAddress);
-        DEPRECATED_membershipManager = IMembershipManager(_membershipManagerAddress);
         nextRequestId = 1;
-    }
-
-    function initializeOnUpgrade(address _roleRegistry, uint16 _shareRemainderSplitToTreasuryInBps) external onlyOwner {
-        require(address(roleRegistry) == address(0) && _roleRegistry != address(0), "Already initialized");
-        require(_shareRemainderSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
-
-        paused = true; // make sure the contract is paused after the upgrade
-        DEPRECATED_roleRegistry = RoleRegistry(_roleRegistry);
-
-        _unused_gap = 0;
-        
-        shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
-
-        currentRequestIdToScanFromForShareRemainder = 1;
-        lastRequestIdToScanUntilForShareRemainder = nextRequestId - 1;
-
-        aggregateSumOfEEthShare = 0;
-        totalRemainderEEthShares = 0;
     }
 
     receive() external payable {

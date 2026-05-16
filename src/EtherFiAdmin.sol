@@ -154,13 +154,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __Ownable_init();
         __UUPSUpgradeable_init();
 
-        DEPRECATED_etherFiOracle = IEtherFiOracle(_etherFiOracle);
-        DEPRECATED_stakingManager = IStakingManager(_stakingManager);
-        DEPRECATED_auctionManager = IAuctionManager(_auctionManager);
-        DEPRECATED_etherFiNodesManager = IEtherFiNodesManager(_etherFiNodesManager);
-        DEPRECATED_liquidityPool = ILiquidityPool(_liquidityPool);
-        DEPRECATED_membershipManager = IMembershipManager(_membershipManager);
-        DEPRECATED_withdrawRequestNft = IWithdrawRequestNFT(_withdrawRequestNft);
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
@@ -221,12 +214,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (_membershipManager && IEtherFiPausable(address(membershipManager)).paused()) {
             membershipManager.unPauseContract();
         }
-    }
-
-    function initializeRoleRegistry(address _roleRegistry) external onlyOwner {
-        require(address(roleRegistry) == address(0x00), "already initialized");
-        DEPRECATED_roleRegistry = RoleRegistry(_roleRegistry);
-        validatorTaskBatchSize = 100;
     }
 
 

@@ -54,7 +54,7 @@ contract MembershipManagerV0 is Initializable, OwnableUpgradeable, PausableUpgra
 
     uint128 public sharesReservedForRewards;
 
-    address private DEPRECATED_admin;
+    address public DEPRECATED_admin;
     mapping(address => bool) public admins;
  
     //--------------------------------------------------------------------------------------

@@ -164,7 +164,6 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         stEth_Eth_Pool = ICurvePool(_stEth_Eth_Pool);
         
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
-        DEPRECATED_eigenLayerWithdrawalClaimGasCost = 150_000;
     }
 
     function initializeOnUpgrade(address _etherfiRestaker) external onlyOwner {

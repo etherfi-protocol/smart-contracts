@@ -20,7 +20,7 @@ contract RegulationsManager is
 
     uint32 public whitelistVersion;
 
-    address private DEPRECATED_admin;
+    address public DEPRECATED_admin;
     mapping(address => bool) public admins;
 
     //--------------------------------------------------------------------------------------

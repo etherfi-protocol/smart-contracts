@@ -26,9 +26,9 @@ contract ProtocolRevenueManager is
     IEtherFiNodesManager public etherFiNodesManager;
     IAuctionManager public auctionManager;
 
-    uint256 private DEPRECATED_globalRevenueIndex;
-    uint128 private DEPRECATED_vestedAuctionFeeSplitForStakers;
-    uint128 private DEPRECATED_auctionFeeVestingPeriodForStakersInDays;
+    uint256 public DEPRECATED_globalRevenueIndex;
+    uint128 public DEPRECATED_vestedAuctionFeeSplitForStakers;
+    uint128 public DEPRECATED_auctionFeeVestingPeriodForStakersInDays;
 
     address public admin;
 

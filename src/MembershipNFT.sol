@@ -64,14 +64,6 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         __ERC1155_init(_metadataURI);
         nextMintTokenId = 1;
         maxTokenId = 1000;
-        DEPRECATED_membershipManager = IMembershipManager(_membershipManagerInstance);
-    }
-
-    function initializeOnUpgrade(address _liquidityPoolAddress) external onlyOwner {
-        require(_liquidityPoolAddress != address(0), "No zero addresses");
-        DEPRECATED_liquidityPool = ILiquidityPool(_liquidityPoolAddress);
-        admins[DEPRECATED_admin] = true;
-        DEPRECATED_admin = address(0);
     }
 
     function mint(address _to, uint256 _amount) external onlyMembershipManagerContract returns (uint256) {

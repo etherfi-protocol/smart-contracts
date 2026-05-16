@@ -194,40 +194,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         
         __Ownable_init();
         __UUPSUpgradeable_init();
-        DEPRECATED_eETH = IeETH(_eEthAddress);
-        DEPRECATED_stakingManager = IStakingManager(_stakingManagerAddress);
-        DEPRECATED_nodesManager = IEtherFiNodesManager(_nodesManagerAddress);
-        DEPRECATED_membershipManager = _membershipManagerAddress;
-        DEPRECATED_TNFT = _tNftAddress;
         paused = true;
         restakeBnftDeposits = false;
         DEPRECATED_ethAmountLockedForWithdrawal = 0;
         DEPRECATED_etherFiAdminContract = _etherFiAdminContract;
         DEPRECATED_withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
         DEPRECATED_isLpBnftHolder = false;
-    }
-
-    function initializeOnUpgrade(address _auctionManager, address _liquifier) external onlyOwner { 
-        require(_auctionManager != address(0) && _liquifier != address(0) && address(DEPRECATED_auctionManager) == address(0) && address(DEPRECATED_liquifier) == address(0), "Invalid");
-
-        DEPRECATED_auctionManager = _auctionManager;
-        DEPRECATED_liquifier = ILiquifier(_liquifier);
-    }
-
-    // Note: Call this function when no validators to approve
-    function initializeVTwoDotFourNine(address _roleRegistry, address _etherFiRedemptionManager) external onlyOwner {
-        require(address(etherFiRedemptionManager) == address(0) && _etherFiRedemptionManager != address(0), "Invalid");
-        require(address(roleRegistry) == address(0x00), "already initialized");
-
-        DEPRECATED_etherFiRedemptionManager = EtherFiRedemptionManager(payable(_etherFiRedemptionManager)); 
-        DEPRECATED_roleRegistry = IRoleRegistry(_roleRegistry);
-
-        //correct splits
-        uint128 tvl = uint128(getTotalPooledEther());
-        totalValueInLp = uint128(address(this).balance);
-        totalValueOutOfLp = tvl - totalValueInLp;
-
-        if(tvl != getTotalPooledEther()) revert();
     }
 
     /// @notice One-shot post-upgrade migration that sweeps existing locked ETH from LP to WithdrawRequestNFT and PriorityWithdrawalQueue.
