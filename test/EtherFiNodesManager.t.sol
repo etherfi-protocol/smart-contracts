@@ -73,21 +73,17 @@ contract EtherFiNodesManagerTest is TestSetup {
         rateLimiterInstance.updateConsumers(managerInstance.CONSOLIDATION_REQUEST_LIMIT_ID(), address(managerInstance), true);
         vm.stopPrank();
         
-        // // Create a proper beacon and upgrade the node implementation
-        // // First, create a new EtherFiNode implementation
-        // address eigenPodManager = address(eigenLayerEigenPodManager);
-        // address delegationManager = address(eigenLayerDelegationManager);
-        // EtherFiNode nodeImpl = new EtherFiNode(
-        //     address(liquidityPoolInstance),
-        //     address(managerInstance),
-        //     eigenPodManager,
-        //     delegationManager,
-        //     address(roleRegistryInstance)
-        // );
-        
-        // // Upgrade the beacon to use the new implementation
-        // vm.prank(stakingManagerInstance.owner());
-        // stakingManagerInstance.upgradeEtherFiNode(address(nodeImpl));
+        // Upgrade the EtherFiNode beacon impl to the locally compiled one so the new
+        // completeQueuedWithdrawals return type matches what the manager wrapper decodes.
+        EtherFiNode nodeImpl = new EtherFiNode(
+            address(liquidityPoolInstance),
+            address(managerInstance),
+            address(eigenLayerEigenPodManager),
+            address(eigenLayerDelegationManager),
+            address(roleRegistryInstance)
+        );
+        vm.prank(stakingManagerInstance.owner());
+        stakingManagerInstance.upgradeEtherFiNode(address(nodeImpl));
         
         // // Now create a test node
         // vm.prank(address(liquidityPoolInstance));
@@ -230,26 +226,31 @@ contract EtherFiNodesManagerTest is TestSetup {
     function test_sweepFunds() public {
         // Send ETH to node
         vm.deal(testNode, 1 ether);
-        
-        vm.prank(admin);
+
+        vm.prank(eigenlayerAdmin);
         managerInstance.sweepFunds(testLegacyId);
-        
+
         // Check event was emitted (if balance > 0)
         // Note: This depends on node implementation
     }
-    
+
     function test_sweepFunds_unauthorized() public {
         vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
         vm.prank(bob);
         managerInstance.sweepFunds(testLegacyId);
+
+        // ADMIN_ROLE alone is not enough — sweepFunds requires EIGENLAYER_ADMIN_ROLE.
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.prank(admin);
+        managerInstance.sweepFunds(testLegacyId);
     }
-    
+
     function test_sweepFunds_whenPaused() public {
         vm.prank(admin);
         managerInstance.pauseContract();
-        
+
         vm.expectRevert();
-        vm.prank(admin);
+        vm.prank(eigenlayerAdmin);
         managerInstance.sweepFunds(testLegacyId);
     }
 
@@ -922,7 +923,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _grantNmPauseUntilRoles();
         _pauseUntil();
         _expectPausedUntilRevert();
-        vm.prank(admin);
+        vm.prank(eigenlayerAdmin);
         managerInstance.sweepFunds(testLegacyId);
     }
 
@@ -1121,7 +1122,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         vm.warp(block.timestamp + managerInstance.MAX_PAUSE_DURATION() + 1);
 
         vm.deal(testNode, 1 ether);
-        vm.prank(admin);
+        vm.prank(eigenlayerAdmin);
         managerInstance.sweepFunds(testLegacyId);
     }
 
