@@ -174,9 +174,4 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
-
-    modifier onlyGuardian() {
-        roleRegistry.onlyGuardian(msg.sender);
-        _;
-    }
 }
