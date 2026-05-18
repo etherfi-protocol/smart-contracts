@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -288,7 +289,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         uint256 share = _rate == 0
             ? sharesForWithdrawalAmount(_amount)
-            : (_amount * 1e18 + _rate - 1) / _rate; // ceiling; rounding favors the protocol
+            : Math.mulDiv(_amount, 1e18, _rate, Math.Rounding.Up); // rounding favors the protocol
         if (share == 0) revert InvalidAmount();
         if (eETH.shares(msg.sender) < share) revert InsufficientLiquidity();
 
@@ -657,7 +658,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (totalPooledEther == 0) {
             return _depositAmount;
         }
-        return (_depositAmount * eETH.totalShares()) / totalPooledEther;
+        return Math.mulDiv(_depositAmount, eETH.totalShares(), totalPooledEther, Math.Rounding.Down);
     }
 
     function _sendFund(address _recipient, uint256 _amount) internal {
@@ -685,7 +686,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256 staked;
         uint256 totalShares = eETH.totalShares();
         if (totalShares > 0) {
-            staked = (getTotalPooledEther() * eETH.shares(_user)) / totalShares;
+            staked = Math.mulDiv(getTotalPooledEther(), eETH.shares(_user), totalShares, Math.Rounding.Down);
         }
         return staked;
     }
@@ -699,7 +700,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (totalPooledEther == 0) {
             return 0;
         }
-        return (_amount * eETH.totalShares()) / totalPooledEther;
+        return Math.mulDiv(_amount, eETH.totalShares(), totalPooledEther, Math.Rounding.Down);
     }
 
     /// @dev withdrawal rounding errors favor the protocol by rounding up
@@ -710,8 +711,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         }
 
         // ceiling division so rounding errors favor the protocol
-        uint256 numerator = _amount * eETH.totalShares();
-        return (numerator + totalPooledEther - 1) / totalPooledEther;
+        return Math.mulDiv(_amount, eETH.totalShares(), totalPooledEther, Math.Rounding.Up);
     }
 
     function amountForShare(uint256 _share) public view returns (uint256) {
@@ -719,7 +719,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (totalShares == 0) {
             return 0;
         }
-        return (_share * getTotalPooledEther()) / totalShares;
+        return Math.mulDiv(_share, getTotalPooledEther(), totalShares, Math.Rounding.Down);
     }
 
     function _checkTotalValueInLp() internal view {

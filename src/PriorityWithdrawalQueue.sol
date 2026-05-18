@@ -36,6 +36,7 @@ contract PriorityWithdrawalQueue is
     uint96 public constant MIN_AMOUNT = 0.01 ether;
     uint96 public constant MAX_AMOUNT = 1000 ether;
     uint256 private constant _BASIS_POINT_SCALE = 1e4;
+    uint256 private constant _SHARE_UNIT = 1e18;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  IMMUTABLES  ---------------------------------------
@@ -66,7 +67,7 @@ contract PriorityWithdrawalQueue is
     uint96 public totalRemainderShares;
     uint128 public ethAmountLockedForPriorityWithdrawal;
 
-    /// @notice Frozen share rate (amountForShare(1e18)) recorded when each request was fulfilled.
+    /// @notice Frozen share rate (amountForShare(_SHARE_UNIT)) recorded when each request was fulfilled.
     /// @dev Empty mapping value (0) means "use live rate" — covers pre-upgrade requests fulfilled
     ///      before the share-rate-freeze upgrade.
     mapping(bytes32 => uint224) private _fulfillmentRates;
@@ -342,13 +343,13 @@ contract PriorityWithdrawalQueue is
         // Snapshot the share rate once for the whole batch. The claim path multiplies this by the
         // request's `shareOfEEth` to obtain the frozen value used for the solvency check and the
         // share burn — decoupling the claim payout from post-fulfill rate movement. Ceiling-rounded
-        // so `shareOfEEth * rate / 1e18 >= LP.amountForShare(shareOfEEth)` (avoiding sub-wei drift
-        // tripping the `amountForShares < amountWithFee` revert) and `ceil(amount * 1e18 / rate)
+        // so `shareOfEEth * rate / _SHARE_UNIT >= LP.amountForShare(shareOfEEth)` (avoiding sub-wei drift
+        // tripping the `amountForShares < amountWithFee` revert) and `ceil(amount * _SHARE_UNIT / rate)
         // <= shareOfEEth` for the burn.
         uint256 totalSharesAtFulfill = eETH.totalShares();
         uint256 rate = totalSharesAtFulfill == 0
             ? 0
-            : (1e18 * liquidityPool.getTotalPooledEther() + totalSharesAtFulfill - 1) / totalSharesAtFulfill;
+            : Math.mulDiv(_SHARE_UNIT, liquidityPool.getTotalPooledEther(), totalSharesAtFulfill, Math.Rounding.Up);
         require(rate > 0 && rate <= type(uint224).max, "invalid rate");
 
         for (uint256 i = 0; i < requests.length; ++i) {
@@ -633,7 +634,7 @@ contract PriorityWithdrawalQueue is
         // Solvency check against the rate frozen at fulfill (or live, for pre-upgrade requests).
         uint256 amountForShares = frozenRate == 0
             ? liquidityPool.amountForShare(request.shareOfEEth)
-            : uint256(request.shareOfEEth) * frozenRate / 1e18;
+            : Math.mulDiv(uint256(request.shareOfEEth), frozenRate, _SHARE_UNIT);
         if (amountForShares < request.amountWithFee) revert InvalidOutputAmount();
 
         uint128 amountToWithdraw = request.amountWithFee;
@@ -730,13 +731,13 @@ contract PriorityWithdrawalQueue is
         uint224 frozenRate = _fulfillmentRates[requestId];
         uint256 amountForShares = frozenRate == 0
             ? liquidityPool.amountForShare(request.shareOfEEth)
-            : uint256(request.shareOfEEth) * frozenRate / 1e18;
+            : Math.mulDiv(uint256(request.shareOfEEth), frozenRate, _SHARE_UNIT);
         if (amountForShares < request.amountWithFee) return 0;
 
         return request.amountWithFee;
     }
 
-    /// @notice Frozen `amountForShare(1e18)` recorded when `requestId` was fulfilled, or 0 if the
+    /// @notice Frozen `amountForShare(_SHARE_UNIT)` recorded when `requestId` was fulfilled, or 0 if the
     ///         request was fulfilled pre-upgrade (live-rate fallback) or has not been fulfilled yet.
     function fulfillmentRate(bytes32 requestId) external view returns (uint224) {
         return _fulfillmentRates[requestId];

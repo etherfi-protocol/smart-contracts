@@ -169,10 +169,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         uint224 frozenRate = _finalizationRates.lowerLookup(uint32(tokenId));
         uint256 amountForShares = frozenRate == 0
             ? liquidityPool.amountForShare(request.shareOfEEth)
-            : uint256(request.shareOfEEth) * frozenRate / SHARE_UNIT;
+            : Math.mulDiv(uint256(request.shareOfEEth), frozenRate, SHARE_UNIT);
 
         // send the lesser value of the originally requested amount of eEth or the frozen-rate value of the shares
-        uint256 amountToTransfer = (request.amountOfEEth < amountForShares) ? request.amountOfEEth : amountForShares;
+        uint256 amountToTransfer = Math.min(request.amountOfEEth, amountForShares);
         uint256 fee = uint256(request.feeGwei) * 1 gwei;
         return (amountToTransfer, fee, frozenRate);
     }
@@ -270,6 +270,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return _finalizationRates.lowerLookup(uint32(tokenId));
     }
 
+    /// @notice Number of finalization-rate checkpoints (including the legacy sentinel, if pushed).
+    function finalizationRatesLength() external view returns (uint256) {
+        return _finalizationRates.length();
+    }
+
     function isValid(uint256 requestId) public view returns (bool) {
         require(_exists(requestId), "Request does not exist");
         return _requests[requestId].isValid;
@@ -290,14 +295,14 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         lastFinalizedRequestId = uint32(requestId);
     }
 
-    /// @dev Ceiling-rounded share rate (`(SHARE_UNIT * TPE + TS - 1) / TS`). We round up so the
+    /// @dev Ceiling-rounded share rate (`ceil(SHARE_UNIT * TPE / TS)`). We round up so the
     ///      frozen rate is never strictly less than `LP.amountForShare`'s floor value — this keeps
     ///      `shareOfEEth * rate / SHARE_UNIT >= amountForShare(shareOfEEth)` for the solvency check
     ///      and `ceil(amount * SHARE_UNIT / rate) <= shareOfEEth` for the burn at claim time.
     function _amountPerShareCeil() internal view returns (uint256) {
         uint256 totalShares = eETH.totalShares();
         if (totalShares == 0) return 0;
-        return (SHARE_UNIT * liquidityPool.getTotalPooledEther() + totalShares - 1) / totalShares;
+        return Math.mulDiv(SHARE_UNIT, liquidityPool.getTotalPooledEther(), totalShares, Math.Rounding.Up);
     }
 
     /// @dev Admin can only invalidate requests that have NOT been finalized yet
