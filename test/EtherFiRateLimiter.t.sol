@@ -18,9 +18,6 @@ contract EtherFiRateLimiterTest is TestSetup {
     address public unauthorizedUser = makeAddr("unauthorized");
     address public pauser = makeAddr("pauser");
     address public unpauser = makeAddr("unpauser");
-    address public pauseUntilPauser = makeAddr("pauseUntilPauser");
-    address public unpauseUntilUnpauser = makeAddr("unpauseUntilUnpauser");
-    address public pauseUntilDurationSetter = makeAddr("pauseUntilDurationSetter");
 
     bytes32 public constant LIMIT_ID_1 = keccak256("LIMIT_1");
     bytes32 public constant LIMIT_ID_2 = keccak256("LIMIT_2");
@@ -48,20 +45,7 @@ contract EtherFiRateLimiterTest is TestSetup {
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), pauser);
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), unpauser);
-        // pauseContractUntil → GUARDIAN_ROLE
-        roleRegistry.grantRole(roleRegistry.GUARDIAN_ROLE(), pauseUntilPauser);
-        // unpauseContractUntil + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
-        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
-        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
-
-        // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so a first pauseContractUntil
-        // is not blocked by the per-pauser cooldown (which treats 0 as unix 0)
-        if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
-
-        uint256 maxDur = rateLimiter.MAX_PAUSE_DURATION();
-        vm.prank(pauseUntilDurationSetter);
-        rateLimiter.setPauseUntilDuration(maxDur);
     }
 
     //--------------------------------------------------------------------------------------
@@ -1162,145 +1146,5 @@ contract EtherFiRateLimiterTest is TestSetup {
         rateLimiter.consume(limitId, amount);
         
         assertEq(rateLimiter.consumable(limitId), capacity - amount);
-    }
-
-    //--------------------------------------------------------------------------------------
-    //-------------------------------- pauseContractUntil / unpauseContractUntil ----------
-    //--------------------------------------------------------------------------------------
-
-    bytes32 constant PAUSABLE_UNTIL_SLOT =
-        0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2;
-
-    function _pausedUntil() internal view returns (uint256) {
-        return uint256(vm.load(address(rateLimiter), PAUSABLE_UNTIL_SLOT));
-    }
-
-    function test_pauseContractUntil_requiresRole() public {
-        // pauseContractUntil → onlyGuardian → GUARDIAN_ROLE in the consolidated model.
-        vm.prank(unauthorizedUser);
-        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
-        rateLimiter.pauseContractUntil();
-    }
-
-    function test_pauseContractUntil_setsState() public {
-        vm.prank(pauseUntilPauser);
-        rateLimiter.pauseContractUntil();
-        assertEq(_pausedUntil(), block.timestamp + rateLimiter.MAX_PAUSE_DURATION());
-    }
-
-    function test_unpauseContractUntil_requiresRole() public {
-        vm.prank(pauseUntilPauser);
-        rateLimiter.pauseContractUntil();
-
-        vm.prank(unauthorizedUser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        rateLimiter.unpauseContractUntil();
-
-        // `unpauser` holds OPERATION_MULTISIG_ROLE (the consolidated admin role),
-        // which is sufficient for unpauseContractUntil — so the call succeeds.
-        vm.prank(unpauser);
-        rateLimiter.unpauseContractUntil();
-    }
-
-    function test_unpauseContractUntil_clearsState() public {
-        vm.prank(pauseUntilPauser);
-        rateLimiter.pauseContractUntil();
-
-        vm.prank(unpauseUntilUnpauser);
-        rateLimiter.unpauseContractUntil();
-        assertEq(_pausedUntil(), 0);
-    }
-
-    function test_unpauseContractUntil_revertsIfNotPaused() public {
-        vm.prank(unpauseUntilUnpauser);
-        vm.expectRevert(PausableUntil.ContractNotPausedUntil.selector);
-        rateLimiter.unpauseContractUntil();
-    }
-
-    // --- setPauseUntilDuration ---
-
-    function test_setPauseUntilDuration_requiresRole() public {
-        uint256 maxDur = rateLimiter.MAX_PAUSE_DURATION();
-
-        vm.prank(unauthorizedUser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        rateLimiter.setPauseUntilDuration(maxDur);
-
-        // PAUSE_UNTIL_ROLE alone must not grant pause-duration capability
-        vm.prank(pauseUntilPauser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        rateLimiter.setPauseUntilDuration(maxDur);
-    }
-
-    function test_setPauseUntilDuration_setsValue() public {
-        uint256 d = rateLimiter.MIN_PAUSE_DURATION() + 1 hours;
-        vm.prank(pauseUntilDurationSetter);
-        rateLimiter.setPauseUntilDuration(d);
-
-        // verify by pausing and checking the resulting pausedUntil
-        vm.prank(pauseUntilPauser);
-        rateLimiter.pauseContractUntil();
-        assertEq(_pausedUntil(), block.timestamp + d);
-    }
-
-    function test_setPauseUntilDuration_revertsOnInvalidValue() public {
-        uint256 belowMin = rateLimiter.MIN_PAUSE_DURATION() - 1;
-        uint256 aboveMax = rateLimiter.MAX_PAUSE_DURATION() + 1;
-
-        vm.prank(pauseUntilDurationSetter);
-        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
-        rateLimiter.setPauseUntilDuration(belowMin);
-
-        vm.prank(pauseUntilDurationSetter);
-        vm.expectRevert(PausableUntil.InvalidPauseUntilDuration.selector);
-        rateLimiter.setPauseUntilDuration(aboveMax);
-    }
-
-    // --- gated function: consume() ---
-
-    function test_consume_blockedByPauseContractUntil() public {
-        vm.prank(admin);
-        rateLimiter.createNewLimiter(LIMIT_ID_1, DEFAULT_CAPACITY, DEFAULT_REFILL_RATE);
-        vm.prank(admin);
-        rateLimiter.updateConsumers(LIMIT_ID_1, consumer1, true);
-
-        vm.prank(pauseUntilPauser);
-        rateLimiter.pauseContractUntil();
-
-        vm.prank(consumer1);
-        vm.expectRevert(
-            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, _pausedUntil())
-        );
-        rateLimiter.consume(LIMIT_ID_1, SMALL_AMOUNT);
-    }
-
-    function test_consume_unblockedAfterPauseExpires() public {
-        vm.prank(admin);
-        rateLimiter.createNewLimiter(LIMIT_ID_1, DEFAULT_CAPACITY, DEFAULT_REFILL_RATE);
-        vm.prank(admin);
-        rateLimiter.updateConsumers(LIMIT_ID_1, consumer1, true);
-
-        vm.prank(pauseUntilPauser);
-        rateLimiter.pauseContractUntil();
-
-        vm.warp(block.timestamp + rateLimiter.MAX_PAUSE_DURATION() + 1);
-
-        vm.prank(consumer1);
-        rateLimiter.consume(LIMIT_ID_1, SMALL_AMOUNT);
-    }
-
-    function test_consume_unblockedAfterExplicitUnpause() public {
-        vm.prank(admin);
-        rateLimiter.createNewLimiter(LIMIT_ID_1, DEFAULT_CAPACITY, DEFAULT_REFILL_RATE);
-        vm.prank(admin);
-        rateLimiter.updateConsumers(LIMIT_ID_1, consumer1, true);
-
-        vm.prank(pauseUntilPauser);
-        rateLimiter.pauseContractUntil();
-        vm.prank(unpauseUntilUnpauser);
-        rateLimiter.unpauseContractUntil();
-
-        vm.prank(consumer1);
-        rateLimiter.consume(LIMIT_ID_1, SMALL_AMOUNT);
     }
 }

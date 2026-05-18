@@ -800,7 +800,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // EtherFiAdmin must be deployed before WithdrawRequestNFT because the latter
         // now takes etherFiAdmin as an immutable constructor arg.
-        etherFiAdminImplementation = new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000, 7200);
+        etherFiAdminImplementation = new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000, 7200, 100_000 ether, 500);
         etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
         etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
 
@@ -958,17 +958,14 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         vm.startPrank(owner);
         // etherFiAdminInstance.updateAdmin(alice, true);
-        // `setEtherFiAdmin` was removed in the role-consolidation refactor.
-        // `etherFiAdmin` lives at storage slot 254 offset 12 (high 20 bytes).
-        // Slot 254 also packs BEACON_GENESIS_TIME, numCommitteeMembers, and
-        // numActiveCommitteeMembers in its lower 12 bytes — preserve them.
-        {
-            bytes32 cur = vm.load(address(etherFiOracleInstance), bytes32(uint256(254)));
-            uint256 mask = (uint256(1) << 96) - 1;
-            uint256 newVal = (uint256(cur) & mask)
-                | (uint256(uint160(address(etherFiAdminInstance))) << 96);
-            vm.store(address(etherFiOracleInstance), bytes32(uint256(254)), bytes32(newVal));
-        }
+        // EtherFiOracle.setEtherFiAdmin removed; write the etherFiAdmin storage slot directly for fresh test deploys.
+        // Slot 254 verified via `forge inspect EtherFiOracle storage-layout`.
+        // etherFiAdmin is packed at slot 254 offset 12 (20 bytes); preserve numCommitteeMembers (offset 4) and
+        // numActiveCommitteeMembers (offset 8) which share this slot.
+        bytes32 oracleSlot254 = vm.load(address(etherFiOracleInstance), bytes32(uint256(254)));
+        bytes32 mask = bytes32(uint256(type(uint160).max) << (12 * 8)); // 20 bytes at offset 12
+        bytes32 newSlot = (oracleSlot254 & ~mask) | bytes32(uint256(uint160(address(etherFiAdminInstance))) << (12 * 8));
+        vm.store(address(etherFiOracleInstance), bytes32(uint256(254)), newSlot);
         liquidityPoolInstance.initializeOnUpgrade(address(auctionManagerProxy), address(liquifierInstance));
         //stakingManagerInstance.initializeOnUpgrade(address(nodeOperatorManagerInstance), address(etherFiAdminInstance));
         auctionInstance.initializeOnUpgrade(address(membershipManagerInstance), 1 ether, address(nodeOperatorManagerInstance));
@@ -1042,7 +1039,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_etherfiAdmin() internal {
-        address newAdminImpl = address(new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000, 7200));
+        address newAdminImpl = address(new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000, 7200, 100_000 ether, 500));
         vm.prank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
@@ -1052,7 +1049,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.prank(etherFiOracleInstance.owner());
         etherFiOracleInstance.upgradeTo(newOracleImpl);
 
-        address newAdminImpl = address(new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000, 7200));
+        address newAdminImpl = address(new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000, 7200, 100_000 ether, 500));
         vm.prank(roleRegistryInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }

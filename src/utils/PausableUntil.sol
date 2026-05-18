@@ -12,12 +12,6 @@ abstract contract PausableUntil {
 
     bytes32 private constant PAUSABLE_UNTIL_STORAGE_SLOT = 0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2; // keccak256("pausableUntil.storage")
 
-    function _getPausableUntilStorage() internal pure returns (PausableUntilStorage storage $) {
-        assembly {
-            $.slot := PAUSABLE_UNTIL_STORAGE_SLOT
-        }
-    }
-
     uint256 public constant MIN_PAUSE_DURATION = 8 hours;
     uint256 public constant MAX_PAUSE_DURATION = 3 days;
     uint256 public constant PAUSER_UNTIL_COOLDOWN = 1 days;
@@ -41,6 +35,12 @@ abstract contract PausableUntil {
 
     function lastPauseTimestamp(address pauser) external view returns (uint256) {
         return _getPausableUntilStorage().lastPauseTimestamp[pauser];
+    }
+
+    function _getPausableUntilStorage() internal pure returns (PausableUntilStorage storage $) {
+        assembly {
+            $.slot := PAUSABLE_UNTIL_STORAGE_SLOT
+        }
     }
 
     function _requireNotPausedUntil() internal view {
