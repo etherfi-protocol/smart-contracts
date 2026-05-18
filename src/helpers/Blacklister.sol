@@ -37,6 +37,9 @@ contract Blacklister is Initializable, UUPSUpgradeable {
         emit UserBlacklistedUntil(user, block.timestamp + 1 days);
     }
 
+    // @dev This function is used to extend the blacklist of a user for a certain period of time.
+    // This function techincally allows modification of blacklist suration (not strictly increase)
+    // which is intended for emergency use cases. But it's intended use will always be to extend the blacklist.
     function extendBlacklistUntil(address user, uint256 until) external onlyOperations {
         blacklistedUntil[user] = block.timestamp + until;
         emit UserBlacklistedUntil(user, block.timestamp + until);
