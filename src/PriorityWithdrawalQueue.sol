@@ -340,16 +340,10 @@ contract PriorityWithdrawalQueue is
     function fulfillRequests(WithdrawRequest[] calldata requests) external onlyRequestManager whenNotPaused {
         uint256 totalAmountToLock = 0;
 
-        // Snapshot the share rate once for the whole batch. The claim path multiplies this by the
-        // request's `shareOfEEth` to obtain the frozen value used for the solvency check and the
-        // share burn — decoupling the claim payout from post-fulfill rate movement. Ceiling-rounded
-        // so `shareOfEEth * rate / _SHARE_UNIT >= LP.amountForShare(shareOfEEth)` (avoiding sub-wei drift
-        // tripping the `amountForShares < amountWithFee` revert) and `ceil(amount * _SHARE_UNIT / rate)
-        // <= shareOfEEth` for the burn.
-        uint256 totalSharesAtFulfill = eETH.totalShares();
-        uint256 rate = totalSharesAtFulfill == 0
-            ? 0
-            : Math.mulDiv(_SHARE_UNIT, liquidityPool.getTotalPooledEther(), totalSharesAtFulfill, Math.Rounding.Up);
+        // Snapshot the share rate once for the whole batch via LP's canonical ceiling formula.
+        // Claim path uses `shareOfEEth * rate / _SHARE_UNIT` for both the solvency check and the
+        // burn count, decoupling payout from post-fulfill rate movement.
+        uint256 rate = liquidityPool.amountPerShareCeil();
         require(rate > 0 && rate <= type(uint224).max, "invalid rate");
 
         for (uint256 i = 0; i < requests.length; ++i) {
@@ -361,6 +355,13 @@ contract PriorityWithdrawalQueue is
 
             uint256 earliestFulfillTime = request.creationTime + MIN_DELAY;
             if (block.timestamp < earliestFulfillTime) revert NotMatured();
+
+            // Per-request solvency check at fulfill time. The freeze locks this rate in, so a
+            // request that fails this check would be permanently unclaimable; fail loudly here
+            // and let the request manager re-attempt after rate recovery (or invalidate).
+            if (Math.mulDiv(uint256(request.shareOfEEth), rate, _SHARE_UNIT) < request.amountWithFee) {
+                revert InvalidOutputAmount();
+            }
 
             _withdrawRequests.remove(requestId);
             _finalizedRequests.add(requestId);
@@ -645,11 +646,12 @@ contract PriorityWithdrawalQueue is
         ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
 
         uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, uint256(frozenRate));
-
-        uint256 remainder = request.shareOfEEth > burnedShares
-            ? request.shareOfEEth - burnedShares
-            : 0;
-        totalRemainderShares += uint96(remainder);
+        // With `amountWithFee <= shareOfEEth * rate / 1e18` enforced at fulfill (frozen path)
+        // or by the live solvency check above (legacy path), the round-trip ceiling division
+        // satisfies `burnedShares <= request.shareOfEEth` by construction. Pin that invariant
+        // explicitly — a violation would imply a precision bug, not a routine rounding artifact.
+        if (burnedShares > request.shareOfEEth) revert InvalidBurnedSharesAmount();
+        totalRemainderShares += uint96(request.shareOfEEth - burnedShares);
 
         require(address(this).balance >= amountToWithdraw, "Insufficient escrow");
         (bool ok, ) = payable(request.user).call{value: amountToWithdraw}("");

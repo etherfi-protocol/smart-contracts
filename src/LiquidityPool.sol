@@ -88,6 +88,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //--------------------------------------------------------------------------------------
     uint256 public constant MIN_WITHDRAW_AMOUNT = 0.01 ether;
     uint256 public constant MAX_WITHDRAW_AMOUNT = 1000 ether;
+    uint256 public constant SHARE_UNIT = 1e18;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ---------------------------------------
@@ -289,7 +290,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
         uint256 share = _rate == 0
             ? sharesForWithdrawalAmount(_amount)
-            : Math.mulDiv(_amount, 1e18, _rate, Math.Rounding.Up); // rounding favors the protocol
+            : Math.mulDiv(_amount, SHARE_UNIT, _rate, Math.Rounding.Up); // rounding favors the protocol
         if (share == 0) revert InvalidAmount();
         if (eETH.shares(msg.sender) < share) revert InsufficientLiquidity();
 
@@ -720,6 +721,16 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
             return 0;
         }
         return Math.mulDiv(_share, getTotalPooledEther(), totalShares, Math.Rounding.Down);
+    }
+
+    /// @notice ETH value of `1e18` shares, rounded UP. Single source of truth for the rate
+    ///         snapshotted by segregated callers (WithdrawRequestNFT / PriorityWithdrawalQueue)
+    ///         at finalize/fulfill. Ceiling rounding keeps the frozen rate >= `amountForShare`'s
+    ///         floor value so the round-trips at claim time satisfy:
+    ///         `shareOfEEth * rate / 1e18 >= amountForShare(shareOfEEth)` (solvency check) and
+    ///         `ceil(amount * 1e18 / rate) <= shareOfEEth` (burn-bounded-by-request).
+    function amountPerShareCeil() public view returns (uint256) {
+        return Math.mulDiv(SHARE_UNIT, getTotalPooledEther(), eETH.totalShares(), Math.Rounding.Up);
     }
 
     function _checkTotalValueInLp() internal view {

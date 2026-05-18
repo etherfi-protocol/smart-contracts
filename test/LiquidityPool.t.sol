@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "./TestSetup.sol";
 import "forge-std/Test.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "../src/utils/PausableUntil.sol";
 
 contract LiquidityPoolTest is TestSetup {
@@ -1896,6 +1897,74 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(liquidityPoolInstance.totalValueOutOfLp(), lpOutBefore - amount, "totalValueOutOfLp not decreased");
         // NFT's counter is decremented by _claimWithdraw before LP is called; here we bypassed _claimWithdraw.
         assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore, "locked counter unchanged when calling LP directly");
+    }
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // Fuzz: LP.withdraw(amount, rate) — boundary correctness for the freeze path
+    // ───────────────────────────────────────────────────────────────────────────
+
+    /// @dev Math property of the (amount, rate) overload's burn derivation, isolated from LP
+    ///      state (caller checks, eETH balance, etc). Covers full uint128 amount × uint224 rate
+    ///      range and confirms `Math.mulDiv` produces a coherent ceiling result without overflow.
+    function testFuzz_withdrawWithRate_shareMathBounds(uint128 amount, uint224 rate) public pure {
+        amount = uint128(bound(uint256(amount), 1, type(uint128).max));
+        rate   = uint224(bound(uint256(rate), 1, type(uint224).max));
+
+        uint256 share = Math.mulDiv(uint256(amount), 1e18, uint256(rate), Math.Rounding.Up);
+
+        // Ceiling: share is never 0 when both inputs are positive.
+        assertGt(share, 0, "ceil(>0 * 1e18 / >0) > 0");
+
+        // Tight ceiling: floor(amount*1e18/rate) <= share <= floor + 1.
+        uint256 floorShare = Math.mulDiv(uint256(amount), 1e18, uint256(rate), Math.Rounding.Down);
+        assertGe(share, floorShare, "ceil >= floor");
+        assertLe(share, floorShare + 1, "ceil <= floor + 1");
+
+        // Round-trip: `share * rate / 1e18` recovers `amount` up to 1 wei loss from the ceiling.
+        // (We only check the inequality when the recovered value fits in uint256 — always true here.)
+        uint256 recovered = Math.mulDiv(share, uint256(rate), 1e18, Math.Rounding.Down);
+        assertGe(recovered + 1, uint256(amount), "ceil(a*U/r)*r/U recovers >= a-1");
+    }
+
+    /// @dev Concrete boundary smoke test of `withdraw(amount, rate)` at uint128/uint224 maxima.
+    ///      Confirms the function doesn't revert from intermediate overflow inside `Math.mulDiv`.
+    function test_withdrawWithRate_maxBoundsDoNotOverflow() public view {
+        // We only exercise the pure math the function does (Math.mulDiv) — not the side effects —
+        // because routing a `type(uint128).max` amount through the NFT escrow requires more state
+        // setup than is meaningful here. The math being safe is the boundary property we care about.
+        uint256 maxAmount = uint256(type(uint128).max);
+        uint256 maxRate   = uint256(type(uint224).max);
+
+        // Largest amount, smallest meaningful rate.
+        uint256 s1 = Math.mulDiv(maxAmount, 1e18, 1, Math.Rounding.Up);
+        assertGt(s1, 0, "max amount / rate=1");
+
+        // Largest amount AND largest rate.
+        uint256 s2 = Math.mulDiv(maxAmount, 1e18, maxRate, Math.Rounding.Up);
+        assertGt(s2, 0, "max amount / max rate");
+    }
+
+    /// @dev `rate == 0` selects the live-rate fallback inside the (amount, rate) overload.
+    ///      Confirms parity with `sharesForWithdrawalAmount` at the current state.
+    function testFuzz_withdrawWithRate_zeroRateUsesLive(uint96 rawAmount) public {
+        uint96 amount = uint96(bound(rawAmount, 1 wei, 100 ether));
+
+        // Deposit so eETH shares exist; transfer to NFT.
+        vm.deal(alice, 1000 ether);
+        vm.prank(alice);
+        liquidityPoolInstance.deposit{value: 1000 ether}();
+        vm.prank(alice);
+        eETHInstance.transfer(address(withdrawRequestNFTInstance), amount);
+
+        uint256 expectedShare = liquidityPoolInstance.sharesForWithdrawalAmount(amount);
+        if (expectedShare == 0) return;
+
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(amount);
+
+        vm.prank(address(withdrawRequestNFTInstance));
+        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), uint256(0));
+        assertEq(burned, expectedShare, "rate=0 path must match sharesForWithdrawalAmount");
     }
 
     function test_initializeOnUpgradeV2_sweepsLockedEth() public {

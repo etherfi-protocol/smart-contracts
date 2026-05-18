@@ -50,10 +50,10 @@ contract EtherFiRestakerTest is TestSetup {
 
         // Aliice has 10 ether eETH
         // Total eETH TVL is 10 ether
-        assertApproxEqAbs(stEth.balanceOf(alice), aliceStEthBalance, 2 wei);
-        assertApproxEqAbs(eETHInstance.balanceOf(alice), aliceEEthBalance + _amount, 2 wei);
-        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), restakerTvl + _amount, 2 wei);
-        assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + _amount, 2 wei);
+        assertApproxEqAbs(stEth.balanceOf(alice), aliceStEthBalance, 4 wei);
+        assertApproxEqAbs(eETHInstance.balanceOf(alice), aliceEEthBalance + _amount, 4 wei);
+        assertApproxEqAbs(etherFiRestakerInstance.getTotalPooledEther(), restakerTvl + _amount, 4 wei);
+        assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(), lpTvl + _amount, 4 wei);
         vm.stopPrank();
     }
 

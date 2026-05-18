@@ -287,22 +287,12 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         // Snapshot the current share rate for the newly-finalized range (prev, requestId].
         // Skip on no-op finalize so the checkpoint trace stays compact.
         if (requestId > lastFinalizedRequestId) {
-            uint256 rate = _amountPerShareCeil();
+            uint256 rate = liquidityPool.amountPerShareCeil();
             require(rate > 0 && rate <= type(uint224).max, "invalid rate");
             _finalizationRates.push(uint32(requestId), uint224(rate));
         }
 
         lastFinalizedRequestId = uint32(requestId);
-    }
-
-    /// @dev Ceiling-rounded share rate (`ceil(SHARE_UNIT * TPE / TS)`). We round up so the
-    ///      frozen rate is never strictly less than `LP.amountForShare`'s floor value — this keeps
-    ///      `shareOfEEth * rate / SHARE_UNIT >= amountForShare(shareOfEEth)` for the solvency check
-    ///      and `ceil(amount * SHARE_UNIT / rate) <= shareOfEEth` for the burn at claim time.
-    function _amountPerShareCeil() internal view returns (uint256) {
-        uint256 totalShares = eETH.totalShares();
-        if (totalShares == 0) return 0;
-        return Math.mulDiv(SHARE_UNIT, liquidityPool.getTotalPooledEther(), totalShares, Math.Rounding.Up);
     }
 
     /// @dev Admin can only invalidate requests that have NOT been finalized yet

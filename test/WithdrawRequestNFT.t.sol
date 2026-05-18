@@ -501,14 +501,19 @@ contract WithdrawRequestNFTTest is TestSetup {
             "Recipient should receive correct ETH amount"
         );
 
-        // Tolerance bumped from 1 wei to 1e3 wei: the share burn now scales through
-        // `frozenRate = amountForShare(1e18)` instead of recomputing directly from
-        // (totalShares, totalPooledEther). The floor-rounding on the stored rate introduces
-        // a sub-wei drift in the per-share calc, on the same order as the burn-assert above.
+        // Drift bound derived from the math, not a flat tolerance.
+        //
+        // expected: shareOfEEth - ceil(amount * TS / TPE)              [live rate]
+        // actual:   shareOfEEth - ceil(amount * 1e18 / R_ceil)         [frozen rate, ceil(1e18*TPE/TS)]
+        //
+        // R_ceil >= R_exact = 1e18*TPE/TS, with R_ceil - R_exact < 1. So `actualBurn <= liveBurn`
+        // and the gap is bounded by `amount * 1e18 / R_exact^2 ≈ amount / 1e18` for rates near 1.
+        // Add a small +2 absorbs the two ceiling roundings.
+        uint256 driftBound = expectedWithdrawAmount / 1e18 + 2;
         assertApproxEqAbs(
             withdrawRequestNFTInstance.totalRemainderEEthShares(),
             expectedDustShares,
-            1e3,
+            driftBound,
             "Incorrect remainder shares"
         );
 

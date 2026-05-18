@@ -920,73 +920,77 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         );
     }
 
-    /// @dev With share-rate freeze, the rate is locked in at `fulfillRequests`. If the rate was
-    ///      insufficient at fulfill time, post-fulfill recovery does NOT rescue the claim — the
-    ///      claim reverts with `InvalidOutputAmount`, and the user must cancel-and-recover via
-    ///      the cancel path (which still pays out current share value as eETH). Pre-freeze the
-    ///      live rate at claim could make the request claimable again; that's intentionally gone.
-    function test_claimWithdraw_recoveryAfterFulfill_revertsAtFrozenInsufficientRate() public {
+    /// @dev With share-rate freeze, the fulfill-time solvency check guards against fulfilling a
+    ///      request that would be permanently unclaimable. The request stays pending; rate can
+    ///      recover, and the next fulfill succeeds.
+    function test_shareRateFreeze_fulfillRevertsAtInsufficientRate_thenSucceedsAfterRecovery() public {
         uint96 withdrawAmount = 10 ether;
 
-        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+        (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
             _createWithdrawRequest(vipUser, withdrawAmount);
 
-        // Slash before fulfill so the rate at fulfill is below the rate at request time.
+        // Slash to drive the live (and therefore fulfill-time) rate below request.amountWithFee.
         _rebase(20 ether);
         _rebase(-25 ether);
 
         IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
         requests[0] = request;
+
+        // Fulfill reverts loudly — request stays pending (not finalized).
         vm.prank(requestManager);
+        vm.expectRevert(PriorityWithdrawalQueue.InvalidOutputAmount.selector);
         priorityQueue.fulfillRequests(requests);
 
-        // Recover after fulfill — the frozen rate from fulfill is still below `amountWithFee`.
+        assertTrue(priorityQueue.requestExists(requestId), "request still pending after rejected fulfill");
+        assertFalse(priorityQueue.isFinalized(requestId), "request not finalized after rejected fulfill");
+        assertEq(priorityQueue.fulfillmentRate(requestId), 0, "no rate stored when fulfill reverts");
+
+        // Recover. Fulfill now succeeds and the user can claim normally.
         _rebase(15 ether);
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(requests);
+        assertTrue(priorityQueue.isFinalized(requestId), "request finalized after recovery");
 
+        uint256 ethBefore = vipUser.balance;
         vm.prank(vipUser);
-        vm.expectRevert(PriorityWithdrawalQueue.InvalidOutputAmount.selector);
         priorityQueue.claimWithdraw(request);
-
-        // The user can still recover by cancelling the finalized request (pays eETH at live rate).
-        vm.prank(vipUser);
-        priorityQueue.cancelWithdraw(request);
-        assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), 0, "Global lock should clear via cancel");
+        assertEq(vipUser.balance, ethBefore + request.amountWithFee,
+            "claim succeeds at frozen rate after recovery");
     }
 
-    function test_cancelWithdraw_finalizedRecoveryAfterFulfill_doesNotDrift() public {
+    /// @dev After a successful fulfill, a post-fulfill slash must not affect the cancel return:
+    ///      cancellation of a finalized request still pays current share value as eETH (cancel
+    ///      bypasses the freeze and uses the live rate, since no ETH leaves the protocol).
+    function test_cancelWithdraw_finalizedNegativeRebaseAfterFulfill_paysLiveRate() public {
         uint96 withdrawAmount = 10 ether;
+
+        // Positive rebase upfront so the request comfortably passes the fulfill solvency check.
+        _rebase(20 ether);
 
         (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
             _createWithdrawRequest(vipUser, withdrawAmount);
-
-        // Slash before fulfill, then strong recovery before invalidate.
-        _rebase(20 ether);
-        _rebase(-25 ether);
 
         IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
         requests[0] = request;
         vm.prank(requestManager);
         priorityQueue.fulfillRequests(requests);
 
-        uint256 lockedAtFulfill = request.amountOfEEth;
-        assertEq(lockedAtFulfill, withdrawAmount, "Lock should use raw request amount");
+        // Slash AFTER fulfill. Cancel still works and pays live (now-reduced) share value as eETH.
+        _rebase(-10 ether);
 
-        // Recover after fulfill then invalidate.
-        _rebase(15 ether);
-        uint256 userBalanceBeforeCancel = eETHInstance.balanceOf(vipUser);
+        uint256 userEEthBefore = eETHInstance.balanceOf(vipUser);
         uint256 expectedReturned = liquidityPoolInstance.amountForShare(request.shareOfEEth);
 
         vm.prank(requestManager);
         priorityQueue.invalidateRequests(requests);
 
-        assertGt(expectedReturned, lockedAtFulfill, "Recovery should increase current share value above locked amount");
         assertApproxEqAbs(
             eETHInstance.balanceOf(vipUser),
-            userBalanceBeforeCancel + expectedReturned,
+            userEEthBefore + expectedReturned,
             2,
-            "Finalized cancel should return current share value"
+            "Finalized cancel returns current (post-slash) share value"
         );
-        assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), 0, "Global lock should clear exactly");
+        assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), 0, "Global lock cleared on cancel");
     }
 
     function test_admininvalidateRequests() public {
@@ -2153,11 +2157,13 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     }
 
     function test_revert_insufficientOutputAmount() public {
-        // User requests with amountWithFee = amountOfEEth (no fee).
-        // A post-request slash drops share value below amountWithFee, so claim reverts.
+        // User requests with amountWithFee = amountOfEEth (no fee). A post-request slash drops
+        // share value below amountWithFee. With share-rate freeze, the solvency check is at
+        // fulfill time (not at claim), so the revert moves earlier — the request manager fails
+        // loudly instead of silently fulfilling a doomed request.
         uint96 withdrawAmount = 10 ether;
 
-        (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+        (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
             _createWithdrawRequestWithFee(vipUser, withdrawAmount, withdrawAmount);
 
         // Slash: a large negative rebase drives share value below the requested amount.
@@ -2168,16 +2174,12 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             "Setup: share value must be below amountWithFee after slash"
         );
 
-        // Fulfill the request
+        // Fulfill reverts because the frozen rate would render the request unclaimable.
         IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
         requests[0] = request;
         vm.prank(requestManager);
-        priorityQueue.fulfillRequests(requests);
-
-        // Claim should revert because current share value < amountWithFee
-        vm.prank(vipUser);
         vm.expectRevert(PriorityWithdrawalQueue.InvalidOutputAmount.selector);
-        priorityQueue.claimWithdraw(request);
+        priorityQueue.fulfillRequests(requests);
     }
 
     function test_revert_amountWithFeeExceedsDepositAmount() public {
@@ -2603,5 +2605,76 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.prank(vipUser);
         priorityQueue.cancelWithdraw(request);
         assertEq(priorityQueue.fulfillmentRate(requestId), 0, "snapshot cleared on cancel");
+    }
+
+    /// @dev Direct test of the per-request solvency check inside `fulfillRequests`: if the
+    ///      fulfill-time rate would leave a request unclaimable, the whole call reverts and
+    ///      the request stays pending (no state change).
+    function test_shareRateFreeze_fulfillRequests_revertsOnInsufficientRate() public {
+        uint96 withdrawAmount = 10 ether;
+        (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequestWithFee(vipUser, withdrawAmount, withdrawAmount);
+
+        // Slash drives rate below request.amountWithFee.
+        _rebase(20 ether);
+        _rebase(-25 ether);
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        requests[0] = request;
+        vm.prank(requestManager);
+        vm.expectRevert(PriorityWithdrawalQueue.InvalidOutputAmount.selector);
+        priorityQueue.fulfillRequests(requests);
+
+        // No state change: request is still pending, no snapshot recorded, no lock taken.
+        assertTrue(priorityQueue.requestExists(requestId), "request still pending");
+        assertFalse(priorityQueue.isFinalized(requestId), "request not finalized");
+        assertEq(priorityQueue.fulfillmentRate(requestId), 0, "no snapshot on revert");
+        assertEq(priorityQueue.ethAmountLockedForPriorityWithdrawal(), 0, "no lock on revert");
+    }
+
+    /// @dev Atomicity: if ANY request in a batch fails the solvency check, the whole batch
+    ///      reverts. Other (otherwise valid) requests in the same batch remain pending.
+    function test_shareRateFreeze_fulfillRequests_batchAtomicOnInsufficientRate() public {
+        // Two requests at the current rate.
+        (bytes32 goodId, IPriorityWithdrawalQueue.WithdrawRequest memory goodReq) =
+            _createWithdrawRequest(vipUser, 5 ether);
+        (bytes32 badId,  IPriorityWithdrawalQueue.WithdrawRequest memory badReq)  =
+            _createWithdrawRequestWithFee(vipUser, 10 ether, 10 ether);
+
+        _rebase(20 ether);
+        _rebase(-25 ether); // bad request now under-rates; good request also affected
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory batch =
+            new IPriorityWithdrawalQueue.WithdrawRequest[](2);
+        batch[0] = goodReq;
+        batch[1] = badReq;
+
+        vm.prank(requestManager);
+        vm.expectRevert(PriorityWithdrawalQueue.InvalidOutputAmount.selector);
+        priorityQueue.fulfillRequests(batch);
+
+        // Neither request was advanced.
+        assertFalse(priorityQueue.isFinalized(goodId), "good req not finalized after batch revert");
+        assertFalse(priorityQueue.isFinalized(badId),  "bad req not finalized after batch revert");
+        assertEq(priorityQueue.fulfillmentRate(goodId), 0, "good req: no snapshot");
+        assertEq(priorityQueue.fulfillmentRate(badId),  0, "bad req: no snapshot");
+    }
+
+    /// @dev A request whose `amountWithFee` is comfortably below the live rate fulfills fine —
+    ///      the new solvency check doesn't fire false positives on healthy requests.
+    function test_shareRateFreeze_fulfillRequests_healthyRequestNotAffected() public {
+        // Build headroom: rate goes up by 50% before request, so amountWithFee << rate * shares / 1e18.
+        _rebase(50 ether);
+
+        (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequest(vipUser, 5 ether);
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        requests[0] = request;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(requests);
+
+        assertTrue(priorityQueue.isFinalized(requestId), "healthy request finalized");
+        assertGt(priorityQueue.fulfillmentRate(requestId), 0, "snapshot stored for healthy request");
     }
 }
