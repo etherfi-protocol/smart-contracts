@@ -134,7 +134,7 @@ contract PriorityWithdrawalQueue is
         _;
     }
 
-    modifier onlyPauser() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
@@ -436,13 +436,13 @@ contract PriorityWithdrawalQueue is
         emit ShareRemainderSplitUpdated(_shareRemainderSplitToTreasuryInBps);
     }
 
-    function pauseContract() external onlyPauser {
+    function pauseContract() external onlyOperations {
         if (paused) revert ContractPaused();
         paused = true;
         emit Paused(msg.sender);
     }
 
-    function unPauseContract() external onlyPauser {
+    function unPauseContract() external onlyOperations {
         if (!paused) revert ContractNotPaused();
         paused = false;
         emit Unpaused(msg.sender);
@@ -452,11 +452,11 @@ contract PriorityWithdrawalQueue is
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyPauser {
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyPauser {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 

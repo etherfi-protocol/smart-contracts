@@ -67,11 +67,11 @@ contract EtherFiNodesManager is
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
-    function pauseContract() external onlyPauser {
+    function pauseContract() external onlyOperations {
         _pause();
     }
 
-    function unPauseContract() external onlyPauser {
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
@@ -79,11 +79,11 @@ contract EtherFiNodesManager is
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyPauser {
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyPauser {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -468,7 +468,7 @@ contract EtherFiNodesManager is
         _;
     }
 
-    modifier onlyPauser() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }

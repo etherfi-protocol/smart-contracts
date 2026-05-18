@@ -271,13 +271,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
     }
 
-    function pauseContract() external onlyPauser {
+    function pauseContract() external onlyOperations {
         if (paused) revert("Pausable: already paused");
         paused = true;
         emit Paused(msg.sender);
     }
 
-    function unPauseContract() external onlyPauser {
+    function unPauseContract() external onlyOperations {
         if (!paused) revert("Pausable: not paused");
 
 
@@ -289,11 +289,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyPauser {
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyPauser {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -383,7 +383,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         _;
     }
 
-    modifier onlyPauser() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }

@@ -136,12 +136,12 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return true;
     }
 
-    function pause() external onlyAdmin {
+    function pause() external onlyOperations {
         paused = true;
         emit Paused();
     }
 
-    function unpause() external onlyAdmin {
+    function unpause() external onlyOperations {
         paused = false;
         emit Unpaused();
     }
@@ -150,11 +150,11 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyAdmin {
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -179,15 +179,15 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _approve(owner, spender, value);
     }
 
-    function recoverETH(address payable to, uint256 amount) external onlyAdmin {
+    function recoverETH(address payable to, uint256 amount) external onlyOperations {
         _recoverETH(to, amount);
     }
 
-    function recoverERC20(address token, address to, uint256 amount) external onlyAdmin{
+    function recoverERC20(address token, address to, uint256 amount) external onlyOperations{
         _recoverERC20(token, to, amount);
     }
 
-    function recoverERC721(address token, address to, uint256 tokenId) external onlyAdmin {
+    function recoverERC721(address token, address to, uint256 tokenId) external onlyOperations {
         _recoverERC721(token, to, tokenId);
     }
 
@@ -282,7 +282,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _;
     }
 
-    modifier onlyAdmin() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }

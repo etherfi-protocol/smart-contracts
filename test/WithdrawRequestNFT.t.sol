@@ -875,7 +875,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
     function _grantWrPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE (onlyPauser)
+        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE (onlyOperations)
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), wrPauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), wrUnpauseUntilUnpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), wrPauseUntilDurationSetter);

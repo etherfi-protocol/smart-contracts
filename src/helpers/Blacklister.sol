@@ -37,17 +37,17 @@ contract Blacklister is Initializable, UUPSUpgradeable {
         emit UserBlacklistedUntil(user, block.timestamp + 1 days);
     }
 
-    function extendBlacklistUntil(address user, uint256 until) external onlyAdmin {
+    function extendBlacklistUntil(address user, uint256 until) external onlyOperations {
         blacklistedUntil[user] = block.timestamp + until;
         emit UserBlacklistedUntil(user, block.timestamp + until);
     }
 
-    function blacklistUser(address user) external onlyAdmin {
+    function blacklistUser(address user) external onlyOperations {
         blacklistedUntil[user] = type(uint256).max;
         emit UserBlacklisted(user);
     }
 
-    function unblacklistUser(address user) external onlyAdmin {
+    function unblacklistUser(address user) external onlyOperations {
         blacklistedUntil[user] = 0;
         emit UserUnblacklisted(user);
     }
@@ -60,7 +60,7 @@ contract Blacklister is Initializable, UUPSUpgradeable {
         return _getImplementation(); 
     }
 
-    modifier onlyAdmin() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }

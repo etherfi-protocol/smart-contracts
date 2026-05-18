@@ -170,7 +170,7 @@ contract WeETHWithdrawAdapter is
     /**
      * @notice Pause the contract
      */
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external onlyOperations {
         if (paused) revert("Pausable: already paused");
 
         paused = true;
@@ -180,7 +180,7 @@ contract WeETHWithdrawAdapter is
     /**
      * @notice Unpause the contract
      */
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external onlyOperations {
         if (!paused) revert("Pausable: not paused");
 
         paused = false;
@@ -197,7 +197,7 @@ contract WeETHWithdrawAdapter is
     /**
      * @notice Unpause the contract from pauseUntil
      */
-    function unpauseContractUntil() external onlyAdmin {
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
@@ -205,7 +205,7 @@ contract WeETHWithdrawAdapter is
      * @notice Sets the pause duration for the contract
      * @param _pauseUntilDuration The new pause duration
      */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -263,7 +263,7 @@ contract WeETHWithdrawAdapter is
         _;
     }
 
-    modifier onlyAdmin() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }

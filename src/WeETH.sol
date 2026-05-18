@@ -95,26 +95,26 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         return eETHAmount;
     }
 
-    function pause() external onlyAdmin {
+    function pause() external onlyOperations {
         paused = true;
         emit Paused();
     }
 
-    function unpause() external onlyAdmin {
+    function unpause() external onlyOperations {
         paused = false;
         emit Unpaused();
     }
 
-    function recoverETH(address payable to, uint256 amount) external onlyAdmin {
+    function recoverETH(address payable to, uint256 amount) external onlyOperations {
         _recoverETH(to, amount);
     }
 
-    function recoverERC20(address token, address to, uint256 amount) external onlyAdmin {
+    function recoverERC20(address token, address to, uint256 amount) external onlyOperations {
         if (token == address(eETH)) revert CannotRecoverEETH();
         _recoverERC20(token, to, amount);
     }
 
-    function recoverERC721(address token, address to, uint256 tokenId) external onlyAdmin {
+    function recoverERC721(address token, address to, uint256 tokenId) external onlyOperations {
         _recoverERC721(token, to, tokenId);
     }
 
@@ -165,7 +165,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         return _getImplementation();
     }
 
-    modifier onlyAdmin() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }

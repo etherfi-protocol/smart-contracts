@@ -515,7 +515,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Pauses the contract
-    function pauseContract() external onlyPauser {
+    function pauseContract() external onlyOperations {
         if (paused) revert("Pausable: already paused");
 
         paused = true;
@@ -523,7 +523,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Unpauses the contract
-    function unPauseContract() external onlyPauser {
+    function unPauseContract() external onlyOperations {
         if (!paused) revert("Pausable: not paused");
 
         paused = false;
@@ -536,12 +536,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Unpauses contract from pauseUntil
-    function unpauseContractUntil() external onlyPauser {
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
     /// @notice Sets the pause duration for the contract
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyPauser {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -734,7 +734,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _;
     }
 
-    modifier onlyPauser() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }

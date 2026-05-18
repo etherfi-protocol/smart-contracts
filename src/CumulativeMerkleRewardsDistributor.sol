@@ -50,7 +50,7 @@ using SafeERC20 for IERC20;
         claimDelay = 172800; // 48 hours
     }
 
-    function setClaimDelay(uint256 _claimDelay) external onlyAdmin {
+    function setClaimDelay(uint256 _claimDelay) external onlyOperations {
         claimDelay = _claimDelay;
         emit ClaimDelayUpdated(claimDelay);
     }
@@ -128,17 +128,17 @@ using SafeERC20 for IERC20;
         emit Claimed(token, account, amount);
     }
 
-    function updateWhitelistedRecipient(address user, bool isWhitelisted) external onlyAdmin {
+    function updateWhitelistedRecipient(address user, bool isWhitelisted) external onlyOperations {
         whitelistedRecipient[user] = isWhitelisted;
         emit RecipientStatusUpdated(user, isWhitelisted);
     }
 
-    function pause() external onlyAdmin {
+    function pause() external onlyOperations {
         paused = true;
         emit Paused(msg.sender);
     }
 
-    function unpause() external onlyAdmin {
+    function unpause() external onlyOperations {
         paused = false;
         emit UnPaused(msg.sender);
     }
@@ -147,11 +147,11 @@ using SafeERC20 for IERC20;
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyAdmin {
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -206,7 +206,7 @@ using SafeERC20 for IERC20;
         _;
     }
 
-    modifier onlyAdmin() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }

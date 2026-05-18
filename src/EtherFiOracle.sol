@@ -286,18 +286,17 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit ConsensusVersionUpdated(_consensusVersion);
     }
     
-    function unpublishReport(bytes32 _hash) external {
-        roleRegistry.onlyOperatingMultisig(msg.sender);
+    function unpublishReport(bytes32 _hash) external onlyOperations {
         require(consensusStates[_hash].consensusReached, "Consensus is not reached yet");
         consensusStates[_hash].support = 0;
         consensusStates[_hash].consensusReached = false;
     }
 
-    function pauseContract() external onlyPauser {
+    function pauseContract() external onlyOperations {
         _pause();
     }
 
-    function unPauseContract() external onlyPauser {
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
@@ -312,7 +311,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         _;
     }
 
-    modifier onlyPauser() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }

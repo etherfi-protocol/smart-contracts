@@ -57,7 +57,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), deployed.OPERATING_TIMELOCK());
         // requestConsolidation is EOA_3-gated and tests still prank admin.
         roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), admin);
-        // PROTOCOL_PAUSER / PROTOCOL_UNPAUSER → OPERATION_MULTISIG_ROLE (onlyPauser)
+        // PROTOCOL_PAUSER / PROTOCOL_UNPAUSER → OPERATION_MULTISIG_ROLE (onlyOperations)
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
         // ETHERFI_RATE_LIMITER_ADMIN_ROLE → OPERATION_MULTISIG_ROLE
         // (already granted via OPERATION_MULTISIG_ROLE above)

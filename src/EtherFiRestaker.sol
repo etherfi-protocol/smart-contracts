@@ -173,7 +173,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // Send the ETH back to the liquidity pool
-    function withdrawEther() public onlyAdmin {
+    function withdrawEther() public onlyOperations {
         _withdrawEther();
     }
 
@@ -188,7 +188,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     // |--------------------------------------------------------------------------------------------|
 
     /// Set the claimer of the restaking rewards of this contract
-    function setRewardsClaimer(address _claimer) external onlyAdmin {
+    function setRewardsClaimer(address _claimer) external onlyOperations {
         rewardsCoordinator.setClaimerFor(_claimer);
     }
 
@@ -197,12 +197,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         address operator,
         IDelegationManager.SignatureWithExpiry memory approverSignatureAndExpiry,
         bytes32 approverSalt
-    ) external onlyAdmin {
+    ) external onlyOperations {
         eigenLayerDelegationManager.delegateTo(operator, approverSignatureAndExpiry, approverSalt);
     }
 
     // undelegate from the current AVS operator & un-restake all
-    function undelegate() external onlyAdmin returns (bytes32[] memory) {
+    function undelegate() external onlyOperations returns (bytes32[] memory) {
         bytes32[] memory withdrawalRoots = eigenLayerDelegationManager.undelegate(address(this));
 
         for (uint256 i = 0; i < withdrawalRoots.length; i++) {
@@ -370,12 +370,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // Pauses the contract
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external onlyOperations {
         _pause();
     }
 
     // Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
@@ -413,7 +413,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     /* MODIFIERS */
-    modifier onlyAdmin() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }

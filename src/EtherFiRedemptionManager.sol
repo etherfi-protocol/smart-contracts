@@ -354,11 +354,11 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
     }
 
-    function pauseContract() external onlyPauser {
+    function pauseContract() external onlyOperations {
         _pause();
     }
 
-    function unPauseContract() external onlyPauser {
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
@@ -366,11 +366,11 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external onlyPauser {
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyPauser {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -450,7 +450,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         _;
     }
 
-    modifier onlyPauser() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }

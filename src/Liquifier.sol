@@ -224,16 +224,16 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         IERC20(_token).safeTransfer(etherfiRestaker, _amount);
     }
 
-    function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyAdmin {
+    function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOperations {
         tokenInfos[_token].isWhitelisted = _isWhitelisted;
     }
 
-    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyAdmin {
+    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyOperations {
         tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
     }
     
-    function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyAdmin {
+    function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyOperations {
         if (_discountInBasisPoints < MIN_DISCOUNT_RATE_IN_BPS || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
@@ -246,26 +246,26 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token] = TokenInfo(0, 0, IStrategy(_target), _isWhitelisted, _discountInBasisPoints, uint32(block.timestamp), _timeBoundCapInEther, _totalCapInEther, 0, 0, _isL2Eth);
     }
 
-    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyAdmin {
+    function updateTimeBoundCapRefreshInterval(uint32 _timeBoundCapRefreshInterval) external onlyOperations {
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
     }
 
-    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyAdmin {
+    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyOperations {
         if (_discountInBasisPoints < MIN_DISCOUNT_RATE_IN_BPS || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
     }
 
-    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyAdmin {
+    function updateQuoteStEthWithCurve(bool _quoteStEthWithCurve) external onlyOperations {
         quoteStEthWithCurve = _quoteStEthWithCurve;
     }
 
     //Pauses the contract
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external onlyOperations {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
@@ -275,12 +275,12 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     /// @notice Unpauses the contract from pauseUntil
-    function unpauseContractUntil() external onlyAdmin {
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
     /// @notice Sets the pause duration for the contract
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -431,7 +431,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         super._requireNotPaused();
     }
 
-    modifier onlyAdmin() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }

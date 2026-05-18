@@ -70,10 +70,10 @@ contract StakingManager is
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external onlyOperations {
         _pause();
     }
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
@@ -239,7 +239,7 @@ contract StakingManager is
 
     /// @dev this method is for backfilling the addresses of etherFiNodes the protocol has previously deployed
     ///    Once this data has been backfilled we can delete this method
-    function backfillExistingEtherFiNodes(address[] calldata nodes) external onlyAdmin {
+    function backfillExistingEtherFiNodes(address[] calldata nodes) external onlyOperations {
         for (uint256 i = 0; i < nodes.length; i++) {
             address node = nodes[i];
             if (deployedEtherFiNodes[node]) continue; // already linked
@@ -253,7 +253,7 @@ contract StakingManager is
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
 
-    modifier onlyAdmin() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }

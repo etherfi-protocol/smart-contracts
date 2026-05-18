@@ -145,7 +145,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         address[] memory _users, 
         LiquidityPool.SourceOfFunds[] memory _approvedTags, 
         bool[] memory _approvals
-    ) external onlyAdmin {
+    ) external onlyOperations {
         require(_users.length == _approvedTags.length && _users.length == _approvals.length, "Invalid array lengths");
 
         for(uint256 x; x < _approvedTags.length; x++) {
@@ -156,7 +156,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     /// @notice Adds an address to the whitelist
     /// @param _address Address of the user to add
-    function addToWhitelist(address _address) external onlyAdmin {
+    function addToWhitelist(address _address) external onlyOperations {
         whitelistedAddresses[_address] = true;
 
         emit AddedToWhitelist(_address);
@@ -164,19 +164,19 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     /// @notice Removed an address from the whitelist
     /// @param _address Address of the user to remove
-    function removeFromWhitelist(address _address) external onlyAdmin {
+    function removeFromWhitelist(address _address) external onlyOperations {
         whitelistedAddresses[_address] = false;
 
         emit RemovedFromWhitelist(_address);
     }
 
     //Pauses the contract
-    function pauseContract() external onlyAdmin {
+    function pauseContract() external onlyOperations {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external onlyAdmin {
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
@@ -262,7 +262,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         _;
     }
 
-    modifier onlyAdmin() {
+    modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
