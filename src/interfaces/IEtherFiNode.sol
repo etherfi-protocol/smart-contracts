@@ -17,7 +17,7 @@ interface IEtherFiNode {
     function queueETHWithdrawal(uint256 amount) external returns (bytes32 withdrawalRoot);
     function completeQueuedETHWithdrawals(bool receiveAsTokens) external returns (uint256 balance);
     function queueWithdrawals(IDelegationManager.QueuedWithdrawalParams[] calldata params) external returns (bytes32[] memory withdrawalRoot);
-    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external;
+    function completeQueuedWithdrawals(IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external returns (uint256 balance);
     function sweepFunds() external returns (uint256 balance);
     function requestExecutionLayerTriggeredWithdrawal(IEigenPod.WithdrawalRequest[] calldata requests) external payable;
     function requestConsolidation(IEigenPod.ConsolidationRequest[] calldata requests) external payable;

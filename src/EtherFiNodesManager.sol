@@ -105,7 +105,7 @@ contract EtherFiNodesManager is
 
     /// @dev under normal conditions ETH should not accumulate in the EtherFiNode. This will forward
     ///   the eth to the liquidity pool in the event of ETH being accidentally sent there
-    function sweepFunds(uint256 id) external onlyAdmin whenNotPaused {
+    function sweepFunds(uint256 id) external onlyEigenlayerAdmin whenNotPaused {
         address nodeAddr = etherfiNodeAddress(id);
         uint256 balance = IEtherFiNode(nodeAddr).sweepFunds();
         if(balance > 0) {
@@ -198,7 +198,10 @@ contract EtherFiNodesManager is
 
     function completeQueuedWithdrawals(address node, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) public onlyEigenlayerAdmin whenNotPaused {
         _validateNode(node);
-        IEtherFiNode(node).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+        uint256 balance = IEtherFiNode(node).completeQueuedWithdrawals(withdrawals, tokens, receiveAsTokens);
+        if (balance > 0) {
+            emit FundsTransferred(node, balance);
+        }
     }
     
     function completeQueuedWithdrawals(uint256 id, IDelegationManager.Withdrawal[] calldata withdrawals, IERC20[][] calldata tokens, bool[] calldata receiveAsTokens) external onlyEigenlayerAdmin whenNotPaused {
