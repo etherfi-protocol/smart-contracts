@@ -75,7 +75,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         liquidityPool = ILiquidityPool(_liquidityPool);
     }
 
-    function mintShares(address _user, uint256 _share) external onlyPoolContract whenNotPaused whenNotPausedUntil {
+    function mintShares(address _user, uint256 _share) external onlyPoolContract whenNotPaused {
         blacklister.nonBlacklisted(_user);
         shares[_user] += _share;
         totalShares += _share;
@@ -84,7 +84,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit TransferShares(address(0), _user, _share);
     }
 
-    function burnShares(address _user, uint256 _share) external whenNotPaused whenNotPausedUntil {
+    function burnShares(address _user, uint256 _share) external whenNotPaused {
         require(msg.sender == address(liquidityPool), "Incorrect Caller");
         blacklister.nonBlacklisted(_user);
         require(shares[_user] >= _share, "BURN_AMOUNT_EXCEEDS_BALANCE");
@@ -206,9 +206,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit Approval(_owner, _spender, _amount);
     }
 
-    function _transferShares(address _sender, address _recipient, uint256 _sharesAmount) internal whenNotPaused {
+    function _transferShares(address _sender, address _recipient, uint256 _sharesAmount) internal whenNotPaused{
         blacklister.nonBlacklisted(_sender);
         blacklister.nonBlacklisted(_recipient);
+        blacklister.nonBlacklisted(msg.sender);
         require(_sender != address(0), "TRANSFER_FROM_THE_ZERO_ADDRESS");
         require(_recipient != address(0), "TRANSFER_TO_THE_ZERO_ADDRESS");
         require(_sharesAmount <= shares[_sender], "TRANSFER_AMOUNT_EXCEEDS_BALANCE");
@@ -294,6 +295,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
     modifier whenNotPaused() {
         require(!paused, "PAUSED");
+        _requireNotPausedUntil();
         _;
     }
 }

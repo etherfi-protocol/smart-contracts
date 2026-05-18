@@ -685,6 +685,93 @@ contract PreludeTest is Test, ArrayTestHelper {
         assertGe(address(liquidityPool).balance, startingBalance + 1 ether);
     }
 
+    function test_sweepFunds_gated_by_eigenlayerAdmin() public {
+        uint256 nodeId = 10885; // pre-linked legacy id used elsewhere
+        address nodeAddr = etherFiNodesManager.etherfiNodeAddress(nodeId);
+        if (nodeAddr == address(0)) return; // skip if fork no longer has this legacy id
+
+        // Random caller: revert.
+        address rando = makeAddr("rando");
+        vm.prank(rando);
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        etherFiNodesManager.sweepFunds(nodeId);
+
+        // ADMIN_ROLE alone (held by `admin`) no longer satisfies sweep.
+        vm.prank(admin);
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        etherFiNodesManager.sweepFunds(nodeId);
+
+        // EIGENLAYER_ADMIN_ROLE can sweep (no-op when node has no balance).
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.sweepFunds(nodeId);
+    }
+
+    function test_completeQueuedWithdrawals_autoSweeps_to_LP() public {
+        bytes memory validatorPubkey = hex"892c95f4e93ab042ee39397bff22cc43298ff4b2d6d6dec3f28b8b8ebcb5c65ab5e6fc29301c1faee473ec095f9e4306";
+        bytes32 pubkeyHash = etherFiNodesManager.calculateValidatorPubkeyHash(validatorPubkey);
+        uint256 legacyID = 10885;
+
+        vm.prank(elExiter);
+        etherFiNodesManager.linkLegacyValidatorIds(toArray_u256(legacyID), toArray_bytes(validatorPubkey));
+
+        address nodeAddr = etherFiNodesManager.etherfiNodeAddress(uint256(pubkeyHash));
+        vm.startPrank(admin);
+        rateLimiter.updateConsumers(etherFiNodesManager.UNRESTAKING_LIMIT_ID(), nodeAddr, true);
+        vm.stopPrank();
+
+        address eigenpod = etherFiNodesManager.getEigenPod(uint256(pubkeyHash));
+        vm.store(eigenpod, bytes32(uint256(52)), bytes32(uint256(10_000 ether / 1 gwei)));
+        vm.deal(eigenpod, 10_000 ether);
+        stdstore
+            .target(eigenPodManager)
+            .sig("podOwnerDepositShares(address)")
+            .with_key(nodeAddr)
+            .checked_write_int(int256(10_000 ether));
+
+        vm.prank(eigenlayerAdmin);
+        bytes32 root = etherFiNodesManager.queueETHWithdrawal(uint256(pubkeyHash), 1 ether);
+
+        // build the explicit Withdrawal struct that mirrors what the node queued
+        IStrategy[] memory strategies = new IStrategy[](1);
+        strategies[0] = IStrategy(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0);
+        uint256[] memory scaledShares = new uint256[](1);
+        scaledShares[0] = 1 ether;
+        IDelegationManager.Withdrawal[] memory withdrawals = new IDelegationManager.Withdrawal[](1);
+        withdrawals[0] = IDelegationManagerTypes.Withdrawal({
+            staker: nodeAddr,
+            delegatedTo: IDelegationManager(delegationManager).delegatedTo(nodeAddr),
+            withdrawer: nodeAddr,
+            nonce: IDelegationManager(delegationManager).cumulativeWithdrawalsQueued(nodeAddr) - 1,
+            startBlock: uint32(block.number),
+            strategies: strategies,
+            scaledShares: scaledShares
+        });
+        // sanity: hash matches what queueETHWithdrawal returned
+        assertEq(IDelegationManager(delegationManager).calculateWithdrawalRoot(withdrawals[0]), root, "withdrawal root mismatch");
+
+        IERC20[][] memory tokens = new IERC20[][](1);
+        tokens[0] = new IERC20[](1);
+        bool[] memory receiveAsTokens = new bool[](1);
+        receiveAsTokens[0] = true;
+
+        vm.roll(block.number + (7200 * 15));
+
+        uint256 lpBefore = address(liquidityPool).balance;
+        uint256 nodeBefore = nodeAddr.balance;
+
+        // Manager wrapper must emit FundsTransferred(nodeAddr, amount) for off-chain indexers.
+        // Topic check only — amount depends on dynamic pre-existing pod state.
+        vm.expectEmit(true, false, false, false, address(etherFiNodesManager));
+        emit IEtherFiNodesManager.FundsTransferred(nodeAddr, 0);
+
+        vm.prank(eigenlayerAdmin);
+        etherFiNodesManager.completeQueuedWithdrawals(uint256(pubkeyHash), withdrawals, tokens, receiveAsTokens);
+
+        // ETH should have flowed pod -> node -> LP (auto-sweep tail). Node ends with no residual.
+        assertEq(nodeAddr.balance, nodeBefore, "node retains no residual after auto-sweep");
+        assertGe(address(liquidityPool).balance, lpBefore + 1 ether, "LP credited at least the withdrawal amount");
+    }
+
     function test_EtherFiNodePermissions() public {
 
         // create a node

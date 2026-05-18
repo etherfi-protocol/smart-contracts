@@ -10,10 +10,11 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRateProvider.sol";
 
 import "./AssetRecovery.sol";
+import "./utils/PausableUntil.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
 
-contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
+contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
 
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
@@ -105,6 +106,18 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         emit Unpaused();
     }
 
+    function pauseContractUntil() external onlyGuardian {
+        _pauseUntil();
+    }
+
+    function unpauseContractUntil() external onlyOperations {
+        _unpauseUntil();
+    }
+
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
+        _setPauseUntilDuration(_pauseUntilDuration);
+    }
+
     function recoverETH(address payable to, uint256 amount) external onlyOperations {
         _recoverETH(to, amount);
     }
@@ -134,8 +147,10 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
         uint256 /* amount */
     ) internal virtual override {
         require(!paused, "PAUSED");
+        _requireNotPausedUntil();
         blacklister.nonBlacklisted(from);
         blacklister.nonBlacklisted(to);
+        blacklister.nonBlacklisted(msg.sender);
     }
 
     //--------------------------------------------------------------------------------------
@@ -167,6 +182,11 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ERC20Pe
 
     modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 }

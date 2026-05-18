@@ -661,9 +661,11 @@ contract EETHTest is TestSetup {
     // -------------------------------------------------------------------------
     // pauseContractUntil / unpauseContractUntil
     //
-    // EETH inherits PausableUntil; `mintShares` and `burnShares` carry the
-    // `whenNotPausedUntil` modifier. Entry points are gated by PAUSE_UNTIL_ROLE
-    // / UNPAUSE_UNTIL_ROLE on RoleRegistry. The state lives in a fixed namespaced
+    // EETH inherits PausableUntil. The pause-until check now lives inside the
+    // `whenNotPaused` modifier (`_requireNotPausedUntil`), so every share-mutating
+    // path — `mintShares`, `burnShares`, and `_transferShares` (i.e. `transfer` /
+    // `transferFrom`) — is gated. Entry points are gated by PAUSE_UNTIL_ROLE /
+    // UNPAUSE_UNTIL_ROLE on RoleRegistry. The state lives in a fixed namespaced
     // storage slot — read via vm.load when we need to assert it.
     // -------------------------------------------------------------------------
 
@@ -803,20 +805,38 @@ contract EETHTest is TestSetup {
         eETHInstance.burnShares(alice, 50);
     }
 
-    // ---- pause-until does NOT block transfers -------------------------------
-    // Only mint/burn carry the modifier; transfers route through `_transferShares`
-    // which is gated only by `whenNotPaused` (the legacy boolean pause).
+    // ---- pause-until blocks transfer / transferFrom -------------------------
 
-    function test_EETH_transfer_notBlockedByPauseContractUntil() public {
+    function test_EETH_transfer_revertsWhenPausedUntil() public {
         _aliceWithEEth(1 ether);
 
         _grantPauseUntilRoles();
         vm.prank(pauseUntilPauser);
         eETHInstance.pauseContractUntil();
+        uint256 pausedUntilTs = _eETHPausedUntil();
 
         vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
         eETHInstance.transfer(bob, 0.5 ether);
-        assertEq(eETHInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    function test_EETH_transferFrom_revertsWhenPausedUntil() public {
+        _aliceWithEEth(1 ether);
+        vm.prank(alice);
+        eETHInstance.approve(bob, 1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+        uint256 pausedUntilTs = _eETHPausedUntil();
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(PausableUntil.ContractPausedUntil.selector, pausedUntilTs)
+        );
+        eETHInstance.transferFrom(alice, bob, 0.5 ether);
     }
 
     // ---- recovery paths -----------------------------------------------------
@@ -845,6 +865,56 @@ contract EETHTest is TestSetup {
         vm.prank(address(liquidityPoolInstance));
         eETHInstance.mintShares(alice, 100);
         assertEq(eETHInstance.shares(alice), 100);
+    }
+
+    function test_EETH_transfer_unblockedAfterPauseExpires() public {
+        _aliceWithEEth(1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        vm.warp(block.timestamp + eETHInstance.MAX_PAUSE_DURATION() + 1);
+
+        vm.prank(alice);
+        eETHInstance.transfer(bob, 0.5 ether);
+        assertEq(eETHInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    function test_EETH_transfer_unblockedAfterManualUnpause() public {
+        _aliceWithEEth(1 ether);
+
+        _grantPauseUntilRoles();
+        vm.prank(pauseUntilPauser);
+        eETHInstance.pauseContractUntil();
+
+        vm.prank(unpauseUntilUnpauser);
+        eETHInstance.unpauseContractUntil();
+
+        vm.prank(alice);
+        eETHInstance.transfer(bob, 0.5 ether);
+        assertEq(eETHInstance.balanceOf(bob), 0.5 ether);
+    }
+
+    // ---- spender (msg.sender) blacklist on transferFrom ---------------------
+    // `_transferShares` now blacklist-checks msg.sender in addition to from/to,
+    // so a blacklisted spender cannot move tokens even between clean parties.
+
+    function test_EETH_transferFrom_revertsWhenSpenderBlacklisted() public {
+        // Use a distinct spender so we can blacklist them without also tripping
+        // the from/to checks.
+        address spender = vm.addr(0xCAFE);
+
+        _aliceWithEEth(1 ether);
+        vm.prank(alice);
+        eETHInstance.approve(spender, 1 ether);
+
+        vm.prank(owner);
+        blacklisterInstance.blacklistUser(spender);
+
+        vm.prank(spender);
+        _expectBlacklistedRevert(spender);
+        eETHInstance.transferFrom(alice, bob, 0.5 ether);
     }
 
     // --- setPauseUntilDuration ---
