@@ -66,6 +66,11 @@ contract PriorityWithdrawalQueue is
     uint96 public totalRemainderShares;
     uint128 public ethAmountLockedForPriorityWithdrawal;
 
+    /// @notice Frozen share rate (amountForShare(1e18)) recorded when each request was fulfilled.
+    /// @dev Empty mapping value (0) means "use live rate" — covers pre-upgrade requests fulfilled
+    ///      before the share-rate-freeze upgrade.
+    mapping(bytes32 => uint224) private _fulfillmentRates;
+
     //--------------------------------------------------------------------------------------
     //-------------------------------------  ROLES  ----------------------------------------
     //--------------------------------------------------------------------------------------
@@ -334,6 +339,18 @@ contract PriorityWithdrawalQueue is
     function fulfillRequests(WithdrawRequest[] calldata requests) external onlyRequestManager whenNotPaused {
         uint256 totalAmountToLock = 0;
 
+        // Snapshot the share rate once for the whole batch. The claim path multiplies this by the
+        // request's `shareOfEEth` to obtain the frozen value used for the solvency check and the
+        // share burn — decoupling the claim payout from post-fulfill rate movement. Ceiling-rounded
+        // so `shareOfEEth * rate / 1e18 >= LP.amountForShare(shareOfEEth)` (avoiding sub-wei drift
+        // tripping the `amountForShares < amountWithFee` revert) and `ceil(amount * 1e18 / rate)
+        // <= shareOfEEth` for the burn.
+        uint256 totalSharesAtFulfill = eETH.totalShares();
+        uint256 rate = totalSharesAtFulfill == 0
+            ? 0
+            : (1e18 * liquidityPool.getTotalPooledEther() + totalSharesAtFulfill - 1) / totalSharesAtFulfill;
+        require(rate > 0 && rate <= type(uint224).max, "invalid rate");
+
         for (uint256 i = 0; i < requests.length; ++i) {
             WithdrawRequest calldata request = requests[i];
             bytes32 requestId = keccak256(abi.encode(request));
@@ -346,6 +363,7 @@ contract PriorityWithdrawalQueue is
 
             _withdrawRequests.remove(requestId);
             _finalizedRequests.add(requestId);
+            _fulfillmentRates[requestId] = uint224(rate);
             totalAmountToLock += request.amountOfEEth;
 
             emit WithdrawRequestFinalized(requestId, request.user, request.amountOfEEth, request.shareOfEEth, request.nonce, uint32(block.timestamp));
@@ -590,8 +608,9 @@ contract PriorityWithdrawalQueue is
         bool wasFinalized = _finalizedRequests.contains(requestId);
         
         _dequeueWithdrawRequest(request);
-        
+
         if (wasFinalized) {
+            delete _fulfillmentRates[requestId];
             ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
             liquidityPool.returnLockedEth{value: request.amountOfEEth}(request.amountOfEEth);
             _checkEthAmountLockedForPriorityWithdrawal();
@@ -609,24 +628,27 @@ contract PriorityWithdrawalQueue is
         
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
-        uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
+        uint224 frozenRate = _fulfillmentRates[requestId];
+
+        // Solvency check against the rate frozen at fulfill (or live, for pre-upgrade requests).
+        uint256 amountForShares = frozenRate == 0
+            ? liquidityPool.amountForShare(request.shareOfEEth)
+            : uint256(request.shareOfEEth) * frozenRate / 1e18;
         if (amountForShares < request.amountWithFee) revert InvalidOutputAmount();
 
         uint128 amountToWithdraw = request.amountWithFee;
 
-        uint256 sharesToBurn = liquidityPool.sharesForWithdrawalAmount(amountToWithdraw);
-
         _finalizedRequests.remove(requestId);
-
-        uint256 remainder = request.shareOfEEth > sharesToBurn 
-            ? request.shareOfEEth - sharesToBurn 
-            : 0;
-        totalRemainderShares += uint96(remainder);
+        delete _fulfillmentRates[requestId];
 
         ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
 
-        uint256 burnedShares = liquidityPool.withdraw(request.user, amountToWithdraw);
-        if (burnedShares != sharesToBurn) revert InvalidBurnedSharesAmount();
+        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, uint256(frozenRate));
+
+        uint256 remainder = request.shareOfEEth > burnedShares
+            ? request.shareOfEEth - burnedShares
+            : 0;
+        totalRemainderShares += uint96(remainder);
 
         require(address(this).balance >= amountToWithdraw, "Insufficient escrow");
         (bool ok, ) = payable(request.user).call{value: amountToWithdraw}("");
@@ -640,7 +662,7 @@ contract PriorityWithdrawalQueue is
         }
         _checkEthAmountLockedForPriorityWithdrawal();
 
-        emit WithdrawRequestClaimed(requestId, request.user, uint96(amountToWithdraw), uint96(sharesToBurn), request.nonce, uint32(block.timestamp));
+        emit WithdrawRequestClaimed(requestId, request.user, uint96(amountToWithdraw), uint96(burnedShares), request.nonce, uint32(block.timestamp));
     }
 
     function _checkEthAmountLockedForPriorityWithdrawal() internal {
@@ -704,9 +726,20 @@ contract PriorityWithdrawalQueue is
     function getClaimableAmount(WithdrawRequest calldata request) external view returns (uint256) {
         bytes32 requestId = keccak256(abi.encode(request));
         if (!_finalizedRequests.contains(requestId)) return 0;
-        if (liquidityPool.amountForShare(request.shareOfEEth) < request.amountWithFee) return 0;
+
+        uint224 frozenRate = _fulfillmentRates[requestId];
+        uint256 amountForShares = frozenRate == 0
+            ? liquidityPool.amountForShare(request.shareOfEEth)
+            : uint256(request.shareOfEEth) * frozenRate / 1e18;
+        if (amountForShares < request.amountWithFee) return 0;
 
         return request.amountWithFee;
+    }
+
+    /// @notice Frozen `amountForShare(1e18)` recorded when `requestId` was fulfilled, or 0 if the
+    ///         request was fulfilled pre-upgrade (live-rate fallback) or has not been fulfilled yet.
+    function fulfillmentRate(bytes32 requestId) external view returns (uint224) {
+        return _fulfillmentRates[requestId];
     }
 
     function totalActiveRequests() external view returns (uint256) {

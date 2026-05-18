@@ -12,6 +12,7 @@ import "./interfaces/IBlacklister.sol";
 
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/Checkpoints.sol";
 import "./RoleRegistry.sol";
 import "./ReentrancyGuardNamespaced.sol";
 import "./utils/PausableUntil.sol";
@@ -21,8 +22,10 @@ import "./utils/PausableUntil.sol";
 contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardNamespaced, PausableUntil, IWithdrawRequestNFT {
     using Math for uint256;
     using SafeERC20 for IERC20;
+    using Checkpoints for Checkpoints.Trace224;
 
     uint256 private constant BASIS_POINT_SCALE = 1e4;
+    uint256 private constant SHARE_UNIT = 1e18;
     // this treasury address is set to ethfi buyback wallet address
     address public immutable treasury;
     
@@ -49,6 +52,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     RoleRegistry public roleRegistry;
 
     uint128 public ethAmountLockedForWithdrawal;
+
+    // (requestId upperBound => amountForShare(1e18) at finalize time).
+    // A value of 0 marks a "legacy" range that pre-dates the share-rate-freeze upgrade;
+    // the claim path falls back to the live rate for those tokenIds.
+    Checkpoints.Trace224 private _finalizationRates;
 
     bytes32 public constant WITHDRAW_REQUEST_NFT_ADMIN_ROLE = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
     bytes32 public constant INVALIDATE_WITHDRAW_REQUEST_ROLE = keccak256("INVALIDATE_WITHDRAW_REQUEST_ROLE");
@@ -107,6 +115,16 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         totalRemainderEEthShares = 0;
     }
 
+    /// @notice One-time initializer for the share-rate-freeze upgrade.
+    /// @dev Pushes a sentinel checkpoint at the current `lastFinalizedRequestId` with value 0.
+    ///      Every requestId <= that key looks up to this sentinel (value 0), which the claim
+    ///      path treats as "fall back to live rate" — preserving legacy behavior for requests
+    ///      that were finalized before this upgrade. New finalizations push real rate snapshots.
+    function initializeShareRateFreezeUpgrade() external onlyOwner {
+        require(_finalizationRates.length() == 0, "already initialized");
+        _finalizationRates.push(uint32(lastFinalizedRequestId), 0);
+    }
+
     receive() external payable {
         require(msg.sender == address(liquidityPool), "Only LP");
         ethAmountLockedForWithdrawal += uint128(msg.value);
@@ -133,21 +151,30 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     function getClaimableAmount(uint256 tokenId) public view returns (uint256) {
-        (uint256 amountToTransfer, uint256 fee) = _getClaimableAmount(tokenId);
+        (uint256 amountToTransfer, uint256 fee, ) = _getClaimableAmount(tokenId);
         return amountToTransfer - fee;
     }
 
-    function _getClaimableAmount(uint256 tokenId) internal view returns (uint256, uint256) {
+    /// @dev Returns `(amountToTransfer, fee, frozenRate)`. `frozenRate` is the rate snapshotted
+    ///      at the request's finalize batch, or 0 for pre-upgrade legacy requests (covered only
+    ///      by the sentinel checkpoint). Callers passing `frozenRate` along to `LP.withdraw` get
+    ///      the live-rate fallback for free — LP treats `rate == 0` as "use live rate".
+    function _getClaimableAmount(uint256 tokenId) internal view returns (uint256, uint256, uint224) {
         require(tokenId <= lastFinalizedRequestId, "Request is not finalized");
         require(ownerOf(tokenId) != address(0), "Already Claimed");
 
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
 
-        // send the lesser value of the originally requested amount of eEth or the current eEth value of the shares
-        uint256 amountForShares = liquidityPool.amountForShare(request.shareOfEEth);
+        // Smallest checkpoint whose key >= tokenId — the finalization batch this request belongs to.
+        uint224 frozenRate = _finalizationRates.lowerLookup(uint32(tokenId));
+        uint256 amountForShares = frozenRate == 0
+            ? liquidityPool.amountForShare(request.shareOfEEth)
+            : uint256(request.shareOfEEth) * frozenRate / SHARE_UNIT;
+
+        // send the lesser value of the originally requested amount of eEth or the frozen-rate value of the shares
         uint256 amountToTransfer = (request.amountOfEEth < amountForShares) ? request.amountOfEEth : amountForShares;
         uint256 fee = uint256(request.feeGwei) * 1 gwei;
-        return (amountToTransfer, fee);
+        return (amountToTransfer, fee, frozenRate);
     }
 
     /// @notice called by the NFT owner to claim their ETH
@@ -157,35 +184,37 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return _claimWithdraw(tokenId, ownerOf(tokenId));
     }
     
-    /// @dev Pays the recipient from this contract's own ETH balance (segregated at finalize via LP.addEthAmountLockedForWithdrawal). Assumes non-decreasing share rate.
+    /// @dev Pays the recipient from this contract's own ETH balance (segregated at finalize via
+    ///      LP.addEthAmountLockedForWithdrawal). Burns shares against the rate frozen at finalize
+    ///      via `LP.withdraw(amount, rate)` (a `frozenRate` of 0 — pre-upgrade requests — asks LP
+    ///      to fall back to the live rate, matching legacy behavior).
     function _claimWithdraw(uint256 tokenId, address recipient) internal {
         require(ownerOf(tokenId) == msg.sender, "Not the owner of the NFT");
         IWithdrawRequestNFT.WithdrawRequest memory request = _requests[tokenId];
         require(request.isValid, "Request is not valid");
 
-        (uint256 amountToTransfer, uint256 fee) = _getClaimableAmount(tokenId);
+        (uint256 amountToTransfer, uint256 fee, uint224 frozenRate) = _getClaimableAmount(tokenId);
         uint256 amountToWithdraw = amountToTransfer - fee;
-        uint256 shareAmountToBurnForWithdrawal = liquidityPool.sharesForWithdrawalAmount(amountToWithdraw);
 
-        // transfer eth to recipient
         _burn(tokenId);
         delete _requests[tokenId];
-
-        // update accounting
-        totalRemainderEEthShares += request.shareOfEEth - shareAmountToBurnForWithdrawal;
 
         require(ethAmountLockedForWithdrawal >= amountToTransfer, "insufficient escrow");
         ethAmountLockedForWithdrawal -= uint128(amountToTransfer);
 
-        uint256 amountBurnedShare = liquidityPool.withdraw(recipient, amountToWithdraw);
-        assert (amountBurnedShare == shareAmountToBurnForWithdrawal);
+        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, uint256(frozenRate));
+        // When `amountToWithdraw` was computed at `frozenRate` (or live rate, for legacy), the
+        // round-trip ceiling division yields `burnedShares <= request.shareOfEEth` by construction;
+        // the require both pins that invariant and protects the remainder bookkeeping below.
+        require(burnedShares <= request.shareOfEEth, "burn exceeds shares");
+        totalRemainderEEthShares += request.shareOfEEth - burnedShares;
 
         (bool ok, ) = payable(recipient).call{value: amountToWithdraw}("");
         require(ok, "ETH transfer failed");
 
         _checkEthAmountLockedForWithdrawal();
 
-        emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw, amountBurnedShare, recipient, 0);
+        emit WithdrawRequestClaimed(uint32(tokenId), amountToWithdraw, burnedShares, recipient, 0);
     }
 
     function batchClaimWithdraw(uint256[] calldata tokenIds) external nonReentrant nonBlacklisted {
@@ -235,6 +264,12 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         return requestId <= lastFinalizedRequestId;
     }
 
+    /// @notice Frozen `amountForShare(1e18)` for the finalization batch covering `tokenId`,
+    ///         or 0 if `tokenId` predates the share-rate-freeze upgrade (live-rate fallback).
+    function frozenRateFor(uint256 tokenId) external view returns (uint224) {
+        return _finalizationRates.lowerLookup(uint32(tokenId));
+    }
+
     function isValid(uint256 requestId) public view returns (bool) {
         require(_exists(requestId), "Request does not exist");
         return _requests[requestId].isValid;
@@ -243,7 +278,26 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function finalizeRequests(uint256 requestId) external onlyAdmin {
         require(requestId >= lastFinalizedRequestId, "Cannot undo finalization");
         require(requestId < nextRequestId, "Cannot finalize future requests");
+
+        // Snapshot the current share rate for the newly-finalized range (prev, requestId].
+        // Skip on no-op finalize so the checkpoint trace stays compact.
+        if (requestId > lastFinalizedRequestId) {
+            uint256 rate = _amountPerShareCeil();
+            require(rate > 0 && rate <= type(uint224).max, "invalid rate");
+            _finalizationRates.push(uint32(requestId), uint224(rate));
+        }
+
         lastFinalizedRequestId = uint32(requestId);
+    }
+
+    /// @dev Ceiling-rounded share rate (`(SHARE_UNIT * TPE + TS - 1) / TS`). We round up so the
+    ///      frozen rate is never strictly less than `LP.amountForShare`'s floor value — this keeps
+    ///      `shareOfEEth * rate / SHARE_UNIT >= amountForShare(shareOfEEth)` for the solvency check
+    ///      and `ceil(amount * SHARE_UNIT / rate) <= shareOfEEth` for the burn at claim time.
+    function _amountPerShareCeil() internal view returns (uint256) {
+        uint256 totalShares = eETH.totalShares();
+        if (totalShares == 0) return 0;
+        return (SHARE_UNIT * liquidityPool.getTotalPooledEther() + totalShares - 1) / totalShares;
     }
 
     /// @dev Admin can only invalidate requests that have NOT been finalized yet

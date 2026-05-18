@@ -934,16 +934,17 @@ contract LiquidityPoolTest is TestSetup {
             vm.stopPrank();
 
             _finalizeWithdrawalRequest(reqId);
-            
+
             // Ensure pool has ETH balance
             vm.deal(bob, 10 ether);
             vm.prank(bob);
             address(liquidityPoolInstance).call{value: 10 ether}("");
-            
-            // Try to withdraw more than locked
+
+            // Try to withdraw more eETH than the NFT escrow holds via the segregated entry.
+            // Rate = 0 routes through the live-rate fallback inside the (amount, rate) overload.
             vm.startPrank(address(withdrawRequestNFTInstance));
             vm.expectRevert(LiquidityPool.InsufficientLiquidity.selector);
-            liquidityPoolInstance.withdraw(alice, withdrawAmount * 2);
+            liquidityPoolInstance.withdraw(withdrawAmount * 2, uint256(0));
             vm.stopPrank();
         } else {
             vm.stopPrank();
@@ -953,7 +954,7 @@ contract LiquidityPoolTest is TestSetup {
     function test_WithdrawFailsIfNotAuthorizedCaller() public {
         vm.deal(alice, 10 ether);
         vm.startPrank(alice);
-        vm.expectRevert("Incorrect Caller");
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
         liquidityPoolInstance.withdraw(alice, 5 ether);
         vm.stopPrank();
     }
@@ -1861,7 +1862,7 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.deposit{value: 1 ether}();
     }
 
-    function test_withdraw_segregatedCaller_skipsLpSendFund() public {
+    function test_withdrawWithRate_segregatedCaller_skipsLpSendFund() public {
         uint128 amount = 1 ether;
 
         // Deposit and request a withdrawal so eETH lands in the NFT contract the real way.
@@ -1883,17 +1884,18 @@ contract LiquidityPoolTest is TestSetup {
         uint128 lpOutBefore        = liquidityPoolInstance.totalValueOutOfLp();
         uint256 lockedBefore       = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
 
+        // Rate = 0 routes through the live-rate fallback inside the (amount, rate) overload,
+        // matching the original test's coverage of the segregated branch.
         vm.prank(address(withdrawRequestNFTInstance));
-        liquidityPoolInstance.withdraw(bob, amount);
+        liquidityPoolInstance.withdraw(amount, uint256(0));
 
         assertEq(address(liquidityPoolInstance).balance, lpEthBefore, "LP ETH should not change on segregated withdraw");
-        assertEq(address(withdrawRequestNFTInstance).balance, nftEthBefore, "NFT ETH unchanged by LP.withdraw alone");
+        assertEq(address(withdrawRequestNFTInstance).balance, nftEthBefore, "NFT ETH unchanged by LP withdraw(amount, rate) alone");
         assertEq(bob.balance, recipientEthBefore, "recipient should NOT receive ETH from LP on segregated path");
         assertEq(liquidityPoolInstance.totalValueInLp(),  lpInBefore, "totalValueInLp should not change");
         assertEq(liquidityPoolInstance.totalValueOutOfLp(), lpOutBefore - amount, "totalValueOutOfLp not decreased");
-        // NFT's counter is decremented by _claimWithdraw before LP.withdraw is called; here we called LP.withdraw
-        // directly (bypassing _claimWithdraw), so the NFT counter is unchanged at this level.
-        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore, "locked counter unchanged when calling LP.withdraw directly");
+        // NFT's counter is decremented by _claimWithdraw before LP is called; here we bypassed _claimWithdraw.
+        assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore, "locked counter unchanged when calling LP directly");
     }
 
     function test_initializeOnUpgradeV2_sweepsLockedEth() public {
