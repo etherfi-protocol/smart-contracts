@@ -107,7 +107,7 @@ contract EtherFiNodesManager is
     // Over time we will migrate to directly calling the associated method on the EtherFiNode contract where applicable.
 
     function createEigenPod(address node) external whenNotPaused returns (address) {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender) && msg.sender != address(stakingManager)) revert IncorrectRole();
+        if (msg.sender != address(stakingManager)) revert InvalidCaller();
         if (!stakingManager.deployedEtherFiNodes(node)) revert UnknownNode();
         return IEtherFiNode(node).createEigenPod();
     }

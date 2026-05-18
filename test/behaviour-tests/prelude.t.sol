@@ -866,7 +866,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         assertEq(address(newNode.getEigenPod()), address(0));
 
         // admin creates one and it should be connected
-        vm.prank(eigenlayerAdmin);
+        vm.prank(address(stakingManager));
         address newPod = etherFiNodesManager.createEigenPod(address(newNode));
         assert(newPod != address(0));
         assertEq(newPod, address(newNode.getEigenPod()));

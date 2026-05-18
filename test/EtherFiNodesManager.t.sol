@@ -275,19 +275,19 @@ contract EtherFiNodesManagerTest is TestSetup {
         vm.prank(nodeCreatorRole);
         address newNode = stakingManagerInstance.instantiateEtherFiNode(false);
         
-        vm.prank(eigenlayerAdmin);
+        vm.prank(address(stakingManagerInstance));
         address pod = managerInstance.createEigenPod(newNode);
         assertTrue(pod != address(0));
     }
     
     function test_createEigenPod_unknownNode() public {
         vm.expectRevert(IEtherFiNodesManager.UnknownNode.selector);
-        vm.prank(eigenlayerAdmin);
+        vm.prank(address(stakingManagerInstance));
         managerInstance.createEigenPod(address(0x999));
     }
     
     function test_createEigenPod_unauthorized() public {
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(IEtherFiNodesManager.InvalidCaller.selector);
         vm.prank(bob);
         managerInstance.createEigenPod(testNode);
     }
