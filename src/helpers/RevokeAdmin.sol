@@ -9,8 +9,6 @@ import "../interfaces/IRoleRegistry.sol";
 contract RevokeAdmin is Initializable, UUPSUpgradeable {
     IRoleRegistry public immutable roleRegistry;
 
-    error IncorrectRole();
-
     constructor(address _roleRegistry) {
         roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
@@ -24,16 +22,28 @@ contract RevokeAdmin is Initializable, UUPSUpgradeable {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
-    function revokePauserUntilRole(address account) external onlyRevokeAdmin {
-        roleRegistry.revokeFast(roleRegistry.PAUSE_UNTIL_ROLE(), account);
+    function revokeGuardianRole(address account) external onlyOperations {
+        roleRegistry.revokeFast(roleRegistry.GUARDIAN_ROLE(), account);
     }
 
-    function revokeBlacklistUntilRole(address account) external onlyRevokeAdmin {
-        roleRegistry.revokeFast(roleRegistry.BLACKLIST_UNTIL_ROLE(), account);
+    function revokeEOA1Role(address account) external onlyOperations {
+        roleRegistry.revokeFast(roleRegistry.EOA_1(), account);
     }
 
-    modifier onlyRevokeAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.REVOKE_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
+    function revokeEOA2Role(address account) external onlyOperations {
+        roleRegistry.revokeFast(roleRegistry.EOA_2(), account);
+    }
+
+    function revokeEOA3Role(address account) external onlyOperations {
+        roleRegistry.revokeFast(roleRegistry.EOA_3(), account);
+    }
+
+    function revokeEOA4Role(address account) external onlyOperations {
+        roleRegistry.revokeFast(roleRegistry.EOA_4(), account);
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 }

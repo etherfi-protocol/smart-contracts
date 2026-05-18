@@ -23,13 +23,6 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;
 
-    error IncorrectRole();
-
-    modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.BUCKET_RATE_LIMITER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
-        _;
-    }
-
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _roleRegistry) {
         roleRegistry = IRoleRegistry(_roleRegistry);
@@ -60,52 +53,55 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         return globalConsumable && perTokenConsumable;
     }
 
-    function setCapacity(uint256 capacity) external onlyAdmin {
+    function setCapacity(uint256 capacity) external onlyOperations {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
         BucketLimiter.setCapacity(limit, capacity64);
     }
 
-    function setRefillRatePerSecond(uint256 refillRate) external onlyAdmin {
+    function setRefillRatePerSecond(uint256 refillRate) external onlyOperations {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
         BucketLimiter.setRefillRate(limit, refillRate64);
     }
 
-    function registerToken(address token, uint256 capacity, uint256 refillRate) external onlyAdmin {
+    function registerToken(address token, uint256 capacity, uint256 refillRate) external onlyOperations {
         uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
         uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
         limitsPerToken[token] = BucketLimiter.create(capacity64, refillRate64);
     }
 
-    function setCapacityPerToken(address token, uint256 capacity) external onlyAdmin {
+    function setCapacityPerToken(address token, uint256 capacity) external onlyOperations {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
         BucketLimiter.setCapacity(limitsPerToken[token], capacity64);
     }
 
-    function setRefillRatePerSecondPerToken(address token, uint256 refillRate) external onlyAdmin {
+    function setRefillRatePerSecondPerToken(address token, uint256 refillRate) external onlyOperations {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
         BucketLimiter.setRefillRate(limitsPerToken[token], refillRate64);
     }
 
-    function updateConsumer(address _consumer) external onlyAdmin {
+    function updateConsumer(address _consumer) external onlyOperations {
         consumer = _consumer;
     }
 
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyOperations {
         _pause();
     }
 
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}

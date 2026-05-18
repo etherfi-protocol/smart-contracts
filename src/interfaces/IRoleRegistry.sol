@@ -82,46 +82,25 @@ interface IRoleRegistry {
     function onlyProtocolUpgrader(address account) external view;
 
     /**
-     * @notice Returns the PROTOCOL_PAUSER role identifier
-     * @return The bytes32 identifier for the PROTOCOL_PAUSER role
+     * @notice Checks if an account is the operating timelock
+     * @dev Reverts if the account is not the operating timelock
+     * @param account The address to check
      */
-    function PROTOCOL_PAUSER() external view returns (bytes32);
+    function onlyOperatingTimelock(address account) external view;
 
     /**
-     * @notice Returns the PROTOCOL_UNPAUSER role identifier
-     * @return The bytes32 identifier for the PROTOCOL_UNPAUSER role
+     * @notice Checks if an account is the operating multisig
+     * @dev Reverts if the account is not the operating multisig
+     * @param account The address to check
      */
-    function PROTOCOL_UNPAUSER() external view returns (bytes32);
+    function onlyOperatingMultisig(address account) external view;
 
     /**
-     * @notice Returns the PAUSE_UNTIL_ROLE role identifier
-     * @return The bytes32 identifier for the PAUSE_UNTIL_ROLE role
+     * @notice Checks if an account is the guardian
+     * @dev Reverts if the account is not the guardian
+     * @param account The address to check
      */
-    function PAUSE_UNTIL_ROLE() external view returns (bytes32);
-
-    /**
-     * @notice Returns the UNPAUSE_UNTIL_ROLE role identifier
-     * @return The bytes32 identifier for the UNPAUSE_UNTIL_ROLE role
-     */
-    function UNPAUSE_UNTIL_ROLE() external view returns (bytes32);
-
-    /**
-     * @notice Returns the PAUSE_DURATION_SETTER role identifier
-     * @return The bytes32 identifier for the PAUSE_DURATION_SETTER role
-     */
-    function PAUSE_DURATION_SETTER() external view returns (bytes32);
-
-    /**
-     * @notice Returns the BLACKLISTER_ROLE role identifier
-     * @return The bytes32 identifier for the BLACKLISTER_ROLE role
-     */
-    function BLACKLISTER_ROLE() external view returns (bytes32);
-
-    /**
-     * @notice Returns the BLACKLIST_UNTIL_ROLE role identifier
-     * @return The bytes32 identifier for the BLACKLIST_UNTIL_ROLE role
-     */
-    function BLACKLIST_UNTIL_ROLE() external view returns (bytes32);
+    function onlyGuardian(address account) external view;
 
     /**
      * @notice Returns the current owner of the contract
@@ -129,61 +108,19 @@ interface IRoleRegistry {
      */
     function owner() external view returns (address);
 
-    function AUCTION_MANAGER_ADMIN_ROLE() external view returns (bytes32);
+    function UPGRADE_TIMELOCK_ROLE() external view returns (bytes32);
 
-    function BUCKET_RATE_LIMITER_ADMIN_ROLE() external view returns (bytes32);
+    function OPERATION_TIMELOCK_ROLE() external view returns (bytes32);
 
-    function CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE() external view returns (bytes32);
-    function CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE() external view returns (bytes32);
+    function OPERATION_MULTISIG_ROLE() external view returns (bytes32);
 
-    function EETH_OPERATING_ADMIN_ROLE() external view returns (bytes32);
+    function GUARDIAN_ROLE() external view returns (bytes32);
 
-    function ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE() external view returns (bytes32);
-    function ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE() external view returns (bytes32);
+    function EOA_1() external view returns (bytes32);
+    
+    function EOA_2() external view returns (bytes32);
 
-    function ETHERFI_NODES_MANAGER_ADMIN_ROLE() external view returns (bytes32);
-    function ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE() external view returns (bytes32);
-    function ETHERFI_NODES_MANAGER_POD_PROVER_ROLE() external view returns (bytes32);
-    function ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE() external view returns (bytes32);
-    function ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE() external view returns (bytes32);
-    function ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE() external view returns (bytes32);
-    function ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE() external view returns (bytes32);
+    function EOA_3() external view returns (bytes32);
 
-    function ETHERFI_ORACLE_ADMIN_ROLE() external view returns (bytes32);
-
-    function LIQUIFIER_ADMIN_ROLE() external view returns (bytes32);
-    function LIQUIFIER_SENDER_ROLE() external view returns (bytes32);
-
-    function WEETH_OPERATING_ADMIN_ROLE() external view returns (bytes32);
-
-    function NODE_OPERATOR_MANAGER_ADMIN_ROLE() external view returns (bytes32);
-
-    function WITHDRAW_REQUEST_NFT_ADMIN_ROLE() external view returns (bytes32);
-    function IMPLICIT_FEE_CLAIMER_ROLE() external view returns (bytes32);
-
-    function ETHERFI_RATE_LIMITER_ADMIN_ROLE() external view returns (bytes32);
-
-    function ETHERFI_REWARDS_ROUTER_ADMIN_ROLE() external view returns (bytes32);
-    function ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE() external view returns (bytes32);
-
-    function LIQUIDITY_POOL_ADMIN_ROLE() external view returns (bytes32);
-    function LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE() external view returns (bytes32);
-    function LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE() external view returns (bytes32);
-
-    function PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE() external view returns (bytes32);
-    function PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE() external view returns (bytes32);
-    function PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE() external view returns (bytes32);
-
-    function ETHERFI_RESTAKER_ADMIN_ROLE() external view returns (bytes32);
-    function ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE() external view returns (bytes32);
-    function ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE() external view returns (bytes32);
-    function ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE() external view returns (bytes32);
-
-    function STAKING_MANAGER_NODE_CREATOR_ROLE() external view returns (bytes32);
-    function STAKING_MANAGER_ADMIN_ROLE() external view returns (bytes32);
-    function STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE() external view returns (bytes32);
-
-    function ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE() external view returns (bytes32);
-
-    function REVOKE_ADMIN_ROLE() external view returns (bytes32);
+    function EOA_4() external view returns (bytes32);
 }

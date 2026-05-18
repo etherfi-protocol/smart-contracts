@@ -52,16 +52,13 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
         emit EthSent(address(this), liquidityPool, balance);
     }
 
-    function recoverERC20(address _token, uint256 _amount) external {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
-
+    function recoverERC20(address _token, uint256 _amount) external onlyOperations {
         IERC20(_token).safeTransfer(treasury, _amount);
 
         emit Erc20Sent(msg.sender, _token, _amount);
     }
 
-    function recoverERC721(address _token, uint256 _tokenId) external {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
+    function recoverERC721(address _token, uint256 _tokenId) external onlyOperations {
 
         IERC721(_token).transferFrom(address(this), treasury, _tokenId);
 
@@ -70,5 +67,12 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    function getImplementation() external view returns (address) {return _getImplementation();}
+    function getImplementation() external view returns (address) {
+        return _getImplementation();
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
 }

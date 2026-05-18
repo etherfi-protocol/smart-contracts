@@ -24,7 +24,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         address wrnOwner = withdrawRequestNFTInstance.owner();
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(buybackWallet, address(blacklisterInstance)))
+            address(new WithdrawRequestNFT(buybackWallet, address(blacklisterInstance), address(etherFiAdminInstance)))
         );
 
         // The production queue proxy on mainnet still runs the master impl which
@@ -42,6 +42,14 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
             vm.prank(lpOwner);
             liquidityPoolInstance.initializeOnUpgradeV2();
         }
+
+        // Admin-gated setters on WithdrawRequestNFT (e.g. updateShareRemainderSplitToTreasuryInBps)
+        // route through OPERATION_TIMELOCK_ROLE. Grant it to `admin` so the test can drive them.
+        // Resolve every argument before vm.prank so unrelated view calls don't consume it.
+        bytes32 opTimelockRole = roleRegistryInstance.OPERATION_TIMELOCK_ROLE();
+        address rrOwner = roleRegistryInstance.owner();
+        vm.prank(rrOwner);
+        roleRegistryInstance.grantRole(opTimelockRole, admin);
     }
 
     function test_HandleRemainder() public {
@@ -69,8 +77,8 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
         // Grant the IMPLICIT_FEE_CLAIMER_ROLE to alice
         vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance))));
-        roleRegistryInstance.grantRole(roleRegistryInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
+        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance), address(etherFiAdminInstance))));
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
         vm.stopPrank();
 
         // Record state before handling remainder
@@ -147,8 +155,8 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
         // Now upgrade the contract and grant roles
         vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance))));
-        roleRegistryInstance.grantRole(roleRegistryInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
+        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance), address(etherFiAdminInstance))));
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
         vm.stopPrank();
 
         uint256 partialAmount = remainderAmount / 2;
@@ -222,14 +230,15 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
             uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
             assertGt(remainderAmount, 0, "Remainder amount should be greater than 0");
 
-            // Update split ratio
-            vm.prank(withdrawRequestNFTInstance.owner());
+            // Update split ratio — onlyAdmin now resolves to OPERATION_TIMELOCK_ROLE,
+            // which `admin` is granted in TestSetup.
+            vm.prank(admin);
             withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(splitRatios[i]);
 
             // Grant the IMPLICIT_FEE_CLAIMER_ROLE to alice
             vm.startPrank(address(roleRegistryInstance.owner()));
-            withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance))));
-            roleRegistryInstance.grantRole(roleRegistryInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
+            withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance), address(etherFiAdminInstance))));
+            roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
             vm.stopPrank();
 
             uint256 nominalToTreasury = Math.mulDiv(remainderAmount, splitRatios[i], 10000);

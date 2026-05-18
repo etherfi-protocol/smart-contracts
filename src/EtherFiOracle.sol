@@ -234,7 +234,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         return BEACON_GENESIS_TIME;
     }
 
-    function addCommitteeMember(address _address) public onlyOwner {
+    function addCommitteeMember(address _address) public onlyAdmin {
         require(committeeMemberStates[_address].registered == false, "Already registered");
         numCommitteeMembers++;
         numActiveCommitteeMembers++;
@@ -243,7 +243,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit CommitteeMemberAdded(_address);
     }
 
-    function removeCommitteeMember(address _address) public onlyOwner {
+    function removeCommitteeMember(address _address) public onlyAdmin {
         require(committeeMemberStates[_address].registered == true, "Not registered");
         numCommitteeMembers--;
         if (committeeMemberStates[_address].enabled) numActiveCommitteeMembers--;
@@ -252,7 +252,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit CommitteeMemberRemoved(_address);
     }
 
-    function manageCommitteeMember(address _address, bool _enabled) public onlyOwner {
+    function manageCommitteeMember(address _address, bool _enabled) public onlyAdmin {
         require(committeeMemberStates[_address].registered == true, "Not registered");
         require(committeeMemberStates[_address].enabled != _enabled, "Already in the target state");
         committeeMemberStates[_address].enabled = _enabled;
@@ -265,23 +265,13 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit CommitteeMemberUpdated(_address, _enabled);
     }
 
-    function setReportStartSlot(uint32 _reportStartSlot) public isAdmin {
-        // check if the start slot is at the beginning of the epoch
-        require(_reportStartSlot > computeSlotAtTimestamp(block.timestamp), "The start slot should be in the future");
-        require(_reportStartSlot > lastPublishedReportRefSlot, "The start slot should be after the last published report");
-        require(_reportStartSlot % SLOTS_PER_EPOCH == 0, "The start slot should be at the beginning of the epoch");
-        reportStartSlot = _reportStartSlot;
-        
-        emit ReportStartSlotUpdated(_reportStartSlot);
-    }
-
-    function setQuorumSize(uint32 _quorumSize) public onlyOwner {
+    function setQuorumSize(uint32 _quorumSize) public onlyAdmin {
         quorumSize = _quorumSize;
 
         emit QuorumUpdated(_quorumSize);
     }
 
-    function setOracleReportPeriod(uint32 _reportPeriodSlot) public isAdmin {
+    function setOracleReportPeriod(uint32 _reportPeriodSlot) public onlyAdmin {
         require(_reportPeriodSlot != 0, "Report period cannot be zero");
         require(_reportPeriodSlot % SLOTS_PER_EPOCH == 0, "Report period must be a multiple of the epoch");
         reportPeriodSlot = _reportPeriodSlot;
@@ -289,36 +279,24 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit OracleReportPeriodUpdated(_reportPeriodSlot);
     }
 
-    function setConsensusVersion(uint32 _consensusVersion) public isAdmin {
+    function setConsensusVersion(uint32 _consensusVersion) public onlyAdmin {
         require(_consensusVersion > consensusVersion, "New consensus version must be greater than the current one");
         consensusVersion = _consensusVersion;
 
         emit ConsensusVersionUpdated(_consensusVersion);
     }
-
-    function setEtherFiAdmin(address _etherFiAdminAddress) external onlyOwner {
-        require(etherFiAdmin == IEtherFiAdmin(address(0)), "EtherFiAdmin is already set");
-        etherFiAdmin = IEtherFiAdmin(_etherFiAdminAddress);
-    }
     
-    function unpublishReport(bytes32 _hash) external isAdmin {
+    function unpublishReport(bytes32 _hash) external onlyOperations {
         require(consensusStates[_hash].consensusReached, "Consensus is not reached yet");
         consensusStates[_hash].support = 0;
         consensusStates[_hash].consensusReached = false;
     }
 
-    function updateLastPublishedBlockStamps(uint32 _lastPublishedReportRefSlot, uint32 _lastPublishedReportRefBlock) external isAdmin {
-        lastPublishedReportRefSlot = _lastPublishedReportRefSlot;
-        lastPublishedReportRefBlock = _lastPublishedReportRefBlock;
-    }
-
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyOperations {
         _pause();
     }
 
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
@@ -328,8 +306,13 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    modifier isAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.ETHERFI_ORACLE_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 }

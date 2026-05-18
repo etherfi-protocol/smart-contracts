@@ -117,7 +117,7 @@ contract NodeOperatorManagerTest is TestSetup {
         assertEq(nodeOperatorManagerInstance.isWhitelisted(jess), false);
         vm.stopPrank();
 
-        vm.expectRevert(NodeOperatorManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         vm.prank(greg);
         nodeOperatorManagerInstance.addToWhitelist(jess);
 
@@ -133,7 +133,7 @@ contract NodeOperatorManagerTest is TestSetup {
             uint64(10)
         );
 
-        vm.expectRevert(NodeOperatorManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         vm.prank(greg);
         nodeOperatorManagerInstance.removeFromWhitelist(alice);
 
@@ -227,7 +227,7 @@ contract NodeOperatorManagerTest is TestSetup {
         approvals[0] = false;
 
         vm.prank(greg);
-        vm.expectRevert(NodeOperatorManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         nodeOperatorManagerInstance.batchUpdateOperatorsApprovedTags(users, approvedTags, approvals);
 
         vm.startPrank(alice);

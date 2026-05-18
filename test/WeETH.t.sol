@@ -499,17 +499,9 @@ contract WeETHTest is TestSetup {
     // ---- pause role gating --------------------------------------------------
 
     function test_WeETH_pause_requiresPauserRole() public {
+        // pause() / unpause() are gated by onlyAdmin (OPERATION_MULTISIG_ROLE).
         vm.prank(bob);
-        vm.expectRevert(WeETH.IncorrectRole.selector);
-        weEthInstance.pause();
-
-        // PROTOCOL_UNPAUSER alone is not enough.
-        address unpauserOnly = vm.addr(0xBADC0DE);
-        bytes32 unpauseRole = roleRegistryInstance.PROTOCOL_UNPAUSER();
-        vm.prank(owner);
-        roleRegistryInstance.grantRole(unpauseRole, unpauserOnly);
-        vm.prank(unpauserOnly);
-        vm.expectRevert(WeETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         weEthInstance.pause();
 
         vm.prank(admin);
@@ -522,7 +514,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pause();
 
         vm.prank(bob);
-        vm.expectRevert(WeETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         weEthInstance.unpause();
 
         vm.prank(admin);

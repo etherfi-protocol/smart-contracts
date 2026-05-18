@@ -70,12 +70,10 @@ contract StakingManager is
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
 
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyOperations {
         _pause();
     }
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
@@ -84,7 +82,7 @@ contract StakingManager is
     //---------------------------------------------------------------------------
     
     function invalidateRegisteredBeaconValidator(DepositData calldata depositData, uint256 bidId, address etherFiNode) external {
-        if (!roleRegistry.hasRole(roleRegistry.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_1(), msg.sender)) revert IncorrectRole();
         bytes32 validatorCreationDataHash = keccak256(abi.encode(depositData.publicKey, depositData.signature, depositData.depositDataRoot, depositData.ipfsHashForEncryptedValidatorKey, bidId, etherFiNode));
         if (validatorCreationStatus[validatorCreationDataHash] != ValidatorCreationStatus.REGISTERED) revert InvalidValidatorCreationStatus();
         validatorCreationStatus[validatorCreationDataHash] = ValidatorCreationStatus.INVALIDATED;
@@ -224,7 +222,7 @@ contract StakingManager is
     /// @dev create a new proxy instance of the etherFiNode withdrawal safe contract.
     /// @param _createEigenPod whether or not to create an associated eigenPod contract.
     function instantiateEtherFiNode(bool _createEigenPod) external returns (address) {
-        if (!roleRegistry.hasRole(roleRegistry.STAKING_MANAGER_NODE_CREATOR_ROLE(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
 
         BeaconProxy proxy = new BeaconProxy(address(etherFiNodeBeacon), "");
         address node = address(proxy);
@@ -241,7 +239,7 @@ contract StakingManager is
 
     /// @dev this method is for backfilling the addresses of etherFiNodes the protocol has previously deployed
     ///    Once this data has been backfilled we can delete this method
-    function backfillExistingEtherFiNodes(address[] calldata nodes) external onlyAdmin {
+    function backfillExistingEtherFiNodes(address[] calldata nodes) external onlyOperations {
         for (uint256 i = 0; i < nodes.length; i++) {
             address node = nodes[i];
             if (deployedEtherFiNodes[node]) continue; // already linked
@@ -255,8 +253,8 @@ contract StakingManager is
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
 
-    modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.STAKING_MANAGER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 

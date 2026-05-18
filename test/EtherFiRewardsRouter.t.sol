@@ -66,7 +66,7 @@ contract EtherFiRewardsRouterTest is Test {
         );
         
         // Grant admin role
-        roleRegistry.grantRole(roleRegistry.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
         vm.stopPrank();
         
         // Deploy proxy and initialize (outside prank so owner is address(this))
@@ -267,7 +267,7 @@ contract EtherFiRewardsRouterTest is Test {
         uint256 amount = 100 ether;
         
         vm.prank(unauthorizedUser);
-        vm.expectRevert(EtherFiRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rewardsRouter.recoverERC20(address(testToken), amount);
     }
     
@@ -336,7 +336,7 @@ contract EtherFiRewardsRouterTest is Test {
         uint256 tokenId = testNFT.mint(address(rewardsRouter));
         
         vm.prank(unauthorizedUser);
-        vm.expectRevert(EtherFiRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rewardsRouter.recoverERC721(address(testNFT), tokenId);
     }
     
@@ -374,7 +374,7 @@ contract EtherFiRewardsRouterTest is Test {
         
         // Grant role
         vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), newAdmin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), newAdmin);
         vm.stopPrank();
         
         uint256 amount = 100 ether;
@@ -387,12 +387,12 @@ contract EtherFiRewardsRouterTest is Test {
         
         // Revoke role
         vm.startPrank(owner);
-        roleRegistry.revokeRole(roleRegistry.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), newAdmin);
+        roleRegistry.revokeRole(roleRegistry.OPERATION_MULTISIG_ROLE(), newAdmin);
         vm.stopPrank();
         
         testToken.mint(address(rewardsRouter), amount);
         vm.prank(newAdmin);
-        vm.expectRevert(EtherFiRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rewardsRouter.recoverERC20(address(testToken), amount);
     }
     

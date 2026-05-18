@@ -204,7 +204,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // 2. Deploy new implementation contracts (with the added guard)
         // ------------------------------------------------------------------
         address newLP  = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, address(blacklisterInstance), 0));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance)));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance), ETHERFI_ADMIN));
 
         // ------------------------------------------------------------------
         // 3. Upgrade the proxies in place
@@ -354,7 +354,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // down the live pauser address, grant the role to this test via
         // RoleRegistry's owner/DEFAULT_ADMIN.
         address roleReg = address(wrn.roleRegistry());
-        bytes32 pauserRole = wrn.roleRegistry().PROTOCOL_PAUSER();
+        bytes32 pauserRole = wrn.roleRegistry().OPERATION_MULTISIG_ROLE();
         address roleRegOwner = IOwnableRead(roleReg).owner();
         vm.startPrank(roleRegOwner);
         (bool granted,) = roleReg.call(
@@ -380,7 +380,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      receive(); the master queue impl has no receive() and would revert.
     function _doUpgrade() internal {
         address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, address(blacklisterInstance), 0));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance)));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance), ETHERFI_ADMIN));
         address newPQ = address(new PriorityWithdrawalQueue(
             LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, TREASURY, 1 hours
         ));

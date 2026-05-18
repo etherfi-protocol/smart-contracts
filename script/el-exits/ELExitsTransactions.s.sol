@@ -71,16 +71,16 @@ contract ElExitsTransactions is Script {
     //--------------------------------------------------------------------------------------
 
     bytes32 ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE =
-        RoleRegistry(roleRegistry).ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE();
+        RoleRegistry(roleRegistry).EOA_3();
 
     bytes32 ETHERFI_NODES_MANAGER_POD_PROVER_ROLE =
-        RoleRegistry(roleRegistry).ETHERFI_NODES_MANAGER_POD_PROVER_ROLE();
+        RoleRegistry(roleRegistry).EOA_4();
 
     bytes32 STAKING_MANAGER_ADMIN_ROLE =
-        RoleRegistry(roleRegistry).STAKING_MANAGER_ADMIN_ROLE();
+        RoleRegistry(roleRegistry).OPERATION_MULTISIG_ROLE();
 
     bytes32 ETHERFI_RATE_LIMITER_ADMIN_ROLE =
-        RoleRegistry(roleRegistry).ETHERFI_RATE_LIMITER_ADMIN_ROLE();
+        RoleRegistry(roleRegistry).OPERATION_MULTISIG_ROLE();
 
     //--------------------------------------------------------------------------------------
     //------------------------------- SELECTORS ---------------------------------------

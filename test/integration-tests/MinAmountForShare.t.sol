@@ -69,6 +69,13 @@ contract MinAmountForShareForkTest is TestSetup, Deployed {
         vm.prank(roleRegistryInstance.owner());
         etherFiRedemptionManagerInstance.upgradeTo(address(newImpl));
 
+        // Admin-gated setters on EtherFiRedemptionManager now route through
+        // OPERATION_TIMELOCK_ROLE; ensure OPERATING_TIMELOCK holds it on the fork.
+        bytes32 opTimelockRole = roleRegistryInstance.OPERATION_TIMELOCK_ROLE();
+        address rrOwner = roleRegistryInstance.owner();
+        vm.prank(rrOwner);
+        roleRegistryInstance.grantRole(opTimelockRole, OPERATING_TIMELOCK);
+
         vm.startPrank(OPERATING_TIMELOCK);
         etherFiRedemptionManagerInstance.setCapacity(3000 ether, ETH_ADDRESS);
         etherFiRedemptionManagerInstance.setRefillRatePerSecond(3000 ether, ETH_ADDRESS);

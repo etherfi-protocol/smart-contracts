@@ -389,13 +389,15 @@ contract PausableUntilIntegrationTest is TestSetup {
         setUpTests();
         limiter = rateLimiterInstance;
 
+        // After role consolidation: rate limiter onlyAdmin / pause / unpause / setPauseUntilDuration
+        // all map to OPERATION_MULTISIG_ROLE. pauseContractUntil maps to GUARDIAN_ROLE.
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), pauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), unpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), pauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
 
         vm.startPrank(admin);
@@ -414,28 +416,21 @@ contract PausableUntilIntegrationTest is TestSetup {
 
     function test_pauseContractUntil_requiresRole() public {
         vm.prank(outsider);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
         limiter.pauseContractUntil();
     }
 
-    function test_pauseContractUntil_protocolPauserCannotCall() public {
-        // PROTOCOL_PAUSER alone must not be able to invoke pauseContractUntil
-        vm.prank(pauser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
-        limiter.pauseContractUntil();
-    }
+    // test_pauseContractUntil_protocolPauserCannotCall removed:
+    // pauseContractUntil requires GUARDIAN_ROLE in the consolidated model. The
+    // pauser address holds the consolidated admin role and not GUARDIAN_ROLE,
+    // so the negative case is covered by test_pauseContractUntil_requiresRole.
 
     function test_unpauseContractUntil_requiresRole() public {
         vm.prank(pauseUntilPauser);
         limiter.pauseContractUntil();
 
         vm.prank(outsider);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
-        limiter.unpauseContractUntil();
-
-        // PROTOCOL_UNPAUSER alone must not be able to invoke unpauseContractUntil
-        vm.prank(unpauser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         limiter.unpauseContractUntil();
     }
 
@@ -531,17 +526,12 @@ contract PausableUntilIntegrationTest is TestSetup {
         uint256 maxDur = limiter.MAX_PAUSE_DURATION();
 
         vm.prank(outsider);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         limiter.setPauseUntilDuration(maxDur);
 
-        // PROTOCOL_PAUSER alone must not grant pause-duration capability
-        vm.prank(pauser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
-        limiter.setPauseUntilDuration(maxDur);
-
-        // PAUSE_UNTIL_ROLE alone must not grant pause-duration capability
+        // Guardian-only role (pauseUntilPauser) cannot set the duration; needs admin role.
         vm.prank(pauseUntilPauser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         limiter.setPauseUntilDuration(maxDur);
     }
 

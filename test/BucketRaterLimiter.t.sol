@@ -28,9 +28,9 @@ contract BucketRateLimiterTest is Test {
         limiter = BucketRateLimiter(address(proxy));
         limiter.initialize();
 
-        roleRegistry.grantRole(roleRegistry.BUCKET_RATE_LIMITER_ADMIN_ROLE(), owner);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), owner);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), owner);
+        // BUCKET_RATE_LIMITER_ADMIN_ROLE / PROTOCOL_PAUSER / PROTOCOL_UNPAUSER all
+        // consolidated into OPERATION_MULTISIG_ROLE.
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), owner);
 
         limiter.updateConsumer(owner);
         limiter.setCapacity(200 ether);
@@ -106,13 +106,13 @@ contract BucketRateLimiterTest is Test {
     }
     
     function test_access_control() public {
-        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         limiter.setCapacity(100 ether);
 
-        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         limiter.setRefillRatePerSecond(100 ether);
 
-        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         limiter.updateConsumer(address(0));
     }
     
@@ -122,29 +122,36 @@ contract BucketRateLimiterTest is Test {
         address chad = address(3);
 
         vm.prank(alice);
-        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         limiter.pauseContract();
 
         assertEq(limiter.DEPRECATED_pausers(alice), false);
 
         vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), alice);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), alice);
         vm.stopPrank();
 
         vm.prank(chad);
-        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         limiter.pauseContract();
 
         vm.prank(alice);
         limiter.pauseContract();
 
         vm.prank(alice);
-        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
+        // unPauseContract is also gated by OPERATION_MULTISIG_ROLE now, but the
+        // call following will succeed since alice has it. Use a fresh non-role
+        // address (chad) to test the revert path.
+        // alice has the role now, so this should NOT revert. We expect the call to succeed.
         limiter.unPauseContract();
 
         vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), bob);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), bob);
         vm.stopPrank();
+
+        // Re-pause so we can test bob unpausing.
+        vm.prank(alice);
+        limiter.pauseContract();
 
         vm.prank(bob);
         limiter.unPauseContract();
@@ -827,7 +834,7 @@ contract BucketRateLimiterTest is Test {
         address nonOwner = address(999);
 
         vm.prank(nonOwner);
-        vm.expectRevert(BucketRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         limiter.updateConsumer(address(999));
     }
 
@@ -837,7 +844,7 @@ contract BucketRateLimiterTest is Test {
         address admin = address(1);
 
         vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.BUCKET_RATE_LIMITER_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
         vm.stopPrank();
 
         assertEq(limiter.DEPRECATED_admins(admin), false);
@@ -846,8 +853,7 @@ contract BucketRateLimiterTest is Test {
     function test_updateAdmin_canPause() public {
         address admin = address(1);
         vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), admin);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
         vm.stopPrank();
 
         vm.prank(admin);
@@ -862,8 +868,7 @@ contract BucketRateLimiterTest is Test {
     function test_updateAdmin_canUnpause() public {
         address admin = address(1);
         vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), admin);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
         vm.stopPrank();
 
         vm.prank(owner);
@@ -881,7 +886,7 @@ contract BucketRateLimiterTest is Test {
         assertEq(limiter.DEPRECATED_pausers(pauser), false);
 
         vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), pauser);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), pauser);
         vm.stopPrank();
 
         assertEq(limiter.DEPRECATED_pausers(pauser), false);
@@ -900,7 +905,7 @@ contract BucketRateLimiterTest is Test {
     function test_updatePauser_adminCanPause() public {
         address admin = address(1);
         vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
         vm.stopPrank();
 
         vm.prank(admin);

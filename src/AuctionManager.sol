@@ -227,7 +227,7 @@ contract AuctionManager is
         }
     }
 
-    function transferAccumulatedRevenue() external onlyAdmin {
+    function transferAccumulatedRevenue() external onlyOperations {
         uint256 transferAmount = accumulatedRevenue;
         accumulatedRevenue = 0;
         (bool sent, ) = membershipManagerContractAddress.call{value: transferAmount}("");
@@ -236,27 +236,25 @@ contract AuctionManager is
 
     /// @notice Disables the whitelisting phase of the bidding
     /// @dev Allows both regular users and whitelisted users to bid
-    function disableWhitelist() public onlyAdmin {
+    function disableWhitelist() public onlyOperations {
         whitelistEnabled = false;
         emit WhitelistDisabled(whitelistEnabled);
     }
 
     /// @notice Enables the whitelisting phase of the bidding
     /// @dev Only users who are on a whitelist can bid
-    function enableWhitelist() public onlyAdmin {
+    function enableWhitelist() public onlyOperations {
         whitelistEnabled = true;
         emit WhitelistEnabled(whitelistEnabled);
     }
 
     //Pauses the contract
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyOperations {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
@@ -322,7 +320,7 @@ contract AuctionManager is
 
     /// @notice Updates the minimum bid price for a non-whitelisted bidder
     /// @param _newMinBidAmount the new amount to set the minimum bid price as
-    function setMinBidPrice(uint64 _newMinBidAmount) external onlyAdmin {
+    function setMinBidPrice(uint64 _newMinBidAmount) external onlyOperations {
         require(_newMinBidAmount < maxBidAmount, "Min bid exceeds max bid");
         require(_newMinBidAmount >= whitelistBidAmount, "Min bid less than whitelist bid amount");
         minBidAmount = _newMinBidAmount;
@@ -330,14 +328,14 @@ contract AuctionManager is
 
     /// @notice Updates the maximum bid price for both whitelisted and non-whitelisted bidders
     /// @param _newMaxBidAmount the new amount to set the maximum bid price as
-    function setMaxBidPrice(uint64 _newMaxBidAmount) external onlyAdmin {
+    function setMaxBidPrice(uint64 _newMaxBidAmount) external onlyOperations {
         require(_newMaxBidAmount > minBidAmount, "Min bid exceeds max bid");
         maxBidAmount = _newMaxBidAmount;
     }
 
     /// @notice Updates the accumulated revenue threshold that will trigger a transfer to MembershipNFT contract
     /// @param _newThreshold the new threshold to set
-    function setAccumulatedRevenueThreshold(uint128 _newThreshold) external onlyAdmin {
+    function setAccumulatedRevenueThreshold(uint128 _newThreshold) external onlyOperations {
         accumulatedRevenueThreshold = _newThreshold;
     }
 
@@ -365,8 +363,8 @@ contract AuctionManager is
         _;
     }
 
-    modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.AUCTION_MANAGER_ADMIN_ROLE(), msg.sender)) revert IncorrectRole();
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 

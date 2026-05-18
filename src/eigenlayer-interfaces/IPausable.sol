@@ -8,7 +8,7 @@ import "../eigenlayer-interfaces/IPauserRegistry.sol";
  * @author Layr Labs, Inc.
  * @notice Terms of Service: https://docs.eigenlayer.xyz/overview/terms-of-service
  * @notice Contracts that inherit from this contract may define their own `pause` and `unpause` (and/or related) functions.
- * These functions should be permissioned as "onlyPauser" which defers to a `PauserRegistry` for determining access control.
+ * These functions should be permissioned as "onlyOperations" which defers to a `PauserRegistry` for determining access control.
  * @dev Pausability is implemented using a uint256, which allows up to 256 different single bit-flags; each bit can potentially pause different functionality.
  * Inspiration for this was taken from the NearBridge design here https://etherscan.io/address/0x3FEFc5A4B1c02f21cBc8D3613643ba0635b9a873#code.
  * For the `pause` and `unpause` functions we've implemented, if you pause, you can only flip (any number of) switches to on/1 (aka "paused"), and if you unpause,

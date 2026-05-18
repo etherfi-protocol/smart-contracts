@@ -14,6 +14,9 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     address public immutable revokeAdmin;
 
     error OnlyProtocolUpgrader();
+    error OnlyOperatingTimelock();
+    error OnlyOperatingMultisig();
+    error OnlyGuardian();
     error OnlyRevokeAdmin();
 
     /// @notice Returns the maximum allowed role value
@@ -86,6 +89,18 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
 
     function onlyProtocolUpgrader(address account) public view {
         if (owner() != account) revert OnlyProtocolUpgrader();
+    }
+
+    function onlyOperatingTimelock(address account) public view {
+        if (!hasRole(OPERATION_TIMELOCK_ROLE, account)) revert OnlyOperatingTimelock();
+    }
+
+    function onlyOperatingMultisig(address account) public view {
+        if (!hasRole(OPERATION_MULTISIG_ROLE, account)) revert OnlyOperatingMultisig();
+    }
+
+    function onlyGuardian(address account) public view {
+        if (!hasRole(GUARDIAN_ROLE, account)) revert OnlyGuardian();
     }
 
     function __revertEnumerableRolesUnauthorized() private pure {
