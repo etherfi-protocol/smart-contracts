@@ -40,8 +40,6 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;
 
-    error IncorrectRole();
-
     event CommitteeMemberAdded(address indexed member);
     event CommitteeMemberRemoved(address indexed member);
     event CommitteeMemberUpdated(address indexed member, bool enabled);

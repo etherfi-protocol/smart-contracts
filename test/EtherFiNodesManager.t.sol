@@ -247,7 +247,7 @@ contract EtherFiNodesManagerTest is TestSetup {
     }
 
     function test_sweepFunds_unauthorized() public {
-        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
         vm.prank(bob);
         managerInstance.sweepFunds(testLegacyId);
 

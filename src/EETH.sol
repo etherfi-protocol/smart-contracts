@@ -45,8 +45,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     event Unpaused();
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
 
-    error IncorrectRole();
-
     // TODO: Figure our what `name` and `version` are for
     constructor(address _roleRegistry, address _blacklister) {
         bytes32 hashedName = keccak256("EETH");

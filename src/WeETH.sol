@@ -22,7 +22,6 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     event Paused();
     event Unpaused();
 
-    error IncorrectRole();
     error CannotRecoverEETH();
 
     //--------------------------------------------------------------------------------------

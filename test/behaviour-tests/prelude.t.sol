@@ -874,7 +874,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
         etherFiNodesManager.completeQueuedWithdrawals(nodeId, withdrawals, tokens, receiveAsTokens);
 
-        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
         etherFiNodesManager.sweepFunds(nodeId);
 
         // normal user should fail for all call forwarding

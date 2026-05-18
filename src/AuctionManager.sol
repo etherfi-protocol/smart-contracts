@@ -51,8 +51,6 @@ contract AuctionManager is
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
-    error IncorrectRole();
-
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------

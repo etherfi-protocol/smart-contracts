@@ -50,7 +50,6 @@ contract WeETHWithdrawAdapter is
     error ZeroAmount();
     error ZeroAddress();
     error ContractPaused();
-    error IncorrectRole();
     error InvalidAmount();
 
     //--------------------------------------------------------------------------------------

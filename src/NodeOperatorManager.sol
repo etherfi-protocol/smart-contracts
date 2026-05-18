@@ -39,8 +39,6 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;
 
-    error IncorrectRole();
-
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
