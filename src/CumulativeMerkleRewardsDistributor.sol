@@ -50,8 +50,7 @@ using SafeERC20 for IERC20;
         claimDelay = 172800; // 48 hours
     }
 
-    function setClaimDelay(uint256 _claimDelay) external {
-        if(!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
+    function setClaimDelay(uint256 _claimDelay) external onlyAdmin {
         claimDelay = _claimDelay;
         emit ClaimDelayUpdated(claimDelay);
     }
@@ -129,8 +128,7 @@ using SafeERC20 for IERC20;
         emit Claimed(token, account, amount);
     }
 
-    function updateWhitelistedRecipient(address user, bool isWhitelisted) external {
-        if(!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
+    function updateWhitelistedRecipient(address user, bool isWhitelisted) external onlyAdmin {
         whitelistedRecipient[user] = isWhitelisted;
         emit RecipientStatusUpdated(user, isWhitelisted);
     }

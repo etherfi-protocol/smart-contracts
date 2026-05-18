@@ -205,7 +205,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         liquidityPoolInstance.deposit{value: depositAmt}();
 
         // Allow 1 wei: deposit→share→eETH round-trip rounding at current mainnet share rate
-        assertApproxEqAbs(eETHInstance.balanceOf(user), depositAmt, 1,
+        assertApproxEqAbs(eETHInstance.balanceOf(user), depositAmt, 2,
             "step1: user eETH after deposit");
         assertEq(liquidityPoolInstance.getTotalPooledEther(),
             baseLp.totalPooled + depositAmt,

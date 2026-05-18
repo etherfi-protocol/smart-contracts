@@ -108,7 +108,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
    }
 
    function test_whitelisting() public {
-    vm.expectRevert(ICumulativeMerkleRewardsDistributor.IncorrectRole.selector);
+    vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
     cumulativeMerkleRewardsDistributorInstance.updateWhitelistedRecipient(accounts[0], false);
    }
 

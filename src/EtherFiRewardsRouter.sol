@@ -72,7 +72,7 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     }
 
     modifier onlyAdmin() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 }

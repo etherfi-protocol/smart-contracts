@@ -134,9 +134,6 @@ contract PreludeTest is Test, ArrayTestHelper {
         roleRegistry.grantRole(roleRegistry.EOA_4(), address(podProver));
         roleRegistry.grantRole(roleRegistry.EOA_3(), elExiter);
         roleRegistry.grantRole(roleRegistry.EOA_3(), admin);
-        roleRegistry.grantRole(roleRegistry.EOA_3(), admin);
-        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
-        roleRegistry.grantRole(roleRegistry.EOA_3(), admin);
         roleRegistry.grantRole(roleRegistry.EOA_1(), admin);
         roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
