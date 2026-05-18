@@ -184,18 +184,18 @@ contract ELExitsForkTestingDeploymentTest is Test {
 
         // Assign NEW EL trigger exit role to a realistic address
         address realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F; // etherFiAdminExecuter
-        roleRegistry.grantRole(roleRegistry.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), realElExiter);
+        roleRegistry.grantRole(roleRegistry.EOA_3(), realElExiter);
         console2.log("Granted ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE to:", realElExiter);
 
         // Assign rate limiter admin role to a realistic address  
         address realRateLimiterAdmin = 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705; // etherFiAdmin
-        roleRegistry.grantRole(roleRegistry.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), realRateLimiterAdmin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), realRateLimiterAdmin);
         console2.log("Granted ETHERFI_RATE_LIMITER_ADMIN_ROLE to:", realRateLimiterAdmin);
 
         // Grant other necessary roles (following prelude pattern)
         address admin = realRateLimiterAdmin; // Use realistic admin address
-        roleRegistry.grantRole(roleRegistry.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(roleRegistry.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
 
         vm.stopPrank();
         console2.log("[OK] All roles granted");
@@ -230,7 +230,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
 
         // Test 1: EL-triggered withdrawal with real role
         address realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
-        bool hasElExitRole = roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), realElExiter);
+        bool hasElExitRole = roleRegistry.hasRole(roleRegistry.EOA_3(), realElExiter);
 
         if (hasElExitRole) {
             console2.log("[OK] EL Exit role correctly assigned to real address");
@@ -265,7 +265,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
 
         // Test 3: Call forwarding (set up a realistic example)
         address realAdmin = address(0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705); // etherFiAdmin
-        bool hasNodesManagerAdminRole = roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), realAdmin);
+        bool hasNodesManagerAdminRole = roleRegistry.hasRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), realAdmin);
 
         if (hasNodesManagerAdminRole) {
             bytes4 eigenPodSelector = bytes4(keccak256("activateRestaking()"));
@@ -321,7 +321,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
         console2.log("=== SIMULATING EL EXIT WITH REAL CONSTRAINTS ===");
 
         address realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
-        bool hasRole = roleRegistry.hasRole(roleRegistry.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), realElExiter);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.EOA_3(), realElExiter);
 
         console2.log("Real EL Exiter:", realElExiter);
         console2.log("Has EL Exit Role:", hasRole);

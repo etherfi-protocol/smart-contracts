@@ -68,7 +68,7 @@ contract BlacklistTest is TestSetup {
     function test_blacklist_requires_role() public {
         address rando = vm.addr(0xBEEF);
         vm.prank(rando);
-        vm.expectRevert(Blacklister.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         blacklisterInstance.blacklistUser(rando);
     }
 
@@ -325,10 +325,9 @@ contract BlacklistTest is TestSetup {
     address internal tempBlacklisted = vm.addr(0xC0FFEE);
 
     function _grantBlacklistUntilRoleTo(address who) internal {
-        // Resolve the role getter BEFORE vm.prank — an external call in the
-        // grantRole arg list would consume the prank. Same pattern is used in
-        // TestSetup.sol around the BLACKLISTER_ROLE grant.
-        bytes32 role = roleRegistryInstance.BLACKLIST_UNTIL_ROLE();
+        // blacklistUserUntil() is now onlyGuardian; in the consolidated role
+        // model that corresponds to GUARDIAN_ROLE on the registry.
+        bytes32 role = roleRegistryInstance.GUARDIAN_ROLE();
         vm.prank(owner);
         roleRegistryInstance.grantRole(role, who);
     }
@@ -361,10 +360,10 @@ contract BlacklistTest is TestSetup {
     }
 
     function test_blacklistUserUntil_default_requires_BLACKLIST_UNTIL_ROLE() public {
-        // `owner` only holds BLACKLISTER_ROLE in setUp; the default-window
-        // overload requires the separate BLACKLIST_UNTIL_ROLE.
+        // `owner` only holds OPERATION_MULTISIG_ROLE (the consolidated admin role)
+        // in setUp; the default-window overload now requires GUARDIAN_ROLE.
         vm.prank(owner);
-        vm.expectRevert(Blacklister.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
         blacklisterInstance.blacklistUserUntil(tempBlacklisted);
     }
 
@@ -399,7 +398,7 @@ contract BlacklistTest is TestSetup {
     function test_blacklistUserUntil_custom_requires_BLACKLISTER_ROLE() public {
         address rando = vm.addr(0xB16B00B5);
         vm.prank(rando);
-        vm.expectRevert(Blacklister.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         blacklisterInstance.extendBlacklistUntil(tempBlacklisted, 1 days);
     }
 

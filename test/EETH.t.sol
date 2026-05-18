@@ -494,22 +494,12 @@ contract EETHTest is TestSetup {
     // ---- pause role gating --------------------------------------------------
 
     function test_EETH_pause_requiresPauserRole() public {
-        // Distinct holder so we don't accidentally rely on `admin`/`alice` overlap.
+        // pause() is now onlyAdmin -> OPERATION_MULTISIG_ROLE.
         vm.prank(bob);
-        vm.expectRevert(EETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         eETHInstance.pause();
 
-        // PROTOCOL_UNPAUSER alone is insufficient — needs PROTOCOL_PAUSER. Resolve
-        // role getter BEFORE vm.prank — an inline external call consumes the prank.
-        address unpauserOnly = vm.addr(0xBADC0DE);
-        bytes32 unpauseRole = roleRegistryInstance.PROTOCOL_UNPAUSER();
-        vm.prank(owner);
-        roleRegistryInstance.grantRole(unpauseRole, unpauserOnly);
-        vm.prank(unpauserOnly);
-        vm.expectRevert(EETH.IncorrectRole.selector);
-        eETHInstance.pause();
-
-        // `admin` holds PROTOCOL_PAUSER from setUpTests (see TestSetup.sol:666).
+        // `admin` holds OPERATION_MULTISIG_ROLE from setUpTests.
         vm.prank(admin);
         eETHInstance.pause();
         assertTrue(eETHInstance.paused());
@@ -520,7 +510,7 @@ contract EETHTest is TestSetup {
         eETHInstance.pause();
 
         vm.prank(bob);
-        vm.expectRevert(EETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         eETHInstance.unpause();
 
         vm.prank(admin);
@@ -686,9 +676,10 @@ contract EETHTest is TestSetup {
 
     function _grantPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
+        // pauseContractUntil → GUARDIAN_ROLE; unpauseContractUntil + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
         // Foundry's default block.timestamp is too small — the cooldown check is
         // `lastPauseTimestamp + MAX_PAUSE_DURATION + COOLDOWN > block.timestamp`,
@@ -713,12 +704,7 @@ contract EETHTest is TestSetup {
         _grantPauseUntilRoles();
 
         vm.prank(bob);
-        vm.expectRevert(EETH.IncorrectRole.selector);
-        eETHInstance.pauseContractUntil();
-
-        // PROTOCOL_PAUSER (admin) alone is insufficient — needs PAUSE_UNTIL_ROLE.
-        vm.prank(admin);
-        vm.expectRevert(EETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
         eETHInstance.pauseContractUntil();
 
         vm.prank(pauseUntilPauser);
@@ -732,12 +718,7 @@ contract EETHTest is TestSetup {
         eETHInstance.pauseContractUntil();
 
         vm.prank(bob);
-        vm.expectRevert(EETH.IncorrectRole.selector);
-        eETHInstance.unpauseContractUntil();
-
-        // PROTOCOL_UNPAUSER (admin) alone is insufficient — needs UNPAUSE_UNTIL_ROLE.
-        vm.prank(admin);
-        vm.expectRevert(EETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         eETHInstance.unpauseContractUntil();
 
         vm.prank(unpauseUntilUnpauser);
@@ -873,12 +854,12 @@ contract EETHTest is TestSetup {
         uint256 maxDur = eETHInstance.MAX_PAUSE_DURATION();
 
         vm.prank(bob);
-        vm.expectRevert(EETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         eETHInstance.setPauseUntilDuration(maxDur);
 
-        // PAUSE_UNTIL_ROLE alone is insufficient
+        // Guardian-only role (pauseUntilPauser) cannot set the duration; needs admin role.
         vm.prank(pauseUntilPauser);
-        vm.expectRevert(EETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         eETHInstance.setPauseUntilDuration(maxDur);
     }
 

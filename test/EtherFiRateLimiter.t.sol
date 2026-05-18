@@ -43,12 +43,16 @@ contract EtherFiRateLimiterTest is TestSetup {
         roleRegistry = roleRegistryInstance;
 
         vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_PAUSER(), pauser);
-        roleRegistry.grantRole(roleRegistry.PROTOCOL_UNPAUSER(), unpauser);
-        roleRegistry.grantRole(roleRegistry.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
-        roleRegistry.grantRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
-        roleRegistry.grantRole(roleRegistry.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
+        // All admin / pauser / unpauser roles consolidated into OPERATION_MULTISIG_ROLE
+        // (rate limiter modifiers use onlyAdmin = OPERATION_MULTISIG_ROLE).
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), pauser);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), unpauser);
+        // pauseContractUntil → GUARDIAN_ROLE
+        roleRegistry.grantRole(roleRegistry.GUARDIAN_ROLE(), pauseUntilPauser);
+        // unpauseContractUntil + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
 
         // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so a first pauseContractUntil
@@ -85,7 +89,7 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rateLimiter.createNewLimiter(LIMIT_ID_2, DEFAULT_CAPACITY, DEFAULT_REFILL_RATE);
     }
 
@@ -100,7 +104,7 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rateLimiter.updateConsumers(LIMIT_ID_1, consumer2, true);
     }
 
@@ -115,7 +119,7 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rateLimiter.setCapacity(LIMIT_ID_1, DEFAULT_CAPACITY * 3);
     }
 
@@ -130,7 +134,7 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rateLimiter.setRefillRate(LIMIT_ID_1, DEFAULT_REFILL_RATE * 3);
     }
 
@@ -145,7 +149,7 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rateLimiter.setRemaining(LIMIT_ID_1, DEFAULT_CAPACITY / 4);
     }
 
@@ -157,7 +161,7 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rateLimiter.pauseContract();
     }
 
@@ -177,7 +181,7 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rateLimiter.unPauseContract();
     }
 
@@ -1172,13 +1176,9 @@ contract EtherFiRateLimiterTest is TestSetup {
     }
 
     function test_pauseContractUntil_requiresRole() public {
+        // pauseContractUntil → onlyGuardian → GUARDIAN_ROLE in the consolidated model.
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
-        rateLimiter.pauseContractUntil();
-
-        // PROTOCOL_PAUSER alone must not grant pause-until capability
-        vm.prank(pauser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
         rateLimiter.pauseContractUntil();
     }
 
@@ -1193,12 +1193,12 @@ contract EtherFiRateLimiterTest is TestSetup {
         rateLimiter.pauseContractUntil();
 
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rateLimiter.unpauseContractUntil();
 
-        // PROTOCOL_UNPAUSER alone must not grant unpause-until capability
+        // `unpauser` holds OPERATION_MULTISIG_ROLE (the consolidated admin role),
+        // which is sufficient for unpauseContractUntil — so the call succeeds.
         vm.prank(unpauser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
         rateLimiter.unpauseContractUntil();
     }
 
@@ -1223,12 +1223,12 @@ contract EtherFiRateLimiterTest is TestSetup {
         uint256 maxDur = rateLimiter.MAX_PAUSE_DURATION();
 
         vm.prank(unauthorizedUser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rateLimiter.setPauseUntilDuration(maxDur);
 
         // PAUSE_UNTIL_ROLE alone must not grant pause-duration capability
         vm.prank(pauseUntilPauser);
-        vm.expectRevert(IEtherFiRateLimiter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rateLimiter.setPauseUntilDuration(maxDur);
     }
 

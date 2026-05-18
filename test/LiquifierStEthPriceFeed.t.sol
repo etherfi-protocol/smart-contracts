@@ -69,13 +69,16 @@ contract LiquifierStEthPriceFeedTest is Test {
             uint32(1 hours)
         );
 
+        // Grant the consolidated admin role before any admin-gated call.
+        // LIQUIFIER_ADMIN_ROLE consolidated into OPERATION_MULTISIG_ROLE.
+        vm.startPrank(owner);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), owner);
+        vm.stopPrank();
+
         // updateWhitelistedToken bypasses the strategy-underlying check that
         // registerToken enforces, which lets us test against a dummy stEth.
+        vm.prank(owner);
         liquifier.updateWhitelistedToken(stEth, true);
-
-        vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.LIQUIFIER_ADMIN_ROLE(), owner);
-        vm.stopPrank();
 
         vm.prank(owner);
         liquifier.updateQuoteStEthWithCurve(true);

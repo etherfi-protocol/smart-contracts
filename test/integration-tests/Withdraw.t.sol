@@ -34,12 +34,15 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         address roleOwner = roleRegistryInstance.owner();
 
         vm.startPrank(roleOwner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(this));
-        roleRegistryInstance.grantRole(roleRegistryInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), address(this));
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), address(this));
+        // Tests prank as OPERATING_TIMELOCK to drive redemption-manager admin setters,
+        // which now require OPERATION_TIMELOCK_ROLE.
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), OPERATING_TIMELOCK);
         vm.stopPrank();
 
         uint32 head = withdrawRequestNFTInstance.nextRequestId();
         if (head > 0) {
+            vm.prank(address(etherFiAdminInstance));
             withdrawRequestNFTInstance.finalizeRequests(head - 1);
         }
 
@@ -83,6 +86,11 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         // (registered=true, enabled=true, lastReportRefSlot=0, numReports=0), clearing any stale
         // submission from mainnet without adding new committee members.
         address oracleOwner = etherFiOracleInstance.owner();
+        // add/removeCommitteeMember now route through OPERATION_TIMELOCK_ROLE.
+        bytes32 opTimelockRole = roleRegistryInstance.OPERATION_TIMELOCK_ROLE();
+        address rrOwner = roleRegistryInstance.owner();
+        vm.prank(rrOwner);
+        roleRegistryInstance.grantRole(opTimelockRole, oracleOwner);
         vm.startPrank(oracleOwner);
         etherFiOracleInstance.removeCommitteeMember(AVS_OPERATOR_1);
         etherFiOracleInstance.addCommitteeMember(AVS_OPERATOR_1);

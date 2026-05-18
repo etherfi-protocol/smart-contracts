@@ -207,7 +207,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         RoleRegistry roleRegistry_ = RoleRegistry(ROLE_REGISTRY);
 
         // Check if new functions exist (will revert if not upgraded)
-        try roleRegistry_.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE() returns (bytes32 role) {
+        try roleRegistry_.EOA_3() returns (bytes32 role) {
             console2.log("[OK] EtherFiNodesManager upgraded - EL exit role exists:", vm.toString(role));
         } catch {
             console2.log("[FAIL] EtherFiNodesManager not upgraded - EL exit role missing");
@@ -248,7 +248,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         EtherFiNodesManager nodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER_PROXY));
 
         // Check EL Trigger Exit Role
-        try roleRegistry.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE() returns (bytes32 elTriggerExitRole) {
+        try roleRegistry.EOA_3() returns (bytes32 elTriggerExitRole) {
             bool hasRole = roleRegistry.hasRole(elTriggerExitRole, EL_TRIGGER_EXITER);
             if (hasRole) {
                 console2.log("[OK] EL Trigger Exit role assigned to:", EL_TRIGGER_EXITER);
@@ -262,7 +262,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         // Check Rate Limiter Admin Role
         if (RATE_LIMITER_PROXY != address(0)) {
             EtherFiRateLimiter rateLimiter = EtherFiRateLimiter(RATE_LIMITER_PROXY);
-            try roleRegistry.ETHERFI_RATE_LIMITER_ADMIN_ROLE() returns (bytes32 rateLimiterAdminRole) {
+            try roleRegistry.OPERATION_MULTISIG_ROLE() returns (bytes32 rateLimiterAdminRole) {
                 bool hasRole = roleRegistry.hasRole(rateLimiterAdminRole, ETHERFI_OPERATING_ADMIN);
                 if (hasRole) {
                     console2.log("[OK] Rate Limiter Admin role assigned to:", ETHERFI_OPERATING_ADMIN);
@@ -275,7 +275,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         }
 
         // Check standard admin roles
-        bytes32 nodesManagerAdminRole = roleRegistry.ETHERFI_NODES_MANAGER_ADMIN_ROLE();
+        bytes32 nodesManagerAdminRole = roleRegistry.OPERATION_TIMELOCK_ROLE();
         bool hasAdminRole = roleRegistry.hasRole(nodesManagerAdminRole, ETHERFI_ADMIN);
         if (hasAdminRole) {
             console2.log("[OK] Nodes Manager Admin role assigned to:", ETHERFI_ADMIN);

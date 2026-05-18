@@ -10,7 +10,7 @@ import "../src/utils/PausableUntil.sol";
 
 contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
 
-    constructor() WithdrawRequestNFT(address(0), address(0)) {}
+    constructor() WithdrawRequestNFT(address(0), address(0), address(0)) {}
 
     function updateParam(uint32 _currentRequestIdToScanFromForShareRemainder, uint32 _lastRequestIdToScanUntilForShareRemainder) external {
         currentRequestIdToScanFromForShareRemainder = _currentRequestIdToScanFromForShareRemainder;
@@ -333,8 +333,9 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_handleRemainder() public {
         initializeRealisticFork(MAINNET_FORK);
         vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance))));
-        roleRegistryInstance.grantRole(roleRegistryInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
+        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance), address(etherFiAdminInstance))));
+        // IMPLICIT_FEE_CLAIMER_ROLE consolidated into EOA_2.
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
         vm.stopPrank();
         uint256 implicitFee = withdrawRequestNFTInstance.getEEthRemainderAmount();
         vm.prank(alice);
@@ -508,7 +509,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         if (dustEEthAmount > 0) {
             // Grant the required role to admin
             vm.startPrank(address(roleRegistryInstance.owner()));
-            roleRegistryInstance.grantRole(roleRegistryInstance.IMPLICIT_FEE_CLAIMER_ROLE(), admin);
+            roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), admin);
             vm.stopPrank();
             
             // Handle remainder (use half to avoid edge cases)
@@ -543,15 +544,15 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertTrue(withdrawRequestNFTInstance.isValid(requestId), "Request should start valid");
         assertEq(withdrawRequestNFTInstance.ownerOf(requestId), recipient, "Recipient should own NFT");
 
-        // Non-admin cannot invalidate
+        // Non-admin cannot invalidate (invalidateRequest is now onlyGuardian)
         vm.prank(recipient);
-        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
         withdrawRequestNFTInstance.invalidateRequest(requestId);
 
         // Admin invalidates request
         vm.startPrank(roleRegistryInstance.owner());
         console.log("roleRegistryInstance.owner()", roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), admin);
         vm.stopPrank();
         vm.prank(admin);
         withdrawRequestNFTInstance.invalidateRequest(requestId);
@@ -817,7 +818,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Non-pauser cannot pause
         vm.prank(bob);
-        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         withdrawRequestNFTInstance.pauseContract();
 
         // Pauser can pause
@@ -847,7 +848,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Non-unpauser cannot unpause
         vm.prank(bob);
-        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         withdrawRequestNFTInstance.unPauseContract();
 
         // Unpauser can unpause
@@ -874,9 +875,10 @@ contract WithdrawRequestNFTTest is TestSetup {
 
     function _grantWrPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), wrPauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), wrUnpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), wrPauseUntilDurationSetter);
+        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE (onlyPauser)
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), wrPauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), wrUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), wrPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
@@ -892,12 +894,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_pauseContractUntil_requiresRole() public {
         _grantWrPauseUntilRoles();
         vm.prank(bob);
-        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
-        withdrawRequestNFTInstance.pauseContractUntil();
-
-        // PROTOCOL_PAUSER (admin) alone is insufficient
-        vm.prank(admin);
-        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
         withdrawRequestNFTInstance.pauseContractUntil();
     }
 
@@ -914,12 +911,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.pauseContractUntil();
 
         vm.prank(bob);
-        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
-        withdrawRequestNFTInstance.unpauseContractUntil();
-
-        // PROTOCOL_UNPAUSER (admin) alone is insufficient
-        vm.prank(admin);
-        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         withdrawRequestNFTInstance.unpauseContractUntil();
     }
 
@@ -947,12 +939,12 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 maxDur = withdrawRequestNFTInstance.MAX_PAUSE_DURATION();
 
         vm.prank(bob);
-        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         withdrawRequestNFTInstance.setPauseUntilDuration(maxDur);
 
-        // PAUSE_UNTIL_ROLE alone is insufficient
+        // Guardian-only role (wrPauseUntilPauser) cannot set the duration; needs admin role.
         vm.prank(wrPauseUntilPauser);
-        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         withdrawRequestNFTInstance.setPauseUntilDuration(maxDur);
     }
 
@@ -1091,7 +1083,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         // Grant LP-side pause-until role and pause LP-until.
         address lpPauser = makeAddr("lpPauser_wrTest");
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), lpPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), lpPauser);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
@@ -1302,7 +1294,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
 
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.IMPLICIT_FEE_CLAIMER_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), admin);
         vm.stopPrank();
 
         uint256 lpBalAfterClaim  = address(liquidityPoolInstance).balance;
@@ -1385,7 +1377,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         if (remainderAmount > 0) {
             // Grant role
             vm.startPrank(address(roleRegistryInstance.owner()));
-            roleRegistryInstance.grantRole(roleRegistryInstance.IMPLICIT_FEE_CLAIMER_ROLE(), admin);
+            roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), admin);
             vm.stopPrank();
 
             // Cannot handle zero amount
@@ -1423,23 +1415,26 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
+        // finalizeRequests is now restricted to etherFiAdmin contract only.
+        address etherFiAdminAddr = address(etherFiAdminInstance);
+
         // Cannot finalize future requests
-        vm.prank(admin);
+        vm.prank(etherFiAdminAddr);
         vm.expectRevert("Cannot finalize future requests");
         withdrawRequestNFTInstance.finalizeRequests(requestId + 100);
 
         // Finalize request
-        vm.prank(admin);
+        vm.prank(etherFiAdminAddr);
         withdrawRequestNFTInstance.finalizeRequests(requestId);
 
         // Cannot undo finalization
-        vm.prank(admin);
+        vm.prank(etherFiAdminAddr);
         vm.expectRevert("Cannot undo finalization");
         withdrawRequestNFTInstance.finalizeRequests(requestId - 1);
 
-        // Non-admin cannot finalize
+        // Non-admin cannot finalize — reverts with IncorrectRole() (not the legacy admin string).
         vm.prank(bob);
-        vm.expectRevert("Caller is not admin");
+        vm.expectRevert(WithdrawRequestNFT.IncorrectRole.selector);
         withdrawRequestNFTInstance.finalizeRequests(requestId + 1);
     }
 
@@ -1664,7 +1659,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     function _pauseLpUntil() internal returns (uint256 lpPausedUntil) {
         address lpPauser = makeAddr("lpPauser_permissionlessClaim");
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), lpPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), lpPauser);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 

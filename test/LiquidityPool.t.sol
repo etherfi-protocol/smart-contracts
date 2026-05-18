@@ -30,7 +30,8 @@ contract LiquidityPoolTest is TestSetup {
         vm.deal(alice, 100 ether);
 
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), alice);
+        // NODE_OPERATOR_MANAGER_ADMIN_ROLE consolidated into OPERATION_MULTISIG_ROLE.
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
         // liquidityPoolInstance.updateAdmin(alice, true);
         vm.stopPrank();
     
@@ -266,7 +267,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_sendExitRequestFails() public {
         uint256[] memory newValidators = new uint256[](10);
-        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         vm.prank(elvis);
         liquidityPoolInstance.DEPRECATED_sendExitRequests(newValidators);
     }
@@ -299,7 +300,7 @@ contract LiquidityPoolTest is TestSetup {
         //Move past one week
         vm.warp(804650);
 
-        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         liquidityPoolInstance.registerValidatorSpawner(alice);
         
         //Let Alice sign up as a BNFT holder
@@ -410,7 +411,7 @@ contract LiquidityPoolTest is TestSetup {
         setUpBnftHolders();
 
         vm.prank(bob);
-        vm.expectRevert("Incorrect Caller");
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         liquidityPoolInstance.unregisterValidatorSpawner(owner);
     }
 
@@ -748,15 +749,15 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_Upgrade2_49_pause_unpause() public {
         // only protocol pauser can pause or unpause
-        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         liquidityPoolInstance.pauseContract();
 
         vm.prank(admin);
         liquidityPoolInstance.pauseContract();
 
         assertTrue(liquidityPoolInstance.paused());
-        
-        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         liquidityPoolInstance.unPauseContract();
 
         vm.prank(admin);
@@ -1061,7 +1062,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_SetFeeRecipientFailsIfNotAdmin() public {
         vm.startPrank(bob);
-        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         liquidityPoolInstance.setFeeRecipient(bob);
         vm.stopPrank();
     }
@@ -1078,7 +1079,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_SetRestakeBnftDepositsFailsIfNotAdmin() public {
         vm.startPrank(bob);
-        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         liquidityPoolInstance.setRestakeBnftDeposits(true);
         vm.stopPrank();
     }
@@ -1106,7 +1107,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_SetValidatorSizeWeiFailsIfNotAdmin() public {
         vm.startPrank(bob);
-        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         liquidityPoolInstance.setValidatorSizeWei(64 ether);
         vm.stopPrank();
     }
@@ -1526,9 +1527,10 @@ contract LiquidityPoolTest is TestSetup {
 
     function _grantLpPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), lpPauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), lpUnpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), lpPauseUntilDurationSetter);
+        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), lpPauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), lpUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), lpPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
@@ -1544,12 +1546,7 @@ contract LiquidityPoolTest is TestSetup {
     function test_pauseContractUntil_requiresRole() public {
         _grantLpPauseUntilRoles();
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
-        liquidityPoolInstance.pauseContractUntil();
-
-        // PROTOCOL_PAUSER (admin) alone is insufficient
-        vm.prank(admin);
-        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
         liquidityPoolInstance.pauseContractUntil();
     }
 
@@ -1566,12 +1563,7 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.pauseContractUntil();
 
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
-        liquidityPoolInstance.unpauseContractUntil();
-
-        // PROTOCOL_UNPAUSER (admin) alone is insufficient
-        vm.prank(admin);
-        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         liquidityPoolInstance.unpauseContractUntil();
     }
 
@@ -1599,12 +1591,12 @@ contract LiquidityPoolTest is TestSetup {
         uint256 maxDur = liquidityPoolInstance.MAX_PAUSE_DURATION();
 
         vm.prank(chad);
-        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         liquidityPoolInstance.setPauseUntilDuration(maxDur);
 
-        // PAUSE_UNTIL_ROLE alone is insufficient
+        // Guardian-only role (lpPauseUntilPauser) cannot set the duration; needs admin role.
         vm.prank(lpPauseUntilPauser);
-        vm.expectRevert(abi.encodeWithSignature("IncorrectRole()"));
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         liquidityPoolInstance.setPauseUntilDuration(maxDur);
     }
 

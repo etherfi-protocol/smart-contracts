@@ -73,17 +73,11 @@ contract RestakingRewardsRouterTest is Test {
             address(liquidityPool)
         );
 
-        // Grant admin role
-        roleRegistry.grantRole(roleRegistry.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), admin);
-        // Grant transfer role
-        roleRegistry.grantRole(
-            roleRegistry.ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE(),
-            admin
-        );
-        roleRegistry.grantRole(
-            roleRegistry.ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE(),
-            transferRoleUser
-        );
+        // Grant admin role — ETHERFI_REWARDS_ROUTER_ADMIN_ROLE consolidated into OPERATION_TIMELOCK_ROLE.
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
+        // Grant transfer role — ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE consolidated into EOA_2.
+        roleRegistry.grantRole(roleRegistry.EOA_2(), admin);
+        roleRegistry.grantRole(roleRegistry.EOA_2(), transferRoleUser);
         vm.stopPrank();
 
         // Deploy proxy and initialize (outside prank so owner is address(this))
@@ -238,7 +232,7 @@ contract RestakingRewardsRouterTest is Test {
 
     function test_setRecipientAddress_revertsWithoutRole() public {
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RestakingRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         router.setRecipientAddress(recipient);
     }
 
@@ -361,9 +355,9 @@ contract RestakingRewardsRouterTest is Test {
     function test_roleManagement_grantAndRevoke() public {
         address newAdmin = vm.addr(100);
 
-        // Grant role
+        // Grant role — admin consolidated into OPERATION_TIMELOCK_ROLE.
         vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), newAdmin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), newAdmin);
         vm.stopPrank();
 
         vm.prank(newAdmin);
@@ -372,11 +366,11 @@ contract RestakingRewardsRouterTest is Test {
 
         // Revoke role
         vm.startPrank(owner);
-        roleRegistry.revokeRole(roleRegistry.ETHERFI_REWARDS_ROUTER_ADMIN_ROLE(), newAdmin);
+        roleRegistry.revokeRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), newAdmin);
         vm.stopPrank();
 
         vm.prank(newAdmin);
-        vm.expectRevert(RestakingRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         router.setRecipientAddress(vm.addr(101));
     }
 

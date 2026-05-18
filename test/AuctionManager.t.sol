@@ -151,8 +151,9 @@ contract AuctionManagerTest is TestSetup {
     function test_DisableWhitelist() public {
         assertTrue(auctionInstance.whitelistEnabled());
 
-        vm.expectRevert(AuctionManager.IncorrectRole.selector);
-        vm.prank(owner);
+        // chad has no roles and must be rejected.
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.prank(chad);
         auctionInstance.disableWhitelist();
 
         vm.prank(alice);
@@ -169,8 +170,8 @@ contract AuctionManagerTest is TestSetup {
 
         assertFalse(auctionInstance.whitelistEnabled());
 
-        vm.expectRevert(AuctionManager.IncorrectRole.selector);
-        vm.prank(owner);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.prank(chad);
         auctionInstance.enableWhitelist();
 
         vm.prank(alice);
@@ -737,8 +738,8 @@ contract AuctionManagerTest is TestSetup {
         vm.expectRevert("Min bid exceeds max bid");
         auctionInstance.setMaxBidPrice(0.001 ether);
 
-        vm.prank(owner);
-        vm.expectRevert(AuctionManager.IncorrectRole.selector);
+        vm.prank(chad);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         auctionInstance.setMaxBidPrice(10 ether);
 
         assertEq(auctionInstance.maxBidAmount(), 5 ether);
@@ -752,8 +753,8 @@ contract AuctionManagerTest is TestSetup {
         vm.expectRevert("Min bid exceeds max bid");
         auctionInstance.setMinBidPrice(5 ether);
 
-        vm.prank(owner);
-        vm.expectRevert(AuctionManager.IncorrectRole.selector);
+        vm.prank(chad);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         auctionInstance.setMinBidPrice(0.005 ether);
 
         assertEq(auctionInstance.minBidAmount(), 0.01 ether);
@@ -846,7 +847,7 @@ contract AuctionManagerTest is TestSetup {
 
     function test_SetAccumulatedRevenueThreshold() public {
         vm.prank(bob);
-        vm.expectRevert(AuctionManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         auctionInstance.setAccumulatedRevenueThreshold(0.005 ether);
 
         // TODO: consider if 0 is an invalid threshold amount
