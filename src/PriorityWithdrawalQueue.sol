@@ -151,6 +151,7 @@ contract PriorityWithdrawalQueue is
     error InsufficientLiquidity();
     error InvalidMinAcceptableShareRate();
     error InvalidAcceptableShareRate();
+    error InvalidShareRate();
     error InvalidLiveRate();
 
     //--------------------------------------------------------------------------------------
@@ -373,7 +374,7 @@ contract PriorityWithdrawalQueue is
         // Claim path uses `shareOfEEth * rate / _SHARE_UNIT` for both the solvency check and the
         // burn count, decoupling payout from post-fulfill rate movement.
         uint256 rate = liquidityPool.amountPerShareCeil();
-        require(rate > 0 && rate <= type(uint224).max, "invalid rate");
+        if (rate < minAcceptableShareRate || rate > maxAcceptableShareRate) revert InvalidShareRate();
 
         for (uint256 i = 0; i < requests.length; ++i) {
             WithdrawRequest calldata request = requests[i];
