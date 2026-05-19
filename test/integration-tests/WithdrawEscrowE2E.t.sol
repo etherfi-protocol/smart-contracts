@@ -100,7 +100,9 @@ contract WithdrawEscrowE2ETest is TestSetup {
             address(weEthInstance),
             address(roleRegistryInstance),
             treasuryInstance,
-            1 hours
+            1 hours,
+            0,
+            4e18
         );
         UUPSProxy proxy = new UUPSProxy(
             address(impl),

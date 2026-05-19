@@ -203,7 +203,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
             // claim semantics match the pre-upgrade behavior. New (post-upgrade) finalizations
             // always push a non-zero snapshot, so this branch only fires for legacy tokenIds.
             uint256 live = liquidityPool.amountPerShareCeil();
-            require(live > 0 && live <= type(uint224).max, "invalid live rate");
+            require(live >= minAcceptableShareRate && live <= maxAcceptableShareRate, "invalid live rate");
             frozenRate = uint224(live);
         }
 

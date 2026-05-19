@@ -65,6 +65,9 @@ contract PriorityWithdrawalQueue is
     address public immutable treasury;
     uint32 public immutable MIN_DELAY;
 
+    uint256 public immutable minAcceptableShareRate;
+    uint256 public immutable maxAcceptableShareRate;
+
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
@@ -146,6 +149,8 @@ contract PriorityWithdrawalQueue is
     error InvalidEEthSharesAfterRemainderHandling();
     error InvalidOutputAmount();
     error InsufficientLiquidity();
+    error InvalidAcceptableShareRate();
+    error InvalidLiveRate();
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
@@ -182,10 +187,11 @@ contract PriorityWithdrawalQueue is
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _liquidityPool, address _eETH, address _weETH, address _roleRegistry, address _treasury, uint32 _minDelay) {
+    constructor(address _liquidityPool, address _eETH, address _weETH, address _roleRegistry, address _treasury, uint32 _minDelay, uint256 _minAcceptableShareRate, uint256 _maxAcceptableShareRate) {
         if (_liquidityPool == address(0) || _eETH == address(0) || _weETH == address(0) || _roleRegistry == address(0) || _treasury == address(0)) {
             revert AddressZero();
         }
+        if (_maxAcceptableShareRate <= _minAcceptableShareRate) revert InvalidAcceptableShareRate();
         
         liquidityPool = ILiquidityPool(_liquidityPool);
         eETH = IeETH(_eETH);
@@ -193,6 +199,9 @@ contract PriorityWithdrawalQueue is
         roleRegistry = IRoleRegistry(_roleRegistry);
         treasury = _treasury;
         MIN_DELAY = _minDelay;
+
+        minAcceptableShareRate = _minAcceptableShareRate;
+        maxAcceptableShareRate = _maxAcceptableShareRate;
 
         _disableInitializers();
     }
@@ -648,16 +657,7 @@ contract PriorityWithdrawalQueue is
         
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
-        uint224 frozenRate = _fulfillmentRates[requestId];
-        if (frozenRate == 0) {
-            // Pre-upgrade legacy request (fulfilled before the share-rate-freeze upgrade) —
-            // resolve to the live rate locally so claim semantics match the pre-upgrade behavior.
-            // LP itself rejects rate=0; the resolved rate is what we pass through.
-            uint256 live = liquidityPool.amountPerShareCeil();
-            require(live > 0 && live <= type(uint224).max, "invalid live rate");
-            frozenRate = uint224(live);
-        }
-
+        uint224 frozenRate = _getFrozenRate(requestId);
         // Solvency check against the resolved rate (frozen for new requests, live for legacy).
         uint256 amountForShares = Math.mulDiv(uint256(request.shareOfEEth), frozenRate, _SHARE_UNIT);
         if (amountForShares < request.amountWithFee) revert InvalidOutputAmount();
@@ -691,6 +691,18 @@ contract PriorityWithdrawalQueue is
         _checkEthAmountLockedForPriorityWithdrawal();
 
         emit WithdrawRequestClaimed(requestId, request.user, uint96(amountToWithdraw), uint96(burnedShares), request.nonce, uint32(block.timestamp));
+    }
+
+    function _getFrozenRate(bytes32 requestId) internal view returns (uint224 frozenRate) {
+        frozenRate = _fulfillmentRates[requestId];
+        if (frozenRate == 0) {
+            // Pre-upgrade legacy request (fulfilled before the share-rate-freeze upgrade) —
+            // resolve to the live rate locally so claim semantics match the pre-upgrade behavior.
+            // LP itself rejects rate=0; the resolved rate is what we pass through.
+            uint256 live = liquidityPool.amountPerShareCeil();
+            if (live < minAcceptableShareRate || live > maxAcceptableShareRate) revert InvalidLiveRate();
+            frozenRate = uint224(live);
+        }
     }
 
     function _checkEthAmountLockedForPriorityWithdrawal() internal {
@@ -755,13 +767,7 @@ contract PriorityWithdrawalQueue is
         bytes32 requestId = keccak256(abi.encode(request));
         if (!_finalizedRequests.contains(requestId)) return 0;
 
-        uint224 frozenRate = _fulfillmentRates[requestId];
-        if (frozenRate == 0) {
-            // Pre-upgrade legacy request — live-rate fallback (mirrors `_claimWithdraw`).
-            uint256 live = liquidityPool.amountPerShareCeil();
-            if (live == 0 || live > type(uint224).max) return 0;
-            frozenRate = uint224(live);
-        }
+        uint224 frozenRate = _getFrozenRate(requestId);
         uint256 amountForShares = Math.mulDiv(uint256(request.shareOfEEth), frozenRate, _SHARE_UNIT);
         if (amountForShares < request.amountWithFee) return 0;
 

@@ -382,7 +382,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, address(blacklisterInstance), 0));
         address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance), 0, 4e18));
         address newPQ = address(new PriorityWithdrawalQueue(
-            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, TREASURY, 1 hours
+            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, TREASURY, 1 hours, 0, 4e18
         ));
 
         vm.prank(UPGRADE_TIMELOCK);

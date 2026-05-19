@@ -42,7 +42,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             address(weEthInstance),
             address(roleRegistryInstance),
             treasury,
-            1 hours
+            1 hours,
+            0,
+            4e18
         );
         UUPSProxy proxy = new UUPSProxy(
             address(priorityQueueImpl),
