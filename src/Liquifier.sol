@@ -458,7 +458,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     modifier onlyUpgradeTimelock() {
-        roleRegistry.onlyOperatingTimelock(msg.sender);
+        roleRegistry.onlyUpgradeTimelock(msg.sender);
         _;
     }
 

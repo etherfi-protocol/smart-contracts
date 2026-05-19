@@ -589,6 +589,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
             roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0))));
         }
+        roleRegistryInstance.grantRole(roleRegistryInstance.UPGRADE_TIMELOCK_ROLE(), owner);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
