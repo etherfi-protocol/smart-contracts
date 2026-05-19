@@ -18,7 +18,7 @@ import "./utils/PausableUntil.sol";
 
 contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, IERC20PermitUpgradeable, IeETH, AssetRecovery {
     using CountersUpgradeable for CountersUpgradeable.Counter;
-    ILiquidityPool public liquidityPool;
+    ILiquidityPool private DEPRECATED_liquidityPool;
 
     uint256 public totalShares;
     mapping (address => uint256) public shares;
@@ -38,6 +38,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     bytes32 private immutable _HASHED_VERSION;
     bytes32 private immutable _TYPE_HASH;
 
+    ILiquidityPool public immutable liquidityPool;
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
@@ -50,7 +51,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     error IncorrectRole();
 
     // TODO: Figure our what `name` and `version` are for
-    constructor(address _roleRegistry, address _blacklister) {
+    constructor(address _liquidityPool, address _roleRegistry, address _blacklister) {
         bytes32 hashedName = keccak256("EETH");
         bytes32 hashedVersion = keccak256("1");
         bytes32 typeHash = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -61,8 +62,10 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _CACHED_THIS = address(this);
         _TYPE_HASH = typeHash;
 
+        require(_liquidityPool != address(0), "No zero addresses");
         require(_roleRegistry != address(0), "must set role registry");
         require(_blacklister != address(0), "must set blacklister");
+        liquidityPool = ILiquidityPool(_liquidityPool);
         roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
 
@@ -74,7 +77,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         
         __UUPSUpgradeable_init();
         __Ownable_init();
-        liquidityPool = ILiquidityPool(_liquidityPool);
     }
 
     function mintShares(address _user, uint256 _share) external onlyPoolContract whenNotPaused {

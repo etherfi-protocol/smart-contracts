@@ -17,7 +17,7 @@ import "forge-std/console.sol";
 
 contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ERC1155Upgradeable, IMembershipNFT {
 
-    IMembershipManager membershipManager;
+    IMembershipManager private DEPRECATED_membershipManager;
     uint32 public nextMintTokenId;
     uint32 public maxTokenId;
     bool public mintingPaused;
@@ -30,11 +30,14 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
 
     string private contractMetadataURI; /// @dev opensea contract-level metadata
 
-    address public DEPRECATED_admin;
+    address private DEPRECATED_admin;
 
     mapping(address => bool) public admins;
 
-    ILiquidityPool public liquidityPool;
+    ILiquidityPool private DEPRECATED_liquidityPool;
+
+    ILiquidityPool public immutable liquidityPool;
+    IMembershipManager public immutable membershipManager;
     IBlacklister public immutable blacklister;
 
     event MerkleUpdated(bytes32, bytes32);
@@ -48,7 +51,9 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
     error OnlyMembershipManagerContract();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _blacklister) {
+    constructor(address _liquidityPool, address _membershipManager, address _blacklister) {
+        liquidityPool = ILiquidityPool(_liquidityPool);
+        membershipManager = IMembershipManager(_membershipManager);
         blacklister = IBlacklister(_blacklister);
         _disableInitializers();
     }
@@ -59,14 +64,6 @@ contract MembershipNFT is Initializable, OwnableUpgradeable, UUPSUpgradeable, ER
         __ERC1155_init(_metadataURI);
         nextMintTokenId = 1;
         maxTokenId = 1000;
-        membershipManager = IMembershipManager(_membershipManagerInstance);
-    }
-
-    function initializeOnUpgrade(address _liquidityPoolAddress) external onlyOwner {
-        require(_liquidityPoolAddress != address(0), "No zero addresses");
-        liquidityPool = ILiquidityPool(_liquidityPoolAddress);
-        admins[DEPRECATED_admin] = true;
-        DEPRECATED_admin = address(0);
     }
 
     function mint(address _to, uint256 _amount) external onlyMembershipManagerContract returns (uint256) {

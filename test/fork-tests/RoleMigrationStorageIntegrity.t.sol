@@ -79,8 +79,8 @@ contract RoleMigrationStorageIntegrityTest is Test, Deployed {
         bytes32[] memory preOracle = _snapshot(ETHERFI_ORACLE);
         bytes32[] memory preNOM    = _snapshot(NODE_OPERATOR_MANAGER);
 
-        address newOracle = address(new EtherFiOracle(ROLE_REGISTRY));
-        address newNOM    = address(new NodeOperatorManager(ROLE_REGISTRY));
+        address newOracle = address(new EtherFiOracle(ETHERFI_ADMIN, ROLE_REGISTRY));
+        address newNOM    = address(new NodeOperatorManager(ROLE_REGISTRY, AUCTION_MANAGER));
 
         _upgradeProxy(ETHERFI_ORACLE,        newOracle);
         _upgradeProxy(NODE_OPERATOR_MANAGER, newNOM);
@@ -99,12 +99,16 @@ contract RoleMigrationStorageIntegrityTest is Test, Deployed {
         bytes32[] memory preAM = _snapshot(AUCTION_MANAGER);
         bytes32[] memory preER = _snapshot(ETHERFI_RESTAKER);
 
-        address newAM = address(new AuctionManager(ROLE_REGISTRY, address(0)));
+        address newAM = address(new AuctionManager(ROLE_REGISTRY, address(0), NODE_OPERATOR_MANAGER, STAKING_MANAGER, MEMBERSHIP_MANAGER));
         address newER = address(new EtherFiRestaker(
+            LIQUIDITY_POOL,
+            LIQUIFIER,
             EIGENLAYER_REWARDS_COORDINATOR,
             ETHERFI_REDEMPTION_MANAGER,
             ROLE_REGISTRY,
-            ETHERFI_RATE_LIMITER
+            ETHERFI_RATE_LIMITER,
+            EIGENLAYER_STRATEGY_MANAGER,
+            EIGENLAYER_DELEGATION_MANAGER
         ));
 
         _upgradeProxy(AUCTION_MANAGER,  newAM);

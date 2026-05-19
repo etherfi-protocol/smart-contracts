@@ -29,12 +29,12 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     // this treasury address is set to ethfi buyback wallet address
     address public immutable treasury;
     
-    ILiquidityPool public liquidityPool;
-    IeETH public eETH; 
-    IMembershipManager public membershipManager;
+    ILiquidityPool private DEPRECATED_liquidityPool;
+    IeETH private DEPRECATED_eETH;
+    IMembershipManager private DEPRECATED_membershipManager;
 
     mapping(uint256 => IWithdrawRequestNFT.WithdrawRequest) private _requests;
-    mapping(address => bool) public DEPRECATED_admins;
+    mapping(address => bool) private DEPRECATED_admins;
 
     uint32 public nextRequestId;
     uint32 public lastFinalizedRequestId;
@@ -49,7 +49,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint256 public totalRemainderEEthShares;
 
     bool public paused;
-    RoleRegistry public roleRegistry;
+    RoleRegistry private DEPRECATED_roleRegistry;
 
     uint128 public ethAmountLockedForWithdrawal;
 
@@ -62,6 +62,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     bytes32 public constant INVALIDATE_WITHDRAW_REQUEST_ROLE = keccak256("INVALIDATE_WITHDRAW_REQUEST_ROLE");
     bytes32 public constant IMPLICIT_FEE_CLAIMER_ROLE = keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
 
+    ILiquidityPool public immutable liquidityPool;
+    IeETH public immutable eETH;
+    IMembershipManager public immutable membershipManager;
+    RoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
     uint256 public immutable minAcceptableShareRate;
@@ -80,9 +84,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _treasury, address _blacklister, uint256 _minAcceptableShareRate, uint256 _maxAcceptableShareRate) {
+    constructor(address _treasury, address _eETH, address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister, uint256 _minAcceptableShareRate, uint256 _maxAcceptableShareRate) {
         require(_maxAcceptableShareRate > _minAcceptableShareRate, "Invalid min and max acceptable share rate");
         treasury = _treasury;
+        eETH = IeETH(_eETH);
+        liquidityPool = ILiquidityPool(_liquidityPool);
+        membershipManager = IMembershipManager(_membershipManager);
+        roleRegistry = RoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
 
         minAcceptableShareRate = _minAcceptableShareRate;
@@ -97,28 +105,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         __Ownable_init();
         __UUPSUpgradeable_init();
 
-        liquidityPool = ILiquidityPool(_liquidityPoolAddress);
-        eETH = IeETH(_eEthAddress);
-        membershipManager = IMembershipManager(_membershipManagerAddress);
         nextRequestId = 1;
-    }
-
-    function initializeOnUpgrade(address _roleRegistry, uint16 _shareRemainderSplitToTreasuryInBps) external onlyOwner {
-        require(address(roleRegistry) == address(0) && _roleRegistry != address(0), "Already initialized");
-        require(_shareRemainderSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
-
-        paused = true; // make sure the contract is paused after the upgrade
-        roleRegistry = RoleRegistry(_roleRegistry);
-
-        _unused_gap = 0;
-        
-        shareRemainderSplitToTreasuryInBps = _shareRemainderSplitToTreasuryInBps;
-
-        currentRequestIdToScanFromForShareRemainder = 1;
-        lastRequestIdToScanUntilForShareRemainder = nextRequestId - 1;
-
-        aggregateSumOfEEthShare = 0;
-        totalRemainderEEthShares = 0;
     }
 
     /// @notice One-time initializer for the share-rate-freeze upgrade.

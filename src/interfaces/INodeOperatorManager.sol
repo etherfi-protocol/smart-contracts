@@ -27,13 +27,6 @@ interface INodeOperatorManager {
         uint64 totalKeys
     ) external;
 
-    function initializeOnUpgrade(
-        address[] memory _operator, 
-        bytes[] memory _ipfsHash,
-        uint64[] memory _totalKeys,
-        uint64[] memory _keysUsed
-    ) external; 
-
     function batchUpdateOperatorsApprovedTags(
         address[] memory _users, 
         LiquidityPool.SourceOfFunds[] memory _approvedTags, 

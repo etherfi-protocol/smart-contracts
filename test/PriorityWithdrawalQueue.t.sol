@@ -51,7 +51,22 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Upgrade LiquidityPool to latest version (needed for setPriorityWithdrawalQueue)
         vm.startPrank(owner);
-        LiquidityPool newLpImpl = new LiquidityPool(address(priorityQueue), address(blacklisterInstance), 0);
+        LiquidityPool newLpImpl = new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: address(stakingManagerInstance),
+                nodesManager: address(managerInstance),
+                eETH: address(eETHInstance),
+                withdrawRequestNFT: address(withdrawRequestNFTInstance),
+                liquifier: address(liquifierInstance),
+                etherFiRedemptionManager: address(etherFiRedemptionManagerInstance),
+                roleRegistry: address(roleRegistryInstance),
+                priorityWithdrawalQueue: address(priorityQueue),
+                blacklister: address(blacklisterInstance),
+                etherFiAdminContract: address(etherFiAdminInstance),
+                membershipManager: address(membershipManagerInstance)
+            }),
+            0
+        );
         liquidityPoolInstance.upgradeTo(address(newLpImpl));
 
         // Upgrade WithdrawRequestNFT so it has receive() and can accept ETH escrow.
@@ -60,7 +75,14 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.stopPrank();
         vm.startPrank(wrnOwner);
         WithdrawRequestNFT newWrnImpl =
-            new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F, address(blacklisterInstance), 0, 4e18);
+            new WithdrawRequestNFT(
+                0x2f5301a3D59388c509C65f8698f521377D41Fd0F,
+                address(eETHInstance),
+                address(liquidityPoolInstance),
+                address(membershipManagerInstance),
+                address(roleRegistryInstance),
+                address(blacklisterInstance)
+            , 0, 4e18);
         withdrawRequestNFTInstance.upgradeTo(address(newWrnImpl));
         vm.stopPrank();
         vm.startPrank(owner);
@@ -519,10 +541,13 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // Verify state changes
         assertEq(priorityQueue.nonce(), initialNonce + 1, "Nonce should increment");
         assertEq(weEthInstance.balanceOf(permitUser), initialWeEthBalance - weEthAmount, "weETH balance should decrease");
+        // Tolerance is 2 wei: weETH unwrap and the share-based transferTo each round
+        // independently, so the delta vs getEETHByWeETH() drifts up to 2 wei
+        // depending on the mainnet fork's live share-price snapshot.
         assertApproxEqAbs(
             eETHInstance.balanceOf(address(priorityQueue)),
             initialQueueEethBalance + expectedEEthAmount,
-            1,
+            2,
             "Queue eETH balance should increase"
         );
         assertTrue(priorityQueue.requestExists(requestId), "Request should exist");
