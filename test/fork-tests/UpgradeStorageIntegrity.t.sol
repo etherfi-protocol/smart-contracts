@@ -95,7 +95,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         s.locked = uint128(uint256(raw) >> 8);
         s.valSize = lp.validatorSizeWei();
         s.paused = lp.paused();
-        s.restake = lp.restakeBnftDeposits();
     }
 
     function _snapWRN(WithdrawRequestNFT wrn) internal view returns (WRNSnap memory s) {

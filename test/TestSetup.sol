@@ -523,7 +523,17 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.startPrank(owner);
 
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
-            liquifierInstance.upgradeTo(address(new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, address(blacklisterInstance), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS)));
+            liquifierInstance.upgradeTo(address(new Liquifier(Liquifier.ConstructorAddresses({
+                liquidityPool: address(liquidityPoolInstance),
+                lidoWithdrawalQueue: address(lidoWithdrawalQueue),
+                lido: address(stEth),
+                stEth_Eth_Pool: address(stEth_Eth_Pool),
+                roleRegistry: address(roleRegistryInstance),
+                stEthPriceFeed: stEthChainlinkFeed,
+                blacklister: address(blacklisterInstance),
+                etherfiRestaker: address(etherFiRestakerInstance),
+                l1SyncPool: address(0xA6)
+            }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS)));
         }
         vm.stopPrank();
 
@@ -574,14 +584,15 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(eigenLayerRewardsCoordinator),
             address(etherFiRedemptionManagerInstance),
             address(roleRegistryInstance),
-            address(rateLimiterInstance)
+            address(rateLimiterInstance),
+            address(eigenLayerStrategyManager),
+            address(eigenLayerDelegationManager)
         );
-        etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
-        etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
-
-        etherFiRestakerInstance.initialize(address(liquidityPoolInstance), address(liquifierInstance));
-
-        liquifierInstance.initializeOnUpgrade(address(etherFiRestakerInstance));
+        // Upgrade in place so the address matches Liquifier's immutable etherfiRestaker.
+        vm.stopPrank();
+        vm.prank(etherFiRestakerInstance.owner());
+        etherFiRestakerInstance.upgradeTo(address(etherFiRestakerImplementation));
+        vm.startPrank(owner);
     }
 
     function setUpTests() internal {
@@ -621,6 +632,12 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         if (stEthChainlinkFeed == address(0)) {
             stEthChainlinkFeed = address(new MockChainlinkPriceFeed(int256(1 ether), 0));
         }
+
+        // Liquifier's constructor now reverts on zero addresses for these. Unit tests
+        // don't exercise the stETH/Lido paths, so dummy non-zero placeholders suffice.
+        if (address(lidoWithdrawalQueue) == address(0)) lidoWithdrawalQueue = ILidoWithdrawalQueue(address(0xA2));
+        if (address(stEth) == address(0)) stEth = ILido(address(0xA3));
+        if (address(stEth_Eth_Pool) == address(0)) stEth_Eth_Pool = ICurvePool(address(0xA4));
 
         // =====================================================================
         // Phase 2: predeploy proxies pointing to a placeholder impl. After this
@@ -686,7 +703,17 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // =====================================================================
 
         // Liquifier first — EtherFiRestaker's constructor reads from it.
-        liquifierImplementation = new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, address(blacklisterInstance), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS);
+        liquifierImplementation = new Liquifier(Liquifier.ConstructorAddresses({
+            liquidityPool: address(liquidityPoolProxy),
+            lidoWithdrawalQueue: address(lidoWithdrawalQueue),
+            lido: address(stEth),
+            stEth_Eth_Pool: address(stEth_Eth_Pool),
+            roleRegistry: address(roleRegistryInstance),
+            stEthPriceFeed: stEthChainlinkFeed,
+            blacklister: address(blacklisterInstance),
+            etherfiRestaker: address(0xA5),
+            l1SyncPool: address(0xA6)
+        }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS);
         liquifierInstance.upgradeTo(address(liquifierImplementation));
         liquifierInstance.initialize(
             address(treasuryInstance),
@@ -889,7 +916,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(0x0),
             address(etherFiRedemptionManagerProxy),
             address(roleRegistryInstance),
-            address(rateLimiterInstance)
+            address(rateLimiterInstance),
+            address(eigenLayerStrategyManager),
+            address(eigenLayerDelegationManager)
         );
         etherFiRestakerInstance.upgradeTo(address(etherFiRestakerImplementation));
 
@@ -1076,7 +1105,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         vm.startPrank(alice);
         liquidityPoolInstance.unPauseContract();
-        liquidityPoolInstance.setRestakeBnftDeposits(restakingBnftDeposits);
         vm.stopPrank();
 
         vm.startPrank(owner);
@@ -1845,7 +1873,17 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_liquifier() internal {
-        address newImpl = address(new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, address(blacklisterInstance), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS));
+        address newImpl = address(new Liquifier(Liquifier.ConstructorAddresses({
+            liquidityPool: address(liquidityPoolInstance),
+            lidoWithdrawalQueue: address(lidoWithdrawalQueue),
+            lido: address(stEth),
+            stEth_Eth_Pool: address(stEth_Eth_Pool),
+            roleRegistry: address(roleRegistryInstance),
+            stEthPriceFeed: stEthChainlinkFeed,
+            blacklister: address(blacklisterInstance),
+            etherfiRestaker: address(0xA5),
+            l1SyncPool: address(0xA6)
+        }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS));
         vm.prank(liquifierInstance.owner());
         liquifierInstance.upgradeTo(newImpl);
     }

@@ -1085,23 +1085,6 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
     }
 
-    function test_SetRestakeBnftDeposits() public {
-        vm.startPrank(alice);
-        liquidityPoolInstance.setRestakeBnftDeposits(true);
-        assertTrue(liquidityPoolInstance.restakeBnftDeposits());
-        
-        liquidityPoolInstance.setRestakeBnftDeposits(false);
-        assertFalse(liquidityPoolInstance.restakeBnftDeposits());
-        vm.stopPrank();
-    }
-
-    function test_SetRestakeBnftDepositsFailsIfNotAdmin() public {
-        vm.startPrank(bob);
-        vm.expectRevert(LiquidityPool.IncorrectRole.selector);
-        liquidityPoolInstance.setRestakeBnftDeposits(true);
-        vm.stopPrank();
-    }
-
     function test_SetValidatorSizeWei() public {
         vm.startPrank(alice);
         liquidityPoolInstance.setValidatorSizeWei(64 ether);

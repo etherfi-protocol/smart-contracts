@@ -204,9 +204,19 @@ contract ReauditFixesTransactions is Utils {
 
         EtherFiNode newEtherFiNodeImplementation = new EtherFiNode(address(LIQUIDITY_POOL), address(ETHERFI_NODES_MANAGER), address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER), address(ROLE_REGISTRY));
         EtherFiRedemptionManager newEtherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(LIQUIDITY_POOL), address(EETH), address(WEETH), address(TREASURY), address(ROLE_REGISTRY), address(ETHERFI_RESTAKER), address(0x0), address(0x0), 10_000, 100, 10_000);
-        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(LIQUIDITY_POOL), address(LIQUIFIER), address(EIGENLAYER_REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER), address(ROLE_REGISTRY), address(ETHERFI_RATE_LIMITER));
+        EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(LIQUIDITY_POOL), address(LIQUIFIER), address(EIGENLAYER_REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER), address(ROLE_REGISTRY), address(ETHERFI_RATE_LIMITER), address(EIGENLAYER_STRATEGY_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
         EtherFiRewardsRouter newEtherFiRewardsRouterImplementation = new EtherFiRewardsRouter(address(LIQUIDITY_POOL), address(TREASURY), address(ROLE_REGISTRY));
-        Liquifier newLiquifierImplementation = new Liquifier(address(ROLE_REGISTRY), 0x86392dC19c0b719886221c78AB11eb8Cf5c52812, address(0x0), 100, 24 hours, 500);
+        Liquifier newLiquifierImplementation = new Liquifier(Liquifier.ConstructorAddresses({
+            liquidityPool: address(LIQUIDITY_POOL),
+            lidoWithdrawalQueue: address(LIDO_WITHDRAWAL_QUEUE),
+            lido: 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84,
+            stEth_Eth_Pool: 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022,
+            roleRegistry: address(ROLE_REGISTRY),
+            stEthPriceFeed: 0x86392dC19c0b719886221c78AB11eb8Cf5c52812,
+            blacklister: address(0xdEaD),
+            etherfiRestaker: address(ETHERFI_RESTAKER),
+            l1SyncPool: address(ETHERFI_L1_SYNC_POOL_ETH)
+        }), 100, 24 hours, 500);
         WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE), address(EETH), address(LIQUIDITY_POOL), address(MEMBERSHIP_MANAGER), address(ROLE_REGISTRY), address(0x0));
         EtherFiViewer newEtherFiViewerImplementation = new EtherFiViewer(address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
 

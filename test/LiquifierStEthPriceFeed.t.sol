@@ -55,7 +55,18 @@ contract LiquifierStEthPriceFeedTest is Test {
         feed = new MockChainlinkPriceFeed(int256(1 ether), block.timestamp);
         curve = new MockCurvePool();
 
-        Liquifier impl = new Liquifier(address(roleRegistry), address(feed), address(0xDEAD), MIN_DISCOUNT, STALE_WINDOW, MAX_DEVIATION_BPS);
+        Liquifier.ConstructorAddresses memory addrs = Liquifier.ConstructorAddresses({
+            liquidityPool: address(0xA1),
+            lidoWithdrawalQueue: address(0xA2),
+            lido: stEth,
+            stEth_Eth_Pool: address(curve),
+            roleRegistry: address(roleRegistry),
+            stEthPriceFeed: address(feed),
+            blacklister: address(0xDEAD),
+            etherfiRestaker: address(0xA5),
+            l1SyncPool: address(0xA6)
+        });
+        Liquifier impl = new Liquifier(addrs, MIN_DISCOUNT, STALE_WINDOW, MAX_DEVIATION_BPS);
         UUPSProxy proxy = new UUPSProxy(address(impl), "");
         liquifier = Liquifier(payable(address(proxy)));
 

@@ -41,7 +41,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     address public feeRecipient;
 
-    uint32 public numPendingDeposits; // number of validator deposits, which needs 'registerValidator'
+    uint32 private DEPRECATED_numPendingDeposits; // number of validator deposits, which needs 'registerValidator'
 
     address private DEPRECATED_bNftTreasury;
     IWithdrawRequestNFT private DEPRECATED_withdrawRequestNFT;
@@ -54,13 +54,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     mapping(address => bool) private DEPRECATED_admins;
     mapping(SourceOfFunds => FundStatistics) private DEPRECATED_fundStatistics;
-    mapping(uint256 => bytes32) public depositDataRootForApprovalDeposits;
+    mapping(uint256 => bytes32) private DEPRECATED_depositDataRootForApprovalDeposits;
     address private DEPRECATED_etherFiAdminContract;
     bool private DEPRECATED_whitelistEnabled;
     mapping(address => bool) private DEPRECATED_whitelisted;
     mapping(address => ValidatorSpawner) public validatorSpawner;
 
-    bool public restakeBnftDeposits;
+    bool private DEPRECATED_restakeBnftDeposits;
     uint128 private DEPRECATED_ethAmountLockedForWithdrawal;
     bool public paused;
     address private DEPRECATED_auctionManager;
@@ -195,11 +195,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         __Ownable_init();
         __UUPSUpgradeable_init();
         paused = true;
-        restakeBnftDeposits = false;
-        DEPRECATED_ethAmountLockedForWithdrawal = 0;
-        DEPRECATED_etherFiAdminContract = _etherFiAdminContract;
-        DEPRECATED_withdrawRequestNFT = IWithdrawRequestNFT(_withdrawRequestNFT);
-        DEPRECATED_isLpBnftHolder = false;
     }
 
     /// @notice One-shot post-upgrade migration that sweeps existing locked ETH from LP to WithdrawRequestNFT and PriorityWithdrawalQueue.
@@ -527,13 +522,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
         feeRecipient = _feeRecipient;
         emit UpdatedFeeRecipient(_feeRecipient);
-    }
-
-    /// @notice Whether or not nodes created via bNFT deposits should be restaked
-    function setRestakeBnftDeposits(bool _restake) external {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-
-        restakeBnftDeposits = _restake;
     }
 
     // Pauses the contract

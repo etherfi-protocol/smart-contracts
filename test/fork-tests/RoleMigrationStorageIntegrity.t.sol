@@ -106,7 +106,9 @@ contract RoleMigrationStorageIntegrityTest is Test, Deployed {
             EIGENLAYER_REWARDS_COORDINATOR,
             ETHERFI_REDEMPTION_MANAGER,
             ROLE_REGISTRY,
-            ETHERFI_RATE_LIMITER
+            ETHERFI_RATE_LIMITER,
+            EIGENLAYER_STRATEGY_MANAGER,
+            EIGENLAYER_DELEGATION_MANAGER
         ));
 
         _upgradeProxy(AUCTION_MANAGER,  newAM);

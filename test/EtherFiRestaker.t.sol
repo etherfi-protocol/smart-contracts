@@ -227,7 +227,7 @@ contract EtherFiRestakerTest is TestSetup {
         EtherFiRestaker restaker = EtherFiRestaker(payable(deployed.ETHERFI_RESTAKER()));
         address _claimer = address(liquidityPoolInstance); // dummy claimer
 
-        address newRestakerImpl = address(new EtherFiRestaker(address(liquidityPoolInstance), address(liquifierInstance), address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance)));
+        address newRestakerImpl = address(new EtherFiRestaker(address(liquidityPoolInstance), address(liquifierInstance), address(eigenLayerRewardsCoordinator), address(etherFiRedemptionManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance), address(eigenLayerStrategyManager), address(eigenLayerDelegationManager)));
 
         address restakerOwner = restaker.owner();
         vm.startPrank(roleRegistryInstance.owner());
@@ -249,7 +249,9 @@ contract EtherFiRestakerTest is TestSetup {
             address(etherFiRestakerInstance.rewardsCoordinator()),
             address(etherFiRestakerInstance.etherFiRedemptionManager()),
             address(roleRegistryInstance),
-            address(rateLimiterInstance)
+            address(rateLimiterInstance),
+            address(eigenLayerStrategyManager),
+            address(eigenLayerDelegationManager)
         ));
 
         vm.startPrank(owner);

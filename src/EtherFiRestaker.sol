@@ -88,14 +88,16 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         address _rewardsCoordinator,
         address _etherFiRedemptionManager,
         address _roleRegistry,
-        address _rateLimiter
+        address _rateLimiter,
+        address _eigenLayerStrategyManager,
+        address _eigenLayerDelegationManager
     ) {
         liquidityPool = LiquidityPool(payable(_liquidityPool));
         liquifier = Liquifier(payable(_liquifier));
         lido = liquifier.lido();
         lidoWithdrawalQueue = liquifier.lidoWithdrawalQueue();
-        eigenLayerStrategyManager = liquifier.eigenLayerStrategyManager();
-        eigenLayerDelegationManager = liquifier.eigenLayerDelegationManager();
+        eigenLayerStrategyManager = IStrategyManager(_eigenLayerStrategyManager); 
+        eigenLayerDelegationManager = IDelegationManager(_eigenLayerDelegationManager);
         rewardsCoordinator = IRewardsCoordinator(_rewardsCoordinator);
         etherFiRedemptionManager = _etherFiRedemptionManager;
         roleRegistry = IRoleRegistry(_roleRegistry);

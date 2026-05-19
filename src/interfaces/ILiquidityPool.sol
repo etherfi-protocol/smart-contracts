@@ -41,7 +41,6 @@ interface ILiquidityPool {
         bool registered;
     }
 
-    function numPendingDeposits() external view returns (uint32);
     function totalValueOutOfLp() external view returns (uint128);
     function totalValueInLp() external view returns (uint128);
     function getTotalEtherClaimOf(address _user) external view returns (uint256);
