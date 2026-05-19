@@ -217,7 +217,7 @@ contract ReauditFixesTransactions is Utils {
             etherfiRestaker: address(ETHERFI_RESTAKER),
             l1SyncPool: address(ETHERFI_L1_SYNC_POOL_ETH)
         }), 100, 24 hours, 500);
-        WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE), address(EETH), address(LIQUIDITY_POOL), address(MEMBERSHIP_MANAGER), address(ROLE_REGISTRY), address(0x0), 0, 2e18);
+        WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE), address(EETH), address(LIQUIDITY_POOL), address(MEMBERSHIP_MANAGER), address(ROLE_REGISTRY), address(0x0), 1, 4e18);
         EtherFiViewer newEtherFiViewerImplementation = new EtherFiViewer(address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
 
         contractCodeChecker.verifyContractByteCodeMatch(etherFiNodeImpl, address(newEtherFiNodeImplementation));

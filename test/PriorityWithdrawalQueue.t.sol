@@ -4,6 +4,8 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 import "forge-std/console2.sol";
 
+import "@openzeppelin/contracts/utils/math/Math.sol";
+
 import "../src/PriorityWithdrawalQueue.sol";
 import "../src/interfaces/IPriorityWithdrawalQueue.sol";
 import "../src/utils/PausableUntil.sol";
@@ -40,7 +42,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             address(weEthInstance),
             address(roleRegistryInstance),
             treasury,
-            1 hours
+            1 hours,
+            1,
+            4e18
         );
         UUPSProxy proxy = new UUPSProxy(
             address(priorityQueueImpl),
@@ -82,7 +86,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
                 address(membershipManagerInstance),
                 address(roleRegistryInstance),
                 address(blacklisterInstance)
-            , 0, 4e18);
+            , 1, 4e18);
         withdrawRequestNFTInstance.upgradeTo(address(newWrnImpl));
         vm.stopPrank();
         vm.startPrank(owner);
@@ -2701,5 +2705,157 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         assertTrue(priorityQueue.isFinalized(requestId), "healthy request finalized");
         assertGt(priorityQueue.fulfillmentRate(requestId), 0, "snapshot stored for healthy request");
+    }
+
+    //--------------------------------------------------------------------------------------
+    //-----------------------  Share-rate-freeze invariants (H-02)  ------------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @notice For a fulfilled request, claim amount must NOT change across post-fulfill rebases.
+    ///         Core H-02 property on the priority path: post-fulfill rate movement is invisible
+    ///         to the claimant — they receive `amountWithFee` from the segregated escrow.
+    function test_invariant_queue_claimAmountIndependentOfPostFulfillRebase() public {
+        // 1. user requests, manager fulfills
+        uint96 withdrawAmount = 5 ether;
+        (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequest(vipUser, withdrawAmount);
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory requests =
+            new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        requests[0] = request;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(requests);
+        uint224 frozenRate = priorityQueue.fulfillmentRate(requestId);
+        assertGt(frozenRate, 0, "fulfillmentRate must be set after fulfill");
+
+        // 2. snapshot expected claim
+        uint256 expectedClaim = priorityQueue.getClaimableAmount(request);
+        assertEq(expectedClaim, request.amountWithFee, "claim is amountWithFee when solvent");
+
+        // 3. apply positive rebase — solvency must still hold and claim must not move.
+        _rebase(20 ether);
+        assertEq(
+            priorityQueue.getClaimableAmount(request),
+            expectedClaim,
+            "queue claim must be invariant under positive post-fulfill rebase"
+        );
+        assertEq(
+            priorityQueue.fulfillmentRate(requestId),
+            frozenRate,
+            "frozen rate must not move under positive rebase"
+        );
+
+        // 4. apply negative rebase. Pre-freeze this would have either dropped the claim or
+        //    blocked it via the live-rate solvency check. Frozen-rate must shield both.
+        _rebase(-15 ether);
+        assertEq(
+            priorityQueue.getClaimableAmount(request),
+            expectedClaim,
+            "queue claim must be invariant under negative post-fulfill rebase"
+        );
+        assertEq(
+            priorityQueue.fulfillmentRate(requestId),
+            frozenRate,
+            "frozen rate must not move under negative rebase"
+        );
+
+        // 5. claim actually pays the snapshot
+        uint256 ethBefore = vipUser.balance;
+        vm.prank(vipUser);
+        priorityQueue.claimWithdraw(request);
+        assertEq(vipUser.balance - ethBefore, expectedClaim, "queue payout uses frozen rate");
+    }
+
+    /// @notice Ceiling round-trip for the Queue claim path: with the frozen-rate solvency check
+    ///         (`shareOfEEth * rate / 1e18 >= amountWithFee`) enforced at fulfill, the round-trip
+    ///         ceiling `ceil(amountWithFee * 1e18 / rate) <= shareOfEEth` must hold for the burn.
+    ///         Mirrors `_claimWithdraw`'s `burnedShares <= shareOfEEth` invariant.
+    function test_invariant_queue_burnCeilingNeverExceedsRequestShares() public {
+        // Exercise a spread of fee fractions: amountWithFee very near, mid, and far below
+        // the rate-frozen value of shareOfEEth. The round-trip property must hold in all cases.
+        uint96[3] memory amounts = [uint96(5 ether), uint96(3 ether), uint96(1 ether)];
+
+        for (uint256 i = 0; i < amounts.length; i++) {
+            uint96 amountWithFee = amounts[i];
+
+            // Build a request via the normal path so shareOfEEth is the real LP-derived share.
+            (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+                _createWithdrawRequestWithFee(vipUser, 5 ether, amountWithFee);
+
+            IPriorityWithdrawalQueue.WithdrawRequest[] memory reqs =
+                new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+            reqs[0] = request;
+            vm.prank(requestManager);
+            priorityQueue.fulfillRequests(reqs);
+
+            uint224 rate = priorityQueue.fulfillmentRate(requestId);
+            assertGt(rate, 0, "rate must be set after fulfill");
+
+            // Round-trip ceiling burn must not exceed the request's share allocation.
+            uint256 burn = Math.mulDiv(uint256(amountWithFee), 1e18, uint256(rate), Math.Rounding.Up);
+            assertLe(burn, uint256(request.shareOfEEth), "queue: ceiling burn <= shareOfEEth");
+
+            // And the protocol never under-collects: burn * rate / 1e18 >= amountWithFee.
+            assertGe(
+                Math.mulDiv(burn, uint256(rate), 1e18, Math.Rounding.Down),
+                uint256(amountWithFee),
+                "queue: round-trip burn * rate / 1e18 >= amountWithFee"
+            );
+
+            // Drain so the next iteration's request can fit (vipUser has 50 ETH eETH baseline).
+            vm.prank(vipUser);
+            priorityQueue.claimWithdraw(request);
+        }
+    }
+
+    /// @notice Legacy fulfillment (snapshot==0 in `_fulfillmentRates`) must fall back to the
+    ///         live rate via `LP.amountPerShareCeil()` — preserving pre-upgrade claim semantics
+    ///         and successfully passing the (now-non-zero) rate to `LP.withdraw`.
+    function test_legacyQueueFulfillment_fallsBackToLiveRate() public {
+        // 1. Create + fulfill normally so the request lands in `_finalizedRequests` and ETH
+        //    is escrowed via `transferLockedEthForPriority`.
+        uint96 withdrawAmount = 5 ether;
+        (bytes32 requestId, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
+            _createWithdrawRequest(vipUser, withdrawAmount);
+
+        IPriorityWithdrawalQueue.WithdrawRequest[] memory reqs =
+            new IPriorityWithdrawalQueue.WithdrawRequest[](1);
+        reqs[0] = request;
+        vm.prank(requestManager);
+        priorityQueue.fulfillRequests(reqs);
+
+        uint224 storedRate = priorityQueue.fulfillmentRate(requestId);
+        assertGt(storedRate, 0, "precondition: rate stored after fulfill");
+
+        // 2. Simulate "pre-upgrade fulfillment" by clearing the rate slot via vm.store. The
+        //    base slot for `_fulfillmentRates` is determined by the contract's storage layout
+        //    (see `forge inspect ... storage`). The value slot for a given key is
+        //    `keccak256(abi.encode(key, baseSlot))`.
+        uint256 fulfillmentRatesBaseSlot = 158;
+        bytes32 valueSlot = keccak256(abi.encode(requestId, fulfillmentRatesBaseSlot));
+        // Sanity: pre-clear slot value should equal storedRate.
+        assertEq(
+            uint256(vm.load(address(priorityQueue), valueSlot)),
+            uint256(storedRate),
+            "_fulfillmentRates slot index drift - update fulfillmentRatesBaseSlot"
+        );
+
+        // 3. Zero the slot — request is now finalized with no snapshot, exactly like a
+        //    pre-upgrade fulfillment.
+        vm.store(address(priorityQueue), valueSlot, bytes32(0));
+        assertEq(priorityQueue.fulfillmentRate(requestId), 0, "snapshot cleared");
+
+        // 4. Pre-cleared expected payout via live-rate path (what pre-upgrade code would compute).
+        uint256 liveAmountForShares = liquidityPoolInstance.amountForShare(request.shareOfEEth);
+        // Solvency check uses the resolved rate (ceil); but both paths agree as long as
+        // amountWithFee <= floor(shareOfEEth * rate / 1e18). The test request is solvent.
+        assertGe(liveAmountForShares, request.amountWithFee, "live solvency precondition");
+
+        // 5. claimWithdraw must succeed via the live-rate fallback — and pay the user
+        //    `amountWithFee` from the segregated escrow exactly like a frozen-rate claim would.
+        uint256 ethBefore = vipUser.balance;
+        vm.prank(vipUser);
+        priorityQueue.claimWithdraw(request);
+        assertEq(vipUser.balance - ethBefore, request.amountWithFee, "legacy fallback claim pays amountWithFee");
     }
 }

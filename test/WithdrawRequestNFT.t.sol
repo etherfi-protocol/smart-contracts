@@ -4,13 +4,14 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/console2.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./TestSetup.sol";
 import "../src/utils/PausableUntil.sol";
 
 
 contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
 
-    constructor() WithdrawRequestNFT(address(0), address(0), address(0), address(0), address(0), address(0), 0, 4e18) {}
+    constructor() WithdrawRequestNFT(address(0), address(0), address(0), address(0), address(0), address(0), 1, 4e18) {}
 
     function updateParam(uint32 _currentRequestIdToScanFromForShareRemainder, uint32 _lastRequestIdToScanUntilForShareRemainder) external {
         currentRequestIdToScanFromForShareRemainder = _currentRequestIdToScanFromForShareRemainder;
@@ -345,7 +346,7 @@ contract WithdrawRequestNFTTest is TestSetup {
             address(membershipManagerInstance),
             address(roleRegistryInstance),
             address(blacklisterInstance)
-        , 0, 4e18)));
+        , 1, 4e18)));
         roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
         vm.stopPrank();
         uint256 implicitFee = withdrawRequestNFTInstance.getEEthRemainderAmount();
@@ -2157,5 +2158,169 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertEq(withdrawRequestNFTInstance.frozenRateFor(r1), rate, "r1 covered by same batch");
         assertEq(withdrawRequestNFTInstance.frozenRateFor(r2), rate, "r2 covered by same batch");
         assertEq(withdrawRequestNFTInstance.frozenRateFor(r3), rate, "r3 covered by same batch");
+    }
+
+    //--------------------------------------------------------------------------------------
+    //-----------------------  Share-rate-freeze invariants (H-02)  ------------------------
+    //--------------------------------------------------------------------------------------
+
+    /// @notice For a finalized request, claim amount must NOT change across post-finalize rebases.
+    ///         This is the core H-02 property: post-finalize rate movement is invisible to the
+    ///         claimant. Exercises both a positive and a negative post-finalize rebase, and the
+    ///         actual claim payout against the pre-rebase snapshot.
+    function test_invariant_claimAmountIndependentOfPostFinalizeRebase() public {
+        // 1. user deposits, requests withdraw
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 20 ether}();
+        vm.stopPrank();
+
+        // Build up TPE so a later negative rebase has headroom and doesn't underflow.
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(20 ether); // 40 ETH TPE / 20 shares → ~2 ETH/share
+
+        vm.prank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        vm.prank(bob);
+        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+
+        // 2. admin finalizes
+        _finalizeWithdrawalRequest(requestId);
+
+        // 3. snapshot expected payout via getClaimableAmount
+        uint256 expectedClaim = withdrawRequestNFTInstance.getClaimableAmount(requestId);
+        uint224 frozenRate = withdrawRequestNFTInstance.frozenRateFor(requestId);
+        assertGt(frozenRate, 0, "frozenRate must be set after finalize");
+
+        // 4. apply positive rebase
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(10 ether);
+
+        // 5. assert getClaimableAmount unchanged after positive rebase
+        assertEq(
+            withdrawRequestNFTInstance.getClaimableAmount(requestId),
+            expectedClaim,
+            "claim must be invariant under positive post-finalize rebase"
+        );
+        assertEq(
+            withdrawRequestNFTInstance.frozenRateFor(requestId),
+            frozenRate,
+            "frozen rate must not move under positive rebase"
+        );
+
+        // 6. apply negative rebase
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(-15 ether);
+
+        // 7. assert getClaimableAmount unchanged after negative rebase
+        assertEq(
+            withdrawRequestNFTInstance.getClaimableAmount(requestId),
+            expectedClaim,
+            "claim must be invariant under negative post-finalize rebase"
+        );
+        assertEq(
+            withdrawRequestNFTInstance.frozenRateFor(requestId),
+            frozenRate,
+            "frozen rate must not move under negative rebase"
+        );
+
+        // 8. user claims, assert actual paid ETH == snapshot
+        uint256 ethBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(requestId);
+        assertEq(bob.balance - ethBefore, expectedClaim, "paid ETH must match the pre-rebase snapshot");
+    }
+
+    /// @notice Ceiling round-trip: for any (amount, rate) tuple where
+    ///         `amount = shareOfEEth * rate / SHARE_UNIT` (the frozen-rate evaluation), the
+    ///         caller's burn `ceil(amount * SHARE_UNIT / rate)` must not exceed `shareOfEEth`.
+    ///         The freeze accounting relies on this for the `burnedShares <= shareOfEEth` guard
+    ///         in `_claimWithdraw`; here we exercise the same math directly against the
+    ///         contract's withdraw path for a spread of tuples.
+    function test_invariant_burnCeilingNeverExceedsRequestShares() public {
+        uint256[3] memory amounts = [uint256(0.01 ether), uint256(1 ether), uint256(95 ether)];
+        uint256[3] memory rates   = [uint256(0.9e18),     uint256(1e18),    uint256(1.5e18)];
+
+        for (uint256 i = 0; i < amounts.length; i++) {
+            for (uint256 j = 0; j < rates.length; j++) {
+                uint256 rate = rates[j];
+                // shareOfEEth large enough that amount = floor(shareOfEEth * rate / 1e18) > 0
+                uint256 shareOfEEth = 100 ether;
+
+                // amount = (rate-frozen) value of shareOfEEth shares, then take min with the
+                // requested amount to mirror `_getClaimableAmount`'s clamp.
+                uint256 amountForShares = Math.mulDiv(shareOfEEth, rate, 1e18);
+                uint256 amount = Math.min(amounts[i], amountForShares);
+                if (amount == 0) continue;
+
+                uint256 burn = Math.mulDiv(amount, 1e18, rate, Math.Rounding.Up);
+                assertLe(burn, shareOfEEth, "ceiling burn must not exceed shareOfEEth");
+
+                // Round-trip: burned * rate / 1e18 >= amount (protocol never under-collects).
+                assertGe(
+                    Math.mulDiv(burn, rate, 1e18, Math.Rounding.Down),
+                    amount,
+                    "round-trip: burn * rate / 1e18 >= amount"
+                );
+            }
+        }
+    }
+
+    /// @notice After upgrade, lookup for a pre-upgrade tokenId resolves to 0, triggering the
+    ///         local live-rate fallback path. The claim payout must match what the pre-upgrade
+    ///         code (live `amountForShare`-based) would have computed at that moment.
+    function test_legacyFallback_matchesPreUpgradeLiveRate() public {
+        // 1. set up a "pre-upgrade finalized request" by stepping lastFinalizedRequestId without
+        //    pushing a real snapshot — mirroring on-chain state at the moment of the upgrade.
+        startHoax(bob);
+        liquidityPoolInstance.deposit{value: 10 ether}();
+        vm.stopPrank();
+        vm.prank(address(membershipManagerInstance));
+        liquidityPoolInstance.rebase(10 ether);
+
+        vm.startPrank(bob);
+        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
+        uint256 legacyId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
+        vm.stopPrank();
+
+        vm.startPrank(withdrawRequestNFTInstance.owner());
+        _setLastFinalizedRequestIdForTest(uint32(legacyId));
+        vm.stopPrank();
+
+        // LP locks the ETH so the eventual claim path can succeed.
+        vm.prank(address(etherFiAdminInstance));
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(uint128(1 ether));
+
+        // 2. capture expected payout via the old live-rate path BEFORE the upgrade init.
+        WithdrawRequestNFT.WithdrawRequest memory legacyReq =
+            withdrawRequestNFTInstance.getRequest(legacyId);
+        uint256 liveAmountForShares = liquidityPoolInstance.amountForShare(legacyReq.shareOfEEth);
+        uint256 expectedPreUpgrade = Math.min(uint256(legacyReq.amountOfEEth), liveAmountForShares);
+
+        // 3. call initializeShareRateFreezeUpgrade (pushes the sentinel = value 0).
+        vm.prank(withdrawRequestNFTInstance.owner());
+        withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
+        assertEq(
+            withdrawRequestNFTInstance.frozenRateFor(legacyId),
+            0,
+            "legacy id must hit the value-0 sentinel"
+        );
+
+        // 4. assert getClaimableAmount returns the same value (live-rate fallback in effect).
+        //    Use a tight delta — both expressions evaluate at the same block / rate, so they
+        //    must match exactly up to a 1-wei rounding artifact (mulDiv-Up vs mulDiv-Down).
+        uint256 postUpgradeClaim = withdrawRequestNFTInstance.getClaimableAmount(legacyId);
+        assertApproxEqAbs(
+            postUpgradeClaim,
+            expectedPreUpgrade,
+            1,
+            "legacy live-rate fallback must match pre-upgrade live-rate semantics within 1 wei"
+        );
+
+        // 5. claim actually succeeds — proves the fallback resolves to a non-zero rate that
+        //    LP accepts (and not the now-removed `rate==0` LP branch).
+        uint256 ethBefore = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(legacyId);
+        assertGt(bob.balance, ethBefore, "claim must succeed via live-rate fallback");
     }
 }

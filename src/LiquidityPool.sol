@@ -147,6 +147,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error InvalidValidatorSize();
     error InvalidArrayLengths();
     error InvalidAmountForShare();
+    error InvalidRate();
 
     struct ConstructorAddresses {
         address stakingManager;
@@ -280,20 +281,21 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /// @notice Settles a finalized claim for withdrawRequestNFT or priorityWithdrawalQueue against
     ///         the rate snapshotted at finalize/fulfill time. Caller supplies the rate; LP derives
-    ///         the share burn from it. A `_rate` of 0 means the caller has no snapshot (pre-upgrade
-    ///         legacy request) and asks LP to use the live rate. ETH was already segregated to the
-    ///         caller at finalize/fulfill via `addEthAmountLockedForWithdrawal` / `transferLockedEthForPriority`,
-    ///         so LP only performs accounting (burn + `totalValueOutOfLp -=`); the caller pays the
-    ///         user from its own balance.
+    ///         the share burn from it. ETH was already segregated to the caller at finalize/fulfill
+    ///         via `addEthAmountLockedForWithdrawal` / `transferLockedEthForPriority`, so LP only
+    ///         performs accounting (burn + `totalValueOutOfLp -=`); the caller pays the user from
+    ///         its own balance.
+    /// @dev    `_rate == 0` is rejected — callers (WRNFT / Queue) are responsible for resolving
+    ///         any pre-upgrade legacy snapshot to a live rate locally via `amountPerShareCeil()`
+    ///         before invoking this function. Single codepath: one ceiling math expression.
     function withdraw(uint256 _amount, uint256 _rate) external nonReentrant returns (uint256) {
         if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) {
             revert IncorrectCaller();
         }
         if (_amount > type(uint128).max || _amount == 0) revert InvalidAmount();
+        if (_rate == 0) revert InvalidRate();
 
-        uint256 share = _rate == 0
-            ? sharesForWithdrawalAmount(_amount)
-            : Math.mulDiv(_amount, SHARE_UNIT, _rate, Math.Rounding.Up); // rounding favors the protocol
+        uint256 share = Math.mulDiv(_amount, SHARE_UNIT, _rate, Math.Rounding.Up); // rounding favors the protocol
         if (share == 0) revert InvalidAmount();
         if (eETH.shares(msg.sender) < share) revert InsufficientLiquidity();
 
