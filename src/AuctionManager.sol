@@ -294,6 +294,11 @@ contract AuctionManager is
         emit BidCancelled(_bidId);
     }
 
+    function _requireNotPaused() internal override view {
+        _requireNotPausedUntil();
+        super._requireNotPaused();
+    }
+
     function _authorizeUpgrade(address newImplementation) internal override {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
     }
