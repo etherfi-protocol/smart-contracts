@@ -638,7 +638,7 @@ contract WeETHTest is TestSetup {
         _aliceWithWeEth(1 ether);
 
         vm.prank(owner);
-        blacklisterInstance.extendBlacklistUntil(alice, 1 days);
+        blacklisterInstance.setBlacklistUntil(alice, 1 days);
 
         vm.prank(alice);
         _expectBlacklistedRevert(alice);
@@ -686,7 +686,7 @@ contract WeETHTest is TestSetup {
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), pauseUntilDurationSetter);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
         // Foundry's default block.timestamp is too small to clear the cooldown
         // check on the very first pause (lastPauseTimestamp[0] = 0 ⇒ trips
@@ -886,12 +886,12 @@ contract WeETHTest is TestSetup {
         uint256 maxDur = weEthInstance.MAX_PAUSE_DURATION();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         weEthInstance.setPauseUntilDuration(maxDur);
 
         // PAUSE_UNTIL_ROLE alone is insufficient.
         vm.prank(pauseUntilPauser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         weEthInstance.setPauseUntilDuration(maxDur);
     }
 

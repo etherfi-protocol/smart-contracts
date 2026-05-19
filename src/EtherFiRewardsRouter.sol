@@ -63,7 +63,9 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
         emit Erc721Sent(msg.sender, _token, _tokenId);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     function getImplementation() external view returns (address) {
         return _getImplementation();

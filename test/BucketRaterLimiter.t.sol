@@ -1168,7 +1168,7 @@ contract BucketRateLimiterTest is Test {
         BucketRateLimiter newImpl = new BucketRateLimiter(address(roleRegistry));
 
         vm.prank(nonOwner);
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
         limiter.upgradeTo(address(newImpl));
     }
 

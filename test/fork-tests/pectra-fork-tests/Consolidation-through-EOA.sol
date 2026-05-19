@@ -57,6 +57,8 @@ contract ConsolidationThroughEOATest is Test {
 
         // Setup consolidation rate limiter bucket (required for new rate limiting)
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), roleRegistry.owner());
+        // RateLimiter mutators (createNewLimiter, updateConsumers) are now onlyAdmin → OPERATION_TIMELOCK_ROLE.
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), roleRegistry.owner());
 
         // Upgrade the on-chain rate limiter so it uses the consolidated role model
         // (the on-chain impl still checks ETHERFI_RATE_LIMITER_ADMIN_ROLE).

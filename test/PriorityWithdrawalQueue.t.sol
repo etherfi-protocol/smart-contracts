@@ -1412,7 +1412,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), pauseUntilDurationSetter);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
@@ -1473,12 +1473,12 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         uint256 maxDur = priorityQueue.MAX_PAUSE_DURATION();
 
         vm.prank(regularUser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         priorityQueue.setPauseUntilDuration(maxDur);
 
         // Guardian-only role (pauseUntilPauser) cannot set the duration; needs admin role.
         vm.prank(pauseUntilPauser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         priorityQueue.setPauseUntilDuration(maxDur);
     }
 
@@ -2096,11 +2096,12 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     function test_revert_adminFunctionsNotAdmin() public {
         vm.startPrank(regularUser);
 
-        // addToWhitelist/removeFromWhitelist are onlyAdmin (OPERATION_TIMELOCK_ROLE).
+        // addToWhitelist is onlyAdmin (OPERATION_TIMELOCK_ROLE).
         vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         priorityQueue.addToWhitelist(regularUser);
 
-        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        // removeFromWhitelist is onlyOperations (OPERATION_MULTISIG_ROLE).
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         priorityQueue.removeFromWhitelist(vipUser);
 
         vm.stopPrank();

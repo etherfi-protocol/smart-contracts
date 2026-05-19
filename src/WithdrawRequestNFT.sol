@@ -280,7 +280,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -350,7 +350,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         require(address(this).balance >= ethAmountLockedForWithdrawal, "Insufficient escrow");
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     function getImplementation() external view returns (address) {
         return _getImplementation();

@@ -44,7 +44,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param id The rate limit identifier
     /// @param consumer The consumer address to update
     /// @param allowed Whether the consumer is allowed to consume from this limit
-    function updateConsumers(bytes32 id, address consumer, bool allowed) external onlyOperations {
+    function updateConsumers(bytes32 id, address consumer, bool allowed) external onlyAdmin {
         if (!limitExists(id)) revert UnknownLimit();
         consumers[id][consumer] = allowed;
         emit ConsumerUpdated(id, consumer, allowed);
@@ -54,7 +54,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @param id The unique identifier for the rate limit
     /// @param capacity The maximum capacity of the bucket in gwei
     /// @param refillRate The refill rate per second in gwei
-    function createNewLimiter(bytes32 id, uint64 capacity, uint64 refillRate) external onlyOperations {
+    function createNewLimiter(bytes32 id, uint64 capacity, uint64 refillRate) external onlyAdmin {
         if (limitExists(id)) revert LimitAlreadyExists();
 
         limits[id] = BucketLimiter.create(capacity, refillRate);
@@ -64,7 +64,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @notice Updates the capacity of an existing rate limit
     /// @param id The rate limit identifier
     /// @param capacity The new maximum capacity in gwei
-    function setCapacity(bytes32 id, uint64 capacity) external onlyOperations {
+    function setCapacity(bytes32 id, uint64 capacity) external onlyAdmin {
         if (!limitExists(id)) revert UnknownLimit();
 
         BucketLimiter.setCapacity(limits[id], capacity);
@@ -74,7 +74,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @notice Updates the refill rate of an existing rate limit
     /// @param id The rate limit identifier
     /// @param refillRate The new refill rate per second in gwei
-    function setRefillRate(bytes32 id, uint64 refillRate) external onlyOperations {
+    function setRefillRate(bytes32 id, uint64 refillRate) external onlyAdmin {
         if (!limitExists(id)) revert UnknownLimit();
 
         BucketLimiter.setRefillRate(limits[id], refillRate);
@@ -84,7 +84,7 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     /// @notice Updates the remaining capacity of an existing rate limit
     /// @param id The rate limit identifier
     /// @param remaining The new remaining capacity in gwei
-    function setRemaining(bytes32 id, uint64 remaining) external onlyOperations {
+    function setRemaining(bytes32 id, uint64 remaining) external onlyAdmin {
         if (!limitExists(id)) revert UnknownLimit();
 
         BucketLimiter.setRemaining(limits[id], remaining);
@@ -169,6 +169,11 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
     //--------------------------------------------------------------------------------------
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
 
     modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);

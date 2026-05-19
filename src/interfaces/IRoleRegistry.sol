@@ -82,6 +82,13 @@ interface IRoleRegistry {
     function onlyProtocolUpgrader(address account) external view;
 
     /**
+     * @notice Checks if an account is the upgrade timelock
+     * @dev Reverts if the account is not the upgrade timelock
+     * @param account The address to check
+     */
+    function onlyUpgradeTimelock(address account) external view;
+
+    /**
      * @notice Checks if an account is the operating timelock
      * @dev Reverts if the account is not the operating timelock
      * @param account The address to check

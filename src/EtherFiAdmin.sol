@@ -198,7 +198,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit ValidatorApprovalTaskCompleted(taskHash, _reportHash, _validators);
     }
 
-    function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) external onlyAdmin {
+    function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) external onlyOperations {
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
         require(validatorApprovalTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
         require(!validatorApprovalTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
@@ -414,6 +414,11 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     modifier onlyAdmin() {
         roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 }

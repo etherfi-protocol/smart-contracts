@@ -416,7 +416,9 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         return (_a > _b) ? _b : _a;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     /* MODIFIERS */
     modifier onlyOperations() {

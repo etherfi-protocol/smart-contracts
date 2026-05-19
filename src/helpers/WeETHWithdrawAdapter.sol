@@ -204,7 +204,7 @@ contract WeETHWithdrawAdapter is
      * @notice Sets the pause duration for the contract
      * @param _pauseUntilDuration The new pause duration
      */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -259,6 +259,11 @@ contract WeETHWithdrawAdapter is
 
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);
+        _;
+    }
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
         _;
     }
 

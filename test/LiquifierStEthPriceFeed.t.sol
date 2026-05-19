@@ -81,9 +81,11 @@ contract LiquifierStEthPriceFeedTest is Test {
         );
 
         // Grant the consolidated admin role before any admin-gated call.
-        // LIQUIFIER_ADMIN_ROLE consolidated into OPERATION_MULTISIG_ROLE.
+        // updateWhitelistedToken now requires OPERATION_TIMELOCK_ROLE (onlyUpgradeTimelock);
+        // updateQuoteStEthWithCurve still uses OPERATION_MULTISIG_ROLE (onlyOperations).
         vm.startPrank(owner);
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), owner);
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), owner);
         vm.stopPrank();
 
         // updateWhitelistedToken bypasses the strategy-underlying check that

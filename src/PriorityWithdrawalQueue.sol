@@ -367,7 +367,7 @@ contract PriorityWithdrawalQueue is
         emit WhitelistUpdated(user, true);
     }
 
-    function removeFromWhitelist(address user) external onlyAdmin {
+    function removeFromWhitelist(address user) external onlyOperations {
         isWhitelisted[user] = false;
         emit WhitelistUpdated(user, false);
     }
@@ -456,7 +456,7 @@ contract PriorityWithdrawalQueue is
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 

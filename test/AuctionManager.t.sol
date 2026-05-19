@@ -764,8 +764,10 @@ contract AuctionManagerTest is TestSetup {
     }
 
     function test_SetWhitelistBidAmount() public {
-        vm.prank(alice);
-        vm.expectRevert("Ownable: caller is not the owner");
+        // updateWhitelistMinBidAmount is now onlyOperations (OPERATION_MULTISIG_ROLE).
+        // bob has no roles in TestSetup.
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         auctionInstance.updateWhitelistMinBidAmount(0.005 ether);
 
         vm.prank(owner);

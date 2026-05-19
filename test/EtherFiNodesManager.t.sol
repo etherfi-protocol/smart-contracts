@@ -822,7 +822,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), nmPauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), nmUnpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), nmPauseUntilDurationSetter);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), nmPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
@@ -891,12 +891,12 @@ contract EtherFiNodesManagerTest is TestSetup {
         uint256 maxDur = managerInstance.MAX_PAUSE_DURATION();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         managerInstance.setPauseUntilDuration(maxDur);
 
         // Guardian-only role (nmPauseUntilPauser) cannot set the duration; needs admin role.
         vm.prank(nmPauseUntilPauser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         managerInstance.setPauseUntilDuration(maxDur);
     }
 

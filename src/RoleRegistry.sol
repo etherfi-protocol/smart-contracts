@@ -14,10 +14,12 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     address public immutable revokeAdmin;
 
     error OnlyProtocolUpgrader();
+    error OnlyUpgradeTimelock();
     error OnlyOperatingTimelock();
     error OnlyOperatingMultisig();
     error OnlyGuardian();
     error OnlyRevokeAdmin();
+    error InvalidRoleToRevoke();
 
     /// @notice Returns the maximum allowed role value
     /// @dev This is used by EnumerableRoles._validateRole to ensure roles are within valid range
@@ -76,6 +78,7 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     /// @param account The address to revoke the role from
     function revokeFast(bytes32 role, address account) public {
         if (msg.sender != revokeAdmin) revert OnlyRevokeAdmin();
+        if (role == UPGRADE_TIMELOCK_ROLE || role == OPERATION_TIMELOCK_ROLE || role == OPERATION_MULTISIG_ROLE) revert InvalidRoleToRevoke();
         _setRole(account, uint256(role), false);
     }
 
@@ -89,6 +92,10 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
 
     function onlyProtocolUpgrader(address account) public view {
         if (owner() != account) revert OnlyProtocolUpgrader();
+    }
+
+    function onlyUpgradeTimelock(address account) public view {
+        if (!hasRole(UPGRADE_TIMELOCK_ROLE, account)) revert OnlyUpgradeTimelock();
     }
 
     function onlyOperatingTimelock(address account) public view {
@@ -111,5 +118,7 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
         }
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        onlyProtocolUpgrader(msg.sender);
+    }
 }

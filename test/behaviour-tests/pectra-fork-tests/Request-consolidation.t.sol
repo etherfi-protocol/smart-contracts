@@ -54,6 +54,8 @@ contract RequestConsolidationTest is TestSetup, Deployed {
         // Setup consolidation rate limiter bucket
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), roleRegistry.owner());
+        // RateLimiter mutators (createNewLimiter, updateConsumers) are now onlyAdmin → OPERATION_TIMELOCK_ROLE.
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), roleRegistry.owner());
         roleRegistry.grantRole(roleRegistry.EOA_3(), realElExiter);
         // ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE consolidated into EOA_3.
         roleRegistry.grantRole(roleRegistry.EOA_3(), ETHERFI_OPERATING_ADMIN);

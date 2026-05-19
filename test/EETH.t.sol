@@ -631,7 +631,7 @@ contract EETHTest is TestSetup {
         _aliceWithEEth(1 ether);
 
         vm.prank(owner);
-        blacklisterInstance.extendBlacklistUntil(alice, 1 days);
+        blacklisterInstance.setBlacklistUntil(alice, 1 days);
 
         vm.prank(alice);
         _expectBlacklistedRevert(alice);
@@ -681,7 +681,7 @@ contract EETHTest is TestSetup {
         // pauseContractUntil → GUARDIAN_ROLE; unpauseContractUntil + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), pauseUntilDurationSetter);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
         // Foundry's default block.timestamp is too small — the cooldown check is
         // `lastPauseTimestamp + MAX_PAUSE_DURATION + COOLDOWN > block.timestamp`,
@@ -924,12 +924,12 @@ contract EETHTest is TestSetup {
         uint256 maxDur = eETHInstance.MAX_PAUSE_DURATION();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         eETHInstance.setPauseUntilDuration(maxDur);
 
         // Guardian-only role (pauseUntilPauser) cannot set the duration; needs admin role.
         vm.prank(pauseUntilPauser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         eETHInstance.setPauseUntilDuration(maxDur);
     }
 

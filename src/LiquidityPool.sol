@@ -438,7 +438,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         IStakingManager.DepositData[] calldata _depositData,
         uint256 _validatorSizeWei
     ) external whenNotPaused nonReentrant {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_1(), msg.sender)) revert IncorrectRole();
         if (_validatorSizeWei < 32 ether || _validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
@@ -470,7 +470,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /// @notice Removes a Validator Spawner
     /// @param _user the address of the Validator Spawner to remove
-    function unregisterValidatorSpawner(address _user) external onlyAdmin {
+    function unregisterValidatorSpawner(address _user) external onlyOperations {
         require(validatorSpawner[_user].registered, "Not registered");
 
         delete validatorSpawner[_user];
@@ -538,7 +538,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /// @notice Sets the pause duration for the contract
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 

@@ -10,13 +10,15 @@ import "../src/utils/PausableUntil.sol";
 
 contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
 
-    constructor() WithdrawRequestNFT(address(0), address(0), address(0), address(0), address(0), address(0), address(0)) {}
+    // roleRegistry must be non-zero — _authorizeUpgrade now defers to it for upgrade auth,
+    // so a zero immutable would brick the swap-back step in updateParam.
+    constructor(address _roleRegistry) WithdrawRequestNFT(address(0), address(0), address(0), address(0), _roleRegistry, address(0), address(0)) {}
 
     function updateParam(uint32 _currentRequestIdToScanFromForShareRemainder, uint32 _lastRequestIdToScanUntilForShareRemainder) external {
         currentRequestIdToScanFromForShareRemainder = _currentRequestIdToScanFromForShareRemainder;
         lastRequestIdToScanUntilForShareRemainder = _lastRequestIdToScanUntilForShareRemainder;
     }
-    
+
 }
 
 contract WithdrawRequestNFTTest is TestSetup {
@@ -31,7 +33,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
     function updateParam(uint32 _currentRequestIdToScanFromForShareRemainder, uint32 _lastRequestIdToScanUntilForShareRemainder) internal {
         address cur_impl = withdrawRequestNFTInstance.getImplementation();
-        address new_impl = address(new WithdrawRequestNFTIntrusive());
+        address new_impl = address(new WithdrawRequestNFTIntrusive(address(roleRegistryInstance)));
         withdrawRequestNFTInstance.upgradeTo(new_impl);
         WithdrawRequestNFTIntrusive(payable(address(withdrawRequestNFTInstance))).updateParam(_currentRequestIdToScanFromForShareRemainder, _lastRequestIdToScanUntilForShareRemainder);
         withdrawRequestNFTInstance.upgradeTo(cur_impl);
@@ -885,7 +887,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE (onlyOperations)
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), wrPauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), wrUnpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), wrPauseUntilDurationSetter);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), wrPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
@@ -946,12 +948,12 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 maxDur = withdrawRequestNFTInstance.MAX_PAUSE_DURATION();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         withdrawRequestNFTInstance.setPauseUntilDuration(maxDur);
 
         // Guardian-only role (wrPauseUntilPauser) cannot set the duration; needs admin role.
         vm.prank(wrPauseUntilPauser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         withdrawRequestNFTInstance.setPauseUntilDuration(maxDur);
     }
 

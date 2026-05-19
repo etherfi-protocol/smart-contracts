@@ -1744,7 +1744,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), rmPauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), rmUnpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), rmPauseUntilDurationSetter);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), rmPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 

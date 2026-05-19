@@ -248,7 +248,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         IERC20(_token).safeTransfer(etherfiRestaker, _amount);
     }
 
-    function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyOperations {
+    function updateWhitelistedToken(address _token, bool _isWhitelisted) external onlyUpgradeTimelock {
         tokenInfos[_token].isWhitelisted = _isWhitelisted;
     }
 
@@ -257,7 +257,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
     }
     
-    function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyOperations {
+    function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyUpgradeTimelock {
         if (_discountInBasisPoints < MIN_DISCOUNT_RATE_IN_BPS || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
@@ -304,7 +304,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     /// @notice Sets the pause duration for the contract
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -448,11 +448,23 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         return (_a > _b) ? _b : _a;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     function _requireNotPaused() internal override view {
         _requireNotPausedUntil();
         super._requireNotPaused();
+    }
+
+    modifier onlyUpgradeTimelock() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
     }
 
     modifier onlyOperations() {

@@ -191,7 +191,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
        // setPauseUntilDuration require OPERATION_MULTISIG_ROLE.
        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauserAddr);
        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauserAddr);
-       roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), pauseUntilDurationSetter);
+       roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
        vm.stopPrank();
        // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so the first-pause cooldown
        // (which treats lastPauseTimestamp[pauser] = 0 as unix 0) is satisfied
@@ -255,13 +255,14 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
        _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
        uint256 maxDur = cumulativeMerkleRewardsDistributorInstance.MAX_PAUSE_DURATION();
 
-       vm.prank(chad);
-       vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+       // bob holds no roles in setUpTests; chad/admin/owner all have OPERATION_TIMELOCK_ROLE.
+       vm.prank(bob);
+       vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
        cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(maxDur);
 
        // Guardian-only (pauseUntilPauser) cannot set the duration; needs admin role.
        vm.prank(pauseUntilPauser);
-       vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+       vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
        cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(maxDur);
    }
 

@@ -233,7 +233,9 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     function _authorizeUpgrade(
         address newImplementation
-    ) internal override onlyOwner {}
+    ) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------

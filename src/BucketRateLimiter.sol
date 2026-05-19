@@ -104,6 +104,7 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         _;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
-
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 }

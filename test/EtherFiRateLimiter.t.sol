@@ -40,9 +40,9 @@ contract EtherFiRateLimiterTest is TestSetup {
         roleRegistry = roleRegistryInstance;
 
         vm.startPrank(owner);
-        // All admin / pauser / unpauser roles consolidated into OPERATION_MULTISIG_ROLE
-        // (rate limiter modifiers use onlyAdmin = OPERATION_MULTISIG_ROLE).
-        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
+        // pauser / unpauser roles consolidated into OPERATION_MULTISIG_ROLE
+        // (rate limiter modifiers use onlyAdmin = OPERATION_TIMELOCK_ROLE).
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), pauser);
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), unpauser);
         vm.stopPrank();
@@ -73,7 +73,7 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         rateLimiter.createNewLimiter(LIMIT_ID_2, DEFAULT_CAPACITY, DEFAULT_REFILL_RATE);
     }
 
@@ -88,7 +88,7 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         rateLimiter.updateConsumers(LIMIT_ID_1, consumer2, true);
     }
 
@@ -103,7 +103,7 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         rateLimiter.setCapacity(LIMIT_ID_1, DEFAULT_CAPACITY * 3);
     }
 
@@ -118,7 +118,7 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         rateLimiter.setRefillRate(LIMIT_ID_1, DEFAULT_REFILL_RATE * 3);
     }
 
@@ -133,7 +133,7 @@ contract EtherFiRateLimiterTest is TestSetup {
 
         // Should fail with unauthorized user
         vm.prank(unauthorizedUser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         rateLimiter.setRemaining(LIMIT_ID_1, DEFAULT_CAPACITY / 4);
     }
 

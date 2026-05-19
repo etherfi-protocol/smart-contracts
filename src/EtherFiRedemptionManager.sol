@@ -370,7 +370,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 

@@ -260,10 +260,12 @@ contract EtherFiRestakerTest is TestSetup {
         vm.stopPrank();
 
         // Grant all restaker roles to owner so existing tests continue to work.
-        // ETHERFI_RESTAKER_ADMIN_ROLE + ETHERFI_RATE_LIMITER_ADMIN_ROLE → OPERATION_MULTISIG_ROLE.
+        // ETHERFI_RESTAKER_ADMIN_ROLE → OPERATION_MULTISIG_ROLE.
+        // ETHERFI_RATE_LIMITER_ADMIN_ROLE → OPERATION_TIMELOCK_ROLE (RateLimiter mutators are onlyAdmin now).
         // ETHERFI_RESTAKER_REQUEST/CLAIM/DEPOSIT_*_ROLE → EOA_3 (onlyOperationsManager).
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
         roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), owner);
         vm.stopPrank();
 

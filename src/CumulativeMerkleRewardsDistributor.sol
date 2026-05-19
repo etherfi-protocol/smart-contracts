@@ -151,7 +151,7 @@ using SafeERC20 for IERC20;
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -203,6 +203,11 @@ using SafeERC20 for IERC20;
     modifier whenNotPaused() {
         _requireNotPaused();
         _requireNotPausedUntil();
+        _;
+    }
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
         _;
     }
 

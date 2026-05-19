@@ -430,7 +430,7 @@ contract LiquidityPoolTest is TestSetup {
         setUpBnftHolders();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         liquidityPoolInstance.unregisterValidatorSpawner(owner);
     }
 
@@ -1532,7 +1532,7 @@ contract LiquidityPoolTest is TestSetup {
         // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), lpPauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), lpUnpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), lpPauseUntilDurationSetter);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), lpPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
@@ -1592,13 +1592,14 @@ contract LiquidityPoolTest is TestSetup {
         _grantLpPauseUntilRoles();
         uint256 maxDur = liquidityPoolInstance.MAX_PAUSE_DURATION();
 
-        vm.prank(chad);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        // bob holds no roles in setUpTests; chad/admin/owner all have OPERATION_TIMELOCK_ROLE.
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         liquidityPoolInstance.setPauseUntilDuration(maxDur);
 
         // Guardian-only role (lpPauseUntilPauser) cannot set the duration; needs admin role.
         vm.prank(lpPauseUntilPauser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         liquidityPoolInstance.setPauseUntilDuration(maxDur);
     }
 

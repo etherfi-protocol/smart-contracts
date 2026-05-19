@@ -6,6 +6,7 @@ import "./interfaces/INodeOperatorManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
+import "./utils/PausableUntil.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -17,6 +18,7 @@ contract AuctionManager is
     IAuctionManager,
     PausableUpgradeable,
     OwnableUpgradeable,
+    PausableUntil,
     ReentrancyGuardUpgradeable,
     UUPSUpgradeable
 {
@@ -257,6 +259,21 @@ contract AuctionManager is
         _unpause();
     }
 
+    // Pauses contract until MAX_PAUSE_DURATION
+    function pauseContractUntil() external onlyGuardian {
+        _pauseUntil();
+    }
+
+    // Unpauses contract from pauseUntil
+    function unpauseContractUntil() external onlyOperations {
+        _unpauseUntil();
+    }
+
+    /// @notice Sets the pause duration for the contract
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
+        _setPauseUntilDuration(_pauseUntilDuration);
+    }
+
     //--------------------------------------------------------------------------------------
     //-------------------------------  INTERNAL FUNCTIONS   --------------------------------
     //--------------------------------------------------------------------------------------
@@ -277,7 +294,9 @@ contract AuctionManager is
         emit BidCancelled(_bidId);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     //--------------------------------------------------------------------------------------
     //--------------------------------------  GETTER  --------------------------------------
@@ -332,7 +351,7 @@ contract AuctionManager is
     /// @param _newAmount the new amount to set the minimum bid price as
     function updateWhitelistMinBidAmount(
         uint128 _newAmount
-    ) external onlyOwner {
+    ) external onlyOperations {
         require(_newAmount < minBidAmount && _newAmount > 0, "Invalid Amount");
         whitelistBidAmount = _newAmount;
     }
@@ -346,8 +365,18 @@ contract AuctionManager is
         _;
     }
 
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
     modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 

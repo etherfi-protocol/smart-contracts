@@ -154,7 +154,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyOperations {
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -280,6 +280,11 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     // [MODIFIERS]
     modifier onlyPoolContract() {
         require(msg.sender == address(liquidityPool), "Only pool contract function");
+        _;
+    }
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
         _;
     }
 

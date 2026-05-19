@@ -591,6 +591,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         }
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), owner);
         roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), owner);
@@ -634,8 +636,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(eigenLayerDelegationManager)
         );
         // Upgrade in place so the address matches Liquifier's immutable etherfiRestaker.
+        // _authorizeUpgrade now defers to RoleRegistry.onlyProtocolUpgrader, which checks
+        // the RoleRegistry owner — not the proxy's own owner (which may be zero in fork tests).
         vm.stopPrank();
-        vm.prank(etherFiRestakerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         etherFiRestakerInstance.upgradeTo(address(etherFiRestakerImplementation));
         vm.startPrank(owner);
     }
@@ -944,6 +948,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         membershipNftImplementation = new MembershipNFT(
             address(liquidityPoolProxy),
             address(membershipManagerProxy),
+            address(roleRegistryInstance),
             address(blacklisterInstance)
         );
         membershipNftInstance.upgradeTo(address(membershipNftImplementation));
@@ -1105,7 +1110,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         );
 
         membershipManagerInstance.updateAdmin(alice, true);
-        membershipNftInstance.updateAdmin(alice, true);
 
         // special case for forked tests utilizing oracle
         // can't use env variable because then it would apply to all tests including non-forked ones

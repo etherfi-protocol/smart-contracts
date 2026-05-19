@@ -450,7 +450,7 @@ contract LiquifierTest is TestSetup {
         // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE (onlyAdmin).
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), liqPauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), liqUnpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), liqPauseUntilDurationSetter);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), liqPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
@@ -528,12 +528,12 @@ contract LiquifierTest is TestSetup {
         uint256 maxDur = liquifierInstance.MAX_PAUSE_DURATION();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         liquifierInstance.setPauseUntilDuration(maxDur);
 
         // Guardian-only role (liqPauseUntilPauser) cannot set the duration; needs admin role.
         vm.prank(liqPauseUntilPauser);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         liquifierInstance.setPauseUntilDuration(maxDur);
     }
 

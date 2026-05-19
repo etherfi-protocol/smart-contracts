@@ -252,7 +252,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit CommitteeMemberRemoved(_address);
     }
 
-    function manageCommitteeMember(address _address, bool _enabled) public onlyAdmin {
+    function manageCommitteeMember(address _address, bool _enabled) public onlyOperations {
         require(committeeMemberStates[_address].registered == true, "Not registered");
         require(committeeMemberStates[_address].enabled != _enabled, "Already in the target state");
         committeeMemberStates[_address].enabled = _enabled;
@@ -304,7 +304,9 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         return _getImplementation();
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     modifier onlyAdmin() {
         roleRegistry.onlyOperatingTimelock(msg.sender);

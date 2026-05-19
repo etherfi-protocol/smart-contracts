@@ -132,7 +132,7 @@ contract RoleRegistryTest is Test {
         
         // Only owner can upgrade
         vm.prank(user1);
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
         registry.upgradeTo(address(newImplementation));
         
         // Owner can upgrade
