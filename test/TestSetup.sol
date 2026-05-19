@@ -744,7 +744,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         membershipNftProxy = new UUPSProxy(address(membershipNftImplementation), "");
         membershipNftInstance = MembershipNFT(payable(membershipNftProxy));
 
-        withdrawRequestNFTImplementation = new WithdrawRequestNFT(address(treasuryInstance), address(blacklisterInstance));
+        withdrawRequestNFTImplementation = new WithdrawRequestNFT(address(treasuryInstance), address(blacklisterInstance), 0, 4e18);
         withdrawRequestNFTProxy = new UUPSProxy(address(withdrawRequestNFTImplementation), "");
         withdrawRequestNFTInstance = WithdrawRequestNFT(payable(withdrawRequestNFTProxy));
 

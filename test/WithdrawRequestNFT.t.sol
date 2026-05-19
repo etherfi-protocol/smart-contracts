@@ -10,7 +10,7 @@ import "../src/utils/PausableUntil.sol";
 
 contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
 
-    constructor() WithdrawRequestNFT(address(0), address(0)) {}
+    constructor() WithdrawRequestNFT(address(0), address(0), 0, 4e18) {}
 
     function updateParam(uint32 _currentRequestIdToScanFromForShareRemainder, uint32 _lastRequestIdToScanUntilForShareRemainder) external {
         currentRequestIdToScanFromForShareRemainder = _currentRequestIdToScanFromForShareRemainder;
@@ -338,7 +338,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_handleRemainder() public {
         initializeRealisticFork(MAINNET_FORK);
         vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance))));
+        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance), 0, 4e18)));
         roleRegistryInstance.grantRole(withdrawRequestNFTInstance.IMPLICIT_FEE_CLAIMER_ROLE(), alice);
         vm.stopPrank();
         uint256 implicitFee = withdrawRequestNFTInstance.getEEthRemainderAmount();

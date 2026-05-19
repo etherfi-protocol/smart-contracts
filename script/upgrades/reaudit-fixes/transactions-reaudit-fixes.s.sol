@@ -207,7 +207,7 @@ contract ReauditFixesTransactions is Utils {
         EtherFiRestaker newEtherFiRestakerImplementation = new EtherFiRestaker(address(EIGENLAYER_REWARDS_COORDINATOR), address(ETHERFI_REDEMPTION_MANAGER), address(ROLE_REGISTRY), address(ETHERFI_RATE_LIMITER));
         EtherFiRewardsRouter newEtherFiRewardsRouterImplementation = new EtherFiRewardsRouter(address(LIQUIDITY_POOL), address(TREASURY), address(ROLE_REGISTRY));
         Liquifier newLiquifierImplementation = new Liquifier(address(ROLE_REGISTRY), 0x86392dC19c0b719886221c78AB11eb8Cf5c52812, address(0x0), 100, 24 hours, 500);
-        WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE), address(0x0));
+        WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE), address(0x0), 0, 2e18);
         EtherFiViewer newEtherFiViewerImplementation = new EtherFiViewer(address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
 
         contractCodeChecker.verifyContractByteCodeMatch(etherFiNodeImpl, address(newEtherFiNodeImplementation));

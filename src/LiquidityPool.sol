@@ -730,7 +730,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     ///         `shareOfEEth * rate / 1e18 >= amountForShare(shareOfEEth)` (solvency check) and
     ///         `ceil(amount * 1e18 / rate) <= shareOfEEth` (burn-bounded-by-request).
     function amountPerShareCeil() public view returns (uint256) {
-        return Math.mulDiv(SHARE_UNIT, getTotalPooledEther(), eETH.totalShares(), Math.Rounding.Up);
+        uint256 totalShares = eETH.totalShares();
+        if (totalShares == 0) return 0;
+        return Math.mulDiv(SHARE_UNIT, getTotalPooledEther(), totalShares, Math.Rounding.Up);
     }
 
     function _checkTotalValueInLp() internal view {

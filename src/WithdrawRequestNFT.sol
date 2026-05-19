@@ -64,6 +64,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     IBlacklister public immutable blacklister;
 
+    uint256 public immutable minAcceptableShareRate;
+    uint256 public immutable maxAcceptableShareRate;
+
     event WithdrawRequestCreated(uint32 indexed requestId, uint256 amountOfEEth, uint256 shareOfEEth, address owner, uint256 fee);
     event WithdrawRequestClaimed(uint32 indexed requestId, uint256 amountOfEEth, uint256 burntShareOfEEth, address owner, uint256 fee);
     event WithdrawRequestInvalidated(uint32 indexed requestId);
@@ -77,10 +80,13 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     error IncorrectRole();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _treasury, address _blacklister) {
+    constructor(address _treasury, address _blacklister, uint256 _minAcceptableShareRate, uint256 _maxAcceptableShareRate) {
+        require(_maxAcceptableShareRate > _minAcceptableShareRate, "Invalid min and max acceptable share rate");
         treasury = _treasury;
         blacklister = IBlacklister(_blacklister);
 
+        minAcceptableShareRate = _minAcceptableShareRate;
+        maxAcceptableShareRate = _maxAcceptableShareRate;
         _disableInitializers();
     }
 
@@ -288,7 +294,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         // Skip on no-op finalize so the checkpoint trace stays compact.
         if (requestId > lastFinalizedRequestId) {
             uint256 rate = liquidityPool.amountPerShareCeil();
-            require(rate > 0 && rate <= type(uint224).max, "invalid rate");
+            require(rate >= minAcceptableShareRate && rate <= maxAcceptableShareRate, "invalid rate");
             _finalizationRates.push(uint32(requestId), uint224(rate));
         }
 

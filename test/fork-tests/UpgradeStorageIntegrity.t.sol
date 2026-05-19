@@ -204,7 +204,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // 2. Deploy new implementation contracts (with the added guard)
         // ------------------------------------------------------------------
         address newLP  = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, address(blacklisterInstance), 0));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance)));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance), 0, 4e18));
 
         // ------------------------------------------------------------------
         // 3. Upgrade the proxies in place
@@ -380,7 +380,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      receive(); the master queue impl has no receive() and would revert.
     function _doUpgrade() internal {
         address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, address(blacklisterInstance), 0));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance)));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance), 0, 4e18));
         address newPQ = address(new PriorityWithdrawalQueue(
             LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, TREASURY, 1 hours
         ));
