@@ -30,18 +30,18 @@ contract AuctionManager is
     uint256 public numberOfBids;
     uint256 public numberOfActiveBids;
 
-    INodeOperatorManager public nodeOperatorManager;
-    IProtocolRevenueManager public DEPRECATED_protocolRevenueManager;
+    INodeOperatorManager private DEPRECATED_nodeOperatorManager;
+    IProtocolRevenueManager private DEPRECATED_protocolRevenueManager;
 
-    address public stakingManagerContractAddress;
+    address private DEPRECATED_stakingManagerContractAddress;
     bool public whitelistEnabled;
 
     mapping(uint256 => Bid) public bids;
 
-    address public DEPRECATED_admin;
+    address private DEPRECATED_admin;
 
     // new state variables for phase 2
-    address public membershipManagerContractAddress;
+    address private DEPRECATED_membershipManagerContractAddress;
     uint128 public accumulatedRevenue;
     uint128 public accumulatedRevenueThreshold;
 
@@ -50,6 +50,9 @@ contract AuctionManager is
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
+    INodeOperatorManager public immutable nodeOperatorManager;
+    address public immutable stakingManagerContractAddress;
+    address public immutable membershipManagerContractAddress;
 
     bytes32 public constant AUCTION_MANAGER_ADMIN_ROLE = keccak256("AUCTION_MANAGER_ADMIN_ROLE");
 
@@ -66,9 +69,12 @@ contract AuctionManager is
     event WhitelistEnabled(bool whitelistStatus);
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry, address _blacklister) {
+    constructor(address _roleRegistry, address _blacklister, address _nodeOperatorManagerContract, address _stakingManagerContractAddress, address _membershipManagerContractAddress) {
         roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
+        nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerContract);
+        stakingManagerContractAddress = _stakingManagerContractAddress;
+        membershipManagerContractAddress = _membershipManagerContractAddress;
         _disableInitializers();
     }
 
@@ -88,18 +94,13 @@ contract AuctionManager is
         numberOfBids = 1;
         whitelistEnabled = true;
 
-        nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerContract);
-
         __Pausable_init();
         __Ownable_init();
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
     }
 
-    function initializeOnUpgrade(address _membershipManagerContractAddress, uint128 _accumulatedRevenueThreshold, address _nodeOperatorManagerAddress) external onlyOwner {
-        require(_membershipManagerContractAddress != address(0) && _nodeOperatorManagerAddress != address(0), "No Zero Addresses");
-        membershipManagerContractAddress = _membershipManagerContractAddress;
-        nodeOperatorManager = INodeOperatorManager(_nodeOperatorManagerAddress);
+    function initializeOnUpgrade(uint128 _accumulatedRevenueThreshold) external onlyOwner {
         accumulatedRevenue = 0;
         accumulatedRevenueThreshold = _accumulatedRevenueThreshold;
     }
@@ -312,16 +313,6 @@ contract AuctionManager is
     //--------------------------------------  SETTER  --------------------------------------
     //--------------------------------------------------------------------------------------
 
-    /// @notice Sets the staking managers contract address in the current contract
-    /// @param _stakingManagerContractAddress new stakingManagerContract address
-    function setStakingManagerContractAddress(
-        address _stakingManagerContractAddress
-    ) external onlyOwner {
-        require(address(stakingManagerContractAddress) == address(0), "Address already set");
-        require(_stakingManagerContractAddress != address(0), "No zero addresses");
-        stakingManagerContractAddress = _stakingManagerContractAddress;
-    }
-
     /// @notice Updates the minimum bid price for a non-whitelisted bidder
     /// @param _newMinBidAmount the new amount to set the minimum bid price as
     function setMinBidPrice(uint64 _newMinBidAmount) external onlyAdmin {
@@ -350,12 +341,6 @@ contract AuctionManager is
     ) external onlyOwner {
         require(_newAmount < minBidAmount && _newAmount > 0, "Invalid Amount");
         whitelistBidAmount = _newAmount;
-    }
-
-    function updateNodeOperatorManager(address _address) external onlyOwner {
-        nodeOperatorManager = INodeOperatorManager(
-            _address
-        );
     }
 
     //--------------------------------------------------------------------------------------

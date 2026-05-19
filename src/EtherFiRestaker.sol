@@ -33,6 +33,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     address public immutable etherFiRedemptionManager;
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
+    LiquidityPool public immutable liquidityPool;
+    Liquifier public immutable liquifier;
+    ILidoWithdrawalQueue public immutable lidoWithdrawalQueue;
+    ILido public immutable lido;
+    IDelegationManager public immutable eigenLayerDelegationManager;
+    IStrategyManager public immutable eigenLayerStrategyManager;
     IRoleRegistry public immutable roleRegistry;
     IEtherFiRateLimiter public immutable rateLimiter;
 
@@ -45,12 +51,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     bytes32 public constant QUEUE_WITHDRAWALS_LIMIT_ID        = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
     bytes32 public constant DEPOSIT_INTO_STRATEGY_LIMIT_ID    = keccak256("DEPOSIT_INTO_STRATEGY_LIMIT_ID");
 
-    LiquidityPool public liquidityPool;
-    Liquifier public liquifier;
-    ILidoWithdrawalQueue public lidoWithdrawalQueue;
-    ILido public lido;
-    IDelegationManager public eigenLayerDelegationManager;
-    IStrategyManager public eigenLayerStrategyManager;
+    LiquidityPool private DEPRECATED_liquidityPool;
+    Liquifier private DEPRECATED_liquifier;
+    ILidoWithdrawalQueue private DEPRECATED_lidoWithdrawalQueue;
+    ILido private DEPRECATED_lido;
+    IDelegationManager private DEPRECATED_eigenLayerDelegationManager;
+    IStrategyManager private DEPRECATED_eigenLayerStrategyManager;
 
     mapping(address => bool) private DEPRECATED_pausers;
     mapping(address => bool) private DEPRECATED_admins;
@@ -58,7 +64,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     mapping(address => TokenInfo) public tokenInfos;
 
     EnumerableSet.Bytes32Set private withdrawalRootsSet;
-    mapping(bytes32 => IDelegationManager.Withdrawal) public DEPRECATED_withdrawalRootToWithdrawal;
+    mapping(bytes32 => IDelegationManager.Withdrawal) private DEPRECATED_withdrawalRootToWithdrawal;
 
 
     event QueuedStEthWithdrawals(uint256[] _reqIds);
@@ -77,11 +83,21 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
+        address _liquidityPool,
+        address _liquifier,
         address _rewardsCoordinator,
         address _etherFiRedemptionManager,
         address _roleRegistry,
-        address _rateLimiter
+        address _rateLimiter,
+        address _eigenLayerStrategyManager,
+        address _eigenLayerDelegationManager
     ) {
+        liquidityPool = LiquidityPool(payable(_liquidityPool));
+        liquifier = Liquifier(payable(_liquifier));
+        lido = liquifier.lido();
+        lidoWithdrawalQueue = liquifier.lidoWithdrawalQueue();
+        eigenLayerStrategyManager = IStrategyManager(_eigenLayerStrategyManager); 
+        eigenLayerDelegationManager = IDelegationManager(_eigenLayerDelegationManager);
         rewardsCoordinator = IRewardsCoordinator(_rewardsCoordinator);
         etherFiRedemptionManager = _etherFiRedemptionManager;
         roleRegistry = IRoleRegistry(_roleRegistry);
@@ -94,15 +110,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         __Ownable_init();
         __Pausable_init();
         __UUPSUpgradeable_init();
-
-        liquidityPool = LiquidityPool(payable(_liquidityPool));
-        liquifier = Liquifier(payable(_liquifier));
-
-        lido = liquifier.lido();
-        lidoWithdrawalQueue = liquifier.lidoWithdrawalQueue();
-
-        eigenLayerStrategyManager = liquifier.eigenLayerStrategyManager();
-        eigenLayerDelegationManager = liquifier.eigenLayerDelegationManager();
 
         (,, IStrategy strategy,,,,,,,,) = liquifier.tokenInfos(address(lido));
         tokenInfos[address(lido)] = TokenInfo({

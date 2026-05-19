@@ -41,7 +41,6 @@ interface ILiquidityPool {
         bool registered;
     }
 
-    function numPendingDeposits() external view returns (uint32);
     function totalValueOutOfLp() external view returns (uint128);
     function totalValueInLp() external view returns (uint128);
     function getTotalEtherClaimOf(address _user) external view returns (uint256);
@@ -50,7 +49,6 @@ interface ILiquidityPool {
     function sharesForWithdrawalAmount(uint256 _amount) external view returns (uint256);
     function amountForShare(uint256 _share) external view returns (uint256);
     function eETH() external view returns (IeETH);
-    function DEPRECATED_ethAmountLockedForWithdrawal() external view returns (uint128);
     function escrowMigrationCompleted() external view returns (bool);
 
     function deposit() external payable returns (uint256);

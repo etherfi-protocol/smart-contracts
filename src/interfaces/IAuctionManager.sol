@@ -32,10 +32,6 @@ interface IAuctionManager {
 
     function processAuctionFeeTransfer(uint256 _validatorId) external;
 
-    function setStakingManagerContractAddress(
-        address _stakingManagerContractAddress
-    ) external;
-
     function setAccumulatedRevenueThreshold(uint128 _newThreshold) external;
 
     function pauseContract() external;
