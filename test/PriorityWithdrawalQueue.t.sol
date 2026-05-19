@@ -43,7 +43,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             address(roleRegistryInstance),
             treasury,
             1 hours,
-            0,
+            1,
             4e18
         );
         UUPSProxy proxy = new UUPSProxy(
@@ -64,7 +64,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.stopPrank();
         vm.startPrank(wrnOwner);
         WithdrawRequestNFT newWrnImpl =
-            new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F, address(blacklisterInstance), 0, 4e18);
+            new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F, address(blacklisterInstance), 1, 4e18);
         withdrawRequestNFTInstance.upgradeTo(address(newWrnImpl));
         vm.stopPrank();
         vm.startPrank(owner);

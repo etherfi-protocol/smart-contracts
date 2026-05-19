@@ -103,6 +103,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _treasury, address _blacklister, uint256 _minAcceptableShareRate, uint256 _maxAcceptableShareRate) {
+        require(_minAcceptableShareRate > 0, "Invalid min acceptable share rate");
         require(_maxAcceptableShareRate > _minAcceptableShareRate, "Invalid min and max acceptable share rate");
         treasury = _treasury;
         blacklister = IBlacklister(_blacklister);

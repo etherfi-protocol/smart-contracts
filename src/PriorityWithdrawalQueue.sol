@@ -149,6 +149,7 @@ contract PriorityWithdrawalQueue is
     error InvalidEEthSharesAfterRemainderHandling();
     error InvalidOutputAmount();
     error InsufficientLiquidity();
+    error InvalidMinAcceptableShareRate();
     error InvalidAcceptableShareRate();
     error InvalidLiveRate();
 
@@ -191,6 +192,7 @@ contract PriorityWithdrawalQueue is
         if (_liquidityPool == address(0) || _eETH == address(0) || _weETH == address(0) || _roleRegistry == address(0) || _treasury == address(0)) {
             revert AddressZero();
         }
+        if (_minAcceptableShareRate == 0) revert InvalidMinAcceptableShareRate();
         if (_maxAcceptableShareRate <= _minAcceptableShareRate) revert InvalidAcceptableShareRate();
         
         liquidityPool = ILiquidityPool(_liquidityPool);
