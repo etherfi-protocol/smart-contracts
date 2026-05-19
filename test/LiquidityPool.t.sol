@@ -26,6 +26,25 @@ contract LiquidityPoolTest is TestSetup {
         _initBid();
     }
 
+    /// @dev Build LiquidityPool ConstructorAddresses overriding the priority queue and
+    /// blacklister; other fields fall back to test setup addresses. Returns a struct
+    /// suitable for `new LiquidityPool(...)`.
+    function _lpCtorAddrs(address pwq, address blacklister) internal view returns (LiquidityPool.ConstructorAddresses memory) {
+        return LiquidityPool.ConstructorAddresses({
+            stakingManager: address(stakingManagerInstance),
+            nodesManager: address(managerInstance),
+            eETH: address(eETHInstance),
+            withdrawRequestNFT: address(withdrawRequestNFTInstance),
+            liquifier: address(liquifierInstance),
+            etherFiRedemptionManager: address(etherFiRedemptionManagerInstance),
+            roleRegistry: address(roleRegistryInstance),
+            priorityWithdrawalQueue: pwq,
+            blacklister: blacklister,
+            etherFiAdminContract: address(etherFiAdminInstance),
+            membershipManager: address(membershipManagerInstance)
+        });
+    }
+
     function _initBid() internal {
         vm.deal(alice, 100 ether);
 
@@ -217,7 +236,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_StakingManagerFailsNotInitializedToken() public {
-        LiquidityPool liquidityPoolNoToken = new LiquidityPool(address(0x0), address(blacklisterInstance), 0);
+        LiquidityPool liquidityPoolNoToken = new LiquidityPool(_lpCtorAddrs(address(0x0), address(blacklisterInstance)), 0);
 
         vm.startPrank(alice);
         vm.deal(alice, 3 ether);
@@ -767,7 +786,7 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_Upgrade2_49_onlyRoleRegistryOwnerCanUpgrade() public {
-        liquidityPool = address(new LiquidityPool(address(0x0), address(blacklisterInstance), 0));
+        liquidityPool = address(new LiquidityPool(_lpCtorAddrs(address(0x0), address(blacklisterInstance)), 0));
         vm.expectRevert(RoleRegistry.OnlyProtocolUpgrader.selector);
         vm.prank(address(100));
         liquidityPoolInstance.upgradeTo(liquidityPool);
@@ -1064,23 +1083,6 @@ contract LiquidityPoolTest is TestSetup {
         vm.startPrank(bob);
         vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         liquidityPoolInstance.setFeeRecipient(bob);
-        vm.stopPrank();
-    }
-
-    function test_SetRestakeBnftDeposits() public {
-        vm.startPrank(alice);
-        liquidityPoolInstance.setRestakeBnftDeposits(true);
-        assertTrue(liquidityPoolInstance.restakeBnftDeposits());
-        
-        liquidityPoolInstance.setRestakeBnftDeposits(false);
-        assertFalse(liquidityPoolInstance.restakeBnftDeposits());
-        vm.stopPrank();
-    }
-
-    function test_SetRestakeBnftDepositsFailsIfNotAdmin() public {
-        vm.startPrank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
-        liquidityPoolInstance.setRestakeBnftDeposits(true);
         vm.stopPrank();
     }
 
@@ -1906,7 +1908,7 @@ contract LiquidityPoolTest is TestSetup {
             bytes32 newVal = (current & mask) | bytes32(uint256(nftLocked) << 8);
             vm.store(address(liquidityPoolInstance), slot220, newVal);
         }
-        assertEq(liquidityPoolInstance.DEPRECATED_ethAmountLockedForWithdrawal(), nftLocked);
+        assertEq(uint128(uint256(vm.load(address(liquidityPoolInstance), bytes32(uint256(220)))) >> 8), nftLocked);
 
         // escrowMigrationCompleted is at slot 226, byte offset 0 (bool).
         // It should already be false after initializeTestingFork; no-op write to be safe.
@@ -1935,7 +1937,7 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(address(withdrawRequestNFTInstance).balance, nftBalBefore + nftLocked, "NFT not funded");
         assertEq(eETHInstance.totalShares(), sharesBefore, "totalShares should not change");
         assertTrue(liquidityPoolInstance.escrowMigrationCompleted(), "flag not set");
-        assertEq(liquidityPoolInstance.DEPRECATED_ethAmountLockedForWithdrawal(), 0, "deprecated LP slot not zeroed");
+        assertEq(uint128(uint256(vm.load(address(liquidityPoolInstance), bytes32(uint256(220)))) >> 8), 0, "deprecated LP slot not zeroed");
         assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT counter not set by migration");
 
         // Idempotency guard.
@@ -1958,8 +1960,8 @@ contract LiquidityPoolTest is TestSetup {
     /// @dev Deploy a fresh LiquidityPool implementation with the desired MIN and upgrade the proxy.
     /// Preserves the existing `priorityWithdrawalQueue` immutable.
     function _upgradeLpWithMinAmount(uint256 minAmount) internal {
-        address pq = liquidityPoolInstance.priorityWithdrawalQueue();
-        LiquidityPool newImpl = new LiquidityPool(pq, address(blacklisterInstance), minAmount);
+        address pq = address(liquidityPoolInstance.priorityWithdrawalQueue());
+        LiquidityPool newImpl = new LiquidityPool(_lpCtorAddrs(pq, address(blacklisterInstance)), minAmount);
         vm.prank(owner);
         liquidityPoolInstance.upgradeTo(address(newImpl));
     }
@@ -1979,10 +1981,10 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     function test_minAmountForShare_immutable_is_set_via_constructor() public {
-        LiquidityPool fresh = new LiquidityPool(address(0), address(blacklisterInstance), 0.5 ether);
+        LiquidityPool fresh = new LiquidityPool(_lpCtorAddrs(address(0), address(blacklisterInstance)), 0.5 ether);
         assertEq(fresh.MIN_AMOUNT_FOR_SHARE(), 0.5 ether);
 
-        LiquidityPool fresh2 = new LiquidityPool(address(0), address(blacklisterInstance), type(uint256).max);
+        LiquidityPool fresh2 = new LiquidityPool(_lpCtorAddrs(address(0), address(blacklisterInstance)), type(uint256).max);
         assertEq(fresh2.MIN_AMOUNT_FOR_SHARE(), type(uint256).max);
     }
 
@@ -2165,12 +2167,12 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_minAmountForShare_immutable_independent_of_priority_queue() public {
         // The two constructor params are independent and neither cross-contaminates the other.
-        LiquidityPool a = new LiquidityPool(address(0xBEEF), address(blacklisterInstance), 1 ether);
-        assertEq(a.priorityWithdrawalQueue(), address(0xBEEF));
+        LiquidityPool a = new LiquidityPool(_lpCtorAddrs(address(0xBEEF), address(blacklisterInstance)), 1 ether);
+        assertEq(address(a.priorityWithdrawalQueue()), address(0xBEEF));
         assertEq(a.MIN_AMOUNT_FOR_SHARE(), 1 ether);
 
-        LiquidityPool b = new LiquidityPool(address(0), address(blacklisterInstance), 0);
-        assertEq(b.priorityWithdrawalQueue(), address(0));
+        LiquidityPool b = new LiquidityPool(_lpCtorAddrs(address(0), address(blacklisterInstance)), 0);
+        assertEq(address(b.priorityWithdrawalQueue()), address(0));
         assertEq(b.MIN_AMOUNT_FOR_SHARE(), 0);
     }
 
@@ -2231,9 +2233,9 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(1 ether);
 
         // transferLockedEthForPriority must also revert before migration completes.
-        // LP's priorityWithdrawalQueue immutable is address(0) in the testing-fork setup,
-        // so we impersonate address(0) to pass the caller check and reach the migration guard.
-        vm.prank(address(0));
+        // Prank as the priorityWithdrawalQueue (LP's immutable) so the caller check
+        // passes and we reach the migration guard.
+        vm.prank(address(liquidityPoolInstance.priorityWithdrawalQueue()));
         vm.expectRevert(bytes("migration not complete"));
         liquidityPoolInstance.transferLockedEthForPriority(1 ether);
     }

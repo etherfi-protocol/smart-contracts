@@ -10,7 +10,7 @@ import "../src/utils/PausableUntil.sol";
 
 contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
 
-    constructor() WithdrawRequestNFT(address(0), address(0), address(0)) {}
+    constructor() WithdrawRequestNFT(address(0), address(0), address(0), address(0), address(0), address(0), address(0)) {}
 
     function updateParam(uint32 _currentRequestIdToScanFromForShareRemainder, uint32 _lastRequestIdToScanUntilForShareRemainder) external {
         currentRequestIdToScanFromForShareRemainder = _currentRequestIdToScanFromForShareRemainder;
@@ -333,7 +333,14 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_handleRemainder() public {
         initializeRealisticFork(MAINNET_FORK);
         vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance), address(etherFiAdminInstance))));
+        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(
+            address(buybackWallet),
+            address(eETHInstance),
+            address(liquidityPoolInstance),
+            address(membershipManagerInstance),
+            address(roleRegistryInstance),
+            address(blacklisterInstance)
+        , address(etherFiAdminInstance))));
         // IMPLICIT_FEE_CLAIMER_ROLE consolidated into EOA_2.
         roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
         vm.stopPrank();

@@ -33,11 +33,12 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     uint32 public numCommitteeMembers; // the total number of committee members
     uint32 public numActiveCommitteeMembers; // the number of active (enabled) committee members
 
-    IEtherFiAdmin etherFiAdmin;
+    IEtherFiAdmin private DEPRECATED_etherFiAdmin;
 
     mapping(address => bool) private DEPRECATED_admins;
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
+    IEtherFiAdmin public immutable etherFiAdmin;
     IRoleRegistry public immutable roleRegistry;
 
     event CommitteeMemberAdded(address indexed member);
@@ -53,7 +54,8 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry) {
+    constructor(address _etherFiAdmin, address _roleRegistry) {
+        etherFiAdmin = IEtherFiAdmin(_etherFiAdmin);
         roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }

@@ -838,14 +838,6 @@ contract BucketRateLimiterTest is Test {
 
     // ============ Admin Tests ============
 
-    function test_updateAdmin_emitsEvent() public {
-        address admin = address(1);
-
-        vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
-        vm.stopPrank();
-    }
-
     function test_updateAdmin_canPause() public {
         address admin = address(1);
         vm.startPrank(owner);
@@ -876,14 +868,6 @@ contract BucketRateLimiterTest is Test {
     }
 
     // ============ Pauser Tests ============
-
-    function test_updatePauser_emitsEvent() public {
-        address pauser = address(1);
-
-        vm.startPrank(owner);
-        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), pauser);
-        vm.stopPrank();
-    }
 
     function test_updatePauser_ownerCanPause() public {
         vm.startPrank(owner);

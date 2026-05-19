@@ -26,17 +26,18 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    address public auctionManagerContractAddress;
+    address private DEPRECATED_auctionManagerContractAddress;
 
     // user address => OperaterData Struct
     mapping(address => KeyData) public addressToOperatorData;
     mapping(address => bool) private whitelistedAddresses;
     mapping(address => bool) public registered;
 
-    mapping(address => bool) public DEPRECATED_admins;
+    mapping(address => bool) private DEPRECATED_admins;
     mapping(address => mapping(ILiquidityPool.SourceOfFunds => bool)) public operatorApprovedTags;
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
+    address public immutable auctionManagerContractAddress;
     IRoleRegistry public immutable roleRegistry;
 
     //--------------------------------------------------------------------------------------
@@ -44,7 +45,8 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry) {
+    constructor(address _roleRegistry, address _auctionManagerContractAddress) {
+        auctionManagerContractAddress = _auctionManagerContractAddress;
         roleRegistry = IRoleRegistry(_roleRegistry);
         _disableInitializers();
     }
@@ -223,21 +225,6 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
-    }
-
-    //--------------------------------------------------------------------------------------
-    //-----------------------------------  SETTERS   ---------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    /// @notice Sets the auction contract address for verification purposes
-    /// @dev Set manually due to circular dependencies
-    /// @param _auctionContractAddress address of the deployed auction contract address
-    function setAuctionContractAddress(
-        address _auctionContractAddress
-    ) public onlyOwner {
-        require(auctionManagerContractAddress == address(0), "Address already set");
-        require(_auctionContractAddress != address(0), "No zero addresses");
-        auctionManagerContractAddress = _auctionContractAddress;
     }
 
     //--------------------------------------------------------------------------------------

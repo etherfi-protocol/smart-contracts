@@ -53,31 +53,31 @@ interface IERC20Burnable is IERC20 {
 contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, PausableUpgradeable, PausableUntil, ReentrancyGuardUpgradeable, ILiquifier {
     using SafeERC20 for IERC20;
 
-    uint32 public DEPRECATED_eigenLayerWithdrawalClaimGasCost;
+    uint32 private DEPRECATED_eigenLayerWithdrawalClaimGasCost;
     uint32 public timeBoundCapRefreshInterval; // seconds
 
     bool public quoteStEthWithCurve;
 
-    uint128 public DEPRECATED_accumulatedFee;
+    uint128 private DEPRECATED_accumulatedFee;
 
     mapping(address => TokenInfo) public tokenInfos;
-    mapping(bytes32 => bool) public isRegisteredQueuedWithdrawals;
-    mapping(address => bool) public DEPRECATED_admins;
+    mapping(bytes32 => bool) private DEPRECATED_isRegisteredQueuedWithdrawals;
+    mapping(address => bool) private DEPRECATED_admins;
 
-    address public treasury;
-    ILiquidityPool public liquidityPool;
-    IStrategyManager public eigenLayerStrategyManager;
-    ILidoWithdrawalQueue public lidoWithdrawalQueue;
+    address private DEPRECATED_treasury;
+    ILiquidityPool private DEPRECATED_liquidityPool;
+    IStrategyManager private DEPRECATED_eigenLayerStrategyManager;
+    ILidoWithdrawalQueue private DEPRECATED_lidoWithdrawalQueue;
 
-    ICurvePool public DEPRECATED_cbEth_Eth_Pool;
-    ICurvePool public DEPRECATED_wbEth_Eth_Pool;
-    ICurvePool public stEth_Eth_Pool;
+    ICurvePool private DEPRECATED_cbEth_Eth_Pool;
+    ICurvePool private DEPRECATED_wbEth_Eth_Pool;
+    ICurvePool private DEPRECATED_stEth_Eth_Pool;
 
-    IcbETH public DEPRECATED_cbEth;
-    IwBETH public DEPRECATED_wbEth;
-    ILido public lido;
+    IcbETH private DEPRECATED_cbEth;
+    IwBETH private DEPRECATED_wbEth;
+    ILido private DEPRECATED_lido;
 
-    IDelegationManager public eigenLayerDelegationManager;
+    IDelegationManager private DEPRECATED_eigenLayerDelegationManager;
 
     IPancackeV3SwapRouter pancakeRouter;
 
@@ -85,17 +85,24 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     
     // To support L2 native minting of weETH
     IERC20[] public dummies;
-    address public l1SyncPool;
+    address private DEPRECATED_l1SyncPool;
 
-    mapping(address => bool) public DEPRECATED_pausers;
+    mapping(address => bool) private DEPRECATED_pausers;
 
-    address public etherfiRestaker;
+    address private DEPRECATED_etherfiRestaker;
 
     uint256 public constant BASIS_POINT_SCALE = 10_000;
 
+    ILiquidityPool public immutable liquidityPool;
+    ILidoWithdrawalQueue public immutable lidoWithdrawalQueue;
+    ILido public immutable lido;
+    ICurvePool public immutable stEth_Eth_Pool;
     IRoleRegistry public immutable roleRegistry;
     AggregatorV3Interface public immutable stEthPriceFeed;
     IBlacklister public immutable blacklister;
+
+    address public immutable etherfiRestaker;
+    address public immutable l1SyncPool;
 
     uint256 public immutable MIN_DISCOUNT_RATE_IN_BPS;
     uint256 public immutable STALE_PRICE_WINDOW;
@@ -121,23 +128,53 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error InvalidDiscountRate();
     error InvalidPriceWindow();
     error InvalidMaxPriceDeviationInBps();
+    error InvalidLiquidityPool();
+    error InvalidLidoWithdrawalQueue();
+    error InvalidLido();
+    error InvalidStEth_Eth_Pool();
     error InvalidRoleRegistry();
     error InvalidPriceFeed();
     error InvalidBlacklister();
+    error InvalidEtherfiRestaker();
+    error InvalidL1SyncPool();
     error StalePriceFeed();
     error InvalidStEthPrice();
 
+    struct ConstructorAddresses {
+        address liquidityPool;
+        address lidoWithdrawalQueue;
+        address lido;
+        address stEth_Eth_Pool;
+        address roleRegistry;
+        address stEthPriceFeed;
+        address blacklister;
+        address etherfiRestaker;
+        address l1SyncPool;
+    }
+
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _roleRegistry, address _stEthPriceFeed, address _blacklister, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) {
+    constructor(ConstructorAddresses memory _constructorAddresses, uint256 _minDiscountInBasisPoints, uint256 _stalePriceWindow, uint256 _maxPriceDeviationInBps) {
         if (_minDiscountInBasisPoints == 0 || _minDiscountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (_stalePriceWindow == 0) revert InvalidPriceWindow();
         if (_maxPriceDeviationInBps == 0 || _maxPriceDeviationInBps > BASIS_POINT_SCALE) revert InvalidMaxPriceDeviationInBps();
-        if (_roleRegistry == address(0)) revert InvalidRoleRegistry();
-        if (_stEthPriceFeed == address(0)) revert InvalidPriceFeed();
-        if (_blacklister == address(0)) revert InvalidBlacklister();
-        roleRegistry = IRoleRegistry(_roleRegistry);
-        stEthPriceFeed = AggregatorV3Interface(_stEthPriceFeed);
-        blacklister = IBlacklister(_blacklister);
+        if (_constructorAddresses.liquidityPool == address(0)) revert InvalidLiquidityPool();
+        if (_constructorAddresses.lidoWithdrawalQueue == address(0)) revert InvalidLidoWithdrawalQueue();
+        if (_constructorAddresses.lido == address(0)) revert InvalidLido();
+        if (_constructorAddresses.stEth_Eth_Pool == address(0)) revert InvalidStEth_Eth_Pool();
+        if (_constructorAddresses.roleRegistry == address(0)) revert InvalidRoleRegistry();
+        if (_constructorAddresses.stEthPriceFeed == address(0)) revert InvalidPriceFeed();
+        if (_constructorAddresses.blacklister == address(0)) revert InvalidBlacklister();
+        if (_constructorAddresses.etherfiRestaker == address(0)) revert InvalidEtherfiRestaker();
+        if (_constructorAddresses.l1SyncPool == address(0)) revert InvalidL1SyncPool();
+        liquidityPool = ILiquidityPool(_constructorAddresses.liquidityPool);
+        lidoWithdrawalQueue = ILidoWithdrawalQueue(_constructorAddresses.lidoWithdrawalQueue);
+        lido = ILido(_constructorAddresses.lido);
+        stEth_Eth_Pool = ICurvePool(_constructorAddresses.stEth_Eth_Pool);
+        roleRegistry = IRoleRegistry(_constructorAddresses.roleRegistry);
+        stEthPriceFeed = AggregatorV3Interface(_constructorAddresses.stEthPriceFeed);
+        blacklister = IBlacklister(_constructorAddresses.blacklister);
+        etherfiRestaker = _constructorAddresses.etherfiRestaker;
+        l1SyncPool = _constructorAddresses.l1SyncPool;
         MIN_DISCOUNT_RATE_IN_BPS = _minDiscountInBasisPoints;
         STALE_PRICE_WINDOW = _stalePriceWindow;
         MAX_PRICE_DEVIATION_IN_BPS = _maxPriceDeviationInBps;
@@ -153,20 +190,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
 
-        treasury = _treasury;
-        liquidityPool = ILiquidityPool(_liquidityPool);
-        lidoWithdrawalQueue = ILidoWithdrawalQueue(_lidoWithdrawalQueue);
-        eigenLayerStrategyManager = IEigenLayerStrategyManager(_eigenLayerStrategyManager);
-
-        lido = ILido(_stEth);
-        stEth_Eth_Pool = ICurvePool(_stEth_Eth_Pool);
-        
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
-        DEPRECATED_eigenLayerWithdrawalClaimGasCost = 150_000;
-    }
-
-    function initializeOnUpgrade(address _etherfiRestaker) external onlyOwner {
-        etherfiRestaker = _etherfiRestaker;
     }
 
     receive() external payable {}

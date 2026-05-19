@@ -64,6 +64,7 @@ import "../src/DepositAdapter.sol";
 import "../src/interfaces/IWeETHWithdrawAdapter.sol";
 import "../src/PriorityWithdrawalQueue.sol";
 import "../src/helpers/Blacklister.sol";
+import "./common/PlaceholderImpl.sol";
 
 /// @notice Funds a contract by sending ETH from a fresh EOA via low-level call so the target's
 ///         receive()/fallback runs and any accounting it does stays in sync with its balance.
@@ -87,6 +88,7 @@ function fundContractFrom(address target, uint256 amount, address from) {
 }
 
 contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
+    using stdStorage for StdStorage;
 
     event Schedule(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt, uint256 delay);
     event Execute(address target, uint256 value, bytes data, bytes32 predecessor, bytes32 salt);
@@ -567,7 +569,17 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.startPrank(owner);
 
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
-            liquifierInstance.upgradeTo(address(new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, address(blacklisterInstance), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS)));
+            liquifierInstance.upgradeTo(address(new Liquifier(Liquifier.ConstructorAddresses({
+                liquidityPool: address(liquidityPoolInstance),
+                lidoWithdrawalQueue: address(lidoWithdrawalQueue),
+                lido: address(stEth),
+                stEth_Eth_Pool: address(stEth_Eth_Pool),
+                roleRegistry: address(roleRegistryInstance),
+                stEthPriceFeed: stEthChainlinkFeed,
+                blacklister: address(blacklisterInstance),
+                etherfiRestaker: address(etherFiRestakerInstance),
+                l1SyncPool: address(0xA6)
+            }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS)));
         }
         vm.stopPrank();
 
@@ -612,17 +624,20 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     function deployEtherFiRestaker() internal {
         etherFiRestakerImplementation = new EtherFiRestaker(
+            address(liquidityPoolInstance),
+            address(liquifierInstance),
             address(eigenLayerRewardsCoordinator),
             address(etherFiRedemptionManagerInstance),
             address(roleRegistryInstance),
-            address(rateLimiterInstance)
+            address(rateLimiterInstance),
+            address(eigenLayerStrategyManager),
+            address(eigenLayerDelegationManager)
         );
-        etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
-        etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
-
-        etherFiRestakerInstance.initialize(address(liquidityPoolInstance), address(liquifierInstance));
-
-        liquifierInstance.initializeOnUpgrade(address(etherFiRestakerInstance));
+        // Upgrade in place so the address matches Liquifier's immutable etherfiRestaker.
+        vm.stopPrank();
+        vm.prank(etherFiRestakerInstance.owner());
+        etherFiRestakerInstance.upgradeTo(address(etherFiRestakerImplementation));
+        vm.startPrank(owner);
     }
 
     function setUpTests() internal {
@@ -630,12 +645,19 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         admin = alice;
 
-
         mockDepositContractEth2 = new DepositContract();
         depositContractEth2 = IDepositContract(address(mockDepositContractEth2));
 
         // Deploy Contracts and Proxies
         treasuryInstance = vm.addr(999999999);
+
+        // =====================================================================
+        // Phase 1: deploy infrastructure with no circular deps
+        // =====================================================================
+
+        // =====================================================================
+        // Phase 1: deploy infrastructure with no circular deps
+        // =====================================================================
 
         roleRegistryImplementation = new RoleRegistry(address(0));
         roleRegistryProxy = new UUPSProxy(address(roleRegistryImplementation), abi.encodeWithSelector(RoleRegistry.initialize.selector, owner));
@@ -650,65 +672,182 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImplementation), abi.encodeWithSelector(Blacklister.initialize.selector))));
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
 
-        nodeOperatorManagerImplementation = new NodeOperatorManager(address(roleRegistryInstance));
-        nodeOperatorManagerProxy = new UUPSProxy(address(nodeOperatorManagerImplementation), "");
+        eigenLayerEigenPodManager = new MockEigenPodManager();
+        eigenLayerDelegationManager = new MockDelegationManager();
+
+        // Default to a stale-by-default mock so the chainlink branch in quoteByMarketValue
+        // is a no-op for unit tests that don't explicitly exercise it. Fork paths set
+        // stEthChainlinkFeed earlier to the live Chainlink aggregator.
+        if (stEthChainlinkFeed == address(0)) {
+            stEthChainlinkFeed = address(new MockChainlinkPriceFeed(int256(1 ether), 0));
+        }
+
+        // Liquifier's constructor now reverts on zero addresses for these. Unit tests
+        // don't exercise the stETH/Lido paths, so dummy non-zero placeholders suffice.
+        if (address(lidoWithdrawalQueue) == address(0)) lidoWithdrawalQueue = ILidoWithdrawalQueue(address(0xA2));
+        if (address(stEth) == address(0)) stEth = ILido(address(0xA3));
+        if (address(stEth_Eth_Pool) == address(0)) stEth_Eth_Pool = ICurvePool(address(0xA4));
+
+        // =====================================================================
+        // Phase 2: predeploy proxies pointing to a placeholder impl. After this
+        // every proxy address is fixed, which breaks the cycles created by the
+        // new immutable constructor args (e.g. LP <-> eETH, Admin <-> Oracle).
+        // =====================================================================
+
+        PlaceholderImpl placeholderImpl = new PlaceholderImpl();
+
+        nodeOperatorManagerProxy = new UUPSProxy(address(placeholderImpl), "");
         nodeOperatorManagerInstance = NodeOperatorManager(address(nodeOperatorManagerProxy));
+
+        auctionManagerProxy = new UUPSProxy(address(placeholderImpl), "");
+        auctionInstance = AuctionManager(address(auctionManagerProxy));
+
+        stakingManagerProxy = new UUPSProxy(address(placeholderImpl), "");
+        stakingManagerInstance = StakingManager(address(stakingManagerProxy));
+
+        etherFiNodeManagerProxy = new UUPSProxy(address(placeholderImpl), "");
+        managerInstance = EtherFiNodesManager(payable(address(etherFiNodeManagerProxy)));
+
+        liquidityPoolProxy = new UUPSProxy(address(placeholderImpl), "");
+        liquidityPoolInstance = LiquidityPool(payable(address(liquidityPoolProxy)));
+
+        liquifierProxy = new UUPSProxy(address(placeholderImpl), "");
+        liquifierInstance = Liquifier(payable(liquifierProxy));
+
+        eETHProxy = new UUPSProxy(address(placeholderImpl), "");
+        eETHInstance = EETH(address(eETHProxy));
+
+        weETHProxy = new UUPSProxy(address(placeholderImpl), "");
+        weEthInstance = WeETH(address(weETHProxy));
+
+        membershipNftProxy = new UUPSProxy(address(placeholderImpl), "");
+        membershipNftInstance = MembershipNFT(payable(membershipNftProxy));
+
+        withdrawRequestNFTProxy = new UUPSProxy(address(placeholderImpl), "");
+        withdrawRequestNFTInstance = WithdrawRequestNFT(payable(withdrawRequestNFTProxy));
+
+        membershipManagerProxy = new UUPSProxy(address(placeholderImpl), "");
+        membershipManagerInstance = MembershipManagerV0(payable(membershipManagerProxy));
+
+        UUPSProxy priorityQueueProxy = new UUPSProxy(address(placeholderImpl), "");
+        priorityQueueInstance = PriorityWithdrawalQueue(payable(address(priorityQueueProxy)));
+
+        etherFiAdminProxy = new UUPSProxy(address(placeholderImpl), "");
+        etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
+
+        etherFiOracleProxy = new UUPSProxy(address(placeholderImpl), "");
+        etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
+
+        etherFiRestakerProxy = new UUPSProxy(address(placeholderImpl), "");
+        etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
+
+        etherFiRedemptionManagerProxy = new UUPSProxy(address(placeholderImpl), "");
+        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
+
+        // =====================================================================
+        // Phase 3: deploy real impls and upgrade each proxy. Order matters where
+        // a constructor *calls into* another contract. Liquifier must be live
+        // before EtherFiRestaker is constructed, because EtherFiRestaker's
+        // constructor reads liquifier.lido() / lidoWithdrawalQueue() / etc.
+        // =====================================================================
+
+        // Liquifier first — EtherFiRestaker's constructor reads from it.
+        liquifierImplementation = new Liquifier(Liquifier.ConstructorAddresses({
+            liquidityPool: address(liquidityPoolProxy),
+            lidoWithdrawalQueue: address(lidoWithdrawalQueue),
+            lido: address(stEth),
+            stEth_Eth_Pool: address(stEth_Eth_Pool),
+            roleRegistry: address(roleRegistryInstance),
+            stEthPriceFeed: stEthChainlinkFeed,
+            blacklister: address(blacklisterInstance),
+            etherfiRestaker: address(0xA5),
+            l1SyncPool: address(0xA6)
+        }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS);
+        liquifierInstance.upgradeTo(address(liquifierImplementation));
+        liquifierInstance.initialize(
+            address(treasuryInstance),
+            address(liquidityPoolProxy),
+            address(eigenLayerStrategyManager),
+            address(lidoWithdrawalQueue),
+            address(stEth),
+            address(stEth_Eth_Pool),
+            3600
+        );
+
+        // EtherFiNode (non-proxy beacon impl used by StakingManager)
+        node = new EtherFiNode(
+            address(liquidityPoolProxy),
+            address(etherFiNodeManagerProxy),
+            address(eigenLayerEigenPodManager),
+            address(eigenLayerDelegationManager),
+            address(roleRegistryInstance)
+        );
+
+        // NodeOperatorManager
+        nodeOperatorManagerImplementation = new NodeOperatorManager(address(roleRegistryInstance), address(auctionManagerProxy));
+        nodeOperatorManagerInstance.upgradeTo(address(nodeOperatorManagerImplementation));
         nodeOperatorManagerInstance.initialize();
 
-        auctionImplementation = new AuctionManager(address(roleRegistryInstance), address(blacklisterInstance));
-        auctionManagerProxy = new UUPSProxy(address(auctionImplementation), "");
-        auctionInstance = AuctionManager(address(auctionManagerProxy));
+        // AuctionManager
+        auctionImplementation = new AuctionManager(
+            address(roleRegistryInstance),
+            address(blacklisterInstance),
+            address(nodeOperatorManagerProxy),
+            address(stakingManagerProxy),
+            address(membershipManagerProxy)
+        );
+        auctionInstance.upgradeTo(address(auctionImplementation));
         auctionInstance.initialize(address(nodeOperatorManagerInstance));
-        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
 
-        stakingManagerImplementation = new StakingManager(address(liquidityPoolInstance), address(managerInstance), address(depositContractEth2), address(auctionInstance), address(node), address(roleRegistryInstance));
-        stakingManagerProxy = new UUPSProxy(address(stakingManagerImplementation), "");
-        stakingManagerInstance = StakingManager(address(stakingManagerProxy));
-        //stakingManagerInstance.initialize(address(auctionInstance), address(mockDepositContractEth2));
-        //stakingManagerInstance.updateAdmin(alice, true);
+        // StakingManager
+        stakingManagerImplementation = new StakingManager(
+            address(liquidityPoolProxy),
+            address(etherFiNodeManagerProxy),
+            address(depositContractEth2),
+            address(auctionManagerProxy),
+            address(node),
+            address(roleRegistryInstance)
+        );
+        stakingManagerInstance.upgradeTo(address(stakingManagerImplementation));
 
+        // EtherFiNodesManager
+        managerImplementation = new EtherFiNodesManager(
+            address(stakingManagerProxy),
+            address(roleRegistryInstance),
+            address(rateLimiterInstance)
+        );
+        managerInstance.upgradeTo(address(managerImplementation));
+
+        // TNFT — fresh proxy, no circular deps
         TNFTImplementation = new TNFT();
         TNFTProxy = new UUPSProxy(address(TNFTImplementation), "");
         TNFTInstance = TNFT(address(TNFTProxy));
         TNFTInstance.initialize(address(stakingManagerInstance));
+        TNFTInstance.initializeOnUpgrade(address(managerInstance));
 
-        BNFTImplementation = new BNFT();
+        // BNFT — fresh proxy; constructor immutables wired to predeployed proxies
+        BNFTImplementation = new BNFT(address(stakingManagerProxy), address(etherFiNodeManagerProxy));
         BNFTProxy = new UUPSProxy(address(BNFTImplementation), "");
         BNFTInstance = BNFT(address(BNFTProxy));
         BNFTInstance.initialize(address(stakingManagerInstance));
 
+        // ProtocolRevenueManager (archive — no circular deps)
         protocolRevenueManagerImplementation = new ProtocolRevenueManager();
         protocolRevenueManagerProxy = new UUPSProxy(address(protocolRevenueManagerImplementation), "");
         protocolRevenueManagerInstance = ProtocolRevenueManager(payable(address(protocolRevenueManagerProxy)));
         protocolRevenueManagerInstance.initialize();
         protocolRevenueManagerInstance.updateAdmin(alice);
 
-        managerImplementation = new EtherFiNodesManager(address(stakingManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance));
-        etherFiNodeManagerProxy = new UUPSProxy(address(managerImplementation), "");
-        managerInstance = EtherFiNodesManager(payable(address(etherFiNodeManagerProxy)));
-        
-
-        TNFTInstance.initializeOnUpgrade(address(managerInstance));
-        BNFTInstance.initializeOnUpgrade(address(managerInstance));
-
+        // RegulationsManager (archive — no circular deps)
         regulationsManagerImplementation = new RegulationsManager();
         vm.expectRevert("Initializable: contract is already initialized");
         regulationsManagerImplementation.initialize();
-
         regulationsManagerProxy = new UUPSProxy(address(regulationsManagerImplementation), "");
         regulationsManagerInstance = RegulationsManager(address(regulationsManagerProxy));
         regulationsManagerInstance.initialize();
         regulationsManagerInstance.updateAdmin(alice, true);
 
-
-        // TODO(Dave): fill in addresses
-        address eigenPodManager;
-        address delegationManager;
-        address liquidityPool;
-        address etherFiNodesManager;
-        node = new EtherFiNode(eigenPodManager, delegationManager, liquidityPool, etherFiNodesManager, address(roleRegistryInstance));
-
-
+        // Test tokens, address provider
         rETH = new TestERC20("Rocket Pool ETH", "rETH");
         rETH.mint(alice, 10e18);
         rETH.mint(bob, 10e18);
@@ -721,12 +860,24 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         sfrxEth = new TestERC20("Frax ETH", "sfrxEth");
         sfrxEth.mint(alice, 10e18);
         sfrxEth.mint(bob, 10e18);
-
         addressProviderInstance = new AddressProvider(address(owner));
 
-        liquidityPoolImplementation = new LiquidityPool(address(0x0), address(blacklisterInstance), 0);
-        liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImplementation),"");
-        liquidityPoolInstance = LiquidityPool(payable(address(liquidityPoolProxy)));
+        liquidityPoolImplementation = new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: address(0x0),
+                nodesManager: address(0x0),
+                eETH: address(0x0),
+                withdrawRequestNFT: address(0x0),
+                liquifier: address(0x0),
+                etherFiRedemptionManager: address(0x0),
+                roleRegistry: address(0x0),
+                priorityWithdrawalQueue: address(0x0),
+                blacklister: address(0x0),
+                etherFiAdminContract: address(0x0),
+                membershipManager: address(0x0)
+            }),
+            0
+        );
 
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), admin);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
@@ -745,74 +896,106 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             stEthChainlinkFeed = address(new MockChainlinkPriceFeed(int256(1 ether), 0));
         }
 
-        liquifierImplementation = new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, address(blacklisterInstance), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS);
-        liquifierProxy = new UUPSProxy(address(liquifierImplementation), "");
-        liquifierInstance = Liquifier(payable(liquifierProxy));
+        // Re-deploy the impl now that etherFiRestakerProxy is known and upgrade the
+        // already-initialized proxy in place. Creating a fresh proxy here would drop
+        // the initialized owner set in Phase 3 and break later upgradeTo calls.
+        liquifierImplementation = new Liquifier(Liquifier.ConstructorAddresses({
+            liquidityPool: address(liquidityPoolProxy),
+            lidoWithdrawalQueue: address(lidoWithdrawalQueue),
+            lido: address(stEth),
+            stEth_Eth_Pool: address(stEth_Eth_Pool),
+            roleRegistry: address(roleRegistryInstance),
+            stEthPriceFeed: stEthChainlinkFeed,
+            blacklister: address(blacklisterInstance),
+            etherfiRestaker: address(etherFiRestakerProxy),
+            l1SyncPool: address(0xA6)
+        }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS);
+        liquifierInstance.upgradeTo(address(liquifierImplementation));
 
         // TODO - not sure what `name` and `versiona` are for
-        eETHImplementation = new EETH(address(roleRegistryInstance), address(blacklisterInstance));
+        eETHImplementation = new EETH(address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance));
         vm.expectRevert("Initializable: contract is already initialized");
-        eETHImplementation.initialize(payable(address(liquidityPoolInstance)));
-
-        eETHProxy = new UUPSProxy(address(eETHImplementation), "");
-        eETHInstance = EETH(address(eETHProxy));
-
+        eETHImplementation.initialize(payable(address(liquidityPoolProxy)));
+        eETHInstance.upgradeTo(address(eETHImplementation));
         vm.expectRevert("No zero addresses");
         eETHInstance.initialize(payable(address(0)));
-        eETHInstance.initialize(payable(address(liquidityPoolInstance)));
+        eETHInstance.initialize(payable(address(liquidityPoolProxy)));
 
-        weEthImplementation = new WeETH(address(roleRegistryInstance), address(blacklisterInstance));
+        // WeETH
+        weEthImplementation = new WeETH(address(eETHProxy), address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance));
         vm.expectRevert("Initializable: contract is already initialized");
-        weEthImplementation.initialize(payable(address(liquidityPoolInstance)), address(eETHInstance));
-
-        weETHProxy = new UUPSProxy(address(weEthImplementation), "");
-        weEthInstance = WeETH(address(weETHProxy));
+        weEthImplementation.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
+        weEthInstance.upgradeTo(address(weEthImplementation));
         vm.expectRevert("No zero addresses");
-        weEthInstance.initialize(address(0), address(eETHInstance));
+        weEthInstance.initialize(address(0), address(eETHProxy));
         vm.expectRevert("No zero addresses");
-        weEthInstance.initialize(payable(address(liquidityPoolInstance)), address(0));
-        weEthInstance.initialize(payable(address(liquidityPoolInstance)), address(eETHInstance));
+        weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(0));
+        weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
 
         // EETH/WEETH operating admin consolidated into OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
 
         vm.stopPrank();
-
         vm.prank(alice);
         regulationsManagerInstance.initializeNewWhitelist(termsAndConditionsHash);
         vm.startPrank(owner);
 
-        eigenLayerEigenPodManager = new MockEigenPodManager();
-        eigenLayerDelegationManager = new MockDelegationManager();
+        // MembershipNFT
+        membershipNftImplementation = new MembershipNFT(
+            address(liquidityPoolProxy),
+            address(membershipManagerProxy),
+            address(blacklisterInstance)
+        );
+        membershipNftInstance.upgradeTo(address(membershipNftImplementation));
 
-        membershipNftImplementation = new MembershipNFT(address(blacklisterInstance));
-        membershipNftProxy = new UUPSProxy(address(membershipNftImplementation), "");
-        membershipNftInstance = MembershipNFT(payable(membershipNftProxy));
+        // WithdrawRequestNFT
+        withdrawRequestNFTImplementation = new WithdrawRequestNFT(
+            address(treasuryInstance),
+            address(eETHProxy),
+            address(liquidityPoolProxy),
+            address(membershipManagerProxy),
+            address(roleRegistryInstance),
+            address(blacklisterInstance),
+            address(etherFiAdminProxy)
+        );
+        withdrawRequestNFTInstance.upgradeTo(address(withdrawRequestNFTImplementation));
 
-        // Deploy PriorityWithdrawalQueue before EtherFiAdmin so the admin's
-        // immutable priorityWithdrawalQueue constructor arg can be wired up.
-        priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
-        UUPSProxy priorityQueueProxy = new UUPSProxy(
+        // MembershipManager (V0). Tests later upgrade to V1 via _upgradeMembershipManagerFromV0ToV1.
+        membershipManagerImplementation = new MembershipManagerV0();
+        membershipManagerInstance.upgradeTo(address(membershipManagerImplementation));
+
+        // PriorityWithdrawalQueue — upgrade + initialize in one call
+        priorityQueueImplementation = new PriorityWithdrawalQueue(
+            address(liquidityPoolProxy),
+            address(eETHProxy),
+            address(weETHProxy),
+            address(roleRegistryInstance),
+            address(treasuryInstance),
+            1 hours
+        );
+        priorityQueueInstance.upgradeToAndCall(
             address(priorityQueueImplementation),
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
         );
-        priorityQueueInstance = PriorityWithdrawalQueue(payable(address(priorityQueueProxy)));
 
-        // EtherFiAdmin must be deployed before WithdrawRequestNFT because the latter
-        // now takes etherFiAdmin as an immutable constructor arg.
-        etherFiAdminImplementation = new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000, 7200, 100_000 ether, 500);
-        etherFiAdminProxy = new UUPSProxy(address(etherFiAdminImplementation), "");
-        etherFiAdminInstance = EtherFiAdmin(payable(etherFiAdminProxy));
+        // EtherFiAdmin
+        etherFiAdminImplementation = new EtherFiAdmin(
+            EtherFiAdmin.ConstructorAddresses({
+                etherFiOracle: address(etherFiOracleProxy),
+                stakingManager: address(stakingManagerProxy),
+                auctionManager: address(auctionManagerProxy),
+                etherFiNodesManager: address(etherFiNodeManagerProxy),
+                liquidityPool: address(liquidityPoolProxy),
+                membershipManager: address(membershipManagerProxy),
+                withdrawRequestNft: address(withdrawRequestNFTProxy),
+                roleRegistry: address(roleRegistryInstance),
+                priorityWithdrawalQueue: address(priorityQueueProxy)
+            }),
+            10_000, 1_000, 7200, 100_000 ether, 500
+        );
+        etherFiAdminInstance.upgradeTo(address(etherFiAdminImplementation));
 
-        withdrawRequestNFTImplementation = new WithdrawRequestNFT(address(treasuryInstance), address(blacklisterInstance), address(etherFiAdminInstance));
-        withdrawRequestNFTProxy = new UUPSProxy(address(withdrawRequestNFTImplementation), "");
-        withdrawRequestNFTInstance = WithdrawRequestNFT(payable(withdrawRequestNFTProxy));
-
-
-        membershipManagerImplementation = new MembershipManagerV0();
-        membershipManagerProxy = new UUPSProxy(address(membershipManagerImplementation), "");
-        membershipManagerInstance = MembershipManagerV0(payable(membershipManagerProxy));
-
+        // CumulativeMerkleRewardsDistributor (no circular deps)
         cumulativeMerkleRewardsDistributorImplementation = new CumulativeMerkleRewardsDistributor(address(roleRegistryInstance));
         cumulativeMerkleRewardsDistributorProxy = new UUPSProxy(address(cumulativeMerkleRewardsDistributorImplementation), "");
         cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(address(cumulativeMerkleRewardsDistributorProxy));
@@ -821,28 +1004,98 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // CumulativeMerkleRewardsDistributor admin/claim-delay-setter consolidated into EOA_3
         roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), admin);
 
-        etherFiOracleImplementation = new EtherFiOracle(address(roleRegistryInstance));
-        etherFiOracleProxy = new UUPSProxy(address(etherFiOracleImplementation), "");
-        etherFiOracleInstance = EtherFiOracle(payable(etherFiOracleProxy));
+        // EtherFiOracle
+        etherFiOracleImplementation = new EtherFiOracle(address(etherFiAdminProxy), address(roleRegistryInstance));
+        etherFiOracleInstance.upgradeTo(address(etherFiOracleImplementation));
 
-        etherFiRestakerImplementation = new EtherFiRestaker(address(0x0), address(etherFiRedemptionManagerInstance), address(roleRegistryInstance), address(rateLimiterInstance));
-        etherFiRestakerProxy = new UUPSProxy(address(etherFiRestakerImplementation), "");
-        etherFiRestakerInstance = EtherFiRestaker(payable(etherFiRestakerProxy));
+        // EtherFiRestaker — constructor reads from liquifier, which is initialized above
+        etherFiRestakerImplementation = new EtherFiRestaker(
+            address(liquidityPoolProxy),
+            address(liquifierProxy),
+            address(0x0),
+            address(etherFiRedemptionManagerProxy),
+            address(roleRegistryInstance),
+            address(rateLimiterInstance),
+            address(eigenLayerStrategyManager),
+            address(eigenLayerDelegationManager)
+        );
+        etherFiRestakerInstance.upgradeTo(address(etherFiRestakerImplementation));
 
-        etherFiRedemptionManagerProxy = new UUPSProxy(address(new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance), address(blacklisterInstance), 10_000, 100, 10_000)), "");
-        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
+        // EtherFiRedemptionManager
+        EtherFiRedemptionManager etherFiRedemptionManagerImpl = new EtherFiRedemptionManager(
+            address(liquidityPoolProxy),
+            address(eETHProxy),
+            address(weETHProxy),
+            address(treasuryInstance),
+            address(roleRegistryInstance),
+            address(etherFiRestakerProxy),
+            address(priorityQueueProxy),
+            address(blacklisterInstance),
+            10_000, 100, 10_000
+        );
+        etherFiRedemptionManagerInstance.upgradeTo(address(etherFiRedemptionManagerImpl));
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
-        // etherFiRedemptionManagerInstance.initializeTokenParameters(_tokens, _exitFeeSplitToTreasuryInBps, _exitFeeInBps, _lowWatermarkInBpsOfTvl, _bucketCapacity, _bucketRefillRate);
 
-        liquidityPoolInstance.initialize(address(eETHInstance), address(stakingManagerInstance), address(etherFiNodeManagerProxy), address(membershipManagerInstance), address(TNFTInstance), address(etherFiAdminProxy), address(withdrawRequestNFTInstance));
-        liquidityPoolInstance.initializeVTwoDotFourNine(address(roleRegistryInstance), address(etherFiRedemptionManagerInstance));
-        // Run one-shot escrow migration so addEthAmountLockedForWithdrawal and
-        // transferLockedEthForPriority are callable in all testing-fork tests.
+        // LiquidityPool — every dep is now a known proxy address
+        liquidityPoolImplementation = new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: address(stakingManagerProxy),
+                nodesManager: address(etherFiNodeManagerProxy),
+                eETH: address(eETHProxy),
+                withdrawRequestNFT: address(withdrawRequestNFTProxy),
+                liquifier: address(liquifierProxy),
+                etherFiRedemptionManager: address(etherFiRedemptionManagerProxy),
+                roleRegistry: address(roleRegistryInstance),
+                priorityWithdrawalQueue: address(priorityQueueProxy),
+                blacklister: address(blacklisterInstance),
+                etherFiAdminContract: address(etherFiAdminProxy),
+                membershipManager: address(membershipManagerProxy)
+            }),
+            0
+        );
+        liquidityPoolInstance.upgradeTo(address(liquidityPoolImplementation));
+
+        // =====================================================================
+        // Phase 4: initialize proxies and wire up roles. These `initialize` /
+        // `initializeOnUpgrade` calls now only write `DEPRECATED_*` storage;
+        // live behavior comes from immutables. Calls that used to set
+        // now-immutable fields are intentionally skipped:
+        //   - LP.initializeOnUpgrade, LP.initializeVTwoDotFourNine
+        //   - EtherFiAdmin.initializeRoleRegistry
+        //   - EtherFiOracle.setEtherFiAdmin (removed)
+        //   - NodeOperatorManager.setAuctionContractAddress (removed)
+        //   - AuctionManager.setStakingManagerContractAddress (removed)
+        // =====================================================================
+        liquidityPoolInstance.initialize(
+            address(eETHProxy),
+            address(stakingManagerProxy),
+            address(etherFiNodeManagerProxy),
+            address(membershipManagerProxy),
+            address(TNFTInstance),
+            address(etherFiAdminProxy),
+            address(withdrawRequestNFTProxy)
+        );
+        // Bootstrap escrow migration flag (no `must be zero` check on immutables).
         liquidityPoolInstance.initializeOnUpgradeV2();
 
         membershipNftInstance.initialize("https://etherfi-cdn/{id}.json", address(membershipManagerInstance));
-        withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolInstance)), payable(address(eETHInstance)), payable(address(membershipManagerInstance)));
-        withdrawRequestNFTInstance.initializeOnUpgrade(address(roleRegistryInstance), 1000);
+
+        withdrawRequestNFTInstance.initialize(payable(address(liquidityPoolProxy)), payable(address(eETHProxy)), payable(address(membershipManagerProxy)));
+        // initializeOnUpgrade now reverts (checks immutable roleRegistry == 0). Set the
+        // share-remainder split + paused state it used to bootstrap directly. Also seed
+        // the scan cursor (current = 1, last = 0) so isScanOfShareRemainderCompleted()
+        // is true from the start, matching post-initializeOnUpgrade behaviour.
+        withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(1000);
+        {
+            // Slot 306 packs (nextRequestId, lastFinalizedRequestId, shareRemainderSplit,
+            // _unused_gap, currentRequestIdToScanFromForShareRemainder, lastRequestIdToScanUntilForShareRemainder).
+            // currentRequestIdToScanFromForShareRemainder sits at bytes 12-15 (bits 96-127).
+            bytes32 slot306 = vm.load(address(withdrawRequestNFTInstance), bytes32(uint256(306)));
+            uint256 mask = ~(uint256(0xffffffff) << 96);
+            bytes32 updated = bytes32((uint256(slot306) & mask) | (uint256(1) << 96));
+            vm.store(address(withdrawRequestNFTInstance), bytes32(uint256(306)), updated);
+        }
+
         membershipManagerInstance.initialize(
             address(eETHInstance),
             address(liquidityPoolInstance),
@@ -850,36 +1103,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(treasuryInstance),
             address(protocolRevenueManagerInstance)
         );
-        liquifierInstance.initialize(
-            address(treasuryInstance),
-            address(liquidityPoolInstance),
-            address(eigenLayerStrategyManager),
-            address(lidoWithdrawalQueue),
-            address(stEth),
-            address(stEth_Eth_Pool),
-            3600
-        );
-
-        /*
-        managerInstance.initialize(
-            address(treasuryInstance),
-            address(auctionInstance),
-            address(stakingManagerInstance),
-            address(TNFTInstance),
-            address(BNFTInstance),
-            address(eigenLayerEigenPodManager),
-            address(eigenLayerDelayedWithdrawalRouter),
-            address(eigenLayerDelegationManager)
-        );
-        managerInstance.updateAdmin(address(etherFiAdminInstance), true);
-        managerInstance.updateAdmin(alice, true);
-        */
-
 
         membershipManagerInstance.updateAdmin(alice, true);
         membershipNftInstance.updateAdmin(alice, true);
-        // liquidityPoolInstance.updateAdmin(alice, true);
-        // liquifierInstance.updateAdmin(alice, true);
 
         // special case for forked tests utilizing oracle
         // can't use env variable because then it would apply to all tests including non-forked ones
@@ -896,30 +1122,27 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             genesisSlotTimestamp = 0;
         }
         etherFiOracleInstance.initialize(2, 1024, 0, 32, 12, genesisSlotTimestamp);
-
         etherFiOracleInstance.addCommitteeMember(alice);
         etherFiOracleInstance.addCommitteeMember(bob);
 
         vm.stopPrank();
 
         vm.startPrank(alice);
-        //managerInstance.setStakingRewardsSplit(0, 0, 1_000_000, 0);
-        //managerInstance.setNonExitPenalty(300, 1 ether);
         membershipManagerInstance.setTopUpCooltimePeriod(28 days);
         vm.stopPrank();
-        
+
         vm.startPrank(owner);
 
         tvlOracle = new TVLOracle(alice);
 
         etherFiAdminInstance.initialize(
-            address(etherFiOracleInstance),
-            address(stakingManagerInstance),
-            address(auctionInstance),
-            address(managerInstance),
-            address(liquidityPoolInstance),
-            address(membershipManagerInstance),
-            address(withdrawRequestNFTInstance),
+            address(etherFiOracleProxy),
+            address(stakingManagerProxy),
+            address(auctionManagerProxy),
+            address(etherFiNodeManagerProxy),
+            address(liquidityPoolProxy),
+            address(membershipManagerProxy),
+            address(withdrawRequestNFTProxy),
             10000,
             0
         );
@@ -931,8 +1154,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         lastProcessedAtBlocks[0] = lastProcessedAtBlocks[1] = 0;
 
         vm.startPrank(owner);
-
-        etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));
+     
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), address(etherFiAdminInstance));
         // ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE consolidated into OPERATION_TIMELOCK_ROLE
@@ -951,27 +1173,16 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), address(etherFiAdminInstance));
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), address(admin));
 
+        vm.stopPrank();
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         liquidityPoolInstance.setValidatorSizeWei(32 ether);
+        // Pause WithdrawRequestNFT so existing tests that unPauseContract in their
+        // own setUp continue to find it paused (initializeOnUpgrade used to set this).
+        withdrawRequestNFTInstance.pauseContract();
         vm.stopPrank();
 
         vm.startPrank(owner);
-        // etherFiAdminInstance.updateAdmin(alice, true);
-        // EtherFiOracle.setEtherFiAdmin removed; write the etherFiAdmin storage slot directly for fresh test deploys.
-        // Slot 254 verified via `forge inspect EtherFiOracle storage-layout`.
-        // etherFiAdmin is packed at slot 254 offset 12 (20 bytes); preserve numCommitteeMembers (offset 4) and
-        // numActiveCommitteeMembers (offset 8) which share this slot.
-        bytes32 oracleSlot254 = vm.load(address(etherFiOracleInstance), bytes32(uint256(254)));
-        bytes32 mask = bytes32(uint256(type(uint160).max) << (12 * 8)); // 20 bytes at offset 12
-        bytes32 newSlot = (oracleSlot254 & ~mask) | bytes32(uint256(uint160(address(etherFiAdminInstance))) << (12 * 8));
-        vm.store(address(etherFiOracleInstance), bytes32(uint256(254)), newSlot);
-        liquidityPoolInstance.initializeOnUpgrade(address(auctionManagerProxy), address(liquifierInstance));
-        //stakingManagerInstance.initializeOnUpgrade(address(nodeOperatorManagerInstance), address(etherFiAdminInstance));
-        auctionInstance.initializeOnUpgrade(address(membershipManagerInstance), 1 ether, address(nodeOperatorManagerInstance));
-        membershipNftInstance.initializeOnUpgrade(address(liquidityPoolInstance));
-
-
         // configure eigenlayer dependency differently for mainnet vs testnet because we rely
         // on the contracts already deployed by eigenlayer on those chains
         bool restakingBnftDeposits;
@@ -996,29 +1207,14 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         vm.startPrank(alice);
         liquidityPoolInstance.unPauseContract();
-        // liquidityPoolInstance.updateWhitelistStatus(false);
-        liquidityPoolInstance.setRestakeBnftDeposits(restakingBnftDeposits);
         vm.stopPrank();
 
-        // Setup dependencies
         vm.startPrank(owner);
         _approveNodeOperators();
         _setUpNodeOperatorWhitelist();
-        vm.stopPrank();
-
-        vm.startPrank(owner);
-        nodeOperatorManagerInstance.setAuctionContractAddress(address(auctionInstance));
-
-        auctionInstance.setStakingManagerContractAddress(address(stakingManagerInstance));
 
         protocolRevenueManagerInstance.setAuctionManagerAddress(address(auctionInstance));
         protocolRevenueManagerInstance.setEtherFiNodesManagerAddress(address(managerInstance));
-
-        //stakingManagerInstance.setEtherFiNodesManagerAddress(address(managerInstance));
-        //stakingManagerInstance.setLiquidityPoolAddress(address(liquidityPoolInstance));
-        //stakingManagerInstance.registerEtherFiNodeImplementationContract(address(node));
-        //stakingManagerInstance.registerTNFTContract(address(TNFTInstance));
-        //stakingManagerInstance.registerBNFTContract(address(BNFTInstance));
 
         vm.stopPrank();
 
@@ -1033,23 +1229,49 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_weETH() internal {
-        address newWeETHImpl = address(new WeETH(address(roleRegistryInstance), address(blacklisterInstance)));
+        address newWeETHImpl = address(new WeETH(address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance)));
         vm.prank(owner);
         weEthInstance.upgradeTo(newWeETHImpl);
     }
 
     function _upgrade_etherfiAdmin() internal {
-        address newAdminImpl = address(new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000, 7200, 100_000 ether, 500));
+        address newAdminImpl = address(new EtherFiAdmin(
+            EtherFiAdmin.ConstructorAddresses({
+                etherFiOracle: address(etherFiOracleInstance),
+                stakingManager: address(stakingManagerInstance),
+                auctionManager: address(auctionInstance),
+                etherFiNodesManager: address(managerInstance),
+                liquidityPool: address(liquidityPoolInstance),
+                membershipManager: address(membershipManagerInstance),
+                withdrawRequestNft: address(withdrawRequestNFTInstance),
+                roleRegistry: address(roleRegistryInstance),
+                priorityWithdrawalQueue: address(priorityQueueInstance)
+            }),
+            10_000, 1_000, 7200
+        , 100_000 ether, 500));
         vm.prank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
 
     function _upgradeOracleAndAdminForFork() internal {
-        address newOracleImpl = address(new EtherFiOracle(address(roleRegistryInstance)));
+        address newOracleImpl = address(new EtherFiOracle(address(etherFiAdminInstance), address(roleRegistryInstance)));
         vm.prank(etherFiOracleInstance.owner());
         etherFiOracleInstance.upgradeTo(newOracleImpl);
 
-        address newAdminImpl = address(new EtherFiAdmin(address(priorityQueueInstance), 10_000, 1_000, 7200, 100_000 ether, 500));
+        address newAdminImpl = address(new EtherFiAdmin(
+            EtherFiAdmin.ConstructorAddresses({
+                etherFiOracle: address(etherFiOracleInstance),
+                stakingManager: address(stakingManagerInstance),
+                auctionManager: address(auctionInstance),
+                etherFiNodesManager: address(managerInstance),
+                liquidityPool: address(liquidityPoolInstance),
+                membershipManager: address(membershipManagerInstance),
+                withdrawRequestNft: address(withdrawRequestNFTInstance),
+                roleRegistry: address(roleRegistryInstance),
+                priorityWithdrawalQueue: address(priorityQueueInstance)
+            }),
+            10_000, 1_000, 7200
+        , 100_000 ether, 500));
         vm.prank(roleRegistryInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
@@ -1081,12 +1303,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             EtherFiRedemptionManager etherFiRedemptionManagerImplementation = new EtherFiRedemptionManager(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(treasuryInstance), address(roleRegistryInstance), address(etherFiRestakerInstance), address(priorityQueueInstance), address(blacklisterInstance), 10_000, 100, 10_000);
             etherFiRedemptionManagerProxy = new UUPSProxy(address(etherFiRedemptionManagerImplementation), "");
             etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(etherFiRedemptionManagerProxy));
-            etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark
-            liquidityPoolInstance.initializeVTwoDotFourNine(address(roleRegistryInstance), address(etherFiRedemptionManagerInstance));  
-        } 
-        if (address(etherFiAdminInstance.roleRegistry()) == address(0x0)) {
-            vm.startPrank(owner);
-            etherFiAdminInstance.initializeRoleRegistry(address(roleRegistryInstance));    
+            etherFiRedemptionManagerInstance.initialize(10_00, 1_00, 1_00, 5 ether, 0.001 ether); // 10% fee split to treasury, 1% exit fee, 1% low watermark  
         }
 
         vm.startPrank(admin);
@@ -1220,13 +1437,18 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
     function _upgradeMembershipManagerFromV0ToV1() internal {
         assertEq(membershipManagerInstance.getImplementation(), address(membershipManagerImplementation));
-        membershipManagerV1Implementation = new MembershipManager(address(roleRegistryInstance), address(blacklisterInstance));
+        membershipManagerV1Implementation = new MembershipManager(
+            address(eETHInstance),
+            address(liquidityPoolInstance),
+            address(membershipNftInstance),
+            address(etherFiAdminInstance),
+            address(roleRegistryInstance),
+            address(blacklisterInstance)
+        );
         vm.startPrank(owner);
         membershipManagerInstance.upgradeTo(address(membershipManagerV1Implementation));
         membershipManagerV1Instance = MembershipManager(payable(membershipManagerProxy));
         assertEq(membershipManagerV1Instance.getImplementation(), address(membershipManagerV1Implementation));
-
-        membershipManagerV1Instance.initializeOnUpgrade(address(etherFiAdminInstance), 0.3 ether, 30);
         vm.stopPrank();
     }
 
@@ -1712,7 +1934,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         address liquidityPool;
         address etherFiNodesManager;
 
-        EtherFiNode etherFiNode = new EtherFiNode(eigenPodManager, delegationManager, liquidityPool, etherFiNodesManager, address(roleRegistryInstance));
+        EtherFiNode etherFiNode = new EtherFiNode(liquidityPool, etherFiNodesManager, eigenPodManager, delegationManager, address(roleRegistryInstance));
         address newImpl = address(etherFiNode);
         vm.prank(stakingManagerInstance.owner());
         stakingManagerInstance.upgradeEtherFiNode(newImpl);
@@ -1733,14 +1955,39 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_liquidity_pool_contract() internal {
-        address newImpl = address(new LiquidityPool(address(0x0), address(blacklisterInstance), 0));
+        address newImpl = address(new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: address(stakingManagerInstance),
+                nodesManager: address(managerInstance),
+                eETH: address(eETHInstance),
+                withdrawRequestNFT: address(withdrawRequestNFTInstance),
+                liquifier: address(liquifierInstance),
+                etherFiRedemptionManager: address(etherFiRedemptionManagerInstance),
+                roleRegistry: address(roleRegistryInstance),
+                priorityWithdrawalQueue: address(priorityQueueInstance),
+                blacklister: address(blacklisterInstance),
+                etherFiAdminContract: address(etherFiAdminInstance),
+                membershipManager: address(membershipManagerInstance)
+            }),
+            0
+        ));
         vm.startPrank(liquidityPoolInstance.owner());
         liquidityPoolInstance.upgradeTo(newImpl);
         vm.stopPrank();
     }
 
     function _upgrade_liquifier() internal {
-        address newImpl = address(new Liquifier(address(roleRegistryInstance), stEthChainlinkFeed, address(blacklisterInstance), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS));
+        address newImpl = address(new Liquifier(Liquifier.ConstructorAddresses({
+            liquidityPool: address(liquidityPoolInstance),
+            lidoWithdrawalQueue: address(lidoWithdrawalQueue),
+            lido: address(stEth),
+            stEth_Eth_Pool: address(stEth_Eth_Pool),
+            roleRegistry: address(roleRegistryInstance),
+            stEthPriceFeed: stEthChainlinkFeed,
+            blacklister: address(blacklisterInstance),
+            etherfiRestaker: address(0xA5),
+            l1SyncPool: address(0xA6)
+        }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS));
         vm.prank(liquifierInstance.owner());
         liquifierInstance.upgradeTo(newImpl);
     }

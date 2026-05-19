@@ -51,7 +51,22 @@ contract RestakingRewardsRouterTest is Test {
         otherToken = new TestERC20("Other Token", "OTH");
 
         // Deploy LiquidityPool
-        liquidityPoolImpl = new LiquidityPool(address(0x0), address(0x0), 0);
+        liquidityPoolImpl = new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: address(0),
+                nodesManager: address(0),
+                eETH: address(0),
+                withdrawRequestNFT: address(0),
+                liquifier: address(0),
+                etherFiRedemptionManager: address(0),
+                roleRegistry: address(roleRegistry),
+                priorityWithdrawalQueue: address(0),
+                blacklister: address(0),
+                etherFiAdminContract: address(0),
+                membershipManager: address(0)
+            }),
+            0
+        );
         liquidityPoolProxy = new UUPSProxy(address(liquidityPoolImpl), "");
         liquidityPool = LiquidityPool(payable(address(liquidityPoolProxy)));
         

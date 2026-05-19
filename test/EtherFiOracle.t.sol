@@ -940,17 +940,6 @@ contract EtherFiOracleTest is TestSetup {
 
     // ========== EtherFiAdmin Additional Coverage Tests ==========
 
-    function test_initializeRoleRegistry() public {
-        // RoleRegistry is already initialized in setUpTests
-        address roleRegistryAddr = address(roleRegistryInstance);
-        assertEq(address(etherFiAdminInstance.roleRegistry()), roleRegistryAddr);
-        
-        // Test: can only initialize once
-        vm.prank(owner);
-        vm.expectRevert("already initialized");
-        etherFiAdminInstance.initializeRoleRegistry(roleRegistryAddr);
-    }
-
     function test_setValidatorTaskBatchSize() public {
         // RoleRegistry is already initialized and alice already has the role in setUpTests
         vm.prank(alice);
@@ -997,59 +986,67 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.updateAcceptableRebaseApr(int32(maxApr + 1));
     }
 
-    function test_constructor_priorityWithdrawalQueue_guardrail() public {
-        // value 0 reverts
-        vm.expectRevert(EtherFiAdmin.InvalidPriorityWithdrawalQueue.selector);
-        new EtherFiAdmin(address(0x0), 500, 1_000, 7200, 100_000 ether, 500);
+    function _defaultEtherFiAdminCtorAddrs() internal view returns (EtherFiAdmin.ConstructorAddresses memory) {
+        return EtherFiAdmin.ConstructorAddresses({
+            etherFiOracle: address(etherFiOracleInstance),
+            stakingManager: address(stakingManagerInstance),
+            auctionManager: address(auctionInstance),
+            etherFiNodesManager: address(managerInstance),
+            liquidityPool: address(liquidityPoolInstance),
+            membershipManager: address(membershipManagerInstance),
+            withdrawRequestNft: address(withdrawRequestNFTInstance),
+            roleRegistry: address(roleRegistryInstance),
+            priorityWithdrawalQueue: address(priorityQueueInstance)
+        });
     }
 
     function test_constructor_maxValidatorTaskBatchSize_guardrail() public {
-        EtherFiAdmin nonZeroValue = new EtherFiAdmin(address(0x1234), 500, 1_000, 7200, 100_000 ether, 500);
+        EtherFiAdmin nonZeroValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500);
         assertEq(nonZeroValue.MAX_VALIDATOR_TASK_BATCH_SIZE(), 1_000);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidValidatorTaskBatchSize.selector);
-        new EtherFiAdmin(address(0x1234), 500, 0, 7200, 100_000 ether, 500);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 0, 7200, 100_000 ether, 500);
     }
 
     function test_constructor_maxAcceptableRebaseAprInBps_guardrail() public {
-        EtherFiAdmin validValue = new EtherFiAdmin(address(0x1234), 500, 1_000, 7200, 100_000 ether, 500);
+        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500);
         assertEq(validValue.MAX_ACCEPTABLE_REBASE_APR_IN_BPS(), 500);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
-        new EtherFiAdmin(address(0x1234), 0, 1_000, 7200, 100_000 ether, 500);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 0, 1_000, 7200, 100_000 ether, 500);
 
         // negative values revert
         vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
-        new EtherFiAdmin(address(0x1234), -1, 1_000, 7200, 100_000 ether, 500);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), -1, 1_000, 7200, 100_000 ether, 500);
 
         // values above 10_000 revert
         vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
-        new EtherFiAdmin(address(0x1234), 10_001, 1_000, 7200, 100_000 ether, 500);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 10_001, 1_000, 7200, 100_000 ether, 500);
     }
 
     function test_constructor_staleOracleReportBlockWindow_guardrail() public {
-        EtherFiAdmin validValue = new EtherFiAdmin(address(0x1234), 500, 1_000, 7200, 100_000 ether, 500);
+        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500);
         assertEq(validValue.STALE_ORACLE_REPORT_BLOCK_WINDOW(), 7200);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidStaleOracleReportBlockWindow.selector);
-        new EtherFiAdmin(address(0x1234), 500, 1_000, 0, 100_000 ether, 500);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 0, 100_000 ether, 500);
     }
 
     function test_constructor_maxFinalizedWithdrawalAmountPerDay_guardrail() public {
-        EtherFiAdmin validValue = new EtherFiAdmin(address(0x1234), 500, 1_000, 7200, 100_000 ether, 500);
+        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500);
         assertEq(validValue.MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY(), 100_000 ether);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidMaxFinalizedWithdrawalAmountPerDay.selector);
-        new EtherFiAdmin(address(0x1234), 500, 1_000, 7200, 0, 500);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 0, 500);
     }
 
     function test_constructor_maxNumValidatorsToApprovePerDay_zero_is_allowed() public {
         // _maxNumValidatorsToApprovePerDay = 0 is allowed (signals "pause new validators")
-        EtherFiAdmin zeroAllowed = new EtherFiAdmin(address(0x1234), 500, 1_000, 7200, 100_000 ether, 0);
+        EtherFiAdmin zeroAllowed = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 0);
         assertEq(zeroAllowed.MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY(), 0);
     }
 

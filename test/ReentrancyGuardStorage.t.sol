@@ -69,7 +69,6 @@ contract ReentrancyGuardStorageTest is TestSetup {
         // Unguarded setters — each touches a different declared storage slot.
         vm.startPrank(admin);
         liquidityPoolInstance.setFeeRecipient(address(0xBEEF));
-        liquidityPoolInstance.setRestakeBnftDeposits(true);
         liquidityPoolInstance.setValidatorSizeWei(64 ether);
         liquidityPoolInstance.registerValidatorSpawner(address(0xABCD));
         vm.stopPrank();

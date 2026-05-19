@@ -187,14 +187,6 @@ contract NodeOperatorManagerTest is TestSetup {
         nodeOperatorManagerInstance.fetchNextKeyIndex(alice);
     }
 
-    function test_CanOnlySetAddressesOnce() public {
-         vm.startPrank(owner);
-         vm.expectRevert("Address already set");
-         nodeOperatorManagerInstance.setAuctionContractAddress(
-             address(0)
-        );
-    }
-
     function test_SetStakingTypeApprovals() public {
         vm.prank(alice);
         nodeOperatorManagerInstance.registerNodeOperator(

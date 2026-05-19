@@ -16,13 +16,25 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // Mainnet NodeOperatorManager hasn't been upgraded to the role-based ACL yet,
         // so its NODE_OPERATOR_MANAGER_ADMIN_ROLE() getter doesn't exist on-chain.
         // Upgrade in place so the new role getters used by _ensureValCreationRoles are reachable.
-        NodeOperatorManager nodeOperatorManagerImpl = new NodeOperatorManager(address(roleRegistryInstance));
+        NodeOperatorManager nodeOperatorManagerImpl = new NodeOperatorManager(address(roleRegistryInstance), address(auctionInstance));
         vm.prank(nodeOperatorManagerInstance.owner());
         nodeOperatorManagerInstance.upgradeTo(address(nodeOperatorManagerImpl));
 
         // Upgrade LiquidityPool to the consolidated role model — the on-chain impl
         // still checks LIQUIDITY_POOL_ADMIN_ROLE on registerValidatorSpawner.
-        LiquidityPool newLpImpl = new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, address(blacklisterInstance), 0);
+        LiquidityPool newLpImpl = new LiquidityPool(LiquidityPool.ConstructorAddresses({
+            stakingManager: address(stakingManagerInstance),
+            nodesManager: address(managerInstance),
+            eETH: address(eETHInstance),
+            withdrawRequestNFT: address(withdrawRequestNFTInstance),
+            liquifier: address(liquifierInstance),
+            etherFiRedemptionManager: address(etherFiRedemptionManagerInstance),
+            roleRegistry: address(roleRegistryInstance),
+            priorityWithdrawalQueue: address(priorityQueueInstance),
+            blacklister: address(blacklisterInstance),
+            etherFiAdminContract: address(etherFiAdminInstance),
+            membershipManager: address(membershipManagerInstance)
+        }), 0);
         address lpOwner = liquidityPoolInstance.owner();
         vm.prank(lpOwner);
         liquidityPoolInstance.upgradeTo(address(newLpImpl));
@@ -32,7 +44,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         address wrnOwner = withdrawRequestNFTInstance.owner();
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance), address(etherFiAdminInstance)))
+            address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), address(membershipManagerInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance)))
         );
 
         // The production queue proxy on mainnet still runs the master impl which
@@ -130,7 +142,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // grant the role used by whitelist ops.
         address nodeOpMgrOwner = nodeOperatorManagerInstance.owner();
         vm.startPrank(nodeOpMgrOwner);
-        NodeOperatorManager newNodeOpMgrImpl = new NodeOperatorManager(address(roleRegistryInstance));
+        NodeOperatorManager newNodeOpMgrImpl = new NodeOperatorManager(address(roleRegistryInstance), address(auctionInstance));
         nodeOperatorManagerInstance.upgradeTo(address(newNodeOpMgrImpl));
         vm.stopPrank();
 

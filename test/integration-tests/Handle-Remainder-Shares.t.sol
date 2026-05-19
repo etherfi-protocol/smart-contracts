@@ -8,6 +8,29 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
+    function _newLpImpl() internal returns (address) {
+        return address(new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: STAKING_MANAGER,
+                nodesManager: ETHERFI_NODES_MANAGER,
+                eETH: EETH,
+                withdrawRequestNFT: WITHDRAW_REQUEST_NFT,
+                liquifier: LIQUIFIER,
+                etherFiRedemptionManager: ETHERFI_REDEMPTION_MANAGER,
+                roleRegistry: ROLE_REGISTRY,
+                priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
+                blacklister: address(blacklisterInstance),
+                etherFiAdminContract: ETHERFI_ADMIN,
+                membershipManager: MEMBERSHIP_MANAGER
+            }),
+            0
+        ));
+    }
+
+    function _newWrnImpl() internal returns (address) {
+        return address(new WithdrawRequestNFT(buybackWallet, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), address(etherFiAdminInstance)));
+    }
+
     function setUp() public {
         initializeRealisticFork(MAINNET_FORK);
         vm.etch(alice, bytes(""));
@@ -18,13 +41,13 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         address lpOwner = liquidityPoolInstance.owner();
         vm.prank(lpOwner);
         liquidityPoolInstance.upgradeTo(
-            address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, address(blacklisterInstance), 0))
+            _newLpImpl()
         );
 
         address wrnOwner = withdrawRequestNFTInstance.owner();
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(buybackWallet, address(blacklisterInstance), address(etherFiAdminInstance)))
+            _newWrnImpl()
         );
 
         // The production queue proxy on mainnet still runs the master impl which
@@ -77,7 +100,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
         // Grant the IMPLICIT_FEE_CLAIMER_ROLE to alice
         vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance), address(etherFiAdminInstance))));
+        withdrawRequestNFTInstance.upgradeTo(_newWrnImpl());
         roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
         vm.stopPrank();
 
@@ -155,7 +178,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
         // Now upgrade the contract and grant roles
         vm.startPrank(address(roleRegistryInstance.owner()));
-        withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance), address(etherFiAdminInstance))));
+        withdrawRequestNFTInstance.upgradeTo(_newWrnImpl());
         roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
         vm.stopPrank();
 
@@ -237,7 +260,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
 
             // Grant the IMPLICIT_FEE_CLAIMER_ROLE to alice
             vm.startPrank(address(roleRegistryInstance.owner()));
-            withdrawRequestNFTInstance.upgradeTo(address(new WithdrawRequestNFT(address(buybackWallet), address(blacklisterInstance), address(etherFiAdminInstance))));
+            withdrawRequestNFTInstance.upgradeTo(_newWrnImpl());
             roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
             vm.stopPrank();
 

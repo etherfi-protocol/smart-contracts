@@ -95,7 +95,6 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         s.locked = uint128(uint256(raw) >> 8);
         s.valSize = lp.validatorSizeWei();
         s.paused = lp.paused();
-        s.restake = lp.restakeBnftDeposits();
     }
 
     function _snapWRN(WithdrawRequestNFT wrn) internal view returns (WRNSnap memory s) {
@@ -203,8 +202,23 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // ------------------------------------------------------------------
         // 2. Deploy new implementation contracts (with the added guard)
         // ------------------------------------------------------------------
-        address newLP  = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, address(blacklisterInstance), 0));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance), ETHERFI_ADMIN));
+        address newLP  = address(new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: STAKING_MANAGER,
+                nodesManager: ETHERFI_NODES_MANAGER,
+                eETH: EETH,
+                withdrawRequestNFT: WITHDRAW_REQUEST_NFT,
+                liquifier: LIQUIFIER,
+                etherFiRedemptionManager: ETHERFI_REDEMPTION_MANAGER,
+                roleRegistry: ROLE_REGISTRY,
+                priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
+                blacklister: address(blacklisterInstance),
+                etherFiAdminContract: ETHERFI_ADMIN,
+                membershipManager: MEMBERSHIP_MANAGER
+            }),
+            0
+        ));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
 
         // ------------------------------------------------------------------
         // 3. Upgrade the proxies in place
@@ -379,8 +393,23 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      migration sweeps queue-locked ETH into the queue contract via
     ///      receive(); the master queue impl has no receive() and would revert.
     function _doUpgrade() internal {
-        address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, address(blacklisterInstance), 0));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(blacklisterInstance), ETHERFI_ADMIN));
+        address newLP = address(new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: STAKING_MANAGER,
+                nodesManager: ETHERFI_NODES_MANAGER,
+                eETH: EETH,
+                withdrawRequestNFT: WITHDRAW_REQUEST_NFT,
+                liquifier: LIQUIFIER,
+                etherFiRedemptionManager: ETHERFI_REDEMPTION_MANAGER,
+                roleRegistry: ROLE_REGISTRY,
+                priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
+                blacklister: address(blacklisterInstance),
+                etherFiAdminContract: ETHERFI_ADMIN,
+                membershipManager: MEMBERSHIP_MANAGER
+            }),
+            0
+        ));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN));
         address newPQ = address(new PriorityWithdrawalQueue(
             LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, TREASURY, 1 hours
         ));
@@ -408,7 +437,22 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
     ///      re-entry. This is defence-in-depth in case some ABI mismatch made
     ///      the modifier no-op.
     function test_postUpgrade_guardBlocksReentry() public {
-        address newLP = address(new LiquidityPool(PRIORITY_WITHDRAWAL_QUEUE, address(blacklisterInstance), 0));
+        address newLP = address(new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: STAKING_MANAGER,
+                nodesManager: ETHERFI_NODES_MANAGER,
+                eETH: EETH,
+                withdrawRequestNFT: WITHDRAW_REQUEST_NFT,
+                liquifier: LIQUIFIER,
+                etherFiRedemptionManager: ETHERFI_REDEMPTION_MANAGER,
+                roleRegistry: ROLE_REGISTRY,
+                priorityWithdrawalQueue: PRIORITY_WITHDRAWAL_QUEUE,
+                blacklister: address(blacklisterInstance),
+                etherFiAdminContract: ETHERFI_ADMIN,
+                membershipManager: MEMBERSHIP_MANAGER
+            }),
+            0
+        ));
         vm.prank(UPGRADE_TIMELOCK);
         IUUPSProxy(LIQUIDITY_POOL).upgradeTo(newLP);
 
