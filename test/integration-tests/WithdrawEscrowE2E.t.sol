@@ -100,7 +100,9 @@ contract WithdrawEscrowE2ETest is TestSetup {
             address(weEthInstance),
             address(roleRegistryInstance),
             treasuryInstance,
-            1 hours
+            1 hours,
+            1,
+            4e18
         );
         UUPSProxy proxy = new UUPSProxy(
             address(impl),
@@ -115,7 +117,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         address wrnOwner = withdrawRequestNFTInstance.owner();
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F, address(blacklisterInstance), 0, 4e18))
+            address(new WithdrawRequestNFT(0x2f5301a3D59388c509C65f8698f521377D41Fd0F, address(blacklisterInstance), 1, 4e18))
         );
     }
 
