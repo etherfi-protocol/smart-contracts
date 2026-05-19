@@ -15,10 +15,26 @@ import "./interfaces/IWeETH.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./utils/PausableUntil.sol";
 
-/// @title PriorityWithdrawalQueue
-/// @notice Manages priority withdrawals for whitelisted users
-/// @dev Implements priority withdrawal queue pattern
-contract PriorityWithdrawalQueue is 
+/// @title PriorityWithdrawalQueue — share-rate-freeze invariants
+/// @notice Manages priority withdrawals for whitelisted users.
+///
+/// Once `fulfillRequests` runs for a requestId, the rate used to compute its claim payout
+/// is frozen at the rate snapshotted in that fulfill call. Subsequent rebases do NOT move
+/// the claim payout — this is the H-02 fix on the priority path.
+///
+/// Invariants:
+///  I1. `_fulfillmentRates[requestId]` is set on fulfill, cleared on claim/cancel/invalidate.
+///      A non-zero value implies the request is in `_finalizedRequests`.
+///  I2. For a finalized requestId, the resolved rate (`_fulfillmentRates[requestId]` or, for
+///      pre-upgrade legacy fulfillments, `LP.amountPerShareCeil()` substituted locally) is
+///      always non-zero — LP itself rejects rate=0.
+///  I3. For any finalized requestId, `getClaimableAmount(request)` and the user-visible
+///      `claimWithdraw` payout are invariant under `LP.rebase()` after the fulfill block.
+///      Property-tested via `test_invariant_queue_claimAmountIndependentOfPostFulfillRebase`.
+///  I4. The rate snapshot uses ceiling rounding (`Math.mulDiv(1e18, TPE, TS, Up)`) so the
+///      per-request solvency check (`shareOfEEth * rate / 1e18 >= amountWithFee`) and the
+///      round-trip burn (`ceil(amountWithFee * 1e18 / rate) <= shareOfEEth`) both hold.
+contract PriorityWithdrawalQueue is
     Initializable, 
     UUPSUpgradeable, 
     ReentrancyGuardUpgradeable,
@@ -67,9 +83,11 @@ contract PriorityWithdrawalQueue is
     uint96 public totalRemainderShares;
     uint128 public ethAmountLockedForPriorityWithdrawal;
 
-    /// @notice Frozen share rate (amountForShare(_SHARE_UNIT)) recorded when each request was fulfilled.
-    /// @dev Empty mapping value (0) means "use live rate" — covers pre-upgrade requests fulfilled
-    ///      before the share-rate-freeze upgrade.
+    /// @notice Frozen share rate (`amountPerShareCeil()`) recorded when each request was fulfilled.
+    /// @dev Empty mapping value (0) means "no snapshot" — covers pre-upgrade requests fulfilled
+    ///      before the share-rate-freeze upgrade. The claim/view paths locally substitute the
+    ///      live `LP.amountPerShareCeil()` for those entries, preserving legacy semantics.
+    ///      LP itself rejects rate=0.
     mapping(bytes32 => uint224) private _fulfillmentRates;
 
     //--------------------------------------------------------------------------------------
@@ -631,11 +649,17 @@ contract PriorityWithdrawalQueue is
         if (!_finalizedRequests.contains(requestId)) revert RequestNotFinalized();
 
         uint224 frozenRate = _fulfillmentRates[requestId];
+        if (frozenRate == 0) {
+            // Pre-upgrade legacy request (fulfilled before the share-rate-freeze upgrade) —
+            // resolve to the live rate locally so claim semantics match the pre-upgrade behavior.
+            // LP itself rejects rate=0; the resolved rate is what we pass through.
+            uint256 live = liquidityPool.amountPerShareCeil();
+            require(live > 0 && live <= type(uint224).max, "invalid live rate");
+            frozenRate = uint224(live);
+        }
 
-        // Solvency check against the rate frozen at fulfill (or live, for pre-upgrade requests).
-        uint256 amountForShares = frozenRate == 0
-            ? liquidityPool.amountForShare(request.shareOfEEth)
-            : Math.mulDiv(uint256(request.shareOfEEth), frozenRate, _SHARE_UNIT);
+        // Solvency check against the resolved rate (frozen for new requests, live for legacy).
+        uint256 amountForShares = Math.mulDiv(uint256(request.shareOfEEth), frozenRate, _SHARE_UNIT);
         if (amountForShares < request.amountWithFee) revert InvalidOutputAmount();
 
         uint128 amountToWithdraw = request.amountWithFee;
@@ -647,9 +671,10 @@ contract PriorityWithdrawalQueue is
 
         uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, uint256(frozenRate));
         // With `amountWithFee <= shareOfEEth * rate / 1e18` enforced at fulfill (frozen path)
-        // or by the live solvency check above (legacy path), the round-trip ceiling division
-        // satisfies `burnedShares <= request.shareOfEEth` by construction. Pin that invariant
-        // explicitly — a violation would imply a precision bug, not a routine rounding artifact.
+        // or by the live solvency check above (legacy path, resolved to live rate locally),
+        // the round-trip ceiling division satisfies `burnedShares <= request.shareOfEEth` by
+        // construction. Pin that invariant explicitly — a violation would imply a precision
+        // bug, not a routine rounding artifact.
         if (burnedShares > request.shareOfEEth) revert InvalidBurnedSharesAmount();
         totalRemainderShares += uint96(request.shareOfEEth - burnedShares);
 
@@ -731,9 +756,13 @@ contract PriorityWithdrawalQueue is
         if (!_finalizedRequests.contains(requestId)) return 0;
 
         uint224 frozenRate = _fulfillmentRates[requestId];
-        uint256 amountForShares = frozenRate == 0
-            ? liquidityPool.amountForShare(request.shareOfEEth)
-            : Math.mulDiv(uint256(request.shareOfEEth), frozenRate, _SHARE_UNIT);
+        if (frozenRate == 0) {
+            // Pre-upgrade legacy request — live-rate fallback (mirrors `_claimWithdraw`).
+            uint256 live = liquidityPool.amountPerShareCeil();
+            if (live == 0 || live > type(uint224).max) return 0;
+            frozenRate = uint224(live);
+        }
+        uint256 amountForShares = Math.mulDiv(uint256(request.shareOfEEth), frozenRate, _SHARE_UNIT);
         if (amountForShares < request.amountWithFee) return 0;
 
         return request.amountWithFee;

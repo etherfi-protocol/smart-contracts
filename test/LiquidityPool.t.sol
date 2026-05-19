@@ -942,10 +942,12 @@ contract LiquidityPoolTest is TestSetup {
             address(liquidityPoolInstance).call{value: 10 ether}("");
 
             // Try to withdraw more eETH than the NFT escrow holds via the segregated entry.
-            // Rate = 0 routes through the live-rate fallback inside the (amount, rate) overload.
+            // Use the live rate so we exercise the InsufficientLiquidity branch (rate=0 would
+            // be rejected by LP's `InvalidRate` guard before the solvency check).
+            uint256 liveRate = liquidityPoolInstance.amountPerShareCeil();
             vm.startPrank(address(withdrawRequestNFTInstance));
             vm.expectRevert(LiquidityPool.InsufficientLiquidity.selector);
-            liquidityPoolInstance.withdraw(withdrawAmount * 2, uint256(0));
+            liquidityPoolInstance.withdraw(withdrawAmount * 2, liveRate);
             vm.stopPrank();
         } else {
             vm.stopPrank();
@@ -1885,10 +1887,11 @@ contract LiquidityPoolTest is TestSetup {
         uint128 lpOutBefore        = liquidityPoolInstance.totalValueOutOfLp();
         uint256 lockedBefore       = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
 
-        // Rate = 0 routes through the live-rate fallback inside the (amount, rate) overload,
-        // matching the original test's coverage of the segregated branch.
+        // Use the live rate via `amountPerShareCeil()` — the canonical snapshot LP exposes for
+        // consumers. `rate=0` is no longer accepted; consumers resolve legacy snapshots locally.
+        uint256 liveRate = liquidityPoolInstance.amountPerShareCeil();
         vm.prank(address(withdrawRequestNFTInstance));
-        liquidityPoolInstance.withdraw(amount, uint256(0));
+        liquidityPoolInstance.withdraw(amount, liveRate);
 
         assertEq(address(liquidityPoolInstance).balance, lpEthBefore, "LP ETH should not change on segregated withdraw");
         assertEq(address(withdrawRequestNFTInstance).balance, nftEthBefore, "NFT ETH unchanged by LP withdraw(amount, rate) alone");
@@ -1944,27 +1947,23 @@ contract LiquidityPoolTest is TestSetup {
         assertGt(s2, 0, "max amount / max rate");
     }
 
-    /// @dev `rate == 0` selects the live-rate fallback inside the (amount, rate) overload.
-    ///      Confirms parity with `sharesForWithdrawalAmount` at the current state.
-    function testFuzz_withdrawWithRate_zeroRateUsesLive(uint96 rawAmount) public {
-        uint96 amount = uint96(bound(rawAmount, 1 wei, 100 ether));
-
-        // Deposit so eETH shares exist; transfer to NFT.
+    /// @dev `rate == 0` is rejected by LP — consumers (WRNFT / Queue) are required to resolve
+    ///      pre-upgrade legacy snapshots to a live rate locally via `amountPerShareCeil()`
+    ///      before invoking the (amount, rate) overload. Pins the InvalidRate revert.
+    function test_withdrawWithRate_zeroRateReverts_InvalidRate() public {
+        // Deposit so eETH shares exist; transfer to NFT so the solvency precondition is met.
         vm.deal(alice, 1000 ether);
         vm.prank(alice);
         liquidityPoolInstance.deposit{value: 1000 ether}();
         vm.prank(alice);
-        eETHInstance.transfer(address(withdrawRequestNFTInstance), amount);
-
-        uint256 expectedShare = liquidityPoolInstance.sharesForWithdrawalAmount(amount);
-        if (expectedShare == 0) return;
+        eETHInstance.transfer(address(withdrawRequestNFTInstance), 1 ether);
 
         vm.prank(address(etherFiAdminInstance));
-        liquidityPoolInstance.addEthAmountLockedForWithdrawal(amount);
+        liquidityPoolInstance.addEthAmountLockedForWithdrawal(uint128(1 ether));
 
         vm.prank(address(withdrawRequestNFTInstance));
-        uint256 burned = liquidityPoolInstance.withdraw(uint256(amount), uint256(0));
-        assertEq(burned, expectedShare, "rate=0 path must match sharesForWithdrawalAmount");
+        vm.expectRevert(LiquidityPool.InvalidRate.selector);
+        liquidityPoolInstance.withdraw(uint256(1 ether), uint256(0));
     }
 
     function test_initializeOnUpgradeV2_sweepsLockedEth() public {
