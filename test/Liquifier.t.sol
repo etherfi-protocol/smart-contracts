@@ -810,7 +810,7 @@ contract LiquifierTest is TestSetup {
 
         // bob never receives OPERATION_MULTISIG_ROLE in setUpLiquifier
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500);
     }
 
