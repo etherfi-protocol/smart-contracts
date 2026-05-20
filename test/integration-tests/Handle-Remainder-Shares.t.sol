@@ -28,7 +28,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
     }
 
     function _newWrnImpl() internal returns (address) {
-        return address(new WithdrawRequestNFT(buybackWallet, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), address(etherFiAdminInstance)));
+        return address(new WithdrawRequestNFT(buybackWallet, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), address(etherFiAdminInstance), 1, 4e18));
     }
 
     function setUp() public {

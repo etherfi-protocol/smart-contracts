@@ -586,7 +586,7 @@ contract PriorityWithdrawalQueue is
         bool wasFinalized = _finalizedRequests.contains(requestId);
         
         _dequeueWithdrawRequest(request);
-        
+
         if (wasFinalized) {
             ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
             liquidityPool.returnLockedEth{value: request.amountOfEEth}(request.amountOfEEth);
@@ -610,19 +610,17 @@ contract PriorityWithdrawalQueue is
 
         uint128 amountToWithdraw = request.amountWithFee;
 
-        uint256 sharesToBurn = liquidityPool.sharesForWithdrawalAmount(amountToWithdraw);
-
         _finalizedRequests.remove(requestId);
-
-        uint256 remainder = request.shareOfEEth > sharesToBurn 
-            ? request.shareOfEEth - sharesToBurn 
-            : 0;
-        totalRemainderShares += uint96(remainder);
 
         ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
 
-        uint256 burnedShares = liquidityPool.withdraw(request.user, amountToWithdraw);
-        if (burnedShares != sharesToBurn) revert InvalidBurnedSharesAmount();
+        uint256 rate = liquidityPool.amountPerShareCeil();
+        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, rate);
+
+        uint256 remainder = request.shareOfEEth > burnedShares 
+            ? request.shareOfEEth - burnedShares 
+            : 0;
+        totalRemainderShares += uint96(remainder);
 
         if (address(this).balance < amountToWithdraw) revert InsufficientEscrow();
         (bool ok, ) = payable(request.user).call{value: amountToWithdraw}("");
@@ -636,7 +634,7 @@ contract PriorityWithdrawalQueue is
         }
         _checkEthAmountLockedForPriorityWithdrawal();
 
-        emit WithdrawRequestClaimed(requestId, request.user, uint96(amountToWithdraw), uint96(sharesToBurn), request.nonce, uint32(block.timestamp));
+        emit WithdrawRequestClaimed(requestId, request.user, uint96(amountToWithdraw), uint96(burnedShares), request.nonce, uint32(block.timestamp));
     }
 
     function _checkEthAmountLockedForPriorityWithdrawal() internal {

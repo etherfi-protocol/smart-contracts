@@ -962,7 +962,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(membershipManagerProxy),
             address(roleRegistryInstance),
             address(blacklisterInstance),
-            address(etherFiAdminProxy)
+            address(etherFiAdminProxy),
+            1, 4e18
         );
         withdrawRequestNFTInstance.upgradeTo(address(withdrawRequestNFTImplementation));
 

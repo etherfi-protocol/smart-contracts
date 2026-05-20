@@ -44,7 +44,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         address wrnOwner = withdrawRequestNFTInstance.owner();
         vm.prank(wrnOwner);
         withdrawRequestNFTInstance.upgradeTo(
-            address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), address(membershipManagerInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance)))
+            address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), address(membershipManagerInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance), 1, 4e18))
         );
 
         // The production queue proxy on mainnet still runs the master impl which
