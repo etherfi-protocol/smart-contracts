@@ -13,8 +13,8 @@ abstract contract PausableUntil {
     bytes32 private constant PAUSABLE_UNTIL_STORAGE_SLOT = 0x2c7e4bc092c2002f0baaf2f47367bc442b098266b43d189dafe4cb25f1e1fea2; // keccak256("pausableUntil.storage")
 
     uint256 public constant MIN_PAUSE_DURATION = 8 hours;
-    uint256 public constant MAX_PAUSE_DURATION = 3 days;
-    uint256 public constant PAUSER_UNTIL_COOLDOWN = 1 days;
+    uint256 public constant MAX_PAUSE_DURATION = 30 days;
+    uint256 public constant PAUSER_UNTIL_COOLDOWN = 7 days;
 
     event PauseUntilDurationSet(uint256 pauseUntilDuration);
     event PausedUntil(uint256 pausedUntil);
