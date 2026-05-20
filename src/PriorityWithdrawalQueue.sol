@@ -15,9 +15,10 @@ import "./interfaces/IWeETH.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./utils/PausableUntil.sol";
 
-/// @title PriorityWithdrawalQueue — share-rate-freeze invariants
-/// @notice Manages priority withdrawals for whitelisted users.
-contract PriorityWithdrawalQueue is
+/// @title PriorityWithdrawalQueue
+/// @notice Manages priority withdrawals for whitelisted users
+/// @dev Implements priority withdrawal queue pattern
+contract PriorityWithdrawalQueue is 
     Initializable, 
     UUPSUpgradeable, 
     ReentrancyGuardUpgradeable,
