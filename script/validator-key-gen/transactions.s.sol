@@ -71,10 +71,10 @@ contract ValidatorKeyGenTransactions is Script {
         string memory forkUrl = vm.envString("MAINNET_RPC_URL"); // TODO: change to mainnet fork
         vm.selectFork(vm.createFork(forkUrl));
 
-        LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = roleRegistry.EOA_1();
-        ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = roleRegistry.EOA_2();
-        STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE = roleRegistry.EOA_1();
-        ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE = roleRegistry.EOA_3();
+        LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = roleRegistry.ORACLE_OPERATIONS_ROLE();
+        ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE();
+        STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE = roleRegistry.ORACLE_OPERATIONS_ROLE();
+        ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE = roleRegistry.EXECUTOR_OPERATIONS_ROLE();
 
         executeUpgrade();
         forkTestOne();

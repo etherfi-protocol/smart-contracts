@@ -482,17 +482,17 @@ contract EtherFiNodesManager is
     }
 
     modifier onlyEigenlayerAdmin() {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyConsolidationExecutor() {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
     modifier onlyPodProver() {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_4(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EIGENPOD_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 

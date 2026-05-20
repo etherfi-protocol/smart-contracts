@@ -594,8 +594,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), owner);
         vm.stopPrank();
 
@@ -1008,8 +1008,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(address(cumulativeMerkleRewardsDistributorProxy));
         cumulativeMerkleRewardsDistributorInstance.initialize();
 
-        // CumulativeMerkleRewardsDistributor admin/claim-delay-setter consolidated into EOA_3
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), admin);
+        // CumulativeMerkleRewardsDistributor admin/claim-delay-setter consolidated into EXECUTOR_OPERATIONS_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), admin);
 
         // EtherFiOracle
         etherFiOracleImplementation = new EtherFiOracle(address(etherFiAdminProxy), address(roleRegistryInstance));
@@ -1162,11 +1162,11 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.startPrank(owner);
      
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), address(etherFiAdminInstance));
         // ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE consolidated into OPERATION_TIMELOCK_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
-        // ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE consolidated into EOA_1
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_1(), alice);
+        // ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE consolidated into ORACLE_OPERATIONS_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), address(etherFiAdminInstance));
 
         // WITHDRAW_REQUEST_NFT_ADMIN_ROLE consolidated into OPERATION_TIMELOCK_ROLE
@@ -1323,8 +1323,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), chad);
         // ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE -> OPERATION_TIMELOCK_ROLE (already granted above)
-        // ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE -> EOA_1
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_1(), alice);
+        // ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE -> ORACLE_OPERATIONS_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), alice);
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         vm.stopPrank();

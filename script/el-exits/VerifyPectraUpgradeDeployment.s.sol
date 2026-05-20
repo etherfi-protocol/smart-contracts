@@ -207,7 +207,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         RoleRegistry roleRegistry_ = RoleRegistry(ROLE_REGISTRY);
 
         // Check if new functions exist (will revert if not upgraded)
-        try roleRegistry_.EOA_3() returns (bytes32 role) {
+        try roleRegistry_.EXECUTOR_OPERATIONS_ROLE() returns (bytes32 role) {
             console2.log("[OK] EtherFiNodesManager upgraded - EL exit role exists:", vm.toString(role));
         } catch {
             console2.log("[FAIL] EtherFiNodesManager not upgraded - EL exit role missing");
@@ -248,7 +248,7 @@ contract VerifyPectraUpgradeDeployment is Script {
         EtherFiNodesManager nodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER_PROXY));
 
         // Check EL Trigger Exit Role
-        try roleRegistry.EOA_3() returns (bytes32 elTriggerExitRole) {
+        try roleRegistry.EXECUTOR_OPERATIONS_ROLE() returns (bytes32 elTriggerExitRole) {
             bool hasRole = roleRegistry.hasRole(elTriggerExitRole, EL_TRIGGER_EXITER);
             if (hasRole) {
                 console2.log("[OK] EL Trigger Exit role assigned to:", EL_TRIGGER_EXITER);

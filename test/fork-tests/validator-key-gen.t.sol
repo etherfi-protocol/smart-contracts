@@ -93,19 +93,19 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         auctionManager.upgradeTo(address(auctionManagerImpl));
 
         vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(roleRegistry.EOA_1(), admin);
-        roleRegistry.grantRole(roleRegistry.EOA_2(), address(stakingManager));
-        roleRegistry.grantRole(roleRegistry.EOA_1(), admin);
+        roleRegistry.grantRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), address(stakingManager));
+        roleRegistry.grantRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), admin);
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
         // OPERATING_TIMELOCK is granted OPERATION_TIMELOCK_ROLE on mainnet — grant
         // it explicitly on the fork so registerValidatorSpawner / batchCreateBeaconValidators
         // pass through the consolidated onlyAdmin gate.
         roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), operatingTimelock);
         roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
-        // EOA_3 (formerly ETHERFI_NODES_MANAGER_EL_EXITER_ROLE) is required by
+        // EXECUTOR_OPERATIONS_ROLE (formerly ETHERFI_NODES_MANAGER_EL_EXITER_ROLE) is required by
         // StakingManager.instantiateEtherFiNode, which the test helpers call.
-        roleRegistry.grantRole(roleRegistry.EOA_3(), operatingTimelock);
-        roleRegistry.grantRole(roleRegistry.EOA_3(), admin);
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), operatingTimelock);
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), admin);
         vm.stopPrank();
     }
 
@@ -484,7 +484,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
     }
 
     function test_roleGrant_succeeds() public {
-        assertEq(roleRegistry.hasRole(roleRegistry.EOA_1(), address(admin)), true);
+        assertEq(roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), address(admin)), true);
     }
 
     // ==================== batchCreateBeaconValidators Tests ====================

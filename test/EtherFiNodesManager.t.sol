@@ -42,28 +42,28 @@ contract EtherFiNodesManagerTest is TestSetup {
         vm.startPrank(managerInstance.owner());
         // ETHERFI_NODES_MANAGER_ADMIN_ROLE → OPERATION_TIMELOCK_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), admin);
-        // ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE → EOA_2
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), eigenlayerAdmin);
-        // ETHERFI_NODES_MANAGER_POD_PROVER_ROLE → EOA_4
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_4(), podProver);
-        // ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE → EOA_4 (forwardExternalCall is onlyPodProver)
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_4(), callForwarder);
-        // ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE → EOA_3
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), elTriggerExit);
-        // STAKING_MANAGER_NODE_CREATOR_ROLE → EOA_3
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), address(liquidityPoolInstance));
+        // ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE → HOUSEKEEPING_OPERATIONS_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), eigenlayerAdmin);
+        // ETHERFI_NODES_MANAGER_POD_PROVER_ROLE → EIGENPOD_OPERATIONS_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.EIGENPOD_OPERATIONS_ROLE(), podProver);
+        // ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE → EIGENPOD_OPERATIONS_ROLE (forwardExternalCall is onlyPodProver)
+        roleRegistryInstance.grantRole(roleRegistryInstance.EIGENPOD_OPERATIONS_ROLE(), callForwarder);
+        // ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE → EXECUTOR_OPERATIONS_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), elTriggerExit);
+        // STAKING_MANAGER_NODE_CREATOR_ROLE → EXECUTOR_OPERATIONS_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), address(liquidityPoolInstance));
         // Existing tests prank the mainnet OPERATING_TIMELOCK to call
-        // instantiateEtherFiNode / linkLegacyValidatorIds (both EOA_3-gated now).
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), deployed.OPERATING_TIMELOCK());
-        // requestConsolidation is EOA_3-gated and tests still prank admin.
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), admin);
+        // instantiateEtherFiNode / linkLegacyValidatorIds (both EXECUTOR_OPERATIONS_ROLE-gated now).
+        roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), deployed.OPERATING_TIMELOCK());
+        // requestConsolidation is EXECUTOR_OPERATIONS_ROLE-gated and tests still prank admin.
+        roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), admin);
         // PROTOCOL_PAUSER / PROTOCOL_UNPAUSER → OPERATION_MULTISIG_ROLE (onlyOperations)
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
         // ETHERFI_RATE_LIMITER_ADMIN_ROLE → OPERATION_MULTISIG_ROLE
         // (already granted via OPERATION_MULTISIG_ROLE above)
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), deployed.STAKING_MANAGER());
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), deployed.STAKING_MANAGER());
         managerInstance.upgradeTo(nodesManagerImplementation);
-        // ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE → EOA_3 (already granted to elTriggerExit above)
+        // ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE → EXECUTOR_OPERATIONS_ROLE (already granted to elTriggerExit above)
         vm.stopPrank();
         
         // Setup rate limiter - check if limiters already exist before creating
@@ -271,8 +271,8 @@ contract EtherFiNodesManagerTest is TestSetup {
     // ============================================
     
     function test_createEigenPod() public {
-        // STAKING_MANAGER_NODE_CREATOR_ROLE consolidated into EOA_3.
-        address nodeCreatorRole = roleRegistryInstance.roleHolders(roleRegistryInstance.EOA_3())[0];
+        // STAKING_MANAGER_NODE_CREATOR_ROLE consolidated into EXECUTOR_OPERATIONS_ROLE.
+        address nodeCreatorRole = roleRegistryInstance.roleHolders(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE())[0];
         vm.prank(nodeCreatorRole);
         address newNode = stakingManagerInstance.instantiateEtherFiNode(false);
         
@@ -526,8 +526,8 @@ contract EtherFiNodesManagerTest is TestSetup {
         }
         
         bytes4 startCheckpointSelector = bytes4(0x88676cad); // startCheckpoint
-        // After consolidation, forwardEigenPodCall requires EOA_4 (onlyPodProver).
-        // Use podProver (granted EOA_4 in setUp) instead of the legacy callForwarder address.
+        // After consolidation, forwardEigenPodCall requires EIGENPOD_OPERATIONS_ROLE (onlyPodProver).
+        // Use podProver (granted EIGENPOD_OPERATIONS_ROLE in setUp) instead of the legacy callForwarder address.
         address allowedCaller = podProver;
 
         vm.prank(admin);
@@ -591,8 +591,8 @@ contract EtherFiNodesManagerTest is TestSetup {
             managerInstance.calculateValidatorPubkeyHash(pubkeys[0]), 
             pubkeys[0]
         );
-        // ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE consolidated into EOA_3.
-        // Use the test-local elTriggerExit (which we know is funded and has EOA_3).
+        // ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE consolidated into EXECUTOR_OPERATIONS_ROLE.
+        // Use the test-local elTriggerExit (which we know is funded and has EXECUTOR_OPERATIONS_ROLE).
         vm.deal(elTriggerExit, valueToSend);
         vm.prank(elTriggerExit);
         managerInstance.requestExecutionLayerTriggeredWithdrawal{value: valueToSend}(reqs);
@@ -1080,7 +1080,7 @@ contract EtherFiNodesManagerTest is TestSetup {
         _pauseUntil();
 
         IEigenPod.WithdrawalRequest[] memory requests;
-        // Role check runs before whenNotPaused now, so prank an EOA_3 holder so the pause
+        // Role check runs before whenNotPaused now, so prank an EXECUTOR_OPERATIONS_ROLE holder so the pause
         // gate is the one that fires.
         _expectPausedUntilRevert();
         vm.prank(elTriggerExit);

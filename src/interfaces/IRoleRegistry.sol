@@ -123,11 +123,11 @@ interface IRoleRegistry {
 
     function GUARDIAN_ROLE() external view returns (bytes32);
 
-    function EOA_1() external view returns (bytes32);
+    function ORACLE_OPERATIONS_ROLE() external view returns (bytes32);
     
-    function EOA_2() external view returns (bytes32);
+    function HOUSEKEEPING_OPERATIONS_ROLE() external view returns (bytes32);
 
-    function EOA_3() external view returns (bytes32);
+    function EXECUTOR_OPERATIONS_ROLE() external view returns (bytes32);
 
-    function EOA_4() external view returns (bytes32);
+    function EIGENPOD_OPERATIONS_ROLE() external view returns (bytes32);
 }

@@ -1401,7 +1401,7 @@ contract EtherFiOracleTest is TestSetup {
         // executeTasks is permissionless once consensus is reached and the report
         // passes the freshness/sequencing checks. Use a fresh, role-less address.
         address randoCaller = makeAddr("randoCaller");
-        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.EOA_1(), randoCaller));
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), randoCaller));
         assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), randoCaller));
 
         vm.prank(randoCaller);
@@ -2381,7 +2381,7 @@ contract EtherFiOracleTest is TestSetup {
 
         address randoCaller = makeAddr("randoCaller2");
         assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), randoCaller));
-        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.EOA_1(), randoCaller));
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), randoCaller));
 
         vm.prank(randoCaller);
         etherFiAdminInstance.finalizeWithdrawalsWhenStale();

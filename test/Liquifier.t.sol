@@ -381,12 +381,12 @@ contract LiquifierTest is TestSetup {
         stEth.transfer(address(liquifierInstance), 1 ether);
         vm.stopPrank();
 
-        // bob has no roles; sendToEtherFiRestaker now requires EOA_2
+        // bob has no roles; sendToEtherFiRestaker now requires HOUSEKEEPING_OPERATIONS_ROLE
         vm.prank(bob);
         vm.expectRevert(Liquifier.IncorrectRole.selector);
         liquifierInstance.sendToEtherFiRestaker(address(stEth), 1);
 
-        // chad has only the consolidated admin role — sender path requires EOA_2
+        // chad has only the consolidated admin role — sender path requires HOUSEKEEPING_OPERATIONS_ROLE
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), chad);
         vm.stopPrank();
@@ -406,9 +406,9 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
 
         address sender = makeAddr("liqSender");
-        // LIQUIFIER_SENDER_ROLE consolidated into EOA_2.
+        // LIQUIFIER_SENDER_ROLE consolidated into HOUSEKEEPING_OPERATIONS_ROLE.
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), sender);
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), sender);
         vm.stopPrank();
 
         uint256 restakerBalBefore = stEth.balanceOf(address(etherFiRestakerInstance));
@@ -424,7 +424,7 @@ contract LiquifierTest is TestSetup {
 
     // test_LIQUIFIER_SENDER_ROLE_constant removed:
     // LIQUIFIER_SENDER_ROLE / LIQUIFIER_ADMIN_ROLE no longer exist as named roles —
-    // they were consolidated into EOA_2 and OPERATION_MULTISIG_ROLE respectively.
+    // they were consolidated into HOUSEKEEPING_OPERATIONS_ROLE and OPERATION_MULTISIG_ROLE respectively.
 
     function test_getTotalPooledEther() public {
         initializeRealisticFork(MAINNET_FORK);

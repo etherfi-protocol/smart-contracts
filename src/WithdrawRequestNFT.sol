@@ -404,7 +404,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     ///   - Burn: the rest of the remainder is burned
     /// @param _eEthAmount: the remainder of the eEth amount
     function handleRemainder(uint256 _eEthAmount) external {
-        if(!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         if (_eEthAmount == 0) revert EETHAmountCannotBeZero(); 
         if (!isScanOfShareRemainderCompleted()) revert NotAllPrevRequestsHaveBeenScanned();
         if (getEEthRemainderAmount() < _eEthAmount) revert NotEnoughEEthRemainder();

@@ -70,8 +70,8 @@ contract PriorityQueueTransactions is Script, Utils {
 
         // Get role hashes from the role registry
         PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE = roleRegistryContract.OPERATION_TIMELOCK_ROLE();
-        PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = roleRegistryContract.EOA_2();
-        PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE = roleRegistryContract.EOA_1();
+        PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = roleRegistryContract.HOUSEKEEPING_OPERATIONS_ROLE();
+        PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE = roleRegistryContract.ORACLE_OPERATIONS_ROLE();
 
         // Step 1: Verify deployed bytecode matches expected
         verifyDeployedBytecode();

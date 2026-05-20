@@ -90,9 +90,9 @@ contract RestakingRewardsRouterTest is Test {
 
         // Grant admin role — ETHERFI_REWARDS_ROUTER_ADMIN_ROLE consolidated into OPERATION_TIMELOCK_ROLE.
         roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
-        // Grant transfer role — ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE consolidated into EOA_2.
-        roleRegistry.grantRole(roleRegistry.EOA_2(), admin);
-        roleRegistry.grantRole(roleRegistry.EOA_2(), transferRoleUser);
+        // Grant transfer role — ETHERFI_REWARDS_ROUTER_ERC20_TRANSFER_ROLE consolidated into HOUSEKEEPING_OPERATIONS_ROLE.
+        roleRegistry.grantRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), transferRoleUser);
         vm.stopPrank();
 
         // Deploy proxy and initialize (outside prank so owner is address(this))

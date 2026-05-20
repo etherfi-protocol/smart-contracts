@@ -44,8 +44,8 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
         vm.selectFork(vm.createFork(forkUrl));
 
         setUpEtherFiRateLimiter();
-        ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE = roleRegistry.EOA_3();
-        LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = roleRegistry.EOA_1();
+        ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE = roleRegistry.EXECUTOR_OPERATIONS_ROLE();
+        LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = roleRegistry.ORACLE_OPERATIONS_ROLE();
 
         address[] memory targets = new address[](6);
         bytes[] memory data = new bytes[](targets.length);

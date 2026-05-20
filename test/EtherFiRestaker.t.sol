@@ -262,13 +262,13 @@ contract EtherFiRestakerTest is TestSetup {
         // Grant all restaker roles to owner so existing tests continue to work.
         // onlyOperations (delegateTo/undelegate/withdrawEther/setRewardsClaimer/pause) → OPERATION_MULTISIG_ROLE.
         // RateLimiter mutators are onlyAdmin → OPERATION_TIMELOCK_ROLE.
-        // stEthRequestWithdrawal / depositIntoStrategy / queueWithdrawals → EOA_2.
-        // stEthClaimWithdrawals / completeQueuedWithdrawals → EOA_3.
+        // stEthRequestWithdrawal / depositIntoStrategy / queueWithdrawals → HOUSEKEEPING_OPERATIONS_ROLE.
+        // stEthClaimWithdrawals / completeQueuedWithdrawals → EXECUTOR_OPERATIONS_ROLE.
         vm.startPrank(roleRegistryInstance.owner());
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), owner);
         vm.stopPrank();
 
         // Create rate-limiter buckets and register restaker as a consumer (idempotent)

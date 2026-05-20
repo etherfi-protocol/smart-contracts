@@ -351,8 +351,8 @@ contract WithdrawRequestNFTTest is TestSetup {
             address(etherFiAdminInstance),
             1, 4e18
         )));
-        // IMPLICIT_FEE_CLAIMER_ROLE consolidated into EOA_2.
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
+        // IMPLICIT_FEE_CLAIMER_ROLE consolidated into HOUSEKEEPING_OPERATIONS_ROLE.
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), alice);
         vm.stopPrank();
         uint256 implicitFee = withdrawRequestNFTInstance.getEEthRemainderAmount();
         vm.prank(alice);
@@ -535,7 +535,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         if (dustEEthAmount > 0) {
             // Grant the required role to admin
             vm.startPrank(address(roleRegistryInstance.owner()));
-            roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), admin);
+            roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), admin);
             vm.stopPrank();
             
             // Handle remainder (use half to avoid edge cases)
@@ -1320,7 +1320,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
 
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), admin);
         vm.stopPrank();
 
         uint256 lpBalAfterClaim  = address(liquidityPoolInstance).balance;
@@ -1403,7 +1403,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         if (remainderAmount > 0) {
             // Grant role
             vm.startPrank(address(roleRegistryInstance.owner()));
-            roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), admin);
+            roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), admin);
             vm.stopPrank();
 
             // Cannot handle zero amount

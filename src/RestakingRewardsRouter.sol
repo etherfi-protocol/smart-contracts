@@ -65,7 +65,7 @@ contract RestakingRewardsRouter is UUPSUpgradeable {
     function recoverERC20() external {
         if (
             !roleRegistry.hasRole(
-                roleRegistry.EOA_2(),
+                roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(),
                 msg.sender
             )
         ) revert IncorrectRole();

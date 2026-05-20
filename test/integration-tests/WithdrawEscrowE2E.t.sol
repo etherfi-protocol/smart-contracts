@@ -41,17 +41,17 @@ contract WithdrawEscrowE2ETest is TestSetup {
     }
 
     // ── Role constants (after role consolidation) ────────────────────────────
-    // PWQ admin → OPERATION_TIMELOCK_ROLE; PWQ whitelist manager → EOA_2;
-    // PWQ request manager → EOA_1; IMPLICIT_FEE_CLAIMER → EOA_2;
+    // PWQ admin → OPERATION_TIMELOCK_ROLE; PWQ whitelist manager → HOUSEKEEPING_OPERATIONS_ROLE;
+    // PWQ request manager → ORACLE_OPERATIONS_ROLE; IMPLICIT_FEE_CLAIMER → HOUSEKEEPING_OPERATIONS_ROLE;
     // WITHDRAW_REQUEST_NFT_ADMIN → OPERATION_TIMELOCK_ROLE.
     bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE =
         keccak256("OPERATION_TIMELOCK_ROLE");
     bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE =
-        keccak256("EOA_2");
+        keccak256("HOUSEKEEPING_OPERATIONS_ROLE");
     bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE =
-        keccak256("EOA_1");
+        keccak256("ORACLE_OPERATIONS_ROLE");
     bytes32 public constant IMPLICIT_FEE_CLAIMER_ROLE =
-        keccak256("EOA_2");
+        keccak256("HOUSEKEEPING_OPERATIONS_ROLE");
     bytes32 public constant WITHDRAW_REQUEST_NFT_ADMIN_ROLE =
         keccak256("OPERATION_TIMELOCK_ROLE");
 

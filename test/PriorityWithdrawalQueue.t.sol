@@ -98,11 +98,11 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Grant roles — consolidated to the 8-tier model.
         // PWQ admin → OPERATION_TIMELOCK_ROLE; pauser → OPERATION_MULTISIG_ROLE;
-        // whitelist manager → EOA_2; request manager → EOA_1; IMPLICIT_FEE_CLAIMER → EOA_2.
+        // whitelist manager → HOUSEKEEPING_OPERATIONS_ROLE; request manager → ORACLE_OPERATIONS_ROLE; IMPLICIT_FEE_CLAIMER → HOUSEKEEPING_OPERATIONS_ROLE.
         // LIQUIDITY_POOL_ADMIN_ROLE → OPERATION_TIMELOCK_ROLE.
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_1(), requestManager);
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), requestManager);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
         // Existing tests still prank the mainnet `admin` address (ETHERFI_OPERATING_ADMIN)
