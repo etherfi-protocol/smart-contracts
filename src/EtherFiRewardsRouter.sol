@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./RoleRegistry.sol";
+import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/ILiquidityPool.sol";
 
 contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
@@ -14,7 +14,7 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
 
     address public immutable treasury;
     address public immutable liquidityPool;
-    RoleRegistry public immutable roleRegistry;
+    IRoleRegistry public immutable roleRegistry;
 
     event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
@@ -29,7 +29,7 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
         _disableInitializers();
         liquidityPool = _liquidityPool;
         treasury = _treasury;
-        roleRegistry = RoleRegistry(_roleRegistry);
+        roleRegistry = IRoleRegistry(_roleRegistry);
     }
 
     receive() external payable {

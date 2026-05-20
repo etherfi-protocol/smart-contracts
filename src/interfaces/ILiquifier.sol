@@ -6,6 +6,7 @@ import "../eigenlayer-interfaces/IStrategy.sol";
 import "../eigenlayer-interfaces/IPauserRegistry.sol";
 import "./IRoleRegistry.sol";
 
+
 // stETH-ETH mainnet: 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022
 interface ICurvePool {
     function exchange_underlying(uint256 i, uint256 j, uint256 dx, uint256 min_dy) external returns (uint256);
@@ -122,6 +123,10 @@ interface ILiquifier {
         uint96 totalDeposited;
         bool isL2Eth;
     }
+
+    function lido() external view returns (ILido);
+    function lidoWithdrawalQueue() external view returns (ILidoWithdrawalQueue);
+    function tokenInfos(address _token) external view returns (uint128, uint128, IStrategy, bool, uint16, uint32, uint32, uint32, uint96, uint96, bool);
 
     function depositWithERC20(address _token, uint256 _amount, address _referral) external returns (uint256);
     function quoteByFairValue(address _token, uint256 _amount) external view returns (uint256);

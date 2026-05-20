@@ -12,6 +12,7 @@ import "./interfaces/IStakingManager.sol";
 import "./interfaces/IAuctionManager.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
 import "./interfaces/ILiquidityPool.sol";
+import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
@@ -67,7 +68,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     ILiquidityPool public immutable liquidityPool;
     IMembershipManager public immutable membershipManager;
     IWithdrawRequestNFT public immutable withdrawRequestNft;
-    RoleRegistry public immutable roleRegistry;
+    IRoleRegistry public immutable roleRegistry;
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
 
     int256 public immutable maxAcceptableRebaseAprInBps;
@@ -133,7 +134,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         liquidityPool = ILiquidityPool(_constructorAddresses.liquidityPool);
         membershipManager = IMembershipManager(_constructorAddresses.membershipManager);
         withdrawRequestNft = IWithdrawRequestNFT(_constructorAddresses.withdrawRequestNft);
-        roleRegistry = RoleRegistry(_constructorAddresses.roleRegistry);
+        roleRegistry = IRoleRegistry(_constructorAddresses.roleRegistry);
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_constructorAddresses.priorityWithdrawalQueue);
 
         maxAcceptableRebaseAprInBps = _maxAcceptableRebaseAprInBps;

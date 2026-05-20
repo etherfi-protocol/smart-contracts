@@ -9,6 +9,7 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import "./EtherFiRedemptionManager.sol";
+
 import "./utils/PausableUntil.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IStakingManager.sol";
@@ -17,6 +18,7 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/ILiquifier.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
+import "./interfaces/IEtherFiRedemptionManager.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
 import "./interfaces/IBlacklister.sol";
@@ -84,7 +86,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     IeETH public immutable eETH;
     IWithdrawRequestNFT public immutable withdrawRequestNFT;
     ILiquifier public immutable liquifier;
-    EtherFiRedemptionManager public immutable etherFiRedemptionManager;
+    IEtherFiRedemptionManager public immutable etherFiRedemptionManager;
     IRoleRegistry public immutable roleRegistry;
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
     IBlacklister public immutable blacklister;
@@ -171,7 +173,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         eETH = IeETH(_constructorAddresses.eETH);
         withdrawRequestNFT = IWithdrawRequestNFT(_constructorAddresses.withdrawRequestNFT);
         liquifier = ILiquifier(_constructorAddresses.liquifier);
-        etherFiRedemptionManager = EtherFiRedemptionManager(payable(_constructorAddresses.etherFiRedemptionManager));
+        etherFiRedemptionManager = IEtherFiRedemptionManager(payable(_constructorAddresses.etherFiRedemptionManager));
         roleRegistry = IRoleRegistry(_constructorAddresses.roleRegistry);
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_constructorAddresses.priorityWithdrawalQueue);
         blacklister = IBlacklister(_constructorAddresses.blacklister);

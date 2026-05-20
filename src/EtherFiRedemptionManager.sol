@@ -22,7 +22,7 @@ import "./EtherFiRestaker.sol";
 
 import "lib/BucketLimiter.sol";
 
-import "./RoleRegistry.sol";
+import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
 import "./interfaces/IBlacklister.sol";
 
@@ -48,8 +48,8 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
-    RoleRegistry public immutable roleRegistry;
     address public immutable treasury;
+    IRoleRegistry public immutable roleRegistry;
     IeETH public immutable eEth;
     IWeETH public immutable weEth;
     ILiquidityPool public immutable liquidityPool;
@@ -104,7 +104,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         maxExitFeeSplitToTreasuryInBps = _maxExitFeeSplitToTreasuryInBps;
         maxExitFeeInBps = _maxExitFeeInBps;
         maxLowWatermarkInBpsOfTvl = _maxLowWatermarkInBpsOfTvl;
-        roleRegistry = RoleRegistry(_roleRegistry);
+        roleRegistry = IRoleRegistry(_roleRegistry);
         treasury = _treasury;
         liquidityPool = ILiquidityPool(payable(_liquidityPool));
         eEth = IeETH(_eEth);

@@ -8,6 +8,7 @@ import "../../src/EtherFiNodesManager.sol";
 import "../../src/EtherFiNode.sol";
 import "../../src/EtherFiRateLimiter.sol";
 import "../../src/LiquidityPool.sol";
+import "../../src/RoleRegistry.sol";
 import "../../src/UUPSProxy.sol";
 import "../../src/AuctionManager.sol";
 import "../../src/EtherFiTimelock.sol";

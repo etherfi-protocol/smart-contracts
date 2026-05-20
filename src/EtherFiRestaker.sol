@@ -17,6 +17,8 @@ import "./eigenlayer-interfaces/IStrategyManager.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
 import "./eigenlayer-interfaces/IRewardsCoordinator.sol";
 
+import "./interfaces/ILiquifier.sol";
+import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IEtherFiRateLimiter.sol";
 
@@ -33,8 +35,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     address public immutable etherFiRedemptionManager;
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
-    LiquidityPool public immutable liquidityPool;
-    Liquifier public immutable liquifier;
+    ILiquidityPool public immutable liquidityPool;
+    ILiquifier public immutable liquifier;
     ILidoWithdrawalQueue public immutable lidoWithdrawalQueue;
     ILido public immutable lido;
     IDelegationManager public immutable eigenLayerDelegationManager;
@@ -92,8 +94,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         address _eigenLayerStrategyManager,
         address _eigenLayerDelegationManager
     ) {
-        liquidityPool = LiquidityPool(payable(_liquidityPool));
-        liquifier = Liquifier(payable(_liquifier));
+        liquidityPool = ILiquidityPool(payable(_liquidityPool));
+        liquifier = ILiquifier(payable(_liquifier));
         lido = liquifier.lido();
         lidoWithdrawalQueue = liquifier.lidoWithdrawalQueue();
         eigenLayerStrategyManager = IStrategyManager(_eigenLayerStrategyManager); 

@@ -6,6 +6,7 @@ import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
+import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IWithdrawRequestNFT.sol";
 import "./interfaces/IMembershipManager.sol";
 import "./interfaces/IBlacklister.sol";
@@ -83,7 +84,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     ILiquidityPool public immutable liquidityPool;
     IeETH public immutable eETH;
     IMembershipManager public immutable membershipManager;
-    RoleRegistry public immutable roleRegistry;
+    IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
     uint256 public immutable minAcceptableShareRate;
@@ -141,7 +142,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         membershipManager = IMembershipManager(_membershipManager);
-        roleRegistry = RoleRegistry(_roleRegistry);
+        roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
         etherFiAdmin = _etherFiAdmin;
         minAcceptableShareRate = _minAcceptableShareRate;

@@ -482,7 +482,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         etherFiRestakerInstance = EtherFiRestaker(payable(address(0x1B7a4C3797236A1C37f8741c0Be35c2c72736fFf)));
         cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(payable(0x9A8c5046a290664Bf42D065d33512fe403484534));
         weEthWithdrawAdapterInstance = IWeETHWithdrawAdapter(deployed.WEETH_WITHDRAW_ADAPTER());
-        etherFiRedemptionManagerInstance = liquidityPoolInstance.etherFiRedemptionManager();
+        etherFiRedemptionManagerInstance = EtherFiRedemptionManager(payable(address(liquidityPoolInstance.etherFiRedemptionManager())));
 
         // Upgrade the live RoleRegistry to the local impl so newly-added role
         // getters are reachable from any contract that is also being upgraded in this fork.
