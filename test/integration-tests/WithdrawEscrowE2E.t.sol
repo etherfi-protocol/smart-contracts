@@ -103,9 +103,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
             address(weEthInstance),
             address(roleRegistryInstance),
             treasuryInstance,
-            1 hours,
-            1,
-            4e18
+            1 hours
         );
         UUPSProxy proxy = new UUPSProxy(
             address(impl),
@@ -729,51 +727,5 @@ contract WithdrawEscrowE2ETest is TestSetup {
             "freeze: frozen rate >= live floor (ceiling rounding)");
         assertLe(uint256(frozenRate) - rateBefore, 1,
             "freeze: ceiling rounding adds at most 1 wei to the rate");
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  TEST 4: Share-rate freeze on mainnet — PriorityWithdrawalQueue
-    //  Post-fulfill negative rebase must not block the claim. Pre-freeze the
-    //  `amountForShares < amountWithFee` solvency check at the live rate could
-    //  trip; with the snapshot, the check uses the rate at fulfill instead.
-    // ══════════════════════════════════════════════════════════════════════════
-
-    function test_e2e_pq_freeze_negativeRebaseAfterFulfill_claimSucceeds() public {
-        uint96 depositAmt  = 20 ether;
-        uint96 withdrawAmt = 5 ether;
-
-        LpSnap memory baseLp = _snapLp();
-        _pq_step1_deposit(vipUser, depositAmt, baseLp, eETHInstance.totalShares());
-
-        IPriorityWithdrawalQueue.WithdrawRequest memory req =
-            _pq_step2_request(vipUser, withdrawAmt);
-
-        _pq_step3_fulfill(withdrawAmt, req);
-
-        // Fulfillment snapshot recorded for this request.
-        bytes32 reqId = pQueue.getRequestId(req);
-        uint224 frozenRate = pQueue.fulfillmentRate(reqId);
-        assertGt(frozenRate, 0, "freeze: fulfillment rate recorded");
-
-        // Drop the live rate sharply enough that the pre-freeze
-        // `liquidityPool.amountForShare(shareOfEEth) < amountWithFee` revert would trigger.
-        uint256 totalPooled = liquidityPoolInstance.getTotalPooledEther();
-        int128 slash = -int128(uint128(totalPooled / 10)); // ~10% slash
-        vm.prank(liquidityPoolInstance.membershipManager());
-        liquidityPoolInstance.rebase(slash);
-
-        // Live solvency check would fail, but the frozen rate covers it.
-        uint256 liveAmountForShares = liquidityPoolInstance.amountForShare(req.shareOfEEth);
-        assertLt(liveAmountForShares, req.amountWithFee,
-            "freeze: sanity - live solvency check would fail post-slash");
-
-        // Claim succeeds via the frozen rate, user receives full amountWithFee.
-        uint256 userEthPre = vipUser.balance;
-        vm.prank(vipUser);
-        pQueue.claimWithdraw(req);
-        assertEq(vipUser.balance - userEthPre, req.amountWithFee,
-            "freeze: PQ payout equals amountWithFee despite post-fulfill slash");
-        assertFalse(pQueue.requestExists(reqId), "freeze: PQ request removed after claim");
-        assertEq(pQueue.fulfillmentRate(reqId), 0, "freeze: PQ snapshot cleared on claim");
     }
 }

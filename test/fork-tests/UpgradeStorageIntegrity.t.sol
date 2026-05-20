@@ -411,7 +411,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         ));
         address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN, 1, 4e18));
         address newPQ = address(new PriorityWithdrawalQueue(
-            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, TREASURY, 1 hours, 1, 4e18
+            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, TREASURY, 1 hours
         ));
 
         vm.prank(UPGRADE_TIMELOCK);

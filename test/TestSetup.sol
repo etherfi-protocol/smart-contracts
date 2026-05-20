@@ -501,7 +501,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         roleRegistryInstance.grantRole(_blacklisterRole, _roleRegOwner);
 
         // Deploy PriorityWithdrawalQueue for fork testing (mainnet LP has immutable address(0) for this)
-        PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours, 1, 4e18);
+        PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
         UUPSProxy priorityQueueProxy = new UUPSProxy(
             address(priorityQueueImplementation),
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
@@ -979,7 +979,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(roleRegistryInstance),
             address(treasuryInstance),
             1 hours
-        , 1, 4e18);
+        );
         priorityQueueInstance.upgradeToAndCall(
             address(priorityQueueImplementation),
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
@@ -1300,7 +1300,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             // upgrade our existing contracts to utilize `roleRegistry`
             vm.stopPrank();
             vm.startPrank(owner);
-            PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours, 1, 4e18);
+            PriorityWithdrawalQueue priorityQueueImplementation = new PriorityWithdrawalQueue(address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance), address(roleRegistryInstance), address(treasuryInstance), 1 hours);
             UUPSProxy priorityQueueProxy = new UUPSProxy(
                 address(priorityQueueImplementation),
                 abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
