@@ -78,7 +78,7 @@ contract LiquifierTest is TestSetup {
         stEth.submit{value: amount + 1 ether}(address(0));
         stEth.approve(address(liquifierInstance), amount);
 
-        vm.expectRevert("CAPPED");
+        vm.expectRevert(Liquifier.Capped.selector);
         liquifierInstance.depositWithERC20(address(stEth), amount, address(0));
 
         vm.stopPrank();
@@ -235,7 +235,7 @@ contract LiquifierTest is TestSetup {
 
         vm.startPrank(l1SyncPool);
         dummyToken.approve(address(liquifierInstance), _x);
-        vm.expectRevert("NOT_ALLOWED");
+        vm.expectRevert(Liquifier.NotAllowed.selector);
         liquifierInstance.depositWithERC20(address(randomToken), _x, address(0));
         vm.stopPrank();
     }
@@ -250,7 +250,7 @@ contract LiquifierTest is TestSetup {
 
         vm.startPrank(alice);
         dummyToken.approve(address(liquifierInstance), _x);
-        vm.expectRevert("NOT_ALLOWED");
+        vm.expectRevert(Liquifier.NotAllowed.selector);
         liquifierInstance.depositWithERC20(address(dummyToken), _x, address(0));
         vm.stopPrank();
     }

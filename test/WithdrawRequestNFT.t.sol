@@ -108,7 +108,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         bool requestIsFinalized = withdrawRequestNFTInstance.isFinalized(requestId);
         assertFalse(requestIsFinalized, "Request should not be finalized");
 
-        vm.expectRevert("Request is not finalized");
+        vm.expectRevert(WithdrawRequestNFT.RequestNotFinalized.selector);
         vm.prank(bob);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
     }
@@ -128,7 +128,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.prank(bob);
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, amountOfEEth);
 
-        vm.expectRevert("Not the owner of the NFT");
+        vm.expectRevert(WithdrawRequestNFT.NotTheOwner.selector);
         vm.prank(alice);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
     }
@@ -302,7 +302,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertTrue(withdrawRequestNFTInstance.isValid(requestId), "Request should be valid");
 
         vm.prank(admin);
-        vm.expectRevert("Cannot invalidate finalized request");
+        vm.expectRevert(WithdrawRequestNFT.CannotInvalidateFinalizedRequest.selector);
         withdrawRequestNFTInstance.invalidateRequest(requestId);
 
         assertTrue(withdrawRequestNFTInstance.isValid(requestId), "Request must remain valid after rejected invalidation");
@@ -572,7 +572,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         
         // Verify cannot transfer invalid request
         vm.prank(recipient);
-        vm.expectRevert("INVALID_REQUEST");
+        vm.expectRevert(WithdrawRequestNFT.InvalidRequest.selector);
         withdrawRequestNFTInstance.transferFrom(recipient, address(0xdead), requestId);
 
         // Owner can seize the invalidated request NFT
@@ -592,7 +592,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
 
         // Should revert before finalization
-        vm.expectRevert("Request is not finalized");
+        vm.expectRevert(WithdrawRequestNFT.RequestNotFinalized.selector);
         withdrawRequestNFTInstance.getClaimableAmount(requestId);
 
         _finalizeWithdrawalRequest(requestId);
@@ -682,7 +682,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Cannot validate already valid request
         vm.prank(admin);
-        vm.expectRevert("Request is valid");
+        vm.expectRevert(WithdrawRequestNFT.RequestValid.selector);
         withdrawRequestNFTInstance.validateRequest(requestId);
     }
 
@@ -745,7 +745,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.deal(address(liquidityPoolInstance), 0);
 
         vm.prank(admin);
-        vm.expectRevert("Request amount is greater than available liquidity");
+        vm.expectRevert(WithdrawRequestNFT.RequestAmountGreaterThanAvailableLiquidity.selector);
         withdrawRequestNFTInstance.validateRequest(reqA);
     }
 
@@ -813,7 +813,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Test invalid value (> 10000)
         vm.prank(withdrawRequestNFTInstance.owner());
-        vm.expectRevert("INVALID");
+        vm.expectRevert(WithdrawRequestNFT.InvalidShareRemainderSplit.selector);
         withdrawRequestNFTInstance.updateShareRemainderSplitToTreasuryInBps(10001);
 
         // Test non-owner cannot update
@@ -837,14 +837,14 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Cannot pause again
         vm.prank(admin);
-        vm.expectRevert("Pausable: already paused");
+        vm.expectRevert(WithdrawRequestNFT.AlreadyPaused.selector);
         withdrawRequestNFTInstance.pauseContract();
 
         // Cannot request withdraw when paused
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
         eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(WithdrawRequestNFT.ContractPaused.selector);
         liquidityPoolInstance.requestWithdraw(bob, 1 ether);
         vm.stopPrank();
     }
@@ -867,7 +867,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Cannot unpause again
         vm.prank(admin);
-        vm.expectRevert("Pausable: not paused");
+        vm.expectRevert(WithdrawRequestNFT.NotPaused.selector);
         withdrawRequestNFTInstance.unPauseContract();
     }
 
@@ -1188,7 +1188,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertTrue(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should be completed");
         
         // Cannot aggregate again after completion
-        vm.expectRevert("scan is completed");
+        vm.expectRevert(WithdrawRequestNFT.ScanCompleted.selector);
         withdrawRequestNFTInstance.aggregateSumEEthShareAmount(1);
     }
 
@@ -1341,7 +1341,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Cannot seize valid request
         vm.prank(withdrawRequestNFTInstance.owner());
-        vm.expectRevert("Request is valid");
+        vm.expectRevert(WithdrawRequestNFT.RequestValid.selector);
         withdrawRequestNFTInstance.seizeInvalidRequest(requestId, admin);
 
         // Invalidate first
@@ -1350,7 +1350,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Cannot seize non-existent request
         vm.prank(withdrawRequestNFTInstance.owner());
-        vm.expectRevert("Request does not exist");
+        vm.expectRevert(WithdrawRequestNFT.RequestNotFound.selector);
         withdrawRequestNFTInstance.seizeInvalidRequest(99999, admin);
 
         // Owner can seize invalid request
@@ -1391,12 +1391,12 @@ contract WithdrawRequestNFTTest is TestSetup {
 
             // Cannot handle zero amount
             vm.prank(admin);
-            vm.expectRevert("EETH amount cannot be 0");
+            vm.expectRevert(WithdrawRequestNFT.EETHAmountCannotBeZero.selector);
             withdrawRequestNFTInstance.handleRemainder(0);
 
             // Cannot handle more than available
             vm.prank(admin);
-            vm.expectRevert("Not enough eETH remainder");
+            vm.expectRevert(WithdrawRequestNFT.NotEnoughEEthRemainder.selector);
             withdrawRequestNFTInstance.handleRemainder(remainderAmount + 1);
 
             // Can handle partial amount
@@ -1429,7 +1429,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Cannot finalize future requests
         vm.prank(etherFiAdminAddr);
-        vm.expectRevert("Cannot finalize future requests");
+        vm.expectRevert(WithdrawRequestNFT.CannotFinalizeFutureRequests.selector);
         withdrawRequestNFTInstance.finalizeRequests(requestId + 100);
 
         // Finalize request
@@ -1438,7 +1438,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Cannot undo finalization
         vm.prank(etherFiAdminAddr);
-        vm.expectRevert("Cannot undo finalization");
+        vm.expectRevert(WithdrawRequestNFT.CannotUndoFinalization.selector);
         withdrawRequestNFTInstance.finalizeRequests(requestId - 1);
 
         // Non-admin cannot finalize — reverts with IncorrectRole() (not the legacy admin string).
@@ -1464,7 +1464,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Owner cannot transfer invalid request
         vm.prank(bob);
-        vm.expectRevert("INVALID_REQUEST");
+        vm.expectRevert(WithdrawRequestNFT.InvalidRequest.selector);
         withdrawRequestNFTInstance.transferFrom(bob, alice, requestId);
 
         // Contract owner can transfer invalid request
@@ -1497,7 +1497,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // Claim still blocked by the `isValid` check inside `_claimWithdraw`.
         vm.prank(bob);
-        vm.expectRevert("Request is not valid");
+        vm.expectRevert(WithdrawRequestNFT.RequestNotValid.selector);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
     }
 
@@ -1509,7 +1509,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     }
 
     function test_isValid_NonExistent() public {
-        vm.expectRevert("Request does not exist");
+        vm.expectRevert(WithdrawRequestNFT.RequestNotFound.selector);
         withdrawRequestNFTInstance.isValid(99999);
     }
 
@@ -1570,7 +1570,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.pauseContract();
 
         vm.prank(bob);
-        vm.expectRevert("Request is not finalized");
+        vm.expectRevert(WithdrawRequestNFT.RequestNotFinalized.selector);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
     }
 
@@ -1579,7 +1579,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         // NOT finalized, NOT paused (matches post-setUp state).
 
         vm.prank(bob);
-        vm.expectRevert("Request is not finalized");
+        vm.expectRevert(WithdrawRequestNFT.RequestNotFinalized.selector);
         withdrawRequestNFTInstance.claimWithdraw(requestId);
     }
 
@@ -1648,13 +1648,13 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         if (membershipMgr != address(0)) {
             vm.prank(membershipMgr);
-            vm.expectRevert("Pausable: paused");
+            vm.expectRevert(LiquidityPool.ContractPaused.selector);
             liquidityPoolInstance.withdraw(bob, 1 ether);
         }
 
         if (redemptionMgr != address(0)) {
             vm.prank(redemptionMgr);
-            vm.expectRevert("Pausable: paused");
+            vm.expectRevert(LiquidityPool.ContractPaused.selector);
             liquidityPoolInstance.withdraw(bob, 1 ether);
         }
     }
@@ -1772,7 +1772,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         liquidityPoolInstance.pauseContract();
 
         vm.prank(bob);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(LiquidityPool.ContractPaused.selector);
         liquidityPoolInstance.requestWithdraw(bob, 1 ether);
     }
 
@@ -1782,7 +1782,7 @@ contract WithdrawRequestNFTTest is TestSetup {
         assertTrue(withdrawRequestNFTInstance.isFinalized(requestId));
 
         vm.prank(admin);
-        vm.expectRevert("Cannot invalidate finalized request");
+        vm.expectRevert(WithdrawRequestNFT.CannotInvalidateFinalizedRequest.selector);
         withdrawRequestNFTInstance.invalidateRequest(requestId);
 
         // Still valid & claimable after the rejected invalidate attempt.
@@ -1817,7 +1817,7 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         // r1 == lastFinalizedRequestId → cannot invalidate.
         vm.prank(admin);
-        vm.expectRevert("Cannot invalidate finalized request");
+        vm.expectRevert(WithdrawRequestNFT.CannotInvalidateFinalizedRequest.selector);
         withdrawRequestNFTInstance.invalidateRequest(r1);
 
         // r2 == lastFinalizedRequestId + 1 → can invalidate.

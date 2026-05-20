@@ -731,7 +731,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_deopsitToRecipient_by_rando_fails() public {
         vm.startPrank(alice);
-        vm.expectRevert("Incorrect Caller");
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
         liquidityPoolInstance.depositToRecipient(alice, 100 ether, address(0));
         vm.stopPrank();
     }
@@ -824,9 +824,9 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_DepositFromMembershipManagerFailsIfNotMembershipManager() public {
         vm.deal(alice, 10 ether);
-        
+
         vm.startPrank(alice);
-        vm.expectRevert("Incorrect Caller");
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
         liquidityPoolInstance.deposit{value: 5 ether}(alice, bob);
         vm.stopPrank();
     }
@@ -854,10 +854,10 @@ contract LiquidityPoolTest is TestSetup {
     function test_DepositWhenPausedFails() public {
         vm.prank(admin);
         liquidityPoolInstance.pauseContract();
-        
+
         vm.deal(alice, 10 ether);
         vm.startPrank(alice);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(LiquidityPool.ContractPaused.selector);
         liquidityPoolInstance.deposit{value: 5 ether}();
         vm.stopPrank();
     }
@@ -973,7 +973,7 @@ contract LiquidityPoolTest is TestSetup {
     function test_WithdrawFailsIfNotAuthorizedCaller() public {
         vm.deal(alice, 10 ether);
         vm.startPrank(alice);
-        vm.expectRevert("Incorrect Caller");
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
         liquidityPoolInstance.withdraw(alice, 5 ether);
         vm.stopPrank();
     }
@@ -985,12 +985,12 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.pauseContract();
 
         vm.startPrank(address(membershipManagerInstance));
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(LiquidityPool.ContractPaused.selector);
         liquidityPoolInstance.withdraw(alice, 1 ether);
         vm.stopPrank();
 
         vm.startPrank(address(etherFiRedemptionManagerInstance));
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(LiquidityPool.ContractPaused.selector);
         liquidityPoolInstance.withdraw(alice, 1 ether);
         vm.stopPrank();
     }
@@ -1065,7 +1065,7 @@ contract LiquidityPoolTest is TestSetup {
         bidIds[0] = 1;
 
         vm.startPrank(bob);
-        vm.expectRevert("Incorrect Caller");
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
         liquidityPoolInstance.batchRegister(depositData, bidIds, address(0x1234));
         vm.stopPrank();
     }
@@ -1126,7 +1126,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_UnregisterValidatorSpawnerFailsIfNotRegistered() public {
         vm.startPrank(alice);
-        vm.expectRevert("Not registered");
+        vm.expectRevert(LiquidityPool.NotRegistered.selector);
         liquidityPoolInstance.unregisterValidatorSpawner(bob);
         vm.stopPrank();
     }
@@ -1473,7 +1473,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_UnregisterValidatorSpawnerWhenNotRegistered() public {
         vm.startPrank(alice);
-        vm.expectRevert("Not registered");
+        vm.expectRevert(LiquidityPool.NotRegistered.selector);
         liquidityPoolInstance.unregisterValidatorSpawner(bob);
         vm.stopPrank();
     }
@@ -1942,7 +1942,7 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT counter not set by migration");
 
         // Idempotency guard.
-        vm.expectRevert(bytes("already migrated"));
+        vm.expectRevert(LiquidityPool.AlreadyMigrated.selector);
         vm.prank(ownerAddr);
         liquidityPoolInstance.initializeOnUpgradeV2();
     }
@@ -2230,14 +2230,14 @@ contract LiquidityPoolTest is TestSetup {
 
         // addEthAmountLockedForWithdrawal must revert with "migration not complete".
         vm.prank(address(etherFiAdminInstance));
-        vm.expectRevert(bytes("migration not complete"));
+        vm.expectRevert(LiquidityPool.MigrationNotComplete.selector);
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(1 ether);
 
         // transferLockedEthForPriority must also revert before migration completes.
         // Prank as the priorityWithdrawalQueue (LP's immutable) so the caller check
         // passes and we reach the migration guard.
         vm.prank(address(liquidityPoolInstance.priorityWithdrawalQueue()));
-        vm.expectRevert(bytes("migration not complete"));
+        vm.expectRevert(LiquidityPool.MigrationNotComplete.selector);
         liquidityPoolInstance.transferLockedEthForPriority(1 ether);
     }
 

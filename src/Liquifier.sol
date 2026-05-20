@@ -139,6 +139,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error InvalidL1SyncPool();
     error StalePriceFeed();
     error InvalidStEthPrice();
+    error NotAllowed();
+    error Capped();
 
     struct ConstructorAddresses {
         address liquidityPool;
@@ -202,7 +204,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
     /// If the token is l2Eth, only the l2SyncPool can call this function
     function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant nonBlacklisted returns (uint256) {        
-        require(isTokenWhitelisted(_token) && (!tokenInfos[_token].isL2Eth || msg.sender == l1SyncPool), "NOT_ALLOWED");
+        if (!isTokenWhitelisted(_token) || (tokenInfos[_token].isL2Eth && msg.sender != l1SyncPool)) revert NotAllowed();
 
         // Measure actual amount received to handle stETH's 1-2 wei rounding issue
         uint256 amountReceived;
@@ -220,7 +222,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
     
         uint256 dx = quoteByDiscountedValue(_token, amountReceived);
-        require(!isDepositCapReached(_token, dx), "CAPPED");
+        if (isDepositCapReached(_token, dx)) revert Capped();
 
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, dx, _referral);
 

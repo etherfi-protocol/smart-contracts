@@ -43,7 +43,7 @@ contract NodeOperatorManagerTest is TestSetup {
         assertEq(nodeOperatorManagerInstance.registered(alice), true);
         assertEq(nodeOperatorManagerInstance.isWhitelisted(alice), true);
 
-        vm.expectRevert("Already registered");
+        vm.expectRevert(NodeOperatorManager.AlreadyRegistered.selector);
         nodeOperatorManagerInstance.registerNodeOperator(
             aliceIPFS_Hash,
             uint64(10)
@@ -98,7 +98,7 @@ contract NodeOperatorManagerTest is TestSetup {
         assertEq(nodeOperatorManagerInstance.registered(bob), true);
 
         vm.prank(owner);
-        vm.expectRevert("Already registered");
+        vm.expectRevert(NodeOperatorManager.AlreadyRegistered.selector);
         nodeOperatorManagerInstance.initializeOnUpgrade(
             operators,
             hashes,
@@ -182,7 +182,7 @@ contract NodeOperatorManagerTest is TestSetup {
         auctionInstance.createBid{value: 0.2 ether}(2, 0.1 ether);
         vm.stopPrank();
 
-        vm.expectRevert("Only auction manager contract function");
+        vm.expectRevert(NodeOperatorManager.IncorrectCaller.selector);
         vm.prank(alice);
         nodeOperatorManagerInstance.fetchNextKeyIndex(alice);
     }
@@ -223,10 +223,10 @@ contract NodeOperatorManagerTest is TestSetup {
         nodeOperatorManagerInstance.batchUpdateOperatorsApprovedTags(users, approvedTags, approvals);
 
         vm.startPrank(alice);
-        vm.expectRevert("Invalid array lengths");
+        vm.expectRevert(NodeOperatorManager.InvalidArrayLengths.selector);
         nodeOperatorManagerInstance.batchUpdateOperatorsApprovedTags(users, approvedTags, incorrectApprovals);
 
-        vm.expectRevert("Invalid array lengths");
+        vm.expectRevert(NodeOperatorManager.InvalidArrayLengths.selector);
         nodeOperatorManagerInstance.batchUpdateOperatorsApprovedTags(incorrectUsers, approvedTags, approvals);
 
         nodeOperatorManagerInstance.batchUpdateOperatorsApprovedTags(users, approvedTags, approvals);

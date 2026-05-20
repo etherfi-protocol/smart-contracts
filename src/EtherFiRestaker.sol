@@ -75,6 +75,11 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     error NotRegistered();
     error WrongOutput();
     error IncorrectCaller();
+    error InsufficientBalance();
+    error NotTheOwner();
+    error AlreadyClaimed();
+    error AmountOverflowsUint64Gwei();
+    error WithdrawalRootNotFound();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
@@ -123,7 +128,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @param amount The amount of stETH to transfer
     function transferStETH(address recipient, uint256 amount) external {
         if(msg.sender != etherFiRedemptionManager) revert IncorrectCaller();
-        require(amount <= lido.balanceOf(address(this)), "EtherFiRestaker: Insufficient stETH balance");
+        if (amount > lido.balanceOf(address(this))) revert InsufficientBalance();
         IERC20(address(lido)).safeTransfer(recipient, amount);
     }
 
@@ -188,7 +193,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     function _withdrawEther() internal {
         uint256 amountToLiquidityPool = _min(address(this).balance, liquidityPool.totalValueOutOfLp());
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
-        require(sent, "ETH_SEND_TO_LIQUIDITY_POOL_FAILED");
+        if (!sent) revert EthTransferFailed();
     }
 
     // |--------------------------------------------------------------------------------------------|
@@ -272,7 +277,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
             /// so that the shares withdrawn from the specified strategies are sent to the caller
             receiveAsTokens[i] = true;
-            require(withdrawalRootsSet.remove(withdrawalRoot), "WITHDRAWAL_ROOT_NOT_FOUND");
+            if (!withdrawalRootsSet.remove(withdrawalRoot)) revert WithdrawalRootNotFound();
         }
 
         /// it will update the erc20 balances of this contract
@@ -372,8 +377,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
             uint256[] memory stEthWithdrawalRequestIds = lidoWithdrawalQueue.getWithdrawalRequests(address(this));
             ILidoWithdrawalQueue.WithdrawalRequestStatus[] memory statuses = lidoWithdrawalQueue.getWithdrawalStatus(stEthWithdrawalRequestIds);
             for (uint256 i = 0; i < statuses.length; i++) {
-                require(statuses[i].owner == address(this), "Not the owner");
-                require(!statuses[i].isClaimed, "Already claimed");
+                if (statuses[i].owner != address(this)) revert NotTheOwner();
+                if (statuses[i].isClaimed) revert AlreadyClaimed();
                 total += statuses[i].amountOfStETH;
             }
         }
@@ -397,7 +402,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// the bucket — prevents sub-gwei dust from bypassing the rate limiter.
     function _amountToGwei(uint256 amountWei) internal pure returns (uint64) {
         uint256 amountGwei = (amountWei + 1e9 - 1) / 1e9;
-        require(amountGwei <= type(uint64).max, "EtherFiRestaker: amount overflows uint64 gwei");
+        if (amountGwei > type(uint64).max) revert AmountOverflowsUint64Gwei();
         return uint64(amountGwei);
     }
 

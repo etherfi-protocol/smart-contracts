@@ -1086,7 +1086,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             _createWithdrawRequest(vipUser, 1 ether);
         batch[0] = r2;
         vm.prank(requestManager);
-        vm.expectRevert(bytes("SendFail"));
+        vm.expectRevert(LiquidityPool.SendFail.selector);
         priorityQueue.fulfillRequests(batch);
     }
 

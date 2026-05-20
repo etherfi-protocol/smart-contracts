@@ -109,10 +109,13 @@ contract PriorityWithdrawalQueue is
     error ArrayLengthMismatch();
     error AddressZero();
     error BadInput();
+    error IncorrectCaller();
     error InvalidBurnedSharesAmount();
     error InvalidEEthSharesAfterRemainderHandling();
     error InvalidOutputAmount();
     error InsufficientLiquidity();
+    error InsufficientEscrow();
+    error EthTransferFailed();
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
@@ -175,7 +178,7 @@ contract PriorityWithdrawalQueue is
     }
 
     receive() external payable {
-        require(msg.sender == address(liquidityPool), "Only LP");
+        if (msg.sender != address(liquidityPool)) revert IncorrectCaller();
         if (liquidityPool.escrowMigrationCompleted()) {
             ethAmountLockedForPriorityWithdrawal += uint128(msg.value);
         }
@@ -621,9 +624,9 @@ contract PriorityWithdrawalQueue is
         uint256 burnedShares = liquidityPool.withdraw(request.user, amountToWithdraw);
         if (burnedShares != sharesToBurn) revert InvalidBurnedSharesAmount();
 
-        require(address(this).balance >= amountToWithdraw, "Insufficient escrow");
+        if (address(this).balance < amountToWithdraw) revert InsufficientEscrow();
         (bool ok, ) = payable(request.user).call{value: amountToWithdraw}("");
-        require(ok, "ETH transfer failed");
+        if (!ok) revert EthTransferFailed();
 
         // Return fee ETH (amountOfEEth - amountWithFee) to LP to keep queue balance clean
         // and unwind the over-credited totalValueOutOfLp from fulfillRequests time.

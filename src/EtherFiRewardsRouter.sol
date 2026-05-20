@@ -22,6 +22,9 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     event Erc20Sent(address indexed caller, address indexed token, uint256 amount);
     event Erc721Sent(address indexed caller, address indexed token, uint256 tokenId);
 
+    error ContractBalanceIsZero();
+    error EthTransferFailed();
+
     constructor(address _liquidityPool, address _treasury, address _roleRegistry) {
         _disableInitializers();
         liquidityPool = _liquidityPool;
@@ -43,9 +46,9 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
         uint256 contractBalance = address(this).balance;
         uint256 totalValueOutOfLp = ILiquidityPool(payable(liquidityPool)).totalValueOutOfLp();
         uint256 balance = contractBalance < totalValueOutOfLp ? contractBalance : totalValueOutOfLp;
-        require(balance > 0, "Contract balance is zero");
+        if (balance == 0) revert ContractBalanceIsZero();
         (bool success, ) = liquidityPool.call{value: balance}("");
-        require(success, "TRANSFER_FAILED");
+        if (!success) revert EthTransferFailed();
         
         emit EthSent(address(this), liquidityPool, balance);
     }

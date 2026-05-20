@@ -25,6 +25,9 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     event Unpaused();
 
     error CannotRecoverEETH();
+    error AddressZero();
+    error ZeroAmount();
+    error ContractPaused();
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STORAGE  ----------------------------------
@@ -40,10 +43,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister) {
-        require(_eETH != address(0), "must set eETH");
-        require(_liquidityPool != address(0), "must set liquidity pool");
-        require(_roleRegistry != address(0), "must set role registry");
-        require(_blacklister != address(0), "must set blacklister");
+        if(_eETH == address(0) || _liquidityPool == address(0) || _roleRegistry == address(0) || _blacklister == address(0)) revert AddressZero();
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         roleRegistry = IRoleRegistry(_roleRegistry);
@@ -52,8 +52,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     }
 
     function initialize(address _liquidityPool, address _eETH) external initializer {
-        require(_liquidityPool != address(0), "No zero addresses");
-        require(_eETH != address(0), "No zero addresses");
+        if (_liquidityPool == address(0) || _eETH == address(0)) revert AddressZero();
 
         __ERC20_init("Wrapped eETH", "weETH");
         __ERC20Permit_init("Wrapped eETH");
@@ -70,7 +69,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     /// @param _eETHAmount the amount of eEth to wrap
     /// @return returns the amount of weEth the user receives
     function wrap(uint256 _eETHAmount) public returns (uint256) {
-        require(_eETHAmount > 0, "weETH: can't wrap zero eETH");
+        if (_eETHAmount == 0) revert ZeroAmount();
         uint256 weEthAmount = liquidityPool.sharesForAmount(_eETHAmount);
         _mint(msg.sender, weEthAmount);
         eETH.transferFrom(msg.sender, address(this), _eETHAmount);
@@ -92,7 +91,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     /// @param _weETHAmount the amount of weETH to unwrap
     /// @return returns the amount of eEth the user receives
     function unwrap(uint256 _weETHAmount) external returns (uint256) {
-        require(_weETHAmount > 0, "Cannot unwrap a zero amount");
+        if (_weETHAmount == 0) revert ZeroAmount();
         uint256 eETHAmount = liquidityPool.amountForShare(_weETHAmount);
         _burn(msg.sender, _weETHAmount);
         eETH.transfer(msg.sender, eETHAmount);
@@ -149,7 +148,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         address to,
         uint256 /* amount */
     ) internal virtual override {
-        require(!paused, "PAUSED");
+        if (paused) revert ContractPaused();
         _requireNotPausedUntil();
         blacklister.nonBlacklisted(from);
         blacklister.nonBlacklisted(to);

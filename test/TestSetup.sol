@@ -931,9 +931,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.expectRevert("Initializable: contract is already initialized");
         weEthImplementation.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
         weEthInstance.upgradeTo(address(weEthImplementation));
-        vm.expectRevert("No zero addresses");
+        vm.expectRevert(WeETH.AddressZero.selector);
         weEthInstance.initialize(address(0), address(eETHProxy));
-        vm.expectRevert("No zero addresses");
+        vm.expectRevert(WeETH.AddressZero.selector);
         weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(0));
         weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
 

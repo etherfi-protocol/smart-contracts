@@ -18,7 +18,7 @@ contract WeETHTest is TestSetup {
     }
 
     function test_WrapEETHFailsIfZeroAmount() public {
-        vm.expectRevert("weETH: can't wrap zero eETH");
+        vm.expectRevert(WeETH.ZeroAmount.selector);
         weEthInstance.wrap(0);
     }
 
@@ -123,7 +123,7 @@ contract WeETHTest is TestSetup {
     }
 
     function test_UnWrapEETHFailsIfZeroAmount() public {
-        vm.expectRevert("Cannot unwrap a zero amount");
+        vm.expectRevert(WeETH.ZeroAmount.selector);
         weEthInstance.unwrap(0);
     }
 
@@ -531,7 +531,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert("PAUSED");
+        vm.expectRevert(WeETH.ContractPaused.selector);
         weEthInstance.wrap(1 ether);
     }
 
@@ -542,7 +542,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert("PAUSED");
+        vm.expectRevert(WeETH.ContractPaused.selector);
         weEthInstance.unwrap(0.5 ether);
     }
 
@@ -553,7 +553,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert("PAUSED");
+        vm.expectRevert(WeETH.ContractPaused.selector);
         weEthInstance.transfer(bob, 0.5 ether);
     }
 
