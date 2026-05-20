@@ -56,7 +56,7 @@ contract ValidatorKeyGenTransactions is Script {
     //--------------------------------------------------------------------------------------
     address constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
     address constant UPGRADE_ADMIN = 0xcdd57D11476c22d265722F68390b036f3DA48c21;
-    uint256 constant TIMELOCK_MIN_DELAY = 259200; // 72 hours
+    uint256 constant TIMELOCK_minDelay = 259200; // 72 hours
 
     LiquidityPool constant liquidityPool = LiquidityPool(payable(LIQUIDITY_POOL_PROXY));
     StakingManager constant stakingManager = StakingManager(STAKING_MANAGER_PROXY);
@@ -138,7 +138,7 @@ contract ValidatorKeyGenTransactions is Script {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            TIMELOCK_MIN_DELAY // minDelay
+            TIMELOCK_minDelay // minDelay
         );
 
         console2.log("Schedule Tx:");
@@ -163,9 +163,9 @@ contract ValidatorKeyGenTransactions is Script {
         // uncomment to run against fork
         console2.log("=== SCHEDULING BATCH ===");
         vm.startPrank(UPGRADE_ADMIN);
-        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, TIMELOCK_MIN_DELAY);
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, TIMELOCK_minDelay);
 
-        vm.warp(block.timestamp + TIMELOCK_MIN_DELAY + 1); // +1 to ensure it's past the delay
+        vm.warp(block.timestamp + TIMELOCK_minDelay + 1); // +1 to ensure it's past the delay
         etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
         vm.stopPrank();
 

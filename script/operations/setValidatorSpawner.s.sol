@@ -36,7 +36,7 @@ contract SetValidatorSpawnerScript is Script, Deployed, Utils {
         console2.log("Target:", targets[0]);
         console2.log("Validator Spawner:", VALIDATOR_SPAWNER);
         console2.log("Operating Timelock:", address(etherFiOperatingTimelock));
-        console2.log("Min Delay:", MIN_DELAY_OPERATING_TIMELOCK, "seconds (8 hours)");
+        console2.log("Min Delay:", minDelay_OPERATING_TIMELOCK, "seconds (8 hours)");
         console2.log("");
 
         // Generate schedule calldata
@@ -47,7 +47,7 @@ contract SetValidatorSpawnerScript is Script, Deployed, Utils {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
 
         console2.log("=== SCHEDULE CALLDATA ===");
@@ -111,12 +111,12 @@ contract SetValidatorSpawnerScript is Script, Deployed, Utils {
             data,
             bytes32(0),
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
         console2.log("Scheduled successfully");
 
         // Fast forward time
-        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1);
+        vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1);
         console2.log("Time warped past delay");
 
         // Execute

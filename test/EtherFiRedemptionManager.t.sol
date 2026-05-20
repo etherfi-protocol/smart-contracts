@@ -91,7 +91,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     function test_exit_fee_guardrail() public {
         vm.startPrank(admin);
 
-        uint256 maxExitFee = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_IN_BPS();
+        uint256 maxExitFee = etherFiRedemptionManagerInstance.maxExitFeeInBps();
         assertEq(maxExitFee, 100); // configured in TestSetup
 
         // boundary value is accepted
@@ -108,7 +108,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     function test_exit_fee_split_to_treasury_guardrail() public {
         vm.startPrank(admin);
 
-        uint256 maxSplit = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS();
+        uint256 maxSplit = etherFiRedemptionManagerInstance.maxExitFeeSplitToTreasuryInBps();
         assertEq(maxSplit, 10_000); // configured in TestSetup
 
         // boundary value is accepted
@@ -123,9 +123,9 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     }
 
     function test_initializeTokenParameters_guardrails() public {
-        uint256 maxExitFee = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_IN_BPS();
-        uint256 maxSplit = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS();
-        uint256 maxLowWatermark = etherFiRedemptionManagerInstance.MAX_LOW_WATERMARK_IN_BPS_OF_TVL();
+        uint256 maxExitFee = etherFiRedemptionManagerInstance.maxExitFeeInBps();
+        uint256 maxSplit = etherFiRedemptionManagerInstance.maxExitFeeSplitToTreasuryInBps();
+        uint256 maxLowWatermark = etherFiRedemptionManagerInstance.maxLowWatermarkInBpsOfTvl();
 
         address[] memory tokens = new address[](1);
         tokens[0] = ETH_ADDRESS;

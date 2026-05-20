@@ -74,7 +74,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // ORACLE_OPERATIONS_ROLE (formerly ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE) is required by
         // EtherFiAdmin.executeValidatorApprovalTask.
         roleRegistryInstance.grantRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), ADMIN_EOA);
-        etherFiAdminInstance.updateMaxNumValidatorsToApprovePerDay(etherFiAdminInstance.MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY());
+        etherFiAdminInstance.updateMaxNumValidatorsToApprovePerDay(etherFiAdminInstance.maxAcceptableNumValidatorsToApprovePerDay());
         vm.stopPrank();
 
         // Handle any pending oracle report that hasn't been processed yet

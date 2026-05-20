@@ -39,11 +39,11 @@ These are **invalid findings**. The reviewer should not raise them, even as note
 
 ### 2.3 Configurable values assumed safe
 The reviewer should assume every configurable value is set to a value that does not cause harm. Do not flag findings of the form "if X is set to 0 / max / too tight / too loose, then bad thing happens." Specifically:
-- `STALE_PRICE_WINDOW`, `MAX_PRICE_DEVIATION_IN_BPS` (Liquifier)
-- `STALE_ORACLE_REPORT_BLOCK_WINDOW` (EtherFiAdmin) — set to ~2 weeks
+- `stalePriceWindow`, `maxPriceDeviationInBps` (Liquifier)
+- `staleOracleReportBlockWindow` (EtherFiAdmin) — set to ~2 weeks
 - `maxFinalizedWithdrawalAmountPerDay`, `maxNumValidatorsToApprovePerDay`
 - `acceptableRebaseAprInBps`, `protocolFeeBps`
-- `MIN_AMOUNT_FOR_SHARE`
+- `minAmountForShare`
 - `pauseUntilDuration` (8h–3d range)
 - `claimDelay` (CMRD)
 - `lowWatermarkInBpsOfTvl`, redemption-rate-limiter capacity/refill
@@ -109,7 +109,7 @@ These were flagged in an internal review and have been addressed, accepted, or a
 
 ### Liquifier / EtherFiRestaker / BucketRateLimiter
 - `quoteByMarketValue` divide-by-zero → already being fixed (§2.4.13).
-- `STALE_PRICE_WINDOW` ≈ heartbeat → configurable, will be set safely (§2.3).
+- `stalePriceWindow` ≈ heartbeat → configurable, will be set safely (§2.3).
 - `latestRoundData` ignoring `answeredInRound < roundId` → only flag if you can show a Chainlink-spec-conformant stale round bypasses other checks; otherwise it's defense-in-depth (note only).
 - `EtherFiRestaker` constructor reads `liquifier.lido()` → out of scope (deploy order, §2.1).
 - `tokenInfos[cbEth/wbEth].isWhitelisted = true` → intended (§2.4.11).
@@ -151,7 +151,7 @@ Focus your effort here. These are areas where a fresh, deep read is highest-valu
 - `WithdrawRequestNFT.claimWithdraw` under: negative rebase between request and finalize; partial finalize where request crosses the finalized boundary; claim by approved-operator vs owner.
 - `PriorityWithdrawalQueue` request → cancel → re-request → finalize sequencing. Off-by-one on queue indices. ETH stuck on cancel-after-finalize.
 - `_checkTotalValueInLp` placement: is it called after every state mutation that could violate it? Any path that mutates `totalValueInLp` or `address(this).balance` without the check?
-- `MIN_AMOUNT_FOR_SHARE` enforcement: every entrypoint that mints/burns shares — is it enforced? Bypassable via referral / membership / NFT-mediated mint?
+- `minAmountForShare` enforcement: every entrypoint that mints/burns shares — is it enforced? Bypassable via referral / membership / NFT-mediated mint?
 
 ### 5.4 eETH/weETH transfer hook composition
 - Pause check + blacklist check + share-math: confirm the order is (pause → blacklist → share-math) at every entrypoint and that no internal protocol mint/burn accidentally hits a user-level check it shouldn't.

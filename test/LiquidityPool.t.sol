@@ -2018,12 +2018,12 @@ contract LiquidityPoolTest is TestSetup {
     }
 
     // ============================================================================
-    // MIN_AMOUNT_FOR_SHARE Tests
+    // minAmountForShare Tests
     // ============================================================================
     //
     // The LiquidityPool now enforces a configurable floor on the eETH share-price.
     // After share-supply or pooled-ether changes, `_checkMinAmountForShare()` reverts
-    // with `InvalidAmountForShare` whenever `amountForShare(1 ether) < MIN_AMOUNT_FOR_SHARE`.
+    // with `InvalidAmountForShare` whenever `amountForShare(1 ether) < minAmountForShare`.
     // The check fires from: receive(), withdraw(), rebase(), burnEEthShares(),
     // burnEEthSharesForNonETHWithdrawal(), _deposit() (every external deposit*),
     // and _accountForEthSentOut() (validator-deposit flows).
@@ -2048,27 +2048,27 @@ contract LiquidityPoolTest is TestSetup {
     // --- immutable getter ---
 
     function test_minAmountForShare_default_is_zero_in_test_setup() public {
-        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0);
+        assertEq(liquidityPoolInstance.minAmountForShare(), 0);
     }
 
     function test_minAmountForShare_immutable_is_set_via_constructor() public {
         LiquidityPool fresh = new LiquidityPool(_lpCtorAddrs(address(0), address(blacklisterInstance)), 0.5 ether);
-        assertEq(fresh.MIN_AMOUNT_FOR_SHARE(), 0.5 ether);
+        assertEq(fresh.minAmountForShare(), 0.5 ether);
 
         LiquidityPool fresh2 = new LiquidityPool(_lpCtorAddrs(address(0), address(blacklisterInstance)), type(uint256).max);
-        assertEq(fresh2.MIN_AMOUNT_FOR_SHARE(), type(uint256).max);
+        assertEq(fresh2.minAmountForShare(), type(uint256).max);
     }
 
     function test_minAmountForShare_immutable_persists_through_upgrade() public {
         _upgradeLpWithMinAmount(0.75 ether);
-        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0.75 ether);
+        assertEq(liquidityPoolInstance.minAmountForShare(), 0.75 ether);
     }
 
     // --- with MIN = 0 (check effectively disabled) ---
 
     function test_minAmountForShare_zero_allows_empty_pool_operations() public {
         // amountForShare(1 ether) returns 0 when totalShares == 0; with MIN=0 the strict `<` is false.
-        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0);
+        assertEq(liquidityPoolInstance.minAmountForShare(), 0);
         assertEq(eETHInstance.totalShares(), 0);
 
         vm.deal(alice, 1 ether);
@@ -2240,11 +2240,11 @@ contract LiquidityPoolTest is TestSetup {
         // The two constructor params are independent and neither cross-contaminates the other.
         LiquidityPool a = new LiquidityPool(_lpCtorAddrs(address(0xBEEF), address(blacklisterInstance)), 1 ether);
         assertEq(address(a.priorityWithdrawalQueue()), address(0xBEEF));
-        assertEq(a.MIN_AMOUNT_FOR_SHARE(), 1 ether);
+        assertEq(a.minAmountForShare(), 1 ether);
 
         LiquidityPool b = new LiquidityPool(_lpCtorAddrs(address(0), address(blacklisterInstance)), 0);
         assertEq(address(b.priorityWithdrawalQueue()), address(0));
-        assertEq(b.MIN_AMOUNT_FOR_SHARE(), 0);
+        assertEq(b.minAmountForShare(), 0);
     }
 
     // --- fuzz: rebase boundary ---

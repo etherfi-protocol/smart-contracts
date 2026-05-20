@@ -169,7 +169,7 @@ contract LiquifierTest is TestSetup {
     }
 
     /// On realistic mainnet fork, the live stETH/ETH feed has a ~24h heartbeat
-    /// and may sit just past STALE_PRICE_WINDOW depending on fork-block timing
+    /// and may sit just past stalePriceWindow depending on fork-block timing
     /// (or after vm.warp). Pin it to a fresh, ~1:1 answer so deposits exercising
     /// the curve-quoting path don't revert with StalePriceFeed.
     function _mockFreshStEthFeed() internal {
@@ -637,7 +637,7 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.pauseContractUntil();
 
         vm.warp(block.timestamp + liquifierInstance.MAX_PAUSE_DURATION() + 1);
-        // Refresh after warp — pause window is days, well past STALE_PRICE_WINDOW.
+        // Refresh after warp — pause window is days, well past stalePriceWindow.
         _mockFreshStEthFeed();
 
         vm.prank(alice);
@@ -699,12 +699,12 @@ contract LiquifierTest is TestSetup {
 
     function test_constructor_acceptsMinDiscountAtScale() public {
         Liquifier impl = new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 10_000, 1 days, 500);
-        assertEq(impl.MIN_DISCOUNT_RATE_IN_BPS(), 10_000);
+        assertEq(impl.minDiscountRateInBps(), 10_000);
     }
 
     function test_constructor_storesMinDiscount() public {
         Liquifier impl = new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 250, 1 days, 500);
-        assertEq(impl.MIN_DISCOUNT_RATE_IN_BPS(), 250);
+        assertEq(impl.minDiscountRateInBps(), 250);
         assertEq(impl.BASIS_POINT_SCALE(), 10_000);
     }
 
@@ -726,8 +726,8 @@ contract LiquifierTest is TestSetup {
     function test_constructor_storesPriceFeedImmutables() public {
         Liquifier impl = new Liquifier(_ctorAddrs(address(1), address(2), address(3)), 250, 1 days, 500);
         assertEq(address(impl.stEthPriceFeed()), address(2));
-        assertEq(impl.STALE_PRICE_WINDOW(), 1 days);
-        assertEq(impl.MAX_PRICE_DEVIATION_IN_BPS(), 500);
+        assertEq(impl.stalePriceWindow(), 1 days);
+        assertEq(impl.maxPriceDeviationInBps(), 500);
     }
 
     function test_registerToken_revertsOnZeroDiscountRate() public {
@@ -758,7 +758,7 @@ contract LiquifierTest is TestSetup {
 
     function test_updateDiscountInBasisPoints_revertsBelowFloor() public {
         _setUp(MAINNET_FORK);
-        uint256 floor = liquifierInstance.MIN_DISCOUNT_RATE_IN_BPS();
+        uint256 floor = liquifierInstance.minDiscountRateInBps();
         assertGt(floor, 0);
 
         vm.prank(owner);
@@ -768,7 +768,7 @@ contract LiquifierTest is TestSetup {
 
     function test_updateDiscountInBasisPoints_acceptsAtFloor() public {
         _setUp(MAINNET_FORK);
-        uint256 floor = liquifierInstance.MIN_DISCOUNT_RATE_IN_BPS();
+        uint256 floor = liquifierInstance.minDiscountRateInBps();
 
         vm.prank(owner);
         liquifierInstance.updateDiscountInBasisPoints(address(stEth), uint16(floor));

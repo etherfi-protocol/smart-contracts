@@ -142,7 +142,7 @@ contract Configurations is Script, Utils {
             payloads,
             predecessor,
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
 
         console2.log("Scheduled Calldata Tx");
@@ -166,8 +166,8 @@ contract Configurations is Script, Utils {
         console2.log("");
 
         vm.startPrank(ETHERFI_OPERATING_ADMIN);
-        _operatingTimelock.scheduleBatch(targets, values, payloads, predecessor, timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
-        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1);
+        _operatingTimelock.scheduleBatch(targets, values, payloads, predecessor, timelockSalt, minDelay_OPERATING_TIMELOCK);
+        vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1);
         _operatingTimelock.executeBatch(targets, values, payloads, predecessor, timelockSalt);
 
         console2.log("Tx executed successfully");
@@ -202,7 +202,7 @@ contract Configurations is Script, Utils {
             payloads,
             predecessor,
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
         console2.log("Scheduled Calldata Tx (redelegate-only / part2)");
         console2.log("================================================");
@@ -225,8 +225,8 @@ contract Configurations is Script, Utils {
         console2.log("");
 
         vm.startPrank(ETHERFI_OPERATING_ADMIN);
-        _operatingTimelock.scheduleBatch(targets, values, payloads, predecessor, timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
-        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1);
+        _operatingTimelock.scheduleBatch(targets, values, payloads, predecessor, timelockSalt, minDelay_OPERATING_TIMELOCK);
+        vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1);
         _operatingTimelock.executeBatch(targets, values, payloads, predecessor, timelockSalt);
 
         console2.log("Tx executed successfully (redelegate-only / part2)");

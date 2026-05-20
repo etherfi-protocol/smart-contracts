@@ -90,7 +90,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     IBlacklister public immutable blacklister;
     address public immutable etherFiAdminContract;
     address public immutable membershipManager;
-    uint256 public immutable MIN_AMOUNT_FOR_SHARE;
+    uint256 public immutable minAmountForShare;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
@@ -177,7 +177,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         blacklister = IBlacklister(_constructorAddresses.blacklister);
         etherFiAdminContract = _constructorAddresses.etherFiAdminContract;
         membershipManager = _constructorAddresses.membershipManager;
-        MIN_AMOUNT_FOR_SHARE = _minAmountForShare;
+        minAmountForShare = _minAmountForShare;
         _disableInitializers();
     }
 
@@ -725,7 +725,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     function _checkMinAmountForShare() internal view {
-        if (amountForShare(1 ether) < MIN_AMOUNT_FOR_SHARE) revert InvalidAmountForShare();
+        if (amountForShare(1 ether) < minAmountForShare) revert InvalidAmountForShare();
     }
 
     function getImplementation() external view returns (address) {return _getImplementation();}

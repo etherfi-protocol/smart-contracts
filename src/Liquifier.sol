@@ -104,9 +104,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     address public immutable etherfiRestaker;
     address public immutable l1SyncPool;
 
-    uint256 public immutable MIN_DISCOUNT_RATE_IN_BPS;
-    uint256 public immutable STALE_PRICE_WINDOW;
-    uint256 public immutable MAX_PRICE_DEVIATION_IN_BPS;
+    uint256 public immutable minDiscountRateInBps;
+    uint256 public immutable stalePriceWindow;
+    uint256 public immutable maxPriceDeviationInBps;
 
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     // This event is deprecated. will be removed in the next release.
@@ -177,9 +177,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         blacklister = IBlacklister(_constructorAddresses.blacklister);
         etherfiRestaker = _constructorAddresses.etherfiRestaker;
         l1SyncPool = _constructorAddresses.l1SyncPool;
-        MIN_DISCOUNT_RATE_IN_BPS = _minDiscountInBasisPoints;
-        STALE_PRICE_WINDOW = _stalePriceWindow;
-        MAX_PRICE_DEVIATION_IN_BPS = _maxPriceDeviationInBps;
+        minDiscountRateInBps = _minDiscountInBasisPoints;
+        stalePriceWindow = _stalePriceWindow;
+        maxPriceDeviationInBps = _maxPriceDeviationInBps;
         _disableInitializers();
     }
 
@@ -260,7 +260,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
     
     function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyUpgradeTimelock {
-        if (_discountInBasisPoints < MIN_DISCOUNT_RATE_IN_BPS || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
+        if (_discountInBasisPoints < minDiscountRateInBps || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
             if (_token == address(0) || _target != address(0)) revert();
@@ -277,7 +277,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyAdmin {
-        if (_discountInBasisPoints < MIN_DISCOUNT_RATE_IN_BPS || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
+        if (_discountInBasisPoints < minDiscountRateInBps || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
     }
 
@@ -352,10 +352,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
                 // via stETH will be blocked until it stablises (either because of underlying lido solvency/liquidity issue or oracle manipulation)
                 (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
                 if (answer <= 0) revert InvalidPriceFeed();
-                if (updatedAt + STALE_PRICE_WINDOW < block.timestamp) revert StalePriceFeed();
+                if (updatedAt + stalePriceWindow < block.timestamp) revert StalePriceFeed();
                 uint256 pricefeedValue = (uint256(answer) * _amount) / 1e18;
                 uint256 deviation = pricefeedValue > _marketValue ? pricefeedValue - _marketValue : _marketValue - pricefeedValue;
-                if (deviation * BASIS_POINT_SCALE / _marketValue > MAX_PRICE_DEVIATION_IN_BPS) revert InvalidStEthPrice();
+                if (deviation * BASIS_POINT_SCALE / _marketValue > maxPriceDeviationInBps) revert InvalidStEthPrice();
             } else {
                 _marketValue = _amount; /// 1:1 from stETH to eETH
             }

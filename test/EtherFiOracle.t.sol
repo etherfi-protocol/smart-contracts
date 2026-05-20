@@ -953,7 +953,7 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_setValidatorTaskBatchSize_guardrail() public {
-        uint256 maxBatchSize = etherFiAdminInstance.MAX_VALIDATOR_TASK_BATCH_SIZE();
+        uint256 maxBatchSize = etherFiAdminInstance.maxValidatorTaskBatchSize();
         assertEq(maxBatchSize, 1_000); // configured in TestSetup
 
         // boundary value is accepted
@@ -967,7 +967,7 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_updateAcceptableRebaseApr_guardrail() public {
-        int256 maxApr = etherFiAdminInstance.MAX_ACCEPTABLE_REBASE_APR_IN_BPS();
+        int256 maxApr = etherFiAdminInstance.maxAcceptableRebaseAprInBps();
         assertEq(maxApr, 10_000); // configured in TestSetup
 
         // boundary value is accepted
@@ -1002,7 +1002,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_constructor_maxValidatorTaskBatchSize_guardrail() public {
         EtherFiAdmin nonZeroValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500);
-        assertEq(nonZeroValue.MAX_VALIDATOR_TASK_BATCH_SIZE(), 1_000);
+        assertEq(nonZeroValue.maxValidatorTaskBatchSize(), 1_000);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidValidatorTaskBatchSize.selector);
@@ -1011,7 +1011,7 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_constructor_maxAcceptableRebaseAprInBps_guardrail() public {
         EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500);
-        assertEq(validValue.MAX_ACCEPTABLE_REBASE_APR_IN_BPS(), 500);
+        assertEq(validValue.maxAcceptableRebaseAprInBps(), 500);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
@@ -1028,26 +1028,26 @@ contract EtherFiOracleTest is TestSetup {
 
     function test_constructor_staleOracleReportBlockWindow_guardrail() public {
         EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500);
-        assertEq(validValue.STALE_ORACLE_REPORT_BLOCK_WINDOW(), 7200);
+        assertEq(validValue.staleOracleReportBlockWindow(), 7200);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidStaleOracleReportBlockWindow.selector);
         new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 0, 100_000 ether, 500);
     }
 
-    function test_constructor_maxFinalizedWithdrawalAmountPerDay_guardrail() public {
+    function test_constructor_maxAcceptableFinalizedWithdrawalAmountPerDay_guardrail() public {
         EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500);
-        assertEq(validValue.MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY(), 100_000 ether);
+        assertEq(validValue.maxAcceptableFinalizedWithdrawalAmountPerDay(), 100_000 ether);
 
         // value 0 reverts
-        vm.expectRevert(EtherFiAdmin.InvalidMaxFinalizedWithdrawalAmountPerDay.selector);
+        vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableFinalizedWithdrawalAmount.selector);
         new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 0, 500);
     }
 
-    function test_constructor_maxNumValidatorsToApprovePerDay_zero_is_allowed() public {
-        // _maxNumValidatorsToApprovePerDay = 0 is allowed (signals "pause new validators")
+    function test_constructor_maxAcceptableNumValidatorsToApprovePerDay_zero_is_allowed() public {
+        // _maxAcceptableNumValidatorsToApprovePerDay = 0 signals "pause new validators"
         EtherFiAdmin zeroAllowed = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 0);
-        assertEq(zeroAllowed.MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY(), 0);
+        assertEq(zeroAllowed.maxAcceptableNumValidatorsToApprovePerDay(), 0);
     }
 
     function test_executeValidatorApprovalTask() public {
@@ -2037,7 +2037,7 @@ contract EtherFiOracleTest is TestSetup {
     // ========== EtherFiAdmin finalizeWithdrawalsWhenStale Tests ==========
 
     // Permissionless escape hatch that lets anyone finalize pending withdrawal
-    // requests once the oracle has gone silent for STALE_ORACLE_REPORT_BLOCK_WINDOW
+    // requests once the oracle has gone silent for staleOracleReportBlockWindow
     // blocks. Walks pending requests in order, skips invalidated ones, stops
     // when LP balance can't cover the next valid request, and only commits if
     // it accumulated something to lock.
@@ -2085,23 +2085,23 @@ contract EtherFiOracleTest is TestSetup {
         vm.deal(address(liquidityPoolInstance), uint256(target));
     }
 
-    // Roll forward until block.number == lastHandledReportRefBlock + STALE_ORACLE_REPORT_BLOCK_WINDOW
+    // Roll forward until block.number == lastHandledReportRefBlock + staleOracleReportBlockWindow
     // (the boundary at which the staleness check first passes).
     function _advanceToStaleBoundary() internal {
         uint256 staleAt = uint256(etherFiAdminInstance.lastHandledReportRefBlock())
-            + etherFiAdminInstance.STALE_ORACLE_REPORT_BLOCK_WINDOW();
+            + etherFiAdminInstance.staleOracleReportBlockWindow();
         if (block.number < staleAt) {
             _moveClock(int256(staleAt - block.number));
         }
     }
 
     // Reverts when the last report is still fresh — block.number sits below
-    // lastHandledReportRefBlock + STALE_ORACLE_REPORT_BLOCK_WINDOW. With both
+    // lastHandledReportRefBlock + staleOracleReportBlockWindow. With both
     // fields at zero post-setup, we're trivially fresh.
     function test_finalizeWithdrawalsWhenStale_revertsWhenNotStale() public {
         // setUp() rolls to block 0; lastHandledReportRefBlock is 0; stale
         // window is 7200, so 0 < 7200 → not stale.
-        assertLt(block.number, etherFiAdminInstance.STALE_ORACLE_REPORT_BLOCK_WINDOW());
+        assertLt(block.number, etherFiAdminInstance.staleOracleReportBlockWindow());
 
         vm.expectRevert(EtherFiAdmin.OracleReportNotStale.selector);
         etherFiAdminInstance.finalizeWithdrawalsWhenStale();
@@ -2110,7 +2110,7 @@ contract EtherFiOracleTest is TestSetup {
     // One block before the staleness boundary still reverts; the check uses
     // strict `<`.
     function test_finalizeWithdrawalsWhenStale_revertsOneBlockBeforeStaleBoundary() public {
-        uint256 staleWindow = etherFiAdminInstance.STALE_ORACLE_REPORT_BLOCK_WINDOW();
+        uint256 staleWindow = etherFiAdminInstance.staleOracleReportBlockWindow();
         _moveClock(int256(staleWindow - 1));
         assertEq(block.number, staleWindow - 1);
 
@@ -2118,13 +2118,13 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.finalizeWithdrawalsWhenStale();
     }
 
-    // At exactly lastHandledReportRefBlock + STALE_ORACLE_REPORT_BLOCK_WINDOW
+    // At exactly lastHandledReportRefBlock + staleOracleReportBlockWindow
     // the report is considered stale and the staleness check passes. With no
     // pending requests we then revert with NoWithdrawalsToFinalize — proving
     // we cleared the freshness check.
     function test_finalizeWithdrawalsWhenStale_succeedsAtExactStaleBoundary() public {
         _advanceToStaleBoundary();
-        assertEq(block.number, etherFiAdminInstance.STALE_ORACLE_REPORT_BLOCK_WINDOW());
+        assertEq(block.number, etherFiAdminInstance.staleOracleReportBlockWindow());
 
         vm.expectRevert(EtherFiAdmin.NoWithdrawalsToFinalize.selector);
         etherFiAdminInstance.finalizeWithdrawalsWhenStale();
@@ -2147,7 +2147,7 @@ contract EtherFiOracleTest is TestSetup {
         assertLt(
             block.number,
             uint256(etherFiAdminInstance.lastHandledReportRefBlock())
-                + etherFiAdminInstance.STALE_ORACLE_REPORT_BLOCK_WINDOW()
+                + etherFiAdminInstance.staleOracleReportBlockWindow()
         );
 
         vm.expectRevert(EtherFiAdmin.OracleReportNotStale.selector);

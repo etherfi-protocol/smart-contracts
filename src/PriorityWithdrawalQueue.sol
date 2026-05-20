@@ -46,7 +46,7 @@ contract PriorityWithdrawalQueue is
     IWeETH public immutable weETH;
     IRoleRegistry public immutable roleRegistry;
     address public immutable treasury;
-    uint32 public immutable MIN_DELAY;
+    uint32 public immutable minDelay;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -172,7 +172,7 @@ contract PriorityWithdrawalQueue is
         weETH = IWeETH(_weETH);
         roleRegistry = IRoleRegistry(_roleRegistry);
         treasury = _treasury;
-        MIN_DELAY = _minDelay;
+        minDelay = _minDelay;
 
         _disableInitializers();
     }
@@ -287,7 +287,7 @@ contract PriorityWithdrawalQueue is
     function cancelWithdraw(
         WithdrawRequest calldata request
     ) external whenNotPaused onlyRequestUser(request.user) nonReentrant returns (bytes32 requestId) {
-        if (request.creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
+        if (request.creationTime + minDelay > block.timestamp) revert NotMatured();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
         uint256 userEEthSharesBefore = eETH.shares(request.user);
 
@@ -305,7 +305,7 @@ contract PriorityWithdrawalQueue is
     ///      ETH delivery forwards gas to request.user, so third parties should avoid claiming for untrusted recipients.
     /// @param request The withdrawal request to claim
     function claimWithdraw(WithdrawRequest calldata request) external nonReentrant {
-        if (request.creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
+        if (request.creationTime + minDelay > block.timestamp) revert NotMatured();
 
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore, uint256 queueEthBefore) = _snapshotBalances();
         uint256 userEthBefore = request.user.balance;
@@ -321,7 +321,7 @@ contract PriorityWithdrawalQueue is
     /// @param requests Array of withdrawal requests to claim
     function batchClaimWithdraw(WithdrawRequest[] calldata requests) external nonReentrant {
         for (uint256 i = 0; i < requests.length; ++i) {
-            if (requests[i].creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
+            if (requests[i].creationTime + minDelay > block.timestamp) revert NotMatured();
             (uint256 lpEthBefore, uint256 queueEEthSharesBefore, uint256 queueEthBefore) = _snapshotBalances();
             uint256 userEthBefore = requests[i].user.balance;
             _claimWithdraw(requests[i]);
@@ -345,7 +345,7 @@ contract PriorityWithdrawalQueue is
             if (_finalizedRequests.contains(requestId)) revert RequestAlreadyFinalized();
             if (!_withdrawRequests.contains(requestId)) revert RequestNotFound();
 
-            uint256 earliestFulfillTime = request.creationTime + MIN_DELAY;
+            uint256 earliestFulfillTime = request.creationTime + minDelay;
             if (block.timestamp < earliestFulfillTime) revert NotMatured();
 
             _withdrawRequests.remove(requestId);

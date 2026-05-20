@@ -162,7 +162,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             creationTime: timestamp
         });
 
-        // Warp time past MIN_DELAY (1 hour) to allow fulfill/cancel/claim operations
+        // Warp time past minDelay (1 hour) to allow fulfill/cancel/claim operations
         vm.warp(block.timestamp + 1 hours + 1);
         vm.roll(block.number + 1);
     }
@@ -241,7 +241,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertEq(priorityQueue.shareRemainderSplitToTreasuryInBps(), 10000);
 
         // Verify constants
-        assertEq(priorityQueue.MIN_DELAY(), 1 hours);
+        assertEq(priorityQueue.minDelay(), 1 hours);
         assertEq(priorityQueue.MIN_AMOUNT(), 0.01 ether);
     }
 
@@ -707,7 +707,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         });
         bytes32 requestId = keccak256(abi.encode(request));
 
-        // Try to fulfill immediately (should fail - not matured, MIN_DELAY = 1 hour)
+        // Try to fulfill immediately (should fail - not matured, minDelay = 1 hour)
         IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
         requests[0] = request;
 
@@ -715,7 +715,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.expectRevert(PriorityWithdrawalQueue.NotMatured.selector);
         priorityQueue.fulfillRequests(requests);
 
-        // Warp time past MIN_DELAY and try again
+        // Warp time past minDelay and try again
         vm.warp(block.timestamp + 1 hours + 1);
         vm.prank(requestManager);
         priorityQueue.fulfillRequests(requests);
@@ -2366,7 +2366,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.prank(alice);
         priorityQueue.addToWhitelist(user);
 
-        // Create the pending request (helper also warps past MIN_DELAY)
+        // Create the pending request (helper also warps past minDelay)
         (, request) = _createWithdrawRequest(user, amount);
 
         // Fulfill the request as the request manager

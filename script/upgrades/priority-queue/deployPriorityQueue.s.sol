@@ -17,7 +17,7 @@ contract DeployPriorityQueue is Script, Utils {
     address etherFiRedemptionManagerImpl;
     bytes32 commitHashSalt = hex"7fc5100aa09ac0c9236907fe0330a15cb0fda6f8";
     
-    uint32 constant MIN_DELAY = 1 hours; // TODO: Set appropriate min delay (e.g., 1 hours = 3600)
+    uint32 constant minDelay = 1 hours; // TODO: Set appropriate min delay (e.g., 1 hours = 3600)
 
     function dryRun() public view {
         console2.log("================================================");
@@ -30,7 +30,7 @@ contract DeployPriorityQueue is Script, Utils {
         console2.log("  _eETH:", EETH);
         console2.log("  _roleRegistry:", ROLE_REGISTRY);
         console2.log("  _treasury:", WITHDRAW_REQUEST_NFT_BUYBACK_SAFE);
-        console2.log("  _minDelay:", MIN_DELAY);
+        console2.log("  _minDelay:", minDelay);
         console2.log("");
 
         console2.log("Constructor Args for LiquidityPool:");
@@ -61,7 +61,7 @@ contract DeployPriorityQueue is Script, Utils {
                 WEETH,
                 ROLE_REGISTRY,
                 WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
-                MIN_DELAY
+                minDelay
             );
             bytes memory bytecode = abi.encodePacked(
                 type(PriorityWithdrawalQueue).creationCode,
