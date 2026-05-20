@@ -154,7 +154,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit Unpaused();
     }
 
-    function pauseContractUntil() external onlyGuardian {
+    function pauseContractUntil() external onlySuperGuardian {
         _pauseUntil();
     }
 
@@ -296,6 +296,11 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
     modifier onlyOperations() {
         roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlySuperGuardian() {
+        roleRegistry.onlySuperGuardian(msg.sender);
         _;
     }
 

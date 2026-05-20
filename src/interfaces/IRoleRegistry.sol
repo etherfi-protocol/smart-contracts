@@ -103,6 +103,13 @@ interface IRoleRegistry {
     function onlyOperatingMultisig(address account) external view;
 
     /**
+     * @notice Checks if an account is the super guardian
+     * @dev Reverts if the account is not the super guardian
+     * @param account The address to check
+     */
+    function onlySuperGuardian(address account) external view;
+
+    /**
      * @notice Checks if an account is the guardian
      * @dev Reverts if the account is not the guardian
      * @param account The address to check
@@ -120,6 +127,8 @@ interface IRoleRegistry {
     function OPERATION_TIMELOCK_ROLE() external view returns (bytes32);
 
     function OPERATION_MULTISIG_ROLE() external view returns (bytes32);
+
+    function SUPER_GUARDIAN_ROLE() external view returns (bytes32);
 
     function GUARDIAN_ROLE() external view returns (bytes32);
 

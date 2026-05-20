@@ -679,7 +679,7 @@ contract EETHTest is TestSetup {
     function _grantPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
         // pauseContractUntil → GUARDIAN_ROLE; unpauseContractUntil + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
-        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), pauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
@@ -706,7 +706,7 @@ contract EETHTest is TestSetup {
         _grantPauseUntilRoles();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         eETHInstance.pauseContractUntil();
 
         vm.prank(pauseUntilPauser);

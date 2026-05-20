@@ -17,6 +17,7 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     error OnlyUpgradeTimelock();
     error OnlyOperatingTimelock();
     error OnlyOperatingMultisig();
+    error OnlySuperGuardian();
     error OnlyGuardian();
     error OnlyRevokeAdmin();
     error InvalidRoleToRevoke();
@@ -104,6 +105,10 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
 
     function onlyOperatingMultisig(address account) public view {
         if (!hasRole(OPERATION_MULTISIG_ROLE, account)) revert OnlyOperatingMultisig();
+    }
+
+    function onlySuperGuardian(address account) public view {
+        if (!hasRole(SUPER_GUARDIAN_ROLE, account)) revert OnlySuperGuardian();
     }
 
     function onlyGuardian(address account) public view {
