@@ -98,14 +98,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     uint256 public constant MAX_WITHDRAW_AMOUNT = 1000 ether;
 
     //--------------------------------------------------------------------------------------
-    //-------------------------------------  ROLES  ---------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    bytes32 public constant LIQUIDITY_POOL_ADMIN_ROLE = keccak256("LIQUIDITY_POOL_ADMIN_ROLE");
-    bytes32 public constant LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE = keccak256("LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE");
-    bytes32 public constant LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = keccak256("LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE");
-
-    //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
@@ -386,7 +378,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256[] calldata _bidIds,
         address _etherFiNode
     ) external whenNotPaused nonReentrant {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_1(), msg.sender)) revert IncorrectRole();
 
         // liquidity pool supplies 1 eth per validator
         uint256 outboundEthAmountFromLp = 1 ether * _bidIds.length;
@@ -403,7 +395,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         bytes[] calldata _pubkeys,
         bytes[] calldata _signatures
     ) external whenNotPaused nonReentrant {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, msg.sender)) revert IncorrectRole();
+        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
         if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
         if (_validatorIds.length == 0 || _validatorIds.length != _pubkeys.length || _validatorIds.length != _signatures.length) revert InvalidArrayLengths();
 
@@ -446,7 +438,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         IStakingManager.DepositData[] calldata _depositData,
         uint256 _validatorSizeWei
     ) external whenNotPaused nonReentrant {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_1(), msg.sender)) revert IncorrectRole();
         if (_validatorSizeWei < 32 ether || _validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
@@ -461,16 +453,14 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @dev set the size of validators created when caling batchApproveRegistration().
     ///   In a future upgrade this will be a parameter to that call but was done like this to
     ///   to limit changes to other dependent contracts
-    function setValidatorSizeWei(uint256 _validatorSizeWei) external {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function setValidatorSizeWei(uint256 _validatorSizeWei) external onlyAdmin {
         if (_validatorSizeWei < 32 ether || _validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
         validatorSizeWei = _validatorSizeWei;
     }
 
     /// @notice The admin can register an address to become a BNFT holder
     /// @param _user The address of the Validator Spawner to register
-    function registerValidatorSpawner(address _user) public {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function registerValidatorSpawner(address _user) public onlyAdmin {
         require(!validatorSpawner[_user].registered, "Already registered");  
 
         validatorSpawner[_user] = ValidatorSpawner({registered: true});
@@ -480,9 +470,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /// @notice Removes a Validator Spawner
     /// @param _user the address of the Validator Spawner to remove
-    function unregisterValidatorSpawner(address _user) external {
+    function unregisterValidatorSpawner(address _user) external onlyOperations {
         require(validatorSpawner[_user].registered, "Not registered");
-        require(roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender), "Incorrect Caller");
 
         delete validatorSpawner[_user];
 
@@ -490,8 +479,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /// @notice Send the exit requests as the T-NFT holder of the LiquidityPool validators
-    function DEPRECATED_sendExitRequests(uint256[] calldata _validatorIds) external {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function DEPRECATED_sendExitRequests(uint256[] calldata _validatorIds) external onlyAdmin {
 
         for (uint256 i = 0; i < _validatorIds.length; i++) {
             emit ValidatorExitRequested(_validatorIds[i]);
@@ -518,15 +506,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /// @notice Set the fee recipient address
     /// @param _feeRecipient The address to set as the fee recipient
-    function setFeeRecipient(address _feeRecipient) external {
-        if (!roleRegistry.hasRole(LIQUIDITY_POOL_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function setFeeRecipient(address _feeRecipient) external onlyAdmin {
         feeRecipient = _feeRecipient;
         emit UpdatedFeeRecipient(_feeRecipient);
     }
 
     // Pauses the contract
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyOperations {
         if (paused) revert("Pausable: already paused");
 
         paused = true;
@@ -534,8 +520,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Unpauses the contract
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyOperations {
         if (!paused) revert("Pausable: not paused");
 
         paused = false;
@@ -543,20 +528,17 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Pauses contract until MAX_PAUSE_DURATION
-    function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContractUntil() external onlyGuardian {
         _pauseUntil();
     }
 
     // Unpauses contract from pauseUntil
-    function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
     /// @notice Sets the pause duration for the contract
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -741,6 +723,27 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);
+        _;
+    }
+
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
+        _;
+    }
+
+    modifier onlyEtherFiAdmin() {
+        if (msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
         _;
     }
 }

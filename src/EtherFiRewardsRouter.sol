@@ -16,15 +16,11 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     address public immutable liquidityPool;
     RoleRegistry public immutable roleRegistry;
 
-    bytes32 public constant ETHERFI_REWARDS_ROUTER_ADMIN_ROLE = keccak256("ETHERFI_REWARDS_ROUTER_ADMIN_ROLE");
-
     event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
     event UpdatedTreasury(address indexed treasury);
     event Erc20Sent(address indexed caller, address indexed token, uint256 amount);
     event Erc721Sent(address indexed caller, address indexed token, uint256 tokenId);
-
-    error IncorrectRole();
 
     constructor(address _liquidityPool, address _treasury, address _roleRegistry) {
         _disableInitializers();
@@ -54,23 +50,29 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
         emit EthSent(address(this), liquidityPool, balance);
     }
 
-    function recoverERC20(address _token, uint256 _amount) external {
-        if (!roleRegistry.hasRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-
+    function recoverERC20(address _token, uint256 _amount) external onlyOperations {
         IERC20(_token).safeTransfer(treasury, _amount);
 
         emit Erc20Sent(msg.sender, _token, _amount);
     }
 
-    function recoverERC721(address _token, uint256 _tokenId) external {
-        if (!roleRegistry.hasRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function recoverERC721(address _token, uint256 _tokenId) external onlyOperations {
 
         IERC721(_token).transferFrom(address(this), treasury, _tokenId);
 
         emit Erc721Sent(msg.sender, _token, _tokenId);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
-    function getImplementation() external view returns (address) {return _getImplementation();}
+    function getImplementation() external view returns (address) {
+        return _getImplementation();
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
 }

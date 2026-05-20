@@ -17,6 +17,27 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.updateMaxNumValidatorsToApprovePerDay(200);
     }
 
+    /// setReportStartSlot was removed from EtherFiOracle in the role-consolidation
+    /// refactor. Tests that need to set the start slot now write the storage
+    /// directly. `reportStartSlot` sits at slot 253 offset 12 (uint32, packed).
+    function _setReportStartSlot(uint32 newSlot) internal {
+        bytes32 cur = vm.load(address(etherFiOracleInstance), bytes32(uint256(253)));
+        uint256 mask = ~(uint256(0xffffffff) << 96);
+        uint256 newVal = (uint256(cur) & mask) | (uint256(newSlot) << 96);
+        vm.store(address(etherFiOracleInstance), bytes32(uint256(253)), bytes32(newVal));
+    }
+
+    /// updateLastPublishedBlockStamps was also removed. Write the two packed
+    /// uint32s (offsets 16 and 20 in slot 253) directly.
+    function _setLastPublishedBlockStamps(uint32 newRefSlot, uint32 newRefBlock) internal {
+        bytes32 cur = vm.load(address(etherFiOracleInstance), bytes32(uint256(253)));
+        uint256 mask = ~((uint256(0xffffffff) << 128) | (uint256(0xffffffff) << 160));
+        uint256 newVal = (uint256(cur) & mask)
+            | (uint256(newRefSlot) << 128)
+            | (uint256(newRefBlock) << 160);
+        vm.store(address(etherFiOracleInstance), bytes32(uint256(253)), bytes32(newVal));
+    }
+
     function test_addCommitteeMember() public {
         _moveClock(1024 + 2 * slotsPerEpoch);
 
@@ -279,8 +300,7 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(slotTo, 2 * 1024 - 1);
         assertEq(blockFrom, 1024);
 
-        vm.prank(owner);
-        etherFiOracleInstance.setReportStartSlot(1 * 1024 + 512);
+        _setReportStartSlot(1 * 1024 + 512);
 
         _moveClock(1 * 1024 + 512);
 
@@ -316,8 +336,7 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(blockFrom, 0);
 
         console.log(etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp));
-        vm.prank(owner);
-        etherFiOracleInstance.setReportStartSlot(1 * 1024 + 512);
+        _setReportStartSlot(1 * 1024 + 512);
 
         (slotFrom, slotTo, blockFrom) = etherFiOracleInstance.blockStampForNextReport();
         assertEq(slotFrom, 1 * 1024 + 512);
@@ -326,8 +345,7 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_report_start_slot() public {
-        vm.prank(owner);
-        etherFiOracleInstance.setReportStartSlot(2048);
+        _setReportStartSlot(2048);
 
         // note that the block timestamp starts from 1 (= slot 0) and the block number starts from 0
 
@@ -359,8 +377,7 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(reportAtSlot3071);
 
         // change startSlot to 3264
-        vm.prank(owner);
-        etherFiOracleInstance.setReportStartSlot(3264);
+        _setReportStartSlot(3264);
 
         // slot 3236
         _moveClock(100);
@@ -397,8 +414,8 @@ contract EtherFiOracleTest is TestSetup {
         // Owner performs manual operations to undo the published report
         vm.startPrank(owner);
         etherFiOracleInstance.unpublishReport(reportHash);
-        etherFiOracleInstance.updateLastPublishedBlockStamps(lastPublishedReportRefSlot, lastPublishedReportRefBlock);
         vm.stopPrank();
+        _setLastPublishedBlockStamps(uint32(lastPublishedReportRefSlot), uint32(lastPublishedReportRefBlock));
 
         assertEq(etherFiOracleInstance.lastPublishedReportRefSlot(), lastPublishedReportRefSlot);
         assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), lastPublishedReportRefBlock);
@@ -571,27 +588,9 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.executeTasks(reportAtPeriod2A);
     }
 
-    function test_all_pause() public {
-        vm.startPrank(admin);
-        bool isAdminPauser = roleRegistryInstance.hasRole(roleRegistryInstance.PROTOCOL_PAUSER(), admin);
-        bool isAdminUnpauser = roleRegistryInstance.hasRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin);
-
-        etherFiAdminInstance.pause(true, true, true, false, false, false);
-        etherFiAdminInstance.pause(true, true, true, false, false, false);
-        etherFiAdminInstance.pause(true, true, true, true, true, true);
-        etherFiAdminInstance.pause(true, true, true, true, true, true);
-        vm.stopPrank();
-
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
-        vm.prank(chad);
-        etherFiAdminInstance.unPause(false, false, false, false, false, false);
-
-        vm.startPrank(admin);
-        etherFiAdminInstance.unPause(false, false, false, true, true, true);
-        etherFiAdminInstance.unPause(true, true, true, true, true, true);
-        etherFiAdminInstance.unPause(true, true, true, true, true, true);
-        vm.stopPrank();
-    }
+    // test_all_pause removed: EtherFiAdmin.pause / unPause were deleted in the
+    // role-consolidation refactor. Per-contract pauseContract / unPauseContract
+    // calls are exercised in their own contract-specific tests.
 
     function test_report_earlier_than_last_admin_execution_fails() public {
         vm.prank(owner);
@@ -790,63 +789,14 @@ contract EtherFiOracleTest is TestSetup {
         assertTrue(genesisTime >= 0);
     }
 
-    function test_updateAdmin() public {
-        address newAdmin = address(0x1234);
-        bytes32 oracleAdminRole = etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE();
-
-        // updateAdmin replaced by RoleRegistry.grantRole / revokeRole
-        vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(oracleAdminRole, newAdmin);
-        assertTrue(roleRegistryInstance.hasRole(oracleAdminRole, newAdmin));
-
-        roleRegistryInstance.revokeRole(oracleAdminRole, newAdmin);
-        assertFalse(roleRegistryInstance.hasRole(oracleAdminRole, newAdmin));
-        vm.stopPrank();
-
-        // Non-owner cannot grant role
-        vm.prank(chad);
-        vm.expectRevert();
-        roleRegistryInstance.grantRole(oracleAdminRole, newAdmin);
-    }
-
     function test_getImplementation() public {
         address impl = etherFiOracleInstance.getImplementation();
         assertTrue(impl != address(0));
     }
 
-    function test_setReportStartSlot_edgeCases() public {
-        _moveClock(1024 + 2 * slotsPerEpoch);
-
-        // Test: start slot must be after last published report (if there is one)
-        // First submit a report
-        vm.prank(alice);
-        etherFiOracleInstance.submitReport(reportAtPeriod2A);
-        
-        // Try to set start slot to the same as last published report
-        vm.prank(owner);
-        vm.expectRevert("The start slot should be in the future");
-        etherFiOracleInstance.setReportStartSlot(reportAtPeriod2A.refSlotTo);
-
-        // Test: start slot must be at beginning of epoch
-        uint32 currentSlot = etherFiOracleInstance.computeSlotAtTimestamp(block.timestamp);
-        uint32 futureSlot = currentSlot + 100;
-        vm.prank(owner);
-        vm.expectRevert("The start slot should be at the beginning of the epoch");
-        etherFiOracleInstance.setReportStartSlot(futureSlot);
-
-        // Test: valid start slot
-        uint32 validSlot = ((futureSlot / 32) + 1) * 32;
-        // Ensure it's actually in the future
-        if (validSlot <= currentSlot) {
-            validSlot = ((currentSlot / 32) + 2) * 32;
-        }
-        // Also ensure it's after the last published report
-        if (validSlot <= reportAtPeriod2A.refSlotTo) {
-            validSlot = ((reportAtPeriod2A.refSlotTo / 32) + 1) * 32;
-        }
-        vm.prank(owner);
-        etherFiOracleInstance.setReportStartSlot(validSlot);
-    }
+    // test_setReportStartSlot_edgeCases removed: setReportStartSlot was deleted
+    // from EtherFiOracle as part of role consolidation. The state remains
+    // settable for test purposes via _setReportStartSlot below.
 
     function test_setConsensusVersion_edgeCases() public {
         // Test: new version must be greater than current
@@ -900,7 +850,7 @@ contract EtherFiOracleTest is TestSetup {
         uint32 futureSlot = ((currentSlot / 32) + 2) * 32; // Ensure it's in the future and at epoch boundary
         
         vm.prank(owner);
-        etherFiOracleInstance.setReportStartSlot(futureSlot);
+        _setReportStartSlot(futureSlot);
 
         // Move clock but not enough to reach reportStartSlot
         _moveClock(100);
@@ -996,9 +946,9 @@ contract EtherFiOracleTest is TestSetup {
         etherFiAdminInstance.setValidatorTaskBatchSize(50);
         // validatorTaskBatchSize is internal, tested indirectly through executeValidatorApprovalTask
 
-        // Test: non-admin cannot set
-        vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
+        // Test: non-admin cannot set (onlyAdmin → OPERATION_TIMELOCK_ROLE)
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         etherFiAdminInstance.setValidatorTaskBatchSize(75);
     }
 
@@ -1282,8 +1232,8 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(etherFiAdminInstance.acceptableRebaseAprInBps(), 5000);
 
         // Test: non-admin cannot update
-        vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         etherFiAdminInstance.updateAcceptableRebaseApr(10000);
     }
 
@@ -1295,8 +1245,8 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(etherFiAdminInstance.postReportWaitTimeInSlots(), 10);
 
         // Test: non-admin cannot update
-        vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
+        vm.prank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         etherFiAdminInstance.updatePostReportWaitTimeInSlots(20);
     }
 
@@ -1448,55 +1398,21 @@ contract EtherFiOracleTest is TestSetup {
 
         _moveClock(int256(uint256(etherFiAdminInstance.postReportWaitTimeInSlots()) + 1));
 
-        // chad has no roles; executeTasks is permissionless once consensus is reached
-        // and the report passes the freshness/sequencing checks.
-        assertFalse(roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), chad));
-        assertFalse(roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), chad));
+        // executeTasks is permissionless once consensus is reached and the report
+        // passes the freshness/sequencing checks. Use a fresh, role-less address.
+        address randoCaller = makeAddr("randoCaller");
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.EOA_1(), randoCaller));
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), randoCaller));
 
-        vm.prank(chad);
+        vm.prank(randoCaller);
         etherFiAdminInstance.executeTasks(report);
 
         assertEq(etherFiAdminInstance.lastHandledReportRefSlot(), report.refSlotTo);
         assertEq(etherFiAdminInstance.lastHandledReportRefBlock(), report.refBlockTo);
     }
 
-    function test_pause_unPause_edgeCases() public {
-        // Roles are already granted in setUpTests, but we need to check if admin has the roles
-        // If not, we'll grant them
-        if (!roleRegistryInstance.hasRole(roleRegistryInstance.PROTOCOL_PAUSER(), admin)) {
-            vm.prank(owner);
-            roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), admin);
-        }
-        if (!roleRegistryInstance.hasRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin)) {
-            vm.prank(owner);
-            roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin);
-        }
-
-        // Test: pause already paused contract
-        vm.prank(admin);
-        etherFiAdminInstance.pause(true, false, false, false, false, false);
-        
-        vm.prank(admin);
-        etherFiAdminInstance.pause(true, false, false, false, false, false); // Should not revert
-
-        // Test: unpause already unpaused contract
-        vm.prank(admin);
-        etherFiAdminInstance.unPause(true, false, false, false, false, false);
-        
-        vm.prank(admin);
-        etherFiAdminInstance.unPause(true, false, false, false, false, false); // Should not revert
-    }
-
-    function test_pause_unPause_insufficientRole() public {
-        // RoleRegistry is already initialized in setUpTests
-        vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
-        etherFiAdminInstance.pause(true, false, false, false, false, false);
-
-        vm.prank(chad);
-        vm.expectRevert(EtherFiAdmin.IncorrectRole.selector);
-        etherFiAdminInstance.unPause(true, false, false, false, false, false);
-    }
+    // test_pause_unPause_edgeCases / test_pause_unPause_insufficientRole removed:
+    // EtherFiAdmin.pause / unPause were deleted in the role-consolidation refactor.
 
     function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsCap() public {
         IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
@@ -2454,8 +2370,8 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(address(liquidityPoolInstance).balance, lpBalanceBefore - 2 ether);
     }
 
-    // The function is permissionless — chad has no protocol roles but can
-    // still trigger it once the report is stale.
+    // The function is permissionless — a role-less address can still trigger it
+    // once the report is stale.
     function test_finalizeWithdrawalsWhenStale_isPermissionless() public {
         _unpauseWithdrawNFT();
         _seedLp(10 ether);
@@ -2463,10 +2379,11 @@ contract EtherFiOracleTest is TestSetup {
 
         _advanceToStaleBoundary();
 
-        assertFalse(roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), chad));
-        assertFalse(roleRegistryInstance.hasRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), chad));
+        address randoCaller = makeAddr("randoCaller2");
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), randoCaller));
+        assertFalse(roleRegistryInstance.hasRole(roleRegistryInstance.EOA_1(), randoCaller));
 
-        vm.prank(chad);
+        vm.prank(randoCaller);
         etherFiAdminInstance.finalizeWithdrawalsWhenStale();
 
         assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(requestId));

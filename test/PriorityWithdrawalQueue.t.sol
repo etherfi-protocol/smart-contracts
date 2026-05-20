@@ -81,8 +81,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
                 address(liquidityPoolInstance),
                 address(membershipManagerInstance),
                 address(roleRegistryInstance),
-                address(blacklisterInstance)
-            );
+                address(blacklisterInstance),
+                address(etherFiAdminInstance));
         withdrawRequestNFTInstance.upgradeTo(address(newWrnImpl));
         vm.stopPrank();
         vm.startPrank(owner);
@@ -92,14 +92,18 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             liquidityPoolInstance.initializeOnUpgradeV2();
         }
 
-        // Grant roles
-        roleRegistryInstance.grantRole(PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE, alice);
-        roleRegistryInstance.grantRole(PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE, alice);
-        roleRegistryInstance.grantRole(PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE, requestManager);
-        roleRegistryInstance.grantRole(IMPLICIT_FEE_CLAIMER_ROLE, alice);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), alice);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), alice);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
+        // Grant roles — consolidated to the 8-tier model.
+        // PWQ admin → OPERATION_TIMELOCK_ROLE; pauser → OPERATION_MULTISIG_ROLE;
+        // whitelist manager → EOA_2; request manager → EOA_1; IMPLICIT_FEE_CLAIMER → EOA_2.
+        // LIQUIDITY_POOL_ADMIN_ROLE → OPERATION_TIMELOCK_ROLE.
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_1(), requestManager);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
+        // Existing tests still prank the mainnet `admin` address (ETHERFI_OPERATING_ADMIN)
+        // to pause LP/queue; grant it the consolidated pauser role.
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
 
         // Configure LiquidityPool to use PriorityWithdrawalQueue (owner has LP admin role now)
         vm.stopPrank();
@@ -1400,16 +1404,15 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     address pauseUntilDurationSetter = makeAddr("pauseUntilDurationSetter");
 
     function _grantPauseUntilRoles() internal {
-        // On the mainnet fork, the live RoleRegistry predates this PR and doesn't expose
-        // PAUSE_UNTIL_ROLE() / UNPAUSE_UNTIL_ROLE(). Upgrade the impl in place so the new
-        // role constants are reachable through both the registry and any contract that
-        // resolves roles via roleRegistry.PAUSE_UNTIL_ROLE().
+        // On the mainnet fork, the live RoleRegistry predates this PR. Upgrade the impl
+        // in place so consolidated roles are reachable.
         vm.startPrank(roleRegistryInstance.owner());
-        RoleRegistry newImpl = new RoleRegistry();
+        RoleRegistry newImpl = new RoleRegistry(address(0));
         roleRegistryInstance.upgradeTo(address(newImpl));
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
+        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
@@ -1425,12 +1428,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
     function test_pauseContractUntil_requiresRole() public {
         _grantPauseUntilRoles();
         vm.prank(regularUser);
-        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
-        priorityQueue.pauseContractUntil();
-
-        // PROTOCOL_PAUSER (alice) alone must not bypass
-        vm.prank(alice);
-        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
         priorityQueue.pauseContractUntil();
     }
 
@@ -1447,12 +1445,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.pauseContractUntil();
 
         vm.prank(regularUser);
-        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
-        priorityQueue.unpauseContractUntil();
-
-        // PROTOCOL_UNPAUSER (alice) alone must not bypass
-        vm.prank(alice);
-        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         priorityQueue.unpauseContractUntil();
     }
 
@@ -1480,12 +1473,12 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         uint256 maxDur = priorityQueue.MAX_PAUSE_DURATION();
 
         vm.prank(regularUser);
-        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         priorityQueue.setPauseUntilDuration(maxDur);
 
-        // PAUSE_UNTIL_ROLE alone is insufficient
+        // Guardian-only role (pauseUntilPauser) cannot set the duration; needs admin role.
         vm.prank(pauseUntilPauser);
-        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         priorityQueue.setPauseUntilDuration(maxDur);
     }
 
@@ -1810,7 +1803,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     function test_revert_updateShareRemainderSplitToTreasury_notAdmin() public {
         vm.prank(regularUser);
-        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         priorityQueue.updateShareRemainderSplitToTreasury(5000);
     }
 
@@ -2102,11 +2095,13 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
     function test_revert_adminFunctionsNotAdmin() public {
         vm.startPrank(regularUser);
-        
-        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+
+        // addToWhitelist is onlyAdmin (OPERATION_TIMELOCK_ROLE).
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         priorityQueue.addToWhitelist(regularUser);
 
-        vm.expectRevert(PriorityWithdrawalQueue.IncorrectRole.selector);
+        // removeFromWhitelist is onlyOperations (OPERATION_MULTISIG_ROLE).
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         priorityQueue.removeFromWhitelist(vipUser);
 
         vm.stopPrank();
@@ -2265,7 +2260,8 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         internal
         returns (uint256 nftRequestId, uint96 nftEethAmount)
     {
-        bytes32 WITHDRAW_REQUEST_NFT_ADMIN_ROLE = keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
+        // WITHDRAW_REQUEST_NFT_ADMIN_ROLE consolidated into OPERATION_TIMELOCK_ROLE.
+        bytes32 WITHDRAW_REQUEST_NFT_ADMIN_ROLE = roleRegistryInstance.OPERATION_TIMELOCK_ROLE();
         vm.prank(owner);
         roleRegistryInstance.grantRole(WITHDRAW_REQUEST_NFT_ADMIN_ROLE, alice);
 

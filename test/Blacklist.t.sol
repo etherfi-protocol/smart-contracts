@@ -68,7 +68,7 @@ contract BlacklistTest is TestSetup {
     function test_blacklist_requires_role() public {
         address rando = vm.addr(0xBEEF);
         vm.prank(rando);
-        vm.expectRevert(Blacklister.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         blacklisterInstance.blacklistUser(rando);
     }
 
@@ -325,10 +325,9 @@ contract BlacklistTest is TestSetup {
     address internal tempBlacklisted = vm.addr(0xC0FFEE);
 
     function _grantBlacklistUntilRoleTo(address who) internal {
-        // Resolve the role getter BEFORE vm.prank — an external call in the
-        // grantRole arg list would consume the prank. Same pattern is used in
-        // TestSetup.sol around the BLACKLISTER_ROLE grant.
-        bytes32 role = blacklisterInstance.BLACKLIST_UNTIL_ROLE();
+        // blacklistUserUntil() is now onlyGuardian; in the consolidated role
+        // model that corresponds to GUARDIAN_ROLE on the registry.
+        bytes32 role = roleRegistryInstance.GUARDIAN_ROLE();
         vm.prank(owner);
         roleRegistryInstance.grantRole(role, who);
     }
@@ -361,10 +360,10 @@ contract BlacklistTest is TestSetup {
     }
 
     function test_blacklistUserUntil_default_requires_BLACKLIST_UNTIL_ROLE() public {
-        // `owner` only holds BLACKLISTER_ROLE in setUp; the default-window
-        // overload requires the separate BLACKLIST_UNTIL_ROLE.
+        // `owner` only holds OPERATION_MULTISIG_ROLE (the consolidated admin role)
+        // in setUp; the default-window overload now requires GUARDIAN_ROLE.
         vm.prank(owner);
-        vm.expectRevert(Blacklister.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
         blacklisterInstance.blacklistUserUntil(tempBlacklisted);
     }
 
@@ -385,7 +384,7 @@ contract BlacklistTest is TestSetup {
         // The custom-duration overload requires BLACKLISTER_ROLE, which `owner`
         // already holds.
         vm.prank(owner);
-        blacklisterInstance.extendBlacklistUntil(tempBlacklisted, duration);
+        blacklisterInstance.setBlacklistUntil(tempBlacklisted, duration);
 
         assertEq(blacklisterInstance.blacklistedUntil(tempBlacklisted), t0 + duration);
 
@@ -399,15 +398,15 @@ contract BlacklistTest is TestSetup {
     function test_blacklistUserUntil_custom_requires_BLACKLISTER_ROLE() public {
         address rando = vm.addr(0xB16B00B5);
         vm.prank(rando);
-        vm.expectRevert(Blacklister.IncorrectRole.selector);
-        blacklisterInstance.extendBlacklistUntil(tempBlacklisted, 1 days);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        blacklisterInstance.setBlacklistUntil(tempBlacklisted, 1 days);
     }
 
     function test_blacklistUserUntil_zero_duration_is_immediately_open() public {
         // `blacklistedUntil = block.timestamp + 0` ⇒ `nonBlacklisted` passes
         // immediately because the check is strict `>`.
         vm.prank(owner);
-        blacklisterInstance.extendBlacklistUntil(tempBlacklisted, 0);
+        blacklisterInstance.setBlacklistUntil(tempBlacklisted, 0);
 
         assertEq(blacklisterInstance.blacklistedUntil(tempBlacklisted), block.timestamp);
         blacklisterInstance.nonBlacklisted(tempBlacklisted);
@@ -417,13 +416,13 @@ contract BlacklistTest is TestSetup {
         // Initial: indefinite blacklist via `blacklistUser` is overwritten by
         // a finite window if BLACKLISTER_ROLE caller chooses to.
         vm.prank(owner);
-        blacklisterInstance.extendBlacklistUntil(tempBlacklisted, 1 days);
+        blacklisterInstance.setBlacklistUntil(tempBlacklisted, 1 days);
         uint256 firstUntil = blacklisterInstance.blacklistedUntil(tempBlacklisted);
 
         vm.warp(block.timestamp + 12 hours);
 
         vm.prank(owner);
-        blacklisterInstance.extendBlacklistUntil(tempBlacklisted, 1 days);
+        blacklisterInstance.setBlacklistUntil(tempBlacklisted, 1 days);
         uint256 secondUntil = blacklisterInstance.blacklistedUntil(tempBlacklisted);
 
         assertGt(secondUntil, firstUntil, "second call should push expiry further out");
@@ -431,13 +430,13 @@ contract BlacklistTest is TestSetup {
 
     function test_blacklistUserUntil_can_reblacklist_after_expiry() public {
         vm.prank(owner);
-        blacklisterInstance.extendBlacklistUntil(tempBlacklisted, 1 days);
+        blacklisterInstance.setBlacklistUntil(tempBlacklisted, 1 days);
 
         vm.warp(block.timestamp + 1 days + 1);
         blacklisterInstance.nonBlacklisted(tempBlacklisted); // open
 
         vm.prank(owner);
-        blacklisterInstance.extendBlacklistUntil(tempBlacklisted, 2 days);
+        blacklisterInstance.setBlacklistUntil(tempBlacklisted, 2 days);
 
         _expectBlacklistedRevert(tempBlacklisted);
         blacklisterInstance.nonBlacklisted(tempBlacklisted);
@@ -455,7 +454,7 @@ contract BlacklistTest is TestSetup {
 
     function test_unblacklistUser_clears_timed_blacklist() public {
         vm.prank(owner);
-        blacklisterInstance.extendBlacklistUntil(tempBlacklisted, 30 days);
+        blacklisterInstance.setBlacklistUntil(tempBlacklisted, 30 days);
 
         _expectBlacklistedRevert(tempBlacklisted);
         blacklisterInstance.nonBlacklisted(tempBlacklisted);
@@ -473,7 +472,7 @@ contract BlacklistTest is TestSetup {
         address user = vm.addr(0xDA7A);
 
         vm.prank(owner);
-        blacklisterInstance.extendBlacklistUntil(user, 1 days);
+        blacklisterInstance.setBlacklistUntil(user, 1 days);
 
         vm.deal(user, 2 ether);
         vm.prank(user);

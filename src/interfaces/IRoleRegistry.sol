@@ -59,6 +59,14 @@ interface IRoleRegistry {
     function revokeRole(bytes32 role, address account) external;
 
     /**
+     * @notice Revokes a role from an account quickly
+     * @dev Only callable by the revoke admin
+     * @param role The role to revoke (as bytes32)
+     * @param account The address to revoke the role from
+     */
+    function revokeFast(bytes32 role, address account) external;
+
+    /**
      * @notice Gets all addresses that have a specific role
      * @dev Wrapper around EnumerableRoles roleHolders function
      * @param role The role to query (as bytes32)
@@ -74,38 +82,52 @@ interface IRoleRegistry {
     function onlyProtocolUpgrader(address account) external view;
 
     /**
-     * @notice Returns the PROTOCOL_PAUSER role identifier
-     * @return The bytes32 identifier for the PROTOCOL_PAUSER role
+     * @notice Checks if an account is the upgrade timelock
+     * @dev Reverts if the account is not the upgrade timelock
+     * @param account The address to check
      */
-    function PROTOCOL_PAUSER() external view returns (bytes32);
+    function onlyUpgradeTimelock(address account) external view;
 
     /**
-     * @notice Returns the PROTOCOL_UNPAUSER role identifier
-     * @return The bytes32 identifier for the PROTOCOL_UNPAUSER role
+     * @notice Checks if an account is the operating timelock
+     * @dev Reverts if the account is not the operating timelock
+     * @param account The address to check
      */
-    function PROTOCOL_UNPAUSER() external view returns (bytes32);
+    function onlyOperatingTimelock(address account) external view;
 
     /**
-     * @notice Returns the PAUSE_UNTIL_ROLE role identifier
-     * @return The bytes32 identifier for the PAUSE_UNTIL_ROLE role
+     * @notice Checks if an account is the operating multisig
+     * @dev Reverts if the account is not the operating multisig
+     * @param account The address to check
      */
-    function PAUSE_UNTIL_ROLE() external view returns (bytes32);
+    function onlyOperatingMultisig(address account) external view;
 
     /**
-     * @notice Returns the UNPAUSE_UNTIL_ROLE role identifier
-     * @return The bytes32 identifier for the UNPAUSE_UNTIL_ROLE role
+     * @notice Checks if an account is the guardian
+     * @dev Reverts if the account is not the guardian
+     * @param account The address to check
      */
-    function UNPAUSE_UNTIL_ROLE() external view returns (bytes32);
-
-    /**
-     * @notice Returns the PAUSE_DURATION_SETTER role identifier
-     * @return The bytes32 identifier for the PAUSE_DURATION_SETTER role
-     */
-    function PAUSE_DURATION_SETTER() external view returns (bytes32);
+    function onlyGuardian(address account) external view;
 
     /**
      * @notice Returns the current owner of the contract
      * @return The address of the current owner
      */
     function owner() external view returns (address);
+
+    function UPGRADE_TIMELOCK_ROLE() external view returns (bytes32);
+
+    function OPERATION_TIMELOCK_ROLE() external view returns (bytes32);
+
+    function OPERATION_MULTISIG_ROLE() external view returns (bytes32);
+
+    function GUARDIAN_ROLE() external view returns (bytes32);
+
+    function EOA_1() external view returns (bytes32);
+    
+    function EOA_2() external view returns (bytes32);
+
+    function EOA_3() external view returns (bytes32);
+
+    function EOA_4() external view returns (bytes32);
 }

@@ -61,6 +61,7 @@ contract HoodiTestTopUp is Script, ArrayTestHelper {
 
         IEtherFiOracle.OracleReport memory report;
         uint256[] memory emptyVals = new uint256[](0);
+        // OracleReport lost `withdrawalRequestsToInvalidate` in the role-consolidation refactor.
         report = IEtherFiOracle.OracleReport(
             etherFiOracleInstance.consensusVersion(), 0, 0, 0, 0, 0, 0, emptyVals, 0, 0
         );

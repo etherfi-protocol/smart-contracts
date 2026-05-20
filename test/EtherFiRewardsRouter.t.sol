@@ -48,7 +48,7 @@ contract EtherFiRewardsRouterTest is Test {
     function setUp() public {
         // Deploy RoleRegistry
         vm.startPrank(owner);
-        roleRegistryImpl = new RoleRegistry();
+        roleRegistryImpl = new RoleRegistry(address(0));
         roleRegistryProxy = new UUPSProxy(
             address(roleRegistryImpl),
             abi.encodeWithSelector(RoleRegistry.initialize.selector, owner)
@@ -66,7 +66,7 @@ contract EtherFiRewardsRouterTest is Test {
         );
         
         // Grant admin role
-        roleRegistry.grantRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
         vm.stopPrank();
         
         // Deploy proxy and initialize (outside prank so owner is address(this))
@@ -267,7 +267,7 @@ contract EtherFiRewardsRouterTest is Test {
         uint256 amount = 100 ether;
         
         vm.prank(unauthorizedUser);
-        vm.expectRevert(EtherFiRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rewardsRouter.recoverERC20(address(testToken), amount);
     }
     
@@ -336,7 +336,7 @@ contract EtherFiRewardsRouterTest is Test {
         uint256 tokenId = testNFT.mint(address(rewardsRouter));
         
         vm.prank(unauthorizedUser);
-        vm.expectRevert(EtherFiRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rewardsRouter.recoverERC721(address(testNFT), tokenId);
     }
     
@@ -373,8 +373,9 @@ contract EtherFiRewardsRouterTest is Test {
         address newAdmin = vm.addr(100);
         
         // Grant role
-        vm.prank(owner);
-        roleRegistry.grantRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, newAdmin);
+        vm.startPrank(owner);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), newAdmin);
+        vm.stopPrank();
         
         uint256 amount = 100 ether;
         testToken.mint(address(rewardsRouter), amount);
@@ -385,12 +386,13 @@ contract EtherFiRewardsRouterTest is Test {
         assertEq(testToken.balanceOf(treasury), amount);
         
         // Revoke role
-        vm.prank(owner);
-        roleRegistry.revokeRole(ETHERFI_REWARDS_ROUTER_ADMIN_ROLE, newAdmin);
+        vm.startPrank(owner);
+        roleRegistry.revokeRole(roleRegistry.OPERATION_MULTISIG_ROLE(), newAdmin);
+        vm.stopPrank();
         
         testToken.mint(address(rewardsRouter), amount);
         vm.prank(newAdmin);
-        vm.expectRevert(EtherFiRewardsRouter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         rewardsRouter.recoverERC20(address(testToken), amount);
     }
     

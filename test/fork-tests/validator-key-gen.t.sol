@@ -49,7 +49,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         // BLACKLISTED_USER) are reachable from upgraded contracts that call
         // into roleRegistry from within their modifiers.
         vm.prank(roleRegistry.owner());
-        roleRegistry.upgradeTo(address(new RoleRegistry()));
+        roleRegistry.upgradeTo(address(new RoleRegistry(address(0))));
 
         // Deploy a Blacklister so impls that wire it as an immutable have a
         // non-zero target.
@@ -93,10 +93,19 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
         auctionManager.upgradeTo(address(auctionManagerImpl));
 
         vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(liquidityPool.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), admin);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
-        roleRegistry.grantRole(stakingManager.STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE(), admin);
-        roleRegistry.grantRole(auctionManager.AUCTION_MANAGER_ADMIN_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.EOA_1(), admin);
+        roleRegistry.grantRole(roleRegistry.EOA_2(), address(stakingManager));
+        roleRegistry.grantRole(roleRegistry.EOA_1(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
+        // OPERATING_TIMELOCK is granted OPERATION_TIMELOCK_ROLE on mainnet — grant
+        // it explicitly on the fork so registerValidatorSpawner / batchCreateBeaconValidators
+        // pass through the consolidated onlyAdmin gate.
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), operatingTimelock);
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
+        // EOA_3 (formerly ETHERFI_NODES_MANAGER_EL_EXITER_ROLE) is required by
+        // StakingManager.instantiateEtherFiNode, which the test helpers call.
+        roleRegistry.grantRole(roleRegistry.EOA_3(), operatingTimelock);
+        roleRegistry.grantRole(roleRegistry.EOA_3(), admin);
         vm.stopPrank();
     }
 
@@ -475,7 +484,7 @@ contract ValidatorKeyGenTest is Test, ArrayTestHelper {
     }
 
     function test_roleGrant_succeeds() public {
-        assertEq(roleRegistry.hasRole(keccak256("STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE"), address(admin)), true);
+        assertEq(roleRegistry.hasRole(roleRegistry.EOA_1(), address(admin)), true);
     }
 
     // ==================== batchCreateBeaconValidators Tests ====================

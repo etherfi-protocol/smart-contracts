@@ -45,7 +45,7 @@ contract LiquifierStEthPriceFeedTest is Test {
         // arbitrary ages from it without underflow.
         vm.warp(1_700_000_000);
 
-        RoleRegistry rrImpl = new RoleRegistry();
+        RoleRegistry rrImpl = new RoleRegistry(address(0));
         UUPSProxy rrProxy = new UUPSProxy(
             address(rrImpl),
             abi.encodeWithSelector(RoleRegistry.initialize.selector, owner)
@@ -80,13 +80,19 @@ contract LiquifierStEthPriceFeedTest is Test {
             uint32(1 hours)
         );
 
+        // Grant the consolidated admin role before any admin-gated call.
+        // updateWhitelistedToken now requires UPGRADE_TIMELOCK_ROLE (onlyUpgradeTimelock);
+        // updateQuoteStEthWithCurve still uses OPERATION_MULTISIG_ROLE (onlyOperations).
+        vm.startPrank(owner);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), owner);
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), owner);
+        roleRegistry.grantRole(roleRegistry.UPGRADE_TIMELOCK_ROLE(), owner);
+        vm.stopPrank();
+
         // updateWhitelistedToken bypasses the strategy-underlying check that
         // registerToken enforces, which lets us test against a dummy stEth.
+        vm.prank(owner);
         liquifier.updateWhitelistedToken(stEth, true);
-
-        vm.startPrank(owner);
-        roleRegistry.grantRole(liquifier.LIQUIFIER_ADMIN_ROLE(), owner);
-        vm.stopPrank();
 
         vm.prank(owner);
         liquifier.updateQuoteStEthWithCurve(true);

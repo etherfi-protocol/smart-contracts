@@ -20,13 +20,60 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         vm.prank(nodeOperatorManagerInstance.owner());
         nodeOperatorManagerInstance.upgradeTo(address(nodeOperatorManagerImpl));
 
+        // Upgrade LiquidityPool to the consolidated role model — the on-chain impl
+        // still checks LIQUIDITY_POOL_ADMIN_ROLE on registerValidatorSpawner.
+        LiquidityPool newLpImpl = new LiquidityPool(LiquidityPool.ConstructorAddresses({
+            stakingManager: address(stakingManagerInstance),
+            nodesManager: address(managerInstance),
+            eETH: address(eETHInstance),
+            withdrawRequestNFT: address(withdrawRequestNFTInstance),
+            liquifier: address(liquifierInstance),
+            etherFiRedemptionManager: address(etherFiRedemptionManagerInstance),
+            roleRegistry: address(roleRegistryInstance),
+            priorityWithdrawalQueue: address(priorityQueueInstance),
+            blacklister: address(blacklisterInstance),
+            etherFiAdminContract: address(etherFiAdminInstance),
+            membershipManager: address(membershipManagerInstance)
+        }), 0);
+        address lpOwner = liquidityPoolInstance.owner();
+        vm.prank(lpOwner);
+        liquidityPoolInstance.upgradeTo(address(newLpImpl));
+
+        // Upgrade WithdrawRequestNFT so it has a receive() function and accepts the
+        // ETH-escrow transfer triggered by initializeOnUpgradeV2.
+        address wrnOwner = withdrawRequestNFTInstance.owner();
+        vm.prank(wrnOwner);
+        withdrawRequestNFTInstance.upgradeTo(
+            address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, address(eETHInstance), address(liquidityPoolInstance), address(membershipManagerInstance), address(roleRegistryInstance), address(blacklisterInstance), address(etherFiAdminInstance)))
+        );
+
+        // The production queue proxy on mainnet still runs the master impl which
+        // has no receive(); initializeOnUpgradeV2 below sweeps queue-locked ETH
+        // into the queue and would revert with SendFail. Upgrade the queue first.
+        address newPQ = address(new PriorityWithdrawalQueue(
+            address(liquidityPoolInstance), address(eETHInstance), address(weEthInstance),
+            address(roleRegistryInstance), treasuryInstance, 1 hours
+        ));
+        vm.prank(UPGRADE_TIMELOCK);
+        PriorityWithdrawalQueue(payable(PRIORITY_WITHDRAWAL_QUEUE)).upgradeTo(newPQ);
+
+        // One-shot migration: move pre-existing locked ETH into NFT escrow so the
+        // post-upgrade LP can route through addEthAmountLockedForWithdrawal.
+        if (!liquidityPoolInstance.escrowMigrationCompleted()) {
+            vm.prank(lpOwner);
+            liquidityPoolInstance.initializeOnUpgradeV2();
+        }
+
         // Upgrade Oracle and Admin to local impls so the new OracleReport ABI matches.
         _upgradeOracleAndAdminForFork();
 
         // Raise the per-day approval cap so executeTasks doesn't reject the validator approval.
         address rrOwner = roleRegistryInstance.owner();
         vm.startPrank(rrOwner);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), rrOwner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), rrOwner);
+        // EOA_1 (formerly ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE) is required by
+        // EtherFiAdmin.executeValidatorApprovalTask.
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_1(), ADMIN_EOA);
         etherFiAdminInstance.updateMaxNumValidatorsToApprovePerDay(etherFiAdminInstance.MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY());
         vm.stopPrank();
 
@@ -82,11 +129,11 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
 
         // Ensure the operating admin can manage LP spawners + create validators.
         vm.startPrank(roleOwner);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), ETHERFI_OPERATING_ADMIN);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), ETHERFI_OPERATING_ADMIN);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), ETHERFI_OPERATING_ADMIN);
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_1(), ETHERFI_OPERATING_ADMIN);
 
         // Ensure operating timelock can create nodes.
-        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), OPERATING_TIMELOCK);
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), OPERATING_TIMELOCK);
         vm.stopPrank();
 
         // The mainnet NodeOperatorManager implementation predates this PR and
@@ -100,7 +147,7 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         vm.stopPrank();
 
         vm.startPrank(roleOwner);
-        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), ETHERFI_OPERATING_ADMIN);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), ETHERFI_OPERATING_ADMIN);
         vm.stopPrank();
     }
 

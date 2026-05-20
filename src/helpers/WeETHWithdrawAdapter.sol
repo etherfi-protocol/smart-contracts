@@ -44,19 +44,12 @@ contract WeETHWithdrawAdapter is
     bool public paused;
 
     //--------------------------------------------------------------------------------------
-    //-------------------------------------  ROLES  ---------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    bytes32 public constant WEETH_WITHDRAW_ADAPTER_ADMIN_ROLE = keccak256("WEETH_WITHDRAW_ADAPTER_ADMIN_ROLE");
-
-    //--------------------------------------------------------------------------------------
     //-------------------------------------  ERRORS  --------------------------------------
     //--------------------------------------------------------------------------------------
 
     error ZeroAmount();
     error ZeroAddress();
     error ContractPaused();
-    error IncorrectRole();
     error InvalidAmount();
 
     //--------------------------------------------------------------------------------------
@@ -176,8 +169,7 @@ contract WeETHWithdrawAdapter is
     /**
      * @notice Pause the contract
      */
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyOperations {
         if (paused) revert("Pausable: already paused");
 
         paused = true;
@@ -187,8 +179,7 @@ contract WeETHWithdrawAdapter is
     /**
      * @notice Unpause the contract
      */
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyOperations {
         if (!paused) revert("Pausable: not paused");
 
         paused = false;
@@ -198,16 +189,14 @@ contract WeETHWithdrawAdapter is
     /**
      * @notice Pause the contract until MAX_PAUSE_DURATION
      */
-    function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContractUntil() external onlyGuardian {
         _pauseUntil();
     }
 
     /**
      * @notice Unpause the contract from pauseUntil
      */
-    function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
@@ -215,8 +204,7 @@ contract WeETHWithdrawAdapter is
      * @notice Sets the pause duration for the contract
      * @param _pauseUntilDuration The new pause duration
      */
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -271,6 +259,21 @@ contract WeETHWithdrawAdapter is
 
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);
+        _;
+    }
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 }

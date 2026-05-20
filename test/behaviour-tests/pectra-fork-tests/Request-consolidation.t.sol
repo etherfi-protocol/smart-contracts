@@ -53,9 +53,12 @@ contract RequestConsolidationTest is TestSetup, Deployed {
 
         // Setup consolidation rate limiter bucket
         vm.startPrank(roleRegistry.owner());
-        bytes32 rateLimiterAdminRole = keccak256("ETHERFI_RATE_LIMITER_ADMIN_ROLE");
-        roleRegistry.grantRole(rateLimiterAdminRole, roleRegistry.owner());
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), realElExiter);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), roleRegistry.owner());
+        // RateLimiter mutators (createNewLimiter, updateConsumers) are now onlyAdmin → OPERATION_TIMELOCK_ROLE.
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), roleRegistry.owner());
+        roleRegistry.grantRole(roleRegistry.EOA_3(), realElExiter);
+        // ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE consolidated into EOA_3.
+        roleRegistry.grantRole(roleRegistry.EOA_3(), ETHERFI_OPERATING_ADMIN);
         vm.stopPrank();
 
         vm.startPrank(roleRegistry.owner());
@@ -114,7 +117,7 @@ contract RequestConsolidationTest is TestSetup, Deployed {
 
     function test_RequestConsolidation() public {
         console2.log("=== REQUEST CONSOLIDATION TEST ===");
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), ETHERFI_OPERATING_ADMIN);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.EOA_3(), ETHERFI_OPERATING_ADMIN);
         require(hasRole, "test: ETHERFI_OPERATING_ADMIN does not have the Consolidation Role");
 
         bytes[] memory pubkeys = new bytes[](3);
@@ -156,7 +159,7 @@ contract RequestConsolidationTest is TestSetup, Deployed {
 
     function test_switchToCompounding() public {
         console2.log("=== SWITCH TO COMPOUNDING TEST ===");
-        bool hasRole = roleRegistry.hasRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), ETHERFI_OPERATING_ADMIN);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.EOA_3(), ETHERFI_OPERATING_ADMIN);
         require(hasRole, "test: ETHERFI_OPERATING_ADMIN does not have the Consolidation Role");
 
         bytes[] memory pubkeys = new bytes[](1);

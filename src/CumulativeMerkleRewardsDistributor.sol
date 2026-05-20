@@ -32,8 +32,6 @@ using SafeERC20 for IERC20;
     //--------------------------------------------------------------------------------------
 
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
-    bytes32 public constant CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE = keccak256("CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE");
-    bytes32 public constant CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE = keccak256("CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE");
     RoleRegistry public immutable roleRegistry;
 
 //--------------------------------------------------------------------------------------
@@ -52,20 +50,19 @@ using SafeERC20 for IERC20;
         claimDelay = 172800; // 48 hours
     }
 
-    function setClaimDelay(uint256 _claimDelay) external {
-        if(!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE, msg.sender)) revert IncorrectRole();
+    function setClaimDelay(uint256 _claimDelay) external onlyOperations {
         claimDelay = _claimDelay;
         emit ClaimDelayUpdated(claimDelay);
     }
 /**
 * @notice Sets a new pending Merkle root for token rewards distribution
-* @dev Only callable by accounts with CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE role
+* @dev Only callable by accounts with EOA_3 role
 * @dev The pending root must be finalized after CLAIM_DELAY blocks before it becomes active
 * @param _token Address of the reward token (use ETH_ADDRESS for ETH rewards)
 * @param _merkleRoot New Merkle root containing the reward data
 **/
     function setPendingMerkleRoot(address _token, bytes32 _merkleRoot) external whenNotPaused {
-        if(!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
         pendingMerkleRoots[_token] = _merkleRoot;
         lastPendingMerkleUpdatedToTimestamp[_token] = block.timestamp;
         emit PendingMerkleRootUpdated(_token, _merkleRoot);
@@ -73,13 +70,13 @@ using SafeERC20 for IERC20;
 
 /**
 * @notice Finalizes a pending Merkle root after the required delay period
-* @dev Only callable by accounts with CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE role
+* @dev Only callable by accounts with EOA_3 role
 * @dev Must wait CLAIM_DELAY blocks after setPendingMerkleRoot before finalizing
 * @param _token Address of the reward token (use ETH_ADDRESS for ETH rewards)
 * @param _finalizedBlock Block number up to which rewards are calculated
 */
     function finalizeMerkleRoot(address _token, uint256 _finalizedBlock) external whenNotPaused {
-        if(!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
         if(!(block.timestamp >= lastPendingMerkleUpdatedToTimestamp[_token] + claimDelay)) revert InsufficentDelay();
         if(_finalizedBlock < lastRewardsCalculatedToBlock[_token] || _finalizedBlock > block.number) revert InvalidFinalizedBlock();
         bytes32 oldClaimableMerkleRoot = claimableMerkleRoots[_token];
@@ -131,36 +128,30 @@ using SafeERC20 for IERC20;
         emit Claimed(token, account, amount);
     }
 
-    function updateWhitelistedRecipient(address user, bool isWhitelisted) external {
-        if(!roleRegistry.hasRole(CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function updateWhitelistedRecipient(address user, bool isWhitelisted) external onlyOperations {
         whitelistedRecipient[user] = isWhitelisted;
         emit RecipientStatusUpdated(user, isWhitelisted);
     }
 
-    function pause() external {
-        if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+    function pause() external onlyOperations {
         paused = true;
         emit Paused(msg.sender);
     }
 
-    function unpause() external {
-        if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+    function unpause() external onlyOperations {
         paused = false;
         emit UnPaused(msg.sender);
     }
 
-    function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContractUntil() external onlyGuardian {
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -215,4 +206,18 @@ using SafeERC20 for IERC20;
         _;
     }
 
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
+        _;
+    }
 }

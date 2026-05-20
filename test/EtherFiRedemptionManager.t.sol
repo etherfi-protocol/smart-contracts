@@ -22,7 +22,8 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         setUpTests();
         initializeRealisticFork(MAINNET_FORK);
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), op_admin);
+        // ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE consolidated into OPERATION_TIMELOCK_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), op_admin);
         vm.stopPrank();
         uint32 timeBoundCapRefreshInterval = liquifierInstance.timeBoundCapRefreshInterval();
         vm.warp(block.timestamp + timeBoundCapRefreshInterval + 1);
@@ -371,9 +372,10 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function testFuzz_role_management(address admin, address pauser, address unpauser, address user) public {
         address owner = roleRegistryInstance.owner();
-        bytes32 ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE = keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE");
-        bytes32 PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
-        bytes32 PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
+        // ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE → OPERATION_TIMELOCK_ROLE.
+        // PROTOCOL_PAUSER / PROTOCOL_UNPAUSER → OPERATION_MULTISIG_ROLE.
+        bytes32 ADMIN_ROLE = roleRegistryInstance.OPERATION_TIMELOCK_ROLE();
+        bytes32 PAUSER_ROLE = roleRegistryInstance.OPERATION_MULTISIG_ROLE();
 
         vm.assume(admin != address(0) && admin != owner);
         vm.assume(pauser != address(0) && pauser != owner && pauser != admin);
@@ -382,11 +384,11 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
         // Grant roles to respective addresses
         vm.prank(owner);
-        roleRegistryInstance.grantRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE, admin);
+        roleRegistryInstance.grantRole(ADMIN_ROLE, admin);
         vm.prank(owner);
-        roleRegistryInstance.grantRole(PROTOCOL_PAUSER, pauser);
+        roleRegistryInstance.grantRole(PAUSER_ROLE, pauser);
         vm.prank(owner);
-        roleRegistryInstance.grantRole(PROTOCOL_UNPAUSER, unpauser);
+        roleRegistryInstance.grantRole(PAUSER_ROLE, unpauser);
 
         // Admin performs admin-only actions
         vm.startPrank(admin);
@@ -409,21 +411,21 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         assertFalse(etherFiRedemptionManagerInstance.paused());
         vm.stopPrank();
 
-        // Revoke ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE role from admin
+        // Revoke ADMIN_ROLE from admin
         vm.prank(owner);
-        roleRegistryInstance.revokeRole(ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE, admin);
+        roleRegistryInstance.revokeRole(ADMIN_ROLE, admin);
 
         // Admin attempts admin-only actions after role revocation
         vm.startPrank(admin);
-        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         etherFiRedemptionManagerInstance.setCapacity(10 ether, ETH_ADDRESS);
         vm.stopPrank();
 
         // User without role attempts admin-only actions
         vm.startPrank(user);
-        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         etherFiRedemptionManagerInstance.pauseContract();
-        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         etherFiRedemptionManagerInstance.unPauseContract();
         vm.stopPrank();
     }
@@ -1206,11 +1208,11 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         liquidityPoolInstance.deposit{value: 100 ether}();
         vm.stopPrank();
 
-        // Pause the contract
-        bytes32 PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
+        // Pause the contract — PROTOCOL_PAUSER consolidated into OPERATION_MULTISIG_ROLE.
+        bytes32 PAUSER_ROLE = roleRegistryInstance.OPERATION_MULTISIG_ROLE();
         address pauser = vm.addr(2000);
         vm.prank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(PROTOCOL_PAUSER, pauser);
+        roleRegistryInstance.grantRole(PAUSER_ROLE, pauser);
 
         vm.prank(pauser);
         etherFiRedemptionManagerInstance.pauseContract();
@@ -1225,11 +1227,11 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.redeemWeEth(10 ether, user, ETH_ADDRESS);
         vm.stopPrank();
 
-        // Unpause the contract
-        bytes32 PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
+        // Unpause the contract — PROTOCOL_UNPAUSER consolidated into OPERATION_MULTISIG_ROLE.
+        bytes32 UNPAUSER_ROLE = roleRegistryInstance.OPERATION_MULTISIG_ROLE();
         address unpauser = vm.addr(2001);
         vm.prank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(PROTOCOL_UNPAUSER, unpauser);
+        roleRegistryInstance.grantRole(UNPAUSER_ROLE, unpauser);
 
         vm.prank(unpauser);
         etherFiRedemptionManagerInstance.unPauseContract();
@@ -1516,48 +1518,48 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function test_mainnet_setExitFeeBasisPoints_max_value() public {
         setUp_Fork();
-        
+
         vm.startPrank(op_admin);
         // Set to maximum allowed value (100%)
         etherFiRedemptionManagerInstance.setExitFeeBasisPoints(10000, ETH_ADDRESS);
-        
+
         (, , uint16 exitFeeBps, ) = etherFiRedemptionManagerInstance.tokenToRedemptionInfo(ETH_ADDRESS);
         assertEq(exitFeeBps, 10000);
-        
+
         // Try to set above maximum - should fail
-        vm.expectRevert("INVALID");
+        vm.expectRevert("Exceeds max exit fee");
         etherFiRedemptionManagerInstance.setExitFeeBasisPoints(10001, ETH_ADDRESS);
         vm.stopPrank();
     }
 
     function test_mainnet_setLowWatermarkInBpsOfTvl_max_value() public {
         setUp_Fork();
-        
+
         vm.startPrank(op_admin);
         // Set to maximum allowed value (100%)
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(10000, ETH_ADDRESS);
-        
+
         (, , , uint16 lowWM) = etherFiRedemptionManagerInstance.tokenToRedemptionInfo(ETH_ADDRESS);
         assertEq(lowWM, 10000);
-        
+
         // Try to set above maximum - should fail
-        vm.expectRevert("INVALID");
+        vm.expectRevert("Exceeds max low watermark of tvl");
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(10001, ETH_ADDRESS);
         vm.stopPrank();
     }
 
     function test_mainnet_setExitFeeSplitToTreasuryInBps_max_value() public {
         setUp_Fork();
-        
+
         vm.startPrank(op_admin);
         // Set to maximum allowed value (100%)
         etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(10000, ETH_ADDRESS);
-        
+
         (, uint16 exitSplit, , ) = etherFiRedemptionManagerInstance.tokenToRedemptionInfo(ETH_ADDRESS);
         assertEq(exitSplit, 10000);
-        
+
         // Try to set above maximum - should fail
-        vm.expectRevert("INVALID");
+        vm.expectRevert("Exceeds max exit fee split to treasury");
         etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(10001, ETH_ADDRESS);
         vm.stopPrank();
     }
@@ -1739,9 +1741,10 @@ contract EtherFiRedemptionManagerTest is TestSetup {
 
     function _grantRmPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), rmPauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), rmUnpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), rmPauseUntilDurationSetter);
+        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), rmPauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), rmUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), rmPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
@@ -1777,12 +1780,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     function test_pauseContractUntil_requiresRole() public {
         _grantRmPauseUntilRoles();
         vm.prank(bob);
-        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
-        etherFiRedemptionManagerInstance.pauseContractUntil();
-
-        // PROTOCOL_PAUSER (admin) alone is insufficient
-        vm.prank(admin);
-        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
         etherFiRedemptionManagerInstance.pauseContractUntil();
     }
 
@@ -1799,12 +1797,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.pauseContractUntil();
 
         vm.prank(bob);
-        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
-        etherFiRedemptionManagerInstance.unpauseContractUntil();
-
-        // PROTOCOL_UNPAUSER (admin) alone is insufficient
-        vm.prank(admin);
-        vm.expectRevert("EtherFiRedemptionManager: Unauthorized");
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         etherFiRedemptionManagerInstance.unpauseContractUntil();
     }
 
