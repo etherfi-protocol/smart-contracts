@@ -52,6 +52,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
     event ReportPublished(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash);
     event ReportSubmitted(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash, address indexed committeeMember);
 
+    error InvalidQuorum();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _etherFiAdmin, address _roleRegistry) {
@@ -239,7 +240,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         numCommitteeMembers++;
         numActiveCommitteeMembers++;
         committeeMemberStates[_address] = CommitteeMemberState(true, true, 0, 0);
-
+        _checkQuorum();
         emit CommitteeMemberAdded(_address);
     }
 
@@ -248,7 +249,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         numCommitteeMembers--;
         if (committeeMemberStates[_address].enabled) numActiveCommitteeMembers--;
         delete committeeMemberStates[_address];
-
+        _checkQuorum();
         emit CommitteeMemberRemoved(_address);
     }
 
@@ -261,13 +262,13 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         } else {
             numActiveCommitteeMembers--;
         }
-
+        _checkQuorum();
         emit CommitteeMemberUpdated(_address, _enabled);
     }
 
     function setQuorumSize(uint32 _quorumSize) public onlyAdmin {
         quorumSize = _quorumSize;
-
+        _checkQuorum();
         emit QuorumUpdated(_quorumSize);
     }
 
@@ -302,6 +303,10 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    function _checkQuorum() internal view {
+        if (numActiveCommitteeMembers < quorumSize || numActiveCommitteeMembers > 2 * quorumSize) revert InvalidQuorum();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override {
