@@ -10,20 +10,11 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    address private DEPRECATED_stakingManagerAddress;
-    address private DEPRECATED_etherFiNodesManagerAddress;
-
-    address public immutable stakingManagerAddress;
-    address public immutable etherFiNodesManagerAddress;
-
-    error AddressZero();
-    error SoulBound();
-    error IncorrectCaller();
+    address public stakingManagerAddress;
+    address public etherFiNodesManagerAddress;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _stakingManagerAddress, address _etherFiNodesManagerAddress) {
-        stakingManagerAddress = _stakingManagerAddress;
-        etherFiNodesManagerAddress = _etherFiNodesManagerAddress;
+    constructor() {
         _disableInitializers();
     }
 
@@ -33,10 +24,19 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @notice initialize to set variables on deployment
     function initialize(address _stakingManagerAddress) initializer external {
-        if (_stakingManagerAddress == address(0)) revert AddressZero();
+        require(_stakingManagerAddress != address(0), "No zero addresses");
         __ERC721_init("Bond NFT", "BNFT");
         __Ownable_init();
         __UUPSUpgradeable_init();
+
+        stakingManagerAddress = _stakingManagerAddress;
+    }
+
+    /// @notice initialization function that should be called after phase 2.0 contract upgrade
+    function initializeOnUpgrade(address _etherFiNodesManagerAddress) onlyOwner external {
+        require(_etherFiNodesManagerAddress != address(0), "Cannot initialize to zero address");
+
+        etherFiNodesManagerAddress = _etherFiNodesManagerAddress;
     }
 
     /// @notice Mints NFT to required user
@@ -65,7 +65,7 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
         uint256  // batchSize
     ) internal virtual override(ERC721Upgradeable ){
         // only allow mint or burn
-        if (from != address(0) && to != address(0)) revert SoulBound();
+        require(from == address(0) || to == address(0), "Err: token is SOUL BOUND");
     }
 
     //--------------------------------------------------------------------------------------
@@ -91,12 +91,12 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     //--------------------------------------------------------------------------------------
 
     modifier onlyStakingManager() {
-        if (msg.sender != stakingManagerAddress) revert IncorrectCaller();
+        require(msg.sender == stakingManagerAddress, "Only staking manager contract");
         _;
     }
 
     modifier onlyEtherFiNodesManager() {
-        if (msg.sender != etherFiNodesManagerAddress) revert IncorrectCaller();
+        require(msg.sender == etherFiNodesManagerAddress, "Only etherFiNodesManager contract");
         _;
     }
 }
