@@ -9,7 +9,6 @@ import "@openzeppelin-upgradeable/contracts/utils/CountersUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/utils/cryptography/ECDSAUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
-import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
@@ -87,11 +86,11 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
     function mintShares(address _user, uint256 _share) external onlyPoolContract whenNotPaused {
         blacklister.nonBlacklisted(_user);
-        uint256 amount = liquidityPool.amountForShare(_share);
-        _consumeIfConfigured(EETH_MINT_LIMIT_ID, amount);
-
         shares[_user] += _share;
         totalShares += _share;
+
+        uint256 amount = liquidityPool.amountForShare(_share);
+        _consumeIfConfigured(EETH_MINT_LIMIT_ID, amount);
 
         emit Transfer(address(0), _user, amount);
         emit TransferShares(address(0), _user, _share);
@@ -101,11 +100,11 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         require(msg.sender == address(liquidityPool), "Incorrect Caller");
         blacklister.nonBlacklisted(_user);
         require(shares[_user] >= _share, "BURN_AMOUNT_EXCEEDS_BALANCE");
-        uint256 amount = liquidityPool.amountForShare(_share);
-        _consumeIfConfigured(EETH_BURN_LIMIT_ID, amount);
-
         shares[_user] -= _share;
         totalShares -= _share;
+
+        uint256 amount = liquidityPool.amountForShare(_share);
+        _consumeIfConfigured(EETH_BURN_LIMIT_ID, amount);
 
         emit Transfer(_user, address(0), amount);
         emit TransferShares(_user, address(0), _share);
@@ -227,8 +226,13 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     }
 
     /// @dev Converts a wei amount to the gwei unit consumed by EtherFiRateLimiter (rounding up).
+    /// Saturates at type(uint64).max — practical token amounts (entire ETH supply is ~1.2e17
+    /// gwei) sit well below this; saturation makes the limiter consume its max-conservative
+    /// cap rather than reverting at SafeCast, which would otherwise DoS pathological-but-legal
+    /// upstream call sites that pass uint128/uint256 amounts.
     function _toBucketUnit(uint256 amount) internal pure returns (uint64) {
-        return SafeCast.toUint64(Math.ceilDiv(amount, 1 gwei));
+        uint256 gweiAmount = Math.ceilDiv(amount, 1 gwei);
+        return gweiAmount > type(uint64).max ? type(uint64).max : uint64(gweiAmount);
     }
 
     function _approve(address _owner, address _spender, uint256 _amount) internal {

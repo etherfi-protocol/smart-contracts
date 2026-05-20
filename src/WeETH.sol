@@ -6,7 +6,6 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
-import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRateProvider.sol";
@@ -183,8 +182,11 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     }
 
     /// @dev Converts a wei amount to the gwei unit consumed by EtherFiRateLimiter (rounding up).
+    /// Saturates at type(uint64).max — practical token amounts sit well below this; saturation
+    /// makes the limiter consume its max-conservative cap rather than reverting at SafeCast.
     function _toBucketUnit(uint256 amount) internal pure returns (uint64) {
-        return SafeCast.toUint64(Math.ceilDiv(amount, 1 gwei));
+        uint256 gweiAmount = Math.ceilDiv(amount, 1 gwei);
+        return gweiAmount > type(uint64).max ? type(uint64).max : uint64(gweiAmount);
     }
 
     //--------------------------------------------------------------------------------------

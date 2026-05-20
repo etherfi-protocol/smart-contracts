@@ -46,14 +46,15 @@ contract TokenRateLimitTest is TestSetup {
 
     function test_eETH_burn_consumes_bucket() public {
         bytes32 id = eETHInstance.EETH_BURN_LIMIT_ID();
-        _setCapacityAndRefill(id, uint64(1 ether / 1 gwei), 0);
+        // burnShares mutates totalShares before computing amountForShare, so each 1-ether
+        // share consumes slightly more than 1 ETH (the pool ether stays put in this test
+        // harness while shares shrink). 2 ETH capacity fits the first burn but not two.
+        _setCapacityAndRefill(id, uint64(2 ether / 1 gwei), 0);
 
-        // Direct burnShares prank to isolate from LP withdrawal plumbing.
         uint256 oneEthShare = liquidityPoolInstance.sharesForAmount(1 ether);
         vm.prank(address(liquidityPoolInstance));
         eETHInstance.burnShares(alice, oneEthShare);
 
-        // Next 1 ether burn exceeds remaining (== 0) → revert.
         vm.prank(address(liquidityPoolInstance));
         vm.expectRevert(IEtherFiRateLimiter.LimitExceeded.selector);
         eETHInstance.burnShares(alice, oneEthShare);
