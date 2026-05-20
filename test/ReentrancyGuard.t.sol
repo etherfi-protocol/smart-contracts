@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 import "forge-std/Test.sol";
 
-import "../src/ReentrancyGuardNamespaced.sol";
+import "../src/utils/ReentrancyGuardNamespaced.sol";
 import "../src/WithdrawRequestNFT.sol";
 
 /// @dev Attacker contract that owns two withdrawal NFTs. On receiving ETH during

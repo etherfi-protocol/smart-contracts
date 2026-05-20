@@ -6,7 +6,7 @@ import "../../script/deploys/Deployed.s.sol";
 import "../../src/LiquidityPool.sol";
 import "../../src/WithdrawRequestNFT.sol";
 import "../../src/PriorityWithdrawalQueue.sol";
-import "../../src/ReentrancyGuardNamespaced.sol";
+import "../../src/utils/ReentrancyGuardNamespaced.sol";
 import "../../src/RoleRegistry.sol";
 import "../../src/UUPSProxy.sol";
 import "../../src/helpers/Blacklister.sol";

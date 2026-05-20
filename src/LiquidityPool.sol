@@ -22,7 +22,7 @@ import "./interfaces/IEtherFiRedemptionManager.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
 import "./interfaces/IBlacklister.sol";
-import "./ReentrancyGuardNamespaced.sol";
+import "./utils/ReentrancyGuardNamespaced.sol";
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardNamespaced, PausableUntil, ILiquidityPool {
     using SafeERC20 for IERC20;
