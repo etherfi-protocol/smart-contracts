@@ -237,8 +237,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Used by eETH staking flow through Liquifier contract; deVamp or to pay protocol fees
-    function depositToRecipient(address _recipient, uint256 _amount, address _referral) public whenNotPaused returns (uint256) {
+    function depositToRecipient(address _recipient, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {
         if (msg.sender != address(liquifier) && msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
+        blacklister.nonBlacklisted(_recipient);
 
         emit Deposit(_recipient, _amount, SourceOfFunds.EETH, _referral);
 
@@ -248,6 +249,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     // Used by ether.fan staking flow
     function deposit(address _user, address _referral) external payable whenNotPaused nonReentrant returns (uint256) {
         if (msg.sender != address(membershipManager)) revert IncorrectCaller();
+        blacklister.nonBlacklisted(_user);
 
         emit Deposit(msg.sender, msg.value, SourceOfFunds.ETHER_FAN, _referral);
 
