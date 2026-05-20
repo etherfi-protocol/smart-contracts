@@ -741,7 +741,9 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         return uint256(1 gwei) * minDepositGwei;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     //--------------------------------------------------------------------------------------
     //--------------------------------------  GETTER  --------------------------------------

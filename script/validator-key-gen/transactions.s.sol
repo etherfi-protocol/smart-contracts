@@ -71,10 +71,10 @@ contract ValidatorKeyGenTransactions is Script {
         string memory forkUrl = vm.envString("MAINNET_RPC_URL"); // TODO: change to mainnet fork
         vm.selectFork(vm.createFork(forkUrl));
 
-        LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = LiquidityPool(payable(liquidityPoolImpl)).LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE();
-        ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE();
-        STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE = StakingManager(payable(stakingManagerImpl)).STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE();
-        ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE = EtherFiNodesManager(payable(etherFiNodesManagerImpl)).ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE();
+        LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = roleRegistry.EOA_1();
+        ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = roleRegistry.EOA_2();
+        STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE = roleRegistry.EOA_1();
+        ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE = roleRegistry.EOA_3();
 
         executeUpgrade();
         forkTestOne();
@@ -175,7 +175,7 @@ contract ValidatorKeyGenTransactions is Script {
 
     function forkTestOne() public {
         vm.prank(roleRegistry.owner());
-        roleRegistry.grantRole(auctionManager.AUCTION_MANAGER_ADMIN_ROLE(), ETHERFI_OPERATING_ADMIN);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), ETHERFI_OPERATING_ADMIN);
 
         address spawner = vm.addr(0x1234);
         

@@ -19,6 +19,7 @@ import "../../src/NodeOperatorManager.sol";
 import "../../src/interfaces/ITNFT.sol";
 import "../../src/interfaces/IBNFT.sol";
 import "../../src/AuctionManager.sol";
+import "../../src/RoleRegistry.sol";
 import "../../src/helpers/Blacklister.sol";
 import "../../src/libraries/DepositDataRootGenerator.sol";
 
@@ -41,7 +42,7 @@ contract PreludeTest is Test, ArrayTestHelper {
     address eigenPodManager = address(0x91E677b07F7AF907ec9a428aafA9fc14a0d3A338);
     address delegationManager = address(0x39053D51B77DC0d36036Fc1fCc8Cb819df8Ef37A);
     address etherFiNodeBeacon = address(0x3c55986Cfee455E2533F4D29006634EcF9B7c03F);
-    RoleRegistry roleRegistry = RoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
+    IRoleRegistry roleRegistry = IRoleRegistry(0x62247D29B4B9BECf4BB73E0c722cf6445cfC7cE9);
     IStrategy beaconStrategy = IStrategy(address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0));
 
     // role users
@@ -67,6 +68,11 @@ contract PreludeTest is Test, ArrayTestHelper {
     function setUp() public {
 
         vm.selectFork(vm.createFork(vm.envString("MAINNET_RPC_URL")));
+
+        // Upgrade RoleRegistry in place so newly-added role getters defined in
+        // RolesLibrary are reachable on the deployed proxy.
+        vm.prank(roleRegistry.owner());
+        RoleRegistry(address(roleRegistry)).upgradeTo(address(new RoleRegistry(address(0))));
 
         stakingManager = StakingManager(0x25e821b7197B146F7713C3b89B6A4D83516B912d);
         liquidityPool = ILiquidityPool(0x308861A430be4cce5502d0A12724771Fc6DaF216);
@@ -138,20 +144,17 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // permissions
         vm.startPrank(roleRegistry.owner());
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), callForwarder);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), eigenlayerAdmin);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManager));
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_POD_PROVER_ROLE(), address(podProver));
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(), elExiter);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE(), admin);
-        roleRegistry.grantRole(stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(), admin);
-        roleRegistry.grantRole(stakingManager.STAKING_MANAGER_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), admin);
-        roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE(), admin);
-        roleRegistry.grantRole(liquidityPoolImpl.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
-        roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE(), elExiter);
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.EOA_4(), callForwarder);
+        roleRegistry.grantRole(roleRegistry.EOA_2(), eigenlayerAdmin);
+        roleRegistry.grantRole(roleRegistry.EOA_2(), address(stakingManager));
+        roleRegistry.grantRole(roleRegistry.EOA_4(), address(podProver));
+        roleRegistry.grantRole(roleRegistry.EOA_3(), elExiter);
+        roleRegistry.grantRole(roleRegistry.EOA_3(), admin);
+        roleRegistry.grantRole(roleRegistry.EOA_1(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
+        roleRegistry.grantRole(roleRegistry.EOA_3(), elExiter);
         vm.stopPrank();
 
         // register admin as a validator spawner so helper_createValidator can drive validator creation through LP entry points
@@ -362,7 +365,9 @@ contract PreludeTest is Test, ArrayTestHelper {
         vm.prank(admin);
         liquidityPool.setValidatorSizeWei(33 ether);
 
-        vm.prank(admin);
+        // batchApproveRegistration is now restricted to msg.sender == etherFiAdminContract
+        // after the role-consolidation refactor.
+        vm.prank(LiquidityPool(payable(address(liquidityPool))).etherFiAdminContract());
         liquidityPool.batchApproveRegistration(
             toArray_u256(bidId),
             toArray_bytes(pubkey),
@@ -396,7 +401,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // grant roles
         vm.startPrank(roleRegistry.owner());
         {
-            roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), user);
+            roleRegistry.grantRole(roleRegistry.EOA_4(), user);
         }
         vm.stopPrank();
 
@@ -452,8 +457,8 @@ contract PreludeTest is Test, ArrayTestHelper {
         
         vm.startPrank(roleRegistry.owner());
         {
-            roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), user1);
-            roleRegistry.grantRole(etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(), user2);
+            roleRegistry.grantRole(roleRegistry.EOA_4(), user1);
+            roleRegistry.grantRole(roleRegistry.EOA_4(), user2);
         }
         vm.stopPrank();
 
@@ -527,11 +532,11 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         // Test 4: Access control - only admin can update whitelists
         vm.prank(user1);
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         etherFiNodesManager.updateAllowedForwardedExternalCalls(user2, transferSelector, usdc, true);
 
         vm.prank(user1);
-        vm.expectRevert(IEtherFiNodesManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         etherFiNodesManager.updateAllowedForwardedEigenpodCalls(user2, podOwnerSelector, true);
     }
 
@@ -551,7 +556,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         oldNodes[0] = 0x0F3e5FA1720E0b99d4DF5ed38783d6f7d71AaF12;
         oldNodes[1] = 0xB94AD22998B357fC52e6ff6bE1024a1846BE6f73;
         vm.prank(user);
-        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         stakingManager.backfillExistingEtherFiNodes(oldNodes);
 
         vm.prank(admin);
@@ -965,7 +970,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         assertEq(address(newNode.getEigenPod()), address(0));
 
         // admin creates one and it should be connected
-        vm.prank(eigenlayerAdmin);
+        vm.prank(address(stakingManager));
         address newPod = etherFiNodesManager.createEigenPod(address(newNode));
         assert(newPod != address(0));
         assertEq(newPod, address(newNode.getEigenPod()));
@@ -1194,7 +1199,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Grant role to the triggering EOA
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(
-            etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(),
+            roleRegistry.EOA_3(),
             elExiter
         );
         vm.stopPrank();
@@ -1253,7 +1258,7 @@ contract PreludeTest is Test, ArrayTestHelper {
 
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(
-            etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(),
+            roleRegistry.EOA_3(),
             elExiter
         );
         vm.stopPrank();
@@ -1455,7 +1460,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         // Grant role to the triggering EOA
         vm.startPrank(roleRegistry.owner());
         roleRegistry.grantRole(
-            etherFiNodesManager.ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE(),
+            roleRegistry.EOA_3(),
             elExiter
         );
         vm.stopPrank();
@@ -1533,7 +1538,7 @@ contract PreludeTest is Test, ArrayTestHelper {
         bytes32 limitId = etherFiNodesManager.UNRESTAKING_LIMIT_ID();
 
         // Debug: check if admin has the role
-        bool hasRole = roleRegistry.hasRole(rateLimiter.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), admin);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.OPERATION_MULTISIG_ROLE(), admin);
         assertTrue(hasRole, "Admin should have the rate limiter role");
 
         // Admin should be able to set capacity and refill rate

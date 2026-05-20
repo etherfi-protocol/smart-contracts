@@ -57,9 +57,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint256 public maxFinalizedWithdrawalAmountPerDay;
     uint256 public maxNumValidatorsToApprovePerDay;
 
-    bytes32 public constant ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE");
-    bytes32 public constant ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE = keccak256("ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE");
-
     // Protocol fees must not exceed 1/MAX_PROTOCOL_FEE_INV_RATIO of total rewards (currently 20%).
     uint256 public constant MAX_PROTOCOL_FEE_INV_RATIO = 5;
 
@@ -161,67 +158,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
 
-    // pause {etherfi oracle, staking manager, auction manager, etherfi nodes manager, liquidity pool, membership manager}
-    // based on the boolean flags
-    // if true, pause,
-    // else, unpuase
-    function pause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external {
-        if( !roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
-        if (_etherFiOracle && !IEtherFiPausable(address(etherFiOracle)).paused()) {
-            etherFiOracle.pauseContract();
-        }
-
-        if (_stakingManager && !IEtherFiPausable(address(stakingManager)).paused()) {
-            stakingManager.pauseContract();
-        }
-
-        if (_auctionManager && !IEtherFiPausable(address(auctionManager)).paused()) {
-            auctionManager.pauseContract();
-        }
-
-        if (_etherFiNodesManager && !IEtherFiPausable(address(etherFiNodesManager)).paused()) {
-            etherFiNodesManager.pauseContract();
-        }
-
-        if (_liquidityPool && !IEtherFiPausable(address(liquidityPool)).paused()) {
-            liquidityPool.pauseContract();
-        }
-
-        if (_membershipManager && !IEtherFiPausable(address(membershipManager)).paused()) {
-            membershipManager.pauseContract();
-        }
-    }
-
-    function unPause(bool _etherFiOracle, bool _stakingManager, bool _auctionManager, bool _etherFiNodesManager, bool _liquidityPool, bool _membershipManager) external {
-        if( !roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
-        if (_etherFiOracle && IEtherFiPausable(address(etherFiOracle)).paused()) {
-            etherFiOracle.unPauseContract();
-        }
-
-        if (_stakingManager && IEtherFiPausable(address(stakingManager)).paused()) {
-            stakingManager.unPauseContract();
-        }
-
-        if (_auctionManager && IEtherFiPausable(address(auctionManager)).paused()) {
-            auctionManager.unPauseContract();
-        }
-
-        if (_etherFiNodesManager && IEtherFiPausable(address(etherFiNodesManager)).paused()) {
-            etherFiNodesManager.unPauseContract();
-        }
-
-        if (_liquidityPool && IEtherFiPausable(address(liquidityPool)).paused()) {
-            liquidityPool.unPauseContract();
-        }
-
-        if (_membershipManager && IEtherFiPausable(address(membershipManager)).paused()) {
-            membershipManager.unPauseContract();
-        }
-    }
-
-
-    function setValidatorTaskBatchSize(uint16 _batchSize) external {
-        if(!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function setValidatorTaskBatchSize(uint16 _batchSize) external onlyAdmin {
         if (_batchSize == 0 || _batchSize > MAX_VALIDATOR_TASK_BATCH_SIZE) revert InvalidValidatorTaskBatchSize();
         validatorTaskBatchSize = _batchSize;
     }
@@ -249,7 +186,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_1(), msg.sender)) revert IncorrectRole();
 
         require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
@@ -261,9 +198,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit ValidatorApprovalTaskCompleted(taskHash, _reportHash, _validators);
     }
 
-    function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-
+    function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) external onlyOperations {
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
         require(validatorApprovalTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
         require(!validatorApprovalTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
@@ -450,27 +385,22 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return (lastHandledReportRefBlock == 0) ? 0 : lastHandledReportRefBlock + 1;
     }
 
-    function updateMaxFinalizedWithdrawalAmountPerDay(uint256 _maxFinalizedWithdrawalAmountPerDay) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function updateMaxFinalizedWithdrawalAmountPerDay(uint256 _maxFinalizedWithdrawalAmountPerDay) external onlyAdmin {
         if (_maxFinalizedWithdrawalAmountPerDay == 0 || _maxFinalizedWithdrawalAmountPerDay > MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY) revert InvalidMaxFinalizedWithdrawalAmountPerDay();
         maxFinalizedWithdrawalAmountPerDay = _maxFinalizedWithdrawalAmountPerDay;
     }
 
-    function updateMaxNumValidatorsToApprovePerDay(uint256 _maxNumValidatorsToApprovePerDay) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function updateMaxNumValidatorsToApprovePerDay(uint256 _maxNumValidatorsToApprovePerDay) external onlyAdmin {
         if (_maxNumValidatorsToApprovePerDay > MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY) revert InvalidMaxNumValidatorsToApprovePerDay();
         maxNumValidatorsToApprovePerDay = _maxNumValidatorsToApprovePerDay;
     }
 
-    function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function updateAcceptableRebaseApr(int32 _acceptableRebaseAprInBps) external onlyAdmin {
         if (_acceptableRebaseAprInBps < 0 || _acceptableRebaseAprInBps > MAX_ACCEPTABLE_REBASE_APR_IN_BPS) revert InvalidAcceptableRebaseApr();
         acceptableRebaseAprInBps = _acceptableRebaseAprInBps;
     }
 
-    function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external {
-        if (!roleRegistry.hasRole(ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-
+    function updatePostReportWaitTimeInSlots(uint16 _postReportWaitTimeInSlots) external onlyAdmin {
         postReportWaitTimeInSlots = _postReportWaitTimeInSlots;
     }
 
@@ -480,5 +410,15 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function _authorizeUpgrade(address newImplementation) internal override {
         roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
     }
 }

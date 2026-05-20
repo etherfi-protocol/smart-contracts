@@ -353,25 +353,20 @@ contract LiquifierTest is TestSetup {
 
         // bob has no pauser role
         vm.startPrank(bob);
-        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         liquifierInstance.pauseContract();
         vm.stopPrank();
 
-        // grant PROTOCOL_PAUSER to bob
+        // grant OPERATION_MULTISIG_ROLE (consolidated admin/pauser) to bob
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), bob);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), bob);
         vm.stopPrank();
 
         vm.prank(bob);
         liquifierInstance.pauseContract();
 
-        // bob cannot unpause — no PROTOCOL_UNPAUSER
+        // bob can also unpause now (consolidated into a single admin role).
         vm.prank(bob);
-        vm.expectRevert(Liquifier.IncorrectRole.selector);
-        liquifierInstance.unPauseContract();
-
-        // setUpLiquifier granted PROTOCOL_UNPAUSER to owner
-        vm.prank(owner);
         liquifierInstance.unPauseContract();
     }
 
@@ -386,14 +381,14 @@ contract LiquifierTest is TestSetup {
         stEth.transfer(address(liquifierInstance), 1 ether);
         vm.stopPrank();
 
-        // bob has no roles
+        // bob has no roles; sendToEtherFiRestaker now requires EOA_2
         vm.prank(bob);
         vm.expectRevert(Liquifier.IncorrectRole.selector);
         liquifierInstance.sendToEtherFiRestaker(address(stEth), 1);
 
-        // chad has only LIQUIFIER_ADMIN_ROLE — that role is no longer accepted here
+        // chad has only the consolidated admin role — sender path requires EOA_2
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), chad);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), chad);
         vm.stopPrank();
         vm.prank(chad);
         vm.expectRevert(Liquifier.IncorrectRole.selector);
@@ -411,8 +406,9 @@ contract LiquifierTest is TestSetup {
         vm.stopPrank();
 
         address sender = makeAddr("liqSender");
+        // LIQUIFIER_SENDER_ROLE consolidated into EOA_2.
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_SENDER_ROLE(), sender);
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), sender);
         vm.stopPrank();
 
         uint256 restakerBalBefore = stEth.balanceOf(address(etherFiRestakerInstance));
@@ -426,13 +422,9 @@ contract LiquifierTest is TestSetup {
         assertApproxEqAbs(stEth.balanceOf(address(liquifierInstance)), liquifierBalBefore - 1 ether, 2);
     }
 
-    function test_LIQUIFIER_SENDER_ROLE_constant() public {
-        initializeRealisticFork(MAINNET_FORK);
-        setUpLiquifier(MAINNET_FORK);
-
-        assertEq(liquifierInstance.LIQUIFIER_SENDER_ROLE(), keccak256("LIQUIFIER_SENDER_ROLE"));
-        assertTrue(liquifierInstance.LIQUIFIER_ADMIN_ROLE() != liquifierInstance.LIQUIFIER_SENDER_ROLE());
-    }
+    // test_LIQUIFIER_SENDER_ROLE_constant removed:
+    // LIQUIFIER_SENDER_ROLE / LIQUIFIER_ADMIN_ROLE no longer exist as named roles —
+    // they were consolidated into EOA_2 and OPERATION_MULTISIG_ROLE respectively.
 
     function test_getTotalPooledEther() public {
         initializeRealisticFork(MAINNET_FORK);
@@ -455,9 +447,10 @@ contract LiquifierTest is TestSetup {
 
     function _grantLiqPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), liqPauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), liqUnpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), liqPauseUntilDurationSetter);
+        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE (onlyAdmin).
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), liqPauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), liqUnpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), liqPauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
@@ -476,12 +469,7 @@ contract LiquifierTest is TestSetup {
         _grantLiqPauseUntilRoles();
 
         vm.prank(bob);
-        vm.expectRevert(Liquifier.IncorrectRole.selector);
-        liquifierInstance.pauseContractUntil();
-
-        // PROTOCOL_PAUSER alone is insufficient
-        vm.prank(owner);
-        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
         liquifierInstance.pauseContractUntil();
     }
 
@@ -504,12 +492,7 @@ contract LiquifierTest is TestSetup {
         liquifierInstance.pauseContractUntil();
 
         vm.prank(bob);
-        vm.expectRevert(Liquifier.IncorrectRole.selector);
-        liquifierInstance.unpauseContractUntil();
-
-        // PROTOCOL_UNPAUSER alone is insufficient
-        vm.prank(owner);
-        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         liquifierInstance.unpauseContractUntil();
     }
 
@@ -545,12 +528,12 @@ contract LiquifierTest is TestSetup {
         uint256 maxDur = liquifierInstance.MAX_PAUSE_DURATION();
 
         vm.prank(bob);
-        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         liquifierInstance.setPauseUntilDuration(maxDur);
 
-        // PAUSE_UNTIL_ROLE alone is insufficient
+        // Guardian-only role (liqPauseUntilPauser) cannot set the duration; needs admin role.
         vm.prank(liqPauseUntilPauser);
-        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         liquifierInstance.setPauseUntilDuration(maxDur);
     }
 
@@ -825,16 +808,16 @@ contract LiquifierTest is TestSetup {
     function test_updateDiscountInBasisPoints_revertsWithoutRole() public {
         _setUp(MAINNET_FORK);
 
-        // bob never receives LIQUIFIER_ADMIN_ROLE in setUpLiquifier
+        // bob never receives OPERATION_MULTISIG_ROLE in setUpLiquifier
         vm.prank(bob);
-        vm.expectRevert(Liquifier.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500);
     }
 
     function test_quoteByDiscountedValue_appliesNewDiscount() public {
         _setUp(MAINNET_FORK);
 
-        vm.prank(owner);
+        vm.prank(admin);
         liquifierInstance.updateDiscountInBasisPoints(address(stEth), 500); // 5%
 
         uint256 amount = 10 ether;

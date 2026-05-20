@@ -22,10 +22,10 @@ contract MembershipNFTTest is TestSetup {
 
     function test_metadata() public {
 
-        // only admin can update uri
-        vm.expectRevert("Caller is not the admin");
+        // Setters now gate on OPERATION_MULTISIG_ROLE — test contract holds no roles.
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         membershipNftInstance.setMetadataURI("badURI.com");
-        vm.expectRevert("Caller is not the admin");
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         membershipNftInstance.setContractMetadataURI("badURI2.com");
 
         vm.startPrank(alice);
@@ -73,9 +73,9 @@ contract MembershipNFTTest is TestSetup {
 
     function test_pauseMinting() public {
 
-        // only owner can set pause status
-        vm.startPrank(owner);
-        vm.expectRevert("Caller is not the admin");
+        // setMintingPaused now requires OPERATION_MULTISIG_ROLE; bob holds no roles.
+        vm.startPrank(bob);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         membershipNftInstance.setMintingPaused(true);
         vm.stopPrank();
 
@@ -222,7 +222,7 @@ contract MembershipNFTTest is TestSetup {
         uint256 tokenId = _mintNftTo(alice);
 
         vm.prank(owner);
-        blacklisterInstance.extendBlacklistUntil(alice, 1 days);
+        blacklisterInstance.setBlacklistUntil(alice, 1 days);
 
         vm.prank(alice);
         _expectBlacklistedRevert(alice);

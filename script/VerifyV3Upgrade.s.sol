@@ -274,62 +274,38 @@ contract VerifyV3Upgrade is Script {
     }
 
     function verifyRoleAssignments() internal {
-        // Define expected roles based on prelude.t.sol
+        // After role consolidation, all per-contract roles map to one of the 8 tier roles:
+        //   UPGRADE_TIMELOCK_ROLE, OPERATION_TIMELOCK_ROLE, OPERATION_MULTISIG_ROLE,
+        //   GUARDIAN_ROLE, EOA_1..EOA_4. Verify the consolidated constants exist.
 
-        // StakingManager roles
-        bytes32 STAKING_MANAGER_NODE_CREATOR_ROLE = keccak256(
-            "STAKING_MANAGER_NODE_CREATOR_ROLE"
-        );
-        console2.log("Checking StakingManager roles...");
-
-        // At least check that the role exists in the system
+        console2.log("Checking consolidated role constants...");
         checkCondition(
-            STAKING_MANAGER_NODE_CREATOR_ROLE ==
-                stakingManager.STAKING_MANAGER_NODE_CREATOR_ROLE(),
-            "STAKING_MANAGER_NODE_CREATOR_ROLE constant matches"
-        );
-
-        // EtherFiNodesManager roles
-        bytes32 ETHERFI_NODES_MANAGER_ADMIN_ROLE = keccak256(
-            "ETHERFI_NODES_MANAGER_ADMIN_ROLE"
-        );
-        bytes32 ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = keccak256(
-            "ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE"
-        );
-        bytes32 ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE = keccak256(
-            "ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE"
-        );
-
-        console2.log("Checking EtherFiNodesManager roles...");
-        checkCondition(
-            ETHERFI_NODES_MANAGER_ADMIN_ROLE ==
-                etherFiNodesManager.ETHERFI_NODES_MANAGER_ADMIN_ROLE(),
-            "ETHERFI_NODES_MANAGER_ADMIN_ROLE constant matches"
+            keccak256("OPERATION_TIMELOCK_ROLE") == roleRegistry.OPERATION_TIMELOCK_ROLE(),
+            "OPERATION_TIMELOCK_ROLE constant matches"
         );
         checkCondition(
-            ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE ==
-                etherFiNodesManager
-                    .ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(),
-            "ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE constant matches"
+            keccak256("OPERATION_MULTISIG_ROLE") == roleRegistry.OPERATION_MULTISIG_ROLE(),
+            "OPERATION_MULTISIG_ROLE constant matches"
         );
         checkCondition(
-            ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE ==
-                etherFiNodesManager.ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE(),
-            "ETHERFI_NODES_MANAGER_CALL_FORWARDER_ROLE constant matches"
-        );
-
-        // Check protocol pauser/unpauser roles exist
-        bytes32 PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
-        bytes32 PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
-
-        console2.log("Checking protocol pause roles...");
-        checkCondition(
-            PROTOCOL_PAUSER == roleRegistry.PROTOCOL_PAUSER(),
-            "PROTOCOL_PAUSER constant matches"
+            keccak256("GUARDIAN_ROLE") == roleRegistry.GUARDIAN_ROLE(),
+            "GUARDIAN_ROLE constant matches"
         );
         checkCondition(
-            PROTOCOL_UNPAUSER == roleRegistry.PROTOCOL_UNPAUSER(),
-            "PROTOCOL_UNPAUSER constant matches"
+            keccak256("EOA_1") == roleRegistry.EOA_1(),
+            "EOA_1 constant matches"
+        );
+        checkCondition(
+            keccak256("EOA_2") == roleRegistry.EOA_2(),
+            "EOA_2 constant matches"
+        );
+        checkCondition(
+            keccak256("EOA_3") == roleRegistry.EOA_3(),
+            "EOA_3 constant matches"
+        );
+        checkCondition(
+            keccak256("EOA_4") == roleRegistry.EOA_4(),
+            "EOA_4 constant matches"
         );
     }
 

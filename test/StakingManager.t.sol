@@ -1374,8 +1374,10 @@ contract StakingManagerTest is TestSetup {
 
     function test_instantiateEtherFiNode() public {
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), alice);
-        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManagerInstance));
+        // STAKING_MANAGER_NODE_CREATOR_ROLE consolidated into EOA_3.
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), alice);
+        // ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE consolidated into EOA_2.
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), address(stakingManagerInstance));
         vm.stopPrank();
         
         vm.prank(alice);
@@ -1391,7 +1393,8 @@ contract StakingManagerTest is TestSetup {
 
     function test_backfillExistingEtherFiNodes() public {
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_ADMIN_ROLE(), alice);
+        // STAKING_MANAGER_ADMIN_ROLE consolidated into OPERATION_MULTISIG_ROLE.
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
         vm.stopPrank();
         
         address[] memory nodes = new address[](2);
@@ -1407,7 +1410,8 @@ contract StakingManagerTest is TestSetup {
 
     function test_backfillExistingEtherFiNodesSkipsDuplicates() public {
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_ADMIN_ROLE(), alice);
+        // STAKING_MANAGER_ADMIN_ROLE consolidated into OPERATION_MULTISIG_ROLE.
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
         vm.stopPrank();
         
         address[] memory nodes = new address[](2);
@@ -1423,31 +1427,31 @@ contract StakingManagerTest is TestSetup {
     function test_backfillExistingEtherFiNodesFailsIfNotAdmin() public {
         address[] memory nodes = new address[](1);
         nodes[0] = address(0x1111);
-        
-        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         stakingManagerInstance.backfillExistingEtherFiNodes(nodes);
     }
 
     function test_unPauseContract() public {
-        address pauser = roleRegistryInstance.roleHolders(roleRegistryInstance.PROTOCOL_PAUSER())[0];
+        // StakingManager pause/unpause is gated by onlyAdmin (OPERATION_MULTISIG_ROLE).
+        address pauser = roleRegistryInstance.roleHolders(roleRegistryInstance.OPERATION_MULTISIG_ROLE())[0];
         vm.startPrank(pauser);
         stakingManagerInstance.pauseContract();
         vm.stopPrank();
         assertTrue(stakingManagerInstance.paused());
-        
-        address unpauser = roleRegistryInstance.roleHolders(roleRegistryInstance.PROTOCOL_UNPAUSER())[0];
-        vm.prank(unpauser);
+
+        vm.prank(pauser);
         stakingManagerInstance.unPauseContract();
         assertFalse(stakingManagerInstance.paused());
     }
 
     function test_unPauseContractFailsIfNotAuthorized() public {
-        address pauser = roleRegistryInstance.roleHolders(roleRegistryInstance.PROTOCOL_PAUSER())[0];
+        address pauser = roleRegistryInstance.roleHolders(roleRegistryInstance.OPERATION_MULTISIG_ROLE())[0];
         vm.prank(pauser);
         stakingManagerInstance.pauseContract();
-        
+
         vm.prank(bob);
-        vm.expectRevert(IStakingManager.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         stakingManagerInstance.unPauseContract();
     }
 
@@ -1476,7 +1480,8 @@ contract StakingManagerTest is TestSetup {
 
     function test_createBeaconValidators() public {
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(managerInstance.ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE(), address(stakingManagerInstance));
+        // ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE consolidated into EOA_2.
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), address(stakingManagerInstance));
         vm.stopPrank();
 
         vm.prank(admin);
@@ -1493,7 +1498,8 @@ contract StakingManagerTest is TestSetup {
         uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
         
         vm.startPrank(owner);
-        roleRegistryInstance.grantRole(stakingManagerInstance.STAKING_MANAGER_NODE_CREATOR_ROLE(), alice);
+        // STAKING_MANAGER_NODE_CREATOR_ROLE consolidated into EOA_3.
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), alice);
         vm.stopPrank();
         
         vm.prank(alice);

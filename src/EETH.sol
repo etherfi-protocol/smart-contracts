@@ -42,13 +42,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
 
-    bytes32 public constant EETH_OPERATING_ADMIN_ROLE = keccak256("EETH_OPERATING_ADMIN_ROLE");
-
     event Paused();
     event Unpaused();
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
-
-    error IncorrectRole();
 
     // TODO: Figure our what `name` and `version` are for
     constructor(address _liquidityPool, address _roleRegistry, address _blacklister) {
@@ -140,30 +136,25 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         return true;
     }
 
-    function pause() external {
-        if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+    function pause() external onlyOperations {
         paused = true;
         emit Paused();
     }
 
-    function unpause() external {
-        if(!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+    function unpause() external onlyOperations {
         paused = false;
         emit Unpaused();
     }
 
-    function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContractUntil() external onlyGuardian {
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
@@ -188,18 +179,15 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _approve(owner, spender, value);
     }
 
-    function recoverETH(address payable to, uint256 amount) external {
-        if(!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function recoverETH(address payable to, uint256 amount) external onlyOperations {
         _recoverETH(to, amount);
     }
 
-    function recoverERC20(address token, address to, uint256 amount) external {
-        if(!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function recoverERC20(address token, address to, uint256 amount) external onlyOperations{
         _recoverERC20(token, to, amount);
     }
 
-    function recoverERC721(address token, address to, uint256 tokenId) external {
-        if(!roleRegistry.hasRole(EETH_OPERATING_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    function recoverERC721(address token, address to, uint256 tokenId) external onlyOperations {
         _recoverERC721(token, to, tokenId);
     }
 
@@ -292,6 +280,21 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     // [MODIFIERS]
     modifier onlyPoolContract() {
         require(msg.sender == address(liquidityPool), "Only pool contract function");
+        _;
+    }
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 

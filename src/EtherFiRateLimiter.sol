@@ -19,11 +19,6 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     mapping(bytes32 bucketId => BucketLimiter.Limit) limits;
     mapping(bytes32 bucketId => mapping(address consumer => bool allowed)) consumers;
 
-    //---------------------------------------------------------------------------
-    //----------------------------  ROLES  --------------------------------------
-    //---------------------------------------------------------------------------
-    bytes32 public constant ETHERFI_RATE_LIMITER_ADMIN_ROLE = keccak256("ETHERFI_RATE_LIMITER_ADMIN_ROLE");
-
     //-------------------------------------------------------------------------
     //-------------------------  Deployment  ----------------------------------
     //-------------------------------------------------------------------------
@@ -97,14 +92,12 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     }
 
     /// @notice Pauses the contract, preventing consumption operations
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyOperations {
         _pause();
     }
 
     /// @notice Unpauses the contract, allowing consumption operations
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
@@ -178,7 +171,12 @@ contract EtherFiRateLimiter is IEtherFiRateLimiter, Initializable, UUPSUpgradeab
     //--------------------------------------------------------------------------------------
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(ETHERFI_RATE_LIMITER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 }

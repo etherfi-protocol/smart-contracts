@@ -68,10 +68,10 @@ contract PriorityQueueTransactions is Script, Utils {
 
         contractCodeChecker = new ContractCodeChecker();
 
-        // Get role hashes from the implementation
-        PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE = PriorityWithdrawalQueue(payable(priorityWithdrawalQueueImpl)).PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE();
-        PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = PriorityWithdrawalQueue(payable(priorityWithdrawalQueueImpl)).PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE();
-        PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE = PriorityWithdrawalQueue(payable(priorityWithdrawalQueueImpl)).PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE();
+        // Get role hashes from the role registry
+        PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE = roleRegistryContract.OPERATION_TIMELOCK_ROLE();
+        PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = roleRegistryContract.EOA_2();
+        PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE = roleRegistryContract.EOA_1();
 
         // Step 1: Verify deployed bytecode matches expected
         verifyDeployedBytecode();

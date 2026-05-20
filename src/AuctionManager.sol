@@ -6,6 +6,7 @@ import "./interfaces/INodeOperatorManager.sol";
 import "./interfaces/IProtocolRevenueManager.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
+import "./utils/PausableUntil.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -17,6 +18,7 @@ contract AuctionManager is
     IAuctionManager,
     PausableUpgradeable,
     OwnableUpgradeable,
+    PausableUntil,
     ReentrancyGuardUpgradeable,
     UUPSUpgradeable
 {
@@ -53,10 +55,6 @@ contract AuctionManager is
     INodeOperatorManager public immutable nodeOperatorManager;
     address public immutable stakingManagerContractAddress;
     address public immutable membershipManagerContractAddress;
-
-    bytes32 public constant AUCTION_MANAGER_ADMIN_ROLE = keccak256("AUCTION_MANAGER_ADMIN_ROLE");
-
-    error IncorrectRole();
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -230,7 +228,7 @@ contract AuctionManager is
         }
     }
 
-    function transferAccumulatedRevenue() external onlyAdmin {
+    function transferAccumulatedRevenue() external onlyOperations {
         uint256 transferAmount = accumulatedRevenue;
         accumulatedRevenue = 0;
         (bool sent, ) = membershipManagerContractAddress.call{value: transferAmount}("");
@@ -239,28 +237,41 @@ contract AuctionManager is
 
     /// @notice Disables the whitelisting phase of the bidding
     /// @dev Allows both regular users and whitelisted users to bid
-    function disableWhitelist() public onlyAdmin {
+    function disableWhitelist() public onlyOperations {
         whitelistEnabled = false;
         emit WhitelistDisabled(whitelistEnabled);
     }
 
     /// @notice Enables the whitelisting phase of the bidding
     /// @dev Only users who are on a whitelist can bid
-    function enableWhitelist() public onlyAdmin {
+    function enableWhitelist() public onlyOperations {
         whitelistEnabled = true;
         emit WhitelistEnabled(whitelistEnabled);
     }
 
     //Pauses the contract
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyOperations {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyOperations {
         _unpause();
+    }
+
+    // Pauses contract until MAX_PAUSE_DURATION
+    function pauseContractUntil() external onlyGuardian {
+        _pauseUntil();
+    }
+
+    // Unpauses contract from pauseUntil
+    function unpauseContractUntil() external onlyOperations {
+        _unpauseUntil();
+    }
+
+    /// @notice Sets the pause duration for the contract
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
+        _setPauseUntilDuration(_pauseUntilDuration);
     }
 
     //--------------------------------------------------------------------------------------
@@ -283,7 +294,14 @@ contract AuctionManager is
         emit BidCancelled(_bidId);
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _requireNotPaused() internal override view {
+        _requireNotPausedUntil();
+        super._requireNotPaused();
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     //--------------------------------------------------------------------------------------
     //--------------------------------------  GETTER  --------------------------------------
@@ -315,7 +333,7 @@ contract AuctionManager is
 
     /// @notice Updates the minimum bid price for a non-whitelisted bidder
     /// @param _newMinBidAmount the new amount to set the minimum bid price as
-    function setMinBidPrice(uint64 _newMinBidAmount) external onlyAdmin {
+    function setMinBidPrice(uint64 _newMinBidAmount) external onlyOperations {
         require(_newMinBidAmount < maxBidAmount, "Min bid exceeds max bid");
         require(_newMinBidAmount >= whitelistBidAmount, "Min bid less than whitelist bid amount");
         minBidAmount = _newMinBidAmount;
@@ -323,14 +341,14 @@ contract AuctionManager is
 
     /// @notice Updates the maximum bid price for both whitelisted and non-whitelisted bidders
     /// @param _newMaxBidAmount the new amount to set the maximum bid price as
-    function setMaxBidPrice(uint64 _newMaxBidAmount) external onlyAdmin {
+    function setMaxBidPrice(uint64 _newMaxBidAmount) external onlyOperations {
         require(_newMaxBidAmount > minBidAmount, "Min bid exceeds max bid");
         maxBidAmount = _newMaxBidAmount;
     }
 
     /// @notice Updates the accumulated revenue threshold that will trigger a transfer to MembershipNFT contract
     /// @param _newThreshold the new threshold to set
-    function setAccumulatedRevenueThreshold(uint128 _newThreshold) external onlyAdmin {
+    function setAccumulatedRevenueThreshold(uint128 _newThreshold) external onlyOperations {
         accumulatedRevenueThreshold = _newThreshold;
     }
 
@@ -338,7 +356,7 @@ contract AuctionManager is
     /// @param _newAmount the new amount to set the minimum bid price as
     function updateWhitelistMinBidAmount(
         uint128 _newAmount
-    ) external onlyOwner {
+    ) external onlyOperations {
         require(_newAmount < minBidAmount && _newAmount > 0, "Invalid Amount");
         whitelistBidAmount = _newAmount;
     }
@@ -353,7 +371,17 @@ contract AuctionManager is
     }
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(AUCTION_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 

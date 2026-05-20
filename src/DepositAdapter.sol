@@ -148,7 +148,9 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         return weEthAmount;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     modifier nonBlacklisted() {
         blacklister.nonBlacklisted(msg.sender);

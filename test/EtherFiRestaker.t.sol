@@ -231,7 +231,8 @@ contract EtherFiRestakerTest is TestSetup {
 
         address restakerOwner = restaker.owner();
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(keccak256("ETHERFI_RESTAKER_ADMIN_ROLE"), restakerOwner);
+        // ETHERFI_RESTAKER_ADMIN_ROLE consolidated into OPERATION_MULTISIG_ROLE.
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), restakerOwner);
         vm.stopPrank();
 
         vm.startPrank(restakerOwner);
@@ -258,13 +259,16 @@ contract EtherFiRestakerTest is TestSetup {
         etherFiRestakerInstance.upgradeTo(newRestakerImpl);
         vm.stopPrank();
 
-        // Grant all restaker roles to owner so existing tests continue to work
+        // Grant all restaker roles to owner so existing tests continue to work.
+        // onlyOperations (delegateTo/undelegate/withdrawEther/setRewardsClaimer/pause) → OPERATION_MULTISIG_ROLE.
+        // RateLimiter mutators are onlyAdmin → OPERATION_TIMELOCK_ROLE.
+        // stEthRequestWithdrawal / depositIntoStrategy / queueWithdrawals → EOA_2.
+        // stEthClaimWithdrawals / completeQueuedWithdrawals → EOA_3.
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_ADMIN_ROLE(), owner);
-        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE(), owner);
-        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE(), owner);
-        roleRegistryInstance.grantRole(etherFiRestakerInstance.ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE(), owner);
-        roleRegistryInstance.grantRole(rateLimiterInstance.ETHERFI_RATE_LIMITER_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), owner);
         vm.stopPrank();
 
         // Create rate-limiter buckets and register restaker as a consumer (idempotent)

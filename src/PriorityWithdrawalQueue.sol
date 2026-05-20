@@ -94,15 +94,6 @@ contract PriorityWithdrawalQueue is
     mapping(bytes32 => uint224) private _fulfillmentRates;
 
     //--------------------------------------------------------------------------------------
-    //-------------------------------------  ROLES  ----------------------------------------
-    //--------------------------------------------------------------------------------------
-
-    bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE = keccak256("PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE");
-    bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = keccak256("PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE");
-    bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE = keccak256("PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE");
-    bytes32 public constant IMPLICIT_FEE_CLAIMER_ROLE = keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
-
-    //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
@@ -170,12 +161,22 @@ contract PriorityWithdrawalQueue is
     }
 
     modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
+    }
+
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
+        _;
+    }
+
+    modifier onlyGuardian() {
+        roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 
     modifier onlyRequestManager() {
-        if (!roleRegistry.hasRole(PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_1(), msg.sender)) revert IncorrectRole();
         _;
     }
 
@@ -410,21 +411,18 @@ contract PriorityWithdrawalQueue is
     //-----------------------------------  ADMIN FUNCTIONS  --------------------------------
     //--------------------------------------------------------------------------------------
 
-    function addToWhitelist(address user) external {
-        if (!roleRegistry.hasRole(PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
+    function addToWhitelist(address user) external onlyAdmin {
         if (user == address(0)) revert AddressZero();
         isWhitelisted[user] = true;
         emit WhitelistUpdated(user, true);
     }
 
-    function removeFromWhitelist(address user) external {
-        if (!roleRegistry.hasRole(PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
+    function removeFromWhitelist(address user) external onlyOperations {
         isWhitelisted[user] = false;
         emit WhitelistUpdated(user, false);
     }
 
-    function batchUpdateWhitelist(address[] calldata users, bool[] calldata statuses) external {
-        if (!roleRegistry.hasRole(PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE, msg.sender)) revert IncorrectRole();
+    function batchUpdateWhitelist(address[] calldata users, bool[] calldata statuses) external onlyAdmin {
         if (users.length != statuses.length) revert ArrayLengthMismatch();
         for (uint256 i = 0; i < users.length; ++i) {
             if (users[i] == address(0)) revert AddressZero();
@@ -457,7 +455,7 @@ contract PriorityWithdrawalQueue is
     ///      - Burn: the rest of the remainder is burned
     /// @param eEthAmount Amount of eETH remainder to handle
     function handleRemainder(uint256 eEthAmount) external {
-        if (!roleRegistry.hasRole(IMPLICIT_FEE_CLAIMER_ROLE, msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender)) revert IncorrectRole();
         if (eEthAmount == 0) revert BadInput();
         if (eEthAmount > liquidityPool.amountForShare(totalRemainderShares)) revert BadInput();
 
@@ -488,32 +486,27 @@ contract PriorityWithdrawalQueue is
         emit ShareRemainderSplitUpdated(_shareRemainderSplitToTreasuryInBps);
     }
 
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyOperations {
         if (paused) revert ContractPaused();
         paused = true;
         emit Paused(msg.sender);
     }
 
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyOperations {
         if (!paused) revert ContractNotPaused();
         paused = false;
         emit Unpaused(msg.sender);
     }
 
-    function pauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+    function pauseContractUntil() external onlyGuardian {
         _pauseUntil();
     }
 
-    function unpauseContractUntil() external {
-        if (!roleRegistry.hasRole(roleRegistry.UNPAUSE_UNTIL_ROLE(), msg.sender)) revert IncorrectRole();
+    function unpauseContractUntil() external onlyOperations {
         _unpauseUntil();
     }
 
-    function setPauseUntilDuration(uint256 _pauseUntilDuration) external {
-        if (!roleRegistry.hasRole(roleRegistry.PAUSE_DURATION_SETTER(), msg.sender)) revert IncorrectRole();
+    function setPauseUntilDuration(uint256 _pauseUntilDuration) external onlyAdmin {
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 

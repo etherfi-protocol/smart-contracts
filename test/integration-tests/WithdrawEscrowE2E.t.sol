@@ -40,17 +40,20 @@ contract WithdrawEscrowE2ETest is TestSetup {
         uint128 locked;
     }
 
-    // ── Role constants ───────────────────────────────────────────────────────
+    // ── Role constants (after role consolidation) ────────────────────────────
+    // PWQ admin → OPERATION_TIMELOCK_ROLE; PWQ whitelist manager → EOA_2;
+    // PWQ request manager → EOA_1; IMPLICIT_FEE_CLAIMER → EOA_2;
+    // WITHDRAW_REQUEST_NFT_ADMIN → OPERATION_TIMELOCK_ROLE.
     bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE =
-        keccak256("PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE");
+        keccak256("OPERATION_TIMELOCK_ROLE");
     bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE =
-        keccak256("PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE");
+        keccak256("EOA_2");
     bytes32 public constant PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE =
-        keccak256("PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE");
+        keccak256("EOA_1");
     bytes32 public constant IMPLICIT_FEE_CLAIMER_ROLE =
-        keccak256("IMPLICIT_FEE_CLAIMER_ROLE");
+        keccak256("EOA_2");
     bytes32 public constant WITHDRAW_REQUEST_NFT_ADMIN_ROLE =
-        keccak256("WITHDRAW_REQUEST_NFT_ADMIN_ROLE");
+        keccak256("OPERATION_TIMELOCK_ROLE");
 
     PriorityWithdrawalQueue public pQueue;
     address public queueRequestManager;
@@ -139,7 +142,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
                 address(membershipManagerInstance),
                 address(roleRegistryInstance),
                 address(blacklisterInstance)
-            , 1, 4e18))
+            , address(etherFiAdminInstance), 1, 4e18))
         );
     }
 
@@ -149,10 +152,10 @@ contract WithdrawEscrowE2ETest is TestSetup {
         roleRegistryInstance.grantRole(PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE, queueRequestManager);
         roleRegistryInstance.grantRole(IMPLICIT_FEE_CLAIMER_ROLE, alice);
         roleRegistryInstance.grantRole(WITHDRAW_REQUEST_NFT_ADMIN_ROLE, alice);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
         // WithdrawRequestNFT.unPauseContract requires PROTOCOL_UNPAUSER on the caller
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), alice);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
     }
 
     // ── Snapshot helpers ─────────────────────────────────────────────────────
@@ -298,7 +301,8 @@ contract WithdrawEscrowE2ETest is TestSetup {
         uint256 preTotalShares   = eETHInstance.totalShares();
         uint128 preLocked        = withdrawRequestNFTInstance.ethAmountLockedForWithdrawal();
 
-        vm.prank(alice);
+        // finalizeRequests is now restricted to msg.sender == etherFiAdmin.
+        vm.prank(address(etherFiAdminInstance));
         withdrawRequestNFTInstance.finalizeRequests(reqId);
 
         vm.prank(address(etherFiAdminInstance));

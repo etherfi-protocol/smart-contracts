@@ -150,7 +150,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // within their modifiers.
         address roleRegOwner = IOwnableRead(ROLE_REGISTRY).owner();
         vm.prank(roleRegOwner);
-        IUUPSProxy(ROLE_REGISTRY).upgradeTo(address(new RoleRegistry()));
+        IUUPSProxy(ROLE_REGISTRY).upgradeTo(address(new RoleRegistry(address(0))));
 
         // Deploy a fresh Blacklister — newly-upgraded impls (LP, WRN, etc.)
         // now wire it as an immutable. Storage-integrity assertions don't care
@@ -218,7 +218,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
             }),
             0
         ));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), 1, 4e18));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN, 1, 4e18));
 
         // ------------------------------------------------------------------
         // 3. Upgrade the proxies in place
@@ -368,7 +368,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
         // down the live pauser address, grant the role to this test via
         // RoleRegistry's owner/DEFAULT_ADMIN.
         address roleReg = address(wrn.roleRegistry());
-        bytes32 pauserRole = wrn.roleRegistry().PROTOCOL_PAUSER();
+        bytes32 pauserRole = wrn.roleRegistry().OPERATION_MULTISIG_ROLE();
         address roleRegOwner = IOwnableRead(roleReg).owner();
         vm.startPrank(roleRegOwner);
         (bool granted,) = roleReg.call(
@@ -409,7 +409,7 @@ contract UpgradeStorageIntegrityTest is Test, Deployed {
             }),
             0
         ));
-        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), 1, 4e18));
+        address newWRN = address(new WithdrawRequestNFT(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), ETHERFI_ADMIN, 1, 4e18));
         address newPQ = address(new PriorityWithdrawalQueue(
             LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, TREASURY, 1 hours, 1, 4e18
         ));

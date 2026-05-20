@@ -40,10 +40,6 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     address public immutable auctionManagerContractAddress;
     IRoleRegistry public immutable roleRegistry;
 
-    bytes32 public constant NODE_OPERATOR_MANAGER_ADMIN_ROLE = keccak256("NODE_OPERATOR_MANAGER_ADMIN_ROLE");
-
-    error IncorrectRole();
-
     //--------------------------------------------------------------------------------------
     //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
     //--------------------------------------------------------------------------------------
@@ -149,7 +145,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         address[] memory _users, 
         LiquidityPool.SourceOfFunds[] memory _approvedTags, 
         bool[] memory _approvals
-    ) external onlyAdmin {
+    ) external onlyOperations {
         require(_users.length == _approvedTags.length && _users.length == _approvals.length, "Invalid array lengths");
 
         for(uint256 x; x < _approvedTags.length; x++) {
@@ -160,7 +156,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     /// @notice Adds an address to the whitelist
     /// @param _address Address of the user to add
-    function addToWhitelist(address _address) external onlyAdmin {
+    function addToWhitelist(address _address) external onlyOperations {
         whitelistedAddresses[_address] = true;
 
         emit AddedToWhitelist(_address);
@@ -168,21 +164,19 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     /// @notice Removed an address from the whitelist
     /// @param _address Address of the user to remove
-    function removeFromWhitelist(address _address) external onlyAdmin {
+    function removeFromWhitelist(address _address) external onlyOperations {
         whitelistedAddresses[_address] = false;
 
         emit RemovedFromWhitelist(_address);
     }
 
     //Pauses the contract
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyOperations {
         _pause();
     }
 
     //Unpauses the contract
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
@@ -239,7 +233,9 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
 
     function _authorizeUpgrade(
         address newImplementation
-    ) internal override onlyOwner {}
+    ) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
@@ -253,8 +249,8 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         _;
     }
 
-    modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(NODE_OPERATOR_MANAGER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 }

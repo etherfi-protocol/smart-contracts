@@ -500,17 +500,9 @@ contract WeETHTest is TestSetup {
     // ---- pause role gating --------------------------------------------------
 
     function test_WeETH_pause_requiresPauserRole() public {
+        // pause() / unpause() are gated by onlyAdmin (OPERATION_MULTISIG_ROLE).
         vm.prank(bob);
-        vm.expectRevert(WeETH.IncorrectRole.selector);
-        weEthInstance.pause();
-
-        // PROTOCOL_UNPAUSER alone is not enough.
-        address unpauserOnly = vm.addr(0xBADC0DE);
-        bytes32 unpauseRole = roleRegistryInstance.PROTOCOL_UNPAUSER();
-        vm.prank(owner);
-        roleRegistryInstance.grantRole(unpauseRole, unpauserOnly);
-        vm.prank(unpauserOnly);
-        vm.expectRevert(WeETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         weEthInstance.pause();
 
         vm.prank(admin);
@@ -523,7 +515,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pause();
 
         vm.prank(bob);
-        vm.expectRevert(WeETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         weEthInstance.unpause();
 
         vm.prank(admin);
@@ -646,7 +638,7 @@ contract WeETHTest is TestSetup {
         _aliceWithWeEth(1 ether);
 
         vm.prank(owner);
-        blacklisterInstance.extendBlacklistUntil(alice, 1 days);
+        blacklisterInstance.setBlacklistUntil(alice, 1 days);
 
         vm.prank(alice);
         _expectBlacklistedRevert(alice);
@@ -692,9 +684,9 @@ contract WeETHTest is TestSetup {
 
     function _grantPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
         // Foundry's default block.timestamp is too small to clear the cooldown
         // check on the very first pause (lastPauseTimestamp[0] = 0 ⇒ trips
@@ -717,12 +709,7 @@ contract WeETHTest is TestSetup {
         _grantPauseUntilRoles();
 
         vm.prank(bob);
-        vm.expectRevert(WeETH.IncorrectRole.selector);
-        weEthInstance.pauseContractUntil();
-
-        // PROTOCOL_PAUSER (admin) alone is insufficient — needs PAUSE_UNTIL_ROLE.
-        vm.prank(admin);
-        vm.expectRevert(WeETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
         weEthInstance.pauseContractUntil();
 
         vm.prank(pauseUntilPauser);
@@ -736,12 +723,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pauseContractUntil();
 
         vm.prank(bob);
-        vm.expectRevert(WeETH.IncorrectRole.selector);
-        weEthInstance.unpauseContractUntil();
-
-        // PROTOCOL_UNPAUSER (admin) alone is insufficient — needs UNPAUSE_UNTIL_ROLE.
-        vm.prank(admin);
-        vm.expectRevert(WeETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         weEthInstance.unpauseContractUntil();
 
         vm.prank(unpauseUntilUnpauser);
@@ -904,12 +886,12 @@ contract WeETHTest is TestSetup {
         uint256 maxDur = weEthInstance.MAX_PAUSE_DURATION();
 
         vm.prank(bob);
-        vm.expectRevert(WeETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         weEthInstance.setPauseUntilDuration(maxDur);
 
         // PAUSE_UNTIL_ROLE alone is insufficient.
         vm.prank(pauseUntilPauser);
-        vm.expectRevert(WeETH.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         weEthInstance.setPauseUntilDuration(maxDur);
     }
 

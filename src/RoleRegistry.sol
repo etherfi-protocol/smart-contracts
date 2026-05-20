@@ -4,19 +4,22 @@ pragma solidity ^0.8.24;
 import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
 import {UUPSUpgradeable, Initializable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import {EnumerableRoles} from "solady/auth/EnumerableRoles.sol";
+import {RolesLibrary} from "./utils/RolesLibrary.sol";
 
 /// @title RoleRegistry - An upgradeable role-based access control system
 /// @notice Provides functionality for managing and querying roles with enumeration capabilities
 /// @dev Implements UUPS upgradeability pattern and uses Solady's EnumerableRoles for efficient role management
 /// @author EtherFi
-contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, EnumerableRoles {
-    bytes32 public constant PROTOCOL_PAUSER = keccak256("PROTOCOL_PAUSER");
-    bytes32 public constant PROTOCOL_UNPAUSER = keccak256("PROTOCOL_UNPAUSER");
-    bytes32 public constant PAUSE_UNTIL_ROLE = keccak256("PAUSE_UNTIL_ROLE");
-    bytes32 public constant UNPAUSE_UNTIL_ROLE = keccak256("UNPAUSE_UNTIL_ROLE");
-    bytes32 public constant PAUSE_DURATION_SETTER = keccak256("PAUSE_DURATION_SETTER");
+contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable, EnumerableRoles, RolesLibrary {
+    address public immutable revokeAdmin;
 
     error OnlyProtocolUpgrader();
+    error OnlyUpgradeTimelock();
+    error OnlyOperatingTimelock();
+    error OnlyOperatingMultisig();
+    error OnlyGuardian();
+    error OnlyRevokeAdmin();
+    error InvalidRoleToRevoke();
 
     /// @notice Returns the maximum allowed role value
     /// @dev This is used by EnumerableRoles._validateRole to ensure roles are within valid range
@@ -26,7 +29,8 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(address _revokeAdmin) {
+        revokeAdmin = _revokeAdmin;
         _disableInitializers();
     }
 
@@ -68,6 +72,16 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
         setRole(account, uint256(role), false);  
     }
 
+    /// @notice Revokes a role from an account quickly
+    /// @dev Only callable by the revoke admin
+    /// @param role The role to revoke (as bytes32)
+    /// @param account The address to revoke the role from
+    function revokeFast(bytes32 role, address account) public {
+        if (msg.sender != revokeAdmin) revert OnlyRevokeAdmin();
+        if (role == UPGRADE_TIMELOCK_ROLE || role == OPERATION_TIMELOCK_ROLE || role == OPERATION_MULTISIG_ROLE) revert InvalidRoleToRevoke();
+        _setRole(account, uint256(role), false);
+    }
+
     /// @notice Gets all addresses that have a specific role
     /// @dev Wrapper around EnumerableRoles roleHolders function converting bytes32 to uint256
     /// @param role The role to query (as bytes32)
@@ -80,6 +94,22 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
         if (owner() != account) revert OnlyProtocolUpgrader();
     }
 
+    function onlyUpgradeTimelock(address account) public view {
+        if (!hasRole(UPGRADE_TIMELOCK_ROLE, account)) revert OnlyUpgradeTimelock();
+    }
+
+    function onlyOperatingTimelock(address account) public view {
+        if (!hasRole(OPERATION_TIMELOCK_ROLE, account)) revert OnlyOperatingTimelock();
+    }
+
+    function onlyOperatingMultisig(address account) public view {
+        if (!hasRole(OPERATION_MULTISIG_ROLE, account)) revert OnlyOperatingMultisig();
+    }
+
+    function onlyGuardian(address account) public view {
+        if (!hasRole(GUARDIAN_ROLE, account)) revert OnlyGuardian();
+    }
+
     function __revertEnumerableRolesUnauthorized() private pure {
         /// @solidity memory-safe-assembly
         assembly {
@@ -88,5 +118,7 @@ contract RoleRegistry is Initializable, Ownable2StepUpgradeable, UUPSUpgradeable
         }
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        onlyProtocolUpgrader(msg.sender);
+    }
 }

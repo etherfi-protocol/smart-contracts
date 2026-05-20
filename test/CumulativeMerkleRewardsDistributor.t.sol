@@ -108,7 +108,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
    }
 
    function test_whitelisting() public {
-    vm.expectRevert(ICumulativeMerkleRewardsDistributor.IncorrectRole.selector);
+    vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
     cumulativeMerkleRewardsDistributorInstance.updateWhitelistedRecipient(accounts[0], false);
    }
 
@@ -147,7 +147,8 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
 
    function test_pausing() public {
     vm.prank(chad);
-    vm.expectRevert(ICumulativeMerkleRewardsDistributor.IncorrectRole.selector);
+    // pause() is onlyAdmin → OPERATION_MULTISIG_ROLE → reverts with OnlyOperatingMultisig.
+    vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
     cumulativeMerkleRewardsDistributorInstance.pause();
     vm.startPrank(admin);
     cumulativeMerkleRewardsDistributorInstance.pause();
@@ -186,9 +187,11 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
 
    function _grantPauseUntilRoles(address pauserAddr, address unpauserAddr) internal {
        vm.startPrank(owner);
-       roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauserAddr);
-       roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauserAddr);
-       roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
+       // pauseContractUntil requires GUARDIAN_ROLE; unpauseContractUntil and
+       // setPauseUntilDuration require OPERATION_MULTISIG_ROLE.
+       roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauserAddr);
+       roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauserAddr);
+       roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
        vm.stopPrank();
        // warp past MAX_PAUSE_DURATION + PAUSER_UNTIL_COOLDOWN so the first-pause cooldown
        // (which treats lastPauseTimestamp[pauser] = 0 as unix 0) is satisfied
@@ -207,12 +210,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
        _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
 
        vm.prank(chad);
-       vm.expectRevert(ICumulativeMerkleRewardsDistributor.IncorrectRole.selector);
-       cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
-
-       // PROTOCOL_PAUSER alone is insufficient
-       vm.prank(admin);
-       vm.expectRevert(ICumulativeMerkleRewardsDistributor.IncorrectRole.selector);
+       vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
        cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
    }
 
@@ -230,12 +228,7 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
        cumulativeMerkleRewardsDistributorInstance.pauseContractUntil();
 
        vm.prank(chad);
-       vm.expectRevert(ICumulativeMerkleRewardsDistributor.IncorrectRole.selector);
-       cumulativeMerkleRewardsDistributorInstance.unpauseContractUntil();
-
-       // PROTOCOL_UNPAUSER alone is insufficient
-       vm.prank(admin);
-       vm.expectRevert(ICumulativeMerkleRewardsDistributor.IncorrectRole.selector);
+       vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
        cumulativeMerkleRewardsDistributorInstance.unpauseContractUntil();
    }
 
@@ -262,13 +255,14 @@ contract  CumulativeMerkleRewardsDistributorTest is TestSetup {
        _grantPauseUntilRoles(pauseUntilPauser, unpauseUntilUnpauser);
        uint256 maxDur = cumulativeMerkleRewardsDistributorInstance.MAX_PAUSE_DURATION();
 
-       vm.prank(chad);
-       vm.expectRevert(ICumulativeMerkleRewardsDistributor.IncorrectRole.selector);
+       // bob holds no roles in setUpTests; chad/admin/owner all have OPERATION_TIMELOCK_ROLE.
+       vm.prank(bob);
+       vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
        cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(maxDur);
 
-       // PAUSE_UNTIL_ROLE alone is insufficient
+       // Guardian-only (pauseUntilPauser) cannot set the duration; needs admin role.
        vm.prank(pauseUntilPauser);
-       vm.expectRevert(ICumulativeMerkleRewardsDistributor.IncorrectRole.selector);
+       vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
        cumulativeMerkleRewardsDistributorInstance.setPauseUntilDuration(maxDur);
    }
 

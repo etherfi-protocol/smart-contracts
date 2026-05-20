@@ -38,9 +38,10 @@ contract WeETHWithdrawAdapterTest is TestSetup {
 
     function _grantPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_UNTIL_ROLE(), pauseUntilPauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.UNPAUSE_UNTIL_ROLE(), unpauseUntilUnpauser);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PAUSE_DURATION_SETTER(), pauseUntilDurationSetter);
+        // pauseContractUntil → GUARDIAN_ROLE; unpause + setPauseUntilDuration → OPERATION_MULTISIG_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
         if (block.timestamp < 1_700_000_000) vm.warp(1_700_000_000);
 
@@ -66,12 +67,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
     function test_pauseContractUntil_requiresRole() public {
         _grantPauseUntilRoles();
         vm.prank(bob);
-        vm.expectRevert(WeETHWithdrawAdapter.IncorrectRole.selector);
-        adapter.pauseContractUntil();
-
-        // PROTOCOL_PAUSER alone is insufficient
-        vm.prank(admin);
-        vm.expectRevert(WeETHWithdrawAdapter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
         adapter.pauseContractUntil();
     }
 
@@ -88,11 +84,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
         adapter.pauseContractUntil();
 
         vm.prank(bob);
-        vm.expectRevert(WeETHWithdrawAdapter.IncorrectRole.selector);
-        adapter.unpauseContractUntil();
-
-        vm.prank(admin);
-        vm.expectRevert(WeETHWithdrawAdapter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
         adapter.unpauseContractUntil();
     }
 
@@ -120,12 +112,12 @@ contract WeETHWithdrawAdapterTest is TestSetup {
         uint256 maxDur = adapter.MAX_PAUSE_DURATION();
 
         vm.prank(bob);
-        vm.expectRevert(WeETHWithdrawAdapter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         adapter.setPauseUntilDuration(maxDur);
 
-        // PAUSE_UNTIL_ROLE alone is insufficient
+        // Guardian-only role (pauseUntilPauser) cannot set the duration; needs admin role.
         vm.prank(pauseUntilPauser);
-        vm.expectRevert(WeETHWithdrawAdapter.IncorrectRole.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         adapter.setPauseUntilDuration(maxDur);
     }
 
@@ -253,7 +245,7 @@ contract WeETHWithdrawAdapterTest is TestSetup {
         _setupUserWithWeETH(bob, 1 ether, 1 ether);
 
         vm.prank(owner);
-        blacklisterInstance.extendBlacklistUntil(bob, 1 days);
+        blacklisterInstance.setBlacklistUntil(bob, 1 days);
 
         // Inside the window: blocked.
         vm.prank(bob);

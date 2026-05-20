@@ -487,7 +487,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // Upgrade the live RoleRegistry to the local impl so newly-added role
         // getters are reachable from any contract that is also being upgraded in this fork.
         vm.prank(roleRegistryInstance.owner());
-        roleRegistryInstance.upgradeTo(address(new RoleRegistry()));
+        roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0))));
 
         // Deploy a fresh Blacklister on the fork — mainnet does not yet have one
         // deployed, but any upgraded impl now expects it as an immutable.
@@ -495,7 +495,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImplementation), abi.encodeWithSelector(Blacklister.initialize.selector))));
         // Resolve both arguments before vm.prank — every interleaved external
         // call would otherwise consume the prank before grantRole executes.
-        bytes32 _blacklisterRole = blacklisterInstance.BLACKLISTER_ROLE();
+        bytes32 _blacklisterRole = roleRegistryInstance.OPERATION_MULTISIG_ROLE();
         address _roleRegOwner = roleRegistryInstance.owner();
         vm.prank(_roleRegOwner);
         roleRegistryInstance.grantRole(_blacklisterRole, _roleRegOwner);
@@ -507,6 +507,52 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             abi.encodeWithSelector(PriorityWithdrawalQueue.initialize.selector)
         );
         priorityQueueInstance = PriorityWithdrawalQueue(payable(address(priorityQueueProxy)));
+
+        // Upgrade StakingManager on the fork so it uses the consolidated role model
+        // (the on-chain impl still calls PROTOCOL_PAUSER, which the upgraded RoleRegistry
+        // no longer exposes). Preserve the existing beacon by reading it off the proxy
+        // before upgrading.
+        address existingBeacon = stakingManagerInstance.getEtherFiNodeBeacon();
+        // Use the real beacon-chain deposit contract on mainnet forks so callers
+        // that go all the way through createBeaconValidators can deposit ETH.
+        address stakingDepositContract = 0x00000000219ab540356cBB839Cbe05303d7705Fa;
+        address newSmImpl = address(new StakingManager(
+            address(liquidityPoolInstance),
+            address(managerInstance),
+            stakingDepositContract,
+            address(auctionInstance),
+            existingBeacon,
+            address(roleRegistryInstance)
+        ));
+        vm.prank(stakingManagerInstance.owner());
+        stakingManagerInstance.upgradeTo(newSmImpl);
+
+        // Upgrade EtherFiRedemptionManager on the fork for the same reason — the
+        // on-chain impl still references roles that the upgraded RoleRegistry no
+        // longer exposes (e.g. PROTOCOL_PAUSER). Match the on-chain max-cap
+        // immutables (10_000 across the board) so fork tests keep working.
+        address newRedemptionImpl = address(new EtherFiRedemptionManager(
+            address(liquidityPoolInstance),
+            address(eETHInstance),
+            address(weEthInstance),
+            treasuryInstance,
+            address(roleRegistryInstance),
+            address(etherFiRestakerInstance),
+            address(priorityQueueInstance),
+            address(blacklisterInstance),
+            10_000,
+            10_000,
+            10_000
+        ));
+        vm.prank(roleRegistryInstance.owner());
+        etherFiRedemptionManagerInstance.upgradeTo(newRedemptionImpl);
+
+        // Upgrade EtherFiRateLimiter on the fork — the on-chain impl still checks
+        // ETHERFI_RATE_LIMITER_ADMIN_ROLE, which the consolidated role model no
+        // longer uses.
+        address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistryInstance)));
+        vm.prank(roleRegistryInstance.owner());
+        rateLimiterInstance.upgradeTo(newRateLimiterImpl);
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
@@ -541,14 +587,16 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // Upgrade in place so new role getters are reachable, then grant roles used by tests.
         vm.startPrank(roleRegistryInstance.owner());
         if (forkEnum == MAINNET_FORK || forkEnum == TESTNET_FORK) {
-            roleRegistryInstance.upgradeTo(address(new RoleRegistry()));
+            roleRegistryInstance.upgradeTo(address(new RoleRegistry(address(0))));
         }
-        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), owner);
-        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_SENDER_ROLE(), owner);
-        roleRegistryInstance.grantRole(liquifierInstance.LIQUIFIER_SENDER_ROLE(), alice);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), owner);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.UPGRADE_TIMELOCK_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), owner);
         vm.stopPrank();
 
         vm.startPrank(owner);
@@ -559,7 +607,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.stopPrank();
 
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(bucketRateLimiter.BUCKET_RATE_LIMITER_ADMIN_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
         vm.stopPrank();
 
         vm.startPrank(owner);
@@ -589,8 +637,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(eigenLayerDelegationManager)
         );
         // Upgrade in place so the address matches Liquifier's immutable etherfiRestaker.
+        // _authorizeUpgrade now defers to RoleRegistry.onlyProtocolUpgrader, which checks
+        // the RoleRegistry owner — not the proxy's own owner (which may be zero in fork tests).
         vm.stopPrank();
-        vm.prank(etherFiRestakerInstance.owner());
+        vm.prank(roleRegistryInstance.owner());
         etherFiRestakerInstance.upgradeTo(address(etherFiRestakerImplementation));
         vm.startPrank(owner);
     }
@@ -610,7 +660,11 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         // Phase 1: deploy infrastructure with no circular deps
         // =====================================================================
 
-        roleRegistryImplementation = new RoleRegistry();
+        // =====================================================================
+        // Phase 1: deploy infrastructure with no circular deps
+        // =====================================================================
+
+        roleRegistryImplementation = new RoleRegistry(address(0));
         roleRegistryProxy = new UUPSProxy(address(roleRegistryImplementation), abi.encodeWithSelector(RoleRegistry.initialize.selector, owner));
         roleRegistryInstance = RoleRegistry(address(roleRegistryProxy));
 
@@ -621,7 +675,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         blacklisterImplementation = new Blacklister(address(roleRegistryInstance));
         blacklisterInstance = Blacklister(address(new UUPSProxy(address(blacklisterImplementation), abi.encodeWithSelector(Blacklister.initialize.selector))));
-        roleRegistryInstance.grantRole(blacklisterInstance.BLACKLISTER_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
 
         eigenLayerEigenPodManager = new MockEigenPodManager();
         eigenLayerDelegationManager = new MockDelegationManager();
@@ -749,7 +803,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         );
         auctionInstance.upgradeTo(address(auctionImplementation));
         auctionInstance.initialize(address(nodeOperatorManagerInstance));
-        roleRegistryInstance.grantRole(auctionInstance.AUCTION_MANAGER_ADMIN_ROLE(), alice);
 
         // StakingManager
         stakingManagerImplementation = new StakingManager(
@@ -814,7 +867,57 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         sfrxEth.mint(bob, 10e18);
         addressProviderInstance = new AddressProvider(address(owner));
 
-        // EETH
+        liquidityPoolImplementation = new LiquidityPool(
+            LiquidityPool.ConstructorAddresses({
+                stakingManager: address(0x0),
+                nodesManager: address(0x0),
+                eETH: address(0x0),
+                withdrawRequestNFT: address(0x0),
+                liquifier: address(0x0),
+                etherFiRedemptionManager: address(0x0),
+                roleRegistry: address(0x0),
+                priorityWithdrawalQueue: address(0x0),
+                blacklister: address(0x0),
+                etherFiAdminContract: address(0x0),
+                membershipManager: address(0x0)
+            }),
+            0
+        );
+
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), admin);
+
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), chad);
+        // ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE consolidated into OPERATION_TIMELOCK_ROLE
+
+
+        // Default to a stale-by-default mock so the chainlink branch in quoteByMarketValue
+        // is a no-op for unit tests that don't explicitly exercise it. Fork paths set
+        // stEthChainlinkFeed earlier to the live Chainlink aggregator.
+        if (stEthChainlinkFeed == address(0)) {
+            stEthChainlinkFeed = address(new MockChainlinkPriceFeed(int256(1 ether), 0));
+        }
+
+        // Re-deploy the impl now that etherFiRestakerProxy is known and upgrade the
+        // already-initialized proxy in place. Creating a fresh proxy here would drop
+        // the initialized owner set in Phase 3 and break later upgradeTo calls.
+        liquifierImplementation = new Liquifier(Liquifier.ConstructorAddresses({
+            liquidityPool: address(liquidityPoolProxy),
+            lidoWithdrawalQueue: address(lidoWithdrawalQueue),
+            lido: address(stEth),
+            stEth_Eth_Pool: address(stEth_Eth_Pool),
+            roleRegistry: address(roleRegistryInstance),
+            stEthPriceFeed: stEthChainlinkFeed,
+            blacklister: address(blacklisterInstance),
+            etherfiRestaker: address(etherFiRestakerProxy),
+            l1SyncPool: address(0xA6)
+        }), 100, LIQUIFIER_STALE_WINDOW, LIQUIFIER_MAX_PRICE_DEVIATION_BPS);
+        liquifierInstance.upgradeTo(address(liquifierImplementation));
+
+        // TODO - not sure what `name` and `versiona` are for
         eETHImplementation = new EETH(address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance));
         vm.expectRevert("Initializable: contract is already initialized");
         eETHImplementation.initialize(payable(address(liquidityPoolProxy)));
@@ -834,8 +937,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(0));
         weEthInstance.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
 
-        roleRegistryInstance.grantRole(eETHInstance.EETH_OPERATING_ADMIN_ROLE(), admin);
-        roleRegistryInstance.grantRole(weEthInstance.WEETH_OPERATING_ADMIN_ROLE(), admin);
+        // EETH/WEETH operating admin consolidated into OPERATION_MULTISIG_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
 
         vm.stopPrank();
         vm.prank(alice);
@@ -846,6 +949,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         membershipNftImplementation = new MembershipNFT(
             address(liquidityPoolProxy),
             address(membershipManagerProxy),
+            address(roleRegistryInstance),
             address(blacklisterInstance)
         );
         membershipNftInstance.upgradeTo(address(membershipNftImplementation));
@@ -858,6 +962,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             address(membershipManagerProxy),
             address(roleRegistryInstance),
             address(blacklisterInstance),
+            address(etherFiAdminProxy),
             1, 4e18
         );
         withdrawRequestNFTInstance.upgradeTo(address(withdrawRequestNFTImplementation));
@@ -903,8 +1008,8 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         cumulativeMerkleRewardsDistributorInstance = CumulativeMerkleRewardsDistributor(address(cumulativeMerkleRewardsDistributorProxy));
         cumulativeMerkleRewardsDistributorInstance.initialize();
 
-        roleRegistryInstance.grantRole(cumulativeMerkleRewardsDistributorInstance.CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_ADMIN_ROLE(), admin);
-        roleRegistryInstance.grantRole(cumulativeMerkleRewardsDistributorInstance.CUMULATIVE_MERKLE_REWARDS_DISTRIBUTOR_CLAIM_DELAY_SETTER_ROLE(), admin);
+        // CumulativeMerkleRewardsDistributor admin/claim-delay-setter consolidated into EOA_3
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), admin);
 
         // EtherFiOracle
         etherFiOracleImplementation = new EtherFiOracle(address(etherFiAdminProxy), address(roleRegistryInstance));
@@ -936,7 +1041,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             10_000, 100, 10_000
         );
         etherFiRedemptionManagerInstance.upgradeTo(address(etherFiRedemptionManagerImpl));
-        roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
 
         // LiquidityPool — every dep is now a known proxy address
         liquidityPoolImplementation = new LiquidityPool(
@@ -968,15 +1073,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         //   - NodeOperatorManager.setAuctionContractAddress (removed)
         //   - AuctionManager.setStakingManagerContractAddress (removed)
         // =====================================================================
-
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), admin);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
-        roleRegistryInstance.grantRole(keccak256("ETHERFI_REDEMPTION_MANAGER_ADMIN_ROLE"), admin);
-
         liquidityPoolInstance.initialize(
             address(eETHProxy),
             address(stakingManagerProxy),
@@ -1016,7 +1112,6 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         );
 
         membershipManagerInstance.updateAdmin(alice, true);
-        membershipNftInstance.updateAdmin(alice, true);
 
         // special case for forked tests utilizing oracle
         // can't use env variable because then it would apply to all tests including non-forked ones
@@ -1057,21 +1152,32 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
             10000,
             0
         );
+        uint256 BLOCKS_IN_DAY = 7200;
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE); //eth
+        tokens[1] = address(eETHInstance);
+        uint256[] memory lastProcessedAtBlocks = new uint256[](2);
+        lastProcessedAtBlocks[0] = lastProcessedAtBlocks[1] = 0;
 
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_VALIDATOR_APPROVER_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), alice);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
+        vm.startPrank(owner);
+     
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), address(etherFiAdminInstance));
+        // ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE consolidated into OPERATION_TIMELOCK_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
+        // ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE consolidated into EOA_1
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_1(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), address(etherFiAdminInstance));
 
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(alice));
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.WITHDRAW_REQUEST_NFT_ADMIN_ROLE(), address(admin));
+        // WITHDRAW_REQUEST_NFT_ADMIN_ROLE consolidated into OPERATION_TIMELOCK_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), address(alice));
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), address(admin));
 
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.INVALIDATE_WITHDRAW_REQUEST_ROLE(), address(alice));
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.INVALIDATE_WITHDRAW_REQUEST_ROLE(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(withdrawRequestNFTInstance.INVALIDATE_WITHDRAW_REQUEST_ROLE(), address(admin));
+        // INVALIDATE_WITHDRAW_REQUEST_ROLE consolidated into GUARDIAN_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), address(alice));
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), address(admin));
 
         vm.stopPrank();
         vm.startPrank(alice);
@@ -1100,8 +1206,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         }
 
         _initOracleReportsforTesting();
-        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), owner);
-        roleRegistryInstance.grantRole(nodeOperatorManagerInstance.NODE_OPERATOR_MANAGER_ADMIN_ROLE(), alice);
+        // NODE_OPERATOR_MANAGER_ADMIN_ROLE consolidated into OPERATION_MULTISIG_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
         vm.stopPrank();
 
         vm.startPrank(alice);
@@ -1184,7 +1291,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         if (address(liquidityPoolInstance.roleRegistry()) == address(0x0)) {
             // deploy new versions of role registry
-            roleRegistryImplementation = new RoleRegistry();
+            roleRegistryImplementation = new RoleRegistry(address(0));
             bytes memory initializerData =  abi.encodeWithSelector(RoleRegistry.initialize.selector, admin);
             roleRegistryInstance = RoleRegistry(address(new UUPSProxy(address(roleRegistryImplementation), initializerData)));
             superAdmin = admin;
@@ -1206,17 +1313,18 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         }
 
         vm.startPrank(admin);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), admin);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), admin);
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_PAUSER(), address(etherFiAdminInstance));
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), admin); 
-        roleRegistryInstance.grantRole(roleRegistryInstance.PROTOCOL_UNPAUSER(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), address(etherFiAdminInstance));
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), address(etherFiAdminInstance));
 
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), owner);
-        roleRegistryInstance.grantRole(liquidityPoolInstance.LIQUIDITY_POOL_ADMIN_ROLE(), chad);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(etherFiAdminInstance.ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), chad);
+        // ETHERFI_ORACLE_EXECUTOR_ADMIN_ROLE -> OPERATION_TIMELOCK_ROLE (already granted above)
+        // ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE -> EOA_1
+        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_1(), alice);
         vm.startPrank(alice);
         etherFiAdminInstance.setValidatorTaskBatchSize(100);
         vm.stopPrank();
@@ -1372,14 +1480,15 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     function _initializeEtherFiAdmin() internal {
         vm.startPrank(owner);
 
-        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), alice);
-        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), owner);
+        // ETHERFI_ORACLE_ADMIN_ROLE -> OPERATION_TIMELOCK_ROLE
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
 
         address admin = address(etherFiAdminInstance);
         //stakingManagerInstance.updateAdmin(admin, true);
         // liquidityPoolInstance.updateAdmin(admin, true);
         membershipManagerInstance.updateAdmin(admin, true);
-        roleRegistryInstance.grantRole(etherFiOracleInstance.ETHERFI_ORACLE_ADMIN_ROLE(), admin);
+        roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), admin);
 
         vm.stopPrank();
     }
@@ -1740,10 +1849,10 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _finalizeWithdrawalRequest(uint256 _requestId) internal {
-        vm.startPrank(alice);
+        // finalizeRequests is now permissioned to etherFiAdmin only.
+        vm.prank(address(etherFiAdminInstance));
         withdrawRequestNFTInstance.finalizeRequests(_requestId);
         uint128 amount = withdrawRequestNFTInstance.getRequest(_requestId).amountOfEEth;
-        vm.stopPrank();
 
         if (withdrawRequestNFTInstance.isValid(_requestId)) {
             vm.prank(address(etherFiAdminInstance));

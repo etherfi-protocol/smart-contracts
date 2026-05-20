@@ -42,11 +42,6 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     IRoleRegistry public immutable roleRegistry;
     IEtherFiRateLimiter public immutable rateLimiter;
 
-    bytes32 public constant ETHERFI_RESTAKER_ADMIN_ROLE                 = keccak256("ETHERFI_RESTAKER_ADMIN_ROLE");
-    bytes32 public constant ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE   = keccak256("ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE");
-    bytes32 public constant ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE     = keccak256("ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE");
-    bytes32 public constant ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE = keccak256("ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE");
-
     bytes32 public constant STETH_REQUEST_WITHDRAWAL_LIMIT_ID = keccak256("STETH_REQUEST_WITHDRAWAL_LIMIT_ID");
     bytes32 public constant QUEUE_WITHDRAWALS_LIMIT_ID        = keccak256("QUEUE_WITHDRAWALS_LIMIT_ID");
     bytes32 public constant DEPOSIT_INTO_STRATEGY_LIMIT_ID    = keccak256("DEPOSIT_INTO_STRATEGY_LIMIT_ID");
@@ -134,14 +129,15 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     /// Initiate the redemption of stETH for ETH
     /// @notice Request for all stETH holdings
-    function stEthRequestWithdrawal() external onlyRequestWithdrawalsRole returns (uint256[] memory) {
+    function stEthRequestWithdrawal() external returns (uint256[] memory) {
         uint256 amount = lido.balanceOf(address(this));
         return stEthRequestWithdrawal(amount);
     }
 
     /// @notice Request for a specific amount of stETH holdings
     /// @param _amount the amount of stETH to request
-    function stEthRequestWithdrawal(uint256 _amount) public onlyRequestWithdrawalsRole returns (uint256[] memory) {
+    function stEthRequestWithdrawal(uint256 _amount) public returns (uint256[] memory) {
+        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender)) revert IncorrectRole();
         rateLimiter.consume(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, _amountToGwei(_amount));
 
         uint256 minAmount = lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT();
@@ -175,7 +171,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @notice Claim a batch of withdrawal requests if they are finalized sending the ETH to the this contract back
     /// @param _requestIds array of request ids to claim
     /// @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
-    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external onlyClaimWithdrawalsRole {
+    function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external {
+        if (!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
         lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
 
         _withdrawEther();
@@ -184,7 +181,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // Send the ETH back to the liquidity pool
-    function withdrawEther() public onlyAdmin {
+    function withdrawEther() public onlyOperations {
         _withdrawEther();
     }
 
@@ -199,7 +196,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     // |--------------------------------------------------------------------------------------------|
 
     /// Set the claimer of the restaking rewards of this contract
-    function setRewardsClaimer(address _claimer) external onlyAdmin {
+    function setRewardsClaimer(address _claimer) external onlyOperations {
         rewardsCoordinator.setClaimerFor(_claimer);
     }
 
@@ -208,12 +205,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         address operator,
         IDelegationManager.SignatureWithExpiry memory approverSignatureAndExpiry,
         bytes32 approverSalt
-    ) external onlyAdmin {
+    ) external onlyOperations {
         eigenLayerDelegationManager.delegateTo(operator, approverSignatureAndExpiry, approverSalt);
     }
 
     // undelegate from the current AVS operator & un-restake all
-    function undelegate() external onlyAdmin returns (bytes32[] memory) {
+    function undelegate() external onlyOperations returns (bytes32[] memory) {
         bytes32[] memory withdrawalRoots = eigenLayerDelegationManager.undelegate(address(this));
 
         for (uint256 i = 0; i < withdrawalRoots.length; i++) {
@@ -228,7 +225,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // deposit the token in holding into the restaking strategy
-    function depositIntoStrategy(address token, uint256 amount) external onlyDepositIntoStrategyRole returns (uint256) {
+    function depositIntoStrategy(address token, uint256 amount) external returns (uint256) {
+        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender)) revert IncorrectRole();
         rateLimiter.consume(DEPOSIT_INTO_STRATEGY_LIMIT_ID, _amountToGwei(amount));
 
         IERC20(token).safeApprove(address(eigenLayerStrategyManager), amount);
@@ -243,7 +241,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// Made easy for operators
     /// @param token the token to withdraw
     /// @param amount the amount of token to withdraw
-    function queueWithdrawals(address token, uint256 amount) public onlyRequestWithdrawalsRole returns (bytes32[] memory) {
+    function queueWithdrawals(address token, uint256 amount) public returns (bytes32[] memory) {
+        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender)) revert IncorrectRole();
         rateLimiter.consume(QUEUE_WITHDRAWALS_LIMIT_ID, _amountToGwei(amount));
 
         uint256 shares = getEigenLayerRestakingStrategy(token).underlyingToSharesView(amount);
@@ -263,7 +262,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     function completeQueuedWithdrawals(
         IDelegationManager.Withdrawal[] memory _queuedWithdrawals,
         IERC20[][] memory _tokens
-    ) external onlyClaimWithdrawalsRole {
+    ) external {
+        if (!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
         uint256 num = _queuedWithdrawals.length;
         bool[] memory receiveAsTokens = new bool[](num);
         for (uint256 i = 0; i < num; i++) {
@@ -381,14 +381,12 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     }
 
     // Pauses the contract
-    function pauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_PAUSER(), msg.sender)) revert IncorrectRole();
+    function pauseContract() external onlyOperations {
         _pause();
     }
 
     // Unpauses the contract
-    function unPauseContract() external {
-        if (!roleRegistry.hasRole(roleRegistry.PROTOCOL_UNPAUSER(), msg.sender)) revert IncorrectRole();
+    function unPauseContract() external onlyOperations {
         _unpause();
     }
 
@@ -423,26 +421,13 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         return (_a > _b) ? _b : _a;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(address newImplementation) internal override {
+        roleRegistry.onlyProtocolUpgrader(msg.sender);
+    }
 
     /* MODIFIERS */
-    modifier onlyAdmin() {
-        if (!roleRegistry.hasRole(ETHERFI_RESTAKER_ADMIN_ROLE, msg.sender)) revert IncorrectRole();
-        _;
-    }
-
-    modifier onlyRequestWithdrawalsRole() {
-        if (!roleRegistry.hasRole(ETHERFI_RESTAKER_REQUEST_WITHDRAWALS_ROLE, msg.sender)) revert IncorrectRole();
-        _;
-    }
-
-    modifier onlyClaimWithdrawalsRole() {
-        if (!roleRegistry.hasRole(ETHERFI_RESTAKER_CLAIM_WITHDRAWALS_ROLE, msg.sender)) revert IncorrectRole();
-        _;
-    }
-
-    modifier onlyDepositIntoStrategyRole() {
-        if (!roleRegistry.hasRole(ETHERFI_RESTAKER_DEPOSIT_INTO_STRATEGY_ROLE, msg.sender)) revert IncorrectRole();
+    modifier onlyOperations() {
+        roleRegistry.onlyOperatingMultisig(msg.sender);
         _;
     }
 }
