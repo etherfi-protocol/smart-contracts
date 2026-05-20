@@ -1127,9 +1127,14 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         } else {
             genesisSlotTimestamp = 0;
         }
-        etherFiOracleInstance.initialize(2, 1024, 0, 32, 12, genesisSlotTimestamp);
+        // Initialize quorum at 1 so we can add committee members one-by-one
+        // without tripping the new _checkQuorum invariant
+        // (numActive < quorum reverts). Once both members are registered,
+        // raise quorum to its real value of 2.
+        etherFiOracleInstance.initialize(1, 1024, 0, 32, 12, genesisSlotTimestamp);
         etherFiOracleInstance.addCommitteeMember(alice);
         etherFiOracleInstance.addCommitteeMember(bob);
+        etherFiOracleInstance.setQuorumSize(2);
 
         vm.stopPrank();
 
