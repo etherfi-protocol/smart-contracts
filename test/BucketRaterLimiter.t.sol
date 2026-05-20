@@ -28,8 +28,7 @@ contract BucketRateLimiterTest is Test {
         limiter = BucketRateLimiter(address(proxy));
         limiter.initialize();
 
-        // BUCKET_RATE_LIMITER_ADMIN_ROLE / PROTOCOL_PAUSER / PROTOCOL_UNPAUSER all
-        // consolidated into OPERATION_MULTISIG_ROLE.
+        roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), owner);
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), owner);
 
         limiter.updateConsumer(owner);
@@ -106,13 +105,13 @@ contract BucketRateLimiterTest is Test {
     }
     
     function test_access_control() public {
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         limiter.setCapacity(100 ether);
 
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         limiter.setRefillRatePerSecond(100 ether);
 
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         limiter.updateConsumer(address(0));
     }
     
@@ -832,7 +831,7 @@ contract BucketRateLimiterTest is Test {
         address nonOwner = address(999);
 
         vm.prank(nonOwner);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
+        vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         limiter.updateConsumer(address(999));
     }
 

@@ -53,37 +53,37 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
         return globalConsumable && perTokenConsumable;
     }
 
-    function setCapacity(uint256 capacity) external onlyOperations {
+    function setCapacity(uint256 capacity) external onlyAdmin {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
         BucketLimiter.setCapacity(limit, capacity64);
     }
 
-    function setRefillRatePerSecond(uint256 refillRate) external onlyOperations {
+    function setRefillRatePerSecond(uint256 refillRate) external onlyAdmin {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
         BucketLimiter.setRefillRate(limit, refillRate64);
     }
 
-    function registerToken(address token, uint256 capacity, uint256 refillRate) external onlyOperations {
+    function registerToken(address token, uint256 capacity, uint256 refillRate) external onlyAdmin {
         uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
         uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
         limitsPerToken[token] = BucketLimiter.create(capacity64, refillRate64);
     }
 
-    function setCapacityPerToken(address token, uint256 capacity) external onlyOperations {
+    function setCapacityPerToken(address token, uint256 capacity) external onlyAdmin {
         // max capacity = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether, which is practically enough
         uint64 capacity64 = SafeCast.toUint64(capacity / 1e12);
         BucketLimiter.setCapacity(limitsPerToken[token], capacity64);
     }
 
-    function setRefillRatePerSecondPerToken(address token, uint256 refillRate) external onlyOperations {
+    function setRefillRatePerSecondPerToken(address token, uint256 refillRate) external onlyAdmin {
         // max refillRate = max(uint64) * 1e12 ~= 16 * 1e18 * 1e12 = 16 * 1e12 ether per second, which is practically enough
         uint64 refillRate64 = SafeCast.toUint64(refillRate / 1e12);
         BucketLimiter.setRefillRate(limitsPerToken[token], refillRate64);
     }
 
-    function updateConsumer(address _consumer) external onlyOperations {
+    function updateConsumer(address _consumer) external onlyAdmin {
         consumer = _consumer;
     }
 
@@ -97,6 +97,11 @@ contract BucketRateLimiter is IRateLimiter, Initializable, PausableUpgradeable, 
 
     function getImplementation() external view returns (address) {
         return _getImplementation();
+    }
+
+    modifier onlyAdmin() {
+        roleRegistry.onlyOperatingTimelock(msg.sender);
+        _;
     }
 
     modifier onlyOperations() {
