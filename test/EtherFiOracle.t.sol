@@ -516,27 +516,23 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_SD_5() public {
+        // numActive=3 (alice, bob, chad), quorum stays at the default 2 because
+        // setQuorumSize(5) would now revert with InvalidQuorum (numActive < quorum).
         vm.prank(owner);
         etherFiOracleInstance.addCommitteeMember(chad);
 
-        vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(5);
-        
         _moveClock(1024 + 2 * slotsPerEpoch);
-        
+
         // alice submits the period 2 report
         vm.prank(alice);
         etherFiOracleInstance.submitReport(reportAtPeriod2A);
-           
+
         // check the consensus state
         bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
         (uint32 support, bool consensusReached, uint32 consensusTimestamp) = etherFiOracleInstance.consensusStates(reportHash);
         assertEq(support, 1);
         assertEq(consensusReached, false);
         assertEq(consensusTimestamp, 0);
-
-        vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
 
         // bob submits the period 2 report
         uint32 curTimestamp = uint32(block.timestamp);
@@ -936,6 +932,93 @@ contract EtherFiOracleTest is TestSetup {
         vm.prank(owner);
         vm.expectRevert(EtherFiOracle.AlreadyRegistered.selector);
         etherFiOracleInstance.addCommitteeMember(chad);
+    }
+
+    // ========== _checkQuorum invariant tests ==========
+    // _checkQuorum reverts with InvalidQuorum when:
+    //   - numActiveCommitteeMembers < quorumSize (too few members for the quorum), or
+    //   - numActiveCommitteeMembers / quorumSize > 2 (quorum too small relative to membership).
+    // The check runs after every add/remove/manage/setQuorum mutation, so each
+    // mutation needs to leave the (members, quorum) pair inside the valid band.
+
+    function test_setQuorumSize_revertsWhenAboveActiveMembers() public {
+        // numActive = 2 (alice, bob); quorum = 3 violates numActive < quorum
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
+        etherFiOracleInstance.setQuorumSize(3);
+    }
+
+    function test_setQuorumSize_revertsWhenRatioTooLow() public {
+        // First grow membership to 3 so the ratio path is reachable
+        vm.prank(owner);
+        etherFiOracleInstance.addCommitteeMember(chad);
+
+        // 3 / 1 = 3 > 2 -> revert (quorum is too small for the active set)
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
+        etherFiOracleInstance.setQuorumSize(1);
+    }
+
+    function test_setQuorumSize_acceptsAtEqualityBoundary() public {
+        // numActive == quorum is allowed (numActive < quorum is the failing edge)
+        vm.prank(owner);
+        etherFiOracleInstance.setQuorumSize(2);
+        assertEq(etherFiOracleInstance.quorumSize(), 2);
+    }
+
+    function test_addCommitteeMember_revertsWhenRatioWouldExceedTwo() public {
+        // Drop quorum to 1 first (legal at numActive=2 since 2/1=2, not > 2)
+        vm.prank(owner);
+        etherFiOracleInstance.setQuorumSize(1);
+
+        // Adding chad makes numActive=3, and 3/1 = 3 > 2 -> revert
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
+        etherFiOracleInstance.addCommitteeMember(chad);
+    }
+
+    function test_removeCommitteeMember_revertsWhenBelowQuorum() public {
+        // numActive=2, quorum=2; removing alice drops numActive to 1 < quorum -> revert
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
+        etherFiOracleInstance.removeCommitteeMember(alice);
+    }
+
+    function test_removeCommitteeMember_okWhenMemberWasDisabled() public {
+        // Disabling alice already accounted for the numActive drop, so removing her
+        // (which only touches numCommitteeMembers, not numActive) keeps quorum valid.
+        vm.prank(owner);
+        etherFiOracleInstance.addCommitteeMember(chad);
+        // numActive=3 after add; disable alice -> numActive=2, quorum=2 (still valid)
+        vm.prank(owner);
+        etherFiOracleInstance.manageCommitteeMember(alice, false);
+
+        vm.prank(owner);
+        etherFiOracleInstance.removeCommitteeMember(alice);
+
+        assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 2);
+        assertEq(etherFiOracleInstance.numCommitteeMembers(), 2);
+    }
+
+    function test_manageCommitteeMember_disablingRevertsWhenBelowQuorum() public {
+        // numActive=2, quorum=2; disabling bob drops numActive to 1 -> revert
+        vm.prank(owner);
+        vm.expectRevert(EtherFiOracle.InvalidQuorum.selector);
+        etherFiOracleInstance.manageCommitteeMember(bob, false);
+    }
+
+    function test_manageCommitteeMember_reenableKeepsQuorumValid() public {
+        // First need a disable that is legal (so add chad to give us headroom)
+        vm.prank(owner);
+        etherFiOracleInstance.addCommitteeMember(chad);
+        vm.prank(owner);
+        etherFiOracleInstance.manageCommitteeMember(chad, false);
+        assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 2);
+
+        // Re-enable chad: numActive goes back to 3, quorum=2, still valid
+        vm.prank(owner);
+        etherFiOracleInstance.manageCommitteeMember(chad, true);
+        assertEq(etherFiOracleInstance.numActiveCommitteeMembers(), 3);
     }
 
     // ========== EtherFiAdmin Additional Coverage Tests ==========
