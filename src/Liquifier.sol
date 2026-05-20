@@ -81,7 +81,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     IPancackeV3SwapRouter pancakeRouter;
 
-    mapping(string => bool) flags;
+    mapping(string => bool) private DEPRECATED_flags;
     
     // To support L2 native minting of weETH
     IERC20[] public dummies;
