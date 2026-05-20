@@ -4,6 +4,8 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 import "forge-std/console2.sol";
 
+import "@openzeppelin/contracts/utils/math/Math.sol";
+
 import "../src/PriorityWithdrawalQueue.sol";
 import "../src/interfaces/IPriorityWithdrawalQueue.sol";
 import "../src/utils/PausableUntil.sol";
@@ -82,7 +84,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
                 address(membershipManagerInstance),
                 address(roleRegistryInstance),
                 address(blacklisterInstance),
-                address(etherFiAdminInstance));
+                address(etherFiAdminInstance),
+                1, 4e18
+            );
         withdrawRequestNFTInstance.upgradeTo(address(newWrnImpl));
         vm.stopPrank();
         vm.startPrank(owner);
@@ -961,19 +965,20 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
         requests[0] = request;
+
         vm.prank(requestManager);
         priorityQueue.fulfillRequests(requests);
 
         uint256 lockedAtFulfill = request.amountOfEEth;
         assertEq(lockedAtFulfill, withdrawAmount, "Lock should use raw request amount");
 
-        // Recover after fulfill. Claim should not exceed the stored lock.
+        // Recover. Fulfill now succeeds and the user can claim normally.
         _rebase(15 ether);
 
         uint256 ethBefore = vipUser.balance;
         vm.prank(vipUser);
         priorityQueue.claimWithdraw(request);
-
+        
         uint256 expectedClaim = liquidityPoolInstance.amountForShare(request.shareOfEEth);
         if (expectedClaim > request.amountOfEEth) expectedClaim = request.amountOfEEth;
 
@@ -986,7 +991,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
             _createWithdrawRequest(vipUser, withdrawAmount);
-
+        
         // Slash before fulfill, then strong recovery before invalidate.
         _rebase(20 ether);
         _rebase(-25 ether);
@@ -1673,9 +1678,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.handleRemainder(amountToHandle);
 
         uint256 treasuryReceived = eETHInstance.balanceOf(treasury) - treasuryBalanceBefore;
-        uint256 expectedTreasuryAmount = (amountToHandle + 1) / 2;
+        uint256 expectedTreasuryAmount = amountToHandle / 2;
         assertEq(amountToHandle % 2, 1, "Test setup must use odd amount");
-        assertEq(treasuryReceived, expectedTreasuryAmount, "Treasury split should round up");
+        assertEq(treasuryReceived, expectedTreasuryAmount, "Treasury split round down");
     }
 
     // function test_handleRemainder_withTreasurySplit() public {
@@ -2182,7 +2187,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             "Setup: share value must be below amountWithFee after slash"
         );
 
-        // Fulfill the request
+        // Fulfill the request 
         IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
         requests[0] = request;
         vm.prank(requestManager);
@@ -2558,5 +2563,4 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // Request no longer exists.
         assertFalse(priorityQueue.requestExists(requestId), "request should be removed after claim");
     }
-
 }

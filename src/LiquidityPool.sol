@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -96,6 +97,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //--------------------------------------------------------------------------------------
     uint256 public constant MIN_WITHDRAW_AMOUNT = 0.01 ether;
     uint256 public constant MAX_WITHDRAW_AMOUNT = 1000 ether;
+    uint256 public constant SHARE_UNIT = 1e18;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
@@ -137,6 +139,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error InvalidValidatorSize();
     error InvalidArrayLengths();
     error InvalidAmountForShare();
+    error InvalidRate();
 
     struct ConstructorAddresses {
         address stakingManager;
@@ -247,38 +250,15 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /// @notice Burns shares and pays ETH. For NFT/queue callers, ETH is paid by the caller from its own segregated balance; LP only does accounting. Other callers receive ETH from LP.
-    function withdraw(address _recipient, uint256 _amount) external nonReentrant returns (uint256) {
-        uint256 share = sharesForWithdrawalAmount(_amount);
-        require(
-            msg.sender == address(withdrawRequestNFT) || 
-            msg.sender == address(membershipManager) || 
-            msg.sender == address(etherFiRedemptionManager) ||
-            msg.sender == address(priorityWithdrawalQueue),
-            "Incorrect Caller"
-        );
-        // Permissionless claims via withdrawRequestNFT and priorityWithdrawalQueue are allowed even when the LP is paused; membershipManager and etherFiRedemptionManager remain gated.
-        if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) {
-            _requireNotPaused();
-            _requireNotPausedUntil();
+    /// @notice Live-rate withdraw for membershipManager and etherFiRedemptionManager.
+    ///         Burns shares at the live rate and pays ETH from the LP to `_recipient`.
+    function withdraw(address _recipient, uint256 _amount) external nonReentrant whenNotPaused returns (uint256) {
+        if (msg.sender != address(membershipManager) && msg.sender != address(etherFiRedemptionManager)) {
+            revert IncorrectCaller();
         }
+        uint256 share = sharesForWithdrawalAmount(_amount);
         if (eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
-
-        bool fromSegregated = (msg.sender == address(withdrawRequestNFT) || msg.sender == address(priorityWithdrawalQueue));
-
-        if (fromSegregated) {
-            // ETH was transferred to caller at lock time; LP only does accounting + share burn here.
-            // NFT now owns the ethAmountLockedForWithdrawal counter and guard (decremented in _claimWithdraw).
-            // Queue caller decrements its own ethAmountLockedForPriorityWithdrawal in its own claim function.
-
-            totalValueOutOfLp -= uint128(_amount);
-            eETH.burnShares(msg.sender, share);
-            _checkMinAmountForShare();
-            // No _sendFund — caller pays recipient itself.
-            return share;
-        }
-
-        // Unchanged path for membershipManager / etherFiRedemptionManager.
         if (totalValueInLp < _amount) revert InsufficientLiquidity();
         totalValueInLp -= uint128(_amount);
         eETH.burnShares(msg.sender, share);
@@ -286,6 +266,33 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _sendFund(_recipient, _amount);
 
         _checkTotalValueInLp();
+        _checkMinAmountForShare();
+
+        return share;
+    }
+
+    /// @notice Settles a finalized claim for withdrawRequestNFT or priorityWithdrawalQueue against
+    ///         the rate snapshotted at finalize/fulfill time. Caller supplies the rate; LP derives
+    ///         the share burn from it. ETH was already segregated to the caller at finalize/fulfill
+    ///         via `addEthAmountLockedForWithdrawal` / `transferLockedEthForPriority`, so LP only
+    ///         performs accounting (burn + `totalValueOutOfLp -=`); the caller pays the user from
+    ///         its own balance.
+    /// @dev    `_rate == 0` is rejected — callers (WRNFT / Queue) are responsible for resolving
+    ///         any pre-upgrade legacy snapshot to a live rate locally via `amountPerShareCeil()`
+    ///         before invoking this function. Single codepath: one ceiling math expression.
+    function withdraw(uint256 _amount, uint256 _rate) external nonReentrant returns (uint256) {
+        if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) {
+            revert IncorrectCaller();
+        }
+        if (_amount > type(uint128).max || _amount == 0) revert InvalidAmount();
+        if (_rate == 0) revert InvalidRate();
+
+        uint256 share = Math.mulDiv(_amount, SHARE_UNIT, _rate, Math.Rounding.Up); // rounding favors the protocol
+        if (share == 0) revert InvalidAmount();
+        if (eETH.shares(msg.sender) < share) revert InsufficientLiquidity();
+
+        totalValueOutOfLp -= uint128(_amount);
+        eETH.burnShares(msg.sender, share);
         _checkMinAmountForShare();
 
         return share;
@@ -632,7 +639,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (totalPooledEther == 0) {
             return _depositAmount;
         }
-        return (_depositAmount * eETH.totalShares()) / totalPooledEther;
+        return Math.mulDiv(_depositAmount, eETH.totalShares(), totalPooledEther, Math.Rounding.Down);
     }
 
     function _sendFund(address _recipient, uint256 _amount) internal {
@@ -660,7 +667,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256 staked;
         uint256 totalShares = eETH.totalShares();
         if (totalShares > 0) {
-            staked = (getTotalPooledEther() * eETH.shares(_user)) / totalShares;
+            staked = Math.mulDiv(getTotalPooledEther(), eETH.shares(_user), totalShares, Math.Rounding.Down);
         }
         return staked;
     }
@@ -674,7 +681,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (totalPooledEther == 0) {
             return 0;
         }
-        return (_amount * eETH.totalShares()) / totalPooledEther;
+        return Math.mulDiv(_amount, eETH.totalShares(), totalPooledEther, Math.Rounding.Down);
     }
 
     /// @dev withdrawal rounding errors favor the protocol by rounding up
@@ -685,8 +692,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         }
 
         // ceiling division so rounding errors favor the protocol
-        uint256 numerator = _amount * eETH.totalShares();
-        return (numerator + totalPooledEther - 1) / totalPooledEther;
+        return Math.mulDiv(_amount, eETH.totalShares(), totalPooledEther, Math.Rounding.Up);
     }
 
     function amountForShare(uint256 _share) public view returns (uint256) {
@@ -694,7 +700,19 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (totalShares == 0) {
             return 0;
         }
-        return (_share * getTotalPooledEther()) / totalShares;
+        return Math.mulDiv(_share, getTotalPooledEther(), totalShares, Math.Rounding.Down);
+    }
+
+    /// @notice ETH value of `1e18` shares, rounded UP. Single source of truth for the rate
+    ///         snapshotted by segregated callers (WithdrawRequestNFT / PriorityWithdrawalQueue)
+    ///         at finalize/fulfill. Ceiling rounding keeps the frozen rate >= `amountForShare`'s
+    ///         floor value so the round-trips at claim time satisfy:
+    ///         `shareOfEEth * rate / 1e18 >= amountForShare(shareOfEEth)` (solvency check) and
+    ///         `ceil(amount * 1e18 / rate) <= shareOfEEth` (burn-bounded-by-request).
+    function amountPerShareCeil() public view returns (uint256) {
+        uint256 totalShares = eETH.totalShares();
+        if (totalShares == 0) return 0;
+        return Math.mulDiv(SHARE_UNIT, getTotalPooledEther(), totalShares, Math.Rounding.Up);
     }
 
     function _checkTotalValueInLp() internal view {

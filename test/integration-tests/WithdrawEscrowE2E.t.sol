@@ -2,6 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/console2.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "../TestSetup.sol";
 import "../../src/PriorityWithdrawalQueue.sol";
 import "../../src/interfaces/IPriorityWithdrawalQueue.sol";
@@ -139,7 +140,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
                 address(membershipManagerInstance),
                 address(roleRegistryInstance),
                 address(blacklisterInstance)
-            , address(etherFiAdminInstance)))
+            , address(etherFiAdminInstance), 1, 4e18))
         );
     }
 
@@ -204,12 +205,14 @@ contract WithdrawEscrowE2ETest is TestSetup {
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(),
             baseLp.totalPooled + depositAmt - withdrawAmt, 2,
             "final: net getTotalPooledEther");
-        // Allow 2 wei for share-rate rounding on the deposit→share round-trip
+        // Allow 4 wei: deposit→share round-trip drifts ~2 wei AND the frozen-rate share burn
+        // (ceil(claimable * 1e18 / frozenRate)) drifts another 1-2 wei vs the live-rate
+        // `sharesForWithdrawalAmount(withdrawAmt)` baseline used to compute `expectedSharesBurned`.
         assertApproxEqAbs(
             eETHInstance.totalShares(),
             baseTotalShares + sharesForDeposit - expectedSharesBurned,
-            2,
-            "final: net totalShares (2-wei tolerance)");
+            4,
+            "final: net totalShares (4-wei tolerance)");
         // share-rate rounding artifact: up to 2-wei remainder from share math stays in locked counter
         assertApproxEqAbs(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), baseLocked, 2,
             "final: ethAmountLockedForWithdrawal back to baseline");
@@ -337,8 +340,13 @@ contract WithdrawEscrowE2ETest is TestSetup {
         // getClaimableAmount returns min(amountOfEEth, amountForShare(shareOfEEth)) - fee,
         // which can be 1 wei less than withdrawAmt due to share-rate rounding.
         uint256 claimable = withdrawRequestNFTInstance.getClaimableAmount(reqId);
-        uint256 expectedSharesBurned =
-            liquidityPoolInstance.sharesForWithdrawalAmount(claimable);
+        // Share burn at claim is computed against the rate frozen at finalize via
+        // ceil(claimable * 1e18 / frozenRate). For pre-upgrade requests the rate is 0
+        // and the contract falls back to live `sharesForWithdrawalAmount`.
+        uint224 frozenRate = withdrawRequestNFTInstance.frozenRateFor(reqId);
+        uint256 expectedSharesBurned = frozenRate == 0
+            ? liquidityPoolInstance.sharesForWithdrawalAmount(claimable)
+            : Math.mulDiv(claimable, 1e18, uint256(frozenRate), Math.Rounding.Up);
 
         vm.prank(user);
         withdrawRequestNFTInstance.claimWithdraw(reqId);
@@ -346,9 +354,9 @@ contract WithdrawEscrowE2ETest is TestSetup {
         // User received ETH from NFT's balance; LP raw ETH unchanged (segregated path)
         // share-rate rounding artifact: claimable may be up to 2 wei less than raw withdrawAmt
         // (deposit→share→amountForShare round-trip can drop 2 wei at the live mainnet share rate)
-        assertApproxEqAbs(user.balance, userEthPre + withdrawAmt, 2,
+        assertApproxEqAbs(user.balance, userEthPre + withdrawAmt, 4,
             "step4: user raw ETH after claim");
-        assertApproxEqAbs(address(withdrawRequestNFTInstance).balance, preNft.rawEth - withdrawAmt, 2,
+        assertApproxEqAbs(address(withdrawRequestNFTInstance).balance, preNft.rawEth - withdrawAmt, 4,
             "step4: NFT raw ETH after claim");
         assertEq(address(liquidityPoolInstance).balance, preLp.rawEth,
             "step4: LP raw ETH unchanged at claim");
@@ -357,7 +365,7 @@ contract WithdrawEscrowE2ETest is TestSetup {
         // totalValueOutOfLp decrements by claimable (the actual ETH paid), not raw withdrawAmt
         // — share-rate round-trip can drift by 2 wei at the live mainnet share rate
         assertApproxEqAbs(liquidityPoolInstance.totalValueOutOfLp(),
-            preLp.outLp - uint128(withdrawAmt), 2,
+            preLp.outLp - uint128(withdrawAmt), 4,
             "step4: totalValueOutOfLp after claim");
         assertEq(eETHInstance.totalShares(),
             preTotalShares - expectedSharesBurned,
@@ -366,15 +374,15 @@ contract WithdrawEscrowE2ETest is TestSetup {
         assertApproxEqAbs(
             eETHInstance.balanceOf(address(withdrawRequestNFTInstance)),
             preNft.eEthBal - withdrawAmt,
-            2,
+            4,
             "step4: NFT eETH after claim (2-wei tolerance for share-rate rounding)"); // share-rate rounding artifact
         // ethAmountLockedForWithdrawal decrements by claimable (NFT._claimWithdraw path)
         // — share-rate rounding artifact: claimable can be up to 2 wei less than withdrawAmt
         assertApproxEqAbs(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(),
-            preLocked - uint128(withdrawAmt), 2,
+            preLocked - uint128(withdrawAmt), 4,
             "step4: ethAmountLockedForWithdrawal after claim");
         assertApproxEqAbs(liquidityPoolInstance.getTotalPooledEther(),
-            preLp.totalPooled - withdrawAmt, 2,
+            preLp.totalPooled - withdrawAmt, 4,
             "step4: getTotalPooledEther after claim");
         // NFT burned — ownerOf must revert
         vm.expectRevert();
@@ -645,5 +653,79 @@ contract WithdrawEscrowE2ETest is TestSetup {
         // Request gone
         assertFalse(pQueue.requestExists(reqId), "cancel: request removed");
         assertFalse(pQueue.isFinalized(reqId),   "cancel: no longer finalized");
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  TEST 3: Share-rate freeze on mainnet — WithdrawRequestNFT
+    //  Negative rebase after finalize must not reduce the claim. The frozen rate
+    //  snapshotted at finalize decouples the claim payout from post-finalize drift.
+    // ══════════════════════════════════════════════════════════════════════════
+
+    function test_e2e_nft_freeze_negativeRebaseAfterFinalize_payoutUnchanged() public {
+        uint96 depositAmt  = 100 ether;
+        uint96 withdrawAmt = 5 ether;
+
+        // Setup: deposit, request, finalize. Snapshot the frozen rate at finalize.
+        LpSnap memory baseLp = _snapLp();
+        uint256 baseTotalShares = eETHInstance.totalShares();
+        _nft_step1_deposit(bob, depositAmt, baseLp, baseTotalShares);
+        uint256 reqId = _nft_step2_request(bob, withdrawAmt, 0);
+        _nft_step3_finalize(bob, withdrawAmt, reqId);
+
+        // Frozen rate must be captured and match the ceiling formula the contract uses internally.
+        uint224 frozenRate = withdrawRequestNFTInstance.frozenRateFor(reqId);
+        assertGt(frozenRate, 0, "freeze: snapshot recorded at finalize");
+
+        // Baseline expectation: what the user would receive RIGHT NOW (at the frozen rate).
+        uint256 claimableBefore = withdrawRequestNFTInstance.getClaimableAmount(reqId);
+        assertGt(claimableBefore, 0, "freeze: claimable > 0 pre-rebase");
+
+        // Negative rebase post-finalize. The frozen rate must shield the claim.
+        // Use ~5% of the live TPE so we don't trip `_checkMinAmountForShare`.
+        uint256 totalPooled = liquidityPoolInstance.getTotalPooledEther();
+        int128 slash = -int128(uint128(totalPooled / 20));
+        vm.prank(liquidityPoolInstance.membershipManager());
+        liquidityPoolInstance.rebase(slash);
+
+        uint256 claimableAfter = withdrawRequestNFTInstance.getClaimableAmount(reqId);
+        assertEq(claimableAfter, claimableBefore,
+            "freeze: getClaimableAmount unaffected by post-finalize negative rebase");
+
+        // Live rate dropped — confirm the freeze is doing real work (i.e. live and frozen disagree now).
+        uint256 liveAmountForShares = liquidityPoolInstance.amountForShare(
+            withdrawRequestNFTInstance.getRequest(reqId).shareOfEEth
+        );
+        assertLt(liveAmountForShares, claimableBefore,
+            "freeze: sanity - live rate is below the frozen-rate claim after the slash");
+
+        // Actually claim and verify the user gets the frozen amount, not the live one.
+        uint256 userEthPre = bob.balance;
+        vm.prank(bob);
+        withdrawRequestNFTInstance.claimWithdraw(reqId);
+        assertEq(bob.balance - userEthPre, claimableBefore,
+            "freeze: payout equals frozen-rate claim despite post-finalize slash");
+    }
+
+    /// @dev Frozen rate snapshotted at finalize is the ceiling-rounded share rate, capped above
+    ///      LP.amountForShare(1e18)'s floor value. Pre-upgrade tokenIds (no snapshot above the
+    ///      sentinel) return 0 — i.e. "use live rate", verified by passing `0` as the rate input.
+    function test_e2e_nft_freeze_snapshotIsCeilingOfLiveRate() public {
+        uint96 depositAmt  = 100 ether;
+        uint96 withdrawAmt = 5 ether;
+
+        LpSnap memory baseLp = _snapLp();
+        _nft_step1_deposit(bob, depositAmt, baseLp, eETHInstance.totalShares());
+        uint256 reqId = _nft_step2_request(bob, withdrawAmt, 0);
+
+        uint256 rateBefore = liquidityPoolInstance.amountForShare(1e18);
+        _nft_step3_finalize(bob, withdrawAmt, reqId);
+
+        uint224 frozenRate = withdrawRequestNFTInstance.frozenRateFor(reqId);
+        // Ceiling rounding ⇒ frozen rate is ≥ live floor, off by at most 1 wei when the
+        // (1e18 * TPE) % TS != 0 (the common case on mainnet).
+        assertGe(uint256(frozenRate), rateBefore,
+            "freeze: frozen rate >= live floor (ceiling rounding)");
+        assertLe(uint256(frozenRate) - rateBefore, 1,
+            "freeze: ceiling rounding adds at most 1 wei to the rate");
     }
 }
