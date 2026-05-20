@@ -178,7 +178,7 @@ contract NodeOperatorManagerTest is TestSetup {
             aliceIPFS_Hash,
             1
         );
-        vm.expectRevert("Insufficient public keys");
+        vm.expectRevert(AuctionManager.InsufficientPublicKeys.selector);
         auctionInstance.createBid{value: 0.2 ether}(2, 0.1 ether);
         vm.stopPrank();
 

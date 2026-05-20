@@ -126,11 +126,17 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     error EthTransferFailed();
     error AlreadyClaimed();
     error RequestNotFinalized();
+    error InvalidMinAcceptableShareRate();
+    error InvalidMinMaxAcceptableShareRate();
+    error AlreadyInitialized();
+    error InvalidLiveRate();
+    error BurnExceedsShares();
+    error InvalidEEthShares();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _treasury, address _eETH, address _liquidityPool, address _membershipManager, address _roleRegistry, address _blacklister,  address _etherFiAdmin, uint256 _minAcceptableShareRate, uint256 _maxAcceptableShareRate) {
-        require(_minAcceptableShareRate > 0, "Invalid min acceptable share rate");
-        require(_maxAcceptableShareRate > _minAcceptableShareRate, "Invalid min and max acceptable share rate");
+        if (_minAcceptableShareRate == 0) revert InvalidMinAcceptableShareRate();
+        if (_maxAcceptableShareRate <= _minAcceptableShareRate) revert InvalidMinMaxAcceptableShareRate();
         treasury = _treasury;
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
@@ -159,7 +165,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     ///      legacy behavior for requests finalized before this upgrade. New finalizations push
     ///      real rate snapshots, so post-upgrade tokenIds always resolve to a non-zero rate.
     function initializeShareRateFreezeUpgrade() external onlyOwner {
-        require(_finalizationRates.length() == 0, "already initialized");
+        if (_finalizationRates.length() != 0) revert AlreadyInitialized();
         _finalizationRates.push(uint32(lastFinalizedRequestId), 0);
     }
 
@@ -212,7 +218,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
             // claim semantics match the pre-upgrade behavior. New (post-upgrade) finalizations
             // always push a non-zero snapshot, so this branch only fires for legacy tokenIds.
             uint256 live = liquidityPool.amountPerShareCeil();
-            require(live >= minAcceptableShareRate && live <= maxAcceptableShareRate, "invalid live rate");
+            if (live < minAcceptableShareRate || live > maxAcceptableShareRate) revert InvalidLiveRate();
             frozenRate = uint224(live);
         }
 
@@ -254,7 +260,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         // When `amountToWithdraw` was computed at `frozenRate` (or live rate, for legacy), the
         // round-trip ceiling division yields `burnedShares <= request.shareOfEEth` by construction;
         // the require both pins that invariant and protects the remainder bookkeeping below.
-        require(burnedShares <= request.shareOfEEth, "burn exceeds shares");
+        if (burnedShares > request.shareOfEEth) revert BurnExceedsShares();
         totalRemainderEEthShares += request.shareOfEEth - burnedShares;
 
         (bool ok, ) = payable(recipient).call{value: amountToWithdraw}("");
@@ -421,7 +427,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         if (eEthAmountToTreasury > 0) IERC20(address(eETH)).safeTransfer(treasury, eEthAmountToTreasury);
         if (eEthSharesToBurn > 0) liquidityPool.burnEEthShares(eEthSharesToBurn);
 
-        require (beforeEEthShares - eEthSharesToMoved == eETH.shares(address(this)), "Invalid eETH shares after remainder handling");
+        if (beforeEEthShares - eEthSharesToMoved != eETH.shares(address(this))) revert InvalidEEthShares();
 
         emit HandledRemainderOfClaimedWithdrawRequests(eEthAmountToTreasury, eEthAmountToBurn);
 

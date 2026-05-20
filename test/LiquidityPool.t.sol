@@ -116,7 +116,7 @@ contract LiquidityPoolTest is TestSetup {
         uint256 aliceNonce = eETHInstance.nonces(alice);
         // create permit with invalid private key (Bob)
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(3, address(liquidityPoolInstance), 2 ether, aliceNonce+1, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE"); //even through the reason was invalid permit to prevent griefing attack the allowance fails
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector); //even through the reason was invalid permit to prevent griefing attack the allowance fails
         liquidityPoolInstance.requestWithdrawWithPermit(alice, 2 ether, permitInput);
         vm.stopPrank();
     }
@@ -133,7 +133,7 @@ contract LiquidityPoolTest is TestSetup {
         uint256 aliceNonce = eETHInstance.nonces(alice);
         //  permit with insufficient amount of ETH
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(liquidityPoolInstance), 1 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector);
         liquidityPoolInstance.requestWithdrawWithPermit(alice, 2 ether, permitInput);
         vm.stopPrank();
     }
@@ -201,7 +201,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         startHoax(alice);
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector);
         liquidityPoolInstance.requestWithdraw(alice, 2 ether);
     }
 
@@ -216,7 +216,7 @@ contract LiquidityPoolTest is TestSetup {
         eETHInstance.approve(address(liquidityPoolInstance), 100 ether);
 
         vm.startPrank(alice);
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector);
         liquidityPoolInstance.requestWithdraw(bob, 2 ether);
 
         liquidityPoolInstance.deposit{value: 10 ether}();

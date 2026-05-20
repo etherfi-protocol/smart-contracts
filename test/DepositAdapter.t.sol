@@ -74,7 +74,7 @@ contract DepositAdapterTest is TestSetup {
 
         // invalid deposits
         wETH.approve(address(depositAdapterInstance), 10 ether);
-        vm.expectRevert("INSUFFICIENT_BALANCE");
+        vm.expectRevert(DepositAdapter.InsufficientBalance.selector);
         depositAdapterInstance.depositWETHForWeETH(10 ether, bob);
     }
 
@@ -190,17 +190,17 @@ contract DepositAdapterTest is TestSetup {
         uint blockTimestampAfter = block.timestamp;
         console.log("Block Timestamp After:", blockTimestampAfter);
         console.log("Permit Deadline:", permitDeadline);
-        vm.expectRevert("PERMIT_EXPIRED");
+        vm.expectRevert(DepositAdapter.PermitExpired.selector);
         depositAdapterInstance.depositStETHForWeETHWithPermit(1 ether, bob, liquifierPermitInput);
     }
         
     function test_Receive() public {
-        vm.expectRevert("ETH_TRANSFERS_NOT_ACCEPTED");
+        vm.expectRevert(DepositAdapter.EthTransfersNotAccepted.selector);
         address(depositAdapterInstance).call{value: 1 ether}("");
 
         address payable depositAdapterPayable = payable(address(depositAdapterInstance));
        
-        vm.expectRevert("ETH_TRANSFERS_NOT_ACCEPTED");
+        vm.expectRevert(DepositAdapter.EthTransfersNotAccepted.selector);
         bool success = depositAdapterPayable.send(1 ether);
     }
 }

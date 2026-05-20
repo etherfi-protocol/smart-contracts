@@ -66,7 +66,7 @@ contract BNFTTest is TestSetup {
 
     function test_BNFTMintsFailsIfNotCorrectCaller() public {
         vm.startPrank(alice);
-        vm.expectRevert("Only staking manager contract");
+        vm.expectRevert(BNFT.IncorrectCaller.selector);
         BNFTInstance.mint(address(alice), 1);
     }
 

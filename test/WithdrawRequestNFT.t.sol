@@ -2138,7 +2138,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     function test_shareRateFreeze_initializeUpgrade_revertsIfAlreadyInitialized() public {
         vm.startPrank(withdrawRequestNFTInstance.owner());
         withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
-        vm.expectRevert("already initialized");
+        vm.expectRevert(WithdrawRequestNFT.AlreadyInitialized.selector);
         withdrawRequestNFTInstance.initializeShareRateFreezeUpgrade();
         vm.stopPrank();
     }

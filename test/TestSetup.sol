@@ -553,6 +553,22 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         address newRateLimiterImpl = address(new EtherFiRateLimiter(address(roleRegistryInstance)));
         vm.prank(roleRegistryInstance.owner());
         rateLimiterInstance.upgradeTo(newRateLimiterImpl);
+
+        // Upgrade DepositAdapter on the fork so tests exercise the post-refactor
+        // custom-error reverts instead of the still-deployed string-revert impl.
+        address newDepositAdapterImpl = address(new DepositAdapter(
+            address(liquidityPoolInstance),
+            address(liquifierInstance),
+            address(weEthInstance),
+            address(eETHInstance),
+            0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
+            address(stEth),
+            0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0,
+            address(roleRegistryInstance),
+            address(blacklisterInstance)
+        ));
+        vm.prank(depositAdapterInstance.owner());
+        depositAdapterInstance.upgradeTo(newDepositAdapterImpl);
     }
 
     function updateShouldSetRoleRegistry(bool shouldSetup) public {
@@ -922,7 +938,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         vm.expectRevert("Initializable: contract is already initialized");
         eETHImplementation.initialize(payable(address(liquidityPoolProxy)));
         eETHInstance.upgradeTo(address(eETHImplementation));
-        vm.expectRevert("No zero addresses");
+        vm.expectRevert(EETH.AddressZero.selector);
         eETHInstance.initialize(payable(address(0)));
         eETHInstance.initialize(payable(address(liquidityPoolProxy)));
 
@@ -1570,7 +1586,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         }
 
         if (bytes(_revertMessage).length > 0) {
-            vm.expectRevert(bytes(_revertMessage));
+            vm.expectRevert(abi.encodeWithSelector(EtherFiAdmin.ReportValidationFailed.selector, _revertMessage));
         }
 
         vm.prank(alice);

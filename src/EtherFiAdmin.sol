@@ -106,6 +106,11 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InvalidStaleOracleReportBlockWindow();
     error OracleReportNotStale();
     error NoWithdrawalsToFinalize();
+    error ReportValidationFailed(string reason);
+    error ConsensusNotReached();
+    error TaskDoesNotExist();
+    error TaskAlreadyCompleted();
+    error TaskAlreadyExists();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
@@ -171,7 +176,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function executeTasks(IEtherFiOracle.OracleReport calldata _report) external {
         bytes32 reportHash = etherFiOracle.generateReportHash(_report);
         (bool _isValid, string memory _error) = _validateReport(_report, reportHash);
-        require(_isValid, _error);
+        if (!_isValid) revert ReportValidationFailed(_error);
 
         _handleAccruedRewards(_report);
         _handleProtocolFees(_report);
@@ -188,10 +193,10 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function executeValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators, bytes[] calldata _pubKeys, bytes[] calldata _signatures) external {
         if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
 
-        require(etherFiOracle.isConsensusReached(_reportHash), "EtherFiAdmin: report didn't reach consensus");
+        if (!etherFiOracle.isConsensusReached(_reportHash)) revert ConsensusNotReached();
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
-        require(validatorApprovalTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
-        require(!validatorApprovalTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
+        if (!validatorApprovalTaskStatus[taskHash].exists) revert TaskDoesNotExist();
+        if (validatorApprovalTaskStatus[taskHash].completed) revert TaskAlreadyCompleted();
 
         validatorApprovalTaskStatus[taskHash].completed = true;
         liquidityPool.batchApproveRegistration(_validators, _pubKeys, _signatures);
@@ -200,8 +205,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function invalidateValidatorApprovalTask(bytes32 _reportHash, uint256[] calldata _validators) external onlyOperations {
         bytes32 taskHash = keccak256(abi.encode(_reportHash, _validators));
-        require(validatorApprovalTaskStatus[taskHash].exists, "EtherFiAdmin: task doesn't exist");
-        require(!validatorApprovalTaskStatus[taskHash].completed, "EtherFiAdmin: task already completed");
+        if (!validatorApprovalTaskStatus[taskHash].exists) revert TaskDoesNotExist();
+        if (validatorApprovalTaskStatus[taskHash].completed) revert TaskAlreadyCompleted();
         validatorApprovalTaskStatus[taskHash].exists = false;
         emit ValidatorApprovalTaskInvalidated(taskHash, _reportHash, _validators);
     }
@@ -268,7 +273,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 batchValidators[j - start] = _report.validatorsToApprove[j];
             }
             bytes32 taskHash = keccak256(abi.encode(_reportHash, batchValidators));
-            require(!validatorApprovalTaskStatus[taskHash].exists, "Task already exists");
+            if (validatorApprovalTaskStatus[taskHash].exists) revert TaskAlreadyExists();
             validatorApprovalTaskStatus[taskHash] = TaskStatus({completed: false, exists: true});
             emit ValidatorApprovalTaskCreated(taskHash, _reportHash, batchValidators);
         }

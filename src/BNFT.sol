@@ -16,6 +16,10 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     address public immutable stakingManagerAddress;
     address public immutable etherFiNodesManagerAddress;
 
+    error AddressZero();
+    error SoulBound();
+    error IncorrectCaller();
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _stakingManagerAddress, address _etherFiNodesManagerAddress) {
         stakingManagerAddress = _stakingManagerAddress;
@@ -29,7 +33,7 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
 
     /// @notice initialize to set variables on deployment
     function initialize(address _stakingManagerAddress) initializer external {
-        require(_stakingManagerAddress != address(0), "No zero addresses");
+        if (_stakingManagerAddress == address(0)) revert AddressZero();
         __ERC721_init("Bond NFT", "BNFT");
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -61,7 +65,7 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
         uint256  // batchSize
     ) internal virtual override(ERC721Upgradeable ){
         // only allow mint or burn
-        require(from == address(0) || to == address(0), "Err: token is SOUL BOUND");
+        if (from != address(0) && to != address(0)) revert SoulBound();
     }
 
     //--------------------------------------------------------------------------------------
@@ -87,12 +91,12 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     //--------------------------------------------------------------------------------------
 
     modifier onlyStakingManager() {
-        require(msg.sender == stakingManagerAddress, "Only staking manager contract");
+        if (msg.sender != stakingManagerAddress) revert IncorrectCaller();
         _;
     }
 
     modifier onlyEtherFiNodesManager() {
-        require(msg.sender == etherFiNodesManagerAddress, "Only etherFiNodesManager contract");
+        if (msg.sender != etherFiNodesManagerAddress) revert IncorrectCaller();
         _;
     }
 }

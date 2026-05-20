@@ -67,7 +67,7 @@ contract WeETHTest is TestSetup {
         // alice priv key = 2
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(weEthInstance), 2 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
 
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector);
         weEthInstance.wrapWithPermit(5 ether, permitInput);
 
     }
@@ -86,7 +86,7 @@ contract WeETHTest is TestSetup {
         // 69 is an invalid private key for alice
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(69, address(weEthInstance), 5 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
 
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector);
         weEthInstance.wrapWithPermit(5 ether, permitInput);
     }
 

@@ -48,7 +48,7 @@ contract EETHTest is TestSetup {
         assertEq(eETHInstance.balanceOf(alice), 0);
         assertEq(eETHInstance.totalSupply(), 0);
 
-        vm.expectRevert("Only pool contract function");
+        vm.expectRevert(EETH.IncorrectCaller.selector);
         vm.prank(alice);
         eETHInstance.mintShares(alice, 100);
     }
@@ -72,11 +72,11 @@ contract EETHTest is TestSetup {
         assertEq(eETHInstance.shares(alice), 50);
         assertEq(eETHInstance.totalShares(), 50);
 
-        vm.expectRevert("BURN_AMOUNT_EXCEEDS_BALANCE");
+        vm.expectRevert(EETH.BurnAmountExceedsBalance.selector);
         vm.prank(address(liquidityPoolInstance));
         eETHInstance.burnShares(alice, 100);
 
-        vm.expectRevert("Incorrect Caller");
+        vm.expectRevert(EETH.IncorrectCaller.selector);
         vm.prank(bob);
         eETHInstance.burnShares(alice, 50);
     }
@@ -172,15 +172,15 @@ contract EETHTest is TestSetup {
         assertEq(eETHInstance.shares(alice), 0.5 ether);
         assertEq(eETHInstance.shares(bob), 0.5 ether);
 
-        vm.expectRevert("TRANSFER_FROM_THE_ZERO_ADDRESS");
+        vm.expectRevert(EETH.AddressZero.selector);
         vm.prank(address(0));
         eETHInstance.transfer(bob, 0.5 ether);
 
-        vm.expectRevert("TRANSFER_TO_THE_ZERO_ADDRESS");
+        vm.expectRevert(EETH.AddressZero.selector);
         vm.prank(alice);
         eETHInstance.transfer(address(0), 0.5 ether);
 
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_BALANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsBalance.selector);
         vm.prank(alice);
         eETHInstance.transfer(bob, 1 ether);
     }
@@ -216,11 +216,11 @@ contract EETHTest is TestSetup {
 
         assertEq(eETHInstance.allowance(alice, bob), 5 ether);
 
-        vm.expectRevert("APPROVE_FROM_ZERO_ADDRESS");
+        vm.expectRevert(EETH.AddressZero.selector);
         vm.prank(address(0));
         eETHInstance.approve(bob, 5 ether);
 
-        vm.expectRevert("APPROVE_TO_ZERO_ADDRESS");
+        vm.expectRevert(EETH.AddressZero.selector);
         vm.prank(alice);
         eETHInstance.approve(address(0), 5 ether);
     }
@@ -249,7 +249,7 @@ contract EETHTest is TestSetup {
         eETHInstance.decreaseAllowance(bob, 4 ether);
         assertEq(eETHInstance.allowance(alice, bob), 3 ether);
 
-        vm.expectRevert("ERC20: decreased allowance below zero");
+        vm.expectRevert(EETH.AllowanceBelowZero.selector);
         eETHInstance.decreaseAllowance(bob, 4 ether);
     }
 
@@ -263,7 +263,7 @@ contract EETHTest is TestSetup {
         assertEq(eETHInstance.shares(alice), 1 ether);
         assertEq(eETHInstance.shares(bob), 0);
 
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector);
         vm.prank(bob);
         eETHInstance.transferFrom(alice, bob, 0.5 ether);
 
@@ -525,7 +525,7 @@ contract EETHTest is TestSetup {
         eETHInstance.pause();
 
         vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert("PAUSED");
+        vm.expectRevert(EETH.ContractPaused.selector);
         eETHInstance.mintShares(alice, 100);
     }
 
@@ -537,7 +537,7 @@ contract EETHTest is TestSetup {
         eETHInstance.pause();
 
         vm.prank(address(liquidityPoolInstance));
-        vm.expectRevert("PAUSED");
+        vm.expectRevert(EETH.ContractPaused.selector);
         eETHInstance.burnShares(alice, 50);
     }
 
@@ -548,7 +548,7 @@ contract EETHTest is TestSetup {
         eETHInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert("PAUSED");
+        vm.expectRevert(EETH.ContractPaused.selector);
         eETHInstance.transfer(bob, 0.5 ether);
     }
 
