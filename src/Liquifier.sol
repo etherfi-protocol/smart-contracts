@@ -78,7 +78,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     IDelegationManager private DEPRECATED_eigenLayerDelegationManager;
 
-    IPancackeV3SwapRouter pancakeRouter;
+    IPancackeV3SwapRouter private DEPRECATED_pancakeRouter;
 
     mapping(string => bool) private DEPRECATED_flags;
     

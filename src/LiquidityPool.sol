@@ -7,8 +7,6 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
-import "./EtherFiRedemptionManager.sol";
-
 import "./utils/PausableUntil.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IStakingManager.sol";
@@ -70,7 +68,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     bool private DEPRECATED_isLpBnftHolder;
 
-    EtherFiRedemptionManager private DEPRECATED_etherFiRedemptionManager;
+    IEtherFiRedemptionManager private DEPRECATED_etherFiRedemptionManager;
 
     IRoleRegistry private DEPRECATED_roleRegistry;
     uint256 public validatorSizeWei;
