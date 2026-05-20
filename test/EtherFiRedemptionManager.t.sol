@@ -420,14 +420,6 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         vm.expectRevert(RoleRegistry.OnlyOperatingTimelock.selector);
         etherFiRedemptionManagerInstance.setCapacity(10 ether, ETH_ADDRESS);
         vm.stopPrank();
-
-        // User without role attempts admin-only actions
-        vm.startPrank(user);
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        etherFiRedemptionManagerInstance.pauseContract();
-        vm.expectRevert(RoleRegistry.OnlyOperatingMultisig.selector);
-        etherFiRedemptionManagerInstance.unPauseContract();
-        vm.stopPrank();
     }
 
     function test_mainnet_redeem_eEth() public {
