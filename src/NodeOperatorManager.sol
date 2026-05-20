@@ -7,7 +7,6 @@ import "../src/interfaces/IRoleRegistry.sol";
 import "../src/LiquidityPool.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 /// Contract which helps us control our node operators and their permissions in different aspects of the protocol
