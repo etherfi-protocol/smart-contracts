@@ -64,9 +64,9 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     uint16 public _unused_gap;
 
     // inclusive
-    uint32 public currentRequestIdToScanFromForShareRemainder;
-    uint32 public lastRequestIdToScanUntilForShareRemainder;
-    uint256 public aggregateSumOfEEthShare;
+    uint32 private DEPRECATED_currentRequestIdToScanFromForShareRemainder;
+    uint32 private DEPRECATED_lastRequestIdToScanUntilForShareRemainder;
+    uint256 private DEPRECATED_aggregateSumOfEEthShare;
 
     uint256 public totalRemainderEEthShares;
 
@@ -278,29 +278,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         }
     }
 
-    // This function is used to aggregate the sum of the eEth shares of the requests that have not been claimed yet.
-    // To be triggered during the upgrade to the new version of the contract.
-    function aggregateSumEEthShareAmount(uint256 _numReqsToScan) external {
-        if (isScanOfShareRemainderCompleted()) revert ScanCompleted();
-
-        // [scanFrom, scanUntil]
-        uint256 scanFrom = currentRequestIdToScanFromForShareRemainder;
-        uint256 scanUntil = Math.min(lastRequestIdToScanUntilForShareRemainder, scanFrom + _numReqsToScan - 1);
-
-        for (uint256 i = scanFrom; i <= scanUntil; i++) {
-            if (!_exists(i)) continue;
-            aggregateSumOfEEthShare += _requests[i].shareOfEEth;
-        }
-
-        currentRequestIdToScanFromForShareRemainder = uint32(scanUntil + 1);
-        
-        // When the scan is completed, update the `totalRemainderEEthShares` and reset the `aggregateSumOfEEthShare`
-        if (isScanOfShareRemainderCompleted()) {
-            totalRemainderEEthShares = eETH.shares(address(this)) - aggregateSumOfEEthShare;
-            aggregateSumOfEEthShare = 0; // gone
-        }
-    }
-
     // Seize the request simply by transferring it to another recipient
     function seizeInvalidRequest(uint256 requestId, address recipient) external onlyAdmin {
         if (_requests[requestId].isValid) revert RequestValid();
@@ -413,7 +390,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     function handleRemainder(uint256 _eEthAmount) external {
         if(!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         if (_eEthAmount == 0) revert EETHAmountCannotBeZero(); 
-        if (!isScanOfShareRemainderCompleted()) revert NotAllPrevRequestsHaveBeenScanned();
         if (getEEthRemainderAmount() < _eEthAmount) revert NotEnoughEEthRemainder();
 
         uint256 beforeEEthShares = eETH.shares(address(this));
@@ -447,10 +423,6 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     function getEEthRemainderAmount() public view returns (uint256) {
         return liquidityPool.amountForShare(totalRemainderEEthShares);
-    }
-
-    function isScanOfShareRemainderCompleted() public view returns (bool) {
-        return currentRequestIdToScanFromForShareRemainder == (lastRequestIdToScanUntilForShareRemainder + 1);
     }
 
     // the withdraw request NFT is transferrable

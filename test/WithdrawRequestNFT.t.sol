@@ -15,11 +15,6 @@ contract WithdrawRequestNFTIntrusive is WithdrawRequestNFT {
     // so a zero immutable would brick the swap-back step in updateParam.
     constructor(address _roleRegistry) WithdrawRequestNFT(address(0), address(0), address(0), address(0), _roleRegistry, address(0), address(0), 1, 4e18) {}
 
-    function updateParam(uint32 _currentRequestIdToScanFromForShareRemainder, uint32 _lastRequestIdToScanUntilForShareRemainder) external {
-        currentRequestIdToScanFromForShareRemainder = _currentRequestIdToScanFromForShareRemainder;
-        lastRequestIdToScanUntilForShareRemainder = _lastRequestIdToScanUntilForShareRemainder;
-    }
-
     /// @dev Test-only: advance `lastFinalizedRequestId` without going through `finalizeRequests`,
     ///      simulating the pre-upgrade state where no rate snapshot was captured.
     function setLastFinalizedRequestIdForTest(uint32 _id) external {
@@ -35,14 +30,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         setUpTests();
         vm.prank(admin);
         withdrawRequestNFTInstance.unPauseContract();
-    }
-
-    function updateParam(uint32 _currentRequestIdToScanFromForShareRemainder, uint32 _lastRequestIdToScanUntilForShareRemainder) internal {
-        address cur_impl = withdrawRequestNFTInstance.getImplementation();
-        address new_impl = address(new WithdrawRequestNFTIntrusive(address(roleRegistryInstance)));
-        withdrawRequestNFTInstance.upgradeTo(new_impl);
-        WithdrawRequestNFTIntrusive(payable(address(withdrawRequestNFTInstance))).updateParam(_currentRequestIdToScanFromForShareRemainder, _lastRequestIdToScanUntilForShareRemainder);
-        withdrawRequestNFTInstance.upgradeTo(cur_impl);
     }
 
     function test_finalizeRequests() public {
@@ -1000,40 +987,6 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.setPauseUntilDuration(aboveMax);
     }
 
-    // The scan-of-share-remainder gate was removed from unPauseContract / unpauseContractUntil.
-    // Unpausing must succeed even when isScanOfShareRemainderCompleted() returns false.
-    function test_unPauseContract_worksWhenScanIncomplete() public {
-        // Force scan-incomplete state: scanFrom < scanUntil + 1
-        vm.startPrank(withdrawRequestNFTInstance.owner());
-        updateParam(1, 5);
-        vm.stopPrank();
-        assertFalse(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "scan should be incomplete");
-
-        vm.prank(admin);
-        withdrawRequestNFTInstance.pauseContract();
-        assertTrue(withdrawRequestNFTInstance.paused());
-
-        vm.prank(admin);
-        withdrawRequestNFTInstance.unPauseContract();
-        assertFalse(withdrawRequestNFTInstance.paused(), "Contract should unpause regardless of scan state");
-    }
-
-    function test_unpauseContractUntil_worksWhenScanIncomplete() public {
-        vm.startPrank(withdrawRequestNFTInstance.owner());
-        updateParam(1, 5);
-        vm.stopPrank();
-        assertFalse(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "scan should be incomplete");
-
-        _grantWrPauseUntilRoles();
-        vm.prank(wrPauseUntilPauser);
-        withdrawRequestNFTInstance.pauseContractUntil();
-        assertEq(_wrPausedUntil(), block.timestamp + withdrawRequestNFTInstance.MAX_PAUSE_DURATION());
-
-        vm.prank(wrUnpauseUntilUnpauser);
-        withdrawRequestNFTInstance.unpauseContractUntil();
-        assertEq(_wrPausedUntil(), 0, "pause-until should clear regardless of scan state");
-    }
-
     // --- each gated function (whenNotPaused → blocked by pause-until too) ---
 
     function test_requestWithdraw_blockedByPauseContractUntil() public {
@@ -1146,67 +1099,6 @@ contract WithdrawRequestNFTTest is TestSetup {
 
         uint256 remainderAmount = withdrawRequestNFTInstance.getEEthRemainderAmount();
         assertGe(remainderAmount, 0, "Remainder amount should be >= 0");
-    }
-
-    function test_isScanOfShareRemainderCompleted() public {
-        // Initially should be completed (no requests to scan)
-        assertTrue(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should be completed initially");
-
-        startHoax(bob);
-        liquidityPoolInstance.deposit{value: 10 ether}();
-        vm.stopPrank();
-
-        vm.prank(bob);
-        eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
-
-        vm.prank(bob);
-        liquidityPoolInstance.requestWithdraw(bob, 1 ether);
-
-        // Still completed because scan range hasn't been set
-        assertTrue(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should still be completed");
-    }
-
-    function test_aggregateSumEEthShareAmount() public {
-        // Setup scan parameters (needs owner to upgrade)
-        uint32 startId = 1;
-        uint32 endId = 5;
-        vm.startPrank(withdrawRequestNFTInstance.owner());
-        updateParam(startId, endId);
-        vm.stopPrank();
-
-        startHoax(bob);
-        liquidityPoolInstance.deposit{value: 50 ether}();
-        vm.stopPrank();
-
-        // Create multiple requests
-        uint256[] memory requestIds = new uint256[](5);
-        for (uint256 i = 0; i < 5; i++) {
-            vm.prank(bob);
-            eETHInstance.approve(address(liquidityPoolInstance), 1 ether);
-            vm.prank(bob);
-            requestIds[i] = liquidityPoolInstance.requestWithdraw(bob, 1 ether);
-        }
-
-        // Initially scan is not completed
-        assertFalse(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should not be completed");
-
-        uint256 initialAggregateSum = withdrawRequestNFTInstance.aggregateSumOfEEthShare();
-        
-        // Aggregate first 3 requests
-        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(3);
-        
-        uint256 aggregateSumAfter = withdrawRequestNFTInstance.aggregateSumOfEEthShare();
-        assertGt(aggregateSumAfter, initialAggregateSum, "Aggregate sum should increase");
-
-        // Aggregate remaining requests
-        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(10);
-        
-        // Scan should be completed now
-        assertTrue(withdrawRequestNFTInstance.isScanOfShareRemainderCompleted(), "Scan should be completed");
-        
-        // Cannot aggregate again after completion
-        vm.expectRevert(WithdrawRequestNFT.ScanCompleted.selector);
-        withdrawRequestNFTInstance.aggregateSumEEthShareAmount(1);
     }
 
     function test_requestWithdrawWithFee() public {
