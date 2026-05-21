@@ -35,7 +35,7 @@ contract ConsolidateValidators is Script {
 
     address constant EL_TRIGGER_EXITER = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
 
-    uint256 MIN_DELAY_OPERATING_TIMELOCK = 28800; // 8 hours
+    uint256 minDelay_OPERATING_TIMELOCK = 28800; // 8 hours
 
     //consolidate the following validators:
     bytes constant PK_54043 = hex"8014c4704f081bd4b8470cb93722601095a314c3db7ccf79c129189d01c432db968a64131f23a94c8ff1e280500ae3d3"; // linked in EtherfiNodesManager
@@ -95,7 +95,7 @@ contract ConsolidateValidators is Script {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK // minDelay
+            minDelay_OPERATING_TIMELOCK // minDelay
         );
         console2.log("Scheduled consolidation request Tx");
         console2.log("================================================");
@@ -110,7 +110,7 @@ contract ConsolidateValidators is Script {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK // minDelay
+            minDelay_OPERATING_TIMELOCK // minDelay
         );
         console2.log("Executed consolidation request Tx");
         console2.log("================================================");
@@ -119,9 +119,9 @@ contract ConsolidateValidators is Script {
         console2.log("");
 
         vm.prank(address(ETHERFI_NODES_MANAGER_ADMIN_ROLE));
-        etherFiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
+        etherFiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, minDelay_OPERATING_TIMELOCK);
         vm.stopPrank();
-        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay        
+        vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay        
         vm.prank(address(ETHERFI_NODES_MANAGER_ADMIN_ROLE));
         etherFiOperatingTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
         vm.stopPrank();

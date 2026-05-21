@@ -23,7 +23,7 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
     EtherFiTimelock constant etherFiTimelock = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     RoleRegistry constant roleRegistry = RoleRegistry(ROLE_REGISTRY);
     EtherFiNodesManager constant etherFiNodesManager = EtherFiNodesManager(payable(ETHERFI_NODES_MANAGER));
-    uint256 constant TIMELOCK_MIN_DELAY = 259200;
+    uint256 constant TIMELOCK_minDelay = 259200;
 
     ContractCodeChecker public contractCodeChecker;
 
@@ -44,8 +44,8 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
         vm.selectFork(vm.createFork(forkUrl));
 
         setUpEtherFiRateLimiter();
-        ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE = roleRegistry.EOA_3();
-        LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = roleRegistry.EOA_1();
+        ETHERFI_NODES_MANAGER_LEGACY_LINKER_ROLE = roleRegistry.EXECUTOR_OPERATIONS_ROLE();
+        LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = roleRegistry.ORACLE_OPERATIONS_ROLE();
 
         address[] memory targets = new address[](6);
         bytes[] memory data = new bytes[](targets.length);
@@ -94,7 +94,7 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
             data,
             bytes32(0),
             timelockSalt,
-            TIMELOCK_MIN_DELAY
+            TIMELOCK_minDelay
         );
 
         console2.log("Schedule calldata:");
@@ -115,8 +115,8 @@ contract CrossPodApprovalScript is Script, Deployed, Utils {
         console2.log("");
 
         vm.startPrank(ETHERFI_UPGRADE_ADMIN);
-        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, TIMELOCK_MIN_DELAY);
-        vm.warp(block.timestamp + TIMELOCK_MIN_DELAY + 1);
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, TIMELOCK_minDelay);
+        vm.warp(block.timestamp + TIMELOCK_minDelay + 1);
         etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
         vm.stopPrank();
 

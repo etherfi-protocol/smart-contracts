@@ -53,7 +53,7 @@ contract ConsolidationThroughEOATest is Test {
         newEtherFiNodesManagerImpl = new EtherFiNodesManager(address(stakingManager), address(roleRegistry), address(rateLimiter));
         vm.startPrank(roleRegistry.owner());
         etherFiNodesManager.upgradeTo(address(newEtherFiNodesManagerImpl));
-        roleRegistry.grantRole(roleRegistry.EOA_3(), realElExiter);
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
 
         // Setup consolidation rate limiter bucket (required for new rate limiting)
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), roleRegistry.owner());
@@ -136,10 +136,10 @@ contract ConsolidationThroughEOATest is Test {
         // and checks if msg.sender equals the result. In a proxy context, this can fail.
         // We need to ensure the prank is set up correctly before the grantRole call.
         vm.startPrank(roleRegistryOwner);
-        roleRegistry.grantRole(roleRegistry.EOA_3(), realElExiter);
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
         vm.stopPrank();
         // Verify the role was granted
-        bool hasRole = roleRegistry.hasRole(roleRegistry.EOA_3(), realElExiter);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
         require(hasRole, "test: EOA does not have the EL Consolidation Role");
         console2.log("Granted ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE to EOA:", realElExiter);
         bytes[] memory pubkeys = new bytes[](3);
@@ -196,7 +196,7 @@ contract ConsolidationThroughEOATest is Test {
         address eoaWithoutRole = makeAddr("eoaWithoutRole");
                 
         // Verify the EOA does not have the role
-        bool hasRole = roleRegistry.hasRole(roleRegistry.EOA_3(), eoaWithoutRole);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), eoaWithoutRole);
         require(!hasRole, "test: EOA should not have the EL Consolidation Role");
 
         bytes[] memory pubkeys = new bytes[](3);

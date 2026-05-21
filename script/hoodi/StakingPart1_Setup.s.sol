@@ -42,8 +42,8 @@ contract StakingPart1 is Script {
     address constant ROLE_REGISTRY = 0x7279853cA1804d4F705d885FeA7f1662323B5Aab;
     
     // Role definition
-    // STAKING_MANAGER_NODE_CREATOR_ROLE consolidated into EOA_3.
-    bytes32 constant STAKING_MANAGER_NODE_CREATOR_ROLE = keccak256("EOA_3");
+    // STAKING_MANAGER_NODE_CREATOR_ROLE consolidated into EXECUTOR_OPERATIONS_ROLE.
+    bytes32 constant STAKING_MANAGER_NODE_CREATOR_ROLE = keccak256("EXECUTOR_OPERATIONS_ROLE");
     
     // Contract interfaces
     LiquidityPool liquidityPool;
@@ -160,7 +160,7 @@ contract StakingPart1 is Script {
             console.log("Depositor already has STAKING_MANAGER_NODE_CREATOR_ROLE");
         }
 
-        console.log("Has role?",roleRegistry.hasRole(roleRegistry.EOA_3(), vm.addr(vm.envUint("PRIVATE_KEY"))));
+        console.log("Has role?",roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), vm.addr(vm.envUint("PRIVATE_KEY"))));
         vm.startBroadcast(vm.envUint("PRIVATE_KEY"));
         console.log("Role reg: %s",address(stakingManager.roleRegistry()));
         console.log("Role Reg: %s",address(roleRegistry));

@@ -10,7 +10,6 @@ import "./utils/PausableUntil.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 contract AuctionManager is
@@ -66,6 +65,21 @@ contract AuctionManager is
     event WhitelistDisabled(bool whitelistStatus);
     event WhitelistEnabled(bool whitelistStatus);
 
+    error AddressZero();
+    error InvalidBidSize();
+    error NotWhitelisted();
+    error IncorrectBidValue();
+    error InsufficientPublicKeys();
+    error BidNotActive();
+    error BidAlreadyActive();
+    error EtherTransferFailed();
+    error InvalidBid();
+    error BidAlreadyCancelled();
+    error InvalidMinBid();
+    error InvalidMaxBid();
+    error InvalidWhitelistAmount();
+    error IncorrectCaller();
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(address _roleRegistry, address _blacklister, address _nodeOperatorManagerContract, address _stakingManagerContractAddress, address _membershipManagerContractAddress) {
         roleRegistry = IRoleRegistry(_roleRegistry);
@@ -84,7 +98,7 @@ contract AuctionManager is
     function initialize(
         address _nodeOperatorManagerContract
     ) external initializer {
-        require(_nodeOperatorManagerContract != address(0), "No Zero Addresses");
+        if (_nodeOperatorManagerContract == address(0)) revert AddressZero();
         
         whitelistBidAmount = 0.001 ether;
         minBidAmount = 0.01 ether;
@@ -111,39 +125,33 @@ contract AuctionManager is
         uint256 _bidSize,
         uint256 _bidAmountPerBid
     ) external payable whenNotPaused nonReentrant nonBlacklisted returns (uint256[] memory) {
-        require(_bidSize > 0, "Bid size is too small");
+        if (_bidSize == 0) revert InvalidBidSize();
         if (whitelistEnabled) {
-            require(
-                nodeOperatorManager.isWhitelisted(msg.sender),
-                "Only whitelisted addresses"
-            );
-            require(
-                msg.value == _bidSize * _bidAmountPerBid &&
-                    _bidAmountPerBid >= whitelistBidAmount &&
-                    _bidAmountPerBid <= maxBidAmount,
-                "Incorrect bid value"
-            );
+            if (!nodeOperatorManager.isWhitelisted(msg.sender)) revert NotWhitelisted();
+            if (
+                msg.value != _bidSize * _bidAmountPerBid ||
+                _bidAmountPerBid < whitelistBidAmount ||
+                _bidAmountPerBid > maxBidAmount
+            ) revert IncorrectBidValue();
         } else {
             if (
                 nodeOperatorManager.isWhitelisted(msg.sender)
             ) {
-                require(
-                    msg.value == _bidSize * _bidAmountPerBid &&
-                        _bidAmountPerBid >= whitelistBidAmount &&
-                        _bidAmountPerBid <= maxBidAmount,
-                    "Incorrect bid value"
-                );
+                if (
+                    msg.value != _bidSize * _bidAmountPerBid ||
+                    _bidAmountPerBid < whitelistBidAmount ||
+                    _bidAmountPerBid > maxBidAmount
+                ) revert IncorrectBidValue();
             } else {
-                require(
-                    msg.value == _bidSize * _bidAmountPerBid &&
-                        _bidAmountPerBid >= minBidAmount &&
-                        _bidAmountPerBid <= maxBidAmount,
-                    "Incorrect bid value"
-                );
+                if (
+                    msg.value != _bidSize * _bidAmountPerBid ||
+                    _bidAmountPerBid < minBidAmount ||
+                    _bidAmountPerBid > maxBidAmount
+                ) revert IncorrectBidValue();
             }
         }
         uint64 keysRemaining = nodeOperatorManager.getNumKeysRemaining(msg.sender);
-        require(_bidSize <= keysRemaining, "Insufficient public keys");
+        if (_bidSize > keysRemaining) revert InsufficientPublicKeys();
 
         uint256[] memory bidIdArray = new uint256[](_bidSize);
         uint64[] memory ipfsIndexArray = new uint64[](_bidSize);
@@ -192,7 +200,7 @@ contract AuctionManager is
         uint256 _bidId
     ) external onlyStakingManagerContract {
         Bid storage bid = bids[_bidId];
-        require(bid.isActive, "The bid is not active");
+        if (!bid.isActive) revert BidNotActive();
 
         bid.isActive = false;
         numberOfActiveBids--;
@@ -204,7 +212,7 @@ contract AuctionManager is
         uint256 _bidId
     ) external onlyStakingManagerContract {
         Bid storage bid = bids[_bidId];
-        require(!bid.isActive, "Bid already active");
+        if (bid.isActive) revert BidAlreadyActive();
 
         bid.isActive = true;
         numberOfActiveBids++;
@@ -222,7 +230,7 @@ contract AuctionManager is
         if (newAccumulatedRevenue >= accumulatedRevenueThreshold) {
             accumulatedRevenue = 0;
             (bool sent, ) = membershipManagerContractAddress.call{value: newAccumulatedRevenue}("");
-            require(sent, "Failed to send Ether");
+            if (!sent) revert EtherTransferFailed();
         } else {
             accumulatedRevenue = uint128(newAccumulatedRevenue);
         }
@@ -232,7 +240,7 @@ contract AuctionManager is
         uint256 transferAmount = accumulatedRevenue;
         accumulatedRevenue = 0;
         (bool sent, ) = membershipManagerContractAddress.call{value: transferAmount}("");
-        require(sent, "Failed to send Ether");
+        if (!sent) revert EtherTransferFailed();
     }
 
     /// @notice Disables the whitelisting phase of the bidding
@@ -280,8 +288,8 @@ contract AuctionManager is
 
     function _cancelBid(uint256 _bidId) internal {
         Bid storage bid = bids[_bidId];
-        require(bid.bidderAddress == msg.sender, "Invalid bid");
-        require(bid.isActive, "Bid already cancelled");
+        if (bid.bidderAddress != msg.sender) revert InvalidBid();
+        if (!bid.isActive) revert BidAlreadyCancelled();
 
         // Cancel the bid by de-activating it
         bid.isActive = false;
@@ -289,7 +297,7 @@ contract AuctionManager is
 
         // Refund the user with their bid amount
         (bool sent, ) = msg.sender.call{value: bid.amount}("");
-        require(sent, "Failed to send Ether");
+        if (!sent) revert EtherTransferFailed();
 
         emit BidCancelled(_bidId);
     }
@@ -334,15 +342,15 @@ contract AuctionManager is
     /// @notice Updates the minimum bid price for a non-whitelisted bidder
     /// @param _newMinBidAmount the new amount to set the minimum bid price as
     function setMinBidPrice(uint64 _newMinBidAmount) external onlyOperations {
-        require(_newMinBidAmount < maxBidAmount, "Min bid exceeds max bid");
-        require(_newMinBidAmount >= whitelistBidAmount, "Min bid less than whitelist bid amount");
+        if (_newMinBidAmount >= maxBidAmount) revert InvalidMinBid();
+        if (_newMinBidAmount < whitelistBidAmount) revert InvalidMinBid();
         minBidAmount = _newMinBidAmount;
     }
 
     /// @notice Updates the maximum bid price for both whitelisted and non-whitelisted bidders
     /// @param _newMaxBidAmount the new amount to set the maximum bid price as
     function setMaxBidPrice(uint64 _newMaxBidAmount) external onlyOperations {
-        require(_newMaxBidAmount > minBidAmount, "Min bid exceeds max bid");
+        if (_newMaxBidAmount <= minBidAmount) revert InvalidMaxBid();
         maxBidAmount = _newMaxBidAmount;
     }
 
@@ -357,7 +365,7 @@ contract AuctionManager is
     function updateWhitelistMinBidAmount(
         uint128 _newAmount
     ) external onlyOperations {
-        require(_newAmount < minBidAmount && _newAmount > 0, "Invalid Amount");
+        if (_newAmount >= minBidAmount || _newAmount == 0) revert InvalidWhitelistAmount();
         whitelistBidAmount = _newAmount;
     }
 
@@ -366,7 +374,7 @@ contract AuctionManager is
     //--------------------------------------------------------------------------------------
 
     modifier onlyStakingManagerContract() {
-        require(msg.sender == stakingManagerContractAddress, "Only staking manager contract function");
+        if (msg.sender != stakingManagerContractAddress) revert IncorrectCaller();
         _;
     }
 

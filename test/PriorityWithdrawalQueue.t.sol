@@ -4,6 +4,8 @@ pragma solidity ^0.8.13;
 import "./TestSetup.sol";
 import "forge-std/console2.sol";
 
+import "@openzeppelin/contracts/utils/math/Math.sol";
+
 import "../src/PriorityWithdrawalQueue.sol";
 import "../src/interfaces/IPriorityWithdrawalQueue.sol";
 import "../src/utils/PausableUntil.sol";
@@ -82,7 +84,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
                 address(membershipManagerInstance),
                 address(roleRegistryInstance),
                 address(blacklisterInstance),
-                address(etherFiAdminInstance));
+                address(etherFiAdminInstance),
+                1, 4e18
+            );
         withdrawRequestNFTInstance.upgradeTo(address(newWrnImpl));
         vm.stopPrank();
         vm.startPrank(owner);
@@ -94,11 +98,11 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         // Grant roles — consolidated to the 8-tier model.
         // PWQ admin → OPERATION_TIMELOCK_ROLE; pauser → OPERATION_MULTISIG_ROLE;
-        // whitelist manager → EOA_2; request manager → EOA_1; IMPLICIT_FEE_CLAIMER → EOA_2.
+        // whitelist manager → HOUSEKEEPING_OPERATIONS_ROLE; request manager → ORACLE_OPERATIONS_ROLE; IMPLICIT_FEE_CLAIMER → HOUSEKEEPING_OPERATIONS_ROLE.
         // LIQUIDITY_POOL_ADMIN_ROLE → OPERATION_TIMELOCK_ROLE.
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), alice);
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_1(), requestManager);
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), requestManager);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), alice);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), owner);
         // Existing tests still prank the mainnet `admin` address (ETHERFI_OPERATING_ADMIN)
@@ -158,7 +162,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             creationTime: timestamp
         });
 
-        // Warp time past MIN_DELAY (1 hour) to allow fulfill/cancel/claim operations
+        // Warp time past minDelay (1 hour) to allow fulfill/cancel/claim operations
         vm.warp(block.timestamp + 1 hours + 1);
         vm.roll(block.number + 1);
     }
@@ -237,7 +241,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         assertEq(priorityQueue.shareRemainderSplitToTreasuryInBps(), 10000);
 
         // Verify constants
-        assertEq(priorityQueue.MIN_DELAY(), 1 hours);
+        assertEq(priorityQueue.minDelay(), 1 hours);
         assertEq(priorityQueue.MIN_AMOUNT(), 0.01 ether);
     }
 
@@ -703,7 +707,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         });
         bytes32 requestId = keccak256(abi.encode(request));
 
-        // Try to fulfill immediately (should fail - not matured, MIN_DELAY = 1 hour)
+        // Try to fulfill immediately (should fail - not matured, minDelay = 1 hour)
         IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
         requests[0] = request;
 
@@ -711,7 +715,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.expectRevert(PriorityWithdrawalQueue.NotMatured.selector);
         priorityQueue.fulfillRequests(requests);
 
-        // Warp time past MIN_DELAY and try again
+        // Warp time past minDelay and try again
         vm.warp(block.timestamp + 1 hours + 1);
         vm.prank(requestManager);
         priorityQueue.fulfillRequests(requests);
@@ -961,19 +965,20 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
         requests[0] = request;
+
         vm.prank(requestManager);
         priorityQueue.fulfillRequests(requests);
 
         uint256 lockedAtFulfill = request.amountOfEEth;
         assertEq(lockedAtFulfill, withdrawAmount, "Lock should use raw request amount");
 
-        // Recover after fulfill. Claim should not exceed the stored lock.
+        // Recover. Fulfill now succeeds and the user can claim normally.
         _rebase(15 ether);
 
         uint256 ethBefore = vipUser.balance;
         vm.prank(vipUser);
         priorityQueue.claimWithdraw(request);
-
+        
         uint256 expectedClaim = liquidityPoolInstance.amountForShare(request.shareOfEEth);
         if (expectedClaim > request.amountOfEEth) expectedClaim = request.amountOfEEth;
 
@@ -986,7 +991,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
 
         (, IPriorityWithdrawalQueue.WithdrawRequest memory request) =
             _createWithdrawRequest(vipUser, withdrawAmount);
-
+        
         // Slash before fulfill, then strong recovery before invalidate.
         _rebase(20 ether);
         _rebase(-25 ether);
@@ -1086,7 +1091,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             _createWithdrawRequest(vipUser, 1 ether);
         batch[0] = r2;
         vm.prank(requestManager);
-        vm.expectRevert(bytes("SendFail"));
+        vm.expectRevert(LiquidityPool.SendFail.selector);
         priorityQueue.fulfillRequests(batch);
     }
 
@@ -1673,9 +1678,9 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         priorityQueue.handleRemainder(amountToHandle);
 
         uint256 treasuryReceived = eETHInstance.balanceOf(treasury) - treasuryBalanceBefore;
-        uint256 expectedTreasuryAmount = (amountToHandle + 1) / 2;
+        uint256 expectedTreasuryAmount = amountToHandle / 2;
         assertEq(amountToHandle % 2, 1, "Test setup must use odd amount");
-        assertEq(treasuryReceived, expectedTreasuryAmount, "Treasury split should round up");
+        assertEq(treasuryReceived, expectedTreasuryAmount, "Treasury split round down");
     }
 
     // function test_handleRemainder_withTreasurySplit() public {
@@ -2182,7 +2187,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
             "Setup: share value must be below amountWithFee after slash"
         );
 
-        // Fulfill the request
+        // Fulfill the request 
         IPriorityWithdrawalQueue.WithdrawRequest[] memory requests = new IPriorityWithdrawalQueue.WithdrawRequest[](1);
         requests[0] = request;
         vm.prank(requestManager);
@@ -2361,7 +2366,7 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         vm.prank(alice);
         priorityQueue.addToWhitelist(user);
 
-        // Create the pending request (helper also warps past MIN_DELAY)
+        // Create the pending request (helper also warps past minDelay)
         (, request) = _createWithdrawRequest(user, amount);
 
         // Fulfill the request as the request manager
@@ -2558,5 +2563,4 @@ contract PriorityWithdrawalQueueTest is TestSetup {
         // Request no longer exists.
         assertFalse(priorityQueue.requestExists(requestId), "request should be removed after claim");
     }
-
 }

@@ -7,7 +7,6 @@ import "../src/interfaces/IRoleRegistry.sol";
 import "../src/LiquidityPool.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 /// Contract which helps us control our node operators and their permissions in different aspects of the protocol
@@ -21,6 +20,12 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     event AddedToWhitelist(address userAddress);
     event RemovedFromWhitelist(address userAddress);
     event UpdatedOperatorApprovals(address operator, LiquidityPool.SourceOfFunds source, bool approved);
+
+    error IncorrectCaller();
+    error InvalidLengths();
+    error AlreadyRegistered();
+    error InsufficientPublicKeys();
+    error InvalidArrayLengths();
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -67,9 +72,9 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         uint64[] memory _totalKeys,
         uint64[] memory _keysUsed
     ) external onlyOwner {
-        require((_operator.length == _ipfsHash.length) && (_operator.length == _totalKeys.length) && (_operator.length == _keysUsed.length), "Invalid lengths");
+        if ((_operator.length != _ipfsHash.length) || (_operator.length != _totalKeys.length) || (_operator.length != _keysUsed.length)) revert InvalidLengths();
         for(uint256 x = 0; x < _operator.length; x++) {
-            require(!registered[_operator[x]], "Already registered");
+            if (registered[_operator[x]]) revert AlreadyRegistered();
 
             KeyData memory keyData = KeyData({
                 totalKeys: _totalKeys[x],
@@ -96,7 +101,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         bytes memory _ipfsHash,
         uint64 _totalKeys
     ) public whenNotPaused {
-        require(!registered[msg.sender], "Already registered");
+        if (registered[msg.sender]) revert AlreadyRegistered();
 
         KeyData memory keyData = KeyData({
             totalKeys: _totalKeys,
@@ -123,10 +128,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     ) external onlyAuctionManagerContract returns (uint64) {
         KeyData storage keyData = addressToOperatorData[_user];
         uint64 totalKeys = keyData.totalKeys;
-        require(
-            keyData.keysUsed < totalKeys,
-            "Insufficient public keys"
-        );
+        if (keyData.keysUsed >= totalKeys) revert InsufficientPublicKeys();
 
         uint64 ipfsIndex = keyData.keysUsed;
         keyData.keysUsed++;
@@ -146,7 +148,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
         LiquidityPool.SourceOfFunds[] memory _approvedTags, 
         bool[] memory _approvals
     ) external onlyOperations {
-        require(_users.length == _approvedTags.length && _users.length == _approvals.length, "Invalid array lengths");
+        if ((_users.length != _approvedTags.length) || (_users.length != _approvals.length)) revert InvalidArrayLengths();
 
         for(uint256 x; x < _approvedTags.length; x++) {
             operatorApprovedTags[_users[x]][_approvedTags[x]] = _approvals[x];
@@ -242,10 +244,7 @@ contract NodeOperatorManager is INodeOperatorManager, Initializable, UUPSUpgrade
     //--------------------------------------------------------------------------------------
 
     modifier onlyAuctionManagerContract() {
-        require(
-            msg.sender == auctionManagerContractAddress,
-            "Only auction manager contract function"
-        );
+        if (msg.sender != auctionManagerContractAddress) revert IncorrectCaller();
         _;
     }
 

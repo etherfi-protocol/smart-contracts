@@ -136,7 +136,7 @@ contract UndelegateAllStakers is Script, Utils {
             payloads,
             predecessor,
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
 
         bytes memory executeCalldata = abi.encodeWithSelector(
@@ -160,9 +160,9 @@ contract UndelegateAllStakers is Script, Utils {
         console2.logBytes(executeCalldata);
         console2.log("===================================================");
 
-        _operatingTimelock.scheduleBatch(targets, values, payloads, predecessor, timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
+        _operatingTimelock.scheduleBatch(targets, values, payloads, predecessor, timelockSalt, minDelay_OPERATING_TIMELOCK);
 
-        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1);
+        vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1);
 
         _operatingTimelock.executeBatch(targets, values, payloads, predecessor, timelockSalt);
 

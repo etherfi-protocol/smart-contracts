@@ -34,7 +34,7 @@ import {ContractCodeChecker} from "../../../script/ContractCodeChecker.sol";
 contract ReauditFixesTransactions is Utils {
     EtherFiTimelock etherFiTimelock = EtherFiTimelock(payable(UPGRADE_TIMELOCK));
     ContractCodeChecker contractCodeChecker;
-    uint256 constant TIMELOCK_MIN_DELAY = 259200; // 72 hours
+    uint256 constant TIMELOCK_minDelay = 259200; // 72 hours
 
     //--------------------------------------------------------------------------------------
     //---------------------------- NEW IMPLEMENTATION ADDRESSES ----------------------------
@@ -161,7 +161,7 @@ contract ReauditFixesTransactions is Utils {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            TIMELOCK_MIN_DELAY
+            TIMELOCK_minDelay
         );
         writeSafeJson("script/upgrades/reaudit-fixes", "reaudit-fixes-upgrade_schedule.json", ETHERFI_UPGRADE_ADMIN, UPGRADE_TIMELOCK, 0, scheduleCalldata, 1);
 
@@ -181,10 +181,10 @@ contract ReauditFixesTransactions is Utils {
         // Execute against fork for testing
         console2.log("=== Scheduling Batch on Fork ===");
         vm.prank(ETHERFI_UPGRADE_ADMIN);
-        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, TIMELOCK_MIN_DELAY);
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, TIMELOCK_minDelay);
 
         // Warp past timelock delay
-        vm.warp(block.timestamp + TIMELOCK_MIN_DELAY + 1);
+        vm.warp(block.timestamp + TIMELOCK_minDelay + 1);
 
         console2.log("=== Executing Batch on Fork ===");
         vm.prank(ETHERFI_UPGRADE_ADMIN);
@@ -217,7 +217,7 @@ contract ReauditFixesTransactions is Utils {
             etherfiRestaker: address(ETHERFI_RESTAKER),
             l1SyncPool: address(ETHERFI_L1_SYNC_POOL_ETH)
         }), 100, 24 hours, 500);
-        WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE), address(EETH), address(LIQUIDITY_POOL), address(MEMBERSHIP_MANAGER), address(ROLE_REGISTRY), address(0x0), address(ETHERFI_ADMIN));
+        WithdrawRequestNFT newWithdrawRequestNFTImplementation = new WithdrawRequestNFT(address(WITHDRAW_REQUEST_NFT_BUYBACK_SAFE), address(EETH), address(LIQUIDITY_POOL), address(MEMBERSHIP_MANAGER), address(ROLE_REGISTRY), address(0x0), address(ETHERFI_ADMIN), 1, 4e18);
         EtherFiViewer newEtherFiViewerImplementation = new EtherFiViewer(address(EIGENLAYER_POD_MANAGER), address(EIGENLAYER_DELEGATION_MANAGER));
 
         contractCodeChecker.verifyContractByteCodeMatch(etherFiNodeImpl, address(newEtherFiNodeImplementation));

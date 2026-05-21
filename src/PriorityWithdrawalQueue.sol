@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
-import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -46,7 +45,7 @@ contract PriorityWithdrawalQueue is
     IWeETH public immutable weETH;
     IRoleRegistry public immutable roleRegistry;
     address public immutable treasury;
-    uint32 public immutable MIN_DELAY;
+    uint32 public immutable minDelay;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -109,10 +108,13 @@ contract PriorityWithdrawalQueue is
     error ArrayLengthMismatch();
     error AddressZero();
     error BadInput();
+    error IncorrectCaller();
     error InvalidBurnedSharesAmount();
     error InvalidEEthSharesAfterRemainderHandling();
     error InvalidOutputAmount();
     error InsufficientLiquidity();
+    error InsufficientEscrow();
+    error EthTransferFailed();
 
     //--------------------------------------------------------------------------------------
     //-----------------------------------  MODIFIERS  --------------------------------------
@@ -145,7 +147,7 @@ contract PriorityWithdrawalQueue is
     }
 
     modifier onlyRequestManager() {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_1(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         _;
     }
 
@@ -169,13 +171,13 @@ contract PriorityWithdrawalQueue is
         weETH = IWeETH(_weETH);
         roleRegistry = IRoleRegistry(_roleRegistry);
         treasury = _treasury;
-        MIN_DELAY = _minDelay;
+        minDelay = _minDelay;
 
         _disableInitializers();
     }
 
     receive() external payable {
-        require(msg.sender == address(liquidityPool), "Only LP");
+        if (msg.sender != address(liquidityPool)) revert IncorrectCaller();
         if (liquidityPool.escrowMigrationCompleted()) {
             ethAmountLockedForPriorityWithdrawal += uint128(msg.value);
         }
@@ -284,7 +286,7 @@ contract PriorityWithdrawalQueue is
     function cancelWithdraw(
         WithdrawRequest calldata request
     ) external whenNotPaused onlyRequestUser(request.user) nonReentrant returns (bytes32 requestId) {
-        if (request.creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
+        if (request.creationTime + minDelay > block.timestamp) revert NotMatured();
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore,) = _snapshotBalances();
         uint256 userEEthSharesBefore = eETH.shares(request.user);
 
@@ -302,7 +304,7 @@ contract PriorityWithdrawalQueue is
     ///      ETH delivery forwards gas to request.user, so third parties should avoid claiming for untrusted recipients.
     /// @param request The withdrawal request to claim
     function claimWithdraw(WithdrawRequest calldata request) external nonReentrant {
-        if (request.creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
+        if (request.creationTime + minDelay > block.timestamp) revert NotMatured();
 
         (uint256 lpEthBefore, uint256 queueEEthSharesBefore, uint256 queueEthBefore) = _snapshotBalances();
         uint256 userEthBefore = request.user.balance;
@@ -318,7 +320,7 @@ contract PriorityWithdrawalQueue is
     /// @param requests Array of withdrawal requests to claim
     function batchClaimWithdraw(WithdrawRequest[] calldata requests) external nonReentrant {
         for (uint256 i = 0; i < requests.length; ++i) {
-            if (requests[i].creationTime + MIN_DELAY > block.timestamp) revert NotMatured();
+            if (requests[i].creationTime + minDelay > block.timestamp) revert NotMatured();
             (uint256 lpEthBefore, uint256 queueEEthSharesBefore, uint256 queueEthBefore) = _snapshotBalances();
             uint256 userEthBefore = requests[i].user.balance;
             _claimWithdraw(requests[i]);
@@ -342,7 +344,7 @@ contract PriorityWithdrawalQueue is
             if (_finalizedRequests.contains(requestId)) revert RequestAlreadyFinalized();
             if (!_withdrawRequests.contains(requestId)) revert RequestNotFound();
 
-            uint256 earliestFulfillTime = request.creationTime + MIN_DELAY;
+            uint256 earliestFulfillTime = request.creationTime + minDelay;
             if (block.timestamp < earliestFulfillTime) revert NotMatured();
 
             _withdrawRequests.remove(requestId);
@@ -405,7 +407,7 @@ contract PriorityWithdrawalQueue is
     ///      - Burn: the rest of the remainder is burned
     /// @param eEthAmount Amount of eETH remainder to handle
     function handleRemainder(uint256 eEthAmount) external {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         if (eEthAmount == 0) revert BadInput();
         if (eEthAmount > liquidityPool.amountForShare(totalRemainderShares)) revert BadInput();
 
@@ -583,7 +585,7 @@ contract PriorityWithdrawalQueue is
         bool wasFinalized = _finalizedRequests.contains(requestId);
         
         _dequeueWithdrawRequest(request);
-        
+
         if (wasFinalized) {
             ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
             liquidityPool.returnLockedEth{value: request.amountOfEEth}(request.amountOfEEth);
@@ -607,23 +609,21 @@ contract PriorityWithdrawalQueue is
 
         uint128 amountToWithdraw = request.amountWithFee;
 
-        uint256 sharesToBurn = liquidityPool.sharesForWithdrawalAmount(amountToWithdraw);
-
         _finalizedRequests.remove(requestId);
-
-        uint256 remainder = request.shareOfEEth > sharesToBurn 
-            ? request.shareOfEEth - sharesToBurn 
-            : 0;
-        totalRemainderShares += uint96(remainder);
 
         ethAmountLockedForPriorityWithdrawal -= uint128(request.amountOfEEth);
 
-        uint256 burnedShares = liquidityPool.withdraw(request.user, amountToWithdraw);
-        if (burnedShares != sharesToBurn) revert InvalidBurnedSharesAmount();
+        uint256 rate = liquidityPool.amountPerShareCeil();
+        uint256 burnedShares = liquidityPool.withdraw(amountToWithdraw, rate);
 
-        require(address(this).balance >= amountToWithdraw, "Insufficient escrow");
+        uint256 remainder = request.shareOfEEth > burnedShares 
+            ? request.shareOfEEth - burnedShares 
+            : 0;
+        totalRemainderShares += uint96(remainder);
+
+        if (address(this).balance < amountToWithdraw) revert InsufficientEscrow();
         (bool ok, ) = payable(request.user).call{value: amountToWithdraw}("");
-        require(ok, "ETH transfer failed");
+        if (!ok) revert EthTransferFailed();
 
         // Return fee ETH (amountOfEEth - amountWithFee) to LP to keep queue balance clean
         // and unwind the over-credited totalValueOutOfLp from fulfillRequests time.
@@ -633,7 +633,7 @@ contract PriorityWithdrawalQueue is
         }
         _checkEthAmountLockedForPriorityWithdrawal();
 
-        emit WithdrawRequestClaimed(requestId, request.user, uint96(amountToWithdraw), uint96(sharesToBurn), request.nonce, uint32(block.timestamp));
+        emit WithdrawRequestClaimed(requestId, request.user, uint96(amountToWithdraw), uint96(burnedShares), request.nonce, uint32(block.timestamp));
     }
 
     function _checkEthAmountLockedForPriorityWithdrawal() internal {

@@ -28,7 +28,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
     }
 
     function _newWrnImpl() internal returns (address) {
-        return address(new WithdrawRequestNFT(buybackWallet, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), address(etherFiAdminInstance)));
+        return address(new WithdrawRequestNFT(buybackWallet, EETH, LIQUIDITY_POOL, MEMBERSHIP_MANAGER, ROLE_REGISTRY, address(blacklisterInstance), address(etherFiAdminInstance), 1, 4e18));
     }
 
     function setUp() public {
@@ -101,7 +101,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         // Grant the IMPLICIT_FEE_CLAIMER_ROLE to alice
         vm.startPrank(address(roleRegistryInstance.owner()));
         withdrawRequestNFTInstance.upgradeTo(_newWrnImpl());
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), alice);
         vm.stopPrank();
 
         // Record state before handling remainder
@@ -179,7 +179,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
         // Now upgrade the contract and grant roles
         vm.startPrank(address(roleRegistryInstance.owner()));
         withdrawRequestNFTInstance.upgradeTo(_newWrnImpl());
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), alice);
         vm.stopPrank();
 
         uint256 partialAmount = remainderAmount / 2;
@@ -261,7 +261,7 @@ contract HandleRemainderSharesIntegrationTest is TestSetup, Deployed {
             // Grant the IMPLICIT_FEE_CLAIMER_ROLE to alice
             vm.startPrank(address(roleRegistryInstance.owner()));
             withdrawRequestNFTInstance.upgradeTo(_newWrnImpl());
-            roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), alice);
+            roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), alice);
             vm.stopPrank();
 
             uint256 nominalToTreasury = Math.mulDiv(remainderAmount, splitRatios[i], 10000);

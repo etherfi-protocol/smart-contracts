@@ -29,8 +29,8 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
 
     function test_immutables_pointAtLiveChainlinkFeed() public view {
         assertEq(address(liquifierInstance.stEthPriceFeed()), CHAINLINK_STETH_ETH_FEED);
-        assertEq(liquifierInstance.STALE_PRICE_WINDOW(), 24 hours);
-        assertEq(liquifierInstance.MAX_PRICE_DEVIATION_IN_BPS(), 500);
+        assertEq(liquifierInstance.stalePriceWindow(), 24 hours);
+        assertEq(liquifierInstance.maxPriceDeviationInBps(), 500);
     }
 
     function test_liveFeed_returnsFreshAnswer() public view {
@@ -48,7 +48,7 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
     // -----------------------------------------------------------------------
 
     function test_quoteByMarketValue_passesWithLiveData() public {
-        // The live feed has a ~24h heartbeat and can drift past STALE_PRICE_WINDOW
+        // The live feed has a ~24h heartbeat and can drift past stalePriceWindow
         // depending on which block the fork lands on. Pin the live answer at a
         // fresh updatedAt so this test isn't sensitive to fork-block selection.
         (, int256 answer, , ,) = AggregatorV3Interface(CHAINLINK_STETH_ETH_FEED).latestRoundData();
@@ -74,7 +74,7 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
 
     /// Boundary: updatedAt + window == now still counts as fresh (`>=`).
     function test_quoteByMarketValue_atStalenessBoundary_checkActive() public {
-        uint256 staleWindow = liquifierInstance.STALE_PRICE_WINDOW();
+        uint256 staleWindow = liquifierInstance.stalePriceWindow();
         _mockChainlinkAnswer(int256(100 ether), block.timestamp - staleWindow);
 
         vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
@@ -86,7 +86,7 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
     // -----------------------------------------------------------------------
 
     function test_quoteByMarketValue_revertsOnMockedStaleFeed() public {
-        uint256 staleWindow = liquifierInstance.STALE_PRICE_WINDOW();
+        uint256 staleWindow = liquifierInstance.stalePriceWindow();
         // updatedAt + window < now → stale → revert.
         _mockChainlinkAnswer(int256(100 ether), block.timestamp - staleWindow - 1);
 
@@ -116,7 +116,7 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
     function test_depositWithERC20_revertsOnMockedStaleFeed() public {
         _seedStEth(alice, 2 ether);
 
-        uint256 staleWindow = liquifierInstance.STALE_PRICE_WINDOW();
+        uint256 staleWindow = liquifierInstance.stalePriceWindow();
         _mockChainlinkAnswer(int256(100 ether), block.timestamp - staleWindow - 1);
 
         vm.startPrank(alice);
@@ -136,7 +136,7 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
         uint256 age
     ) public {
         answer = bound(answer, 1, int256(uint256(2 ether))); // 0..2 ETH per stETH
-        uint256 staleWindow = liquifierInstance.STALE_PRICE_WINDOW();
+        uint256 staleWindow = liquifierInstance.stalePriceWindow();
         age = bound(age, 0, staleWindow * 2);
 
         uint256 amount = 1 ether;
@@ -156,7 +156,7 @@ contract LiquifierStEthPriceFeedForkTest is TestSetup {
         if (!fresh) {
             vm.expectRevert(Liquifier.StalePriceFeed.selector);
             liquifierInstance.quoteByMarketValue(address(stEth), amount);
-        } else if ((deviation * bps) / marketValue > liquifierInstance.MAX_PRICE_DEVIATION_IN_BPS()) {
+        } else if ((deviation * bps) / marketValue > liquifierInstance.maxPriceDeviationInBps()) {
             vm.expectRevert(Liquifier.InvalidStEthPrice.selector);
             liquifierInstance.quoteByMarketValue(address(stEth), amount);
         } else {

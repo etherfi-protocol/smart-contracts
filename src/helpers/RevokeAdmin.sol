@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
+
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "../interfaces/IRoleRegistry.sol";
@@ -27,19 +27,19 @@ contract RevokeAdmin is Initializable, UUPSUpgradeable {
     }
 
     function revokeEOA1Role(address account) external onlyOperations {
-        roleRegistry.revokeFast(roleRegistry.EOA_1(), account);
+        roleRegistry.revokeFast(roleRegistry.ORACLE_OPERATIONS_ROLE(), account);
     }
 
     function revokeEOA2Role(address account) external onlyOperations {
-        roleRegistry.revokeFast(roleRegistry.EOA_2(), account);
+        roleRegistry.revokeFast(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), account);
     }
 
     function revokeEOA3Role(address account) external onlyOperations {
-        roleRegistry.revokeFast(roleRegistry.EOA_3(), account);
+        roleRegistry.revokeFast(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), account);
     }
 
     function revokeEOA4Role(address account) external onlyOperations {
-        roleRegistry.revokeFast(roleRegistry.EOA_4(), account);
+        roleRegistry.revokeFast(roleRegistry.EIGENPOD_OPERATIONS_ROLE(), account);
     }
 
     modifier onlyOperations() {

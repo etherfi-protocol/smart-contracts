@@ -53,6 +53,16 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     event Unpaused();
     event TransferShares( address indexed from, address indexed to, uint256 sharesValue);
 
+    error AddressZero();
+    error IncorrectCaller();
+    error BurnAmountExceedsBalance();
+    error AllowanceBelowZero();
+    error TransferAmountExceedsAllowance();
+    error ExpiredDeadline();
+    error InvalidSignature();
+    error TransferAmountExceedsBalance();
+    error ContractPaused();
+
     // TODO: Figure our what `name` and `version` are for
     constructor(address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter) {
         bytes32 hashedName = keccak256("EETH");
@@ -65,10 +75,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _CACHED_THIS = address(this);
         _TYPE_HASH = typeHash;
 
-        require(_liquidityPool != address(0), "No zero addresses");
-        require(_roleRegistry != address(0), "must set role registry");
-        require(_blacklister != address(0), "must set blacklister");
-        require(_rateLimiter != address(0), "must set rate limiter");
+        if (_liquidityPool == address(0) || _roleRegistry == address(0) || _blacklister == address(0)) revert AddressZero();
         liquidityPool = ILiquidityPool(_liquidityPool);
         roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
@@ -78,8 +85,8 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     }
 
     function initialize(address _liquidityPool) external initializer {
-        require(_liquidityPool != address(0), "No zero addresses");
-        
+        if (_liquidityPool == address(0)) revert AddressZero();
+
         __UUPSUpgradeable_init();
         __Ownable_init();
     }
@@ -97,9 +104,9 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     }
 
     function burnShares(address _user, uint256 _share) external whenNotPaused {
-        require(msg.sender == address(liquidityPool), "Incorrect Caller");
+        if (msg.sender != address(liquidityPool)) revert IncorrectCaller();
         blacklister.nonBlacklisted(_user);
-        require(shares[_user] >= _share, "BURN_AMOUNT_EXCEEDS_BALANCE");
+        if (shares[_user] < _share) revert BurnAmountExceedsBalance();
         shares[_user] -= _share;
         totalShares -= _share;
 
@@ -134,7 +141,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     function decreaseAllowance(address _spender, uint256 _decreaseAmount) external returns (bool) {
         address owner = msg.sender;
         uint256 currentAllowance = allowance(owner, _spender);
-        require(currentAllowance >= _decreaseAmount, "ERC20: decreased allowance below zero");
+        if (currentAllowance < _decreaseAmount) revert AllowanceBelowZero();
         unchecked {
             _approve(owner, _spender, currentAllowance - _decreaseAmount);
         }
@@ -143,7 +150,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
     function transferFrom(address _sender, address _recipient, uint256 _amount) external override(IeETH, IERC20Upgradeable) returns (bool) {
         uint256 currentAllowance = allowances[_sender][msg.sender];
-        require(currentAllowance >= _amount, "TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        if (currentAllowance < _amount) revert TransferAmountExceedsAllowance();
         unchecked {
             _approve(_sender, msg.sender, currentAllowance - _amount);
         }
@@ -161,7 +168,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         emit Unpaused();
     }
 
-    function pauseContractUntil() external onlyGuardian {
+    function pauseContractUntil() external onlySuperGuardian {
         _pauseUntil();
     }
 
@@ -182,14 +189,14 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         bytes32 r,
         bytes32 s
     ) public virtual override(IeETH, IERC20PermitUpgradeable) {
-        require(block.timestamp <= deadline, "ERC20Permit: expired deadline");
+        if (block.timestamp > deadline) revert ExpiredDeadline();
 
         bytes32 structHash = keccak256(abi.encode(_PERMIT_TYPEHASH, owner, spender, value, _useNonce(owner), deadline));
 
         bytes32 hash = _hashTypedDataV4(structHash);
 
         address signer = ECDSAUpgradeable.recover(hash, v, r, s);
-        require(signer == owner, "ERC20Permit: invalid signature");
+        if (signer != owner) revert InvalidSignature();
 
         _approve(owner, spender, value);
     }
@@ -236,8 +243,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     }
 
     function _approve(address _owner, address _spender, uint256 _amount) internal {
-        require(_owner != address(0), "APPROVE_FROM_ZERO_ADDRESS");
-        require(_spender != address(0), "APPROVE_TO_ZERO_ADDRESS");
+        if (_owner == address(0) || _spender == address(0)) revert AddressZero();
 
         allowances[_owner][_spender] = _amount;
         emit Approval(_owner, _spender, _amount);
@@ -247,9 +253,8 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         blacklister.nonBlacklisted(_sender);
         blacklister.nonBlacklisted(_recipient);
         blacklister.nonBlacklisted(msg.sender);
-        require(_sender != address(0), "TRANSFER_FROM_THE_ZERO_ADDRESS");
-        require(_recipient != address(0), "TRANSFER_TO_THE_ZERO_ADDRESS");
-        require(_sharesAmount <= shares[_sender], "TRANSFER_AMOUNT_EXCEEDS_BALANCE");
+        if (_sender == address(0) || _recipient == address(0)) revert AddressZero();
+        if (_sharesAmount > shares[_sender]) revert TransferAmountExceedsBalance();
 
         shares[_sender] -= _sharesAmount;
         shares[_recipient] += _sharesAmount;
@@ -316,7 +321,7 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
 
     // [MODIFIERS]
     modifier onlyPoolContract() {
-        require(msg.sender == address(liquidityPool), "Only pool contract function");
+        if (msg.sender != address(liquidityPool)) revert IncorrectCaller();
         _;
     }
 
@@ -330,13 +335,18 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
         _;
     }
 
+    modifier onlySuperGuardian() {
+        roleRegistry.onlySuperGuardian(msg.sender);
+        _;
+    }
+
     modifier onlyGuardian() {
         roleRegistry.onlyGuardian(msg.sender);
         _;
     }
 
     modifier whenNotPaused() {
-        require(!paused, "PAUSED");
+        if (paused) revert ContractPaused();
         _requireNotPausedUntil();
         _;
     }

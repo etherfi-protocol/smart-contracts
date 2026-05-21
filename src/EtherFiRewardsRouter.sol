@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./RoleRegistry.sol";
+import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/ILiquidityPool.sol";
 
 contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
@@ -14,7 +14,7 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
 
     address public immutable treasury;
     address public immutable liquidityPool;
-    RoleRegistry public immutable roleRegistry;
+    IRoleRegistry public immutable roleRegistry;
 
     event EthReceived(address indexed from, uint256 value);
     event EthSent(address indexed from, address indexed to, uint256 value);
@@ -22,11 +22,14 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
     event Erc20Sent(address indexed caller, address indexed token, uint256 amount);
     event Erc721Sent(address indexed caller, address indexed token, uint256 tokenId);
 
+    error ContractBalanceIsZero();
+    error EthTransferFailed();
+
     constructor(address _liquidityPool, address _treasury, address _roleRegistry) {
         _disableInitializers();
         liquidityPool = _liquidityPool;
         treasury = _treasury;
-        roleRegistry = RoleRegistry(_roleRegistry);
+        roleRegistry = IRoleRegistry(_roleRegistry);
     }
 
     receive() external payable {
@@ -43,9 +46,9 @@ contract EtherFiRewardsRouter is OwnableUpgradeable, UUPSUpgradeable  {
         uint256 contractBalance = address(this).balance;
         uint256 totalValueOutOfLp = ILiquidityPool(payable(liquidityPool)).totalValueOutOfLp();
         uint256 balance = contractBalance < totalValueOutOfLp ? contractBalance : totalValueOutOfLp;
-        require(balance > 0, "Contract balance is zero");
+        if (balance == 0) revert ContractBalanceIsZero();
         (bool success, ) = liquidityPool.call{value: balance}("");
-        require(success, "TRANSFER_FAILED");
+        if (!success) revert EthTransferFailed();
         
         emit EthSent(address(this), liquidityPool, balance);
     }

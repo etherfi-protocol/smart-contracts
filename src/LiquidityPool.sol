@@ -3,11 +3,10 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 
-import "./EtherFiRedemptionManager.sol";
 import "./utils/PausableUntil.sol";
 import "./interfaces/IeETH.sol";
 import "./interfaces/IStakingManager.sol";
@@ -16,10 +15,11 @@ import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/ILiquifier.sol";
 import "./interfaces/IEtherFiNode.sol";
 import "./interfaces/IEtherFiNodesManager.sol";
+import "./interfaces/IEtherFiRedemptionManager.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
 import "./interfaces/IBlacklister.sol";
-import "./ReentrancyGuardNamespaced.sol";
+import "./utils/ReentrancyGuardNamespaced.sol";
 
 contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardNamespaced, PausableUntil, ILiquidityPool {
     using SafeERC20 for IERC20;
@@ -68,7 +68,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     bool private DEPRECATED_isLpBnftHolder;
 
-    EtherFiRedemptionManager private DEPRECATED_etherFiRedemptionManager;
+    IEtherFiRedemptionManager private DEPRECATED_etherFiRedemptionManager;
 
     IRoleRegistry private DEPRECATED_roleRegistry;
     uint256 public validatorSizeWei;
@@ -83,26 +83,27 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     IeETH public immutable eETH;
     IWithdrawRequestNFT public immutable withdrawRequestNFT;
     ILiquifier public immutable liquifier;
-    EtherFiRedemptionManager public immutable etherFiRedemptionManager;
+    IEtherFiRedemptionManager public immutable etherFiRedemptionManager;
     IRoleRegistry public immutable roleRegistry;
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
     IBlacklister public immutable blacklister;
     address public immutable etherFiAdminContract;
     address public immutable membershipManager;
-    uint256 public immutable MIN_AMOUNT_FOR_SHARE;
+    uint256 public immutable minAmountForShare;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
     uint256 public constant MIN_WITHDRAW_AMOUNT = 0.01 ether;
     uint256 public constant MAX_WITHDRAW_AMOUNT = 1000 ether;
+    uint256 public constant SHARE_UNIT = 1e18;
 
     //--------------------------------------------------------------------------------------
     //-------------------------------------  EVENTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
 
-    event Paused(address account);
-    event Unpaused(address account);
+    event Paused();
+    event Unpaused();
 
     event Deposit(address indexed sender, uint256 amount, SourceOfFunds source, address referral);
     event Withdraw(address indexed sender, address recipient, uint256 amount, SourceOfFunds source);
@@ -137,6 +138,12 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     error InvalidValidatorSize();
     error InvalidArrayLengths();
     error InvalidAmountForShare();
+    error InvalidRate();
+    error AlreadyMigrated();
+    error MigrationNotComplete();
+    error AlreadyRegistered();
+    error NotRegistered();
+    error ContractPaused();
 
     struct ConstructorAddresses {
         address stakingManager;
@@ -163,13 +170,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         eETH = IeETH(_constructorAddresses.eETH);
         withdrawRequestNFT = IWithdrawRequestNFT(_constructorAddresses.withdrawRequestNFT);
         liquifier = ILiquifier(_constructorAddresses.liquifier);
-        etherFiRedemptionManager = EtherFiRedemptionManager(payable(_constructorAddresses.etherFiRedemptionManager));
+        etherFiRedemptionManager = IEtherFiRedemptionManager(payable(_constructorAddresses.etherFiRedemptionManager));
         roleRegistry = IRoleRegistry(_constructorAddresses.roleRegistry);
         priorityWithdrawalQueue = IPriorityWithdrawalQueue(_constructorAddresses.priorityWithdrawalQueue);
         blacklister = IBlacklister(_constructorAddresses.blacklister);
         etherFiAdminContract = _constructorAddresses.etherFiAdminContract;
         membershipManager = _constructorAddresses.membershipManager;
-        MIN_AMOUNT_FOR_SHARE = _minAmountForShare;
+        minAmountForShare = _minAmountForShare;
         _disableInitializers();
     }
 
@@ -191,7 +198,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /// @notice One-shot post-upgrade migration that sweeps existing locked ETH from LP to WithdrawRequestNFT and PriorityWithdrawalQueue.
     function initializeOnUpgradeV2() external onlyOwner {
-        require(!escrowMigrationCompleted, "already migrated");
+        if (escrowMigrationCompleted) revert AlreadyMigrated();
 
         uint128 nftLocked   = DEPRECATED_ethAmountLockedForWithdrawal;
         uint128 queueLocked = address(priorityWithdrawalQueue) != address(0)
@@ -229,8 +236,9 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     // Used by eETH staking flow through Liquifier contract; deVamp or to pay protocol fees
-    function depositToRecipient(address _recipient, uint256 _amount, address _referral) public whenNotPaused returns (uint256) {
-        require(msg.sender == address(liquifier) || msg.sender == address(etherFiAdminContract), "Incorrect Caller");
+    function depositToRecipient(address _recipient, uint256 _amount, address _referral) public whenNotPaused nonReentrant returns (uint256) {
+        if (msg.sender != address(liquifier) && msg.sender != address(etherFiAdminContract)) revert IncorrectCaller();
+        blacklister.nonBlacklisted(_recipient);
 
         emit Deposit(_recipient, _amount, SourceOfFunds.EETH, _referral);
 
@@ -239,7 +247,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     // Used by ether.fan staking flow
     function deposit(address _user, address _referral) external payable whenNotPaused nonReentrant returns (uint256) {
-        require(msg.sender == address(membershipManager), "Incorrect Caller");
+        if (msg.sender != address(membershipManager)) revert IncorrectCaller();
+        blacklister.nonBlacklisted(_user);
 
         emit Deposit(msg.sender, msg.value, SourceOfFunds.ETHER_FAN, _referral);
 
@@ -247,38 +256,15 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     /// @notice Burns shares and pays ETH. For NFT/queue callers, ETH is paid by the caller from its own segregated balance; LP only does accounting. Other callers receive ETH from LP.
-    function withdraw(address _recipient, uint256 _amount) external nonReentrant returns (uint256) {
-        uint256 share = sharesForWithdrawalAmount(_amount);
-        require(
-            msg.sender == address(withdrawRequestNFT) || 
-            msg.sender == address(membershipManager) || 
-            msg.sender == address(etherFiRedemptionManager) ||
-            msg.sender == address(priorityWithdrawalQueue),
-            "Incorrect Caller"
-        );
-        // Permissionless claims via withdrawRequestNFT and priorityWithdrawalQueue are allowed even when the LP is paused; membershipManager and etherFiRedemptionManager remain gated.
-        if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) {
-            _requireNotPaused();
-            _requireNotPausedUntil();
+    /// @notice Live-rate withdraw for membershipManager and etherFiRedemptionManager.
+    ///         Burns shares at the live rate and pays ETH from the LP to `_recipient`.
+    function withdraw(address _recipient, uint256 _amount) external nonReentrant whenNotPaused returns (uint256) {
+        if (msg.sender != address(membershipManager) && msg.sender != address(etherFiRedemptionManager)) {
+            revert IncorrectCaller();
         }
+        uint256 share = sharesForWithdrawalAmount(_amount);
         if (eETH.balanceOf(msg.sender) < _amount) revert InsufficientLiquidity();
         if (_amount > type(uint128).max || _amount == 0 || share == 0) revert InvalidAmount();
-
-        bool fromSegregated = (msg.sender == address(withdrawRequestNFT) || msg.sender == address(priorityWithdrawalQueue));
-
-        if (fromSegregated) {
-            // ETH was transferred to caller at lock time; LP only does accounting + share burn here.
-            // NFT now owns the ethAmountLockedForWithdrawal counter and guard (decremented in _claimWithdraw).
-            // Queue caller decrements its own ethAmountLockedForPriorityWithdrawal in its own claim function.
-
-            totalValueOutOfLp -= uint128(_amount);
-            eETH.burnShares(msg.sender, share);
-            _checkMinAmountForShare();
-            // No _sendFund — caller pays recipient itself.
-            return share;
-        }
-
-        // Unchanged path for membershipManager / etherFiRedemptionManager.
         if (totalValueInLp < _amount) revert InsufficientLiquidity();
         totalValueInLp -= uint128(_amount);
         eETH.burnShares(msg.sender, share);
@@ -286,6 +272,33 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _sendFund(_recipient, _amount);
 
         _checkTotalValueInLp();
+        _checkMinAmountForShare();
+
+        return share;
+    }
+
+    /// @notice Settles a finalized claim for withdrawRequestNFT or priorityWithdrawalQueue against
+    ///         the rate snapshotted at finalize/fulfill time. Caller supplies the rate; LP derives
+    ///         the share burn from it. ETH was already segregated to the caller at finalize/fulfill
+    ///         via `addEthAmountLockedForWithdrawal` / `transferLockedEthForPriority`, so LP only
+    ///         performs accounting (burn + `totalValueOutOfLp -=`); the caller pays the user from
+    ///         its own balance.
+    /// @dev    `_rate == 0` is rejected — callers (WRNFT / Queue) are responsible for resolving
+    ///         any pre-upgrade legacy snapshot to a live rate locally via `amountPerShareCeil()`
+    ///         before invoking this function. Single codepath: one ceiling math expression.
+    function withdraw(uint256 _amount, uint256 _rate) external nonReentrant returns (uint256) {
+        if (msg.sender != address(withdrawRequestNFT) && msg.sender != address(priorityWithdrawalQueue)) {
+            revert IncorrectCaller();
+        }
+        if (_amount > type(uint128).max || _amount == 0) revert InvalidAmount();
+        if (_rate == 0) revert InvalidRate();
+
+        uint256 share = Math.mulDiv(_amount, SHARE_UNIT, _rate, Math.Rounding.Up); // rounding favors the protocol
+        if (share == 0) revert InvalidAmount();
+        if (eETH.shares(msg.sender) < share) revert InsufficientLiquidity();
+
+        totalValueOutOfLp -= uint128(_amount);
+        eETH.burnShares(msg.sender, share);
         _checkMinAmountForShare();
 
         return share;
@@ -369,7 +382,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256[] calldata _bidIds,
         address _etherFiNode
     ) external whenNotPaused {
-        require(validatorSpawner[msg.sender].registered, "Incorrect Caller");
+        if (!validatorSpawner[msg.sender].registered) revert IncorrectCaller();
         stakingManager.registerBeaconValidators(_depositData, _bidIds, _etherFiNode);
     }
 
@@ -378,7 +391,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256[] calldata _bidIds,
         address _etherFiNode
     ) external whenNotPaused nonReentrant {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_1(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
 
         // liquidity pool supplies 1 eth per validator
         uint256 outboundEthAmountFromLp = 1 ether * _bidIds.length;
@@ -438,7 +451,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         IStakingManager.DepositData[] calldata _depositData,
         uint256 _validatorSizeWei
     ) external whenNotPaused nonReentrant {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_1(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         if (_validatorSizeWei < 32 ether || _validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
 
         // we have already deposited the initial amount to create the validator on the beacon chain
@@ -461,7 +474,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @notice The admin can register an address to become a BNFT holder
     /// @param _user The address of the Validator Spawner to register
     function registerValidatorSpawner(address _user) public onlyAdmin {
-        require(!validatorSpawner[_user].registered, "Already registered");  
+        if (validatorSpawner[_user].registered) revert AlreadyRegistered();  
 
         validatorSpawner[_user] = ValidatorSpawner({registered: true});
 
@@ -471,7 +484,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @notice Removes a Validator Spawner
     /// @param _user the address of the Validator Spawner to remove
     function unregisterValidatorSpawner(address _user) external onlyOperations {
-        require(validatorSpawner[_user].registered, "Not registered");
+        if (!validatorSpawner[_user].registered) revert NotRegistered();
 
         delete validatorSpawner[_user];
 
@@ -516,7 +529,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (paused) revert("Pausable: already paused");
 
         paused = true;
-        emit Paused(msg.sender);
+        emit Paused();
     }
 
     // Unpauses the contract
@@ -524,7 +537,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (!paused) revert("Pausable: not paused");
 
         paused = false;
-        emit Unpaused(msg.sender);
+        emit Unpaused();
     }
 
     // Pauses contract until MAX_PAUSE_DURATION
@@ -549,7 +562,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     /// @notice Locks ETH for finalized NFT withdrawals by transferring from LP to WithdrawRequestNFT. TVL preserved by InLp/OutOfLp rebalance; share rate unchanged.
     function addEthAmountLockedForWithdrawal(uint128 _amount) external {
         if (msg.sender != address(etherFiAdminContract) && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
-        require(escrowMigrationCompleted, "migration not complete");
+        if (!escrowMigrationCompleted) revert MigrationNotComplete();
         if (totalValueInLp < _amount) revert InsufficientLiquidity();
 
         totalValueInLp     -= _amount;
@@ -563,8 +576,8 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /// @notice Locks ETH for the priority withdrawal queue by transferring from LP to the queue contract. TVL preserved by InLp/OutOfLp rebalance.
     function transferLockedEthForPriority(uint128 _amount) external {
-        require(msg.sender == address(priorityWithdrawalQueue), "Incorrect Caller");
-        require(escrowMigrationCompleted, "migration not complete");
+        if (msg.sender != address(priorityWithdrawalQueue)) revert IncorrectCaller();
+        if (!escrowMigrationCompleted) revert MigrationNotComplete();
         if (totalValueInLp < _amount) revert InsufficientLiquidity();
 
         totalValueInLp     -= _amount;
@@ -578,7 +591,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
 
     /// @notice Returns ETH from the priority queue back to LP on a finalized cancel. Inverse of transferLockedEthForPriority.
     function returnLockedEth(uint128 _amount) external payable {
-        require(msg.sender == address(priorityWithdrawalQueue), "Incorrect Caller");
+        if (msg.sender != address(priorityWithdrawalQueue)) revert IncorrectCaller();
         if (msg.value != _amount || _amount == 0) revert InvalidAmount();
         totalValueOutOfLp -= uint128(_amount);
         totalValueInLp    += uint128(_amount);
@@ -632,13 +645,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (totalPooledEther == 0) {
             return _depositAmount;
         }
-        return (_depositAmount * eETH.totalShares()) / totalPooledEther;
+        return Math.mulDiv(_depositAmount, eETH.totalShares(), totalPooledEther, Math.Rounding.Down);
     }
 
     function _sendFund(address _recipient, uint256 _amount) internal {
         uint256 balance = address(this).balance;
         (bool sent, ) = _recipient.call{value: _amount}("");
-        require(sent && address(this).balance >= balance - _amount, "SendFail");
+        if (!sent || address(this).balance < balance - _amount) revert SendFail();
     }
 
     function _accountForEthSentOut(uint256 _amount) internal {
@@ -660,7 +673,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         uint256 staked;
         uint256 totalShares = eETH.totalShares();
         if (totalShares > 0) {
-            staked = (getTotalPooledEther() * eETH.shares(_user)) / totalShares;
+            staked = Math.mulDiv(getTotalPooledEther(), eETH.shares(_user), totalShares, Math.Rounding.Down);
         }
         return staked;
     }
@@ -674,7 +687,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (totalPooledEther == 0) {
             return 0;
         }
-        return (_amount * eETH.totalShares()) / totalPooledEther;
+        return Math.mulDiv(_amount, eETH.totalShares(), totalPooledEther, Math.Rounding.Down);
     }
 
     /// @dev withdrawal rounding errors favor the protocol by rounding up
@@ -685,8 +698,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         }
 
         // ceiling division so rounding errors favor the protocol
-        uint256 numerator = _amount * eETH.totalShares();
-        return (numerator + totalPooledEther - 1) / totalPooledEther;
+        return Math.mulDiv(_amount, eETH.totalShares(), totalPooledEther, Math.Rounding.Up);
     }
 
     function amountForShare(uint256 _share) public view returns (uint256) {
@@ -694,7 +706,19 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         if (totalShares == 0) {
             return 0;
         }
-        return (_share * getTotalPooledEther()) / totalShares;
+        return Math.mulDiv(_share, getTotalPooledEther(), totalShares, Math.Rounding.Down);
+    }
+
+    /// @notice ETH value of `1e18` shares, rounded UP. Single source of truth for the rate
+    ///         snapshotted by segregated callers (WithdrawRequestNFT / PriorityWithdrawalQueue)
+    ///         at finalize/fulfill. Ceiling rounding keeps the frozen rate >= `amountForShare`'s
+    ///         floor value so the round-trips at claim time satisfy:
+    ///         `shareOfEEth * rate / 1e18 >= amountForShare(shareOfEEth)` (solvency check) and
+    ///         `ceil(amount * 1e18 / rate) <= shareOfEEth` (burn-bounded-by-request).
+    function amountPerShareCeil() public view returns (uint256) {
+        uint256 totalShares = eETH.totalShares();
+        if (totalShares == 0) return 0;
+        return Math.mulDiv(SHARE_UNIT, getTotalPooledEther(), totalShares, Math.Rounding.Up);
     }
 
     function _checkTotalValueInLp() internal view {
@@ -702,13 +726,13 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     }
 
     function _checkMinAmountForShare() internal view {
-        if (amountForShare(1 ether) < MIN_AMOUNT_FOR_SHARE) revert InvalidAmountForShare();
+        if (amountForShare(1 ether) < minAmountForShare) revert InvalidAmountForShare();
     }
 
     function getImplementation() external view returns (address) {return _getImplementation();}
 
     function _requireNotPaused() internal view virtual {
-        require(!paused, "Pausable: paused");
+        if (paused) revert ContractPaused();
     }
 
     //--------------------------------------------------------------------------------------

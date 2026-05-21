@@ -48,7 +48,7 @@ interface IPriorityWithdrawalQueue {
     function ethAmountLockedForPriorityWithdrawal() external view returns (uint128);
 
     // Constants
-    function MIN_DELAY() external view returns (uint32);
+    function minDelay() external view returns (uint32);
     function MIN_AMOUNT() external view returns (uint96);
 
     // Oracle/Solver functions

@@ -1374,10 +1374,10 @@ contract StakingManagerTest is TestSetup {
 
     function test_instantiateEtherFiNode() public {
         vm.startPrank(owner);
-        // STAKING_MANAGER_NODE_CREATOR_ROLE consolidated into EOA_3.
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), alice);
-        // ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE consolidated into EOA_2.
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), address(stakingManagerInstance));
+        // STAKING_MANAGER_NODE_CREATOR_ROLE consolidated into EXECUTOR_OPERATIONS_ROLE.
+        roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), alice);
+        // ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE consolidated into HOUSEKEEPING_OPERATIONS_ROLE.
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), address(stakingManagerInstance));
         vm.stopPrank();
         
         vm.prank(alice);
@@ -1480,8 +1480,8 @@ contract StakingManagerTest is TestSetup {
 
     function test_createBeaconValidators() public {
         vm.startPrank(owner);
-        // ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE consolidated into EOA_2.
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_2(), address(stakingManagerInstance));
+        // ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE consolidated into HOUSEKEEPING_OPERATIONS_ROLE.
+        roleRegistryInstance.grantRole(roleRegistryInstance.HOUSEKEEPING_OPERATIONS_ROLE(), address(stakingManagerInstance));
         vm.stopPrank();
 
         vm.prank(admin);
@@ -1498,8 +1498,8 @@ contract StakingManagerTest is TestSetup {
         uint256[] memory bidIds = auctionInstance.createBid{value: 0.1 ether}(1, 0.1 ether);
         
         vm.startPrank(owner);
-        // STAKING_MANAGER_NODE_CREATOR_ROLE consolidated into EOA_3.
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), alice);
+        // STAKING_MANAGER_NODE_CREATOR_ROLE consolidated into EXECUTOR_OPERATIONS_ROLE.
+        roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), alice);
         vm.stopPrank();
         
         vm.prank(alice);

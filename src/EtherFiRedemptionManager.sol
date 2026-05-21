@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/draft-IERC20Permit.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
-import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
@@ -22,7 +21,7 @@ import "./EtherFiRestaker.sol";
 
 import "lib/BucketLimiter.sol";
 
-import "./RoleRegistry.sol";
+import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IPriorityWithdrawalQueue.sol";
 import "./interfaces/IBlacklister.sol";
 
@@ -48,8 +47,8 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
-    RoleRegistry public immutable roleRegistry;
     address public immutable treasury;
+    IRoleRegistry public immutable roleRegistry;
     IeETH public immutable eEth;
     IWeETH public immutable weEth;
     ILiquidityPool public immutable liquidityPool;
@@ -58,9 +57,9 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     IPriorityWithdrawalQueue public immutable priorityWithdrawalQueue;
     IBlacklister public immutable blacklister;
 
-    uint256 public immutable MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS;
-    uint256 public immutable MAX_EXIT_FEE_IN_BPS;
-    uint256 public immutable MAX_LOW_WATERMARK_IN_BPS_OF_TVL;
+    uint256 public immutable maxExitFeeSplitToTreasuryInBps;
+    uint256 public immutable maxExitFeeInBps;
+    uint256 public immutable maxLowWatermarkInBpsOfTvl;
 
     mapping(address => RedemptionInfo) public tokenToRedemptionInfo;
 
@@ -70,6 +69,19 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     error InvalidAmount();
     error InvalidOutputToken();
     error BlacklistedUser();
+    error InvalidBps();
+    error ExceedsMaxExitFee();
+    error ExceedsMaxLowWatermark();
+    error ExceedsMaxExitFeeSplit();
+    error InvalidNumSharesBurnt();
+    error InvalidTotalShares();
+    error TransferFailed();
+    error InvalidLpBalance();
+    error InvalidTotalValueOutOfLp();
+    error InsufficientBalance();
+    error ExceededRedeemable();
+    error RateLimitExceeded();
+    error AmountTooLarge();
 
 
     receive() external payable {}
@@ -88,10 +100,10 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         uint256 _maxLowWatermarkInBpsOfTvl)
     {
         if (_maxExitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _maxExitFeeInBps > BASIS_POINT_SCALE || _maxLowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidAmount();
-        MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS = _maxExitFeeSplitToTreasuryInBps;
-        MAX_EXIT_FEE_IN_BPS = _maxExitFeeInBps;
-        MAX_LOW_WATERMARK_IN_BPS_OF_TVL = _maxLowWatermarkInBpsOfTvl;
-        roleRegistry = RoleRegistry(_roleRegistry);
+        maxExitFeeSplitToTreasuryInBps = _maxExitFeeSplitToTreasuryInBps;
+        maxExitFeeInBps = _maxExitFeeInBps;
+        maxLowWatermarkInBpsOfTvl = _maxLowWatermarkInBpsOfTvl;
+        roleRegistry = IRoleRegistry(_roleRegistry);
         treasury = _treasury;
         liquidityPool = ILiquidityPool(payable(_liquidityPool));
         eEth = IeETH(_eEth);
@@ -105,9 +117,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     }
 
     function initialize(uint16 _exitFeeSplitToTreasuryInBps, uint16 _exitFeeInBps, uint16 _lowWatermarkInBpsOfTvl, uint256 _bucketCapacity, uint256 _bucketRefillRate) external initializer {
-        require(_exitFeeInBps <= BASIS_POINT_SCALE, "INVALID");
-        require(_exitFeeSplitToTreasuryInBps <= BASIS_POINT_SCALE, "INVALID");
-        require(_lowWatermarkInBpsOfTvl <= BASIS_POINT_SCALE, "INVALID");
+        if (_exitFeeInBps > BASIS_POINT_SCALE || _exitFeeSplitToTreasuryInBps > BASIS_POINT_SCALE || _lowWatermarkInBpsOfTvl > BASIS_POINT_SCALE) revert InvalidBps();
 
         __UUPSUpgradeable_init();
         __Pausable_init();
@@ -116,9 +126,9 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     function initializeTokenParameters(address[] memory _tokens, uint16[] memory _exitFeeSplitToTreasuryInBps, uint16[] memory _exitFeeInBps, uint16[] memory _lowWatermarkInBpsOfTvl, uint256[] memory _bucketCapacity, uint256[] memory _bucketRefillRate)  external onlyAdmin {
         for(uint256 i = 0; i < _exitFeeSplitToTreasuryInBps.length; i++) {
-            require (_exitFeeSplitToTreasuryInBps[i] <= MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS, "Exceeds max exit fee split to treasury");
-            require (_exitFeeInBps[i] <= MAX_EXIT_FEE_IN_BPS, "Exceeds max exit fee");
-            require (_lowWatermarkInBpsOfTvl[i] <= MAX_LOW_WATERMARK_IN_BPS_OF_TVL, "Exceeds max low watermark of tvl");
+            if (_exitFeeSplitToTreasuryInBps[i] > maxExitFeeSplitToTreasuryInBps) revert ExceedsMaxExitFeeSplit();
+            if (_exitFeeInBps[i] > maxExitFeeInBps) revert ExceedsMaxExitFee();
+            if (_lowWatermarkInBpsOfTvl[i] > maxLowWatermarkInBpsOfTvl) revert ExceedsMaxLowWatermark();
             tokenToRedemptionInfo[address(_tokens[i])] = RedemptionInfo({
                 limit: BucketLimiter.create(_convertToBucketUnit(_bucketCapacity[i], Math.Rounding.Down), _convertToBucketUnit(_bucketRefillRate[i], Math.Rounding.Down)),
                 exitFeeSplitToTreasuryInBps: _exitFeeSplitToTreasuryInBps[i],
@@ -183,19 +193,19 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         uint256 totalEEthShare = eEth.totalShares();
 
         // Withdraw ETH from the liquidity pool
-        require(liquidityPool.withdraw(address(this), eEthAmountToReceiver) == sharesToBurn, "invalid num shares burnt");
+        if (liquidityPool.withdraw(address(this), eEthAmountToReceiver) != sharesToBurn) revert InvalidNumSharesBurnt();
         uint256 ethReceived = address(this).balance - prevBalance;
 
         // To Stakers by burning shares
         liquidityPool.burnEEthShares(feeShareToStakers);
-        require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
+        if (eEth.totalShares() < 1 gwei || eEth.totalShares() != totalEEthShare - (sharesToBurn + feeShareToStakers)) revert InvalidTotalShares();
 
         // To Receiver by transferring ETH, using gas 10k for additional safety
         (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
-        require(success, "EtherFiRedemptionManager: Transfer failed");
+        if (!success) revert TransferFailed();
 
         // Make sure the liquidity pool balance is correct && total shares are correct
-        require(address(liquidityPool).balance == prevLpBalance - ethReceived, "EtherFiRedemptionManager: Invalid liquidity pool balance");
+        if (address(liquidityPool).balance != prevLpBalance - ethReceived) revert InvalidLpBalance();
     }
 
     /**
@@ -219,8 +229,8 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         liquidityPool.burnEEthShares(feeShareToStakers);
 
         // Validate total shares and total value out of lp
-        require(eEth.totalShares() >= 1 gwei && eEth.totalShares() == totalEEthShare - (sharesToBurn + feeShareToStakers), "EtherFiRedemptionManager: Invalid total shares");
-        require(liquidityPool.totalValueOutOfLp() == totalValueOutOfLpBefore - eEthAmountToReceiver, "EtherFiRedemptionManager: Invalid total value out of lp");
+        if (eEth.totalShares() < 1 gwei || eEth.totalShares() != totalEEthShare - (sharesToBurn + feeShareToStakers)) revert InvalidTotalShares();
+        if (liquidityPool.totalValueOutOfLp() != totalValueOutOfLpBefore - eEthAmountToReceiver) revert InvalidTotalValueOutOfLp();
 
         etherFiRestaker.transferStETH(receiver, eEthAmountToReceiver);
     }
@@ -340,17 +350,17 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
      * @param token The token to set the exit fee for
      */
     function setExitFeeBasisPoints(uint16 _exitFeeInBps, address token) external onlyAdmin {
-        require(_exitFeeInBps <= MAX_EXIT_FEE_IN_BPS, "Exceeds max exit fee");
+        if (_exitFeeInBps > maxExitFeeInBps) revert ExceedsMaxExitFee();
         tokenToRedemptionInfo[token].exitFeeInBps = _exitFeeInBps;
     }
 
     function setLowWatermarkInBpsOfTvl(uint16 _lowWatermarkInBpsOfTvl, address token) external onlyAdmin {
-        require(_lowWatermarkInBpsOfTvl <= MAX_LOW_WATERMARK_IN_BPS_OF_TVL, "Exceeds max low watermark of tvl");
+        if (_lowWatermarkInBpsOfTvl > maxLowWatermarkInBpsOfTvl) revert ExceedsMaxLowWatermark();
         tokenToRedemptionInfo[token].lowWatermarkInBpsOfTvl = _lowWatermarkInBpsOfTvl;
     }
 
     function setExitFeeSplitToTreasuryInBps(uint16 _exitFeeSplitToTreasuryInBps, address token) external onlyAdmin {
-        require(_exitFeeSplitToTreasuryInBps <= MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS, "Exceeds max exit fee split to treasury");
+        if (_exitFeeSplitToTreasuryInBps > maxExitFeeSplitToTreasuryInBps) revert ExceedsMaxExitFeeSplit();
         tokenToRedemptionInfo[token].exitFeeSplitToTreasuryInBps = _exitFeeSplitToTreasuryInBps;
     }
 
@@ -375,8 +385,8 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     }
 
     function _redeemEEth(uint256 eEthAmount, address receiver, address outputToken) internal {
-        require(eEthAmount <= eEth.balanceOf(msg.sender), "EtherFiRedemptionManager: Insufficient balance");
-        require(canRedeem(eEthAmount, outputToken), "EtherFiRedemptionManager: Exceeded total redeemable amount");
+        if (eEthAmount > eEth.balanceOf(msg.sender)) revert InsufficientBalance();
+        if (!canRedeem(eEthAmount, outputToken)) revert ExceededRedeemable();
 
         (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount, outputToken);
 
@@ -387,8 +397,8 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     function _redeemWeEth(uint256 weEthAmount, address receiver, address outputToken) internal {
         uint256 eEthAmount = weEth.getEETHByWeETH(weEthAmount);
-        require(weEthAmount <= weEth.balanceOf(msg.sender), "EtherFiRedemptionManager: Insufficient balance");
-        require(canRedeem(eEthAmount, outputToken), "EtherFiRedemptionManager: Exceeded total redeemable amount");
+        if (weEthAmount > weEth.balanceOf(msg.sender)) revert InsufficientBalance();
+        if (!canRedeem(eEthAmount, outputToken)) revert ExceededRedeemable();
 
         (uint256 eEthShares, uint256 eEthAmountToReceiver, uint256 eEthFeeAmountToTreasury, uint256 sharesToBurn, uint256 feeShareToTreasury) = _calcRedemption(eEthAmount, outputToken);
 
@@ -401,11 +411,11 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     function _updateRateLimit(uint256 amount, address token) internal {
         uint64 bucketUnit = _convertToBucketUnit(amount, Math.Rounding.Up);
-        require(BucketLimiter.consume(tokenToRedemptionInfo[token].limit, bucketUnit), "BucketRateLimiter: rate limit exceeded");
+        if (!BucketLimiter.consume(tokenToRedemptionInfo[token].limit, bucketUnit)) revert RateLimitExceeded();
     }
 
     function _convertToBucketUnit(uint256 amount, Math.Rounding rounding) internal pure returns (uint64) {
-        require(amount < type(uint64).max * BUCKET_UNIT_SCALE, "EtherFiRedemptionManager: Amount too large");
+        if (amount >= type(uint64).max * BUCKET_UNIT_SCALE) revert AmountTooLarge();
         return (rounding == Math.Rounding.Up) ? SafeCast.toUint64((amount + BUCKET_UNIT_SCALE - 1) / BUCKET_UNIT_SCALE) : SafeCast.toUint64(amount / BUCKET_UNIT_SCALE);
     }
 

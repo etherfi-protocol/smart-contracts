@@ -10,16 +10,11 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     //---------------------------------  STATE-VARIABLES  ----------------------------------
     //--------------------------------------------------------------------------------------
 
-    address private DEPRECATED_stakingManagerAddress;
-    address private DEPRECATED_etherFiNodesManagerAddress;
-
-    address public immutable stakingManagerAddress;
-    address public immutable etherFiNodesManagerAddress;
+    address public stakingManagerAddress;
+    address public etherFiNodesManagerAddress;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _stakingManagerAddress, address _etherFiNodesManagerAddress) {
-        stakingManagerAddress = _stakingManagerAddress;
-        etherFiNodesManagerAddress = _etherFiNodesManagerAddress;
+    constructor() {
         _disableInitializers();
     }
 
@@ -33,6 +28,15 @@ contract BNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
         __ERC721_init("Bond NFT", "BNFT");
         __Ownable_init();
         __UUPSUpgradeable_init();
+
+        stakingManagerAddress = _stakingManagerAddress;
+    }
+
+    /// @notice initialization function that should be called after phase 2.0 contract upgrade
+    function initializeOnUpgrade(address _etherFiNodesManagerAddress) onlyOwner external {
+        require(_etherFiNodesManagerAddress != address(0), "Cannot initialize to zero address");
+
+        etherFiNodesManagerAddress = _etherFiNodesManagerAddress;
     }
 
     /// @notice Mints NFT to required user

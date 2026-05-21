@@ -18,7 +18,7 @@ contract WeETHTest is TestSetup {
     }
 
     function test_WrapEETHFailsIfZeroAmount() public {
-        vm.expectRevert("weETH: can't wrap zero eETH");
+        vm.expectRevert(WeETH.ZeroAmount.selector);
         weEthInstance.wrap(0);
     }
 
@@ -67,7 +67,7 @@ contract WeETHTest is TestSetup {
         // alice priv key = 2
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(weEthInstance), 2 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
 
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector);
         weEthInstance.wrapWithPermit(5 ether, permitInput);
 
     }
@@ -86,7 +86,7 @@ contract WeETHTest is TestSetup {
         // 69 is an invalid private key for alice
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(69, address(weEthInstance), 5 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
 
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector);
         weEthInstance.wrapWithPermit(5 ether, permitInput);
     }
 
@@ -123,7 +123,7 @@ contract WeETHTest is TestSetup {
     }
 
     function test_UnWrapEETHFailsIfZeroAmount() public {
-        vm.expectRevert("Cannot unwrap a zero amount");
+        vm.expectRevert(WeETH.ZeroAmount.selector);
         weEthInstance.unwrap(0);
     }
 
@@ -531,7 +531,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert("PAUSED");
+        vm.expectRevert(WeETH.ContractPaused.selector);
         weEthInstance.wrap(1 ether);
     }
 
@@ -542,7 +542,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert("PAUSED");
+        vm.expectRevert(WeETH.ContractPaused.selector);
         weEthInstance.unwrap(0.5 ether);
     }
 
@@ -553,7 +553,7 @@ contract WeETHTest is TestSetup {
         weEthInstance.pause();
 
         vm.prank(alice);
-        vm.expectRevert("PAUSED");
+        vm.expectRevert(WeETH.ContractPaused.selector);
         weEthInstance.transfer(bob, 0.5 ether);
     }
 
@@ -684,7 +684,7 @@ contract WeETHTest is TestSetup {
 
     function _grantPauseUntilRoles() internal {
         vm.startPrank(roleRegistryInstance.owner());
-        roleRegistryInstance.grantRole(roleRegistryInstance.GUARDIAN_ROLE(), pauseUntilPauser);
+        roleRegistryInstance.grantRole(roleRegistryInstance.SUPER_GUARDIAN_ROLE(), pauseUntilPauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), unpauseUntilUnpauser);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), pauseUntilDurationSetter);
         vm.stopPrank();
@@ -709,7 +709,7 @@ contract WeETHTest is TestSetup {
         _grantPauseUntilRoles();
 
         vm.prank(bob);
-        vm.expectRevert(RoleRegistry.OnlyGuardian.selector);
+        vm.expectRevert(RoleRegistry.OnlySuperGuardian.selector);
         weEthInstance.pauseContractUntil();
 
         vm.prank(pauseUntilPauser);

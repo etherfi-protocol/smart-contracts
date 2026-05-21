@@ -55,8 +55,8 @@ contract PausableUntilTest is Test {
 
     function test_constants() public view {
         assertEq(harness.MIN_PAUSE_DURATION(), 8 hours);
-        assertEq(harness.MAX_PAUSE_DURATION(), 3 days);
-        assertEq(harness.PAUSER_UNTIL_COOLDOWN(), 1 days);
+        assertEq(harness.MAX_PAUSE_DURATION(), 30 days);
+        assertEq(harness.PAUSER_UNTIL_COOLDOWN(), 7 days);
     }
 
     // --------------------------------------------------------
