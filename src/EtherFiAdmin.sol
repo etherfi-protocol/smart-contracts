@@ -54,11 +54,13 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     RoleRegistry private DEPRECATED_roleRegistry;
 
+    uint256 public lastStaleReportFinalizationTimestamp;
     uint256 public maxFinalizedWithdrawalAmountPerDay;
     uint256 public maxNumValidatorsToApprovePerDay;
 
     // Protocol fees must not exceed 1/MAX_PROTOCOL_FEE_INV_RATIO of total rewards (currently 20%).
     uint256 public constant MAX_PROTOCOL_FEE_INV_RATIO = 5;
+    uint256 public constant STALE_REPORT_FINALIZATION_COOLDOWN = 1 days;
 
     IEtherFiOracle public immutable etherFiOracle;
     IStakingManager public immutable stakingManager;
@@ -105,6 +107,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error InvalidMaxAcceptableRebaseApr();
     error InvalidStaleOracleReportBlockWindow();
     error OracleReportNotStale();
+    error StaleReportFinalizationCooldown();
     error NoWithdrawalsToFinalize();
     error ReportValidationFailed(string reason);
     error ConsensusNotReached();
@@ -218,7 +221,8 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @dev    Reverts with OracleReportNotStale if the window has not elapsed, or NoWithdrawalsToFinalize
     ///         if no valid pending requests can be covered.
     function finalizeWithdrawalsWhenStale() external {
-        if (block.number < lastHandledReportRefBlock + staleOracleReportBlockWindow) revert OracleReportNotStale();
+        if (block.number < etherFiOracle.lastPublishedReportRefBlock() + staleOracleReportBlockWindow) revert OracleReportNotStale();
+        if (block.timestamp < lastStaleReportFinalizationTimestamp + STALE_REPORT_FINALIZATION_COOLDOWN) revert StaleReportFinalizationCooldown();
 
         uint256 liquidity = address(liquidityPool).balance;
         uint32 currentRequestId = withdrawRequestNft.nextRequestId() - 1;
@@ -239,6 +243,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
         if (finalizedWithdrawalAmount == 0) revert NoWithdrawalsToFinalize();
         _finalizeWithdrawals(requestId, finalizedWithdrawalAmount);
+        lastStaleReportFinalizationTimestamp = block.timestamp;
     }
 
     //protocol owns the eth that was distributed to NO and treasury in eigenpods and etherfinodes 

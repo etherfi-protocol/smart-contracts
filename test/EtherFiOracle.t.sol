@@ -2422,6 +2422,19 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(requestId));
     }
 
+    function test_finalizeWithdrawalsWhenStale_revertsWhenCooldownPeriodNotElapsed() public {
+        _unpauseWithdrawNFT();
+        _seedLp(10 ether);
+        _makeWithdrawRequest(1 ether);
+
+        _advanceToStaleBoundary();
+        
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+
+        vm.expectRevert(EtherFiAdmin.StaleReportFinalizationCooldown.selector);
+        etherFiAdminInstance.finalizeWithdrawalsWhenStale();
+    }
+
     // Calling twice back-to-back: second call has nothing new to finalize so
     // it reverts with NoWithdrawalsToFinalize (not OracleReportNotStale —
     // staleness is still satisfied, the inner loop just finds nothing).
@@ -2434,13 +2447,15 @@ contract EtherFiOracleTest is TestSetup {
 
         etherFiAdminInstance.finalizeWithdrawalsWhenStale();
 
+        vm.warp(block.timestamp + etherFiAdminInstance.STALE_REPORT_FINALIZATION_COOLDOWN() + 1);
+
         vm.expectRevert(EtherFiAdmin.NoWithdrawalsToFinalize.selector);
         etherFiAdminInstance.finalizeWithdrawalsWhenStale();
     }
 
     // A partial-fill call followed by another after liquidity replenishes:
     // the second call picks up the leftover request that the first one
-    // couldn't cover.
+    // couldn't cover after cooldown period.
     function test_finalizeWithdrawalsWhenStale_resumesAfterLiquidityReplenishes() public {
         _unpauseWithdrawNFT();
         _seedLp(20 ether);
@@ -2459,6 +2474,8 @@ contract EtherFiOracleTest is TestSetup {
         // Bump totalValueInLp via a deposit so addEthAmountLockedForWithdrawal
         // doesn't trip its own InsufficientLiquidity guard.
         _seedLp(10 ether);
+
+        vm.warp(block.timestamp + etherFiAdminInstance.STALE_REPORT_FINALIZATION_COOLDOWN() + 1);
 
         etherFiAdminInstance.finalizeWithdrawalsWhenStale();
         assertEq(withdrawRequestNFTInstance.lastFinalizedRequestId(), uint32(r2));
