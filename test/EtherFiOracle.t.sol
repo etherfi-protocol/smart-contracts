@@ -392,35 +392,6 @@ contract EtherFiOracleTest is TestSetup {
         etherFiOracleInstance.submitReport(reportAtSlot4287);
     }
 
-    function test_unpublishReport() public {
-        vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
-
-        // period 2
-        _moveClock(1024 + 2 * slotsPerEpoch);
-
-        uint32 lastPublishedReportRefSlot = etherFiOracleInstance.lastPublishedReportRefSlot();
-        uint32 lastPublishedReportRefBlock = etherFiOracleInstance.lastPublishedReportRefBlock();
-
-        // Oracle accidentally generated an wrong report
-        bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
-        vm.prank(alice);
-        bool consensusReached = etherFiOracleInstance.submitReport(reportAtPeriod2A);
-        assertEq(consensusReached, true);
-
-        assertEq(etherFiOracleInstance.lastPublishedReportRefSlot(), reportAtPeriod2A.refSlotTo);
-        assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), reportAtPeriod2A.refBlockTo);
-
-        // Owner performs manual operations to undo the published report
-        vm.startPrank(owner);
-        etherFiOracleInstance.unpublishReport(reportHash);
-        vm.stopPrank();
-        _setLastPublishedBlockStamps(uint32(lastPublishedReportRefSlot), uint32(lastPublishedReportRefBlock));
-
-        assertEq(etherFiOracleInstance.lastPublishedReportRefSlot(), lastPublishedReportRefSlot);
-        assertEq(etherFiOracleInstance.lastPublishedReportRefBlock(), lastPublishedReportRefBlock);
-    }
-
     function test_pause() public {
         _moveClock(1024 + 2 * slotsPerEpoch);
         
@@ -812,33 +783,6 @@ contract EtherFiOracleTest is TestSetup {
         vm.prank(owner);
         etherFiOracleInstance.setConsensusVersion(5);
         assertEq(etherFiOracleInstance.consensusVersion(), 5);
-    }
-
-    function test_unpublishReport_edgeCases() public {
-        vm.prank(owner);
-        etherFiOracleInstance.setQuorumSize(1);
-
-        _moveClock(1024 + 2 * slotsPerEpoch);
-
-        bytes32 reportHash = etherFiOracleInstance.generateReportHash(reportAtPeriod2A);
-        
-        // Test: cannot unpublish report that hasn't reached consensus
-        vm.prank(owner);
-        vm.expectRevert(EtherFiOracle.ConsensusNotReached.selector);
-        etherFiOracleInstance.unpublishReport(reportHash);
-
-        // Submit report to reach consensus
-        vm.prank(alice);
-        etherFiOracleInstance.submitReport(reportAtPeriod2A);
-
-        // Now unpublish should work
-        vm.prank(owner);
-        etherFiOracleInstance.unpublishReport(reportHash);
-
-        // Verify consensus is reset
-        (uint32 support, bool consensusReached,) = etherFiOracleInstance.consensusStates(reportHash);
-        assertEq(support, 0);
-        assertEq(consensusReached, false);
     }
 
     function test_shouldSubmitReport_reportSlotNotStarted() public {

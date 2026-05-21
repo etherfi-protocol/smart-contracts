@@ -307,13 +307,6 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         emit ConsensusVersionUpdated(_consensusVersion);
     }
 
-    function unpublishReport(bytes32 _hash) external onlyOperations {
-        if (!consensusStates[_hash].consensusReached) revert ConsensusNotReached();
-        consensusStates[_hash].support = 0;
-        consensusStates[_hash].consensusReached = false;
-        emit ReportUnpublished(_hash);
-    }
-
     function pauseContract() external onlyOperations {
         _pause();
     }
