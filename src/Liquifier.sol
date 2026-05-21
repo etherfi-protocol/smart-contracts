@@ -144,6 +144,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error InvalidStEthPrice();
     error NotAllowed();
     error Capped();
+    error AddressZero();
+    error InvalidTotalSupply();
 
     struct ConstructorAddresses {
         address liquidityPool;
@@ -268,7 +270,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if (_timeBoundCapInEther > MAX_TIME_BOUND_CAP_IN_ETHER || _totalCapInEther > MAX_TOTAL_CAP_IN_ETHER) revert InvalidDepositCap();
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
-            if (_token == address(0) || _target != address(0)) revert();
+            if (_token == address(0) || _target != address(0)) revert AddressZero();
             dummies.push(IERC20(_token));
         } else {
             // _target = EigenLayer's Strategy contract
@@ -448,7 +450,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function _L2SanityChecks(address _token) internal view {
-        if (IERC20(_token).totalSupply() != IERC20(_token).balanceOf(address(this))) revert();
+        if (IERC20(_token).totalSupply() != IERC20(_token).balanceOf(address(this))) revert InvalidTotalSupply();
     }
 
     function _min(uint256 _a, uint256 _b) internal pure returns (uint256) {
