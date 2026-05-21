@@ -91,6 +91,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     address private DEPRECATED_etherfiRestaker;
 
     uint256 public constant BASIS_POINT_SCALE = 10_000;
+    uint32 public constant MAX_TIME_BOUND_CAP_IN_ETHER = 500_000_000;
+    uint32 public constant MAX_TOTAL_CAP_IN_ETHER = 2_000_000_000;
 
     ILiquidityPool public immutable liquidityPool;
     ILidoWithdrawalQueue public immutable lidoWithdrawalQueue;
@@ -125,6 +127,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error IncorrectAmount();
     error IncorrectRole();
     error InvalidDiscountRate();
+    error InvalidDepositCap();
     error InvalidPriceWindow();
     error InvalidMaxPriceDeviationInBps();
     error InvalidLiquidityPool();
@@ -254,12 +257,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     }
 
     function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyAdmin {
+        if (_timeBoundCapInEther > MAX_TIME_BOUND_CAP_IN_ETHER || _totalCapInEther > MAX_TOTAL_CAP_IN_ETHER) revert InvalidDepositCap();
         tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
     }
-    
+
     function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyUpgradeTimelock {
         if (_discountInBasisPoints < minDiscountRateInBps || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
+        if (_timeBoundCapInEther > MAX_TIME_BOUND_CAP_IN_ETHER || _totalCapInEther > MAX_TOTAL_CAP_IN_ETHER) revert InvalidDepositCap();
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
             if (_token == address(0) || _target != address(0)) revert();

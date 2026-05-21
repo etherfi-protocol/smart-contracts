@@ -49,6 +49,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
 
     event ReportPublished(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash);
     event ReportSubmitted(uint32 consensusVersion, uint32 refSlotFrom, uint32 refSlotTo, uint32 refBlockFrom, uint32 refBlockTo, bytes32 indexed hash, address indexed committeeMember);
+    event ReportUnpublished(bytes32 indexed hash);
 
     error ConsensusAlreadyReached();
     error ReportNotNeeded();
@@ -306,6 +307,7 @@ contract EtherFiOracle is Initializable, OwnableUpgradeable, PausableUpgradeable
         if (!consensusStates[_hash].consensusReached) revert ConsensusNotReached();
         consensusStates[_hash].support = 0;
         consensusStates[_hash].consensusReached = false;
+        emit ReportUnpublished(_hash);
     }
 
     function pauseContract() external onlyOperations {
