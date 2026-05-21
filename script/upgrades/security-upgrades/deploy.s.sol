@@ -43,12 +43,13 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
     bytes32 public constant commitHashSalt = bytes32(bytes20(hex"0000000000000000000000000000000000000000"));
 
     // ----- Immutable params (set per spec / ops review) -----
+    // NOTE: These values are variable and would be further changed as per needed
     // Liquifier
     address public constant STETH_PRICE_FEED = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812; // Chainlink stETH/ETH
     address public constant LIDO = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address public constant STETH_ETH_CURVE_POOL = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022;
     uint256 public constant LIQUIFIER_MIN_DISCOUNT_BPS = 100;          // 1% floor
-    uint256 public constant LIQUIFIER_STALE_PRICE_WINDOW = 24 hours;
+    uint256 public constant LIQUIFIER_STALE_PRICE_WINDOW = 7 days;
     uint256 public constant LIQUIFIER_MAX_PRICE_DEVIATION_BPS = 500;   // 5%
 
     // EtherFiRedemptionManager hardcoded ceilings (per spec §7.4.6 / §9)
@@ -58,10 +59,10 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
 
     // EtherFiAdmin immutable params
     int256  public constant ADMIN_MAX_REBASE_APR_BPS = 1_000;           // 10% absolute ceiling
-    uint256 public constant ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE = 25;
+    uint256 public constant ADMIN_MAX_VALIDATOR_TASK_BATCH_SIZE = 100; // 50 Currently
     uint256 public constant ADMIN_STALE_ORACLE_REPORT_BLOCK_WINDOW = 7200 * 7; // ~14 days @ 12s blocks
-    uint256 public constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 50_000 ether;
-    uint256 public constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 2_000;
+    uint256 public constant ADMIN_MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY = 100_000 ether;
+    uint256 public constant ADMIN_MAX_VALIDATORS_TO_APPROVE_PER_DAY = 1_000; 
 
     // LiquidityPool dust guard (spec — minimum amount per share)
     uint256 public constant LP_MIN_AMOUNT_FOR_SHARE = 1 ether;
@@ -152,7 +153,7 @@ contract DeploySecurityUpgrades is Script, Deployed, Utils {
         {
             string memory name = "WithdrawRequestNFT";
             bytes memory args = abi.encode(
-                WITHDRAW_REQUEST_NFT_BUYBACK_SAFE,
+                TREASURY, // NOTE: Making this address as Treasury and not WithdrawRequestNFT because we want to send funds there directly
                 EETH,
                 LIQUIDITY_POOL,
                 MEMBERSHIP_MANAGER,

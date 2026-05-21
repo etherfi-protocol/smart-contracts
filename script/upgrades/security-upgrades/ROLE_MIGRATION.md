@@ -13,24 +13,149 @@ and the `RoleRegistry` modifier shims (`onlyOperatingTimelock`,
 
 ## 1. Modifier → Role map (post-upgrade source of truth)
 
-Every contract touched by PR #385 routes its access checks through one of
-these roles. The right-hand column is the *only* role that needs to hold an
-address for that gated path to work after the upgrade.
+This section lists **every** role-gated external function in PR #385, with
+the exact function name and the role that gates it. Each row was derived from
+the source directly via grep + AST walk over `src/*.sol`. If a function name
+isn't here, either it isn't role-gated or it doesn't exist.
 
-| Contract | Modifier in code | RoleRegistry role enforced |
+> Modifier semantics:
+> - `onlyAdmin` → `roleRegistry.onlyOperatingTimelock(msg.sender)` → `OPERATION_TIMELOCK_ROLE`
+> - `onlyOperations` → `roleRegistry.onlyOperatingMultisig(msg.sender)` → `OPERATION_MULTISIG_ROLE`
+> - `onlyGuardian` → `roleRegistry.onlyGuardian(msg.sender)` → `GUARDIAN_ROLE`
+> - `onlySuperGuardian` → `roleRegistry.onlySuperGuardian(msg.sender)` → `SUPER_GUARDIAN_ROLE`
+> - `onlyUpgradeTimelock` → `roleRegistry.onlyUpgradeTimelock(msg.sender)` → `UPGRADE_TIMELOCK_ROLE`
+> - `onlyEigenlayerAdmin` → direct `hasRole(HOUSEKEEPING_OPERATIONS_ROLE)`
+> - `onlyConsolidationExecutor` → direct `hasRole(EXECUTOR_OPERATIONS_ROLE)`
+> - `onlyPodProver` → direct `hasRole(EIGENPOD_OPERATIONS_ROLE)`
+> - `onlyRequestManager` (PriorityWithdrawalQueue) → direct `hasRole(ORACLE_OPERATIONS_ROLE)`
+
+### `OPERATION_TIMELOCK_ROLE` (`onlyAdmin`)
+
+| Contract | Function |
+|---|---|
+| EtherFiAdmin | `setValidatorTaskBatchSize`, `updateMaxFinalizedWithdrawalAmountPerDay`, `updateMaxNumValidatorsToApprovePerDay`, `updateAcceptableRebaseApr`, `updatePostReportWaitTimeInSlots` |
+| EtherFiOracle | `addCommitteeMember`, `removeCommitteeMember`, `setQuorumSize`, `setOracleReportPeriod`, `setConsensusVersion` |
+| EtherFiRedemptionManager | `initializeTokenParameters`, `setCapacity`, `setRefillRatePerSecond`, `setExitFeeBasisPoints`, `setLowWatermarkInBpsOfTvl`, `setExitFeeSplitToTreasuryInBps`, `setPauseUntilDuration` |
+| EtherFiNodesManager | `setPauseUntilDuration`, `updateAllowedForwardedExternalCalls`, `updateAllowedForwardedEigenpodCalls` |
+| EtherFiRateLimiter | `updateConsumers`, `createNewLimiter`, `setCapacity`, `setRefillRate`, `setRemaining` |
+| BucketRateLimiter | `setCapacity`, `setRefillRatePerSecond`, `registerToken`, `setCapacityPerToken`, `setRefillRatePerSecondPerToken`, `updateConsumer` |
+| AuctionManager | `setPauseUntilDuration` |
+| LiquidityPool | `setValidatorSizeWei`, `registerValidatorSpawner`, `DEPRECATED_sendExitRequests`, `setFeeRecipient`, `setPauseUntilDuration` |
+| Liquifier | `updateDepositCap`, `updateDiscountInBasisPoints`, `setPauseUntilDuration` |
+| WithdrawRequestNFT | `seizeInvalidRequest`, `validateRequest`, `updateShareRemainderSplitToTreasuryInBps`, `setPauseUntilDuration` |
+| EETH | `setPauseUntilDuration` |
+| WeETH | `setPauseUntilDuration` |
+| PriorityWithdrawalQueue | `addToWhitelist`, `batchUpdateWhitelist`, `updateShareRemainderSplitToTreasury`, `setPauseUntilDuration` |
+| CumulativeMerkleRewardsDistributor | `setPauseUntilDuration` |
+| RestakingRewardsRouter | `setRecipientAddress` |
+
+### `OPERATION_MULTISIG_ROLE` (`onlyOperations`)
+
+| Contract | Function |
+|---|---|
+| EtherFiAdmin | `invalidateValidatorApprovalTask` |
+| EtherFiOracle | `manageCommitteeMember`, `unpublishReport`, `pauseContract`, `unPauseContract` |
+| EtherFiRedemptionManager | `pauseContract`, `unPauseContract`, `unpauseContractUntil` |
+| EtherFiRestaker | `withdrawEther`, `setRewardsClaimer`, `delegateTo`, `undelegate`, `pauseContract`, `unPauseContract` |
+| EtherFiNodesManager | `pauseContract`, `unPauseContract`, `unpauseContractUntil` |
+| EtherFiRateLimiter | `pauseContract`, `unPauseContract` |
+| BucketRateLimiter | `pauseContract`, `unPauseContract` |
+| AuctionManager | `transferAccumulatedRevenue`, `disableWhitelist`, `enableWhitelist`, `pauseContract`, `unPauseContract`, `unpauseContractUntil`, `setMinBidPrice`, `setMaxBidPrice`, `setAccumulatedRevenueThreshold`, `updateWhitelistMinBidAmount` |
+| NodeOperatorManager | `batchUpdateOperatorsApprovedTags`, `addToWhitelist`, `removeFromWhitelist`, `pauseContract`, `unPauseContract` |
+| LiquidityPool | `unregisterValidatorSpawner`, `pauseContract`, `unPauseContract`, `unpauseContractUntil` |
+| Liquifier | `updateTimeBoundCapRefreshInterval`, `updateQuoteStEthWithCurve`, `pauseContract`, `unPauseContract`, `unpauseContractUntil` |
+| WithdrawRequestNFT | `pauseContract`, `unPauseContract`, `unpauseContractUntil` |
+| EETH | `pause`, `unpause`, `unpauseContractUntil`, `recoverETH` |
+| WeETH | `pause`, `unpause`, `unpauseContractUntil`, `recoverETH` |
+| MembershipNFT | `setMaxTokenId`, `setUpForEap`, `setMintingPaused`, `setContractMetadataURI`, `setMetadataURI`, `alertMetadataUpdate`, `alertBatchMetadataUpdate` |
+| StakingManager | `pauseContract`, `unPauseContract`, `backfillExistingEtherFiNodes` |
+| CumulativeMerkleRewardsDistributor | `setClaimDelay`, `updateWhitelistedRecipient`, `pause`, `unpause`, `unpauseContractUntil` |
+| EtherFiRewardsRouter | `recoverERC20`, `recoverERC721` |
+| PriorityWithdrawalQueue | `removeFromWhitelist`, `pauseContract`, `unPauseContract`, `unpauseContractUntil` |
+| Blacklister | `blacklistUser`, `unblacklistUser`, `setBlacklistUntil` |
+
+### `GUARDIAN_ROLE` (`onlyGuardian`)
+
+| Contract | Function |
+|---|---|
+| EtherFiRedemptionManager | `pauseContractUntil` |
+| EtherFiNodesManager | `pauseContractUntil` |
+| AuctionManager | `pauseContractUntil` |
+| LiquidityPool | `pauseContractUntil` |
+| Liquifier | `pauseContractUntil` |
+| WithdrawRequestNFT | `invalidateRequest`, `pauseContractUntil` |
+| PriorityWithdrawalQueue | `pauseContractUntil` |
+| CumulativeMerkleRewardsDistributor | `pauseContractUntil` |
+| Blacklister | `blacklistUserUntil` (1-day cap) |
+
+### `SUPER_GUARDIAN_ROLE` (`onlySuperGuardian`)
+
+| Contract | Function |
+|---|---|
+| EETH | `pauseContractUntil` |
+| WeETH | `pauseContractUntil` |
+
+### `UPGRADE_TIMELOCK_ROLE` (`onlyUpgradeTimelock`)
+
+| Contract | Function |
+|---|---|
+| Liquifier | `updateWhitelistedToken`, `registerToken` |
+
+### `HOUSEKEEPING_OPERATIONS_ROLE`
+
+| Contract | Function | Source |
 |---|---|---|
-| EETH, WeETH, LP, NFT, Liquifier, EFAdmin, EFOracle, EFRedemptionMgr, EFNodesMgr, EFRateLimiter, BucketRateLimiter, AuctionMgr, CumulativeMerkleRewardsDistributor | `onlyAdmin` | `OPERATION_TIMELOCK_ROLE` |
-| LP, NFT, Liquifier, EFAdmin, EFOracle, EFRedemptionMgr, EFNodesMgr, EFRateLimiter, BucketRateLimiter, AuctionMgr, NodeOperatorMgr, MembershipNFT, StakingMgr, EFRewardsRouter, EFRestaker, CumulativeMerkleRewardsDistributor | `onlyOperations` | `OPERATION_MULTISIG_ROLE` |
-| LP, NFT, Liquifier, EFRedemptionMgr, EFNodesMgr, AuctionMgr, CumulativeMerkleRewardsDistributor | `onlyGuardian` | `GUARDIAN_ROLE` |
-| EETH, WeETH | `onlySuperGuardian` | `SUPER_GUARDIAN_ROLE` |
-| Liquifier (`updateWhitelistedToken`, `registerToken`) | `onlyUpgradeTimelock` | `UPGRADE_TIMELOCK_ROLE` |
-| EFNodesMgr (`onlyEigenlayerAdmin`, `Liquifier.queueWithdrawals`, `Liquifier.completeQueuedWithdrawals`, `NFT.handleRemainder`, `Restaker.queueWithdrawals/completeQueuedWithdrawals/stEthRequestWithdrawal`, `PriorityQueue.handleRemainder`) | direct `hasRole(HOUSEKEEPING_OPERATIONS_ROLE)` | `HOUSEKEEPING_OPERATIONS_ROLE` |
-| EFNodesMgr (`onlyConsolidationExecutor`), `StakingManager.invalidateValidatorTask`, `Restaker.completeQueuedWithdrawalsForEtherFiRedemptionManager`, `Restaker.completeQueuedWithdrawals_HOUSEKEEPING`, `CumulativeMerkleRewardsDistributor.startMerkleRoot/updateMerkleRoot`, `EtherFiAdmin.executeTasks` | direct `hasRole(EXECUTOR_OPERATIONS_ROLE)` | `EXECUTOR_OPERATIONS_ROLE` |
-| EFNodesMgr (`onlyPodProver`: `startCheckpoint`, `verifyCheckpointProofs`) | direct `hasRole(EIGENPOD_OPERATIONS_ROLE)` | `EIGENPOD_OPERATIONS_ROLE` |
-| StakingManager.batchDepositWithBidIds, LiquidityPool.requestValidator{Sign}, LiquidityPool.depositToRecipient | direct `hasRole(ORACLE_OPERATIONS_ROLE)` | `ORACLE_OPERATIONS_ROLE` |
-| MembershipManager.onlyOperations | direct `hasRole(MEMBERSHIP_MANAGER_OPERATIONS_ROLE)` | `MEMBERSHIP_MANAGER_OPERATIONS_ROLE` |
-| Blacklister.blacklistUser/unblacklistUser/setBlacklistUntil | `onlyOperations` → `OPERATION_MULTISIG_ROLE` |
-| Blacklister.blacklistUserUntil (1 day cap) | `onlyGuardian` → `GUARDIAN_ROLE` |
+| EtherFiNodesManager | `sweepFunds`, `setProofSubmitter`, `queueETHWithdrawal`, `completeQueuedETHWithdrawals`, `queueWithdrawals`, `completeQueuedWithdrawals` | `onlyEigenlayerAdmin` |
+| EtherFiRestaker | `stEthRequestWithdrawal` (both overloads), `depositIntoStrategy`, `queueWithdrawals` | inline `hasRole` |
+| Liquifier | `withdrawEther`, `sendToEtherFiRestaker` | inline `hasRole` |
+| WithdrawRequestNFT | `handleRemainder` | inline `hasRole` |
+| PriorityWithdrawalQueue | `handleRemainder` | inline `hasRole` |
+
+### `EXECUTOR_OPERATIONS_ROLE`
+
+| Contract | Function | Source |
+|---|---|---|
+| EtherFiNodesManager | `requestExecutionLayerTriggeredWithdrawal`, `requestConsolidation`, `linkLegacyValidatorIds` | `onlyConsolidationExecutor` |
+| EtherFiRestaker | `stEthClaimWithdrawals`, `completeQueuedWithdrawals` | inline `hasRole` |
+| StakingManager | `instantiateEtherFiNode` | inline `hasRole` |
+| CumulativeMerkleRewardsDistributor | `setPendingMerkleRoot`, `finalizeMerkleRoot` | inline `hasRole` |
+
+### `EIGENPOD_OPERATIONS_ROLE` (`onlyPodProver`)
+
+| Contract | Function |
+|---|---|
+| EtherFiNodesManager | `startCheckpoint`, `verifyCheckpointProofs`, `forwardExternalCall`, `forwardEigenPodCall` |
+
+### `ORACLE_OPERATIONS_ROLE`
+
+| Contract | Function | Source |
+|---|---|---|
+| EtherFiAdmin | `executeValidatorApprovalTask` | inline `hasRole` |
+| LiquidityPool | `batchCreateBeaconValidators`, `confirmAndFundBeaconValidators` | inline `hasRole` |
+| StakingManager | `invalidateRegisteredBeaconValidator` | inline `hasRole` |
+| PriorityWithdrawalQueue | `fulfillRequests`, `invalidateRequests` | `onlyRequestManager` |
+
+### Permissionless (no role required)
+
+These functions intentionally have **no** access control after PR #385.
+Listed here so the audit doesn't flag a missing role grant.
+
+| Contract | Function | Why |
+|---|---|---|
+| EtherFiAdmin | `executeTasks` | Validation is done by `_validateReport`; spec keeps it role-free so consensus drives execution. |
+| EtherFiAdmin | `finalizeWithdrawalsWhenStale` | Stale-oracle escape hatch (spec §5.5). Reverts unless `block.number ≥ lastHandledReportRefBlock + staleOracleReportBlockWindow`. |
+| EtherFiRewardsRouter | `withdrawToLiquidityPool` | Routes any held ETH to the LP. Anyone can trigger. |
+| StakingManager | `createBeaconValidators`, `registerBeaconValidators`, `confirmAndFundBeaconValidators` | Gated by `msg.sender == liquidityPool`, not by a RoleRegistry role. |
+
+### Out-of-band ACL (not RoleRegistry)
+
+| Contract | Function | Gate |
+|---|---|---|
+| EtherFiNode (per-validator) | various | `msg.sender == EtherFiNodesManager` |
+| StakingManager | `createBeaconValidators`, `registerBeaconValidators`, `confirmAndFundBeaconValidators` | `msg.sender == liquidityPool` |
+| AuctionManager | various bid hooks | `msg.sender == stakingManagerContractAddress` (`onlyStakingManagerContract`) |
+| LiquidityPool | various | `msg.sender == etherFiAdminContract` (`onlyEtherFiAdmin`) |
+| EETH | `mintShares`, `burnShares` | `msg.sender == liquidityPool` (`onlyPoolContract`) |
 
 ### Decoded role hashes (for `cast` queries)
 
@@ -45,7 +170,6 @@ address for that gated path to work after the upgrade.
 | `HOUSEKEEPING_OPERATIONS_ROLE` | `cast keccak HOUSEKEEPING_OPERATIONS_ROLE` |
 | `EXECUTOR_OPERATIONS_ROLE` | `cast keccak EXECUTOR_OPERATIONS_ROLE` |
 | `EIGENPOD_OPERATIONS_ROLE` | `cast keccak EIGENPOD_OPERATIONS_ROLE` |
-| `MEMBERSHIP_MANAGER_OPERATIONS_ROLE` | `cast keccak MEMBERSHIP_MANAGER_OPERATIONS_ROLE` |
 
 Read current holders before deciding any grant/revoke:
 ```bash
@@ -56,48 +180,41 @@ cast call $ROLE_REGISTRY "roleHolders(bytes32)(address[])" $(cast keccak GUARDIA
 
 ---
 
-## 2. Role rotation worksheet
+## 2. Role holder worksheet
 
-For each row: paste **current holders** from `roleHolders(...)`, decide the
-**target holders** after this PR, and fill the matching `GRANT_*` /
-`REVOKE_*` constants in `transactions.s.sol`. If a row needs no change, leave
-both columns empty and leave the constants at `address(0)`.
+Each of the 9 RolesLibrary roles gets exactly one grant in this script.
+3 are prefilled with the protocol-fixed addresses; **fill in the other 6**.
 
-> The script supports exactly **one grant + one revoke per role per batch**.
-> If you need more changes for a single role, run the script twice or extend
-> the array sizes in `transactions.s.sol`.
+The script does **not** revoke legacy holders. After running, audit
+`roleHolders(role)` on `RoleRegistry` and revoke any unwanted address with a
+separate ops transaction (Operating multisig or Upgrade timelock as
+appropriate to the role's admin).
 
-### 2.1 Tier roles (gated by `UPGRADE_TIMELOCK`)
+### 2.1 Tier roles (granted from Batch A, `UPGRADE_TIMELOCK`)
 
-These can only be edited from `UPGRADE_TIMELOCK`. They populate Batch A.
+| Role | Holder constant in script | Value | Source |
+|---|---|---|---|
+| `UPGRADE_TIMELOCK_ROLE` | `HOLDER_UPGRADE_TIMELOCK_ROLE` | `0x9f26d4C958fD811A1F59B01B86Be7dFFc9d20761` | `Deployed.UPGRADE_TIMELOCK` |
+| `OPERATION_TIMELOCK_ROLE` | `HOLDER_OPERATION_TIMELOCK_ROLE` | `0xcD425f44758a08BaAB3C4908f3e3dE5776e45d7a` | `Deployed.OPERATING_TIMELOCK` |
+| `OPERATION_MULTISIG_ROLE` | `HOLDER_OPERATION_MULTISIG_ROLE` | `0x2aCA71020De61bb532008049e1Bd41E451aE8AdC` | `Deployed.ETHERFI_OPERATING_ADMIN` |
 
-| Role | Current holder(s) — query first | Target after PR | `GRANT_*` | `REVOKE_*` | My suggestion |
-|---|---|---|---|---|---|
-| `UPGRADE_TIMELOCK_ROLE` | _fill in from cast_ | _fill in_ | `GRANT_UPGRADE_TIMELOCK_ROLE` | `REVOKE_UPGRADE_TIMELOCK_ROLE` | Probably **no change** — already on the 10d timelock. |
-| `OPERATION_TIMELOCK_ROLE` | _fill in_ | _fill in_ | `GRANT_OPERATION_TIMELOCK_ROLE` | `REVOKE_OPERATION_TIMELOCK_ROLE` | Should match `OPERATING_TIMELOCK` (`0xcD42…5d7a`). If it isn't already, grant to that and revoke any EOA. |
-| `OPERATION_MULTISIG_ROLE` | _fill in_ | _fill in_ | `GRANT_OPERATION_MULTISIG_ROLE` | `REVOKE_OPERATION_MULTISIG_ROLE` | Should match `ETHERFI_OPERATING_ADMIN` Safe (`0x2aCA…8AdC`). If it isn't already, grant to that and revoke any EOA. |
+No action needed on these three — verify the values still match `Deployed.s.sol`.
 
-### 2.2 Guardian tier (gated by `OPERATING_TIMELOCK`)
+### 2.2 Guardian tier (granted from Batch B, `OPERATING_TIMELOCK`)
 
-These populate Batch B.
+| Role | Holder constant in script | Value to set | Notes |
+|---|---|---|---|
+| `SUPER_GUARDIAN_ROLE` | `HOLDER_SUPER_GUARDIAN_ROLE` | _fill in_ | Can pause EETH/WeETH transfers (`pauseContractUntil` on EETH, WeETH). Spec recommends an internal 2-of-3 sub-safe. |
+| `GUARDIAN_ROLE` | `HOLDER_GUARDIAN_ROLE` | _fill in_ | Emergency pause across LP, NFT, Liquifier, EFNodesMgr, EFRedemptionMgr, AuctionMgr, PriorityWithdrawalQueue, CumulativeMerkleRewardsDistributor + Blacklister 1-day blacklist. Hypernative or guardian EOA. |
 
-| Role | Current holder(s) — query first | Target after PR | `GRANT_*` | `REVOKE_*` | My suggestion |
-|---|---|---|---|---|---|
-| `GUARDIAN_ROLE` (Hypernative) | _fill in_ | _fill in_ | `GRANT_GUARDIAN_ROLE_HYPERNATIVE` | — | Grant to the Hypernative responder address. |
-| `GUARDIAN_ROLE` (EOA) | _fill in_ | _fill in_ | `GRANT_GUARDIAN_ROLE_EOA` | `REVOKE_GUARDIAN_ROLE_LEGACY` | Grant to the new emergency EOA. Revoke the old `PAUSER_EOA` (`0x9AF1…` per spec §6.3.4) **only** if a replacement is already in place. |
-| `SUPER_GUARDIAN_ROLE` | _fill in_ | _fill in_ | `GRANT_SUPER_GUARDIAN_ROLE` | `REVOKE_SUPER_GUARDIAN_ROLE` | Grant to the entity authorised to pause EETH/WeETH transfers (per spec, an internal-only role, typically a 2-of-3 sub-safe). |
+### 2.3 Operations roles (granted from Batch B, `OPERATING_TIMELOCK`)
 
-### 2.3 Operations roles (gated by `OPERATING_TIMELOCK`)
-
-These populate Batch B.
-
-| Role | Current holder(s) — query first | Target after PR | `GRANT_*` | `REVOKE_*` | My suggestion |
-|---|---|---|---|---|---|
-| `ORACLE_OPERATIONS_ROLE` | _fill in_ | _fill in_ | `GRANT_ORACLE_OPERATIONS_ROLE` | `REVOKE_ORACLE_OPERATIONS_ROLE` | Should remain on `ADMIN_EOA` (`0x1258…1B0F`) for now — the spec keeps oracle execution where it is until the permissionless flow ships. Confirm with ops. |
-| `HOUSEKEEPING_OPERATIONS_ROLE` | _fill in_ | _fill in_ | `GRANT_HOUSEKEEPING_OPERATIONS_ROLE` | `REVOKE_HOUSEKEEPING_OPERATIONS_ROLE` | EigenLayer queue/complete, stETH withdrawal queue, Liquifier housekeeping — currently `ADMIN_EOA`. Spec §8.2 moves this behind `OPERATING_TIMELOCK`. Grant new, revoke `ADMIN_EOA`. |
-| `EXECUTOR_OPERATIONS_ROLE` | _fill in_ | _fill in_ | `GRANT_EXECUTOR_OPERATIONS_ROLE` | `REVOKE_EXECUTOR_OPERATIONS_ROLE` | `executeTasks`, EL consolidations, merkle root publishing. Spec keeps this on `ADMIN_EOA` until permissionless execution lands. Confirm. |
-| `EIGENPOD_OPERATIONS_ROLE` | _fill in_ | _fill in_ | `GRANT_EIGENPOD_OPERATIONS_ROLE` | `REVOKE_EIGENPOD_OPERATIONS_ROLE` | `startCheckpoint`, `verifyCheckpointProofs`. Currently a pod-prover EOA. Confirm holder vs. new prover. |
-| `MEMBERSHIP_MANAGER_OPERATIONS_ROLE` | _fill in_ | _fill in_ | `GRANT_MEMBERSHIP_MGR_OPERATIONS_ROLE` | `REVOKE_MEMBERSHIP_MGR_OPERATIONS_ROLE` | Membership-manager operator EOA. Confirm whether it changes. |
+| Role | Holder constant in script | Value to set | Functions it gates (verified in §1) |
+|---|---|---|---|
+| `ORACLE_OPERATIONS_ROLE` | `HOLDER_ORACLE_OPERATIONS_ROLE` | _fill in_ | `EtherFiAdmin.executeValidatorApprovalTask`, `LiquidityPool.batchCreateBeaconValidators / confirmAndFundBeaconValidators`, `StakingManager.invalidateRegisteredBeaconValidator`, `PriorityWithdrawalQueue.fulfillRequests / invalidateRequests` |
+| `HOUSEKEEPING_OPERATIONS_ROLE` | `HOLDER_HOUSEKEEPING_OPERATIONS_ROLE` | _fill in_ | `EtherFiNodesManager.sweepFunds / setProofSubmitter / queueETHWithdrawal / completeQueuedETHWithdrawals / queueWithdrawals / completeQueuedWithdrawals`; `EtherFiRestaker.stEthRequestWithdrawal / depositIntoStrategy / queueWithdrawals`; `Liquifier.withdrawEther / sendToEtherFiRestaker`; `WithdrawRequestNFT.handleRemainder`; `PriorityWithdrawalQueue.handleRemainder` |
+| `EXECUTOR_OPERATIONS_ROLE` | `HOLDER_EXECUTOR_OPERATIONS_ROLE` | _fill in_ | `EtherFiNodesManager.requestExecutionLayerTriggeredWithdrawal / requestConsolidation / linkLegacyValidatorIds`; `EtherFiRestaker.stEthClaimWithdrawals / completeQueuedWithdrawals`; `StakingManager.instantiateEtherFiNode`; `CumulativeMerkleRewardsDistributor.setPendingMerkleRoot / finalizeMerkleRoot` |
+| `EIGENPOD_OPERATIONS_ROLE` | `HOLDER_EIGENPOD_OPERATIONS_ROLE` | _fill in_ | `EtherFiNodesManager.startCheckpoint / verifyCheckpointProofs / forwardExternalCall / forwardEigenPodCall` |
 
 ---
 
@@ -156,8 +273,7 @@ Seconds: `7 days = 604800`. `30 days = 2_592_000` (absolute max).
    for r in UPGRADE_TIMELOCK_ROLE OPERATION_TIMELOCK_ROLE OPERATION_MULTISIG_ROLE \
             SUPER_GUARDIAN_ROLE GUARDIAN_ROLE \
             ORACLE_OPERATIONS_ROLE HOUSEKEEPING_OPERATIONS_ROLE \
-            EXECUTOR_OPERATIONS_ROLE EIGENPOD_OPERATIONS_ROLE \
-            MEMBERSHIP_MANAGER_OPERATIONS_ROLE; do
+            EXECUTOR_OPERATIONS_ROLE EIGENPOD_OPERATIONS_ROLE; do
      echo "$r:"
      cast call $RR "roleHolders(bytes32)(address[])" "$(cast keccak $r)" --rpc-url $MAINNET_RPC_URL
    done
@@ -180,15 +296,24 @@ Seconds: `7 days = 604800`. `30 days = 2_592_000` (absolute max).
 
 ## 5. Notes & caveats
 
-- **Spec §8.2 (ADMIN_EOA deprecation)** is staged: this PR keeps oracle execution
-  (`ORACLE_OPERATIONS_ROLE`, `EXECUTOR_OPERATIONS_ROLE`) on `ADMIN_EOA` because
-  the permissionless `executeTasks` flow (Tier 1 #8) is not implemented yet.
-  Don't preemptively revoke those without a replacement caller.
-- **Tier-role grants in Batch A** require `UPGRADE_TIMELOCK` to itself hold the
-  RoleRegistry role-admin position. It does. Don't change that.
-- **Blacklister itself is a *contract*, not a role.** The grants/revokes for
-  Guardian/Operations are what determine who can call `blacklistUserUntil` and
-  `blacklistUser/unblacklistUser`.
-- The script supports a single grant + a single revoke **per role per batch**.
-  Multiple grants for the same role (e.g. two new guardians) need two passes,
-  or extend the `GRANT_*` constants and `_maybeRoleGrant` call sites.
+- **The script only grants, it does not revoke.** After running it, query
+  `roleHolders(role)` on `RoleRegistry` for each of the 9 roles and revoke any
+  legacy holder via a separate Safe transaction. The admin that signs the
+  revoke depends on the role:
+  - Tier roles (`UPGRADE_TIMELOCK_ROLE`, `OPERATION_TIMELOCK_ROLE`,
+    `OPERATION_MULTISIG_ROLE`) → revoke via `UPGRADE_TIMELOCK`.
+  - All other roles → revoke via `OPERATING_TIMELOCK` (which holds
+    `RoleRegistry.OPERATION_TIMELOCK_ROLE`).
+- **Spec §8.2 (ADMIN_EOA deprecation)** is staged: this PR keeps oracle
+  execution paths (`ORACLE_OPERATIONS_ROLE`, `EXECUTOR_OPERATIONS_ROLE`) on
+  `ADMIN_EOA` because the permissionless `executeTasks` flow already shipped
+  but the EOA still calls the validator-approval / merkle / consolidation
+  paths. Don't preemptively revoke `ADMIN_EOA` without a replacement caller.
+- **Blacklister is a *contract*, not a role.** Who can call
+  `blacklistUserUntil` (`GUARDIAN_ROLE`) and `blacklistUser`/`unblacklistUser`
+  (`OPERATION_MULTISIG_ROLE`) is determined entirely by the addresses you
+  grant the Guardian / Operating-multisig roles to.
+- **Multiple holders for one role?** If you need more than one address to
+  hold a single role (e.g. two guardians), grant the second one in a
+  follow-up Safe transaction via `OPERATING_TIMELOCK` after this script
+  runs. The script intentionally manages exactly one holder per role.
