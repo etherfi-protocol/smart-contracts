@@ -5,6 +5,7 @@ import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/draft-IERC20PermitUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/ILiquifier.sol";
@@ -16,6 +17,7 @@ import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
 
 contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
+    using SafeERC20 for IERC20;
 
     ILiquidityPool public immutable liquidityPool;
     ILiquifier public immutable liquifier;
@@ -79,7 +81,7 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
         if (wETH.allowance(msg.sender, address(this)) < _amount) revert AllowanceExceeded();
         if (wETH.balanceOf(msg.sender) < _amount) revert InsufficientBalance();
         
-        wETH.transferFrom(msg.sender, address(this), _amount);
+        IERC20(address(wETH)).safeTransferFrom(msg.sender, address(this), _amount);
         wETH.withdraw(_amount);
 
         uint256 eETHShares = liquidityPool.deposit{value: _amount}(_referral);
@@ -102,10 +104,10 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
 
         // Accounting for the 1-2 wei corner case
         uint256 initialBalance = stETH.balanceOf(address(this));
-        stETH.transferFrom(msg.sender, address(this), _amount);
+        IERC20(address(stETH)).safeTransferFrom(msg.sender, address(this), _amount);
         uint256 actualTransferredAmount = stETH.balanceOf(address(this)) - initialBalance;
 
-        stETH.approve(address(liquifier), actualTransferredAmount);
+        IERC20(address(stETH)).safeIncreaseAllowance(address(liquifier), actualTransferredAmount);
         uint256 eETHShares = liquifier.depositWithERC20(address(stETH), actualTransferredAmount, _referral);
         
         emit AdapterDeposit(msg.sender, actualTransferredAmount, SourceOfFunds.STETH, _referral);
@@ -124,14 +126,14 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
             if (_permit.deadline < block.timestamp) revert PermitExpired();
         }
 
-        wstETH.transferFrom(msg.sender, address(this), _amount);
+        IERC20(address(wstETH)).safeTransferFrom(msg.sender, address(this), _amount);
 
         // Accounting for the 1-2 wei corner case
         uint256 initialBalance = stETH.balanceOf(address(this));
         uint256 stETHAmount = wstETH.unwrap(_amount);
         uint256 actualTransferredAmount = stETH.balanceOf(address(this)) - initialBalance;
 
-        stETH.approve(address(liquifier), actualTransferredAmount);
+        IERC20(address(stETH)).safeIncreaseAllowance(address(liquifier), actualTransferredAmount);
         uint256 eETHShares = liquifier.depositWithERC20(address(stETH), actualTransferredAmount, _referral);
         
         emit AdapterDeposit(msg.sender, actualTransferredAmount, SourceOfFunds.WSTETH, _referral);
@@ -144,9 +146,9 @@ contract DepositAdapter is UUPSUpgradeable, OwnableUpgradeable {
 
     function _wrapAndReturn(uint256 _eEthShares) internal returns (uint256) {
         uint256 eEthAmount = liquidityPool.amountForShare(_eEthShares);
-        eETH.approve(address(weETH), eEthAmount);
+        IERC20(address(eETH)).safeIncreaseAllowance(address(weETH), eEthAmount);
         uint256 weEthAmount = weETH.wrap(eEthAmount);
-        weETH.transfer(msg.sender, weEthAmount);
+        IERC20(address(weETH)).safeTransfer(msg.sender, weEthAmount);
 
         return weEthAmount;
     }

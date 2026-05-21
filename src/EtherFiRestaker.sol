@@ -166,7 +166,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
             reqAmounts[numReqs - 1] = minAmount;
         }
 
-        lido.approve(address(lidoWithdrawalQueue), _amount);
+        IERC20(lido).safeIncreaseAllowance(address(lidoWithdrawalQueue), _amount);
         uint256[] memory reqIds = lidoWithdrawalQueue.requestWithdrawals(reqAmounts, address(this));
 
         emit QueuedStEthWithdrawals(reqIds);

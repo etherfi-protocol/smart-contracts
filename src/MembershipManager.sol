@@ -4,6 +4,8 @@ pragma solidity ^0.8.13;
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/IeETH.sol";
 import "./interfaces/IMembershipManager.sol";
@@ -18,6 +20,7 @@ import "./libraries/GlobalIndexLibrary.sol";
 import "forge-std/console.sol";
 
 contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgradeable, UUPSUpgradeable, IMembershipManager {
+    using SafeERC20 for IERC20;
 
     //--------------------------------------------------------------------------------------
     //---------------------------------  STATE-VARIABLES  ----------------------------------
@@ -172,7 +175,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         (uint256 totalBalance, uint256 feeAmount) = _withdrawAndBurn(_tokenId);
 
         // transfer 'eEthShares' of eETH to the owner
-        eETH.transfer(msg.sender, totalBalance - feeAmount);
+        IERC20(address(eETH)).safeTransfer(msg.sender, totalBalance - feeAmount);
 
         if (feeAmount > 0) {
             liquidityPool.withdraw(address(this), feeAmount);
@@ -225,7 +228,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
         _applyUnwrapPenalty(_tokenId, prevAmount, _amount);
 
         // send EETH to recipient before requesting withdraw?
-        eETH.approve(address(liquidityPool), _amount);
+        IERC20(address(eETH)).safeIncreaseAllowance(address(liquidityPool), _amount);
         uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(address(msg.sender), _amount, uint64(0));
 
         _emitNftUpdateEvent(_tokenId);
@@ -245,7 +248,7 @@ contract MembershipManager is Initializable, OwnableUpgradeable, PausableUpgrade
 
         (uint256 totalBalance, uint256 feeAmount) = _withdrawAndBurn(_tokenId);
 
-        eETH.approve(address(liquidityPool), totalBalance);
+        IERC20(address(eETH)).safeIncreaseAllowance(address(liquidityPool), totalBalance);
         uint256 withdrawTokenId = liquidityPool.requestMembershipNFTWithdraw(msg.sender, totalBalance, feeAmount);
         
         return withdrawTokenId;
