@@ -235,7 +235,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         rateLimiter.consume(DEPOSIT_INTO_STRATEGY_LIMIT_ID, _amountToGwei(amount));
 
-        IERC20(token).safeApprove(address(eigenLayerStrategyManager), amount);
+        IERC20(token).safeIncreaseAllowance(address(eigenLayerStrategyManager), amount);
 
         IStrategy strategy = tokenInfos[token].elStrategy;
         uint256 shares = eigenLayerStrategyManager.depositIntoStrategy(strategy, IERC20(token), amount);
