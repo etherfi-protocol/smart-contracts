@@ -63,7 +63,6 @@ contract EETH is IERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     error TransferAmountExceedsBalance();
     error ContractPaused();
 
-    // TODO: Figure our what `name` and `version` are for
     constructor(address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter) {
         bytes32 hashedName = keccak256("EETH");
         bytes32 hashedVersion = keccak256("1");
