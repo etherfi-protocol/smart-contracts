@@ -1530,25 +1530,6 @@ contract EtherFiOracleTest is TestSetup {
         assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), lockedBefore + 6 ether);
     }
 
-    // The flip side of the balance-based check: if the LP's actual ETH falls
-    // below what totalValueInLp would suggest, the check reverts even though
-    // the accounting says the withdrawal fits.
-    function test_executeTasks_revertsWhenFinalizedWithdrawalExceedsLpBalance() public {
-        vm.deal(alice, 10 ether);
-        vm.prank(alice);
-        liquidityPoolInstance.deposit{value: 10 ether}();
-
-        // Knock the LP's ETH balance below its accounting so the two diverge.
-        vm.deal(address(liquidityPoolInstance), 4 ether);
-        assertGt(liquidityPoolInstance.totalValueInLp(), address(liquidityPoolInstance).balance);
-
-        IEtherFiOracle.OracleReport memory report = _emptyOracleReport();
-        report.finalizedWithdrawalAmount = 5 ether; // <= totalValueInLp (10), > balance (4)
-
-        _moveClock(1 days / 12);
-        _executeAdminTasks(report, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
-    }
-
     // =====================================================================
     // canExecuteTasks unit tests
     //
@@ -2227,10 +2208,10 @@ contract EtherFiOracleTest is TestSetup {
         _seedLp(10 ether);
         _makeWithdrawRequest(5 ether);
 
-        // Drain the LP balance below the request amount; the staleness function
-        // reads `address(liquidityPool).balance` directly, so this is the only
-        // knob that matters for the liquidity check.
-        vm.deal(address(liquidityPoolInstance), 1 ether);
+        // Drain totalValueInLp below the request amount; the staleness function
+        // reads `liquidityPool.totalValueInLp()`, so we have to drop both
+        // accounting and balance to make the liquidity check fail.
+        _forceLpBalanceAndTVIL(1 ether);
 
         _advanceToStaleBoundary();
 
@@ -2368,8 +2349,8 @@ contract EtherFiOracleTest is TestSetup {
         _makeWithdrawRequest(5 ether);
 
         _invalidateRequest(r1);
-        // LP balance below the next (valid) request's amount.
-        vm.deal(address(liquidityPoolInstance), 1 ether);
+        // totalValueInLp below the next (valid) request's amount.
+        _forceLpBalanceAndTVIL(1 ether);
 
         _advanceToStaleBoundary();
 

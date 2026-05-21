@@ -29,6 +29,9 @@ contract StakingManager is
 
     address public immutable liquidityPool;
     uint256 public constant initialDepositAmount = 1 ether;
+    uint256 public constant MIN_VALIDATOR_SIZE_WEI = 32 ether;
+    uint256 public constant MAX_VALIDATOR_SIZE_WEI = 2048 ether;
+    uint256 public constant VALIDATOR_PUBKEY_LENGTH = 48;
     IEtherFiNodesManager public immutable etherFiNodesManager;
     IDepositContract public immutable depositContractEth2;
     IAuctionManager public immutable auctionManager;
@@ -155,7 +158,7 @@ contract StakingManager is
     ///   The caller can use generateDepositDataRoot() to generate a valid root.
     function confirmAndFundBeaconValidators(DepositData[] calldata depositData, uint256 validatorSizeWei) external payable {
         if (msg.sender != liquidityPool) revert InvalidCaller();
-        if (validatorSizeWei < 32 ether || validatorSizeWei > 2048 ether) revert InvalidValidatorSize();
+        if (validatorSizeWei < MIN_VALIDATOR_SIZE_WEI || validatorSizeWei > MAX_VALIDATOR_SIZE_WEI) revert InvalidValidatorSize();
 
         // we already deposited the initial amount to create the validators in createBeaconValidators()
         uint256 remainingDeposit = validatorSizeWei - initialDepositAmount;
@@ -182,7 +185,7 @@ contract StakingManager is
 
     /// @notice Calculates the pubkey hash of a validator's pubkey as per SSZ spec
     function calculateValidatorPubkeyHash(bytes memory pubkey) public pure returns (bytes32) {
-        if (pubkey.length != 48) revert InvalidPubKeyLength();
+        if (pubkey.length != VALIDATOR_PUBKEY_LENGTH) revert InvalidPubKeyLength();
         return sha256(abi.encodePacked(pubkey, bytes16(0)));
     }
 

@@ -50,7 +50,7 @@ using SafeERC20 for IERC20;
         __Ownable_init();
         __UUPSUpgradeable_init();
         paused = false;
-        claimDelay = 172800; // 48 hours
+        claimDelay = 2 days; // 48 hours
     }
 
     function setClaimDelay(uint256 _claimDelay) external onlyOperations {

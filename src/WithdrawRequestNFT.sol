@@ -108,12 +108,10 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     error AlreadyPaused();
     error NotPaused();
     error EETHAmountCannotBeZero();
-    error NotAllPrevRequestsHaveBeenScanned();
     error NotEnoughEEthRemainder();
     error FeeReturnFailed();
     error InvalidRequest();
     error ContractPaused();
-    error ScanCompleted();
     error RequestValid();
     error RequestNotValid();
     error RequestNotFound();

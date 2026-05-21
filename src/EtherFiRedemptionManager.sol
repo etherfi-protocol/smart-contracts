@@ -72,7 +72,6 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
 
     error InvalidAmount();
     error InvalidOutputToken();
-    error BlacklistedUser();
     error InvalidBps();
     error ExceedsMaxExitFee();
     error ExceedsMaxLowWatermark();

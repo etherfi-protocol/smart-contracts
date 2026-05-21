@@ -74,11 +74,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     error IncorrectRole();
     error NotEnoughBalance();
     error IncorrectAmount();
-    error StrategyShareNotEnough();
     error EthTransferFailed();
-    error AlreadyRegistered();
-    error NotRegistered();
-    error WrongOutput();
     error IncorrectCaller();
     error InsufficientBalance();
     error NotTheOwner();
@@ -101,7 +97,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         liquifier = ILiquifier(payable(_liquifier));
         lido = liquifier.lido();
         lidoWithdrawalQueue = liquifier.lidoWithdrawalQueue();
-        eigenLayerStrategyManager = IStrategyManager(_eigenLayerStrategyManager); 
+        eigenLayerStrategyManager = IStrategyManager(_eigenLayerStrategyManager);
         eigenLayerDelegationManager = IDelegationManager(_eigenLayerDelegationManager);
         rewardsCoordinator = IRewardsCoordinator(_rewardsCoordinator);
         etherFiRedemptionManager = _etherFiRedemptionManager;

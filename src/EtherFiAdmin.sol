@@ -61,6 +61,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // Protocol fees must not exceed 1/MAX_PROTOCOL_FEE_INV_RATIO of total rewards (currently 20%).
     uint256 public constant MAX_PROTOCOL_FEE_INV_RATIO = 5;
     uint256 public constant STALE_REPORT_FINALIZATION_COOLDOWN = 1 days;
+    uint256 public constant BASIS_POINTS_DENOMINATOR = 10_000;
 
     IEtherFiOracle public immutable etherFiOracle;
     IStakingManager public immutable stakingManager;
@@ -99,7 +100,6 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event ValidatorApprovalTaskInvalidated(bytes32 indexed _taskHash, bytes32 indexed _reportHash, uint256[] _validators);
 
     error IncorrectRole();
-    error InvalidPriorityWithdrawalQueue();
     error InvalidMaxAcceptableFinalizedWithdrawalAmount();
     error InvalidMaxNumberOfRequestsToFinalizePerDay();
     error InvalidMaxFinalizedWithdrawalAmountPerDay();
@@ -127,7 +127,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 _maxAcceptableNumValidatorsToApprovePerDay,
         uint256 _maxNumberOfRequestsToFinalizePerDay
     ) {
-        if (_maxAcceptableRebaseAprInBps <= 0 || _maxAcceptableRebaseAprInBps > 10_000) revert InvalidMaxAcceptableRebaseApr();
+        if (_maxAcceptableRebaseAprInBps <= 0 || _maxAcceptableRebaseAprInBps > int256(BASIS_POINTS_DENOMINATOR)) revert InvalidMaxAcceptableRebaseApr();
         if (_maxValidatorTaskBatchSize == 0) revert InvalidValidatorTaskBatchSize();
         if (_staleOracleReportBlockWindow == 0) revert InvalidStaleOracleReportBlockWindow();
         if (_maxAcceptableFinalizedWithdrawalAmountPerDay == 0) revert InvalidMaxAcceptableFinalizedWithdrawalAmount();
@@ -352,7 +352,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // - 10% APR = 0.0274% per day
         int256 apr;
         if (currentTVL > 0) {
-            apr = 10000 * (_report.accruedRewards * 365 days) / (currentTVL * int256(elapsedTime));
+            apr = int256(BASIS_POINTS_DENOMINATOR) * (_report.accruedRewards * 365 days) / (currentTVL * int256(elapsedTime));
         }
         int256 absApr = (apr > 0) ? apr : - apr;
         if (absApr > acceptableRebaseAprInBps) return (false, "EtherFiAdmin: TVL changed too much");

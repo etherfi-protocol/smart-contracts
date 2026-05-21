@@ -110,7 +110,6 @@ contract PriorityWithdrawalQueue is
     error AddressZero();
     error BadInput();
     error IncorrectCaller();
-    error InvalidBurnedSharesAmount();
     error InvalidEEthSharesAfterRemainderHandling();
     error InvalidOutputAmount();
     error InsufficientLiquidity();
@@ -191,7 +190,7 @@ contract PriorityWithdrawalQueue is
         __ReentrancyGuard_init();
 
         nonce = 1;
-        shareRemainderSplitToTreasuryInBps = 10000; // 100%
+        shareRemainderSplitToTreasuryInBps = uint16(_BASIS_POINT_SCALE); // 100%
     }
 
     //--------------------------------------------------------------------------------------

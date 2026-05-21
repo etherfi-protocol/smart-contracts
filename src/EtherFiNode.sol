@@ -92,7 +92,7 @@ contract EtherFiNode is IEtherFiNode {
         uint256[] memory depositShares = new uint256[](1);
         depositShares[0] = amount;
         IStrategy[] memory strategies = new IStrategy[](1);
-        strategies[0] = IStrategy(address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0));
+        strategies[0] = IStrategy(BEACON_ETH_STRATEGY_ADDRESS);
 
         IDelegationManagerTypes.QueuedWithdrawalParams[] memory paramsArray = new IDelegationManagerTypes.QueuedWithdrawalParams[](1);
         paramsArray[0] = IDelegationManagerTypes.QueuedWithdrawalParams({

@@ -91,6 +91,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     address private DEPRECATED_etherfiRestaker;
 
     uint256 public constant BASIS_POINT_SCALE = 10_000;
+    uint256 public constant SHARE_UNIT = 1e18;
     uint32 public constant MAX_TIME_BOUND_CAP_IN_ETHER = 500_000_000;
     uint32 public constant MAX_TOTAL_CAP_IN_ETHER = 2_000_000_000;
 
@@ -123,12 +124,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     error NotSupportedToken();
     error EthTransferFailed();
-    error NotEnoughBalance();
     error AlreadyRegistered();
-    error NotRegistered();
-    error WrongOutput();
     error IncorrectCaller();
-    error IncorrectAmount();
     error IncorrectRole();
     error InvalidDiscountRate();
     error InvalidDepositCap();
@@ -361,7 +358,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
                 (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
                 if (answer <= 0) revert InvalidPriceFeed();
                 if (updatedAt + stalePriceWindow < block.timestamp) revert StalePriceFeed();
-                uint256 pricefeedValue = (uint256(answer) * _amount) / 1e18;
+                uint256 pricefeedValue = (uint256(answer) * _amount) / SHARE_UNIT;
                 uint256 deviation = pricefeedValue > _marketValue ? pricefeedValue - _marketValue : _marketValue - pricefeedValue;
                 if (deviation * BASIS_POINT_SCALE / _marketValue > maxPriceDeviationInBps) revert InvalidStEthPrice();
             } else {

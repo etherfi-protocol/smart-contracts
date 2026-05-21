@@ -30,6 +30,29 @@ contract WithdrawRequestNFTTest is TestSetup {
         setUpTests();
         vm.prank(admin);
         withdrawRequestNFTInstance.unPauseContract();
+
+        // seizeInvalidRequest is now gated by onlyUpgradeTimelock (audit L-02).
+        // Grant the role to the NFT contract's owner so tests calling
+        // `vm.prank(withdrawRequestNFTInstance.owner())` can still invoke it.
+        // Cache view-call results before the prank — each external call (even view)
+        // consumes a single `vm.prank`.
+        address roleOwner = roleRegistryInstance.owner();
+        address nftOwner = withdrawRequestNFTInstance.owner();
+        bytes32 upgradeRole = roleRegistryInstance.UPGRADE_TIMELOCK_ROLE();
+        vm.prank(roleOwner);
+        roleRegistryInstance.grantRole(upgradeRole, nftOwner);
+    }
+
+    // Drops totalValueInLp (and balance, to preserve the LP invariant) to `target`.
+    // LiquidityPool storage layout: slot 207 packs totalValueOutOfLp (low 128)
+    // and totalValueInLp (high 128). vm.deal alone would skew accounting.
+    function _forceLpBalanceAndTVIL(uint128 target) internal {
+        bytes32 slot = bytes32(uint256(207));
+        bytes32 raw = vm.load(address(liquidityPoolInstance), slot);
+        uint128 outOf = uint128(uint256(raw));
+        bytes32 packed = bytes32((uint256(target) << 128) | uint256(outOf));
+        vm.store(address(liquidityPoolInstance), slot, packed);
+        vm.deal(address(liquidityPoolInstance), uint256(target));
     }
 
     function test_finalizeRequests() public {
@@ -727,7 +750,7 @@ contract WithdrawRequestNFTTest is TestSetup {
     /// @dev When the LP can no longer cover the request amount (drained between
     ///      invalidate and re-validate), `validateRequest` must revert before
     ///      touching state. We stage the same finalized-but-invalid setup and
-    ///      then `vm.deal(LP, 0)` to force the precondition to fail.
+    ///      then drop totalValueInLp to 0 (the check now reads tVIL, not balance).
     function test_validateRequest_finalized_revertsOnInsufficientLpBalance() public {
         startHoax(bob);
         liquidityPoolInstance.deposit{value: 10 ether}();
@@ -740,8 +763,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         withdrawRequestNFTInstance.invalidateRequest(reqA);
         _finalizeWithdrawalRequest(reqB);
 
-        // Drain LP so it can't cover the 1 ETH request.
-        vm.deal(address(liquidityPoolInstance), 0);
+        // Drop LP accounting (and balance) so it can't cover the 1 ETH request.
+        _forceLpBalanceAndTVIL(0);
 
         vm.prank(admin);
         vm.expectRevert(WithdrawRequestNFT.RequestAmountGreaterThanAvailableLiquidity.selector);
