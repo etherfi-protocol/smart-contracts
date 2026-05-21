@@ -229,7 +229,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (block.number < etherFiOracle.lastPublishedReportRefBlock() + staleOracleReportBlockWindow) revert OracleReportNotStale();
         if (block.timestamp < lastStaleReportFinalizationTimestamp + STALE_REPORT_FINALIZATION_COOLDOWN) revert StaleReportFinalizationCooldown();
 
-        uint256 liquidity = address(liquidityPool).balance;
+        uint256 liquidity = liquidityPool.totalValueInLp();
         uint32 currentRequestId = withdrawRequestNft.nextRequestId() - 1;
         uint32 lastFinalizedRequestId = withdrawRequestNft.lastFinalizedRequestId();
         uint32 requestId = lastFinalizedRequestId;
@@ -376,7 +376,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function _validateWithdrawals(IEtherFiOracle.OracleReport calldata _report, uint256 elapsedTime) internal view returns (bool, string memory) {
         uint256 finalizedWithdrawalAmountPerDay = (_report.finalizedWithdrawalAmount * 1 days) / elapsedTime;
         if (finalizedWithdrawalAmountPerDay > maxFinalizedWithdrawalAmountPerDay) return (false, "EtherFiAdmin: finalized withdrawal amount exceeds max");
-        if (_report.finalizedWithdrawalAmount > address(liquidityPool).balance) return (false, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
+        if (_report.finalizedWithdrawalAmount > liquidityPool.totalValueInLp()) return (false, "EtherFiAdmin: finalized withdrawal exceeds LP liquidity");
 
         // valdate finalized request id
         uint32 lastFinalizedRequestId = withdrawRequestNft.lastFinalizedRequestId();

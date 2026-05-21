@@ -344,7 +344,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
         if (_requests[requestId].isValid) revert RequestValid();
         if (requestId <= lastFinalizedRequestId) {
             uint256 amount = _requests[requestId].amountOfEEth;
-            if (amount > address(liquidityPool).balance) revert RequestAmountGreaterThanAvailableLiquidity();
+            if (amount > liquidityPool.totalValueInLp()) revert RequestAmountGreaterThanAvailableLiquidity();
             liquidityPool.addEthAmountLockedForWithdrawal(uint128(amount));
         }
         _requests[requestId].isValid = true;

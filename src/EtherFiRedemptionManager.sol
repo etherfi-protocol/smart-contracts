@@ -189,7 +189,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         uint256 feeShareToStakers
     ) internal {
         uint256 prevBalance = address(this).balance;
-        uint256 prevLpBalance = address(liquidityPool).balance;
+        uint256 prevLpBalance = liquidityPool.totalValueInLp();
         uint256 totalEEthShare = eEth.totalShares();
 
         // Withdraw ETH from the liquidity pool
@@ -205,7 +205,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         if (!success) revert TransferFailed();
 
         // Make sure the liquidity pool balance is correct && total shares are correct
-        if (address(liquidityPool).balance != prevLpBalance - ethReceived) revert InvalidLpBalance();
+        if (liquidityPool.totalValueInLp() != prevLpBalance - ethReceived) revert InvalidLpBalance();
     }
 
     /**
@@ -280,7 +280,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         if(token == ETH_ADDRESS) {
             // Post-escrow-migration, locked ETH has physically left LP into the holder
             // contracts, so LP.balance already excludes it. No further subtraction needed.
-            return address(liquidityPool).balance;
+            return liquidityPool.totalValueInLp();
         } else if (token == address(lido)) {
             return lido.balanceOf(address(etherFiRestaker));
         }
