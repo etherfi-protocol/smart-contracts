@@ -847,7 +847,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         TNFTInstance.initializeOnUpgrade(address(managerInstance));
 
         // BNFT — fresh proxy; constructor immutables wired to predeployed proxies
-        BNFTImplementation = new BNFT(address(stakingManagerProxy), address(etherFiNodeManagerProxy));
+        BNFTImplementation = new BNFT();
         BNFTProxy = new UUPSProxy(address(BNFTImplementation), "");
         BNFTInstance = BNFT(address(BNFTProxy));
         BNFTInstance.initialize(address(stakingManagerInstance));
