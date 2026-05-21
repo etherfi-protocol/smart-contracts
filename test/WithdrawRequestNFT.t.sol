@@ -242,10 +242,9 @@ contract WithdrawRequestNFTTest is TestSetup {
 
     // Sub-wei rounding scenario from the original SD-6 report. The MIN_WITHDRAW_AMOUNT
     // gate on the LiquidityPool rewrites any below-MIN request if amount is equal to the 
-    // caller's full eETH balance instead of reverting. Pin the new behavior: a legacy 9-wei
-    // request mints a single request for bob's full eETH balance, leaving no dust behind to
-    // round around.
-    function test_SD_6_requestBelowMin_withdrawsFullBalance() public {
+    // caller's full eETH balance instead of reverting. Pin the new behavior: a below-MIN
+    // request reverts with InvalidWithdrawalAmount.
+    function test_SD_6_requestBelowMin_revertsWithInvalidWithdrawalAmount() public {
         vm.deal(bob, 9);
 
         vm.startPrank(bob);
@@ -258,12 +257,8 @@ contract WithdrawRequestNFTTest is TestSetup {
         vm.startPrank(bob);
         uint256 balance = eETHInstance.balanceOf(bob);
         eETHInstance.approve(address(liquidityPoolInstance), balance);
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, balance);
-        vm.stopPrank();
-
-        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
-        assertEq(request.amountOfEEth, balance, "below-MIN request should withdraw bob's full balance");
-        assertEq(eETHInstance.balanceOf(bob), 0, "bob should have no eETH dust left");
+        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
+        liquidityPoolInstance.requestWithdraw(bob, balance);
     }
 
 

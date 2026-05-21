@@ -94,7 +94,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     //--------------------------------------------------------------------------------------
     //---------------------------------  CONSTANTS  ---------------------------------------
     //--------------------------------------------------------------------------------------
-    uint256 public constant MIN_WITHDRAW_AMOUNT = 0.01 ether;
+    uint256 public constant MIN_WITHDRAW_AMOUNT = 0.001 ether;
     uint256 public constant MAX_WITHDRAW_AMOUNT = 1000 ether;
     uint256 public constant SHARE_UNIT = 1e18;
 
@@ -312,8 +312,7 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
     function requestWithdraw(address recipient, uint256 amount) public whenNotPaused nonReentrant nonBlacklisted returns (uint256) {
         blacklister.nonBlacklisted(recipient);
         if (amount == 0) revert InvalidWithdrawalAmount();
-        if (amount < MIN_WITHDRAW_AMOUNT && amount != IERC20(address(eETH)).balanceOf(msg.sender)) revert InvalidWithdrawalAmount();
-        if (amount > MAX_WITHDRAW_AMOUNT) revert InvalidWithdrawalAmount();
+        if (amount < MIN_WITHDRAW_AMOUNT || amount > MAX_WITHDRAW_AMOUNT) revert InvalidWithdrawalAmount();
         uint256 share = sharesForAmount(amount);
         if (share == 0) revert InvalidShareAmount();
 

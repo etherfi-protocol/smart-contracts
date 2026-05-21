@@ -2316,7 +2316,7 @@ contract LiquidityPoolTest is TestSetup {
     //--------------------------------------------------------------------------------------
 
     function test_constants_minMaxWithdrawAmount() public view {
-        assertEq(liquidityPoolInstance.MIN_WITHDRAW_AMOUNT(), 0.01 ether, "MIN_WITHDRAW_AMOUNT mismatch");
+        assertEq(liquidityPoolInstance.MIN_WITHDRAW_AMOUNT(), 0.001 ether, "MIN_WITHDRAW_AMOUNT mismatch");
         assertEq(liquidityPoolInstance.MAX_WITHDRAW_AMOUNT(), 1000 ether, "MAX_WITHDRAW_AMOUNT mismatch");
     }
 
@@ -2408,9 +2408,9 @@ contract LiquidityPoolTest is TestSetup {
 
     /// @dev Contrast with `requestMembershipNFTWithdraw`, which accepts both dust
     ///      and whale amounts unchanged. Via the user-facing `requestWithdraw`:
-    ///        - dust (< MIN) is rewritten to the caller's full eETH balance
+    ///        - dust (< MIN) reverts with InvalidWithdrawalAmount
     ///        - large (> MAX) still reverts with InvalidWithdrawalAmount
-    function test_requestWithdraw_userFlow_dustWithdrawsFullBalance_largeReverts() public {
+    function test_requestWithdraw_userFlow_dustRevertsWithInvalidWithdrawalAmount_largeRevertsWithInvalidWithdrawalAmount() public {
         uint256 dust = liquidityPoolInstance.MIN_WITHDRAW_AMOUNT() - 1;
         uint256 large = liquidityPoolInstance.MAX_WITHDRAW_AMOUNT() + 1 ether;
 
@@ -2420,9 +2420,8 @@ contract LiquidityPoolTest is TestSetup {
         uint256 balance = eETHInstance.balanceOf(bob);
         eETHInstance.approve(address(liquidityPoolInstance), balance);
 
-        uint256 requestId = liquidityPoolInstance.requestWithdraw(bob, dust);
-        WithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNFTInstance.getRequest(requestId);
-        assertEq(request.amountOfEEth, balance, "dust request should withdraw bob's full balance");
+        vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
+        liquidityPoolInstance.requestWithdraw(bob, dust);
 
         vm.expectRevert(LiquidityPool.InvalidWithdrawalAmount.selector);
         liquidityPoolInstance.requestWithdraw(bob, large);

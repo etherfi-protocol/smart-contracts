@@ -1017,7 +1017,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 roleRegistry: address(roleRegistryInstance),
                 priorityWithdrawalQueue: address(priorityQueueProxy)
             }),
-            10_000, 1_000, 7200, 100_000 ether, 500
+            10_000, 1_000, 7200, 100_000 ether, 500, 1000
         );
         etherFiAdminInstance.upgradeTo(address(etherFiAdminImplementation));
 
@@ -1323,7 +1323,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 priorityWithdrawalQueue: address(priorityQueueInstance)
             }),
             10_000, 1_000, 7200
-        , 100_000 ether, 500));
+        , 100_000 ether, 500, 1000));
         vm.prank(etherFiAdminInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }
@@ -1346,7 +1346,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
                 priorityWithdrawalQueue: address(priorityQueueInstance)
             }),
             10_000, 1_000, 7200
-        , 100_000 ether, 500));
+        , 100_000 ether, 500, 1000));
         vm.prank(roleRegistryInstance.owner());
         etherFiAdminInstance.upgradeTo(newAdminImpl);
     }

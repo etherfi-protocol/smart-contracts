@@ -74,6 +74,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     int256 public immutable maxAcceptableRebaseAprInBps;
     uint256 public immutable maxValidatorTaskBatchSize;
+    uint256 public immutable maxNumberOfRequestsToFinalizePerDay;
     uint256 public immutable maxAcceptableFinalizedWithdrawalAmountPerDay;
     uint256 public immutable maxAcceptableNumValidatorsToApprovePerDay;
     uint256 public immutable staleOracleReportBlockWindow;
@@ -100,6 +101,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error IncorrectRole();
     error InvalidPriorityWithdrawalQueue();
     error InvalidMaxAcceptableFinalizedWithdrawalAmount();
+    error InvalidMaxNumberOfRequestsToFinalizePerDay();
     error InvalidMaxFinalizedWithdrawalAmountPerDay();
     error InvalidMaxNumValidatorsToApprovePerDay();
     error InvalidAcceptableRebaseApr();
@@ -122,12 +124,14 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 _maxValidatorTaskBatchSize,
         uint256 _staleOracleReportBlockWindow,
         uint256 _maxAcceptableFinalizedWithdrawalAmountPerDay,
-        uint256 _maxAcceptableNumValidatorsToApprovePerDay
+        uint256 _maxAcceptableNumValidatorsToApprovePerDay,
+        uint256 _maxNumberOfRequestsToFinalizePerDay
     ) {
         if (_maxAcceptableRebaseAprInBps <= 0 || _maxAcceptableRebaseAprInBps > 10_000) revert InvalidMaxAcceptableRebaseApr();
         if (_maxValidatorTaskBatchSize == 0) revert InvalidValidatorTaskBatchSize();
         if (_staleOracleReportBlockWindow == 0) revert InvalidStaleOracleReportBlockWindow();
         if (_maxAcceptableFinalizedWithdrawalAmountPerDay == 0) revert InvalidMaxAcceptableFinalizedWithdrawalAmount();
+        if (_maxNumberOfRequestsToFinalizePerDay == 0) revert InvalidMaxNumberOfRequestsToFinalizePerDay();
 
         etherFiOracle = IEtherFiOracle(_constructorAddresses.etherFiOracle);
         stakingManager = IStakingManager(_constructorAddresses.stakingManager);
@@ -144,8 +148,9 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         staleOracleReportBlockWindow = _staleOracleReportBlockWindow;
         maxAcceptableFinalizedWithdrawalAmountPerDay = _maxAcceptableFinalizedWithdrawalAmountPerDay;
         maxAcceptableNumValidatorsToApprovePerDay = _maxAcceptableNumValidatorsToApprovePerDay;
+        maxNumberOfRequestsToFinalizePerDay = _maxNumberOfRequestsToFinalizePerDay;
 
-         _disableInitializers();
+        _disableInitializers();
     }
 
     function initialize(
@@ -376,6 +381,7 @@ contract EtherFiAdmin is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         // valdate finalized request id
         uint32 lastFinalizedRequestId = withdrawRequestNft.lastFinalizedRequestId();
         if (_report.lastFinalizedWithdrawalRequestId < lastFinalizedRequestId) return (false, "EtherFiAdmin: finalized withdrawal request id is less than last finalized request id");
+        if (_report.lastFinalizedWithdrawalRequestId - lastFinalizedRequestId > maxNumberOfRequestsToFinalizePerDay) return (false, "EtherFiAdmin: number of requests to finalize exceeds max");
         uint256 sumOfRequests;
         for (uint256 i = lastFinalizedRequestId + 1; i <= _report.lastFinalizedWithdrawalRequestId; i++) {
             IWithdrawRequestNFT.WithdrawRequest memory request = withdrawRequestNft.getRequest(i);

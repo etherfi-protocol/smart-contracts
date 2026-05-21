@@ -1034,52 +1034,52 @@ contract EtherFiOracleTest is TestSetup {
     }
 
     function test_constructor_maxValidatorTaskBatchSize_guardrail() public {
-        EtherFiAdmin nonZeroValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500);
+        EtherFiAdmin nonZeroValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500, 1000);
         assertEq(nonZeroValue.maxValidatorTaskBatchSize(), 1_000);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidValidatorTaskBatchSize.selector);
-        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 0, 7200, 100_000 ether, 500);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 0, 7200, 100_000 ether, 500, 1000);
     }
 
     function test_constructor_maxAcceptableRebaseAprInBps_guardrail() public {
-        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500);
+        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500, 1000);
         assertEq(validValue.maxAcceptableRebaseAprInBps(), 500);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
-        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 0, 1_000, 7200, 100_000 ether, 500);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 0, 1_000, 7200, 100_000 ether, 500, 1000);
 
         // negative values revert
         vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
-        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), -1, 1_000, 7200, 100_000 ether, 500);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), -1, 1_000, 7200, 100_000 ether, 500, 1000);
 
         // values above 10_000 revert
         vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableRebaseApr.selector);
-        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 10_001, 1_000, 7200, 100_000 ether, 500);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 10_001, 1_000, 7200, 100_000 ether, 500, 1000);
     }
 
     function test_constructor_staleOracleReportBlockWindow_guardrail() public {
-        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500);
+        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500, 1000);
         assertEq(validValue.staleOracleReportBlockWindow(), 7200);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidStaleOracleReportBlockWindow.selector);
-        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 0, 100_000 ether, 500);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 0, 100_000 ether, 500, 1000);
     }
 
     function test_constructor_maxAcceptableFinalizedWithdrawalAmountPerDay_guardrail() public {
-        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500);
+        EtherFiAdmin validValue = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 500, 1000);
         assertEq(validValue.maxAcceptableFinalizedWithdrawalAmountPerDay(), 100_000 ether);
 
         // value 0 reverts
         vm.expectRevert(EtherFiAdmin.InvalidMaxAcceptableFinalizedWithdrawalAmount.selector);
-        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 0, 500);
+        new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 0, 500, 1000);
     }
 
     function test_constructor_maxAcceptableNumValidatorsToApprovePerDay_zero_is_allowed() public {
         // _maxAcceptableNumValidatorsToApprovePerDay = 0 signals "pause new validators"
-        EtherFiAdmin zeroAllowed = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 0);
+        EtherFiAdmin zeroAllowed = new EtherFiAdmin(_defaultEtherFiAdminCtorAddrs(), 500, 1_000, 7200, 100_000 ether, 0, 1000);
         assertEq(zeroAllowed.maxAcceptableNumValidatorsToApprovePerDay(), 0);
     }
 
