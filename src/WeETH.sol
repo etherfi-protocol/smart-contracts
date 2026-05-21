@@ -13,6 +13,8 @@ import "./AssetRecovery.sol";
 import "./utils/PausableUntil.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IBlacklister.sol";
+import "./interfaces/IEtherFiRateLimiter.sol";
+import "./libraries/RateLimitMath.sol";
 
 contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, PausableUntil, ERC20PermitUpgradeable, IRateProvider, AssetRecovery {
 
@@ -20,6 +22,18 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     ILiquidityPool public immutable liquidityPool;
     IRoleRegistry public immutable roleRegistry;
     IBlacklister public immutable blacklister;
+    IEtherFiRateLimiter public immutable rateLimiter;
+
+    /// @dev Operationally, the WEETH_MINT_LIMIT_ID bucket capacity should be configured
+    ///      ≤ the EETH_MINT_LIMIT_ID capacity on EtherFiRateLimiter. weETH minting via wrap
+    ///      is a downstream operation on already-minted eETH: any minted weETH consumes from
+    ///      the underlying eETH supply, which is itself bounded by EETH_MINT. Setting weETH
+    ///      mint higher than eETH mint creates an inconsistent rate-limit profile (the eETH
+    ///      cap is still the binding constraint for the wrap path) and only makes sense if
+    ///      a direct weETH minter exists (e.g. an L1 bridge inflow), which today does not.
+    bytes32 public constant WEETH_MINT_LIMIT_ID = keccak256("WEETH_MINT_LIMIT_ID");
+    bytes32 public constant WEETH_BURN_LIMIT_ID = keccak256("WEETH_BURN_LIMIT_ID");
+    bytes32 public constant WEETH_TRANSFER_LIMIT_ID = keccak256("WEETH_TRANSFER_LIMIT_ID");
 
     event Paused();
     event Unpaused();
@@ -42,12 +56,13 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     //--------------------------------------------------------------------------------------
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor(address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister) {
-        if(_eETH == address(0) || _liquidityPool == address(0) || _roleRegistry == address(0) || _blacklister == address(0)) revert AddressZero();
+    constructor(address _eETH, address _liquidityPool, address _roleRegistry, address _blacklister, address _rateLimiter) {
+        if(_eETH == address(0) || _liquidityPool == address(0) || _roleRegistry == address(0) || _blacklister == address(0) || _rateLimiter == address(0)) revert AddressZero();
         eETH = IeETH(_eETH);
         liquidityPool = ILiquidityPool(_liquidityPool);
         roleRegistry = IRoleRegistry(_roleRegistry);
         blacklister = IBlacklister(_blacklister);
+        rateLimiter = IEtherFiRateLimiter(_rateLimiter);
         _disableInitializers();
     }
 
@@ -71,6 +86,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     function wrap(uint256 _eETHAmount) public returns (uint256) {
         if (_eETHAmount == 0) revert ZeroAmount();
         uint256 weEthAmount = liquidityPool.sharesForAmount(_eETHAmount);
+        rateLimiter.consumeIfConfigured(WEETH_MINT_LIMIT_ID, RateLimitMath.toBucketUnit(weEthAmount));
         _mint(msg.sender, weEthAmount);
         eETH.transferFrom(msg.sender, address(this), _eETHAmount);
         return weEthAmount;
@@ -93,6 +109,7 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     function unwrap(uint256 _weETHAmount) external returns (uint256) {
         if (_weETHAmount == 0) revert ZeroAmount();
         uint256 eETHAmount = liquidityPool.amountForShare(_weETHAmount);
+        rateLimiter.consumeIfConfigured(WEETH_BURN_LIMIT_ID, RateLimitMath.toBucketUnit(_weETHAmount));
         _burn(msg.sender, _weETHAmount);
         eETH.transfer(msg.sender, eETHAmount);
         return eETHAmount;
@@ -146,13 +163,16 @@ contract WeETH is ERC20Upgradeable, UUPSUpgradeable, OwnableUpgradeable, Pausabl
     function _beforeTokenTransfer(
         address from,
         address to,
-        uint256 /* amount */
+        uint256 amount
     ) internal virtual override {
         if (paused) revert ContractPaused();
         _requireNotPausedUntil();
         blacklister.nonBlacklisted(from);
         blacklister.nonBlacklisted(to);
         blacklister.nonBlacklisted(msg.sender);
+        if (from != address(0) && to != address(0)) {
+            rateLimiter.consumeIfConfigured(WEETH_TRANSFER_LIMIT_ID, RateLimitMath.toBucketUnit(amount));
+        }
     }
 
     //--------------------------------------------------------------------------------------

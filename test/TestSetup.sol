@@ -934,7 +934,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         liquifierInstance.upgradeTo(address(liquifierImplementation));
 
         // TODO - not sure what `name` and `versiona` are for
-        eETHImplementation = new EETH(address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance));
+        eETHImplementation = new EETH(address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance));
         vm.expectRevert("Initializable: contract is already initialized");
         eETHImplementation.initialize(payable(address(liquidityPoolProxy)));
         eETHInstance.upgradeTo(address(eETHImplementation));
@@ -943,7 +943,7 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
         eETHInstance.initialize(payable(address(liquidityPoolProxy)));
 
         // WeETH
-        weEthImplementation = new WeETH(address(eETHProxy), address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance));
+        weEthImplementation = new WeETH(address(eETHProxy), address(liquidityPoolProxy), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance));
         vm.expectRevert("Initializable: contract is already initialized");
         weEthImplementation.initialize(payable(address(liquidityPoolProxy)), address(eETHProxy));
         weEthInstance.upgradeTo(address(weEthImplementation));
@@ -955,6 +955,9 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
 
         // EETH/WEETH operating admin consolidated into OPERATION_MULTISIG_ROLE
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_MULTISIG_ROLE(), admin);
+
+        // Bootstrap EETH/WeETH rate-limit buckets and consumer whitelists for tests.
+        _setupTokenRateLimits();
 
         vm.stopPrank();
         vm.prank(alice);
@@ -1256,9 +1259,56 @@ contract TestSetup is Test, ContractCodeChecker, DepositDataGeneration {
     }
 
     function _upgrade_weETH() internal {
-        address newWeETHImpl = address(new WeETH(address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance)));
+        address newWeETHImpl = address(new WeETH(address(eETHInstance), address(liquidityPoolInstance), address(roleRegistryInstance), address(blacklisterInstance), address(rateLimiterInstance)));
         vm.prank(owner);
         weEthInstance.upgradeTo(newWeETHImpl);
+
+        // The upgraded weETH calls the rate limiter on mint/burn/transfer; create the
+        // buckets and whitelist the token so fork tests don't revert on UnknownLimit.
+        uint64 maxUint64 = type(uint64).max;
+        bytes32[3] memory weethIds = [
+            weEthInstance.WEETH_MINT_LIMIT_ID(),
+            weEthInstance.WEETH_BURN_LIMIT_ID(),
+            weEthInstance.WEETH_TRANSFER_LIMIT_ID()
+        ];
+        vm.startPrank(owner);
+        for (uint256 i = 0; i < weethIds.length; i++) {
+            if (!rateLimiterInstance.limitExists(weethIds[i])) {
+                rateLimiterInstance.createNewLimiter(weethIds[i], maxUint64, maxUint64);
+            }
+            rateLimiterInstance.updateConsumers(weethIds[i], address(weEthInstance), true);
+        }
+        vm.stopPrank();
+    }
+
+    /// @dev Idempotently creates the 6 EETH/WeETH rate-limit buckets with effectively
+    /// unbounded capacity and whitelists the token contracts as consumers. Tests that
+    /// want to exercise rate-limit behavior should override capacity/refill via the
+    /// rate limiter's admin functions before calling the rate-limited path.
+    function _setupTokenRateLimits() internal {
+        uint64 maxUint64 = type(uint64).max;
+        bytes32[3] memory eethIds = [
+            eETHInstance.EETH_MINT_LIMIT_ID(),
+            eETHInstance.EETH_BURN_LIMIT_ID(),
+            eETHInstance.EETH_TRANSFER_LIMIT_ID()
+        ];
+        bytes32[3] memory weethIds = [
+            weEthInstance.WEETH_MINT_LIMIT_ID(),
+            weEthInstance.WEETH_BURN_LIMIT_ID(),
+            weEthInstance.WEETH_TRANSFER_LIMIT_ID()
+        ];
+        for (uint256 i = 0; i < eethIds.length; i++) {
+            if (!rateLimiterInstance.limitExists(eethIds[i])) {
+                rateLimiterInstance.createNewLimiter(eethIds[i], maxUint64, maxUint64);
+            }
+            rateLimiterInstance.updateConsumers(eethIds[i], address(eETHInstance), true);
+        }
+        for (uint256 i = 0; i < weethIds.length; i++) {
+            if (!rateLimiterInstance.limitExists(weethIds[i])) {
+                rateLimiterInstance.createNewLimiter(weethIds[i], maxUint64, maxUint64);
+            }
+            rateLimiterInstance.updateConsumers(weethIds[i], address(weEthInstance), true);
+        }
     }
 
     function _upgrade_etherfiAdmin() internal {

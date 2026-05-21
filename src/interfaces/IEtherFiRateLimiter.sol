@@ -12,6 +12,7 @@ interface IEtherFiRateLimiter {
 
     // core
     function consume(bytes32 id, uint64 amount) external;
+    function consumeIfConfigured(bytes32 id, uint64 amount) external;
     function canConsume(bytes32 id, uint64 amount) external view returns (bool);
     function consumable(bytes32 id) external view returns (uint64);
 
