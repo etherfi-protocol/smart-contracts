@@ -112,11 +112,6 @@ contract AuctionManager is
         __ReentrancyGuard_init();
     }
 
-    function initializeOnUpgrade(uint128 _accumulatedRevenueThreshold) external onlyOwner {
-        accumulatedRevenue = 0;
-        accumulatedRevenueThreshold = _accumulatedRevenueThreshold;
-    }
-
     /// @notice Creates bid(s) for the right to run a validator node when ETH is deposited
     /// @param _bidSize the number of bids that the node operator would like to create
     /// @param _bidAmountPerBid the ether value of each bid that is created
