@@ -116,7 +116,7 @@ contract LiquidityPoolTest is TestSetup {
         uint256 aliceNonce = eETHInstance.nonces(alice);
         // create permit with invalid private key (Bob)
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(3, address(liquidityPoolInstance), 2 ether, aliceNonce+1, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE"); //even through the reason was invalid permit to prevent griefing attack the allowance fails
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector); //even through the reason was invalid permit to prevent griefing attack the allowance fails
         liquidityPoolInstance.requestWithdrawWithPermit(alice, 2 ether, permitInput);
         vm.stopPrank();
     }
@@ -133,7 +133,7 @@ contract LiquidityPoolTest is TestSetup {
         uint256 aliceNonce = eETHInstance.nonces(alice);
         //  permit with insufficient amount of ETH
         ILiquidityPool.PermitInput memory permitInput = createPermitInput(2, address(liquidityPoolInstance), 1 ether, aliceNonce, 2**256 - 1, eETHInstance.DOMAIN_SEPARATOR());
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector);
         liquidityPoolInstance.requestWithdrawWithPermit(alice, 2 ether, permitInput);
         vm.stopPrank();
     }
@@ -201,7 +201,7 @@ contract LiquidityPoolTest is TestSetup {
         vm.stopPrank();
 
         startHoax(alice);
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector);
         liquidityPoolInstance.requestWithdraw(alice, 2 ether);
     }
 
@@ -216,7 +216,7 @@ contract LiquidityPoolTest is TestSetup {
         eETHInstance.approve(address(liquidityPoolInstance), 100 ether);
 
         vm.startPrank(alice);
-        vm.expectRevert("TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE");
+        vm.expectRevert(EETH.TransferAmountExceedsAllowance.selector);
         liquidityPoolInstance.requestWithdraw(bob, 2 ether);
 
         liquidityPoolInstance.deposit{value: 10 ether}();
@@ -732,7 +732,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_deopsitToRecipient_by_rando_fails() public {
         vm.startPrank(alice);
-        vm.expectRevert("Incorrect Caller");
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
         liquidityPoolInstance.depositToRecipient(alice, 100 ether, address(0));
         vm.stopPrank();
     }
@@ -825,9 +825,9 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_DepositFromMembershipManagerFailsIfNotMembershipManager() public {
         vm.deal(alice, 10 ether);
-        
+
         vm.startPrank(alice);
-        vm.expectRevert("Incorrect Caller");
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
         liquidityPoolInstance.deposit{value: 5 ether}(alice, bob);
         vm.stopPrank();
     }
@@ -855,10 +855,10 @@ contract LiquidityPoolTest is TestSetup {
     function test_DepositWhenPausedFails() public {
         vm.prank(admin);
         liquidityPoolInstance.pauseContract();
-        
+
         vm.deal(alice, 10 ether);
         vm.startPrank(alice);
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(LiquidityPool.ContractPaused.selector);
         liquidityPoolInstance.deposit{value: 5 ether}();
         vm.stopPrank();
     }
@@ -989,12 +989,12 @@ contract LiquidityPoolTest is TestSetup {
         liquidityPoolInstance.pauseContract();
 
         vm.startPrank(address(membershipManagerInstance));
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(LiquidityPool.ContractPaused.selector);
         liquidityPoolInstance.withdraw(alice, 1 ether);
         vm.stopPrank();
 
         vm.startPrank(address(etherFiRedemptionManagerInstance));
-        vm.expectRevert("Pausable: paused");
+        vm.expectRevert(LiquidityPool.ContractPaused.selector);
         liquidityPoolInstance.withdraw(alice, 1 ether);
         vm.stopPrank();
     }
@@ -1069,7 +1069,7 @@ contract LiquidityPoolTest is TestSetup {
         bidIds[0] = 1;
 
         vm.startPrank(bob);
-        vm.expectRevert("Incorrect Caller");
+        vm.expectRevert(LiquidityPool.IncorrectCaller.selector);
         liquidityPoolInstance.batchRegister(depositData, bidIds, address(0x1234));
         vm.stopPrank();
     }
@@ -1130,7 +1130,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_UnregisterValidatorSpawnerFailsIfNotRegistered() public {
         vm.startPrank(alice);
-        vm.expectRevert("Not registered");
+        vm.expectRevert(LiquidityPool.NotRegistered.selector);
         liquidityPoolInstance.unregisterValidatorSpawner(bob);
         vm.stopPrank();
     }
@@ -1477,7 +1477,7 @@ contract LiquidityPoolTest is TestSetup {
 
     function test_UnregisterValidatorSpawnerWhenNotRegistered() public {
         vm.startPrank(alice);
-        vm.expectRevert("Not registered");
+        vm.expectRevert(LiquidityPool.NotRegistered.selector);
         liquidityPoolInstance.unregisterValidatorSpawner(bob);
         vm.stopPrank();
     }
@@ -2012,18 +2012,18 @@ contract LiquidityPoolTest is TestSetup {
         assertEq(withdrawRequestNFTInstance.ethAmountLockedForWithdrawal(), nftLocked, "NFT counter not set by migration");
 
         // Idempotency guard.
-        vm.expectRevert(bytes("already migrated"));
+        vm.expectRevert(LiquidityPool.AlreadyMigrated.selector);
         vm.prank(ownerAddr);
         liquidityPoolInstance.initializeOnUpgradeV2();
     }
 
     // ============================================================================
-    // MIN_AMOUNT_FOR_SHARE Tests
+    // minAmountForShare Tests
     // ============================================================================
     //
     // The LiquidityPool now enforces a configurable floor on the eETH share-price.
     // After share-supply or pooled-ether changes, `_checkMinAmountForShare()` reverts
-    // with `InvalidAmountForShare` whenever `amountForShare(1 ether) < MIN_AMOUNT_FOR_SHARE`.
+    // with `InvalidAmountForShare` whenever `amountForShare(1 ether) < minAmountForShare`.
     // The check fires from: receive(), withdraw(), rebase(), burnEEthShares(),
     // burnEEthSharesForNonETHWithdrawal(), _deposit() (every external deposit*),
     // and _accountForEthSentOut() (validator-deposit flows).
@@ -2048,27 +2048,27 @@ contract LiquidityPoolTest is TestSetup {
     // --- immutable getter ---
 
     function test_minAmountForShare_default_is_zero_in_test_setup() public {
-        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0);
+        assertEq(liquidityPoolInstance.minAmountForShare(), 0);
     }
 
     function test_minAmountForShare_immutable_is_set_via_constructor() public {
         LiquidityPool fresh = new LiquidityPool(_lpCtorAddrs(address(0), address(blacklisterInstance)), 0.5 ether);
-        assertEq(fresh.MIN_AMOUNT_FOR_SHARE(), 0.5 ether);
+        assertEq(fresh.minAmountForShare(), 0.5 ether);
 
         LiquidityPool fresh2 = new LiquidityPool(_lpCtorAddrs(address(0), address(blacklisterInstance)), type(uint256).max);
-        assertEq(fresh2.MIN_AMOUNT_FOR_SHARE(), type(uint256).max);
+        assertEq(fresh2.minAmountForShare(), type(uint256).max);
     }
 
     function test_minAmountForShare_immutable_persists_through_upgrade() public {
         _upgradeLpWithMinAmount(0.75 ether);
-        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0.75 ether);
+        assertEq(liquidityPoolInstance.minAmountForShare(), 0.75 ether);
     }
 
     // --- with MIN = 0 (check effectively disabled) ---
 
     function test_minAmountForShare_zero_allows_empty_pool_operations() public {
         // amountForShare(1 ether) returns 0 when totalShares == 0; with MIN=0 the strict `<` is false.
-        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0);
+        assertEq(liquidityPoolInstance.minAmountForShare(), 0);
         assertEq(eETHInstance.totalShares(), 0);
 
         vm.deal(alice, 1 ether);
@@ -2240,11 +2240,11 @@ contract LiquidityPoolTest is TestSetup {
         // The two constructor params are independent and neither cross-contaminates the other.
         LiquidityPool a = new LiquidityPool(_lpCtorAddrs(address(0xBEEF), address(blacklisterInstance)), 1 ether);
         assertEq(address(a.priorityWithdrawalQueue()), address(0xBEEF));
-        assertEq(a.MIN_AMOUNT_FOR_SHARE(), 1 ether);
+        assertEq(a.minAmountForShare(), 1 ether);
 
         LiquidityPool b = new LiquidityPool(_lpCtorAddrs(address(0), address(blacklisterInstance)), 0);
         assertEq(address(b.priorityWithdrawalQueue()), address(0));
-        assertEq(b.MIN_AMOUNT_FOR_SHARE(), 0);
+        assertEq(b.minAmountForShare(), 0);
     }
 
     // --- fuzz: rebase boundary ---
@@ -2300,14 +2300,14 @@ contract LiquidityPoolTest is TestSetup {
 
         // addEthAmountLockedForWithdrawal must revert with "migration not complete".
         vm.prank(address(etherFiAdminInstance));
-        vm.expectRevert(bytes("migration not complete"));
+        vm.expectRevert(LiquidityPool.MigrationNotComplete.selector);
         liquidityPoolInstance.addEthAmountLockedForWithdrawal(1 ether);
 
         // transferLockedEthForPriority must also revert before migration completes.
         // Prank as the priorityWithdrawalQueue (LP's immutable) so the caller check
         // passes and we reach the migration guard.
         vm.prank(address(liquidityPoolInstance.priorityWithdrawalQueue()));
-        vm.expectRevert(bytes("migration not complete"));
+        vm.expectRevert(LiquidityPool.MigrationNotComplete.selector);
         liquidityPoolInstance.transferLockedEthForPriority(1 ether);
     }
 

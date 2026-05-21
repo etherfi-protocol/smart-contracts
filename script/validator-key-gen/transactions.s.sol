@@ -56,7 +56,7 @@ contract ValidatorKeyGenTransactions is Script {
     //--------------------------------------------------------------------------------------
     address constant ETHERFI_OPERATING_ADMIN = 0x2aCA71020De61bb532008049e1Bd41E451aE8AdC;
     address constant UPGRADE_ADMIN = 0xcdd57D11476c22d265722F68390b036f3DA48c21;
-    uint256 constant TIMELOCK_MIN_DELAY = 259200; // 72 hours
+    uint256 constant TIMELOCK_minDelay = 259200; // 72 hours
 
     LiquidityPool constant liquidityPool = LiquidityPool(payable(LIQUIDITY_POOL_PROXY));
     StakingManager constant stakingManager = StakingManager(STAKING_MANAGER_PROXY);
@@ -71,10 +71,10 @@ contract ValidatorKeyGenTransactions is Script {
         string memory forkUrl = vm.envString("MAINNET_RPC_URL"); // TODO: change to mainnet fork
         vm.selectFork(vm.createFork(forkUrl));
 
-        LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = roleRegistry.EOA_1();
-        ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = roleRegistry.EOA_2();
-        STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE = roleRegistry.EOA_1();
-        ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE = roleRegistry.EOA_3();
+        LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE = roleRegistry.ORACLE_OPERATIONS_ROLE();
+        ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE = roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE();
+        STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE = roleRegistry.ORACLE_OPERATIONS_ROLE();
+        ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE = roleRegistry.EXECUTOR_OPERATIONS_ROLE();
 
         executeUpgrade();
         forkTestOne();
@@ -138,7 +138,7 @@ contract ValidatorKeyGenTransactions is Script {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            TIMELOCK_MIN_DELAY // minDelay
+            TIMELOCK_minDelay // minDelay
         );
 
         console2.log("Schedule Tx:");
@@ -163,9 +163,9 @@ contract ValidatorKeyGenTransactions is Script {
         // uncomment to run against fork
         console2.log("=== SCHEDULING BATCH ===");
         vm.startPrank(UPGRADE_ADMIN);
-        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, TIMELOCK_MIN_DELAY);
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, TIMELOCK_minDelay);
 
-        vm.warp(block.timestamp + TIMELOCK_MIN_DELAY + 1); // +1 to ensure it's past the delay
+        vm.warp(block.timestamp + TIMELOCK_minDelay + 1); // +1 to ensure it's past the delay
         etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
         vm.stopPrank();
 

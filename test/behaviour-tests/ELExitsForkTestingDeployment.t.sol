@@ -8,6 +8,7 @@ import "../../src/EtherFiNodesManager.sol";
 import "../../src/EtherFiNode.sol";
 import "../../src/EtherFiRateLimiter.sol";
 import "../../src/LiquidityPool.sol";
+import "../../src/RoleRegistry.sol";
 import "../../src/UUPSProxy.sol";
 import "../../src/AuctionManager.sol";
 import "../../src/EtherFiTimelock.sol";
@@ -184,7 +185,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
 
         // Assign NEW EL trigger exit role to a realistic address
         address realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F; // etherFiAdminExecuter
-        roleRegistry.grantRole(roleRegistry.EOA_3(), realElExiter);
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
         console2.log("Granted ETHERFI_NODES_MANAGER_EL_TRIGGER_EXIT_ROLE to:", realElExiter);
 
         // Assign rate limiter admin role to a realistic address  
@@ -230,7 +231,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
 
         // Test 1: EL-triggered withdrawal with real role
         address realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
-        bool hasElExitRole = roleRegistry.hasRole(roleRegistry.EOA_3(), realElExiter);
+        bool hasElExitRole = roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
 
         if (hasElExitRole) {
             console2.log("[OK] EL Exit role correctly assigned to real address");
@@ -321,7 +322,7 @@ contract ELExitsForkTestingDeploymentTest is Test {
         console2.log("=== SIMULATING EL EXIT WITH REAL CONSTRAINTS ===");
 
         address realElExiter = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
-        bool hasRole = roleRegistry.hasRole(roleRegistry.EOA_3(), realElExiter);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
 
         console2.log("Real EL Exiter:", realElExiter);
         console2.log("Has EL Exit Role:", hasRole);

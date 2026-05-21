@@ -84,14 +84,14 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100_00, ETH_ADDRESS); // 100%
         assertEq(etherFiRedemptionManagerInstance.lowWatermarkInETH(ETH_ADDRESS), 100 ether);
 
-        vm.expectRevert("Exceeds max low watermark of tvl");
+        vm.expectRevert(EtherFiRedemptionManager.ExceedsMaxLowWatermark.selector);
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(100_01, ETH_ADDRESS); // 100.01%
     }
 
     function test_exit_fee_guardrail() public {
         vm.startPrank(admin);
 
-        uint256 maxExitFee = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_IN_BPS();
+        uint256 maxExitFee = etherFiRedemptionManagerInstance.maxExitFeeInBps();
         assertEq(maxExitFee, 100); // configured in TestSetup
 
         // boundary value is accepted
@@ -100,7 +100,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         assertEq(exitFeeBps, uint16(maxExitFee));
 
         // one above the cap reverts
-        vm.expectRevert("Exceeds max exit fee");
+        vm.expectRevert(EtherFiRedemptionManager.ExceedsMaxExitFee.selector);
         etherFiRedemptionManagerInstance.setExitFeeBasisPoints(uint16(maxExitFee + 1), ETH_ADDRESS);
         vm.stopPrank();
     }
@@ -108,7 +108,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
     function test_exit_fee_split_to_treasury_guardrail() public {
         vm.startPrank(admin);
 
-        uint256 maxSplit = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS();
+        uint256 maxSplit = etherFiRedemptionManagerInstance.maxExitFeeSplitToTreasuryInBps();
         assertEq(maxSplit, 10_000); // configured in TestSetup
 
         // boundary value is accepted
@@ -117,15 +117,15 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         assertEq(exitSplit, uint16(maxSplit));
 
         // one above the cap reverts
-        vm.expectRevert("Exceeds max exit fee split to treasury");
+        vm.expectRevert(EtherFiRedemptionManager.ExceedsMaxExitFeeSplit.selector);
         etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(uint16(maxSplit + 1), ETH_ADDRESS);
         vm.stopPrank();
     }
 
     function test_initializeTokenParameters_guardrails() public {
-        uint256 maxExitFee = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_IN_BPS();
-        uint256 maxSplit = etherFiRedemptionManagerInstance.MAX_EXIT_FEE_SPLIT_TO_TREASURY_IN_BPS();
-        uint256 maxLowWatermark = etherFiRedemptionManagerInstance.MAX_LOW_WATERMARK_IN_BPS_OF_TVL();
+        uint256 maxExitFee = etherFiRedemptionManagerInstance.maxExitFeeInBps();
+        uint256 maxSplit = etherFiRedemptionManagerInstance.maxExitFeeSplitToTreasuryInBps();
+        uint256 maxLowWatermark = etherFiRedemptionManagerInstance.maxLowWatermarkInBpsOfTvl();
 
         address[] memory tokens = new address[](1);
         tokens[0] = ETH_ADDRESS;
@@ -143,21 +143,21 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         exitFeeSplitBps[0] = uint16(maxSplit + 1);
         exitFeeBps[0] = uint16(maxExitFee);
         lowWatermarkBps[0] = uint16(maxLowWatermark);
-        vm.expectRevert("Exceeds max exit fee split to treasury");
+        vm.expectRevert(EtherFiRedemptionManager.ExceedsMaxExitFeeSplit.selector);
         etherFiRedemptionManagerInstance.initializeTokenParameters(tokens, exitFeeSplitBps, exitFeeBps, lowWatermarkBps, capacities, refillRates);
 
         // exit fee above cap reverts
         exitFeeSplitBps[0] = uint16(maxSplit);
         exitFeeBps[0] = uint16(maxExitFee + 1);
         lowWatermarkBps[0] = uint16(maxLowWatermark);
-        vm.expectRevert("Exceeds max exit fee");
+        vm.expectRevert(EtherFiRedemptionManager.ExceedsMaxExitFee.selector);
         etherFiRedemptionManagerInstance.initializeTokenParameters(tokens, exitFeeSplitBps, exitFeeBps, lowWatermarkBps, capacities, refillRates);
 
         // low watermark above cap reverts
         exitFeeSplitBps[0] = uint16(maxSplit);
         exitFeeBps[0] = uint16(maxExitFee);
         lowWatermarkBps[0] = uint16(maxLowWatermark + 1);
-        vm.expectRevert("Exceeds max low watermark of tvl");
+        vm.expectRevert(EtherFiRedemptionManager.ExceedsMaxLowWatermark.selector);
         etherFiRedemptionManagerInstance.initializeTokenParameters(tokens, exitFeeSplitBps, exitFeeBps, lowWatermarkBps, capacities, refillRates);
 
         // boundary values are accepted
@@ -473,7 +473,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
             // User has enough balance, so test should fail due to exceeding redeemable amount
             uint256 amountToRedeem = redeemableAmountAfter + 1 ether;
             eETHInstance.approve(address(etherFiRedemptionManagerInstance), amountToRedeem);
-            vm.expectRevert("EtherFiRedemptionManager: Exceeded total redeemable amount");
+            vm.expectRevert(EtherFiRedemptionManager.ExceededRedeemable.selector);
             etherFiRedemptionManagerInstance.redeemEEth(amountToRedeem, user, ETH_ADDRESS);
         }
         // If user doesn't have enough balance, that's fine - the redemption already verified the core functionality
@@ -549,7 +549,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 treasuryBalance = eETHInstance.balanceOf(address(etherFiRedemptionManagerInstance.treasury()));
 
         eETHInstance.approve(address(etherFiRedemptionManagerInstance), redeemAmount);
-        vm.expectRevert("EtherFiRedemptionManager: Exceeded total redeemable amount");
+        vm.expectRevert(EtherFiRedemptionManager.ExceededRedeemable.selector);
         etherFiRedemptionManagerInstance.redeemEEth(redeemAmount, user, ETH_ADDRESS);
 
         vm.stopPrank();
@@ -622,7 +622,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
             // User has enough balance, so test should fail due to exceeding redeemable amount
             uint256 amountToRedeem = redeemableAmount + 1 ether;
             eETHInstance.approve(address(etherFiRedemptionManagerInstance), amountToRedeem);
-            vm.expectRevert("EtherFiRedemptionManager: Exceeded total redeemable amount");
+            vm.expectRevert(EtherFiRedemptionManager.ExceededRedeemable.selector);
             etherFiRedemptionManagerInstance.redeemEEth(amountToRedeem, user, lidoToken);
         }
         // If user doesn't have enough balance, that's fine - the redemption already verified the core functionality
@@ -777,7 +777,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         liquidityPoolInstance.deposit{value: 10 ether}();
         address lidoToken = address(etherFiRestakerInstance.lido()); // external call; fetch before expectRevert
         eETHInstance.approve(address(etherFiRedemptionManagerInstance), 1 ether);
-        vm.expectRevert(bytes("EtherFiRedemptionManager: Exceeded total redeemable amount"));
+        vm.expectRevert(EtherFiRedemptionManager.ExceededRedeemable.selector);
         etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, lidoToken);
         vm.stopPrank();
         vm.startPrank(op_admin);
@@ -1089,7 +1089,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 remainingBalance = eETHInstance.balanceOf(user);
         if (remainingBalance > 0) {
             eETHInstance.approve(address(etherFiRedemptionManagerInstance), remainingBalance);
-            vm.expectRevert("EtherFiRedemptionManager: Exceeded total redeemable amount");
+            vm.expectRevert(EtherFiRedemptionManager.ExceededRedeemable.selector);
             etherFiRedemptionManagerInstance.redeemEEth(remainingBalance, user, ETH_ADDRESS);
         }
         vm.stopPrank();
@@ -1145,7 +1145,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
             vm.deal(user, 100 ether);
             vm.startPrank(user);
             liquidityPoolInstance.deposit{value: 100 ether}();
-            vm.expectRevert("EtherFiRedemptionManager: Exceeded total redeemable amount");
+            vm.expectRevert(EtherFiRedemptionManager.ExceededRedeemable.selector);
             etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, ETH_ADDRESS);
             vm.stopPrank();
         }
@@ -1178,7 +1178,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
             vm.deal(user, 100 ether);
             vm.startPrank(user);
             liquidityPoolInstance.deposit{value: 100 ether}();
-            vm.expectRevert("EtherFiRedemptionManager: Exceeded total redeemable amount");
+            vm.expectRevert(EtherFiRedemptionManager.ExceededRedeemable.selector);
             etherFiRedemptionManagerInstance.redeemEEth(1 ether, user, ETH_ADDRESS);
             vm.stopPrank();
         }
@@ -1272,7 +1272,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         
         // Try to redeem more than balance
         eETHInstance.approve(address(etherFiRedemptionManagerInstance), 100 ether);
-        vm.expectRevert("EtherFiRedemptionManager: Insufficient balance");
+        vm.expectRevert(EtherFiRedemptionManager.InsufficientBalance.selector);
         etherFiRedemptionManagerInstance.redeemEEth(100 ether, user, ETH_ADDRESS);
         vm.stopPrank();
     }
@@ -1298,7 +1298,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         eETHInstance.approve(address(etherFiRedemptionManagerInstance), amount);
         
         // Should fail due to exceeding total redeemable amount
-        vm.expectRevert("EtherFiRedemptionManager: Insufficient balance");
+        vm.expectRevert(EtherFiRedemptionManager.InsufficientBalance.selector);
         etherFiRedemptionManagerInstance.redeemEEth(amount, user, address(stEth));
         vm.stopPrank();
     }
@@ -1448,7 +1448,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         uint256 remainingBalance = eETHInstance.balanceOf(user);
         if (remainingBalance > 0) {
             eETHInstance.approve(address(etherFiRedemptionManagerInstance), remainingBalance);
-            vm.expectRevert("EtherFiRedemptionManager: Exceeded total redeemable amount");
+            vm.expectRevert(EtherFiRedemptionManager.ExceededRedeemable.selector);
             etherFiRedemptionManagerInstance.redeemEEth(remainingBalance, user, ETH_ADDRESS);
         }
         vm.stopPrank();
@@ -1519,7 +1519,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         assertEq(exitFeeBps, 10000);
 
         // Try to set above maximum - should fail
-        vm.expectRevert("Exceeds max exit fee");
+        vm.expectRevert(EtherFiRedemptionManager.ExceedsMaxExitFee.selector);
         etherFiRedemptionManagerInstance.setExitFeeBasisPoints(10001, ETH_ADDRESS);
         vm.stopPrank();
     }
@@ -1535,7 +1535,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         assertEq(lowWM, 10000);
 
         // Try to set above maximum - should fail
-        vm.expectRevert("Exceeds max low watermark of tvl");
+        vm.expectRevert(EtherFiRedemptionManager.ExceedsMaxLowWatermark.selector);
         etherFiRedemptionManagerInstance.setLowWatermarkInBpsOfTvl(10001, ETH_ADDRESS);
         vm.stopPrank();
     }
@@ -1551,7 +1551,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         assertEq(exitSplit, 10000);
 
         // Try to set above maximum - should fail
-        vm.expectRevert("Exceeds max exit fee split to treasury");
+        vm.expectRevert(EtherFiRedemptionManager.ExceedsMaxExitFeeSplit.selector);
         etherFiRedemptionManagerInstance.setExitFeeSplitToTreasuryInBps(10001, ETH_ADDRESS);
         vm.stopPrank();
     }
@@ -1573,7 +1573,7 @@ contract EtherFiRedemptionManagerTest is TestSetup {
         
         // Try to redeem more weETH than balance
         weEthInstance.approve(address(etherFiRedemptionManagerInstance), 100 ether);
-        vm.expectRevert("EtherFiRedemptionManager: Insufficient balance");
+        vm.expectRevert(EtherFiRedemptionManager.InsufficientBalance.selector);
         etherFiRedemptionManagerInstance.redeemWeEth(100 ether, user, ETH_ADDRESS);
         vm.stopPrank();
     }

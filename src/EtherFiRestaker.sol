@@ -1,7 +1,6 @@
 /// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
@@ -17,6 +16,8 @@ import "./eigenlayer-interfaces/IStrategyManager.sol";
 import "./eigenlayer-interfaces/IDelegationManager.sol";
 import "./eigenlayer-interfaces/IRewardsCoordinator.sol";
 
+import "./interfaces/ILiquifier.sol";
+import "./interfaces/ILiquidityPool.sol";
 import "./interfaces/IRoleRegistry.sol";
 import "./interfaces/IEtherFiRateLimiter.sol";
 
@@ -33,8 +34,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     address public immutable etherFiRedemptionManager;
 
     // Immutables are not part of proxy storage; stored in implementation bytecode only.
-    LiquidityPool public immutable liquidityPool;
-    Liquifier public immutable liquifier;
+    ILiquidityPool public immutable liquidityPool;
+    ILiquifier public immutable liquifier;
     ILidoWithdrawalQueue public immutable lidoWithdrawalQueue;
     ILido public immutable lido;
     IDelegationManager public immutable eigenLayerDelegationManager;
@@ -75,6 +76,11 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     error NotRegistered();
     error WrongOutput();
     error IncorrectCaller();
+    error InsufficientBalance();
+    error NotTheOwner();
+    error AlreadyClaimed();
+    error AmountOverflowsUint64Gwei();
+    error WithdrawalRootNotFound();
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(
@@ -87,8 +93,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         address _eigenLayerStrategyManager,
         address _eigenLayerDelegationManager
     ) {
-        liquidityPool = LiquidityPool(payable(_liquidityPool));
-        liquifier = Liquifier(payable(_liquifier));
+        liquidityPool = ILiquidityPool(payable(_liquidityPool));
+        liquifier = ILiquifier(payable(_liquifier));
         lido = liquifier.lido();
         lidoWithdrawalQueue = liquifier.lidoWithdrawalQueue();
         eigenLayerStrategyManager = IStrategyManager(_eigenLayerStrategyManager); 
@@ -123,7 +129,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @param amount The amount of stETH to transfer
     function transferStETH(address recipient, uint256 amount) external {
         if(msg.sender != etherFiRedemptionManager) revert IncorrectCaller();
-        require(amount <= lido.balanceOf(address(this)), "EtherFiRestaker: Insufficient stETH balance");
+        if (amount > lido.balanceOf(address(this))) revert InsufficientBalance();
         IERC20(address(lido)).safeTransfer(recipient, amount);
     }
 
@@ -137,7 +143,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @notice Request for a specific amount of stETH holdings
     /// @param _amount the amount of stETH to request
     function stEthRequestWithdrawal(uint256 _amount) public returns (uint256[] memory) {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         rateLimiter.consume(STETH_REQUEST_WITHDRAWAL_LIMIT_ID, _amountToGwei(_amount));
 
         uint256 minAmount = lidoWithdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT();
@@ -172,7 +178,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @param _requestIds array of request ids to claim
     /// @param _hints checkpoint hint for each id. Can be obtained with `findCheckpointHints()`
     function stEthClaimWithdrawals(uint256[] calldata _requestIds, uint256[] calldata _hints) external {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         lidoWithdrawalQueue.claimWithdrawals(_requestIds, _hints);
 
         _withdrawEther();
@@ -188,7 +194,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     function _withdrawEther() internal {
         uint256 amountToLiquidityPool = _min(address(this).balance, liquidityPool.totalValueOutOfLp());
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
-        require(sent, "ETH_SEND_TO_LIQUIDITY_POOL_FAILED");
+        if (!sent) revert EthTransferFailed();
     }
 
     // |--------------------------------------------------------------------------------------------|
@@ -226,7 +232,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
     // deposit the token in holding into the restaking strategy
     function depositIntoStrategy(address token, uint256 amount) external returns (uint256) {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         rateLimiter.consume(DEPOSIT_INTO_STRATEGY_LIMIT_ID, _amountToGwei(amount));
 
         IERC20(token).safeApprove(address(eigenLayerStrategyManager), amount);
@@ -242,7 +248,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// @param token the token to withdraw
     /// @param amount the amount of token to withdraw
     function queueWithdrawals(address token, uint256 amount) public returns (bytes32[] memory) {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         rateLimiter.consume(QUEUE_WITHDRAWALS_LIMIT_ID, _amountToGwei(amount));
 
         uint256 shares = getEigenLayerRestakingStrategy(token).underlyingToSharesView(amount);
@@ -263,7 +269,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
         IDelegationManager.Withdrawal[] memory _queuedWithdrawals,
         IERC20[][] memory _tokens
     ) external {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         uint256 num = _queuedWithdrawals.length;
         bool[] memory receiveAsTokens = new bool[](num);
         for (uint256 i = 0; i < num; i++) {
@@ -272,7 +278,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
 
             /// so that the shares withdrawn from the specified strategies are sent to the caller
             receiveAsTokens[i] = true;
-            require(withdrawalRootsSet.remove(withdrawalRoot), "WITHDRAWAL_ROOT_NOT_FOUND");
+            if (!withdrawalRootsSet.remove(withdrawalRoot)) revert WithdrawalRootNotFound();
         }
 
         /// it will update the erc20 balances of this contract
@@ -372,8 +378,8 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
             uint256[] memory stEthWithdrawalRequestIds = lidoWithdrawalQueue.getWithdrawalRequests(address(this));
             ILidoWithdrawalQueue.WithdrawalRequestStatus[] memory statuses = lidoWithdrawalQueue.getWithdrawalStatus(stEthWithdrawalRequestIds);
             for (uint256 i = 0; i < statuses.length; i++) {
-                require(statuses[i].owner == address(this), "Not the owner");
-                require(!statuses[i].isClaimed, "Already claimed");
+                if (statuses[i].owner != address(this)) revert NotTheOwner();
+                if (statuses[i].isClaimed) revert AlreadyClaimed();
                 total += statuses[i].amountOfStETH;
             }
         }
@@ -397,7 +403,7 @@ contract EtherFiRestaker is Initializable, UUPSUpgradeable, OwnableUpgradeable, 
     /// the bucket — prevents sub-gwei dust from bypassing the rate limiter.
     function _amountToGwei(uint256 amountWei) internal pure returns (uint64) {
         uint256 amountGwei = (amountWei + 1e9 - 1) / 1e9;
-        require(amountGwei <= type(uint64).max, "EtherFiRestaker: amount overflows uint64 gwei");
+        if (amountGwei > type(uint64).max) revert AmountOverflowsUint64Gwei();
         return uint64(amountGwei);
     }
 

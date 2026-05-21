@@ -56,7 +56,7 @@ contract AutoCompound is Script, Utils {
     IEtherFiNodesManager constant nodesManager = IEtherFiNodesManager(ETHERFI_NODES_MANAGER);
     EtherFiTimelock constant etherFiTimelock = EtherFiTimelock(payable(OPERATING_TIMELOCK));
     
-    // Note: MIN_DELAY_OPERATING_TIMELOCK is inherited from Utils (via TimelockUtils)
+    // Note: minDelay_OPERATING_TIMELOCK is inherited from Utils (via TimelockUtils)
     
     // Default parameters
     string constant DEFAULT_OUTPUT_FILE = "auto-compound-txns.json";
@@ -294,7 +294,7 @@ contract AutoCompound is Script, Utils {
             payloads,
             bytes32(0), // predecessor
             salt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
         
         // Build execute calldata
@@ -308,8 +308,8 @@ contract AutoCompound is Script, Utils {
         );
 
         vm.prank(address(ETHERFI_OPERATING_ADMIN));
-        etherFiTimelock.scheduleBatch(targets, values, payloads, bytes32(0), salt, MIN_DELAY_OPERATING_TIMELOCK);
-        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1);
+        etherFiTimelock.scheduleBatch(targets, values, payloads, bytes32(0), salt, minDelay_OPERATING_TIMELOCK);
+        vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1);
         vm.prank(address(ETHERFI_OPERATING_ADMIN));
         etherFiTimelock.executeBatch(targets, values, payloads, bytes32(0), salt);
     }
@@ -428,7 +428,7 @@ contract AutoCompound is Script, Utils {
         if (needsLinking) {
             console2.log("EXECUTION ORDER:");
             console2.log("1. Execute schedule transaction (link-schedule.json)");
-            console2.log("2. Wait", MIN_DELAY_OPERATING_TIMELOCK / 3600, "hours for timelock delay");
+            console2.log("2. Wait", minDelay_OPERATING_TIMELOCK / 3600, "hours for timelock delay");
             console2.log("3. Execute execute transaction (link-execute.json)");
             console2.log("4. Execute consolidation transaction (consolidation.json)");
         } else {

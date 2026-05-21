@@ -71,10 +71,10 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         address rrOwner = roleRegistryInstance.owner();
         vm.startPrank(rrOwner);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), rrOwner);
-        // EOA_1 (formerly ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE) is required by
+        // ORACLE_OPERATIONS_ROLE (formerly ETHERFI_ORACLE_EXECUTOR_TASK_MANAGER_ROLE) is required by
         // EtherFiAdmin.executeValidatorApprovalTask.
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_1(), ADMIN_EOA);
-        etherFiAdminInstance.updateMaxNumValidatorsToApprovePerDay(etherFiAdminInstance.MAX_NUM_VALIDATORS_TO_APPROVE_PER_DAY());
+        roleRegistryInstance.grantRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), ADMIN_EOA);
+        etherFiAdminInstance.updateMaxNumValidatorsToApprovePerDay(etherFiAdminInstance.maxAcceptableNumValidatorsToApprovePerDay());
         vm.stopPrank();
 
         // Handle any pending oracle report that hasn't been processed yet
@@ -130,10 +130,10 @@ contract ValidatorFlowsIntegrationTest is TestSetup, Deployed {
         // Ensure the operating admin can manage LP spawners + create validators.
         vm.startPrank(roleOwner);
         roleRegistryInstance.grantRole(roleRegistryInstance.OPERATION_TIMELOCK_ROLE(), ETHERFI_OPERATING_ADMIN);
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_1(), ETHERFI_OPERATING_ADMIN);
+        roleRegistryInstance.grantRole(roleRegistryInstance.ORACLE_OPERATIONS_ROLE(), ETHERFI_OPERATING_ADMIN);
 
         // Ensure operating timelock can create nodes.
-        roleRegistryInstance.grantRole(roleRegistryInstance.EOA_3(), OPERATING_TIMELOCK);
+        roleRegistryInstance.grantRole(roleRegistryInstance.EXECUTOR_OPERATIONS_ROLE(), OPERATING_TIMELOCK);
         vm.stopPrank();
 
         // The mainnet NodeOperatorManager implementation predates this PR and

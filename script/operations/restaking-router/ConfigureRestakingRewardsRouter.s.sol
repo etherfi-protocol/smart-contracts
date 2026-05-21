@@ -45,7 +45,7 @@ contract ConfigureRestakingRewardsRouter is Script, Utils {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_TIMELOCK
+            minDelay_TIMELOCK
         );
 
         console2.log("====== Schedule Role Grants Tx:");
@@ -71,11 +71,11 @@ contract ConfigureRestakingRewardsRouter is Script, Utils {
         // uncomment to run against fork
         // vm.startBroadcast(ETHERFI_UPGRADE_ADMIN);
         vm.startPrank(ETHERFI_UPGRADE_ADMIN);
-        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_TIMELOCK);
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, minDelay_TIMELOCK);
         console2.log("====== Role Grants Scheduled Successfully");
         console2.log("================================================");
         console2.log("");
-        vm.warp(block.timestamp + MIN_DELAY_TIMELOCK + 1);
+        vm.warp(block.timestamp + minDelay_TIMELOCK + 1);
         etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
         vm.stopPrank();
 

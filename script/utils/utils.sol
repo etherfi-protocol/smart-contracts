@@ -28,8 +28,8 @@ contract Utils is Script, Deployed {
         0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
     ICreate2Factory constant mainnetCreate2Factory = ICreate2Factory(0x356d1B83970CeF2018F2c9337cDdb67dff5AEF99);
 
-    uint256 constant MIN_DELAY_OPERATING_TIMELOCK = 28800; // 8 hours
-    uint256 constant MIN_DELAY_TIMELOCK = 259200; // 72 hours
+    uint256 constant minDelay_OPERATING_TIMELOCK = 28800; // 8 hours
+    uint256 constant minDelay_TIMELOCK = 259200; // 72 hours
 
     //-------------------------------------------------------------------------
     // Immutable Snapshot Helpers for Upgrade Verification

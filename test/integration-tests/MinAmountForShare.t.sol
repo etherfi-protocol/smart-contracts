@@ -5,10 +5,10 @@ import "forge-std/console2.sol";
 import "../TestSetup.sol";
 import "../../script/deploys/Deployed.s.sol";
 
-/// @notice Mainnet-fork tests for the MIN_AMOUNT_FOR_SHARE immutable on LiquidityPool.
+/// @notice Mainnet-fork tests for the minAmountForShare immutable on LiquidityPool.
 ///
-/// MIN_AMOUNT_FOR_SHARE is enforced by `_checkMinAmountForShare()` which reverts with
-/// `InvalidAmountForShare` whenever `amountForShare(1 ether) < MIN_AMOUNT_FOR_SHARE`.
+/// minAmountForShare is enforced by `_checkMinAmountForShare()` which reverts with
+/// `InvalidAmountForShare` whenever `amountForShare(1 ether) < minAmountForShare`.
 /// The check is invoked from every state-changing path that can move the eETH/ETH ratio:
 ///   - receive(), _deposit() (deposit / depositToRecipient / deposit(address,address))
 ///   - withdraw() (NFT, membershipManager, redemptionManager, priorityWithdrawalQueue)
@@ -56,7 +56,7 @@ contract MinAmountForShareForkTest is TestSetup, Deployed {
         );
         vm.prank(roleRegistryInstance.owner());
         liquidityPoolInstance.upgradeTo(address(newImpl));
-        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), minAmount);
+        assertEq(liquidityPoolInstance.minAmountForShare(), minAmount);
     }
 
     function _ratio() internal view returns (uint256) {
@@ -104,25 +104,25 @@ contract MinAmountForShareForkTest is TestSetup, Deployed {
     // ---------------------------------------------------------------------
 
     /// Pre-upgrade: mainnet's currently-deployed LP impl predates this branch, so the
-    /// `MIN_AMOUNT_FOR_SHARE` getter selector does not exist on the deployed bytecode.
+    /// `minAmountForShare` getter selector does not exist on the deployed bytecode.
     /// The proxy delegatecall returns no data and reverts. Asserting this guards against
     /// silent regressions in the pre-upgrade baseline this test suite assumes.
     function test_fork_minAmount_getter_absent_pre_upgrade() public {
         (bool ok, ) = address(liquidityPoolInstance).staticcall(
-            abi.encodeWithSignature("MIN_AMOUNT_FOR_SHARE()")
+            abi.encodeWithSignature("minAmountForShare()")
         );
-        assertFalse(ok, "MIN_AMOUNT_FOR_SHARE getter unexpectedly exists pre-upgrade");
+        assertFalse(ok, "minAmountForShare getter unexpectedly exists pre-upgrade");
     }
 
     function test_fork_minAmount_immutable_set_after_upgrade() public {
         _upgradeLpWithMinAmount(0.5 ether);
-        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0.5 ether);
+        assertEq(liquidityPoolInstance.minAmountForShare(), 0.5 ether);
 
         _upgradeLpWithMinAmount(1.5 ether);
-        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 1.5 ether);
+        assertEq(liquidityPoolInstance.minAmountForShare(), 1.5 ether);
 
         _upgradeLpWithMinAmount(0);
-        assertEq(liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE(), 0);
+        assertEq(liquidityPoolInstance.minAmountForShare(), 0);
     }
 
     // ---------------------------------------------------------------------
@@ -245,7 +245,7 @@ contract MinAmountForShareForkTest is TestSetup, Deployed {
         // ratio decreased but stayed above MIN
         uint256 newRatio = _ratio();
         assertLt(newRatio, ratio);
-        assertGe(newRatio, liquidityPoolInstance.MIN_AMOUNT_FOR_SHARE());
+        assertGe(newRatio, liquidityPoolInstance.minAmountForShare());
     }
 
     // ---------------------------------------------------------------------

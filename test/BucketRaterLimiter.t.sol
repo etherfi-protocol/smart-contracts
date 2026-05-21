@@ -40,19 +40,19 @@ contract BucketRateLimiterTest is Test {
     function test_updateRateLimit() public {
         vm.startPrank(limiter.owner());
 
-        vm.expectRevert("BucketRateLimiter: rate limit exceeded");
+        vm.expectRevert(BucketRateLimiter.RateLimitExceeded.selector);
         limiter.updateRateLimit(address(0), address(0), 50 ether, 50 ether);
 
         vm.warp(block.timestamp + 1);
 
         limiter.updateRateLimit(address(0), address(0), 50 ether, 50 ether);
 
-        vm.expectRevert("BucketRateLimiter: rate limit exceeded");
+        vm.expectRevert(BucketRateLimiter.RateLimitExceeded.selector);
         limiter.updateRateLimit(address(0), address(0), 50 ether, 50 ether);
 
         vm.warp(block.timestamp + 1);
 
-        vm.expectRevert("BucketRateLimiter: rate limit exceeded");
+        vm.expectRevert(BucketRateLimiter.RateLimitExceeded.selector);
         limiter.updateRateLimit(address(0), address(0), 51 ether, 50 ether);
 
         vm.warp(block.timestamp + 1);
@@ -60,7 +60,7 @@ contract BucketRateLimiterTest is Test {
         limiter.updateRateLimit(address(0), address(0), 100 ether, 100 ether);
 
         vm.warp(block.timestamp + 3);
-        vm.expectRevert("BucketRateLimiter: rate limit exceeded");
+        vm.expectRevert(BucketRateLimiter.RateLimitExceeded.selector);
         limiter.updateRateLimit(address(0), address(0), 100 ether, 101 ether);
 
         vm.stopPrank();
@@ -73,7 +73,7 @@ contract BucketRateLimiterTest is Test {
         vm.warp(block.timestamp + 1);
         limiter.updateRateLimit(address(0), address(0), 0, 1);
 
-        vm.expectRevert("BucketRateLimiter: rate limit exceeded");
+        vm.expectRevert(BucketRateLimiter.RateLimitExceeded.selector);
         limiter.updateRateLimit(address(0), address(0), 50 ether, 50 ether);
 
         vm.stopPrank();
@@ -91,12 +91,12 @@ contract BucketRateLimiterTest is Test {
 
         limiter.updateRateLimit(address(0), token, 50 ether, 50 ether);
 
-        vm.expectRevert("BucketRateLimiter: token rate limit exceeded");
+        vm.expectRevert(BucketRateLimiter.TokenRateLimitExceeded.selector);
         limiter.updateRateLimit(address(0), token, 50 ether, 50 ether);
 
         vm.warp(block.timestamp + 1);
 
-        vm.expectRevert("BucketRateLimiter: token rate limit exceeded");
+        vm.expectRevert(BucketRateLimiter.TokenRateLimitExceeded.selector);
         limiter.updateRateLimit(address(0), token, 51 ether, 50 ether);
 
         limiter.updateRateLimit(address(0), token, 50 ether, 50 ether);
@@ -423,7 +423,7 @@ contract BucketRateLimiterTest is Test {
         vm.warp(block.timestamp + 1);
         assertFalse(limiter.canConsume(address(0), 1, 0));
         
-        vm.expectRevert("BucketRateLimiter: rate limit exceeded");
+        vm.expectRevert(BucketRateLimiter.RateLimitExceeded.selector);
         limiter.updateRateLimit(address(0), address(0), 1, 0);
         
         vm.stopPrank();
@@ -637,7 +637,7 @@ contract BucketRateLimiterTest is Test {
         vm.warp(block.timestamp + 1);
         assertFalse(limiter.canConsume(token, 1, 0));
         
-        vm.expectRevert("BucketRateLimiter: token rate limit exceeded");
+        vm.expectRevert(BucketRateLimiter.TokenRateLimitExceeded.selector);
         limiter.updateRateLimit(address(0), token, 1, 0);
         
         vm.stopPrank();
@@ -818,7 +818,7 @@ contract BucketRateLimiterTest is Test {
         vm.stopPrank();
         
         vm.prank(nonConsumer);
-        vm.expectRevert("NOT_CONSUMER");
+        vm.expectRevert(BucketRateLimiter.IncorrectCaller.selector);
         limiter.updateRateLimit(address(0), address(0), 1 ether, 0);
         
         vm.startPrank(consumer);

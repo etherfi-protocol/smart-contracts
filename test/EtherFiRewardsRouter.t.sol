@@ -196,7 +196,7 @@ contract EtherFiRewardsRouterTest is Test {
         // Even with high totalValueOutOfLp, should revert if contract balance is 0
         mockLiquidityPool.setTotalValueOutOfLp(type(uint128).max);
         
-        vm.expectRevert("Contract balance is zero");
+        vm.expectRevert(EtherFiRewardsRouter.ContractBalanceIsZero.selector);
         rewardsRouter.withdrawToLiquidityPool();
     }
 
@@ -207,7 +207,7 @@ contract EtherFiRewardsRouterTest is Test {
         // totalValueOutOfLp is 0, so min(balance, 0) = 0
         mockLiquidityPool.setTotalValueOutOfLp(0);
         
-        vm.expectRevert("Contract balance is zero");
+        vm.expectRevert(EtherFiRewardsRouter.ContractBalanceIsZero.selector);
         rewardsRouter.withdrawToLiquidityPool();
     }
     

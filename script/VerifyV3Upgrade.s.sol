@@ -276,7 +276,7 @@ contract VerifyV3Upgrade is Script {
     function verifyRoleAssignments() internal {
         // After role consolidation, all per-contract roles map to one of the 8 tier roles:
         //   UPGRADE_TIMELOCK_ROLE, OPERATION_TIMELOCK_ROLE, OPERATION_MULTISIG_ROLE,
-        //   GUARDIAN_ROLE, EOA_1..EOA_4. Verify the consolidated constants exist.
+        //   GUARDIAN_ROLE, ORACLE_OPERATIONS_ROLE..EIGENPOD_OPERATIONS_ROLE. Verify the consolidated constants exist.
 
         console2.log("Checking consolidated role constants...");
         checkCondition(
@@ -292,20 +292,20 @@ contract VerifyV3Upgrade is Script {
             "GUARDIAN_ROLE constant matches"
         );
         checkCondition(
-            keccak256("EOA_1") == roleRegistry.EOA_1(),
-            "EOA_1 constant matches"
+            keccak256("ORACLE_OPERATIONS_ROLE") == roleRegistry.ORACLE_OPERATIONS_ROLE(),
+            "ORACLE_OPERATIONS_ROLE constant matches"
         );
         checkCondition(
-            keccak256("EOA_2") == roleRegistry.EOA_2(),
-            "EOA_2 constant matches"
+            keccak256("HOUSEKEEPING_OPERATIONS_ROLE") == roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(),
+            "HOUSEKEEPING_OPERATIONS_ROLE constant matches"
         );
         checkCondition(
-            keccak256("EOA_3") == roleRegistry.EOA_3(),
-            "EOA_3 constant matches"
+            keccak256("EXECUTOR_OPERATIONS_ROLE") == roleRegistry.EXECUTOR_OPERATIONS_ROLE(),
+            "EXECUTOR_OPERATIONS_ROLE constant matches"
         );
         checkCondition(
-            keccak256("EOA_4") == roleRegistry.EOA_4(),
-            "EOA_4 constant matches"
+            keccak256("EIGENPOD_OPERATIONS_ROLE") == roleRegistry.EIGENPOD_OPERATIONS_ROLE(),
+            "EIGENPOD_OPERATIONS_ROLE constant matches"
         );
     }
 

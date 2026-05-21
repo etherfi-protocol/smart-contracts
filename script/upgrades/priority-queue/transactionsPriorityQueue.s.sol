@@ -35,8 +35,8 @@ contract PriorityQueueTransactions is Script, Utils {
     address constant etherFiRedemptionManagerImpl = 0x6BD191582F40012b2f2cdf66bD3D32bDe41191F7;
     ContractCodeChecker contractCodeChecker;
 
-    // MIN_DELAY used when deploying PriorityWithdrawalQueue implementation (must match deploy script)
-    uint32 constant PWQ_MIN_DELAY = 1 hours;
+    // minDelay used when deploying PriorityWithdrawalQueue implementation (must match deploy script)
+    uint32 constant PWQ_minDelay = 1 hours;
 
     //--------------------------------------------------------------------------------------
     //------------------------------- IMMUTABLE SNAPSHOTS (PRE-UPGRADE) -------------------
@@ -70,8 +70,8 @@ contract PriorityQueueTransactions is Script, Utils {
 
         // Get role hashes from the role registry
         PRIORITY_WITHDRAWAL_QUEUE_ADMIN_ROLE = roleRegistryContract.OPERATION_TIMELOCK_ROLE();
-        PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = roleRegistryContract.EOA_2();
-        PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE = roleRegistryContract.EOA_1();
+        PRIORITY_WITHDRAWAL_QUEUE_WHITELIST_MANAGER_ROLE = roleRegistryContract.HOUSEKEEPING_OPERATIONS_ROLE();
+        PRIORITY_WITHDRAWAL_QUEUE_REQUEST_MANAGER_ROLE = roleRegistryContract.ORACLE_OPERATIONS_ROLE();
 
         // Step 1: Verify deployed bytecode matches expected
         verifyDeployedBytecode();
@@ -153,7 +153,7 @@ contract PriorityQueueTransactions is Script, Utils {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_TIMELOCK // 72 hours
+            minDelay_TIMELOCK // 72 hours
         );
 
         console2.log("================================================");
@@ -194,9 +194,9 @@ contract PriorityQueueTransactions is Script, Utils {
         // Execute on fork for testing
         console2.log("=== SCHEDULING BATCH ON FORK ===");
         vm.startPrank(ETHERFI_UPGRADE_ADMIN);
-        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_TIMELOCK);
+        etherFiTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, minDelay_TIMELOCK);
 
-        vm.warp(block.timestamp + MIN_DELAY_TIMELOCK + 1);
+        vm.warp(block.timestamp + minDelay_TIMELOCK + 1);
         etherFiTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
         vm.stopPrank();
 
@@ -271,7 +271,7 @@ contract PriorityQueueTransactions is Script, Utils {
             0
         );
         PriorityWithdrawalQueue newPWQImpl = new PriorityWithdrawalQueue(
-            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_MIN_DELAY
+            LIQUIDITY_POOL, EETH, WEETH, ROLE_REGISTRY, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, PWQ_minDelay
         );
         EtherFiRedemptionManager newRedemptionManagerImpl = new EtherFiRedemptionManager(
             LIQUIDITY_POOL, EETH, WEETH, WITHDRAW_REQUEST_NFT_BUYBACK_SAFE, ROLE_REGISTRY, ETHERFI_RESTAKER, priorityWithdrawalQueueProxy, address(0), 10_000, 100, 10_000
@@ -310,7 +310,7 @@ contract PriorityQueueTransactions is Script, Utils {
         selectors[1] = bytes4(keccak256("eETH()"));
         selectors[2] = bytes4(keccak256("roleRegistry()"));
         selectors[3] = bytes4(keccak256("treasury()"));
-        selectors[4] = bytes4(keccak256("MIN_DELAY()"));
+        selectors[4] = bytes4(keccak256("minDelay()"));
     }
 
     //--------------------------------------------------------------------------------------

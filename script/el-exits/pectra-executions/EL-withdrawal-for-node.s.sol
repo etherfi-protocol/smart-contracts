@@ -36,8 +36,8 @@ contract ELWithdrawalForNode is Script {
 
     address constant EL_TRIGGER_EXITER = 0x12582A27E5e19492b4FcD194a60F8f5e1aa31B0F;
 
-    uint256 MIN_DELAY_OPERATING_TIMELOCK = 28800; // 8 hours
-    uint256 MIN_DELAY_TIMELOCK = 259200; // 72 hours
+    uint256 minDelay_OPERATING_TIMELOCK = 28800; // 8 hours
+    uint256 minDelay_TIMELOCK = 259200; // 72 hours
 
     bytes constant PK_54043 = hex"8014c4704f081bd4b8470cb93722601095a314c3db7ccf79c129189d01c432db968a64131f23a94c8ff1e280500ae3d3";
     bytes constant PK_54045 = hex"820cf0499d0d908d10c19d85027ed4077322096cd4fb322a763c3bf5e4eb70db30b44ef1284e6fb713421a195735d942";
@@ -105,7 +105,7 @@ contract ELWithdrawalForNode is Script {
             data,
             bytes32(0), //predecessor
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
         console2.log("Scheduled linkLegacyValidatorIds Tx");
         console2.log("================================================");
@@ -120,7 +120,7 @@ contract ELWithdrawalForNode is Script {
             data,
             bytes32(0), //predecessor
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
         console2.log("Executed linkLegacyValidatorIds Tx");
         console2.log("================================================");
@@ -135,10 +135,10 @@ contract ELWithdrawalForNode is Script {
         // uncomment to run against fork
         // console2.log("=== SCHEDULING BATCH ===");
         // // console2.log("Current timestamp:", block.timestamp);
-        // etherFiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
+        // etherFiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, minDelay_OPERATING_TIMELOCK);
 
         // console2.log("=== FAST FORWARDING TIME ===");
-        // vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
+        // vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
         // // console2.log("New timestamp:", block.timestamp);
         // etherFiOperatingTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
     }

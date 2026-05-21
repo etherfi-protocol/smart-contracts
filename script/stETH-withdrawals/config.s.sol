@@ -60,7 +60,7 @@ contract StETHWithdrawalsConfig is Script, Utils, Test {
             data,
             bytes32(0),
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
         console2.log("Schedule Update Configs EFRM Tx:");
         console2.logBytes(scheduleCalldata);
@@ -83,13 +83,13 @@ contract StETHWithdrawalsConfig is Script, Utils, Test {
         // uncomment to run against fork
         console2.log("=== SCHEDULING BATCH ===");
         vm.startPrank(ETHERFI_OPERATING_ADMIN);
-        etherfiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, MIN_DELAY_OPERATING_TIMELOCK);
+        etherfiOperatingTimelock.scheduleBatch(targets, values, data, bytes32(0), timelockSalt, minDelay_OPERATING_TIMELOCK);
         console2.log("Schedule of Update Configs EFRM Tx successful");
         console2.log("================================================");
         console2.log("");
 
         console2.log("=== FAST FORWARDING TIME ===");
-        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
+        vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1); // +1 to ensure it's past the delay
         etherfiOperatingTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
         vm.stopPrank();
         console2.log("Execute of Update Configs EFRM Tx successful");

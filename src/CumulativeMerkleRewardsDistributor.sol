@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import { SafeERC20, IERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
-import {RoleRegistry} from "./RoleRegistry.sol";
+import {IRoleRegistry} from "./interfaces/IRoleRegistry.sol";
 import {PausableUntil} from "./utils/PausableUntil.sol";
 import {ICumulativeMerkleRewardsDistributor}  from "./interfaces/ICumulativeMerkleRewardsDistributor.sol";
 
@@ -32,7 +32,7 @@ using SafeERC20 for IERC20;
     //--------------------------------------------------------------------------------------
 
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
-    RoleRegistry public immutable roleRegistry;
+    IRoleRegistry public immutable roleRegistry;
 
 //--------------------------------------------------------------------------------------
 //----------------------------  STATE-CHANGING FUNCTIONS  ------------------------------
@@ -40,7 +40,7 @@ using SafeERC20 for IERC20;
 
     constructor(address _roleRegistry) {
         _disableInitializers();
-        roleRegistry = RoleRegistry(_roleRegistry);
+        roleRegistry = IRoleRegistry(_roleRegistry);
     }
 
     function initialize() external initializer {
@@ -56,13 +56,13 @@ using SafeERC20 for IERC20;
     }
 /**
 * @notice Sets a new pending Merkle root for token rewards distribution
-* @dev Only callable by accounts with EOA_3 role
+* @dev Only callable by accounts with EXECUTOR_OPERATIONS_ROLE role
 * @dev The pending root must be finalized after CLAIM_DELAY blocks before it becomes active
 * @param _token Address of the reward token (use ETH_ADDRESS for ETH rewards)
 * @param _merkleRoot New Merkle root containing the reward data
 **/
     function setPendingMerkleRoot(address _token, bytes32 _merkleRoot) external whenNotPaused {
-        if(!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         pendingMerkleRoots[_token] = _merkleRoot;
         lastPendingMerkleUpdatedToTimestamp[_token] = block.timestamp;
         emit PendingMerkleRootUpdated(_token, _merkleRoot);
@@ -70,13 +70,13 @@ using SafeERC20 for IERC20;
 
 /**
 * @notice Finalizes a pending Merkle root after the required delay period
-* @dev Only callable by accounts with EOA_3 role
+* @dev Only callable by accounts with EXECUTOR_OPERATIONS_ROLE role
 * @dev Must wait CLAIM_DELAY blocks after setPendingMerkleRoot before finalizing
 * @param _token Address of the reward token (use ETH_ADDRESS for ETH rewards)
 * @param _finalizedBlock Block number up to which rewards are calculated
 */
     function finalizeMerkleRoot(address _token, uint256 _finalizedBlock) external whenNotPaused {
-        if(!roleRegistry.hasRole(roleRegistry.EOA_3(), msg.sender)) revert IncorrectRole();
+        if(!roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         if(!(block.timestamp >= lastPendingMerkleUpdatedToTimestamp[_token] + claimDelay)) revert InsufficentDelay();
         if(_finalizedBlock < lastRewardsCalculatedToBlock[_token] || _finalizedBlock > block.number) revert InvalidFinalizedBlock();
         bytes32 oldClaimableMerkleRoot = claimableMerkleRoots[_token];

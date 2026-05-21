@@ -148,10 +148,10 @@ contract VerifyValidatorKeyGen is Script {
         address etherFiNode = address(0x1234);
 
         {
-            require(roleRegistry.hasRole(roleRegistry.EOA_1(), ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE");
-            require(roleRegistry.hasRole(roleRegistry.EOA_2(), address(stakingManager)), "StakingManager does not have ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
-            require(roleRegistry.hasRole(roleRegistry.EOA_1(), realElExiter), "realElExiter does not have STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE");
-            require(roleRegistry.hasRole(roleRegistry.EOA_3(), ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
+            require(roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have LIQUIDITY_POOL_VALIDATOR_CREATOR_ROLE");
+            require(roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), address(stakingManager)), "StakingManager does not have ETHERFI_NODES_MANAGER_EIGENLAYER_ADMIN_ROLE");
+            require(roleRegistry.hasRole(roleRegistry.ORACLE_OPERATIONS_ROLE(), realElExiter), "realElExiter does not have STAKING_MANAGER_VALIDATOR_INVALIDATOR_ROLE");
+            require(roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), ETHERFI_OPERATING_ADMIN), "ETHERFI_OPERATING_ADMIN does not have ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE");
             require(EtherFiRestaker(payable(ETHERFI_RESTAKER_PROXY)).isDelegated(), "Can't find EigenLayer Delegation Manager");
         }
 

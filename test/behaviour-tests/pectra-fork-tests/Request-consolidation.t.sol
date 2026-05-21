@@ -56,9 +56,9 @@ contract RequestConsolidationTest is TestSetup, Deployed {
         roleRegistry.grantRole(roleRegistry.OPERATION_MULTISIG_ROLE(), roleRegistry.owner());
         // RateLimiter mutators (createNewLimiter, updateConsumers) are now onlyAdmin → OPERATION_TIMELOCK_ROLE.
         roleRegistry.grantRole(roleRegistry.OPERATION_TIMELOCK_ROLE(), roleRegistry.owner());
-        roleRegistry.grantRole(roleRegistry.EOA_3(), realElExiter);
-        // ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE consolidated into EOA_3.
-        roleRegistry.grantRole(roleRegistry.EOA_3(), ETHERFI_OPERATING_ADMIN);
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), realElExiter);
+        // ETHERFI_NODES_MANAGER_EL_CONSOLIDATION_ROLE consolidated into EXECUTOR_OPERATIONS_ROLE.
+        roleRegistry.grantRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), ETHERFI_OPERATING_ADMIN);
         vm.stopPrank();
 
         vm.startPrank(roleRegistry.owner());
@@ -117,7 +117,7 @@ contract RequestConsolidationTest is TestSetup, Deployed {
 
     function test_RequestConsolidation() public {
         console2.log("=== REQUEST CONSOLIDATION TEST ===");
-        bool hasRole = roleRegistry.hasRole(roleRegistry.EOA_3(), ETHERFI_OPERATING_ADMIN);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), ETHERFI_OPERATING_ADMIN);
         require(hasRole, "test: ETHERFI_OPERATING_ADMIN does not have the Consolidation Role");
 
         bytes[] memory pubkeys = new bytes[](3);
@@ -159,7 +159,7 @@ contract RequestConsolidationTest is TestSetup, Deployed {
 
     function test_switchToCompounding() public {
         console2.log("=== SWITCH TO COMPOUNDING TEST ===");
-        bool hasRole = roleRegistry.hasRole(roleRegistry.EOA_3(), ETHERFI_OPERATING_ADMIN);
+        bool hasRole = roleRegistry.hasRole(roleRegistry.EXECUTOR_OPERATIONS_ROLE(), ETHERFI_OPERATING_ADMIN);
         require(hasRole, "test: ETHERFI_OPERATING_ADMIN does not have the Consolidation Role");
 
         bytes[] memory pubkeys = new bytes[](1);

@@ -276,7 +276,7 @@ contract ConsolidateValidators is Script, Utils {
             data,
             bytes32(0), // predecessor
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
         console2.log("=== Schedule", operationName, "Tx ===");
         console2.logBytes(scheduleCalldata);
@@ -305,11 +305,11 @@ contract ConsolidateValidators is Script, Utils {
             data,
             bytes32(0),
             timelockSalt,
-            MIN_DELAY_OPERATING_TIMELOCK
+            minDelay_OPERATING_TIMELOCK
         );
         
         // Execute
-        vm.warp(block.timestamp + MIN_DELAY_OPERATING_TIMELOCK + 1);
+        vm.warp(block.timestamp + minDelay_OPERATING_TIMELOCK + 1);
         vm.prank(address(ETHERFI_OPERATING_ADMIN));
         etherFiOperatingTimelock.executeBatch(targets, values, data, bytes32(0), timelockSalt);
     }

@@ -50,7 +50,7 @@ contract WithdrawIntegrationTest is TestSetup, Deployed {
         // a few epochs forward, so even a 1-ETH finalization blows up to ~10k ETH/day.
         // Raise the cap to the contract-enforced ceiling so realistic-fork tests can run.
         etherFiAdminInstance.updateMaxFinalizedWithdrawalAmountPerDay(
-            etherFiAdminInstance.MAX_FINALIZED_WITHDRAWAL_AMOUNT_PER_DAY()
+            etherFiAdminInstance.maxAcceptableFinalizedWithdrawalAmountPerDay()
         );
     }
 

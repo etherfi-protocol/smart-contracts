@@ -1,7 +1,6 @@
 /// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.23;
 
-import "@openzeppelin-upgradeable/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import "@openzeppelin-upgradeable/contracts/security/PausableUpgradeable.sol";
@@ -79,9 +78,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     IDelegationManager private DEPRECATED_eigenLayerDelegationManager;
 
-    IPancackeV3SwapRouter pancakeRouter;
+    IPancackeV3SwapRouter private DEPRECATED_pancakeRouter;
 
-    mapping(string => bool) flags;
+    mapping(string => bool) private DEPRECATED_flags;
     
     // To support L2 native minting of weETH
     IERC20[] public dummies;
@@ -104,9 +103,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     address public immutable etherfiRestaker;
     address public immutable l1SyncPool;
 
-    uint256 public immutable MIN_DISCOUNT_RATE_IN_BPS;
-    uint256 public immutable STALE_PRICE_WINDOW;
-    uint256 public immutable MAX_PRICE_DEVIATION_IN_BPS;
+    uint256 public immutable minDiscountRateInBps;
+    uint256 public immutable stalePriceWindow;
+    uint256 public immutable maxPriceDeviationInBps;
 
     event Liquified(address _user, uint256 _toEEthAmount, address _fromToken, bool _isRestaked);
     // This event is deprecated. will be removed in the next release.
@@ -139,6 +138,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     error InvalidL1SyncPool();
     error StalePriceFeed();
     error InvalidStEthPrice();
+    error NotAllowed();
+    error Capped();
 
     struct ConstructorAddresses {
         address liquidityPool;
@@ -175,9 +176,9 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         blacklister = IBlacklister(_constructorAddresses.blacklister);
         etherfiRestaker = _constructorAddresses.etherfiRestaker;
         l1SyncPool = _constructorAddresses.l1SyncPool;
-        MIN_DISCOUNT_RATE_IN_BPS = _minDiscountInBasisPoints;
-        STALE_PRICE_WINDOW = _stalePriceWindow;
-        MAX_PRICE_DEVIATION_IN_BPS = _maxPriceDeviationInBps;
+        minDiscountRateInBps = _minDiscountInBasisPoints;
+        stalePriceWindow = _stalePriceWindow;
+        maxPriceDeviationInBps = _maxPriceDeviationInBps;
         _disableInitializers();
     }
 
@@ -202,7 +203,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
     /// @return mintedAmount the amount of eETH minted to the caller (= msg.sender)
     /// If the token is l2Eth, only the l2SyncPool can call this function
     function depositWithERC20(address _token, uint256 _amount, address _referral) public whenNotPaused nonReentrant nonBlacklisted returns (uint256) {        
-        require(isTokenWhitelisted(_token) && (!tokenInfos[_token].isL2Eth || msg.sender == l1SyncPool), "NOT_ALLOWED");
+        if (!isTokenWhitelisted(_token) || (tokenInfos[_token].isL2Eth && msg.sender != l1SyncPool)) revert NotAllowed();
 
         // Measure actual amount received to handle stETH's 1-2 wei rounding issue
         uint256 amountReceived;
@@ -220,7 +221,7 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         if(tokenInfos[_token].isL2Eth) _L2SanityChecks(_token);
     
         uint256 dx = quoteByDiscountedValue(_token, amountReceived);
-        require(!isDepositCapReached(_token, dx), "CAPPED");
+        if (isDepositCapReached(_token, dx)) revert Capped();
 
         uint256 eEthShare = liquidityPool.depositToRecipient(msg.sender, dx, _referral);
 
@@ -237,14 +238,14 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
 
     // Send the redeemed ETH back to the liquidity pool & Send the fee to Treasury
     function withdrawEther() external {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         uint256 amountToLiquidityPool = _min(address(this).balance, liquidityPool.totalValueOutOfLp());
         (bool sent, ) = payable(address(liquidityPool)).call{value: amountToLiquidityPool, gas: 20000}("");
         if (!sent) revert EthTransferFailed();
     }
 
     function sendToEtherFiRestaker(address _token, uint256 _amount) external {
-        if (!roleRegistry.hasRole(roleRegistry.EOA_2(), msg.sender)) revert IncorrectRole();
+        if (!roleRegistry.hasRole(roleRegistry.HOUSEKEEPING_OPERATIONS_ROLE(), msg.sender)) revert IncorrectRole();
         IERC20(_token).safeTransfer(etherfiRestaker, _amount);
     }
 
@@ -252,13 +253,13 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         tokenInfos[_token].isWhitelisted = _isWhitelisted;
     }
 
-    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyOperations {
+    function updateDepositCap(address _token, uint32 _timeBoundCapInEther, uint32 _totalCapInEther) public onlyAdmin {
         tokenInfos[_token].timeBoundCapInEther = _timeBoundCapInEther;
         tokenInfos[_token].totalCapInEther = _totalCapInEther;
     }
     
     function registerToken(address _token, address _target, bool _isWhitelisted, uint16 _discountInBasisPoints, uint32 _timeBoundCapInEther, uint32 _totalCapInEther, bool _isL2Eth) external onlyUpgradeTimelock {
-        if (_discountInBasisPoints < MIN_DISCOUNT_RATE_IN_BPS || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
+        if (_discountInBasisPoints < minDiscountRateInBps || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         if (tokenInfos[_token].timeBoundCapClockStartTime != 0) revert AlreadyRegistered();
         if (_isL2Eth) {
             if (_token == address(0) || _target != address(0)) revert();
@@ -274,8 +275,8 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
         timeBoundCapRefreshInterval = _timeBoundCapRefreshInterval;
     }
 
-    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyOperations {
-        if (_discountInBasisPoints < MIN_DISCOUNT_RATE_IN_BPS || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
+    function updateDiscountInBasisPoints(address _token, uint16 _discountInBasisPoints) external onlyAdmin {
+        if (_discountInBasisPoints < minDiscountRateInBps || _discountInBasisPoints > BASIS_POINT_SCALE) revert InvalidDiscountRate();
         tokenInfos[_token].discountInBasisPoints = _discountInBasisPoints;
     }
 
@@ -350,10 +351,10 @@ contract Liquifier is Initializable, UUPSUpgradeable, OwnableUpgradeable, Pausab
                 // via stETH will be blocked until it stablises (either because of underlying lido solvency/liquidity issue or oracle manipulation)
                 (, int256 answer, , uint256 updatedAt,) = stEthPriceFeed.latestRoundData();
                 if (answer <= 0) revert InvalidPriceFeed();
-                if (updatedAt + STALE_PRICE_WINDOW < block.timestamp) revert StalePriceFeed();
+                if (updatedAt + stalePriceWindow < block.timestamp) revert StalePriceFeed();
                 uint256 pricefeedValue = (uint256(answer) * _amount) / 1e18;
                 uint256 deviation = pricefeedValue > _marketValue ? pricefeedValue - _marketValue : _marketValue - pricefeedValue;
-                if (deviation * BASIS_POINT_SCALE / _marketValue > MAX_PRICE_DEVIATION_IN_BPS) revert InvalidStEthPrice();
+                if (deviation * BASIS_POINT_SCALE / _marketValue > maxPriceDeviationInBps) revert InvalidStEthPrice();
             } else {
                 _marketValue = _amount; /// 1:1 from stETH to eETH
             }
