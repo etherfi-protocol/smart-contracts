@@ -28,6 +28,10 @@ contract EtherFiNode is IEtherFiNode {
     uint32 public constant EIGENLAYER_WITHDRAWAL_DELAY_BLOCKS = 100800;
     address public constant BEACON_ETH_STRATEGY_ADDRESS = address(0xbeaC0eeEeeeeEEeEeEEEEeeEEeEeeeEeeEEBEaC0);
 
+    /// @dev Suggested gas stipend for contract receiving ETH to perform a few
+    /// storage reads and writes, but low enough to prevent griefing.
+    uint256 internal constant GAS_STIPEND_NO_GRIEF = 100_000;
+
     //---------------------------------------------------------------------------
     //-----------------------------  Storage  -----------------------------------
     //---------------------------------------------------------------------------
@@ -161,7 +165,7 @@ contract EtherFiNode is IEtherFiNode {
         uint256 totalValueOutOfLp = liquidityPool.totalValueOutOfLp();
         balance = contractBalance < totalValueOutOfLp ? contractBalance : totalValueOutOfLp;
         if (balance > 0) {
-            (bool sent, ) = payable(address(liquidityPool)).call{value: balance, gas: 20000}("");
+            (bool sent, ) = payable(address(liquidityPool)).call{value: balance, gas: GAS_STIPEND_NO_GRIEF}("");
             if (!sent) revert TransferFailed();
             emit FundsTransferred(address(liquidityPool), balance);
         }

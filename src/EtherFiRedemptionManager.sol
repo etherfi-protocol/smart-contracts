@@ -45,6 +45,10 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
     uint256 private constant BUCKET_UNIT_SCALE = 1e12;
     uint256 private constant BASIS_POINT_SCALE = 1e4;
 
+    /// @dev Suggested gas stipend for contract receiving ETH to perform a few
+    /// storage reads and writes, but low enough to prevent griefing.
+    uint256 internal constant GAS_STIPEND_NO_GRIEF = 100_000;
+
     address public constant ETH_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     address public immutable treasury;
@@ -201,7 +205,7 @@ contract EtherFiRedemptionManager is Initializable, PausableUpgradeable, Pausabl
         if (eEth.totalShares() < 1 gwei || eEth.totalShares() != totalEEthShare - (sharesToBurn + feeShareToStakers)) revert InvalidTotalShares();
 
         // To Receiver by transferring ETH, using gas 10k for additional safety
-        (bool success, ) = receiver.call{value: ethReceived, gas: 10_000}("");
+        (bool success, ) = receiver.call{value: ethReceived, gas: GAS_STIPEND_NO_GRIEF}("");
         if (!success) revert TransferFailed();
 
         // Make sure the liquidity pool balance is correct && total shares are correct
