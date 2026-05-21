@@ -554,10 +554,6 @@ contract LiquidityPool is Initializable, OwnableUpgradeable, UUPSUpgradeable, Re
         _setPauseUntilDuration(_pauseUntilDuration);
     }
 
-    // Deprecated, just existing not to touch EtherFiAdmin contract
-    function setStakingTargetWeights(uint32 _eEthWeight, uint32 _etherFanWeight) external {
-    }
-
     /// @notice Locks ETH for finalized NFT withdrawals by transferring from LP to WithdrawRequestNFT. TVL preserved by InLp/OutOfLp rebalance; share rate unchanged.
     function addEthAmountLockedForWithdrawal(uint128 _amount) external {
         if (msg.sender != address(etherFiAdminContract) && msg.sender != address(withdrawRequestNFT)) revert IncorrectCaller();
