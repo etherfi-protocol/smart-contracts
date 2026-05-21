@@ -281,7 +281,7 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
     }
 
     // Seize the request simply by transferring it to another recipient
-    function seizeInvalidRequest(uint256 requestId, address recipient) external onlyAdmin {
+    function seizeInvalidRequest(uint256 requestId, address recipient) external onlyUpgradeTimelock {
         if (_requests[requestId].isValid) revert RequestValid();
         if (!_exists(requestId)) revert RequestNotFound();
 
@@ -466,6 +466,11 @@ contract WithdrawRequestNFT is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgrad
 
     modifier onlyLiquidityPool() {
         if (msg.sender != address(liquidityPool)) revert IncorrectCaller();
+        _;
+    }
+
+    modifier onlyUpgradeTimelock() {
+        roleRegistry.onlyUpgradeTimelock(msg.sender);
         _;
     }
 
